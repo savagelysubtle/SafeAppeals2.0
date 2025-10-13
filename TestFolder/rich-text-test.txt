@@ -1,0 +1,21 @@
+Rich Text Editor Test File
+=========================
+
+This is a test file for the new Rich Text Editor extension.
+
+Instructions:
+1. Open this file in Void
+2. Right-click and select "Open with Rich Text Editor"
+3. Or use "Reopen with..." and select "Rich Text Editor"
+
+Features to test:
+- Bold text formatting (Ctrl+B or toolbar button)
+- Italic text formatting (Ctrl+I or toolbar button)
+- Underline text formatting (Ctrl+U or toolbar button)
+- Visual formatting that doesn't affect the saved file content
+- Toolbar buttons that show active state
+- Keyboard shortcuts for formatting
+
+The file should save as plain text regardless of visual formatting applied.
+
+Try formatting some text and then save the file to verify it remains as plain text.

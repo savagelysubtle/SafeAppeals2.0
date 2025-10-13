@@ -322,6 +322,20 @@ const excludedExtensions = [
 	'ms-vscode.node-debug2',
 ];
 
+// Document-focused extensions allowlist
+const allowedExtensions = new Set([
+	'markdown-language-features',
+	'markdown-math',
+	'markdown-basics',
+	'json',
+	'json-language-features',
+	'yaml',
+	'xml',
+	'git',
+	'git-base',
+	'txt-rich-editor',
+]);
+
 const marketplaceWebExtensionsExclude = new Set([
 	'ms-vscode.node-debug',
 	'ms-vscode.node-debug2',
@@ -421,6 +435,7 @@ function doPackageLocalExtensionsStream(forWeb: boolean, disableMangle: boolean,
 				const extensionName = path.basename(extensionPath);
 				return { name: extensionName, path: extensionPath, manifestPath: absoluteManifestPath };
 			})
+			.filter(({ name }) => allowedExtensions.has(name))
 			.filter(({ name }) => native ? nativeExtensionsSet.has(name) : !nativeExtensionsSet.has(name))
 			.filter(({ name }) => excludedExtensions.indexOf(name) === -1)
 			.filter(({ name }) => builtInExtensions.every(b => b.name !== name))
@@ -559,9 +574,6 @@ const esbuildMediaScripts = [
 	'markdown-language-features/esbuild-notebook.js',
 	'markdown-language-features/esbuild-preview.js',
 	'markdown-math/esbuild.js',
-	'notebook-renderers/esbuild.js',
-	'ipynb/esbuild.js',
-	'simple-browser/esbuild-preview.js',
 ];
 
 export async function webpackExtensions(taskName: string, isWatch: boolean, webpackConfigLocations: { configPath: string; outputRoot?: string }[]) {

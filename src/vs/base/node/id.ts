@@ -7,7 +7,6 @@ import { networkInterfaces } from 'os';
 import { TernarySearchTree } from '../common/ternarySearchTree.js';
 import * as uuid from '../common/uuid.js';
 import { getMac } from './macAddress.js';
-import { isWindows } from '../common/platform.js';
 
 // http://www.techrepublic.com/blog/data-center/mac-address-scorecard-for-common-virtual-machine-platforms/
 // VMware ESX 3, Server, Workstation, Player	00-50-56, 00-0C-29, 00-05-69
@@ -101,17 +100,9 @@ async function getMacMachineId(errorLogger: (error: any) => void): Promise<strin
 	}
 }
 
-const SQM_KEY: string = 'Software\\Microsoft\\SQMClient';
 export async function getSqmMachineId(errorLogger: (error: any) => void): Promise<string> {
-	if (isWindows) {
-		const Registry = await import('@vscode/windows-registry');
-		try {
-			return Registry.GetStringRegKey('HKEY_LOCAL_MACHINE', SQM_KEY, 'MachineId') || '';
-		} catch (err) {
-			errorLogger(err);
-			return '';
-		}
-	}
+	// Skip windows registry for doc-focused editor to avoid native module issues
+	console.log('getSqmMachineId: Skipping windows registry for doc-focused editor');
 	return '';
 }
 

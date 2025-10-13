@@ -40,6 +40,7 @@ Go to the "Individual Components" tab and select:
 - `MSVC v143 - VS 2022 C++ x64/x86 Spectre-mitigated libs (Latest)`
 - `C++ ATL for latest build tools with Spectre Mitigations`
 - `C++ MFC for latest build tools with Spectre Mitigations`
+- `Windows 10 SDK` (10.0.22621 or newer) and/or `Windows 11 SDK`
 
 Finally, click Install.
 
@@ -51,6 +52,41 @@ First, run `npm install -g node-gyp`. Then:
 - Red Hat (Fedora, etc): `sudo dnf install @development-tools gcc gcc-c++ make libsecret-devel krb5-devel libX11-devel libxkbfile-devel`.
 - SUSE (openSUSE, etc): `sudo zypper install patterns-devel-C-C++-devel_C_C++  krb5-devel libsecret-devel libxkbfile-devel libX11-devel`.
 - Others: see [How to Contribute](https://github.com/microsoft/vscode/wiki/How-to-Contribute).
+
+### d. Windows - First-time Setup (Quick Start)
+
+Run these in an elevated PowerShell in your repo root the first time you set up:
+
+```powershell
+# Node 20 (matches .nvmrc)
+nvm install 20.18.2
+nvm use 20.18.2
+
+# Fix NVM_SYMLINK errors (if symlink target already exists as a real folder)
+if ($env:NVM_SYMLINK -and (Test-Path $env:NVM_SYMLINK)) {
+  Rename-Item -Path $env:NVM_SYMLINK -NewName (Split-Path $env:NVM_SYMLINK -Leaf)"_backup_$(Get-Date -Format yyyyMMddHHmmss)" -ErrorAction SilentlyContinue
+}
+
+# Tooling for node-gyp
+$env:GYP_MSVS_VERSION = "2022"  # Use VS 2022 toolset (v143)
+# Optional: pin Python 3.11/3.12 (recommended for node-gyp)
+# npm config set python "C:\\Path\\to\\python311.exe"
+
+# Clean any locks and caches (optional but helps with first-time setup)
+Get-Process node,electron,gulp,msbuild -ErrorAction SilentlyContinue | Stop-Process -Force
+Remove-Item -Recurse -Force "$env:LOCALAPPDATA\node-gyp\Cache" -ErrorAction SilentlyContinue
+
+# Install dependencies
+npm install
+
+# If native modules fail, rebuild sequentially (avoid parallel builders)
+# npm rebuild @vscode/sqlite3 @parcel/watcher @vscode/windows-process-tree @vscode/spdlog --verbose
+```
+
+### e. Local dev: `npm install` vs `npm ci`
+
+- **Use `npm install`** for first-time local setup and day-to-day development. It allows small ad‑hoc fixes (e.g., `tar@6`, `node-addon-api`) that some native module builds expect on Windows.
+- **Use `npm ci`** only in clean CI environments. It strictly uses `package-lock.json` and will remove ad‑hoc modules you may have added locally.
 
 ### Developer Mode Instructions
 
@@ -70,6 +106,12 @@ Here's how to start changing SafeAppeals2.0's code. These steps cover everything
    - You won't see your changes unless you press <kbd>Ctrl+R</kbd> (<kbd>Cmd+R</kbd>) inside the new window to reload. Alternatively, press <kbd>Ctrl+Shift+P</kbd> and `Reload Window`.
    - You might want to add the flags `--user-data-dir ./.tmp/user-data --extensions-dir ./.tmp/extensions` to the command in step 4, which lets you reset any IDE changes you made by deleting the `.tmp` folder.
 
+#### CSS in Development (Import Maps)
+
+- In dev, `VSCODE_DEV=1` enables the CSS development service.
+- CSS files imported via `import './file.css'` are mapped to small JS blobs that call `globalThis._VSCODE_CSS_LOAD(url)`, which injects the stylesheet.
+- If you see "Failed to load module script ... MIME type 'text/css'": launch via `scripts/code.bat` or the "Launch VS Code Internal" configuration so `VSCODE_DEV=1` is set.
+
 - You can kill any of the build scripts by pressing `Ctrl+D` in its terminal. If you press `Ctrl+C` the script will close but will keep running in the background.
 
 If you get any errors, scroll down for common fixes.
@@ -88,11 +130,65 @@ If you get any errors, scroll down for common fixes.
 `sudo chown root:root .build/electron/chrome-sandbox && sudo chmod 4755 .build/electron/chrome-sandbox` and then run `./scripts/code.sh` again.
 - If you have any other questions, feel free to [submit an issue](https://github.com/savagelysubtle/SafeAppeals2.0/issues/new). You can also refer to VSCode's complete [How to Contribute](https://github.com/microsoft/vscode/wiki/How-to-Contribute) page.
 
+##### Windows native-build troubleshooting
+
+- **MSB8040 (Spectre libs required)**: In Visual Studio Installer → Build Tools 2022 → Individual components, install:
+  - `MSVC v143 – VS 2022 C++ x64/x86 Spectre-mitigated libs (Latest)`
+  - `C++ ATL for latest build tools with Spectre Mitigations`
+  - `C++ MFC for latest build tools with Spectre Mitigations`
+  - `Windows 10 SDK` (10.0.22621+) and/or `Windows 11 SDK`
+  - Then set:
+
+    ```powershell
+    $env:GYP_MSVS_VERSION = "2022"
+    ```
+
+- **Python for node-gyp**: Prefer Python 3.11 or 3.12 and point npm to it:
+
+  ```powershell
+  npm config set python "C:\\Path\\to\\python311.exe"
+  ```
+
+- **NVM_SYMLINK error** (target exists as a real folder): rename it, then `nvm use`:
+
+  ```powershell
+  $sym = $env:NVM_SYMLINK; if ($sym -and (Test-Path $sym)) { Rename-Item -Path $sym -NewName ((Split-Path $sym -Leaf)+"_backup_$(Get-Date -Format yyyyMMddHHmmss)") }
+  nvm use 20.18.2
+  ```
+
+- **EPERM/EBUSY (locked files)**: stop locking processes, clear caches, rebuild sequentially:
+
+  ```powershell
+  Get-Process node,electron,gulp,msbuild -ErrorAction SilentlyContinue | Stop-Process -Force
+  Remove-Item -Recurse -Force "$env:LOCALAPPDATA\node-gyp\Cache" -ErrorAction SilentlyContinue
+  npm rebuild @vscode/sqlite3 @parcel/watcher @vscode/windows-process-tree @vscode/spdlog --verbose
+  ```
+
+  If it persists, add a Defender exclusion for the repo:
+
+  ```powershell
+  Add-MpPreference -ExclusionPath "D:\\Coding\\SafeAppeals2.0"
+  ```
+
+- **@vscode/sqlite3 "Cannot find module 'tar'"** during build: install tar v6 and rebuild:
+
+  ```powershell
+  npm i tar@6 --no-save
+  npm rebuild @vscode/sqlite3 --verbose
+  ```
+
+- **@vscode/windows-process-tree "Cannot find module 'node-addon-api'"**: install headers and rebuild:
+
+  ```powershell
+  npm i node-addon-api@8 --no-save
+  npm rebuild @vscode\windows-process-tree --verbose
+  ```
+
 #### Building SafeAppeals2.0 from Terminal
 
 To build SafeAppeals2.0 from the terminal instead of from inside VSCode, follow the steps above, but instead of pressing <kbd>Cmd+Shift+B</kbd>, run `npm run watch`. The build is done when you see something like this:
 
-```
+```text
 [watch-extensions] [00:37:39] Finished compilation extensions with 0 errors after 19303 ms
 [watch-client    ] [00:38:06] Finished compilation with 0 errors after 46248 ms
 [watch-client    ] [00:38:07] Starting compilation...

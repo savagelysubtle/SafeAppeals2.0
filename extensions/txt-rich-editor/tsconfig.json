@@ -1,0 +1,14 @@
+{
+	"extends": "../tsconfig.base.json",
+	"compilerOptions": {
+		"outDir": "./out",
+		"experimentalDecorators": true,
+		"typeRoots": ["./node_modules/@types"],
+		"lib": ["es2020", "dom"],
+		"moduleResolution": "node",
+		"allowSyntheticDefaultImports": true,
+		"esModuleInterop": true
+	},
+	"include": ["src/**/*", "../../src/vscode-dts/vscode.d.ts"],
+	"files": ["src/types.d.ts"]
+}

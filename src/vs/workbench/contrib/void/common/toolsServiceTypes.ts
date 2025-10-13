@@ -23,10 +23,11 @@ export const approvalTypeOfBuiltinToolName: Partial<{ [T in BuiltinToolName]?: '
 	'delete_file_or_folder': 'edits',
 	'rewrite_file': 'edits',
 	'edit_file': 'edits',
-	'run_command': 'terminal',
-	'run_persistent_command': 'terminal',
-	'open_persistent_terminal': 'terminal',
-	'kill_persistent_terminal': 'terminal',
+	// Terminal commands disabled for doc-focused editor
+	// 'run_command': 'terminal',
+	// 'run_persistent_command': 'terminal',
+	// 'open_persistent_terminal': 'terminal',
+	// 'kill_persistent_terminal': 'terminal',
 }
 
 
@@ -56,10 +57,11 @@ export type BuiltinToolCallParams = {
 	'create_file_or_folder': { uri: URI, isFolder: boolean },
 	'delete_file_or_folder': { uri: URI, isRecursive: boolean, isFolder: boolean },
 	// ---
-	'run_command': { command: string; cwd: string | null, terminalId: string },
-	'open_persistent_terminal': { cwd: string | null },
-	'run_persistent_command': { command: string; persistentTerminalId: string },
-	'kill_persistent_terminal': { persistentTerminalId: string },
+	// Terminal commands disabled for doc-focused editor
+	// 'run_command': { command: string; cwd: string | null, terminalId: string },
+	// 'open_persistent_terminal': { cwd: string | null },
+	// 'run_persistent_command': { command: string; persistentTerminalId: string },
+	// 'kill_persistent_terminal': { persistentTerminalId: string },
 }
 
 // RESULT OF TOOL CALL
@@ -77,10 +79,11 @@ export type BuiltinToolResultType = {
 	'create_file_or_folder': {},
 	'delete_file_or_folder': {},
 	// ---
-	'run_command': { result: string; resolveReason: TerminalResolveReason; },
-	'run_persistent_command': { result: string; resolveReason: TerminalResolveReason; },
-	'open_persistent_terminal': { persistentTerminalId: string },
-	'kill_persistent_terminal': {},
+	// Terminal commands disabled for doc-focused editor
+	// 'run_command': { result: string; resolveReason: TerminalResolveReason; },
+	// 'run_persistent_command': { result: string; resolveReason: TerminalResolveReason; },
+	// 'open_persistent_terminal': { persistentTerminalId: string },
+	// 'kill_persistent_terminal': {},
 }
 
 

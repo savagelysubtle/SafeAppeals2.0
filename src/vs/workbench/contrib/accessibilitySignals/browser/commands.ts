@@ -12,7 +12,7 @@ import { AccessibilitySignal, AcknowledgeDocCommentsToken, IAccessibilitySignalS
 import { IConfigurationService } from '../../../../platform/configuration/common/configuration.js';
 import { ServicesAccessor } from '../../../../platform/instantiation/common/instantiation.js';
 import { IQuickInputService, IQuickPickItem } from '../../../../platform/quickinput/common/quickInput.js';
-import { IPreferencesService } from '../../../services/preferences/common/preferences.js';
+import { IPreferencesService } from '../../../../workbench/services/preferences/common/preferences.js';
 import { DisposableStore } from '../../../../base/common/lifecycle.js';
 
 export class ShowSignalSoundHelp extends Action2 {
@@ -29,14 +29,14 @@ export class ShowSignalSoundHelp extends Action2 {
 		});
 	}
 
-	override async run(accessor: ServicesAccessor): Promise<void> {
+	async run(accessor: ServicesAccessor): Promise<void> {
 		const accessibilitySignalService = accessor.get(IAccessibilitySignalService);
 		const quickInputService = accessor.get(IQuickInputService);
 		const configurationService = accessor.get(IConfigurationService);
 		const accessibilityService = accessor.get(IAccessibilityService);
 		const preferencesService = accessor.get(IPreferencesService);
 		const userGestureSignals = [AccessibilitySignal.save, AccessibilitySignal.format];
-		const items: (IQuickPickItem & { signal: AccessibilitySignal })[] = AccessibilitySignal.allAccessibilitySignals.map((signal, idx) => ({
+		const items: (IQuickPickItem & { signal: AccessibilitySignal })[] = AccessibilitySignal.allAccessibilitySignals.map((signal: AccessibilitySignal, idx: number) => ({
 			label: userGestureSignals.includes(signal) ? `${signal.name} (${configurationService.getValue(signal.settingsKey + '.sound')})` : signal.name,
 			signal,
 			buttons: userGestureSignals.includes(signal) ? [{
@@ -44,14 +44,14 @@ export class ShowSignalSoundHelp extends Action2 {
 				tooltip: localize('sounds.help.settings', 'Configure Sound'),
 				alwaysVisible: true
 			}] : []
-		})).sort((a, b) => a.label.localeCompare(b.label));
+		})).sort((a: IQuickPickItem, b: IQuickPickItem) => a.label.localeCompare(b.label));
 		const disposables = new DisposableStore();
 		const qp = disposables.add(quickInputService.createQuickPick<IQuickPickItem & { signal: AccessibilitySignal }>());
 		qp.items = items;
-		qp.selectedItems = items.filter(i => accessibilitySignalService.isSoundEnabled(i.signal) || userGestureSignals.includes(i.signal) && configurationService.getValue(i.signal.settingsKey + '.sound') !== 'never');
+		qp.selectedItems = items.filter((i: IQuickPickItem & { signal: AccessibilitySignal }) => accessibilitySignalService.isSoundEnabled(i.signal) || userGestureSignals.includes(i.signal) && configurationService.getValue(i.signal.settingsKey + '.sound') !== 'never');
 		disposables.add(qp.onDidAccept(() => {
-			const enabledSounds = qp.selectedItems.map(i => i.signal);
-			const disabledSounds = qp.items.map(i => (i as any).signal).filter(i => !enabledSounds.includes(i));
+			const enabledSounds = qp.selectedItems.map((i: IQuickPickItem & { signal: AccessibilitySignal }) => i.signal);
+			const disabledSounds = qp.items.map((i: IQuickPickItem & { signal: AccessibilitySignal }) => i.signal).filter((i: AccessibilitySignal) => !enabledSounds.includes(i));
 			for (const signal of enabledSounds) {
 				let { sound, announcement } = configurationService.getValue<{ sound: string; announcement?: string }>(signal.settingsKey);
 				sound = userGestureSignals.includes(signal) ? 'userGesture' : accessibilityService.isScreenReaderOptimized() ? 'auto' : 'on';
@@ -70,7 +70,7 @@ export class ShowSignalSoundHelp extends Action2 {
 			}
 			qp.hide();
 		}));
-		disposables.add(qp.onDidTriggerItemButton(e => {
+		disposables.add(qp.onDidTriggerItemButton((e: { item: IQuickPickItem & { signal: AccessibilitySignal } }) => {
 			preferencesService.openUserSettings({ jsonEditor: true, revealSetting: { key: e.item.signal.settingsKey, edit: true } });
 		}));
 		disposables.add(qp.onDidChangeActive(() => {
@@ -101,14 +101,14 @@ export class ShowAccessibilityAnnouncementHelp extends Action2 {
 		});
 	}
 
-	override async run(accessor: ServicesAccessor): Promise<void> {
+	async run(accessor: ServicesAccessor): Promise<void> {
 		const accessibilitySignalService = accessor.get(IAccessibilitySignalService);
 		const quickInputService = accessor.get(IQuickInputService);
 		const configurationService = accessor.get(IConfigurationService);
 		const accessibilityService = accessor.get(IAccessibilityService);
 		const preferencesService = accessor.get(IPreferencesService);
 		const userGestureSignals = [AccessibilitySignal.save, AccessibilitySignal.format];
-		const items: (IQuickPickItem & { signal: AccessibilitySignal })[] = AccessibilitySignal.allAccessibilitySignals.filter(c => !!c.legacyAnnouncementSettingsKey).map((signal, idx) => ({
+		const items: (IQuickPickItem & { signal: AccessibilitySignal })[] = AccessibilitySignal.allAccessibilitySignals.filter((c: AccessibilitySignal) => !!c.legacyAnnouncementSettingsKey).map((signal: AccessibilitySignal, idx: number) => ({
 			label: userGestureSignals.includes(signal) ? `${signal.name} (${configurationService.getValue(signal.settingsKey + '.announcement')})` : signal.name,
 			signal,
 			buttons: userGestureSignals.includes(signal) ? [{
@@ -116,11 +116,11 @@ export class ShowAccessibilityAnnouncementHelp extends Action2 {
 				tooltip: localize('announcement.help.settings', 'Configure Announcement'),
 				alwaysVisible: true,
 			}] : []
-		})).sort((a, b) => a.label.localeCompare(b.label));
+		})).sort((a: IQuickPickItem, b: IQuickPickItem) => a.label.localeCompare(b.label));
 		const disposables = new DisposableStore();
 		const qp = disposables.add(quickInputService.createQuickPick<IQuickPickItem & { signal: AccessibilitySignal }>());
 		qp.items = items;
-		qp.selectedItems = items.filter(i => accessibilitySignalService.isAnnouncementEnabled(i.signal) || userGestureSignals.includes(i.signal) && configurationService.getValue(i.signal.settingsKey + '.announcement') !== 'never');
+		qp.selectedItems = items.filter((i: IQuickPickItem & { signal: AccessibilitySignal }) => accessibilitySignalService.isAnnouncementEnabled(i.signal) || userGestureSignals.includes(i.signal) && configurationService.getValue(i.signal.settingsKey + '.announcement') !== 'never');
 		const screenReaderOptimized = accessibilityService.isScreenReaderOptimized();
 		disposables.add(qp.onDidAccept(() => {
 			if (!screenReaderOptimized) {
@@ -128,8 +128,8 @@ export class ShowAccessibilityAnnouncementHelp extends Action2 {
 				qp.hide();
 				return;
 			}
-			const enabledAnnouncements = qp.selectedItems.map(i => i.signal);
-			const disabledAnnouncements = AccessibilitySignal.allAccessibilitySignals.filter(cue => !!cue.legacyAnnouncementSettingsKey && !enabledAnnouncements.includes(cue));
+			const enabledAnnouncements = qp.selectedItems.map((i: IQuickPickItem & { signal: AccessibilitySignal }) => i.signal);
+			const disabledAnnouncements = AccessibilitySignal.allAccessibilitySignals.filter((cue: AccessibilitySignal) => !!cue.legacyAnnouncementSettingsKey && !enabledAnnouncements.includes(cue));
 			for (const signal of enabledAnnouncements) {
 				let { sound, announcement } = configurationService.getValue<{ sound: string; announcement?: string }>(signal.settingsKey);
 				announcement = userGestureSignals.includes(signal) ? 'userGesture' : signal.announcementMessage && accessibilityService.isScreenReaderOptimized() ? 'auto' : undefined;
@@ -144,7 +144,7 @@ export class ShowAccessibilityAnnouncementHelp extends Action2 {
 			}
 			qp.hide();
 		}));
-		disposables.add(qp.onDidTriggerItemButton(e => {
+		disposables.add(qp.onDidTriggerItemButton((e: { item: IQuickPickItem & { signal: AccessibilitySignal } }) => {
 			preferencesService.openUserSettings({ jsonEditor: true, revealSetting: { key: e.item.signal.settingsKey, edit: true } });
 		}));
 		disposables.add(qp.onDidHide(() => disposables.dispose()));

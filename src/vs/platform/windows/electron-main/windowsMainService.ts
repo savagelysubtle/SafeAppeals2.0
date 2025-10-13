@@ -1513,7 +1513,17 @@ export class WindowsMainService extends Disposable implements IWindowsMainServic
 			policiesData: this.policyService.serialize(),
 			continueOn: this.environmentMainService.continueOn,
 
-			cssModules: this.cssDevelopmentService.isEnabled ? await this.cssDevelopmentService.getCssModules() : undefined
+			cssModules: await (async () => {
+				if (this.cssDevelopmentService.isEnabled) {
+					this.logService.info('[WINDOW_CONFIG] CSS dev service is enabled, getting CSS modules...');
+					const modules = await this.cssDevelopmentService.getCssModules();
+					this.logService.info(`[WINDOW_CONFIG] Found ${modules.length} CSS modules`);
+					return modules;
+				} else {
+					this.logService.info('[WINDOW_CONFIG] CSS dev service is disabled');
+					return undefined;
+				}
+			})()
 		};
 
 		// New window

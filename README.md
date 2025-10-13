@@ -1,19 +1,19 @@
-# Welcome to SafeAppeals2.0
+# Welcome to Safe Appeals Navigator
 
 <div align="center">
  <img
-  src="./src/vs/workbench/browser/parts/editor/media/slice_of_void.png"
-   alt="SafeAppeals2.0 Welcome"
+  src="./void_icons/slice_of_void.png"
+   alt="Safe Appeals Navigator Welcome"
   width="300"
    height="300"
  />
 </div>
 
-SafeAppeals2.0 is the open-source Cursor alternative.
+Safe Appeals Navigator is the open-source Cursor alternative with vibrant lime green accents.
 
-Use AI agents on your codebase, checkpoint and visualize changes, and bring any model or host locally. SafeAppeals2.0 sends messages directly to providers without retaining your data.
+Use AI agents on your codebase, checkpoint and visualize changes, and bring any model or host locally. Safe Appeals Navigator sends messages directly to providers without retaining your data.
 
-This repo contains the full sourcecode for SafeAppeals2.0. If you're new, welcome!
+This repo contains the full sourcecode for Safe Appeals Navigator. If you're new, welcome!
 
 - 🧭 [GitHub Repository](https://github.com/savagelysubtle/SafeAppeals2.0)
 
@@ -23,17 +23,17 @@ This repo contains the full sourcecode for SafeAppeals2.0. If you're new, welcom
 
 ## Contributing
 
-1. To get started working on SafeAppeals2.0, check out our Project Board! You can also see [HOW_TO_CONTRIBUTE](https://github.com/savagelysubtle/SafeAppeals2.0/blob/main/HOW_TO_CONTRIBUTE.md).
+1. To get started working on Safe Appeals Navigator, check out our Project Board! You can also see [HOW_TO_CONTRIBUTE](https://github.com/savagelysubtle/SafeAppeals2.0/blob/main/HOW_TO_CONTRIBUTE.md).
 
 2. Feel free to open issues or submit pull requests!
 
 ## Reference
 
-SafeAppeals2.0 is a fork of the [vscode](https://github.com/microsoft/vscode) repository. For a guide to the codebase, see [VOID_CODEBASE_GUIDE](https://github.com/savagelysubtle/SafeAppeals2.0/blob/main/VOID_CODEBASE_GUIDE.md).
+Safe Appeals Navigator is a fork of the [vscode](https://github.com/microsoft/vscode) repository. For a guide to the codebase, see [VOID_CODEBASE_GUIDE](https://github.com/savagelysubtle/SafeAppeals2.0/blob/main/VOID_CODEBASE_GUIDE.md).
 
 ## Note
 
-SafeAppeals2.0 is actively maintained and developed. Stay updated with new releases by watching the repository!
+Safe Appeals Navigator is actively maintained and developed. Stay updated with new releases by watching the repository!
 
 ## Support
 
