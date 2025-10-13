@@ -1,28 +1,77 @@
 # Rich Text Editor for Documents
 
-A Microsoft Office-style ribbon interface rich text editor for .txt, .gdoc, and .docx files in VS Code.
+A professional Microsoft Office-style rich text editor for VS Code with advanced document editing capabilities for `.txt`, `.gdoc`, and `.docx` files.
 
 ## Features
 
-### Ribbon Interface
+### 🎨 Advanced Ribbon Interface
 
-- **Home Tab** with organized groups:
-  - **Clipboard**: Undo/Redo
-  - **Font**: Bold, Italic, Underline, Strikethrough, Font Size
-  - **Paragraph**: Alignment (Left, Center, Right), Indentation
-  - **Lists**: Bulleted and Numbered lists
-  - **Styles**: Heading levels (H1, H2, H3), Blockquotes
-  - **File**: Import/Export DOCX (desktop only)
+#### Home Tab
 
-### Document Support
+All essential formatting tools organized into groups:
 
-- **.txt files**: Visual formatting, saves as plain text
-- **.gdoc files**: Google Docs-style formatting, saves as plain text
-- **.docx files**: Full DOCX import/export with formatting preservation
+- **Clipboard**: Undo, Redo
+- **Font**: Bold, Italic, Underline, Strikethrough, Font family, Font size
+- **Paragraph**: Alignment (Left, Center, Right, Justify), Indentation
+- **Lists**: Bulleted and numbered lists
+- **Styles**: Heading levels (H1, H2, H3), Blockquotes
+- **File**: Import/Export DOCX (desktop only)
 
-### DOCX Import/Export
+#### Insert Tab 🆕
 
-- Import existing DOCX files with formatting
+Add rich content to your documents:
+
+- **Tables**: Insert custom tables or quick 3x3 tables
+- **Illustrations**: Images, shapes, and charts
+- **Links**: Hyperlinks and bookmarks
+- **Text Elements**: Text boxes, dates, symbols (©, ®, ™, etc.)
+- **Signatures**: Digital signature lines
+
+#### Page Layout Tab 🆕
+
+Control your document's appearance:
+
+- **Page Setup**: Paper size (Letter, A4, Legal, Tabloid), orientation, margins
+- **Columns**: One, two, or three column layouts
+- **Page Background**: Background colors, borders, watermarks
+- **Line Numbers**: Toggle line number display
+
+#### View Tab 🆕
+
+Customize your editing view:
+
+- **Zoom**: Zoom in/out with presets (50%-200%)
+- **Show/Hide**: Toggle rulers, gridlines, paragraph marks
+- **View Modes**: Print layout, web layout, focus mode
+- **Window**: Split view and full-screen options
+
+#### Format Tab 🆕
+
+Advanced text formatting:
+
+- **Text Effects**: Shadows, outlines, glows
+- **Color Tools**: Text color, highlight, background color
+- **Spacing**: Line spacing (1.0-3.0), paragraph spacing
+- **Case Conversion**: UPPERCASE, lowercase, Capitalize
+- **Clear Formatting**: Remove all formatting at once
+
+### 📏 Canvas-Based Professional Rendering
+
+- **Top Ruler**: Shows character positions for precise alignment
+- **Left Margin**: Line numbers with smooth scrolling
+- **Draggable Margins**: Adjust text boundaries by dragging handles on the ruler
+- **Centered Layout**: Document-style centered editor
+- **Smooth Performance**: Optimized canvas rendering
+
+### 📄 Multi-Format Support
+
+- **`.txt` files**: Default editor with rich text capabilities
+- **`.gdoc` files**: Google Docs-style formatting
+- **`.docx` files**: Full DOCX import/export (desktop only)
+
+### 💾 DOCX Import/Export
+
+- Import existing DOCX files with formatting preservation
 - Export rich content to DOCX format
 - Available on desktop environments only (not web)
 
@@ -30,31 +79,83 @@ A Microsoft Office-style ribbon interface rich text editor for .txt, .gdoc, and 
 
 ### Opening Files
 
-1. Right-click any `.txt`, `.gdoc`, or `.docx` file
-2. Select "Open with Rich Text Editor"
-3. Or use "Reopen with..." → "Rich Text Editor"
+1. **Automatic**: `.txt`, `.gdoc`, and `.docx` files open automatically
+2. **Manual**: Right-click → "Open with Rich Text Editor"
+3. **From Explorer**: Use context menu on any text file
 
-### Ribbon Controls
+### Formatting Text
 
-- **Formatting**: Select text and click formatting buttons
-- **Headings**: Use the Styles dropdown to change heading levels
-- **Lists**: Click bullet or number buttons to create lists
-- **Alignment**: Use alignment buttons for text positioning
-- **Font Size**: Select from the font size dropdown
+- **Select text** and use ribbon buttons
+- **Keyboard shortcuts** for quick formatting:
+  - `Ctrl+B`: Bold
+  - `Ctrl+I`: Italic
+  - `Ctrl+U`: Underline
+  - `Ctrl+Z`: Undo
+  - `Ctrl+Y`: Redo
 
-### DOCX Operations
+### Working with Tables
 
-- **Import**: Click the Import button (📁) to load a DOCX file
-- **Export**: Click the Export button (💾) to save as DOCX
-- **Save**: Regular save preserves plain text content
+1. Click **Insert** tab
+2. Click "Quick Table" for instant 3x3 table
+3. Click in cells to edit content
+4. Tables are fully style-able
 
-### Keyboard Shortcuts
+### Page Layout
 
-- `Ctrl+B`: Bold
-- `Ctrl+I`: Italic
-- `Ctrl+U`: Underline
-- `Ctrl+Z`: Undo
-- `Ctrl+Y`: Redo
+1. Click **Page Layout** tab
+2. Select paper size from dropdown
+3. Choose column layout (1, 2, or 3 columns)
+4. Set page background color
+
+### View Options
+
+1. Click **View** tab
+2. Adjust zoom (50%-200%)
+3. Toggle rulers and gridlines
+4. Enter focus mode for distraction-free writing
+
+### Advanced Formatting
+
+1. Click **Format** tab
+2. Apply text colors and effects
+3. Adjust line spacing
+4. Convert text case
+5. Clear all formatting when needed
+
+## Feature Highlights
+
+### Smart Document Editing 🚀
+
+- **Tables**: Create and edit tables directly
+- **Multiple Columns**: 1, 2, or 3 column layouts
+- **Zoom Control**: 50% to 200% scaling
+- **Focus Mode**: Hide ribbon for distraction-free writing
+- **Text Effects**: Shadows, outlines, glows
+
+### Professional Tools 🎯
+
+- **Date/Time**: Insert current date and time
+- **Symbols**: Quick access to ©, ®, ™, and more
+- **Case Conversion**: UPPERCASE, lowercase, Capitalize
+- **Color Tools**: Text, highlight, and background colors
+- **Line Spacing**: Precise control (1.0 to 3.0)
+
+### Canvas Rendering 🎨
+
+- **Character Ruler**: See exact column positions
+- **Line Numbers**: Auto-scrolling line count
+- **Draggable Margins**: Visual margin adjustment
+- **Smooth Scrolling**: Optimized for large documents
+
+## Keyboard Shortcuts
+
+| Shortcut | Action |
+|----------|--------|
+| `Ctrl+B` | Bold |
+| `Ctrl+I` | Italic |
+| `Ctrl+U` | Underline |
+| `Ctrl+Z` | Undo |
+| `Ctrl+Y` | Redo |
 
 ## Technical Details
 
@@ -69,38 +170,41 @@ A Microsoft Office-style ribbon interface rich text editor for .txt, .gdoc, and 
 - **Desktop**: Full functionality including DOCX import/export
 - **Web**: Visual editing only, DOCX features disabled
 
-### Dependencies
+### Architecture
 
-- `mammoth`: DOCX to HTML conversion
-- `html-to-docx`: HTML to DOCX conversion
+- Built using VS Code's Custom Text Editor API
+- HTML Canvas API for text rendering
+- `mammoth` library for DOCX to HTML conversion (desktop)
+- `html-to-docx` library for HTML to DOCX conversion (desktop)
+- Webview-based UI with contenteditable
+- Optimized rendering with requestAnimationFrame
 
-## File Types
+## Limitations
 
-### .txt Files
+- Formatting is visual only - files save as plain text
+- DOCX import/export requires desktop version
+- Some advanced Word features may not be preserved
+- Complex shapes and charts are placeholders
 
-- Basic rich text editing
-- Visual formatting only
-- Saves as plain text
+## Roadmap
 
-### .gdoc Files
+Future enhancements:
 
-- Google Docs-style interface
-- Visual formatting only
-- Saves as plain text
-
-### .docx Files
-
-- Full DOCX support
-- Import with formatting preservation
-- Export with formatting
-- Visual editing with DOCX compatibility
+- Full image insertion and manipulation
+- Custom shapes and drawing tools
+- Advanced chart creation
+- Track changes and comments
+- Spell check and grammar
+- Custom templates
+- More table formatting options
+- Cell merging and splitting
 
 ## Error Handling
 
-- **Missing dependencies**: Graceful fallback to plain text
-- **Conversion errors**: User notifications with details
-- **Web environment**: DOCX features automatically disabled
-- **File access**: Clear error messages for permission issues
+- **Missing dependencies**: Graceful fallback
+- **Conversion errors**: User notifications
+- **Web environment**: DOCX features auto-disabled
+- **File access**: Clear error messages
 
 ## Development
 
@@ -116,12 +220,9 @@ npm run compile
 npm run watch
 ```
 
-### Testing
+## Contributing
 
-1. Open test files in `TestFolder/`
-2. Use "Reopen with Rich Text Editor"
-3. Test formatting and DOCX operations
-4. Verify plain text saving
+This extension is part of the Void editor project. See the main repository for contribution guidelines.
 
 ## License
 
