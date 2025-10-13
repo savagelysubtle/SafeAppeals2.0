@@ -35,7 +35,7 @@ import './convertToLLMMessageWorkbenchContrib.js'
 
 // tools
 import './toolsService.js'
-import './terminalToolService.js'
+// import './terminalToolService.js' // Disabled for doc-focused editor
 
 // register Thread History
 import './chatThreadService.js'

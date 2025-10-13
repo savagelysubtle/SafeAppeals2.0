@@ -256,10 +256,16 @@ export class ExtensionManagementChannelClient extends CommontExtensionManagement
 	}
 
 	install(vsix: URI, options?: InstallOptions): Promise<ILocalExtension> {
+		if (this.productService.disableExtensionInstalls) {
+			throw new Error('Extension installation is disabled');
+		}
 		return Promise.resolve(this.channel.call<ILocalExtension>('install', [vsix, options])).then(local => transformIncomingExtension(local, null));
 	}
 
 	installFromLocation(location: URI, profileLocation: URI): Promise<ILocalExtension> {
+		if (this.productService.disableExtensionInstalls) {
+			throw new Error('Extension installation is disabled');
+		}
 		return Promise.resolve(this.channel.call<ILocalExtension>('installFromLocation', [location, profileLocation])).then(local => transformIncomingExtension(local, null));
 	}
 
@@ -273,10 +279,16 @@ export class ExtensionManagementChannelClient extends CommontExtensionManagement
 	}
 
 	installFromGallery(extension: IGalleryExtension, installOptions?: InstallOptions): Promise<ILocalExtension> {
+		if (this.productService.disableExtensionInstalls) {
+			throw new Error('Extension installation is disabled');
+		}
 		return Promise.resolve(this.channel.call<ILocalExtension>('installFromGallery', [extension, installOptions])).then(local => transformIncomingExtension(local, null));
 	}
 
 	async installGalleryExtensions(extensions: InstallExtensionInfo[]): Promise<InstallExtensionResult[]> {
+		if (this.productService.disableExtensionInstalls) {
+			throw new Error('Extension installation is disabled');
+		}
 		const results = await this.channel.call<InstallExtensionResult[]>('installGalleryExtensions', [extensions]);
 		return results.map(e => ({ ...e, local: e.local ? transformIncomingExtension(e.local, null) : e.local, source: this.isUriComponents(e.source) ? URI.revive(e.source) : e.source, profileLocation: URI.revive(e.profileLocation) }));
 	}

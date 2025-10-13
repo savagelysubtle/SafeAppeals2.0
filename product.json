@@ -37,6 +37,26 @@
 		"itemUrl": "https://marketplace.visualstudio.com/items"
 	},
 	"builtInExtensions": [],
+	"disableExtensionInstalls": true,
+	"settings.experimentalDefaults": {
+		"files.associations": {
+			"*.md": "markdown",
+			"*.markdown": "markdown",
+			"*.txt": "plaintext",
+			"*.yaml": "yaml",
+			"*.yml": "yaml",
+			"*.json": "json",
+			"*.xml": "xml"
+		},
+		"workbench.startupEditor": "newUntitledFile",
+		"editor.formatOnSave": false,
+		"editor.bracketPairColorization.enabled": false,
+		"editor.matchBrackets": "never",
+		"editor.codeActionsOnSave": {},
+		"editor.folding": false,
+		"editor.semanticHighlighting.enabled": false,
+		"terminal.integrated.enable": false
+	},
 	"linkProtectionTrustedDomains": [
 		"https://voideditor.com",
 		"https://voideditor.dev",

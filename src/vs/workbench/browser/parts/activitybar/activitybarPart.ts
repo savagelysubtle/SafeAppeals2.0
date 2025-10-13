@@ -33,7 +33,7 @@ import { Action2, IMenuService, MenuId, MenuRegistry, registerAction2 } from '..
 import { ContextKeyExpr, IContextKeyService } from '../../../../platform/contextkey/common/contextkey.js';
 import { Categories } from '../../../../platform/action/common/actionCommonCategories.js';
 import { getContextMenuActions } from '../../../../platform/actions/browser/menuEntryActionViewItem.js';
-import { IViewDescriptorService, ViewContainerLocation, ViewContainerLocationToString } from '../../../common/views.js';
+import { IViewDescriptorService, ViewContainerLocation, ViewContainerLocationToString, ViewContainer } from '../../../common/views.js';
 import { IExtensionService } from '../../../services/extensions/common/extensions.js';
 import { IWorkbenchEnvironmentService } from '../../../services/environment/common/environmentService.js';
 import { IViewsService } from '../../../services/views/common/viewsService.js';
@@ -193,6 +193,16 @@ export class ActivitybarPart extends Part {
 export class ActivityBarCompositeBar extends PaneCompositeBar {
 
 	private element: HTMLElement | undefined;
+
+	// Override to filter view containers to only allow Explorer, Search, and SCM
+	protected override getViewContainers(): readonly ViewContainer[] {
+		const allowed = new Set([
+			'workbench.view.explorer',
+			'workbench.view.search',
+			'workbench.view.scm',
+		]);
+		return super.getViewContainers().filter(c => allowed.has(c.id));
+	}
 
 	private menuBar: CustomMenubarControl | undefined;
 	private menuBarContainer: HTMLElement | undefined;
