@@ -1123,8 +1123,8 @@ export const Settings = () => {
 
 
 	return (
-		<div className={`@@void-scope ${isDark ? 'dark' : ''}`} style={{ height: '100%', width: '100%', overflow: 'auto' }}>
-			<div className="flex flex-col md:flex-row w-full gap-6 max-w-[900px] mx-auto mb-32" style={{ minHeight: '80vh' }}>
+		<div className={`@@void-scope ${isDark ? 'dark' : ''}`} style={{ display: 'flex', flexDirection: 'column', height: '100%', width: '100%', overflow: 'auto' }}>
+			<div className="flex flex-col md:flex-row w-full gap-6 max-w-[900px] mx-auto mb-32" style={{ minHeight: '80vh', flex: 1 }}>
 				{/* ──────────────  SIDEBAR  ────────────── */}
 
 				<aside className="md:w-1/4 w-full p-6 shrink-0">

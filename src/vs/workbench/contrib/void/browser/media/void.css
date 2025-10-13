@@ -202,3 +202,63 @@
 .void-scrollable-element *::-webkit-scrollbar-corner {
 	background-color: var(--void-bg-3) !important;
 }
+
+/* Void Chat Panel Container Layout */
+.void-sidebar,
+.auxiliary-bar .part-container {
+	display: flex !important;
+	flex-direction: column !important;
+	height: 100% !important;
+	width: 100% !important;
+}
+
+.void-sidebar > div,
+.auxiliary-bar .part-container > div {
+	height: 100%;
+	width: 100%;
+	display: flex;
+	flex-direction: column;
+}
+
+/* Void Chat Panel Styling */
+.void-chat-panel {
+	display: flex;
+	flex-direction: column;
+	height: 100%;
+	background: var(--vscode-editor-background);
+	color: var(--vscode-foreground);
+	caret-color: #A6E22E;
+}
+
+.void-chat-panel button,
+.void-chat-panel [role="button"] {
+	background: #A6E22E;
+	color: #0b0b0b;
+	border: none;
+	border-radius: 4px;
+	padding: 6px 12px;
+	cursor: pointer;
+	transition: background-color 0.2s ease;
+}
+
+.void-chat-panel button:hover,
+.void-chat-panel [role="button"]:hover {
+	background: #8CBF22;
+}
+
+.void-chat-panel button:active,
+.void-chat-panel [role="button"]:active {
+	background: #8CBF22;
+}
+
+.void-chat-panel input,
+.void-chat-panel textarea {
+	caret-color: #A6E22E;
+}
+
+.void-chat-panel .scrollable {
+	flex: 1;
+	overflow: auto;
+	display: flex;
+	flex-direction: column;
+}

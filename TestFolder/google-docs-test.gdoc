@@ -1,0 +1,44 @@
+Google Docs Test File
+=====================
+
+This is a test file for the Rich Text Editor with Google Docs (.gdoc) support.
+
+Document Information:
+- Title: Google Docs Test Document
+- Created: 2025-01-13
+- Author: Test User
+- Format: Google Docs
+
+Features to Test:
+================
+
+1. Rich Text Formatting
+   - Bold text
+   - Italic text
+   - Underlined text
+   - Strikethrough text
+
+2. Document Structure
+   - Headings (H1, H2, H3)
+   - Bullet lists
+   - Numbered lists
+   - Blockquotes
+
+3. Code Formatting
+   - Inline code
+   - Code blocks
+
+4. Alignment
+   - Left alignment
+   - Center alignment
+   - Right alignment
+
+Instructions:
+============
+
+1. Open this file in Void
+2. Right-click and select "Open with Rich Text Editor"
+3. Test all the formatting features
+4. Verify the file saves as plain text
+
+Note: This simulates a Google Docs file format. Real .gdoc files are ZIP archives with XML content.
