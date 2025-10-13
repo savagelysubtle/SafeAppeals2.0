@@ -67,40 +67,62 @@ export class DocxXmlHandler {
 	 * Convert DOCX XML to HTML for editing
 	 */
 	public docxXmlToHtml(docxDoc: DocxDocument): string {
-		const parser = new DOMParser();
-		const xmlDoc = parser.parseFromString(docxDoc.xml, 'text/xml');
+		try {
+			const parser = new DOMParser();
+			const xmlDoc = parser.parseFromString(docxDoc.xml, 'text/xml');
 
-		// Get the body element
-		const body = xmlDoc.getElementsByTagName('w:body')[0];
-		if (!body) {
-			return '<p>Empty document</p>';
-		}
-
-		const htmlParts: string[] = [];
-
-		// Process each paragraph and other elements
-		const children = Array.from(body.children);
-		for (const child of children) {
-			const tagName = child.tagName;
-
-			if (tagName === 'w:p') {
-				// Process paragraph
-				htmlParts.push(this.processParagraph(child as Element));
-			} else if (tagName === 'w:tbl') {
-				// Process table
-				htmlParts.push(this.processTable(child as Element));
+			// Check for parsing errors
+			const parserError = xmlDoc.getElementsByTagName('parsererror');
+			if (parserError.length > 0) {
+				console.error('XML parsing error:', parserError[0].textContent);
+				throw new Error('Failed to parse DOCX XML');
 			}
-		}
 
-		return htmlParts.join('');
+			// Get the body element (try with and without namespace)
+			let body = xmlDoc.getElementsByTagName('w:body')[0];
+			if (!body) {
+				body = xmlDoc.getElementsByTagNameNS('*', 'body')[0];
+			}
+			if (!body) {
+				console.warn('No body element found in DOCX');
+				return '<p>Empty document</p>';
+			}
+
+			const htmlParts: string[] = [];
+
+			// Process each paragraph and other elements
+			const children = Array.from(body.children);
+			for (const child of children) {
+				const localName = child.localName || child.tagName.split(':').pop();
+
+				if (localName === 'p') {
+					// Process paragraph
+					htmlParts.push(this.processParagraph(child as Element));
+				} else if (localName === 'tbl') {
+					// Process table
+					htmlParts.push(this.processTable(child as Element));
+				} else if (localName === 'sectPr') {
+					// Section properties - skip
+					continue;
+				}
+			}
+
+			const result = htmlParts.join('\n');
+			console.log('DOCX XML converted to HTML, length:', result.length);
+			return result;
+		} catch (error) {
+			console.error('Error converting DOCX XML to HTML:', error);
+			throw error;
+		}
 	}
 
 	/**
 	 * Process a paragraph element
 	 */
 	private processParagraph(pElem: Element): string {
-		const runs = pElem.getElementsByTagName('w:r');
-		const paragraphProps = pElem.getElementsByTagName('w:pPr')[0];
+		// Get runs using namespace-aware methods
+		const runs = this.getChildrenByLocalName(pElem, 'r');
+		const paragraphProps = this.getChildByLocalName(pElem, 'pPr');
 
 		// Check for heading level
 		let headingLevel = 0;
@@ -110,40 +132,39 @@ export class DocxXmlHandler {
 
 		if (paragraphProps) {
 			// Check for heading style
-			const pStyle = paragraphProps.getElementsByTagName('w:pStyle')[0];
+			const pStyle = this.getChildByLocalName(paragraphProps, 'pStyle');
 			if (pStyle) {
-				const styleVal = pStyle.getAttribute('w:val');
+				const styleVal = pStyle.getAttribute('w:val') || pStyle.getAttributeNS('*', 'val');
 				if (styleVal?.match(/^Heading(\d)$/)) {
 					headingLevel = parseInt(RegExp.$1);
 				}
 			}
 
 			// Check for alignment
-			const jc = paragraphProps.getElementsByTagName('w:jc')[0];
+			const jc = this.getChildByLocalName(paragraphProps, 'jc');
 			if (jc) {
-				const alignVal = jc.getAttribute('w:val');
+				const alignVal = jc.getAttribute('w:val') || jc.getAttributeNS('*', 'val');
 				if (alignVal === 'center') alignment = 'center';
 				else if (alignVal === 'right') alignment = 'right';
 				else if (alignVal === 'both') alignment = 'justify';
 			}
 
 			// Check for numbering (lists)
-			const numPr = paragraphProps.getElementsByTagName('w:numPr')[0];
+			const numPr = this.getChildByLocalName(paragraphProps, 'numPr');
 			if (numPr) {
 				isList = true;
-				// Could check numId to determine bullet vs numbered
 			}
 		}
 
 		// Process text runs
 		let textContent = '';
-		for (let i = 0; i < runs.length; i++) {
-			textContent += this.processRun(runs[i] as Element);
+		for (const run of runs) {
+			textContent += this.processRun(run);
 		}
 
 		// If empty paragraph, add br
 		if (textContent.trim() === '') {
-			textContent = '<br>';
+			textContent = '&nbsp;';
 		}
 
 		// Build HTML
@@ -162,34 +183,75 @@ export class DocxXmlHandler {
 	}
 
 	/**
+	 * Helper to get children by local name (namespace-agnostic)
+	 */
+	private getChildrenByLocalName(elem: Element, localName: string): Element[] {
+		const result: Element[] = [];
+		for (let i = 0; i < elem.children.length; i++) {
+			const child = elem.children[i];
+			const childLocalName = child.localName || child.tagName.split(':').pop();
+			if (childLocalName === localName) {
+				result.push(child as Element);
+			}
+		}
+		return result;
+	}
+
+	/**
+	 * Helper to get first child by local name (namespace-agnostic)
+	 */
+	private getChildByLocalName(elem: Element, localName: string): Element | undefined {
+		for (let i = 0; i < elem.children.length; i++) {
+			const child = elem.children[i];
+			const childLocalName = child.localName || child.tagName.split(':').pop();
+			if (childLocalName === localName) {
+				return child as Element;
+			}
+		}
+		return undefined;
+	}
+
+	/**
 	 * Process a run (text with formatting)
 	 */
 	private processRun(runElem: Element): string {
-		const textElems = runElem.getElementsByTagName('w:t');
+		// Get text elements using namespace-aware method
+		const textElems = this.getChildrenByLocalName(runElem, 't');
 		if (textElems.length === 0) {
+			// Check for breaks or tabs
+			const br = this.getChildByLocalName(runElem, 'br');
+			if (br) return '<br>';
+			const tab = this.getChildByLocalName(runElem, 'tab');
+			if (tab) return '&nbsp;&nbsp;&nbsp;&nbsp;';
 			return '';
 		}
 
 		let text = '';
-		for (let i = 0; i < textElems.length; i++) {
-			text += textElems[i].textContent || '';
+		for (const textElem of textElems) {
+			text += textElem.textContent || '';
 		}
 
 		// Check for formatting
-		const runProps = runElem.getElementsByTagName('w:rPr')[0];
+		const runProps = this.getChildByLocalName(runElem, 'rPr');
 		let isBold = false;
 		let isItalic = false;
 		let isUnderline = false;
 		let isStrikethrough = false;
+		let isHighlight = false;
 
 		if (runProps) {
-			isBold = runProps.getElementsByTagName('w:b').length > 0;
-			isItalic = runProps.getElementsByTagName('w:i').length > 0;
-			isUnderline = runProps.getElementsByTagName('w:u').length > 0;
-			isStrikethrough = runProps.getElementsByTagName('w:strike').length > 0;
+			isBold = this.getChildByLocalName(runProps, 'b') !== undefined;
+			isItalic = this.getChildByLocalName(runProps, 'i') !== undefined;
+			isUnderline = this.getChildByLocalName(runProps, 'u') !== undefined;
+			isStrikethrough = this.getChildByLocalName(runProps, 'strike') !== undefined;
+			isHighlight = this.getChildByLocalName(runProps, 'highlight') !== undefined;
 		}
 
+		// Escape XML/HTML
+		text = this.escapeXml(text);
+
 		// Apply formatting
+		if (isHighlight) text = `<mark>${text}</mark>`;
 		if (isBold) text = `<b>${text}</b>`;
 		if (isItalic) text = `<i>${text}</i>`;
 		if (isUnderline) text = `<u>${text}</u>`;
@@ -202,23 +264,22 @@ export class DocxXmlHandler {
 	 * Process a table element
 	 */
 	private processTable(tblElem: Element): string {
-		const rows = tblElem.getElementsByTagName('w:tr');
-		let html = '<table border="1" style="border-collapse: collapse; width: 100%;">';
+		const rows = this.getChildrenByLocalName(tblElem, 'tr');
+		let html = '<table border="1" style="border-collapse: collapse; width: 100%; margin: 1em 0;">';
 
-		for (let i = 0; i < rows.length; i++) {
+		for (const row of rows) {
 			html += '<tr>';
-			const cells = (rows[i] as Element).getElementsByTagName('w:tc');
+			const cells = this.getChildrenByLocalName(row, 'tc');
 
-			for (let j = 0; j < cells.length; j++) {
-				const cellElem = cells[j] as Element;
-				const paragraphs = cellElem.getElementsByTagName('w:p');
+			for (const cellElem of cells) {
+				const paragraphs = this.getChildrenByLocalName(cellElem, 'p');
 				let cellContent = '';
 
-				for (let k = 0; k < paragraphs.length; k++) {
-					cellContent += this.processParagraph(paragraphs[k] as Element);
+				for (const para of paragraphs) {
+					cellContent += this.processParagraph(para);
 				}
 
-				html += `<td style="padding: 4px; border: 1px solid #ccc;">${cellContent}</td>`;
+				html += `<td style="padding: 8px; border: 1px solid #ddd; vertical-align: top;">${cellContent}</td>`;
 			}
 
 			html += '</tr>';
