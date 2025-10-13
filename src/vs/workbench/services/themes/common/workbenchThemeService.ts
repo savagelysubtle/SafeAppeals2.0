@@ -63,7 +63,7 @@ export const COLOR_THEME_DARK_INITIAL_COLORS = { // Void changed this to match d
 	'statusBar.background': '#A6E22E',
 	'statusBar.border': '#454545',
 	'statusBar.foreground': '#ffffff',
-	'statusBar.noFolderBackground': '#68217A',
+	'statusBar.noFolderBackground': '#8CBF22',
 	'tab.activeBackground': '#2D2D2D',
 	'tab.activeBorder': '#ffffff',
 	'tab.activeBorderTop': '#A6E22E',
