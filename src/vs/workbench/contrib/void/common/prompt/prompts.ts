@@ -303,40 +303,38 @@ export const builtinTools: {
 			new_content: { description: `The new contents of the file. Must be a string.` }
 		},
 	},
-	run_command: {
-		name: 'run_command',
-		description: `Runs a terminal command and waits for the result (times out after ${MAX_TERMINAL_INACTIVE_TIME}s of inactivity). ${terminalDescHelper}`,
-		params: {
-			command: { description: 'The terminal command to run.' },
-			cwd: { description: cwdHelper },
-		},
-	},
+	// Terminal commands disabled for doc-focused editor
+	// run_command: {
+	// 	name: 'run_command',
+	// 	description: `Runs a terminal command and waits for the result (times out after ${MAX_TERMINAL_INACTIVE_TIME}s of inactivity). ${terminalDescHelper}`,
+	// 	params: {
+	// 		command: { description: 'The terminal command to run.' },
+	// 		cwd: { description: cwdHelper },
+	// 	},
+	// },
 
-	run_persistent_command: {
-		name: 'run_persistent_command',
-		description: `Runs a terminal command in the persistent terminal that you created with open_persistent_terminal (results after ${MAX_TERMINAL_BG_COMMAND_TIME} are returned, and command continues running in background). ${terminalDescHelper}`,
-		params: {
-			command: { description: 'The terminal command to run.' },
-			persistent_terminal_id: { description: 'The ID of the terminal created using open_persistent_terminal.' },
-		},
-	},
+	// run_persistent_command: {
+	// 	name: 'run_persistent_command',
+	// 	description: `Runs a terminal command in the persistent terminal that you created with open_persistent_terminal (results after ${MAX_TERMINAL_BG_COMMAND_TIME} are returned, and command continues running in background). ${terminalDescHelper}`,
+	// 	params: {
+	// 		command: { description: 'The terminal command to run.' },
+	// 		persistent_terminal_id: { description: 'The ID of the terminal created using open_persistent_terminal.' },
+	// 	},
+	// },
 
+	// open_persistent_terminal: {
+	// 	name: 'open_persistent_terminal',
+	// 	description: `Use this tool when you want to run a terminal command indefinitely, like a dev server (eg \`npm run dev\`), a background listener, etc. Opens a new terminal in the user's environment which will not awaited for or killed.`,
+	// 	params: {
+	// 		cwd: { description: cwdHelper },
+	// 	}
+	// },
 
-
-	open_persistent_terminal: {
-		name: 'open_persistent_terminal',
-		description: `Use this tool when you want to run a terminal command indefinitely, like a dev server (eg \`npm run dev\`), a background listener, etc. Opens a new terminal in the user's environment which will not awaited for or killed.`,
-		params: {
-			cwd: { description: cwdHelper },
-		}
-	},
-
-
-	kill_persistent_terminal: {
-		name: 'kill_persistent_terminal',
-		description: `Interrupts and closes a persistent terminal that you opened with open_persistent_terminal.`,
-		params: { persistent_terminal_id: { description: `The ID of the persistent terminal.` } }
-	}
+	// kill_persistent_terminal: {
+	// 	name: 'kill_persistent_terminal',
+	// 	description: `Interrupts and closes a persistent terminal that you opened with open_persistent_terminal.`,
+	// 	params: { persistent_terminal_id: { description: `The ID of the persistent terminal.` } }
+	// }
 
 
 	// go_to_definition
@@ -477,7 +475,7 @@ ${directoryStr}
 	}
 
 	if (mode === 'agent') {
-		details.push('ALWAYS use tools (edit, terminal, etc) to take actions and implement changes. For example, if you would like to edit a file, you MUST use a tool.')
+		details.push('ALWAYS use tools (edit, etc) to take actions and implement changes. For example, if you would like to edit a file, you MUST use a tool.')
 		details.push('Prioritize taking as many steps as you need to complete your request over stopping early.')
 		details.push(`You will OFTEN need to gather context before making a change. Do not immediately make a change unless you have ALL relevant context.`)
 		details.push(`ALWAYS have maximal certainty in a change BEFORE you make it. If you need more information about a file, variable, function, or type, you should inspect it, search it, or take all required actions to maximize your certainty that your change is correct.`)

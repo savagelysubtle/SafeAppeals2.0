@@ -106,22 +106,25 @@ Registry.as<IEditorPaneRegistry>(EditorExtensions.EditorPane).registerEditorPane
 		new SyncDescriptor(ExtensionsInput)
 	]);
 
-Registry.as<IViewContainersRegistry>(ViewContainerExtensions.ViewContainersRegistry).registerViewContainer(
-	{
-		id: VIEWLET_ID,
-		title: localize2('extensions', "Extensions"),
-		openCommandActionDescriptor: {
+// Only register Extensions view if extension installs are not disabled
+if (!product.disableExtensionInstalls) {
+	Registry.as<IViewContainersRegistry>(ViewContainerExtensions.ViewContainersRegistry).registerViewContainer(
+		{
 			id: VIEWLET_ID,
-			mnemonicTitle: localize({ key: 'miViewExtensions', comment: ['&& denotes a mnemonic'] }, "E&&xtensions"),
-			keybindings: { primary: KeyMod.CtrlCmd | KeyMod.Shift | KeyCode.KeyX },
+			title: localize2('extensions', "Extensions"),
+			openCommandActionDescriptor: {
+				id: VIEWLET_ID,
+				mnemonicTitle: localize({ key: 'miViewExtensions', comment: ['&& denotes a mnemonic'] }, "E&&xtensions"),
+				keybindings: { primary: KeyMod.CtrlCmd | KeyMod.Shift | KeyCode.KeyX },
+				order: 4,
+			},
+			ctorDescriptor: new SyncDescriptor(ExtensionsViewPaneContainer),
+			icon: extensionsViewIcon,
 			order: 4,
-		},
-		ctorDescriptor: new SyncDescriptor(ExtensionsViewPaneContainer),
-		icon: extensionsViewIcon,
-		order: 4,
-		rejectAddedViews: true,
-		alwaysUseContainerInfo: true,
-	}, ViewContainerLocation.Sidebar);
+			rejectAddedViews: true,
+			alwaysUseContainerInfo: true,
+		}, ViewContainerLocation.Sidebar);
+}
 
 Registry.as<IConfigurationRegistry>(ConfigurationExtensions.Configuration)
 	.registerConfiguration({
@@ -649,32 +652,38 @@ class ExtensionsContributions extends Disposable implements IWorkbenchContributi
 
 	// Global actions
 	private registerGlobalActions(): void {
-		this._register(MenuRegistry.appendMenuItem(MenuId.MenubarPreferencesMenu, {
-			command: {
-				id: VIEWLET_ID,
-				title: localize({ key: 'miPreferencesExtensions', comment: ['&& denotes a mnemonic'] }, "&&Extensions")
-			},
-			group: '2_configuration',
-			order: 3
-		}));
-		this._register(MenuRegistry.appendMenuItem(MenuId.GlobalActivity, {
-			command: {
-				id: VIEWLET_ID,
-				title: localize('showExtensions', "Extensions")
-			},
-			group: '2_configuration',
-			order: 3
-		}));
+		// Only register Extensions menu items if extension installs are not disabled
+		if (!product.disableExtensionInstalls) {
+			this._register(MenuRegistry.appendMenuItem(MenuId.MenubarPreferencesMenu, {
+				command: {
+					id: VIEWLET_ID,
+					title: localize({ key: 'miPreferencesExtensions', comment: ['&& denotes a mnemonic'] }, "&&Extensions")
+				},
+				group: '2_configuration',
+				order: 3
+			}));
+			this._register(MenuRegistry.appendMenuItem(MenuId.GlobalActivity, {
+				command: {
+					id: VIEWLET_ID,
+					title: localize('showExtensions', "Extensions")
+				},
+				group: '2_configuration',
+				order: 3
+			}));
+		}
 
-		this.registerExtensionAction({
-			id: 'workbench.extensions.action.focusExtensionsView',
-			title: localize2('focusExtensions', 'Focus on Extensions View'),
-			category: ExtensionsLocalizedLabel,
-			f1: true,
-			run: async (accessor: ServicesAccessor) => {
-				await accessor.get(IExtensionsWorkbenchService).openSearch('');
-			}
-		});
+		// Only register focus extensions view action if extension installs are not disabled
+		if (!product.disableExtensionInstalls) {
+			this.registerExtensionAction({
+				id: 'workbench.extensions.action.focusExtensionsView',
+				title: localize2('focusExtensions', 'Focus on Extensions View'),
+				category: ExtensionsLocalizedLabel,
+				f1: true,
+				run: async (accessor: ServicesAccessor) => {
+					await accessor.get(IExtensionsWorkbenchService).openSearch('');
+				}
+			});
+		}
 
 		this.registerExtensionAction({
 			id: 'workbench.extensions.action.installExtensions',
