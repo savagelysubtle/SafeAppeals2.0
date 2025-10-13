@@ -7,6 +7,7 @@ import * as vscode from 'vscode';
 import { docxToHtml, htmlToDocxBuffer, readDocxFile, writeDocxFile, isWebEnvironment } from './conversion';
 import { MonacoRichTextEditor } from './monacoRichTextEditor';
 import { VoidWebviewBridge } from './voidWebviewBridge';
+import { Logger } from './logger';
 
 export class RichTextEditorProvider implements vscode.CustomTextEditorProvider {
     private currentDocument: vscode.TextDocument | undefined;
@@ -14,7 +15,10 @@ export class RichTextEditorProvider implements vscode.CustomTextEditorProvider {
     // private _monacoEditor: MonacoRichTextEditor | undefined; // For future desktop/Monaco integration
     private webviewBridge: VoidWebviewBridge | undefined;
 
-    constructor(private readonly context: vscode.ExtensionContext) { }
+    constructor(
+        private readonly context: vscode.ExtensionContext,
+        private readonly logger: Logger
+    ) { }
 
     public setMonacoEditor(_editor: MonacoRichTextEditor): void {
         // this._monacoEditor = editor;
@@ -30,6 +34,9 @@ export class RichTextEditorProvider implements vscode.CustomTextEditorProvider {
         webviewPanel: vscode.WebviewPanel,
         _token: vscode.CancellationToken
     ): Promise<void> {
+        this.logger.info(`Opening file: ${document.uri.fsPath}`);
+        this.logger.trace(`File size: ${document.getText().length} characters`);
+
         this.currentDocument = document;
         this.currentWebviewPanel = webviewPanel;
 
@@ -109,9 +116,15 @@ export class RichTextEditorProvider implements vscode.CustomTextEditorProvider {
 
         if (documentType === 'docx') {
             try {
+                this.logger.info('Attempting to load DOCX file...');
                 // Load DOCX file and convert to HTML
                 const buffer = await readDocxFile(document.uri.fsPath);
+                this.logger.trace(`DOCX file loaded: ${buffer.length} bytes`);
+
                 const html = await docxToHtml(buffer);
+                this.logger.info('DOCX successfully converted to HTML');
+                this.logger.trace(`HTML length: ${html.length} characters`);
+
                 webviewPanel.webview.postMessage({
                     type: 'set-content',
                     content: html,
@@ -119,7 +132,11 @@ export class RichTextEditorProvider implements vscode.CustomTextEditorProvider {
                 });
             } catch (error) {
                 // Fall back to plain text if conversion fails
-                vscode.window.showWarningMessage(`Failed to load DOCX content: ${error}. Falling back to plain text.`);
+                this.logger.error('Failed to load DOCX content', error);
+                const errorMessage = error instanceof Error ? error.message : String(error);
+
+                vscode.window.showWarningMessage(`Failed to load DOCX content: ${errorMessage}. Falling back to plain text.`);
+
                 webviewPanel.webview.postMessage({
                     type: 'set-content',
                     content: document.getText(),
@@ -128,6 +145,7 @@ export class RichTextEditorProvider implements vscode.CustomTextEditorProvider {
             }
         } else {
             // For .txt and .gdoc files, send plain text
+            this.logger.trace(`Loading ${documentType} file as plain text`);
             webviewPanel.webview.postMessage({
                 type: 'set-content',
                 content: document.getText(),
@@ -138,12 +156,15 @@ export class RichTextEditorProvider implements vscode.CustomTextEditorProvider {
 
     private async handleExportDocx(html: string): Promise<void> {
         if (!this.currentDocument) {
+            this.logger.error('Export DOCX: No document available');
             vscode.window.showErrorMessage('No document available for export');
             return;
         }
 
         try {
+            this.logger.info('Starting DOCX export...');
             const buffer = await htmlToDocxBuffer(html);
+            this.logger.trace(`Generated DOCX buffer: ${buffer.length} bytes`);
 
             // Suggest filename based on current document
             const fileName = this.currentDocument.fileName;
@@ -161,15 +182,21 @@ export class RichTextEditorProvider implements vscode.CustomTextEditorProvider {
 
             if (uri) {
                 await writeDocxFile(uri.fsPath, buffer);
+                this.logger.info(`Document exported successfully to: ${uri.fsPath}`);
                 vscode.window.showInformationMessage(`Document exported to ${uri.fsPath}`);
+            } else {
+                this.logger.info('DOCX export cancelled by user');
             }
         } catch (error) {
-            vscode.window.showErrorMessage(`Failed to export DOCX: ${error}`);
+            this.logger.error('Failed to export DOCX', error);
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            vscode.window.showErrorMessage(`Failed to export DOCX: ${errorMessage}`);
         }
     }
 
     private async handleImportDocx(webviewPanel: vscode.WebviewPanel): Promise<void> {
         try {
+            this.logger.info('Starting DOCX import...');
             const uri = await vscode.window.showOpenDialog({
                 filters: {
                     'Word Documents': ['docx']
@@ -178,8 +205,13 @@ export class RichTextEditorProvider implements vscode.CustomTextEditorProvider {
             });
 
             if (uri && uri.length > 0) {
+                this.logger.info(`Importing DOCX from: ${uri[0].fsPath}`);
                 const buffer = await readDocxFile(uri[0].fsPath);
+                this.logger.trace(`DOCX file loaded: ${buffer.length} bytes`);
+
                 const html = await docxToHtml(buffer);
+                this.logger.info('DOCX successfully converted to HTML');
+                this.logger.trace(`HTML length: ${html.length} characters`);
 
                 webviewPanel.webview.postMessage({
                     type: 'set-content',
@@ -188,9 +220,13 @@ export class RichTextEditorProvider implements vscode.CustomTextEditorProvider {
                 });
 
                 vscode.window.showInformationMessage(`DOCX imported from ${uri[0].fsPath}`);
+            } else {
+                this.logger.info('DOCX import cancelled by user');
             }
         } catch (error) {
-            vscode.window.showErrorMessage(`Failed to import DOCX: ${error}`);
+            this.logger.error('Failed to import DOCX', error);
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            vscode.window.showErrorMessage(`Failed to import DOCX: ${errorMessage}`);
         }
     }
 

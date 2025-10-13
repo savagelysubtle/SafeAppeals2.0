@@ -27,12 +27,28 @@
           },
           {
             "filenamePattern": "*.gdoc"
-          },
+          }
+        ],
+        "priority": "default"
+      },
+      {
+        "viewType": "txtRichEditor.docxEditor",
+        "displayName": "Rich Text Editor (DOCX)",
+        "selector": [
           {
             "filenamePattern": "*.docx"
           }
         ],
         "priority": "default"
+      }
+    ],
+    "languages": [
+      {
+        "id": "plaintext",
+        "extensions": [
+          ".txt",
+          ".gdoc"
+        ]
       }
     ],
     "commands": [
@@ -62,6 +78,11 @@
         "title": "Void Inline Edit",
         "category": "Text Editor",
         "enablement": "richTextEditorActive"
+      },
+      {
+        "command": "txtRichEditor.showLogs",
+        "title": "Show Rich Text Editor Logs",
+        "category": "Text Editor"
       }
     ],
     "keybindings": [
@@ -115,10 +136,12 @@
     "watch": "gulp watch-extension:txt-rich-editor"
   },
   "dependencies": {
-    "mammoth": "^1.6.0",
-    "html-to-docx": "^1.8.0"
+    "html-to-docx": "^1.8.0",
+    "jszip": "^3.10.1",
+    "mammoth": "^1.6.0"
   },
   "devDependencies": {
+    "@types/jszip": "^3.4.1",
     "@types/node": "20.x"
   },
   "repository": {
