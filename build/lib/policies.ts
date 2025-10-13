@@ -8,8 +8,8 @@ import { promises as fs } from 'fs';
 import path from 'path';
 import byline from 'byline';
 import { rgPath } from '@vscode/ripgrep';
-import Parser from 'tree-sitter';
-const { typescript } = require('tree-sitter-typescript');
+// Removed tree-sitter dependencies for document-focused editor
+// All tree-sitter dependent functions are disabled
 const product = require('../../product.json');
 const packageJson = require('../../package.json');
 
@@ -152,7 +152,7 @@ class BooleanPolicy extends BasePolicy {
 		minimumVersion: string,
 		description: NlsString,
 		moduleName: string,
-		settingNode: Parser.SyntaxNode
+		settingNode: any
 	): BooleanPolicy | undefined {
 		const type = getStringProperty(moduleName, settingNode, 'type');
 
@@ -204,7 +204,7 @@ class BooleanPolicy extends BasePolicy {
 }
 
 class ParseError extends Error {
-	constructor(message: string, moduleName: string, node: Parser.SyntaxNode) {
+	constructor(message: string, moduleName: string, node: null.SyntaxNode) {
 		super(`${message}. ${moduleName}.ts:${node.startPosition.row + 1}`);
 	}
 }
@@ -217,7 +217,7 @@ class NumberPolicy extends BasePolicy {
 		minimumVersion: string,
 		description: NlsString,
 		moduleName: string,
-		settingNode: Parser.SyntaxNode
+		settingNode: any
 	): NumberPolicy | undefined {
 		const type = getStringProperty(moduleName, settingNode, 'type');
 
@@ -282,7 +282,7 @@ class StringPolicy extends BasePolicy {
 		minimumVersion: string,
 		description: NlsString,
 		moduleName: string,
-		settingNode: Parser.SyntaxNode
+		settingNode: any
 	): StringPolicy | undefined {
 		const type = getStringProperty(moduleName, settingNode, 'type');
 
@@ -337,7 +337,7 @@ class ObjectPolicy extends BasePolicy {
 		minimumVersion: string,
 		description: NlsString,
 		moduleName: string,
-		settingNode: Parser.SyntaxNode
+		settingNode: any
 	): ObjectPolicy | undefined {
 		const type = getStringProperty(moduleName, settingNode, 'type');
 
@@ -393,7 +393,7 @@ class StringEnumPolicy extends BasePolicy {
 		minimumVersion: string,
 		description: NlsString,
 		moduleName: string,
-		settingNode: Parser.SyntaxNode
+		settingNode: any
 	): StringEnumPolicy | undefined {
 		const type = getStringProperty(moduleName, settingNode, 'type');
 
@@ -477,13 +477,13 @@ class StringEnumPolicy extends BasePolicy {
 
 interface QType<T> {
 	Q: string;
-	value(matches: Parser.QueryMatch[]): T | undefined;
+	value(matches: nullMatch[]): T | undefined;
 }
 
 const NumberQ: QType<number> = {
 	Q: `(number) @value`,
 
-	value(matches: Parser.QueryMatch[]): number | undefined {
+	value(matches: nullMatch[]): number | undefined {
 		const match = matches[0];
 
 		if (!match) {
@@ -515,7 +515,7 @@ const StringQ: QType<string | NlsString> = {
 		)
 	]`,
 
-	value(matches: Parser.QueryMatch[]): string | NlsString | undefined {
+	value(matches: nullMatch[]): string | NlsString | undefined {
 		const match = matches[0];
 
 		if (!match) {
@@ -541,7 +541,7 @@ const StringQ: QType<string | NlsString> = {
 const StringArrayQ: QType<(string | NlsString)[]> = {
 	Q: `(array ${StringQ.Q})`,
 
-	value(matches: Parser.QueryMatch[]): (string | NlsString)[] | undefined {
+	value(matches: nullMatch[]): (string | NlsString)[] | undefined {
 		if (matches.length === 0) {
 			return undefined;
 		}
@@ -552,15 +552,15 @@ const StringArrayQ: QType<(string | NlsString)[]> = {
 	}
 };
 
-function getProperty<T>(qtype: QType<T>, moduleName: string, node: Parser.SyntaxNode, key: string): T | undefined {
-	const query = new Parser.Query(
-		typescript,
+function getProperty<T>(qtype: QType<T>, moduleName: string, node: null.SyntaxNode, key: string): T | undefined {
+	const query = new null(
+		null,
 		`(
 			(pair
 				key: [(property_identifier)(string)] @key
 				value: ${qtype.Q}
 			)
-			(#any-of? @key "${key}" "'${key}'")
+			(#null-of? @key "${key}" "'${key}'")
 		)`
 	);
 
@@ -572,15 +572,15 @@ function getProperty<T>(qtype: QType<T>, moduleName: string, node: Parser.Syntax
 	}
 }
 
-function getNumberProperty(moduleName: string, node: Parser.SyntaxNode, key: string): number | undefined {
+function getNumberProperty(moduleName: string, node: null.SyntaxNode, key: string): number | undefined {
 	return getProperty(NumberQ, moduleName, node, key);
 }
 
-function getStringProperty(moduleName: string, node: Parser.SyntaxNode, key: string): string | NlsString | undefined {
+function getStringProperty(moduleName: string, node: null.SyntaxNode, key: string): string | NlsString | undefined {
 	return getProperty(StringQ, moduleName, node, key);
 }
 
-function getStringArrayProperty(moduleName: string, node: Parser.SyntaxNode, key: string): (string | NlsString)[] | undefined {
+function getStringArrayProperty(moduleName: string, node: null.SyntaxNode, key: string): (string | NlsString)[] | undefined {
 	return getProperty(StringArrayQ, moduleName, node, key);
 }
 
@@ -595,9 +595,9 @@ const PolicyTypes = [
 
 function getPolicy(
 	moduleName: string,
-	configurationNode: Parser.SyntaxNode,
-	settingNode: Parser.SyntaxNode,
-	policyNode: Parser.SyntaxNode,
+	configurationNode: null.SyntaxNode,
+	settingNode: null.SyntaxNode,
+	policyNode: null.SyntaxNode,
 	categories: Map<string, Category>
 ): Policy {
 	const name = getStringProperty(moduleName, policyNode, 'name');
@@ -655,17 +655,17 @@ function getPolicy(
 	return result;
 }
 
-function getPolicies(moduleName: string, node: Parser.SyntaxNode): Policy[] {
-	const query = new Parser.Query(typescript, `
+function getPolicies(moduleName: string, node: null.SyntaxNode): Policy[] {
+	const query = new null(null, `
 		(
 			(call_expression
 				function: (member_expression property: (property_identifier) @registerConfigurationFn) (#eq? @registerConfigurationFn registerConfiguration)
 				arguments: (arguments	(object	(pair
-					key: [(property_identifier)(string)] @propertiesKey (#any-of? @propertiesKey "properties" "'properties'")
+					key: [(property_identifier)(string)] @propertiesKey (#null-of? @propertiesKey "properties" "'properties'")
 					value: (object (pair
 						key: [(property_identifier)(string)(computed_property_name)]
 						value: (object (pair
-							key: [(property_identifier)(string)] @policyKey (#any-of? @policyKey "policy" "'policy'")
+							key: [(property_identifier)(string)] @policyKey (#null-of? @policyKey "policy" "'policy'")
 							value: (object) @policy
 						)) @setting
 					))
@@ -1035,8 +1035,8 @@ async function getNLS(extensionGalleryServiceUrl: string, resourceUrlTemplate: s
 }
 
 async function parsePolicies(): Promise<Policy[]> {
-	const parser = new Parser();
-	parser.setLanguage(typescript);
+	const parser = new null();
+	parser.setLanguage(null);
 
 	const files = await getFiles(process.cwd());
 	const base = path.join(process.cwd(), 'src');
