@@ -50,6 +50,32 @@
         "command": "txtRichEditor.importDocx",
         "title": "Import DOCX",
         "category": "Text Editor"
+      },
+      {
+        "command": "txtRichEditor.addToVoidChat",
+        "title": "Add Selection to Void Chat",
+        "category": "Text Editor",
+        "enablement": "richTextEditorActive"
+      },
+      {
+        "command": "txtRichEditor.inlineEdit",
+        "title": "Void Inline Edit",
+        "category": "Text Editor",
+        "enablement": "richTextEditorActive"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "txtRichEditor.addToVoidChat",
+        "key": "ctrl+l",
+        "mac": "cmd+l",
+        "when": "richTextEditorActive && editorTextFocus"
+      },
+      {
+        "command": "txtRichEditor.inlineEdit",
+        "key": "ctrl+k",
+        "mac": "cmd+k",
+        "when": "richTextEditorActive && editorTextFocus"
       }
     ],
     "menus": {

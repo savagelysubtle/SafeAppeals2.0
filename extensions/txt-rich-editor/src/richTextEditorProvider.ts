@@ -5,12 +5,25 @@
 
 import * as vscode from 'vscode';
 import { docxToHtml, htmlToDocxBuffer, readDocxFile, writeDocxFile, isWebEnvironment } from './conversion';
+import { MonacoRichTextEditor } from './monacoRichTextEditor';
+import { VoidWebviewBridge } from './voidWebviewBridge';
 
 export class RichTextEditorProvider implements vscode.CustomTextEditorProvider {
     private currentDocument: vscode.TextDocument | undefined;
     private currentWebviewPanel: vscode.WebviewPanel | undefined;
+    // private _monacoEditor: MonacoRichTextEditor | undefined; // For future desktop/Monaco integration
+    private webviewBridge: VoidWebviewBridge | undefined;
 
     constructor(private readonly context: vscode.ExtensionContext) { }
+
+    public setMonacoEditor(_editor: MonacoRichTextEditor): void {
+        // this._monacoEditor = editor;
+        // Monaco editor integration reserved for future implementation
+    }
+
+    public setWebviewBridge(bridge: VoidWebviewBridge): void {
+        this.webviewBridge = bridge;
+    }
 
     public async resolveCustomTextEditor(
         document: vscode.TextDocument,
@@ -19,6 +32,11 @@ export class RichTextEditorProvider implements vscode.CustomTextEditorProvider {
     ): Promise<void> {
         this.currentDocument = document;
         this.currentWebviewPanel = webviewPanel;
+
+        // If webview bridge is available (web environment), register the panel
+        if (this.webviewBridge) {
+            this.webviewBridge.setPanel(webviewPanel);
+        }
 
         // Setup webview
         webviewPanel.webview.options = {
@@ -1195,6 +1213,50 @@ export class RichTextEditorProvider implements vscode.CustomTextEditorProvider {
                         type: 'request-export-docx',
                         html: editor.innerHTML
                     });
+                    break;
+                case 'request-plain-text-for-chat':
+                    // Extract plain text and send to Void chat
+                    const plainText = editor.innerText || editor.textContent;
+                    const selection = window.getSelection();
+                    let selectionInfo = undefined;
+                    if (selection && !selection.isCollapsed) {
+                        const range = selection.getRangeAt(0);
+                        selectionInfo = {
+                            start: range.startOffset,
+                            end: range.endOffset
+                        };
+                    }
+                    vscode.postMessage({
+                        type: 'void-add-to-chat',
+                        plainText: selectionInfo ? selection.toString() : plainText,
+                        selection: selectionInfo
+                    });
+                    break;
+                case 'request-html-for-inline-edit':
+                    // Extract HTML and send for inline editing
+                    const htmlContent = editor.innerHTML;
+                    const currentSelection = window.getSelection();
+                    let htmlSelectionInfo = undefined;
+                    if (currentSelection && !currentSelection.isCollapsed) {
+                        const range = currentSelection.getRangeAt(0);
+                        htmlSelectionInfo = {
+                            start: range.startOffset,
+                            end: range.endOffset
+                        };
+                    }
+                    vscode.postMessage({
+                        type: 'void-inline-edit',
+                        html: htmlContent,
+                        selection: htmlSelectionInfo
+                    });
+                    break;
+                case 'apply-html-edit':
+                    // Apply edited HTML from Void back to editor
+                    if (!isUpdating && message.html) {
+                        isUpdating = true;
+                        editor.innerHTML = message.html;
+                        isUpdating = false;
+                    }
                     break;
             }
         });

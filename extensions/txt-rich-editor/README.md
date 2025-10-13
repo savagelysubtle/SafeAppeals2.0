@@ -186,6 +186,30 @@ Advanced text formatting:
 - Some advanced Word features may not be preserved
 - Complex shapes and charts are placeholders
 
+## Void AI Integration 🤖
+
+The Rich Text Editor now includes full integration with Void's AI agent capabilities!
+
+### Features
+
+- **Ctrl+L (Cmd+L)**: Add selection to Void chat
+  - Strips formatting and sends plain text
+  - Works with selections or entire document
+  - Opens Void sidebar automatically
+
+- **Ctrl+K (Cmd+K)**: AI-powered inline editing
+  - Preserves rich text formatting
+  - Edit specific sections with AI assistance
+  - Formatting outside edit range remains intact
+
+### Implementation
+
+- **Desktop**: Uses Monaco editor with HTML state management
+- **Web**: Uses webview with message-based Void bridge
+- **Format Handling**: Plain text for chat, HTML-aware for edits
+
+See [VOID_INTEGRATION.md](./VOID_INTEGRATION.md) for detailed documentation.
+
 ## Roadmap
 
 Future enhancements:
@@ -198,6 +222,8 @@ Future enhancements:
 - Custom templates
 - More table formatting options
 - Cell merging and splitting
+- Enhanced HTML diff algorithm for better format preservation
+- Richer Monaco decorations for HTML styling
 
 ## Error Handling
 
