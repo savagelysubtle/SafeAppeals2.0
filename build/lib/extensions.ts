@@ -333,6 +333,7 @@ const allowedExtensions = new Set([
 	'xml',
 	'git',
 	'git-base',
+	'txt-rich-editor',
 ]);
 
 const marketplaceWebExtensionsExclude = new Set([

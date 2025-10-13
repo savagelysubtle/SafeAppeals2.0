@@ -33,7 +33,7 @@ import { RawToolCallObj } from '../../../../common/sendLLMMessageTypes.js';
 import ErrorBoundary from './ErrorBoundary.js';
 import { ToolApprovalTypeSwitch } from '../void-settings-tsx/Settings.js';
 
-import { persistentTerminalNameOfId } from '../../../terminalToolService.js';
+// // import { persistentTerminalNameOfId } from '../../../terminalToolService.js'; // Terminal functionality disabled // Terminal functionality disabled
 import { removeMCPToolNamePrefix } from '../../../../common/mcpServiceTypes.js';
 
 
@@ -1412,8 +1412,8 @@ const titleOfBuiltinToolName = {
 	'delete_file_or_folder': { done: `Deleted`, proposed: `Delete`, running: loadingTitleWrapper(`Deleting`) },
 	'edit_file': { done: `Edited file`, proposed: 'Edit file', running: loadingTitleWrapper('Editing file') },
 	'rewrite_file': { done: `Wrote file`, proposed: 'Write file', running: loadingTitleWrapper('Writing file') },
-	'run_command': { done: `Ran terminal`, proposed: 'Run terminal', running: loadingTitleWrapper('Running terminal') },
-	'run_persistent_command': { done: `Ran terminal`, proposed: 'Run terminal', running: loadingTitleWrapper('Running terminal') },
+		// 'run_command': { done: `Ran terminal`, proposed: 'Run terminal', running: loadingTitleWrapper('Running terminal') }, // Terminal functionality disabled
+		// 'run_persistent_command': { done: `Ran terminal`, proposed: 'Run terminal', running: loadingTitleWrapper('Running terminal') }, // Terminal functionality disabled
 
 	'open_persistent_terminal': { done: `Opened terminal`, proposed: 'Open terminal', running: loadingTitleWrapper('Opening terminal') },
 	'kill_persistent_terminal': { done: `Killed terminal`, proposed: 'Kill terminal', running: loadingTitleWrapper('Killing terminal') },
@@ -1526,14 +1526,14 @@ const toolNameToDesc = (toolName: BuiltinToolName, _toolParams: BuiltinToolCallP
 				desc1Info: getRelative(toolParams.uri, accessor),
 			}
 		},
-		'run_command': () => {
-			const toolParams = _toolParams as BuiltinToolCallParams['run_command']
+		// 'run_command': () => {
+		// 	const toolParams = _toolParams as BuiltinToolCallParams['run_command'] // Terminal functionality disabled
 			return {
 				desc1: `"${toolParams.command}"`,
 			}
 		},
-		'run_persistent_command': () => {
-			const toolParams = _toolParams as BuiltinToolCallParams['run_persistent_command']
+		// 'run_persistent_command': () => {
+		// 	const toolParams = _toolParams as BuiltinToolCallParams['run_persistent_command'] // Terminal functionality disabled
 			return {
 				desc1: `"${toolParams.command}"`,
 			}
@@ -1827,11 +1827,13 @@ const CommandTool = ({ toolMessage, type, threadId }: { threadId: string } & ({
 		// />
 
 		let msg: string
-		if (type === 'run_command') msg = toolsService.stringOfResult['run_command'](toolMessage.params, result)
-		else msg = toolsService.stringOfResult['run_persistent_command'](toolMessage.params, result)
+		// Terminal functionality disabled - toolsService methods commented out
+		// if (type === 'run_command') msg = toolsService.stringOfResult['run_command'](toolMessage.params, result)
+		// else msg = toolsService.stringOfResult['run_persistent_command'](toolMessage.params, result)
+		msg = 'Terminal functionality disabled'
 
 		if (type === 'run_persistent_command') {
-			componentParams.info = persistentTerminalNameOfId(toolMessage.params.persistentTerminalId)
+			// componentParams.info = persistentTerminalNameOfId(toolMessage.params.persistentTerminalId) // Terminal functionality disabled
 		}
 
 		componentParams.children = <ToolChildrenWrapper className='whitespace-pre text-nowrap overflow-auto text-sm'>
@@ -2361,17 +2363,17 @@ const builtinToolNameToComponent: { [T in BuiltinToolName]: { resultWrapper: Res
 
 	// ---
 
-	'run_command': {
-		resultWrapper: (params) => {
-			return <CommandTool {...params} type='run_command' />
-		}
-	},
+	// 'run_command': {
+	// 	resultWrapper: (params) => {
+	// 		return <CommandTool {...params} type='run_command' />
+	// 	}
+	// }, // Terminal functionality disabled
 
-	'run_persistent_command': {
-		resultWrapper: (params) => {
-			return <CommandTool {...params} type='run_persistent_command' />
-		}
-	},
+	// 'run_persistent_command': {
+	// 	resultWrapper: (params) => {
+	// 		return <CommandTool {...params} type='run_persistent_command' />
+	// 	}
+	// }, // Terminal functionality disabled
 	'open_persistent_terminal': {
 		resultWrapper: ({ toolMessage }) => {
 			const accessor = useAccessor()
@@ -2395,7 +2397,7 @@ const builtinToolNameToComponent: { [T in BuiltinToolName]: { resultWrapper: Res
 			if (toolMessage.type === 'success') {
 				const { result } = toolMessage
 				const { persistentTerminalId } = result
-				componentParams.desc1 = persistentTerminalNameOfId(persistentTerminalId)
+				// componentParams.desc1 = persistentTerminalNameOfId(persistentTerminalId) // Terminal functionality disabled
 				componentParams.onClick = () => terminalToolsService.focusPersistentTerminal(persistentTerminalId)
 			}
 			else if (toolMessage.type === 'tool_error') {
@@ -2430,7 +2432,7 @@ const builtinToolNameToComponent: { [T in BuiltinToolName]: { resultWrapper: Res
 
 			if (toolMessage.type === 'success') {
 				const { persistentTerminalId } = params
-				componentParams.desc1 = persistentTerminalNameOfId(persistentTerminalId)
+				// componentParams.desc1 = persistentTerminalNameOfId(persistentTerminalId) // Terminal functionality disabled
 				componentParams.onClick = () => terminalToolsService.focusPersistentTerminal(persistentTerminalId)
 			}
 			else if (toolMessage.type === 'tool_error') {
@@ -3176,11 +3178,13 @@ export const SidebarChat = () => {
 
 
 	return (
-		<Fragment key={threadId} // force rerender when change thread
-		>
-			{isLandingPage ?
-				landingPageContent
-				: threadPageContent}
-		</Fragment>
+		<div className="void-chat-panel">
+			<Fragment key={threadId} // force rerender when change thread
+			>
+				{isLandingPage ?
+					landingPageContent
+					: threadPageContent}
+			</Fragment>
+		</div>
 	)
 }

@@ -1,0 +1,51 @@
+Microsoft Word Test File
+========================
+
+This is a test file for the Rich Text Editor with Microsoft Word (.docx) support.
+
+Document Properties:
+- Title: Microsoft Word Test Document
+- Author: Test User
+- Created: 2025-01-13
+- Subject: Test Document
+- Format: Microsoft Word
+
+Advanced Features to Test:
+=========================
+
+1. Text Formatting
+   - Bold, Italic, Underline, Strikethrough
+   - Font styles and sizes
+   - Text colors (if supported)
+
+2. Document Structure
+   - Headings (H1, H2, H3)
+   - Paragraph styles
+   - Lists (bulleted and numbered)
+   - Blockquotes
+
+3. Code and Technical Content
+   - Inline code snippets
+   - Code blocks with syntax highlighting
+   - Technical documentation formatting
+
+4. Layout and Alignment
+   - Text alignment (left, center, right)
+   - Paragraph spacing
+   - Document margins
+
+5. Advanced Features
+   - Tables (if supported)
+   - Images (if supported)
+   - Links and references
+
+Instructions:
+============
+
+1. Open this file in Void
+2. Right-click and select "Open with Rich Text Editor"
+3. Test all formatting features
+4. Verify document type shows as "DOCX"
+5. Save and verify plain text output
+
+Note: This simulates a Microsoft Word document format. Real .docx files are ZIP archives with XML content.
