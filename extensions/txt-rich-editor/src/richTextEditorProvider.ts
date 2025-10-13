@@ -550,6 +550,10 @@ export class RichTextEditorProvider implements vscode.CustomTextEditorProvider {
     <div class="ribbon">
         <div class="ribbon-tabs">
             <button class="ribbon-tab active" id="homeTab">Home</button>
+            <button class="ribbon-tab" id="insertTab">Insert</button>
+            <button class="ribbon-tab" id="pageLayoutTab">Page Layout</button>
+            <button class="ribbon-tab" id="viewTab">View</button>
+            <button class="ribbon-tab" id="formatTab">Format</button>
         </div>
 
         <div class="ribbon-content" id="homeContent">
@@ -629,20 +633,208 @@ export class RichTextEditorProvider implements vscode.CustomTextEditorProvider {
                 </div>
             </div>
 
-            <!-- TODO: Complex ribbon - Insert tab
-                 - Tables, Images, Shapes, Charts
-                 - Links, Bookmarks, Cross-references
-                 - Header/Footer, Page Number, Date/Time -->
+        </div>
 
-            <!-- TODO: Complex ribbon - Page Layout tab
-                 - Page Size, Orientation, Margins (preset)
-                 - Columns, Line Numbers, Hyphenation
-                 - Page Background, Watermark -->
+        <!-- INSERT TAB -->
+        <div class="ribbon-content" id="insertContent" style="display: none;">
+            <!-- Tables Group -->
+            <div class="ribbon-group">
+                <div class="ribbon-group-title">Tables</div>
+                <div class="ribbon-group-content">
+                    <button class="ribbon-button" id="insertTable" title="Insert Table">📊</button>
+                    <button class="ribbon-button" id="quickTable" title="Quick Table (3x3)">⊞</button>
+                </div>
+            </div>
 
-            <!-- TODO: Complex ribbon - Review tab
-                 - Track Changes, Comments, Compare
-                 - Spelling & Grammar, Thesaurus
-                 - Protect Document, Accept/Reject Changes -->
+            <!-- Illustrations Group -->
+            <div class="ribbon-group">
+                <div class="ribbon-group-title">Illustrations</div>
+                <div class="ribbon-group-content">
+                    <button class="ribbon-button" id="insertImage" title="Insert Image">🖼️</button>
+                    <button class="ribbon-button" id="insertShape" title="Insert Shape">⬜</button>
+                    <button class="ribbon-button" id="insertChart" title="Insert Chart">📈</button>
+                </div>
+            </div>
+
+            <!-- Links Group -->
+            <div class="ribbon-group">
+                <div class="ribbon-group-title">Links</div>
+                <div class="ribbon-group-content">
+                    <button class="ribbon-button" id="insertLink" title="Insert Hyperlink">🔗</button>
+                    <button class="ribbon-button" id="insertBookmark" title="Insert Bookmark">🔖</button>
+                </div>
+            </div>
+
+            <!-- Text Group -->
+            <div class="ribbon-group">
+                <div class="ribbon-group-title">Text</div>
+                <div class="ribbon-group-content">
+                    <button class="ribbon-button" id="insertTextBox" title="Insert Text Box">▭</button>
+                    <button class="ribbon-button" id="insertDate" title="Insert Date/Time">📅</button>
+                    <button class="ribbon-button" id="insertSymbol" title="Insert Symbol">Ω</button>
+                </div>
+            </div>
+
+            <!-- Signature Group -->
+            <div class="ribbon-group">
+                <div class="ribbon-group-title">Signature</div>
+                <div class="ribbon-group-content">
+                    <button class="ribbon-button" id="insertSignature" title="Insert Signature Line">✍️</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- PAGE LAYOUT TAB -->
+        <div class="ribbon-content" id="pageLayoutContent" style="display: none;">
+            <!-- Page Setup Group -->
+            <div class="ribbon-group">
+                <div class="ribbon-group-title">Page Setup</div>
+                <div class="ribbon-group-content">
+                    <select class="ribbon-select" id="pageSize" title="Page Size">
+                        <option value="letter">Letter (8.5" × 11")</option>
+                        <option value="a4">A4 (210mm × 297mm)</option>
+                        <option value="legal">Legal (8.5" × 14")</option>
+                        <option value="tabloid">Tabloid (11" × 17")</option>
+                    </select>
+                    <button class="ribbon-button" id="pageOrientation" title="Page Orientation">📄</button>
+                    <button class="ribbon-button" id="pageMargins" title="Margins">↔️</button>
+                </div>
+            </div>
+
+            <!-- Columns Group -->
+            <div class="ribbon-group">
+                <div class="ribbon-group-title">Columns</div>
+                <div class="ribbon-group-content">
+                    <button class="ribbon-button" id="oneColumn" title="One Column">║</button>
+                    <button class="ribbon-button" id="twoColumns" title="Two Columns">║║</button>
+                    <button class="ribbon-button" id="threeColumns" title="Three Columns">║║║</button>
+                </div>
+            </div>
+
+            <!-- Page Background Group -->
+            <div class="ribbon-group">
+                <div class="ribbon-group-title">Page Background</div>
+                <div class="ribbon-group-content">
+                    <button class="ribbon-button" id="pageColor" title="Page Color">🎨</button>
+                    <button class="ribbon-button" id="pageBorders" title="Page Borders">⊡</button>
+                    <button class="ribbon-button" id="watermark" title="Watermark">💧</button>
+                </div>
+            </div>
+
+            <!-- Line Numbers Group -->
+            <div class="ribbon-group">
+                <div class="ribbon-group-title">Line Numbers</div>
+                <div class="ribbon-group-content">
+                    <button class="ribbon-button" id="lineNumbers" title="Toggle Line Numbers">🔢</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- VIEW TAB -->
+        <div class="ribbon-content" id="viewContent" style="display: none;">
+            <!-- Zoom Group -->
+            <div class="ribbon-group">
+                <div class="ribbon-group-title">Zoom</div>
+                <div class="ribbon-group-content">
+                    <button class="ribbon-button" id="zoomIn" title="Zoom In">🔍+</button>
+                    <button class="ribbon-button" id="zoomOut" title="Zoom Out">🔍-</button>
+                    <select class="ribbon-select" id="zoomLevel" title="Zoom Level">
+                        <option value="50">50%</option>
+                        <option value="75">75%</option>
+                        <option value="100" selected>100%</option>
+                        <option value="125">125%</option>
+                        <option value="150">150%</option>
+                        <option value="200">200%</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Show Group -->
+            <div class="ribbon-group">
+                <div class="ribbon-group-title">Show</div>
+                <div class="ribbon-group-content">
+                    <button class="ribbon-button" id="showRuler" title="Toggle Ruler">📏</button>
+                    <button class="ribbon-button" id="showGridlines" title="Show Gridlines">⊞</button>
+                    <button class="ribbon-button" id="showParagraphMarks" title="Show Paragraph Marks">¶</button>
+                </div>
+            </div>
+
+            <!-- View Mode Group -->
+            <div class="ribbon-group">
+                <div class="ribbon-group-title">View Mode</div>
+                <div class="ribbon-group-content">
+                    <button class="ribbon-button" id="printLayout" title="Print Layout">📄</button>
+                    <button class="ribbon-button" id="webLayout" title="Web Layout">🌐</button>
+                    <button class="ribbon-button" id="focusMode" title="Focus Mode">👁️</button>
+                </div>
+            </div>
+
+            <!-- Window Group -->
+            <div class="ribbon-group">
+                <div class="ribbon-group-title">Window</div>
+                <div class="ribbon-group-content">
+                    <button class="ribbon-button" id="splitView" title="Split View">⊟</button>
+                    <button class="ribbon-button" id="fullScreen" title="Full Screen">⛶</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- FORMAT TAB -->
+        <div class="ribbon-content" id="formatContent" style="display: none;">
+            <!-- Text Effects Group -->
+            <div class="ribbon-group">
+                <div class="ribbon-group-title">Text Effects</div>
+                <div class="ribbon-group-content">
+                    <button class="ribbon-button" id="textShadow" title="Text Shadow">S̲</button>
+                    <button class="ribbon-button" id="textOutline" title="Text Outline">O</button>
+                    <button class="ribbon-button" id="textGlow" title="Text Glow">✨</button>
+                </div>
+            </div>
+
+            <!-- Color Group -->
+            <div class="ribbon-group">
+                <div class="ribbon-group-title">Color</div>
+                <div class="ribbon-group-content">
+                    <button class="ribbon-button" id="textColor" title="Text Color">A</button>
+                    <button class="ribbon-button" id="highlightColor" title="Highlight Color">🖍️</button>
+                    <button class="ribbon-button" id="backgroundColor" title="Background Color">🎨</button>
+                </div>
+            </div>
+
+            <!-- Spacing Group -->
+            <div class="ribbon-group">
+                <div class="ribbon-group-title">Spacing</div>
+                <div class="ribbon-group-content">
+                    <select class="ribbon-select" id="lineSpacing" title="Line Spacing">
+                        <option value="1.0">1.0</option>
+                        <option value="1.15">1.15</option>
+                        <option value="1.5">1.5</option>
+                        <option value="1.6" selected>1.6</option>
+                        <option value="2.0">2.0</option>
+                        <option value="2.5">2.5</option>
+                        <option value="3.0">3.0</option>
+                    </select>
+                    <button class="ribbon-button" id="paragraphSpacing" title="Paragraph Spacing">↕️</button>
+                </div>
+            </div>
+
+            <!-- Case Group -->
+            <div class="ribbon-group">
+                <div class="ribbon-group-title">Change Case</div>
+                <div class="ribbon-group-content">
+                    <button class="ribbon-button" id="uppercase" title="UPPERCASE">AA</button>
+                    <button class="ribbon-button" id="lowercase" title="lowercase">aa</button>
+                    <button class="ribbon-button" id="capitalize" title="Capitalize">Aa</button>
+                </div>
+            </div>
+
+            <!-- Clear Formatting Group -->
+            <div class="ribbon-group">
+                <div class="ribbon-group-title">Clear</div>
+                <div class="ribbon-group-content">
+                    <button class="ribbon-button" id="clearFormatting" title="Clear All Formatting">🧹</button>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -792,6 +984,51 @@ export class RichTextEditorProvider implements vscode.CustomTextEditorProvider {
         document.addEventListener('mousemove', doDrag);
         document.addEventListener('mouseup', stopDrag);
 
+        // TAB SWITCHING
+        const tabs = {
+            homeTab: document.getElementById('homeTab'),
+            insertTab: document.getElementById('insertTab'),
+            pageLayoutTab: document.getElementById('pageLayoutTab'),
+            viewTab: document.getElementById('viewTab'),
+            formatTab: document.getElementById('formatTab')
+        };
+
+        const tabContents = {
+            homeContent: document.getElementById('homeContent'),
+            insertContent: document.getElementById('insertContent'),
+            pageLayoutContent: document.getElementById('pageLayoutContent'),
+            viewContent: document.getElementById('viewContent'),
+            formatContent: document.getElementById('formatContent')
+        };
+
+        function switchTab(tabName) {
+            // Hide all content
+            Object.values(tabContents).forEach(content => {
+                if (content) content.style.display = 'none';
+            });
+
+            // Remove active class from all tabs
+            Object.values(tabs).forEach(tab => {
+                if (tab) tab.classList.remove('active');
+            });
+
+            // Show selected content and activate tab
+            const contentId = tabName.replace('Tab', 'Content');
+            if (tabContents[contentId]) {
+                tabContents[contentId].style.display = 'flex';
+            }
+            if (tabs[tabName]) {
+                tabs[tabName].classList.add('active');
+            }
+        }
+
+        // Attach tab click handlers
+        Object.keys(tabs).forEach(tabName => {
+            if (tabs[tabName]) {
+                tabs[tabName].addEventListener('click', () => switchTab(tabName));
+            }
+        });
+
         function renderCanvas() {
             if (!canvasInitialized) return;
 
@@ -832,7 +1069,7 @@ export class RichTextEditorProvider implements vscode.CustomTextEditorProvider {
             ctx.font = '10px "Segoe UI", sans-serif';
             ctx.textBaseline = 'top';
             ctx.lineWidth = 1;
-            
+
             const charWidth = 8;
             for (let i = 0; i < rulerTop.width / charWidth; i++) {
                 const x = i * charWidth;
@@ -889,7 +1126,7 @@ export class RichTextEditorProvider implements vscode.CustomTextEditorProvider {
             for (let i = 0; i < visibleLines; i++) {
                 const lineNum = startLine + i + 1;
                 const y = 32 + (i * lineHeight) + 10 - (scrollOffset % lineHeight); // 32 = ruler height, 10 = padding
-                
+
                 if (y > 32 && y < marginLeft.height) {
                     ctx.fillText(lineNum.toString(), marginLeft.width - 8, y);
                 }
@@ -1158,6 +1395,180 @@ export class RichTextEditorProvider implements vscode.CustomTextEditorProvider {
 
         // Update button states periodically
         setInterval(updateButtonStates, 100);
+
+        // === INSERT TAB FEATURES ===
+
+        // Quick Table (3x3)
+        document.getElementById('quickTable')?.addEventListener('click', () => {
+            const table = document.createElement('table');
+            table.style.borderCollapse = 'collapse';
+            table.style.margin = '10px 0';
+            table.style.border = '1px solid #ccc';
+
+            for (let i = 0; i < 3; i++) {
+                const row = table.insertRow();
+                for (let j = 0; j < 3; j++) {
+                    const cell = row.insertCell();
+                    cell.style.border = '1px solid #ccc';
+                    cell.style.padding = '8px';
+                    cell.style.minWidth = '80px';
+                    cell.contentEditable = 'true';
+                    cell.innerHTML = '&nbsp;';
+                }
+            }
+
+            const selection = window.getSelection();
+            if (selection && selection.rangeCount > 0) {
+                const range = selection.getRangeAt(0);
+                range.deleteContents();
+                range.insertNode(table);
+            }
+        });
+
+        // Insert Date
+        document.getElementById('insertDate')?.addEventListener('click', () => {
+            const now = new Date();
+            const dateStr = now.toLocaleDateString() + ' ' + now.toLocaleTimeString();
+            document.execCommand('insertText', false, dateStr);
+        });
+
+        // Insert Symbol
+        document.getElementById('insertSymbol')?.addEventListener('click', () => {
+            const symbols = ['©', '®', '™', '°', '±', '÷', '×', '§', '¶', '†', '‡', '•', '◊', '…', '→', '←', '↑', '↓', '↔', '⇒', '⇐', '∞', '≈', '≠', '≤', '≥'];
+            const symbol = symbols[Math.floor(Math.random() * symbols.length)];
+            document.execCommand('insertText', false, symbol);
+        });
+
+        // === PAGE LAYOUT TAB FEATURES ===
+
+        // Page Size
+        document.getElementById('pageSize')?.addEventListener('change', (e) => {
+            const size = e.target.value;
+            const sizes = {
+                'letter': { width: '816px' },
+                'a4': { width: '794px' },
+                'legal': { width: '816px' },
+                'tabloid': { width: '1056px' }
+            };
+            if (sizes[size]) {
+                editor.style.maxWidth = sizes[size].width;
+            }
+        });
+
+        // Column Layouts
+        document.getElementById('oneColumn')?.addEventListener('click', () => {
+            editor.style.columnCount = '1';
+            editor.style.columnGap = '0';
+        });
+
+        document.getElementById('twoColumns')?.addEventListener('click', () => {
+            editor.style.columnCount = '2';
+            editor.style.columnGap = '30px';
+        });
+
+        document.getElementById('threeColumns')?.addEventListener('click', () => {
+            editor.style.columnCount = '3';
+            editor.style.columnGap = '20px';
+        });
+
+        // Page Background
+        document.getElementById('pageColor')?.addEventListener('click', () => {
+            const color = prompt('Enter background color (e.g., #f0f0f0, lightblue):');
+            if (color) {
+                editor.style.backgroundColor = color;
+            }
+        });
+
+        // === VIEW TAB FEATURES ===
+
+        // Zoom
+        let currentZoom = 100;
+        document.getElementById('zoomIn')?.addEventListener('click', () => {
+            currentZoom = Math.min(200, currentZoom + 10);
+            editor.style.fontSize = (14 * currentZoom / 100) + 'px';
+            document.getElementById('zoomLevel').value = currentZoom;
+        });
+
+        document.getElementById('zoomOut')?.addEventListener('click', () => {
+            currentZoom = Math.max(50, currentZoom - 10);
+            editor.style.fontSize = (14 * currentZoom / 100) + 'px';
+            document.getElementById('zoomLevel').value = currentZoom;
+        });
+
+        document.getElementById('zoomLevel')?.addEventListener('change', (e) => {
+            currentZoom = parseInt(e.target.value);
+            editor.style.fontSize = (14 * currentZoom / 100) + 'px';
+        });
+
+        // Toggle Ruler
+        document.getElementById('showRuler')?.addEventListener('click', () => {
+            const rulerTop = document.getElementById('rulerTop');
+            if (rulerTop) {
+                rulerTop.style.display = rulerTop.style.display === 'none' ? 'block' : 'none';
+            }
+        });
+
+        // Focus Mode
+        document.getElementById('focusMode')?.addEventListener('click', () => {
+            const ribbon = document.querySelector('.ribbon');
+            if (ribbon) {
+                ribbon.style.display = ribbon.style.display === 'none' ? 'flex' : 'none';
+            }
+        });
+
+        // === FORMAT TAB FEATURES ===
+
+        // Text Color
+        document.getElementById('textColor')?.addEventListener('click', () => {
+            const color = prompt('Enter text color (e.g., #ff0000, red):');
+            if (color) {
+                document.execCommand('foreColor', false, color);
+            }
+        });
+
+        // Highlight Color
+        document.getElementById('highlightColor')?.addEventListener('click', () => {
+            const color = prompt('Enter highlight color (e.g., yellow, #ffff00):');
+            if (color) {
+                document.execCommand('hiliteColor', false, color);
+            }
+        });
+
+        // Line Spacing
+        document.getElementById('lineSpacing')?.addEventListener('change', (e) => {
+            editor.style.lineHeight = e.target.value;
+        });
+
+        // Text Case Transformations
+        document.getElementById('uppercase')?.addEventListener('click', () => {
+            const selection = window.getSelection();
+            if (selection && selection.toString()) {
+                const text = selection.toString().toUpperCase();
+                document.execCommand('insertText', false, text);
+            }
+        });
+
+        document.getElementById('lowercase')?.addEventListener('click', () => {
+            const selection = window.getSelection();
+            if (selection && selection.toString()) {
+                const text = selection.toString().toLowerCase();
+                document.execCommand('insertText', false, text);
+            }
+        });
+
+        document.getElementById('capitalize')?.addEventListener('click', () => {
+            const selection = window.getSelection();
+            if (selection && selection.toString()) {
+                const text = selection.toString().replace(/\\b\\w/g, l => l.toUpperCase());
+                document.execCommand('insertText', false, text);
+            }
+        });
+
+        // Clear Formatting
+        document.getElementById('clearFormatting')?.addEventListener('click', () => {
+            document.execCommand('removeFormat');
+            document.execCommand('unlink');
+        });
     </script>
 </body>
 </html>`;
