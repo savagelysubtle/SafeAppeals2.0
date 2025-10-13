@@ -167,9 +167,9 @@ class CliMain extends Disposable {
 		// Policy
 		let policyService: IPolicyService | undefined;
 		if (isWindows && productService.win32RegValueName) {
-			policyService = this._register(new NativePolicyService(logService, productService.win32RegValueName));
+			policyService = this._register(new NativePolicyService(logService));
 		} else if (isMacintosh && productService.darwinBundleIdentifier) {
-			policyService = this._register(new NativePolicyService(logService, productService.darwinBundleIdentifier));
+			policyService = this._register(new NativePolicyService(logService));
 		} else if (environmentService.policyFile) {
 			policyService = this._register(new FilePolicyService(environmentService.policyFile, fileService, logService));
 		} else {

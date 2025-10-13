@@ -18,20 +18,8 @@ enum SpdLogLevel {
 }
 
 async function createSpdLogLogger(name: string, logfilePath: string, filesize: number, filecount: number, donotUseFormatters: boolean): Promise<spdlog.Logger | null> {
-	// Do not crash if spdlog cannot be loaded
-	try {
-		const _spdlog = await import('@vscode/spdlog');
-		_spdlog.setFlushOn(SpdLogLevel.Trace);
-		const logger = await _spdlog.createAsyncRotatingLogger(name, logfilePath, filesize, filecount);
-		if (donotUseFormatters) {
-			logger.clearFormatters();
-		} else {
-			logger.setPattern('%Y-%m-%d %H:%M:%S.%e [%l] %v');
-		}
-		return logger;
-	} catch (e) {
-		console.error(e);
-	}
+	// Skip spdlog for doc-focused editor to avoid native module issues
+	console.log('SpdLogLogger: Skipping spdlog for doc-focused editor');
 	return null;
 }
 

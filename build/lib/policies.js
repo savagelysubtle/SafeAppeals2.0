@@ -12,8 +12,8 @@ const fs_1 = require("fs");
 const path_1 = __importDefault(require("path"));
 const byline_1 = __importDefault(require("byline"));
 const ripgrep_1 = require("@vscode/ripgrep");
-const tree_sitter_1 = __importDefault(require("tree-sitter"));
-const { typescript } = require('tree-sitter-typescript');
+// Removed tree-sitter dependencies for document-focused editor
+// All tree-sitter dependent functions are disabled
 const product = require('../../product.json');
 const packageJson = require('../../package.json');
 function isNlsString(value) {
@@ -380,7 +380,7 @@ const StringArrayQ = {
     }
 };
 function getProperty(qtype, moduleName, node, key) {
-    const query = new tree_sitter_1.default.Query(typescript, `(
+    const query = new any(null, `(
 			(pair
 				key: [(property_identifier)(string)] @key
 				value: ${qtype.Q}
@@ -459,7 +459,7 @@ function getPolicy(moduleName, configurationNode, settingNode, policyNode, categ
     return result;
 }
 function getPolicies(moduleName, node) {
-    const query = new tree_sitter_1.default.Query(typescript, `
+    const query = new any(null, `
 		(
 			(call_expression
 				function: (member_expression property: (property_identifier) @registerConfigurationFn) (#eq? @registerConfigurationFn registerConfiguration)
@@ -802,8 +802,8 @@ async function getNLS(extensionGalleryServiceUrl, resourceUrlTemplate, languageI
     return await getSpecificNLS(resourceUrlTemplate, languageId, latestCompatibleVersion);
 }
 async function parsePolicies() {
-    const parser = new tree_sitter_1.default();
-    parser.setLanguage(typescript);
+    const parser = new any();
+    parser.setLanguage(null);
     const files = await getFiles(process.cwd());
     const base = path_1.default.join(process.cwd(), 'src');
     const policies = [];

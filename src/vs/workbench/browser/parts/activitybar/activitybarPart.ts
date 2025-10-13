@@ -201,6 +201,7 @@ export class ActivityBarCompositeBar extends PaneCompositeBar {
 
 	private readonly keyboardNavigationDisposables = this._register(new DisposableStore());
 
+
 	constructor(
 		options: IPaneCompositeBarOptions,
 		part: Parts,
@@ -240,6 +241,7 @@ export class ActivityBarCompositeBar extends PaneCompositeBar {
 			}
 		}));
 	}
+
 
 	private fillContextMenuActions(actions: IAction[], e?: MouseEvent | GestureEvent) {
 		// Menu

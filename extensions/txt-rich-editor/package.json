@@ -1,0 +1,102 @@
+{
+  "name": "txt-rich-editor",
+  "displayName": "Rich Text Editor for Documents",
+  "description": "A rich text editor for .txt, .gdoc, and .docx files with visual formatting",
+  "version": "1.0.0",
+  "publisher": "vscode",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.70.0"
+  },
+  "extensionKind": [
+    "workspace",
+    "ui"
+  ],
+  "categories": [
+    "Other"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "customEditors": [
+      {
+        "viewType": "txtRichEditor.editor",
+        "displayName": "Rich Text Editor",
+        "selector": [
+          {
+            "filenamePattern": "*.txt"
+          },
+          {
+            "filenamePattern": "*.gdoc"
+          },
+          {
+            "filenamePattern": "*.docx"
+          }
+        ],
+        "priority": "default"
+      }
+    ],
+    "commands": [
+      {
+        "command": "txtRichEditor.openWithRichEditor",
+        "title": "Open with Rich Text Editor",
+        "category": "Text Editor"
+      },
+      {
+        "command": "txtRichEditor.exportDocx",
+        "title": "Export as DOCX",
+        "category": "Text Editor"
+      },
+      {
+        "command": "txtRichEditor.importDocx",
+        "title": "Import DOCX",
+        "category": "Text Editor"
+      }
+    ],
+    "menus": {
+      "explorer/context": [
+        {
+          "command": "txtRichEditor.openWithRichEditor",
+          "when": "resourceExtname == '.txt'",
+          "group": "navigation"
+        },
+        {
+          "command": "txtRichEditor.openWithRichEditor",
+          "when": "resourceExtname == '.gdoc'",
+          "group": "navigation"
+        },
+        {
+          "command": "txtRichEditor.openWithRichEditor",
+          "when": "resourceExtname == '.docx'",
+          "group": "navigation"
+        }
+      ],
+      "editor/title": [
+        {
+          "command": "txtRichEditor.exportDocx",
+          "when": "activeCustomEditor == 'txtRichEditor.editor'",
+          "group": "navigation"
+        },
+        {
+          "command": "txtRichEditor.importDocx",
+          "when": "activeCustomEditor == 'txtRichEditor.editor'",
+          "group": "navigation"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "compile": "gulp compile-extension:txt-rich-editor",
+    "watch": "gulp watch-extension:txt-rich-editor"
+  },
+  "dependencies": {
+    "mammoth": "^1.6.0",
+    "html-to-docx": "^1.8.0"
+  },
+  "devDependencies": {
+    "@types/node": "20.x"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/microsoft/vscode.git"
+  }
+}

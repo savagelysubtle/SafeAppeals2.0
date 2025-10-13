@@ -22,11 +22,9 @@ import { ColorScheme } from '../../web.api.js';
 import { OpenFileFolderAction, OpenFolderAction } from '../../actions/workspaceActions.js';
 import { IWindowOpenable } from '../../../../platform/window/common/window.js';
 import { splitRecentLabel } from '../../../../base/common/labels.js';
-import { IViewsService } from '../../../services/views/common/viewsService.js';
 
 /* eslint-disable */ // Void
 import { VOID_CTRL_K_ACTION_ID, VOID_CTRL_L_ACTION_ID } from '../../../contrib/void/browser/actionIDs.js';
-import { VIEWLET_ID as REMOTE_EXPLORER_VIEWLET_ID } from '../../../contrib/remote/browser/remoteExplorer.js';
 /* eslint-enable */
 
 // interface WatermarkEntry {
@@ -99,7 +97,6 @@ export class EditorGroupWatermark extends Disposable {
 		@ICommandService private readonly commandService: ICommandService,
 		@IHostService private readonly hostService: IHostService,
 		@ILabelService private readonly labelService: ILabelService,
-		@IViewsService private readonly viewsService: IViewsService,
 	) {
 		super();
 
@@ -209,17 +206,17 @@ export class EditorGroupWatermark extends Disposable {
 				}
 				buttonContainer.appendChild(openFolderButton.root);
 
-				// Open SSH button
-				const openSSHButton = h('button')
-				openSSHButton.root.classList.add('void-openssh-button')
-				openSSHButton.root.style.display = 'block'
-				openSSHButton.root.style.backgroundColor = '#5a5a5a' // Made darker than the default gray
-				openSSHButton.root.style.width = '124px' // Set width to 124px as requested
-				openSSHButton.root.textContent = 'Open SSH'
-				openSSHButton.root.onclick = () => {
-					this.viewsService.openViewContainer(REMOTE_EXPLORER_VIEWLET_ID);
-				}
-				buttonContainer.appendChild(openSSHButton.root);
+				// Open SSH button - REMOVED as SSH terminal option was removed for users
+				// const openSSHButton = h('button')
+				// openSSHButton.root.classList.add('void-openssh-button')
+				// openSSHButton.root.style.display = 'block'
+				// openSSHButton.root.style.backgroundColor = '#5a5a5a' // Made darker than the default gray
+				// openSSHButton.root.style.width = '124px' // Set width to 124px as requested
+				// openSSHButton.root.textContent = 'Open SSH'
+				// openSSHButton.root.onclick = () => {
+				// 	this.viewsService.openViewContainer(REMOTE_EXPLORER_VIEWLET_ID);
+				// }
+				// buttonContainer.appendChild(openSSHButton.root);
 
 
 				// Recents

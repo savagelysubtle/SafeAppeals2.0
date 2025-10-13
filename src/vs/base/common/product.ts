@@ -215,6 +215,7 @@ export interface IProductConfiguration {
 	readonly remoteDefaultExtensionsIfInstalledLocally?: string[];
 
 	readonly extensionConfigurationPolicy?: IStringDictionary<IPolicy>;
+	readonly disableExtensionInstalls?: boolean;
 }
 
 export interface ITunnelApplicationConfig {

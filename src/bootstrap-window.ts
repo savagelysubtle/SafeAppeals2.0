@@ -190,6 +190,7 @@
 		// DEV ---------------------------------------------------------------------------------------
 
 		if (Array.isArray(configuration.cssModules) && configuration.cssModules.length > 0) {
+			console.log(`[BOOTSTRAP] CSS modules detected: ${configuration.cssModules.length} modules`);
 			performance.mark('code/willAddCssLoader');
 
 			const style = document.createElement('style');
@@ -220,6 +221,8 @@
 			document.head.appendChild(importMapScript);
 
 			performance.mark('code/didAddCssLoader');
+		} else {
+			console.log('[BOOTSTRAP] No CSS modules detected or CSS modules array is empty');
 		}
 	}
 
