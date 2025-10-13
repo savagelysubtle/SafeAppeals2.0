@@ -1,4 +1,6 @@
-# Welcome to Safe Appeals Navigator
+# ⚖️ SafeAppealNavigator
+
+*Support this project: [paypal.me/safeappealnavigator](https://paypal.me/safeappealnavigator)*
 
 <div align="center">
  <img

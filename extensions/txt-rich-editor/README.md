@@ -73,12 +73,13 @@ Advanced text formatting:
 
 - **Native DOCX XML Parser**: Direct handling of DOCX XML structure
 - **Better Format Preservation**: Maintains more formatting than traditional converters
+- **Unified Interface**: DOCX files get the same beautiful ribbon UI as TXT files! 🎉
 - Import existing DOCX files with formatting preservation
 - Export rich content to DOCX format
 - Bidirectional HTML ↔ DOCX XML conversion
 - Available on desktop environments only (not web)
 
-See [DOCX_XML_SUPPORT.md](./DOCX_XML_SUPPORT.md) for technical details.
+See [DOCX_XML_SUPPORT.md](./DOCX_XML_SUPPORT.md) for technical details and [UNIFIED_INTERFACE.md](./UNIFIED_INTERFACE.md) for the unified editor experience.
 
 ## Usage
 

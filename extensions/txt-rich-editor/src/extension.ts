@@ -5,6 +5,7 @@
 
 import * as vscode from 'vscode';
 import { RichTextEditorProvider } from './richTextEditorProvider';
+import { DocxEditorProvider } from './docxEditorProvider';
 import { MonacoRichTextEditor } from './monacoRichTextEditor';
 import { VoidWebviewBridge } from './voidWebviewBridge';
 import { registerVoidActions } from './voidActions';
@@ -38,8 +39,9 @@ export function activate(context: vscode.ExtensionContext) {
 			supportsMultipleEditorsPerDocument: false,
 		});
 
-		// Register for binary DOCX files
-		const docxDisposable = vscode.window.registerCustomEditorProvider('txtRichEditor.docxEditor', provider, {
+		// Register DOCX editor provider (handles binary files)
+		const docxProvider = new DocxEditorProvider(context, logger);
+		const docxDisposable = vscode.window.registerCustomEditorProvider('txtRichEditor.docxEditor', docxProvider, {
 			supportsMultipleEditorsPerDocument: false,
 			webviewOptions: {
 				retainContextWhenHidden: true
@@ -48,6 +50,7 @@ export function activate(context: vscode.ExtensionContext) {
 
 		// Register export DOCX command
 		const exportCommand = vscode.commands.registerCommand('txtRichEditor.exportDocx', () => {
+			// Try text editor first, then DOCX editor
 			provider.exportDocx();
 		});
 
@@ -64,20 +67,12 @@ export function activate(context: vscode.ExtensionContext) {
 		webviewBridge = new VoidWebviewBridge(context);
 		provider.setWebviewBridge(webviewBridge);
 
-		// Register for text files
+		// Register for text files only (DOCX not supported in web)
 		const textDisposable = vscode.window.registerCustomEditorProvider('txtRichEditor.editor', provider, {
 			supportsMultipleEditorsPerDocument: false,
 		});
 
-		// Register for DOCX files
-		const docxDisposable = vscode.window.registerCustomEditorProvider('txtRichEditor.docxEditor', provider, {
-			supportsMultipleEditorsPerDocument: false,
-			webviewOptions: {
-				retainContextWhenHidden: true
-			}
-		});
-
-		context.subscriptions.push(textDisposable, docxDisposable);
+		context.subscriptions.push(textDisposable);
 	}
 
 	// Register command to open with rich editor
