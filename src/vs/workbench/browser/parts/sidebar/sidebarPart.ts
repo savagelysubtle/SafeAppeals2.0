@@ -25,7 +25,7 @@ import { AbstractPaneCompositePart, CompositeBarPosition } from '../paneComposit
 import { ActivityBarCompositeBar, ActivitybarPart } from '../activitybar/activitybarPart.js';
 import { ActionsOrientation } from '../../../../base/browser/ui/actionbar/actionbar.js';
 import { HoverPosition } from '../../../../base/browser/ui/hover/hoverWidget.js';
-import { IPaneCompositeBarOptions } from '../paneCompositeBar.js';
+import { IPaneCompositeBarOptions, PaneCompositeBar } from '../paneCompositeBar.js';
 import { IConfigurationService } from '../../../../platform/configuration/common/configuration.js';
 import { Action2, IMenuService, registerAction2 } from '../../../../platform/actions/common/actions.js';
 import { Separator } from '../../../../base/common/actions.js';
@@ -163,7 +163,7 @@ export class SidebarPart extends AbstractPaneCompositePart {
 		return this.layoutService.getSideBarPosition() === SideBarPosition.LEFT ? AnchorAlignment.LEFT : AnchorAlignment.RIGHT;
 	}
 
-	protected override createCompositeBar(): ActivityBarCompositeBar {
+	protected override createCompositeBar(): PaneCompositeBar {
 		return this.instantiationService.createInstance(ActivityBarCompositeBar, this.getCompositeBarOptions(), this.partId, this, false);
 	}
 

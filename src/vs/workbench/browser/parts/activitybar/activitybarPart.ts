@@ -201,12 +201,6 @@ export class ActivityBarCompositeBar extends PaneCompositeBar {
 
 	private readonly keyboardNavigationDisposables = this._register(new DisposableStore());
 
-	// Doc-focused mode: only allow these view containers in the Activity Bar
-	private static readonly ALLOWED_VIEW_CONTAINERS = new Set([
-		'workbench.view.explorer',
-		'workbench.view.search',
-		'workbench.view.scm',
-	]);
 
 	constructor(
 		options: IPaneCompositeBarOptions,
@@ -248,11 +242,6 @@ export class ActivityBarCompositeBar extends PaneCompositeBar {
 		}));
 	}
 
-	protected override getViewContainers(): readonly ViewContainer[] {
-		// Doc-focused mode: filter view containers to allowed list
-		const allContainers = super.getViewContainers();
-		return allContainers.filter(container => ActivityBarCompositeBar.ALLOWED_VIEW_CONTAINERS.has(container.id));
-	}
 
 	private fillContextMenuActions(actions: IAction[], e?: MouseEvent | GestureEvent) {
 		// Menu

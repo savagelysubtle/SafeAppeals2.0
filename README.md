@@ -2,7 +2,7 @@
 
 <div align="center">
  <img
-  src="./src/vs/workbench/browser/parts/editor/media/slice_of_void.png"
+  src="./void_icons/slice_of_void.png"
    alt="Safe Appeals Navigator Welcome"
   width="300"
    height="300"
