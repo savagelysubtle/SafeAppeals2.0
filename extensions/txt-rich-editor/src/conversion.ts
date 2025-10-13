@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as fs from 'fs';
+import { DocxXmlHandler } from './docxXmlHandler';
 
 // Dynamic imports to handle optional dependencies
 let mammoth: any;
@@ -27,7 +28,19 @@ async function loadDependencies() {
 	}
 }
 
-export async function docxToHtml(buffer: Uint8Array): Promise<string> {
+export async function docxToHtml(buffer: Uint8Array, useNativeParser: boolean = true): Promise<string> {
+	// Try native DOCX XML parser first for better format preservation
+	if (useNativeParser) {
+		try {
+			const handler = new DocxXmlHandler();
+			const docxDoc = await handler.parseDocxBuffer(buffer);
+			return handler.docxXmlToHtml(docxDoc);
+		} catch (error) {
+			console.warn('Native DOCX parser failed, falling back to mammoth:', error);
+		}
+	}
+
+	// Fallback to mammoth
 	await loadDependencies();
 
 	if (!mammoth) {
@@ -42,7 +55,19 @@ export async function docxToHtml(buffer: Uint8Array): Promise<string> {
 	}
 }
 
-export async function htmlToDocxBuffer(html: string): Promise<Uint8Array> {
+export async function htmlToDocxBuffer(html: string, useNativeGenerator: boolean = true): Promise<Uint8Array> {
+	// Try native DOCX XML generator first for better format preservation
+	if (useNativeGenerator) {
+		try {
+			const handler = new DocxXmlHandler();
+			const docxDoc = handler.htmlToDocxXml(html);
+			return await handler.generateDocxBuffer(docxDoc);
+		} catch (error) {
+			console.warn('Native DOCX generator failed, falling back to html-to-docx:', error);
+		}
+	}
+
+	// Fallback to html-to-docx
 	await loadDependencies();
 
 	if (!htmlToDocx) {

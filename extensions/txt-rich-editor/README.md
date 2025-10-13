@@ -71,9 +71,14 @@ Advanced text formatting:
 
 ### 💾 DOCX Import/Export
 
+- **Native DOCX XML Parser**: Direct handling of DOCX XML structure
+- **Better Format Preservation**: Maintains more formatting than traditional converters
 - Import existing DOCX files with formatting preservation
 - Export rich content to DOCX format
+- Bidirectional HTML ↔ DOCX XML conversion
 - Available on desktop environments only (not web)
+
+See [DOCX_XML_SUPPORT.md](./DOCX_XML_SUPPORT.md) for technical details.
 
 ## Usage
 
@@ -174,8 +179,10 @@ Advanced text formatting:
 
 - Built using VS Code's Custom Text Editor API
 - HTML Canvas API for text rendering
-- `mammoth` library for DOCX to HTML conversion (desktop)
-- `html-to-docx` library for HTML to DOCX conversion (desktop)
+- **Native DOCX XML Handler** for bidirectional conversion (primary)
+- `mammoth` library for DOCX to HTML conversion (fallback)
+- `html-to-docx` library for HTML to DOCX conversion (fallback)
+- `jszip` for DOCX archive handling
 - Webview-based UI with contenteditable
 - Optimized rendering with requestAnimationFrame
 
@@ -225,12 +232,31 @@ Future enhancements:
 - Enhanced HTML diff algorithm for better format preservation
 - Richer Monaco decorations for HTML styling
 
-## Error Handling
+## Error Handling & Debugging
+
+### Built-in Logging System
+
+The extension includes a comprehensive logging system similar to Git extension:
+
+- **View Logs**: Run command "Show Rich Text Editor Logs" from Command Palette
+- **Output Panel**: View > Output, select "Rich Text Editor"
+- **Log Levels**: Error, Warning, Info, Trace
+- **Logged Events**: File operations, DOCX conversions, errors with stack traces
+
+**Common Issues:**
+
+- **DOCX won't open**: Check logs for "Can't find end of central directory" - file may not be valid DOCX
+- **Export fails**: Verify write permissions in target directory
+- **Extension not loading**: Check activation logs for errors
+
+See [LOGGING.md](./LOGGING.md) for complete documentation.
+
+### Error Handling
 
 - **Missing dependencies**: Graceful fallback
-- **Conversion errors**: User notifications
+- **Conversion errors**: User notifications with detailed logs
 - **Web environment**: DOCX features auto-disabled
-- **File access**: Clear error messages
+- **File access**: Clear error messages with stack traces in logs
 
 ## Development
 

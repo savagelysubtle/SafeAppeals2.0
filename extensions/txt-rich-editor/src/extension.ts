@@ -9,23 +9,41 @@ import { MonacoRichTextEditor } from './monacoRichTextEditor';
 import { VoidWebviewBridge } from './voidWebviewBridge';
 import { registerVoidActions } from './voidActions';
 import { isWebEnvironment } from './conversion';
+import { Logger } from './logger';
 
 export function activate(context: vscode.ExtensionContext) {
 	const isWeb = isWebEnvironment();
+
+	// Create logger for error tracking
+	const logger = new Logger('Rich Text Editor');
+	context.subscriptions.push(logger);
+
+	logger.info('Rich Text Editor extension activating...');
+	logger.info(`Environment: ${isWeb ? 'Web' : 'Desktop'}`);
 
 	let monacoEditor: MonacoRichTextEditor | undefined;
 	let webviewBridge: VoidWebviewBridge | undefined;
 
 	if (!isWeb) {
 		// Desktop: Use Monaco-based editor
+		logger.info('Initializing Monaco-based rich text editor for desktop...');
 		monacoEditor = new MonacoRichTextEditor(context);
 
 		// Register the custom editor provider (webview for rich UI)
-		const provider = new RichTextEditorProvider(context);
+		const provider = new RichTextEditorProvider(context, logger);
 		provider.setMonacoEditor(monacoEditor);
 
-		const disposable = vscode.window.registerCustomEditorProvider('txtRichEditor.editor', provider, {
+		// Register for text files (.txt, .gdoc)
+		const textDisposable = vscode.window.registerCustomEditorProvider('txtRichEditor.editor', provider, {
 			supportsMultipleEditorsPerDocument: false,
+		});
+
+		// Register for binary DOCX files
+		const docxDisposable = vscode.window.registerCustomEditorProvider('txtRichEditor.docxEditor', provider, {
+			supportsMultipleEditorsPerDocument: false,
+			webviewOptions: {
+				retainContextWhenHidden: true
+			}
 		});
 
 		// Register export DOCX command
@@ -38,18 +56,28 @@ export function activate(context: vscode.ExtensionContext) {
 			provider.importDocx();
 		});
 
-		context.subscriptions.push(disposable, exportCommand, importCommand);
+		context.subscriptions.push(textDisposable, docxDisposable, exportCommand, importCommand);
 	} else {
 		// Web: Use webview-only editor with void bridge
-		const provider = new RichTextEditorProvider(context);
+		logger.info('Initializing webview-based rich text editor for web...');
+		const provider = new RichTextEditorProvider(context, logger);
 		webviewBridge = new VoidWebviewBridge(context);
 		provider.setWebviewBridge(webviewBridge);
 
-		const disposable = vscode.window.registerCustomEditorProvider('txtRichEditor.editor', provider, {
+		// Register for text files
+		const textDisposable = vscode.window.registerCustomEditorProvider('txtRichEditor.editor', provider, {
 			supportsMultipleEditorsPerDocument: false,
 		});
 
-		context.subscriptions.push(disposable);
+		// Register for DOCX files
+		const docxDisposable = vscode.window.registerCustomEditorProvider('txtRichEditor.docxEditor', provider, {
+			supportsMultipleEditorsPerDocument: false,
+			webviewOptions: {
+				retainContextWhenHidden: true
+			}
+		});
+
+		context.subscriptions.push(textDisposable, docxDisposable);
 	}
 
 	// Register command to open with rich editor
@@ -85,8 +113,17 @@ export function activate(context: vscode.ExtensionContext) {
 	});
 
 	context.subscriptions.push(editorChangeDisposable);
+
+	// Register command to show output channel
+	const showLogsCommand = vscode.commands.registerCommand('txtRichEditor.showLogs', () => {
+		logger.show();
+	});
+	context.subscriptions.push(showLogsCommand);
+
+	logger.info('Rich Text Editor extension activated successfully');
 }
 
 export function deactivate() {
 	// Cleanup if needed
 }
+
