@@ -52,7 +52,7 @@ export enum ThemeSettingDefaults {
 }
 
 export const COLOR_THEME_DARK_INITIAL_COLORS = { // Void changed this to match dark+
-	'activityBar.activeBorder': '#ffffff',
+	'activityBar.activeBorder': '#A6E22E',
 	'activityBar.background': '#333333',
 	'activityBar.border': '#454545',
 	'activityBar.foreground': '#ffffff',
@@ -60,16 +60,16 @@ export const COLOR_THEME_DARK_INITIAL_COLORS = { // Void changed this to match d
 	'editorGroup.border': '#444444',
 	'editorGroupHeader.tabsBackground': '#252526',
 	'editorGroupHeader.tabsBorder': '#252526',
-	'statusBar.background': '#007ACC',
+	'statusBar.background': '#A6E22E',
 	'statusBar.border': '#454545',
 	'statusBar.foreground': '#ffffff',
 	'statusBar.noFolderBackground': '#68217A',
 	'tab.activeBackground': '#2D2D2D',
 	'tab.activeBorder': '#ffffff',
-	'tab.activeBorderTop': '#007ACC',
+	'tab.activeBorderTop': '#A6E22E',
 	'tab.activeForeground': '#ffffff',
 	'tab.border': '#252526',
-	'textLink.foreground': '#3794ff',
+	'textLink.foreground': '#A6E22E',
 	'titleBar.activeBackground': '#3C3C3C',
 	'titleBar.activeForeground': '#CCCCCC',
 	'titleBar.border': '#454545',

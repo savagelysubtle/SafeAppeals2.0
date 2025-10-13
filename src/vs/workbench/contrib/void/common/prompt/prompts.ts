@@ -162,11 +162,6 @@ const paginationParam = {
 } as const
 
 
-
-const terminalDescHelper = `You can use this tool to run any command: sed, grep, etc. Do not edit any files with this tool; use edit_file instead. When working with git and other tools that open an editor (e.g. git diff), you should pipe to cat to get all results and not get stuck in vim.`
-
-const cwdHelper = 'Optional. The directory in which to run the command. Defaults to the first workspace folder.'
-
 export type SnakeCase<S extends string> =
 	// exact acronym URI
 	S extends 'URI' ? 'uri'
