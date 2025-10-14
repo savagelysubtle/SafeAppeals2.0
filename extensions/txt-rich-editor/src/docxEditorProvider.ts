@@ -8,6 +8,8 @@ import { DocumentConverter, docxToHtmlWithLayout, htmlToDocxBuffer } from './con
 import { Logger } from './logger';
 import { generateRibbonHtml } from './ribbonHtml';
 import { EditorProviderRegistry } from './editorProviderRegistry';
+import { MarginController, PageLayout } from './marginController';
+import { DocxPageLayout } from './docxXmlHandler';
 
 /**
  * Custom editor provider for DOCX files (binary files)
@@ -16,8 +18,10 @@ import { EditorProviderRegistry } from './editorProviderRegistry';
 export class DocxEditorProvider implements vscode.CustomReadonlyEditorProvider<vscode.CustomDocument> {
 	private currentDocument: vscode.CustomDocument | undefined;
 	private currentHtml: string = '';
-	private currentPageLayout: any = null;
+	private currentPageLayout: DocxPageLayout | null = null;
 	private currentXml: string = '';
+	private currentWebviewPanel: vscode.WebviewPanel | undefined;
+	private marginController: MarginController;
 
 	constructor(
 		private readonly context: vscode.ExtensionContext,
@@ -26,7 +30,20 @@ export class DocxEditorProvider implements vscode.CustomReadonlyEditorProvider<v
 		private readonly _documentConverter?: DocumentConverter,
 		private readonly _aiDispatcher?: any,
 		private readonly _editorRegistry?: EditorProviderRegistry
-	) { }
+	) {
+		// Initialize MarginController with default Letter page settings
+		this.marginController = new MarginController(logger, {
+			margins: { top: 96, right: 96, bottom: 96, left: 96 }, // 1 inch at 96 DPI
+			orientation: 'portrait',
+			size: { width: 816, height: 1056, name: 'Letter' },
+			zoom: 1.0
+		});
+
+		// Listen for layout changes and sync to webview
+		this.marginController.on('layout-changed', (layout: PageLayout) => {
+			this.sendLayoutToWebview(layout);
+		});
+	}
 
 	async openCustomDocument(
 		uri: vscode.Uri,
@@ -49,6 +66,7 @@ export class DocxEditorProvider implements vscode.CustomReadonlyEditorProvider<v
 		_token: vscode.CancellationToken
 	): Promise<void> {
 		this.currentDocument = document;
+		this.currentWebviewPanel = webviewPanel;
 
 		// Register with editor registry for command routing
 		if (this._editorRegistry) {
@@ -89,6 +107,14 @@ export class DocxEditorProvider implements vscode.CustomReadonlyEditorProvider<v
 						// Store the current HTML for export
 						this.currentHtml = message.html;
 						return;
+					case 'page-layout-update':
+						// Handle page layout updates from webview (margin drags, etc.)
+						await this.handlePageLayoutUpdate(message.data);
+						return;
+					case 'request-page-layout':
+						// Send current page layout to webview
+						this.sendLayoutToWebview(this.marginController.getLayout());
+						return;
 				}
 			},
 			undefined,
@@ -117,7 +143,12 @@ export class DocxEditorProvider implements vscode.CustomReadonlyEditorProvider<v
 			this.logger.info(`HTML preview: ${result.content?.substring(0, 200)}...`);
 
 			this.currentHtml = result.content || '';
-			this.currentPageLayout = result.pageLayout;
+			this.currentPageLayout = result.pageLayout || null;
+
+			// Update MarginController with DOCX layout if available
+			if (result.pageLayout) {
+				this.applyDocxLayoutToController(result.pageLayout);
+			}
 
 			// Store the original XML for XML view
 			if (this._documentConverter) {
@@ -137,9 +168,15 @@ export class DocxEditorProvider implements vscode.CustomReadonlyEditorProvider<v
 				content: result.content || '',
 				isHtml: true,
 				readonly: false, // Allow editing
-				pageLayout: result.pageLayout
+				pageLayout: this.convertLayoutForWebview(this.marginController.getLayout())
 			});
 			this.logger.info('✅ Content sent to webview');
+
+			// Send the layout after content to ensure webview is ready
+			setTimeout(() => {
+				this.sendLayoutToWebview(this.marginController.getLayout());
+			}, 100);
+
 			this.logger.info('=== END DOCX EDITOR PROVIDER ===');
 		} catch (error) {
 			this.logger.error('❌ Failed to load DOCX content', error);
@@ -234,10 +271,114 @@ export class DocxEditorProvider implements vscode.CustomReadonlyEditorProvider<v
 				content: this.currentHtml,
 				isHtml: true,
 				readonly: false,
-				pageLayout: this.currentPageLayout
+				pageLayout: this.convertLayoutForWebview(this.marginController.getLayout())
 			});
 		} catch (error) {
 			this.logger.error('Failed to handle normal view request:', error);
+		}
+	}
+
+	/**
+	 * Convert DOCX page layout (twips) to MarginController layout (pixels)
+	 */
+	private applyDocxLayoutToController(docxLayout: DocxPageLayout): void {
+		// Convert twips to pixels (1 twip = 1/20 point, 1 point = 1.33 pixels at 96 DPI)
+		const twipsToPixels = (twips: number) => Math.round(twips * 1.33 / 20);
+
+		const marginsPx = {
+			top: twipsToPixels(docxLayout.margins.top),
+			right: twipsToPixels(docxLayout.margins.right),
+			bottom: twipsToPixels(docxLayout.margins.bottom),
+			left: twipsToPixels(docxLayout.margins.left)
+		};
+
+		const pageSizePx = {
+			width: twipsToPixels(docxLayout.pageSize.width),
+			height: twipsToPixels(docxLayout.pageSize.height),
+			name: this.getPageSizeName(twipsToPixels(docxLayout.pageSize.width), twipsToPixels(docxLayout.pageSize.height))
+		};
+
+		this.marginController.setLayout({
+			margins: marginsPx,
+			orientation: docxLayout.orientation,
+			size: pageSizePx
+		});
+
+		this.logger.info(`Applied DOCX layout to controller: ${JSON.stringify({ margins: marginsPx, size: pageSizePx, orientation: docxLayout.orientation })}`);
+	}
+
+	/**
+	 * Determine page size name from dimensions
+	 */
+	private getPageSizeName(width: number, height: number): string {
+		const sizes = [
+			{ name: 'Letter', width: 816, height: 1056 },
+			{ name: 'A4', width: 794, height: 1123 },
+			{ name: 'Legal', width: 816, height: 1344 },
+			{ name: 'Tabloid', width: 1056, height: 1632 }
+		];
+
+		for (const size of sizes) {
+			if (Math.abs(width - size.width) < 10 && Math.abs(height - size.height) < 10) {
+				return size.name;
+			}
+		}
+
+		return 'Custom';
+	}
+
+	/**
+	 * Send page layout to webview
+	 */
+	private sendLayoutToWebview(layout: PageLayout): void {
+		if (this.currentWebviewPanel) {
+			this.currentWebviewPanel.webview.postMessage({
+				type: 'page-layout-changed',
+				pageLayout: this.convertLayoutForWebview(layout)
+			});
+		}
+	}
+
+	/**
+	 * Convert MarginController layout to webview format (pixels)
+	 */
+	private convertLayoutForWebview(layout: PageLayout): any {
+		return {
+			margins: {
+				top: layout.margins.top,
+				right: layout.margins.right,
+				bottom: layout.margins.bottom,
+				left: layout.margins.left
+			},
+			pageSize: {
+				width: layout.size.width,
+				height: layout.size.height,
+				name: layout.size.name
+			},
+			orientation: layout.orientation,
+			zoom: layout.zoom
+		};
+	}
+
+	/**
+	 * Handle page layout updates from webview
+	 */
+	private async handlePageLayoutUpdate(data: any): Promise<void> {
+		try {
+			if (data.margins) {
+				this.marginController.setMargins(data.margins);
+			}
+			if (data.orientation) {
+				this.marginController.setOrientation(data.orientation);
+			}
+			if (data.pageSize) {
+				this.marginController.setPageSize(data.pageSize);
+			}
+			if (data.zoom !== undefined) {
+				this.marginController.setZoom(data.zoom);
+			}
+		} catch (error) {
+			this.logger.error('Failed to update page layout:', error);
 		}
 	}
 

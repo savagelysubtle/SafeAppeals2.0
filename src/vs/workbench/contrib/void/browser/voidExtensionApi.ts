@@ -7,7 +7,7 @@ import { URI } from '../../../../base/common/uri.js';
 import { ICommandService } from '../../../../platform/commands/common/commands.js';
 import { registerAction2, Action2 } from '../../../../platform/actions/common/actions.js';
 import { ServicesAccessor } from '../../../../platform/instantiation/common/instantiation.js';
-import { IChatThreadService } from '../common/chatThreadService.js';
+import { IChatThreadService } from './chatThreadService.js';
 import { IViewsService } from '../../../services/views/common/viewsService.js';
 import { VOID_VIEW_CONTAINER_ID } from './sidebarPane.js';
 
@@ -91,10 +91,10 @@ registerAction2(class VoidGetChatContextAction extends Action2 {
 		const chatThreadService = accessor.get(IChatThreadService);
 
 		// Get current thread state
-		const currentThread = chatThreadService.getCurrentThreadState();
+		const currentThread = chatThreadService.getCurrentThread();
 
 		return {
-			stagingSelections: currentThread?.stagingSelections || [],
+			stagingSelections: currentThread?.state.stagingSelections || [],
 			messages: currentThread?.messages || []
 		};
 	}
