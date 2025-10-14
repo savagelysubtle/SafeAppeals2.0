@@ -7,7 +7,7 @@ import { IWorkspaceContextService } from '../../../../platform/workspace/common/
 import { QueryBuilder } from '../../../services/search/common/queryBuilder.js'
 import { ISearchService } from '../../../services/search/common/search.js'
 import { IEditCodeService } from './editCodeServiceInterface.js'
-// import { ITerminalToolService } from './terminalToolService.js' // Disabled for doc-focused editor
+import { ITerminalToolService } from './terminalToolService.js'
 import { LintErrorItem, BuiltinToolCallParams, BuiltinToolResultType, BuiltinToolName } from '../common/toolsServiceTypes.js'
 import { IVoidModelService } from '../common/voidModelService.js'
 import { EndOfLinePreference } from '../../../../editor/common/model.js'
@@ -16,8 +16,9 @@ import { computeDirectoryTree1Deep, IDirectoryStrService, stringifyDirectoryTree
 import { IMarkerService, MarkerSeverity } from '../../../../platform/markers/common/markers.js'
 import { timeout } from '../../../../base/common/async.js'
 import { RawToolParamsObj } from '../common/sendLLMMessageTypes.js'
-import { MAX_CHILDREN_URIs_PAGE, MAX_FILE_CHARS_PAGE } from '../common/prompt/prompts.js'
+import { MAX_CHILDREN_URIs_PAGE, MAX_FILE_CHARS_PAGE, MAX_TERMINAL_INACTIVE_TIME, MAX_TERMINAL_BG_COMMAND_TIME } from '../common/prompt/prompts.js'
 import { IVoidSettingsService } from '../common/voidSettingsService.js'
+import { generateUuid } from '../../../../base/common/uuid.js'
 
 
 // tool use for AI
@@ -111,6 +112,11 @@ const validateBoolean = (b: unknown, opts: { default: boolean }) => {
 	return opts.default
 }
 
+const validateProposedTerminalId = (terminalIdUnknown: unknown) => {
+	if (typeof terminalIdUnknown !== 'string') throw new Error(`Invalid LLM output format: persistentTerminalId must be a string, but its type is "${typeof terminalIdUnknown}".`)
+	return terminalIdUnknown
+}
+
 
 const checkIfIsFolder = (uriStr: string) => {
 	uriStr = uriStr.trim()
@@ -142,7 +148,7 @@ export class ToolsService implements IToolsService {
 		@IInstantiationService instantiationService: IInstantiationService,
 		@IVoidModelService voidModelService: IVoidModelService,
 		@IEditCodeService editCodeService: IEditCodeService,
-		// @ITerminalToolService private readonly terminalToolService: ITerminalToolService, // Disabled for doc-focused editor
+		@ITerminalToolService private readonly terminalToolService: ITerminalToolService,
 		@IVoidCommandBarService private readonly commandBarService: IVoidCommandBarService,
 		@IDirectoryStrService private readonly directoryStrService: IDirectoryStrService,
 		@IMarkerService private readonly markerService: IMarkerService,
@@ -259,31 +265,30 @@ export class ToolsService implements IToolsService {
 
 			// ---
 
-			// Terminal commands disabled for doc-focused editor
-			// run_command: (params: RawToolParamsObj) => {
-			// 	const { command: commandUnknown, cwd: cwdUnknown } = params
-			// 	const command = validateStr('command', commandUnknown)
-			// 	const cwd = validateOptionalStr('cwd', cwdUnknown)
-			// 	const terminalId = generateUuid()
-			// 	return { command, cwd, terminalId }
-			// },
-			// run_persistent_command: (params: RawToolParamsObj) => {
-			// 	const { command: commandUnknown, persistent_terminal_id: persistentTerminalIdUnknown } = params;
-			// 	const command = validateStr('command', commandUnknown);
-			// 	const persistentTerminalId = validateProposedTerminalId(persistentTerminalIdUnknown)
-			// 	return { command, persistentTerminalId };
-			// },
-			// open_persistent_terminal: (params: RawToolParamsObj) => {
-			// 	const { cwd: cwdUnknown } = params;
-			// 	const cwd = validateOptionalStr('cwd', cwdUnknown)
-			// 	// No parameters needed; will open a new background terminal
-			// 	return { cwd };
-			// },
-			// kill_persistent_terminal: (params: RawToolParamsObj) => {
-			// 	const { persistent_terminal_id: terminalIdUnknown } = params;
-			// 	const persistentTerminalId = validateProposedTerminalId(terminalIdUnknown);
-			// 	return { persistentTerminalId };
-			// },
+			run_command: (params: RawToolParamsObj) => {
+				const { command: commandUnknown, cwd: cwdUnknown } = params
+				const command = validateStr('command', commandUnknown)
+				const cwd = validateOptionalStr('cwd', cwdUnknown)
+				const terminalId = generateUuid()
+				return { command, cwd, terminalId }
+			},
+			run_persistent_command: (params: RawToolParamsObj) => {
+				const { command: commandUnknown, persistent_terminal_id: persistentTerminalIdUnknown } = params;
+				const command = validateStr('command', commandUnknown);
+				const persistentTerminalId = validateProposedTerminalId(persistentTerminalIdUnknown)
+				return { command, persistentTerminalId };
+			},
+			open_persistent_terminal: (params: RawToolParamsObj) => {
+				const { cwd: cwdUnknown } = params;
+				const cwd = validateOptionalStr('cwd', cwdUnknown)
+				// No parameters needed; will open a new background terminal
+				return { cwd };
+			},
+			kill_persistent_terminal: (params: RawToolParamsObj) => {
+				const { persistent_terminal_id: terminalIdUnknown } = params;
+				const persistentTerminalId = validateProposedTerminalId(terminalIdUnknown);
+				return { persistentTerminalId };
+			},
 
 		}
 
@@ -439,24 +444,23 @@ export class ToolsService implements IToolsService {
 				return { result: lintErrorsPromise }
 			},
 			// ---
-			// Terminal commands disabled for doc-focused editor
-			// run_command: async ({ command, cwd, terminalId }) => {
-			// 	const { resPromise, interrupt } = await this.terminalToolService.runCommand(command, { type: 'temporary', cwd, terminalId })
-			// 	return { result: resPromise, interruptTool: interrupt }
-			// },
-			// run_persistent_command: async ({ command, persistentTerminalId }) => {
-			// 	const { resPromise, interrupt } = await this.terminalToolService.runCommand(command, { type: 'persistent', persistentTerminalId })
-			// 	return { result: resPromise, interruptTool: interrupt }
-			// },
-			// open_persistent_terminal: async ({ cwd }) => {
-			// 	const persistentTerminalId = await this.terminalToolService.createPersistentTerminal({ cwd })
-			// 	return { result: { persistentTerminalId } }
-			// },
-			// kill_persistent_terminal: async ({ persistentTerminalId }) => {
-			// 	// Close the background terminal by sending exit
-			// 	await this.terminalToolService.killPersistentTerminal(persistentTerminalId)
-			// 	return { result: {} }
-			// },
+			run_command: async ({ command, cwd, terminalId }) => {
+				const { resPromise, interrupt } = await this.terminalToolService.runCommand(command, { type: 'temporary', cwd, terminalId })
+				return { result: resPromise, interruptTool: interrupt }
+			},
+			run_persistent_command: async ({ command, persistentTerminalId }) => {
+				const { resPromise, interrupt } = await this.terminalToolService.runCommand(command, { type: 'persistent', persistentTerminalId })
+				return { result: resPromise, interruptTool: interrupt }
+			},
+			open_persistent_terminal: async ({ cwd }) => {
+				const persistentTerminalId = await this.terminalToolService.createPersistentTerminal({ cwd })
+				return { result: { persistentTerminalId } }
+			},
+			kill_persistent_terminal: async ({ persistentTerminalId }) => {
+				// Close the background terminal by sending exit
+				await this.terminalToolService.killPersistentTerminal(persistentTerminalId)
+				return { result: {} }
+			},
 		}
 
 
@@ -526,41 +530,40 @@ export class ToolsService implements IToolsService {
 
 				return `Change successfully made to ${params.uri.fsPath}.${lintErrsString}`
 			},
-			// Terminal commands disabled for doc-focused editor
-			// run_command: (params, result) => {
-			// 	const { resolveReason, result: result_, } = result
-			// 	// success
-			// 	if (resolveReason.type === 'done') {
-			// 		return `${result_}\n(exit code ${resolveReason.exitCode})`
-			// 	}
-			// 	// normal command
-			// 	if (resolveReason.type === 'timeout') {
-			// 		return `${result_}\nTerminal command ran, but was automatically killed by Void after ${MAX_TERMINAL_INACTIVE_TIME}s of inactivity and did not finish successfully. To try with more time, open a persistent terminal and run the command there.`
-			// 	}
-			// 	throw new Error(`Unexpected internal error: Terminal command did not resolve with a valid reason.`)
-			// },
+			run_command: (params, result) => {
+				const { resolveReason, result: result_, } = result
+				// success
+				if (resolveReason.type === 'done') {
+					return `${result_}\n(exit code ${resolveReason.exitCode})`
+				}
+				// normal command
+				if (resolveReason.type === 'timeout') {
+					return `${result_}\nTerminal command ran, but was automatically killed by Void after ${MAX_TERMINAL_INACTIVE_TIME}s of inactivity and did not finish successfully. To try with more time, open a persistent terminal and run the command there.`
+				}
+				throw new Error(`Unexpected internal error: Terminal command did not resolve with a valid reason.`)
+			},
 
-			// run_persistent_command: (params, result) => {
-			// 	const { resolveReason, result: result_, } = result
-			// 	const { persistentTerminalId } = params
-			// 	// success
-			// 	if (resolveReason.type === 'done') {
-			// 		return `${result_}\n(exit code ${resolveReason.exitCode})`
-			// 	}
-			// 	// bg command
-			// 	if (resolveReason.type === 'timeout') {
-			// 		return `${result_}\nTerminal command is running in terminal ${persistentTerminalId}. The given outputs are the results after ${MAX_TERMINAL_BG_COMMAND_TIME} seconds.`
-			// 	}
-			// 	throw new Error(`Unexpected internal error: Terminal command did not resolve with a valid reason.`)
-			// },
+			run_persistent_command: (params, result) => {
+				const { resolveReason, result: result_, } = result
+				const { persistentTerminalId } = params
+				// success
+				if (resolveReason.type === 'done') {
+					return `${result_}\n(exit code ${resolveReason.exitCode})`
+				}
+				// bg command
+				if (resolveReason.type === 'timeout') {
+					return `${result_}\nTerminal command is running in terminal ${persistentTerminalId}. The given outputs are the results after ${MAX_TERMINAL_BG_COMMAND_TIME} seconds.`
+				}
+				throw new Error(`Unexpected internal error: Terminal command did not resolve with a valid reason.`)
+			},
 
-			// open_persistent_terminal: (_params, result) => {
-			// 	const { persistentTerminalId } = result;
-			// 	return `Successfully created persistent terminal. persistentTerminalId="${persistentTerminalId}"`;
-			// },
-			// kill_persistent_terminal: (params, _result) => {
-			// 	return `Successfully closed terminal "${params.persistentTerminalId}".`;
-			// },
+			open_persistent_terminal: (_params, result) => {
+				const { persistentTerminalId } = result;
+				return `Successfully created persistent terminal. persistentTerminalId="${persistentTerminalId}"`;
+			},
+			kill_persistent_terminal: (params, _result) => {
+				return `Successfully closed terminal "${params.persistentTerminalId}".`;
+			},
 		}
 
 
