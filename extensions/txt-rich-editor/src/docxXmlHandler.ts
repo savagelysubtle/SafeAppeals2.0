@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import JSZip from 'jszip';
+import { DOMParser } from '@xmldom/xmldom';
 
 /**
  * DOCX XML Handler - Bidirectional converter between DOCX XML and HTML
@@ -84,8 +85,10 @@ export class DocxXmlHandler {
 	 */
 	public docxXmlToHtml(docxDoc: DocxDocument): string {
 		try {
+			console.log('=== DOCX XML PARSER DEBUG ===');
 			console.log('Starting DOCX XML to HTML conversion...');
-			console.log('XML preview:', docxDoc.xml.substring(0, 200) + '...');
+			console.log('XML length:', docxDoc.xml.length);
+			console.log('XML preview:', docxDoc.xml.substring(0, 300) + '...');
 
 			const parser = new DOMParser();
 			const xmlDoc = parser.parseFromString(docxDoc.xml, 'text/xml');
@@ -97,32 +100,14 @@ export class DocxXmlHandler {
 				throw new Error('Failed to parse DOCX XML');
 			}
 
-			// Get the body element using multiple methods
-			let body: Element | null = null;
-
-			// Try different ways to find the body element
-			body = xmlDoc.getElementsByTagName('w:body')[0] as Element;
+			// Get the body element - DOCX uses w:body
+			const body = xmlDoc.getElementsByTagName('w:body')[0] as Element;
 			if (!body) {
-				body = xmlDoc.getElementsByTagNameNS('http://schemas.openxmlformats.org/wordprocessingml/2006/main', 'body')[0] as Element;
-			}
-			if (!body) {
-				// Search all elements for body
-				const allElements = xmlDoc.getElementsByTagName('*');
-				for (let i = 0; i < allElements.length; i++) {
-					const elem = allElements[i];
-					if (elem.localName === 'body' || elem.tagName === 'w:body') {
-						body = elem as Element;
-						break;
-					}
-				}
-			}
-
-			if (!body) {
-				console.warn('No body element found in DOCX');
+				console.warn('No w:body element found in DOCX');
 				return '<p>Empty document</p>';
 			}
 
-			console.log('Found body element:', body.tagName);
+			console.log('✅ Found body element:', body.tagName);
 
 			const htmlParts: string[] = [];
 
@@ -130,33 +115,43 @@ export class DocxXmlHandler {
 			const children = Array.from(body.children);
 			console.log('Body children count:', children.length);
 
-			for (const child of children) {
-				const localName = child.localName || child.tagName.split(':').pop();
-				console.log('Processing element:', child.tagName, 'localName:', localName);
+			let paragraphCount = 0;
+			let tableCount = 0;
+			let otherCount = 0;
 
-				if (localName === 'p') {
+			for (const child of children) {
+				const tagName = child.tagName;
+				console.log(`Processing element ${htmlParts.length}:`, tagName);
+
+				if (tagName === 'w:p') {
 					// Process paragraph
 					const html = this.processParagraph(child as Element);
-					console.log('Paragraph HTML:', html.substring(0, 100) + '...');
+					console.log(`Paragraph ${paragraphCount} HTML:`, html.substring(0, 100) + '...');
 					htmlParts.push(html);
-				} else if (localName === 'tbl') {
+					paragraphCount++;
+				} else if (tagName === 'w:tbl') {
 					// Process table
 					const html = this.processTable(child as Element);
-					console.log('Table HTML:', html.substring(0, 100) + '...');
+					console.log(`Table ${tableCount} HTML:`, html.substring(0, 100) + '...');
 					htmlParts.push(html);
-				} else if (localName === 'sectPr') {
+					tableCount++;
+				} else if (tagName === 'w:sectPr') {
 					// Section properties - skip
+					console.log('Skipping section properties');
 					continue;
 				} else {
-					console.log('Unhandled element:', child.tagName);
+					console.log('Unhandled element:', tagName);
+					otherCount++;
 				}
 			}
 
+			console.log(`Processed: ${paragraphCount} paragraphs, ${tableCount} tables, ${otherCount} other elements`);
 			const result = htmlParts.join('\n');
-			console.log('DOCX XML converted to HTML, length:', result.length);
+			console.log('✅ DOCX XML converted to HTML, length:', result.length);
+			console.log('=== END DOCX XML PARSER DEBUG ===');
 			return result;
 		} catch (error) {
-			console.error('Error converting DOCX XML to HTML:', error);
+			console.error('❌ Error converting DOCX XML to HTML:', error);
 			throw error;
 		}
 	}
@@ -165,37 +160,36 @@ export class DocxXmlHandler {
 	 * Process a paragraph element
 	 */
 	private processParagraph(pElem: Element): string {
-		// Get runs using namespace-aware methods
-		const runs = this.getChildrenByLocalName(pElem, 'r');
-		const paragraphProps = this.getChildByLocalName(pElem, 'pPr');
+		// Get runs - DOCX uses w:r elements
+		const runs = pElem.getElementsByTagName('w:r');
+		const paragraphProps = pElem.getElementsByTagName('w:pPr')[0];
 
 		// Check for heading level
 		let headingLevel = 0;
 		let alignment = '';
 		let isList = false;
-		// let listType = 'bullet'; // Reserved for future use
 
 		if (paragraphProps) {
 			// Check for heading style
-			const pStyle = this.getChildByLocalName(paragraphProps, 'pStyle');
+			const pStyle = paragraphProps.getElementsByTagName('w:pStyle')[0];
 			if (pStyle) {
-				const styleVal = pStyle.getAttribute('w:val') || pStyle.getAttributeNS('*', 'val');
+				const styleVal = pStyle.getAttribute('w:val');
 				if (styleVal?.match(/^Heading(\d)$/)) {
 					headingLevel = parseInt(RegExp.$1);
 				}
 			}
 
 			// Check for alignment
-			const jc = this.getChildByLocalName(paragraphProps, 'jc');
+			const jc = paragraphProps.getElementsByTagName('w:jc')[0];
 			if (jc) {
-				const alignVal = jc.getAttribute('w:val') || jc.getAttributeNS('*', 'val');
+				const alignVal = jc.getAttribute('w:val');
 				if (alignVal === 'center') alignment = 'center';
 				else if (alignVal === 'right') alignment = 'right';
 				else if (alignVal === 'both') alignment = 'justify';
 			}
 
 			// Check for numbering (lists)
-			const numPr = this.getChildByLocalName(paragraphProps, 'numPr');
+			const numPr = paragraphProps.getElementsByTagName('w:numPr')[0];
 			if (numPr) {
 				isList = true;
 			}
@@ -203,8 +197,8 @@ export class DocxXmlHandler {
 
 		// Process text runs
 		let textContent = '';
-		for (const run of runs) {
-			textContent += this.processRun(run);
+		for (let i = 0; i < runs.length; i++) {
+			textContent += this.processRun(runs[i] as Element);
 		}
 
 		// If empty paragraph, add br
@@ -227,94 +221,29 @@ export class DocxXmlHandler {
 		return html;
 	}
 
-	/**
-	 * Helper to get children by local name (namespace-agnostic)
-	 */
-	private getChildrenByLocalName(elem: Element, localName: string): Element[] {
-		const result: Element[] = [];
-
-		// Try different methods to find elements
-		// Method 1: Direct tag name search
-		const directElements = elem.getElementsByTagName(localName);
-		for (let i = 0; i < directElements.length; i++) {
-			if (directElements[i].parentElement === elem) {
-				result.push(directElements[i] as Element);
-			}
-		}
-
-		// Method 2: Namespace-aware search
-		const nsElements = elem.getElementsByTagNameNS('http://schemas.openxmlformats.org/wordprocessingml/2006/main', localName);
-		for (let i = 0; i < nsElements.length; i++) {
-			if (nsElements[i].parentElement === elem && !result.includes(nsElements[i] as Element)) {
-				result.push(nsElements[i] as Element);
-			}
-		}
-
-		// Method 3: Manual traversal (fallback)
-		if (result.length === 0) {
-			for (let i = 0; i < elem.children.length; i++) {
-				const child = elem.children[i];
-				const childLocalName = child.localName || child.tagName.split(':').pop();
-				if (childLocalName === localName) {
-					result.push(child as Element);
-				}
-			}
-		}
-
-		return result;
-	}
-
-	/**
-	 * Helper to get first child by local name (namespace-agnostic)
-	 */
-	private getChildByLocalName(elem: Element, localName: string): Element | undefined {
-		// Try different methods to find element
-		// Method 1: Direct tag name search
-		const directElement = elem.getElementsByTagName(localName)[0];
-		if (directElement && directElement.parentElement === elem) {
-			return directElement as Element;
-		}
-
-		// Method 2: Namespace-aware search
-		const nsElement = elem.getElementsByTagNameNS('http://schemas.openxmlformats.org/wordprocessingml/2006/main', localName)[0];
-		if (nsElement && nsElement.parentElement === elem) {
-			return nsElement as Element;
-		}
-
-		// Method 3: Manual traversal (fallback)
-		for (let i = 0; i < elem.children.length; i++) {
-			const child = elem.children[i];
-			const childLocalName = child.localName || child.tagName.split(':').pop();
-			if (childLocalName === localName) {
-				return child as Element;
-			}
-		}
-
-		return undefined;
-	}
 
 	/**
 	 * Process a run (text with formatting)
 	 */
 	private processRun(runElem: Element): string {
-		// Get text elements using namespace-aware method
-		const textElems = this.getChildrenByLocalName(runElem, 't');
+		// Get text elements - DOCX uses w:t elements
+		const textElems = runElem.getElementsByTagName('w:t');
 		if (textElems.length === 0) {
 			// Check for breaks or tabs
-			const br = this.getChildByLocalName(runElem, 'br');
+			const br = runElem.getElementsByTagName('w:br')[0];
 			if (br) return '<br>';
-			const tab = this.getChildByLocalName(runElem, 'tab');
+			const tab = runElem.getElementsByTagName('w:tab')[0];
 			if (tab) return '&nbsp;&nbsp;&nbsp;&nbsp;';
 			return '';
 		}
 
 		let text = '';
-		for (const textElem of textElems) {
-			text += textElem.textContent || '';
+		for (let i = 0; i < textElems.length; i++) {
+			text += textElems[i].textContent || '';
 		}
 
 		// Check for formatting
-		const runProps = this.getChildByLocalName(runElem, 'rPr');
+		const runProps = runElem.getElementsByTagName('w:rPr')[0];
 		let isBold = false;
 		let isItalic = false;
 		let isUnderline = false;
@@ -322,11 +251,11 @@ export class DocxXmlHandler {
 		let isHighlight = false;
 
 		if (runProps) {
-			isBold = this.getChildByLocalName(runProps, 'b') !== undefined;
-			isItalic = this.getChildByLocalName(runProps, 'i') !== undefined;
-			isUnderline = this.getChildByLocalName(runProps, 'u') !== undefined;
-			isStrikethrough = this.getChildByLocalName(runProps, 'strike') !== undefined;
-			isHighlight = this.getChildByLocalName(runProps, 'highlight') !== undefined;
+			isBold = runProps.getElementsByTagName('w:b').length > 0;
+			isItalic = runProps.getElementsByTagName('w:i').length > 0;
+			isUnderline = runProps.getElementsByTagName('w:u').length > 0;
+			isStrikethrough = runProps.getElementsByTagName('w:strike').length > 0;
+			isHighlight = runProps.getElementsByTagName('w:highlight').length > 0;
 		}
 
 		// Escape XML/HTML
@@ -348,7 +277,8 @@ export class DocxXmlHandler {
 	private processTable(tblElem: Element): string {
 		console.log('Processing table element:', tblElem.tagName);
 
-		const rows = this.getChildrenByLocalName(tblElem, 'tr');
+		// DOCX uses w:tr for table rows
+		const rows = tblElem.getElementsByTagName('w:tr');
 		console.log('Found rows:', rows.length);
 
 		if (rows.length === 0) {
@@ -359,18 +289,20 @@ export class DocxXmlHandler {
 		let html = '<table border="1" style="border-collapse: collapse; width: 100%; margin: 1em 0;">';
 
 		for (let i = 0; i < rows.length; i++) {
-			const row = rows[i];
+			const row = rows[i] as Element;
 			console.log(`Processing row ${i}:`, row.tagName);
 			html += '<tr>';
 
-			const cells = this.getChildrenByLocalName(row, 'tc');
+			// DOCX uses w:tc for table cells
+			const cells = row.getElementsByTagName('w:tc');
 			console.log(`Row ${i} has ${cells.length} cells`);
 
 			for (let j = 0; j < cells.length; j++) {
-				const cellElem = cells[j];
+				const cellElem = cells[j] as Element;
 				console.log(`Processing cell ${j}:`, cellElem.tagName);
 
-				const paragraphs = this.getChildrenByLocalName(cellElem, 'p');
+				// DOCX uses w:p for paragraphs in cells
+				const paragraphs = cellElem.getElementsByTagName('w:p');
 				let cellContent = '';
 
 				if (paragraphs.length === 0) {
@@ -382,8 +314,8 @@ export class DocxXmlHandler {
 						cellContent = '<p>&nbsp;</p>';
 					}
 				} else {
-					for (const para of paragraphs) {
-						cellContent += this.processParagraph(para);
+					for (let k = 0; k < paragraphs.length; k++) {
+						cellContent += this.processParagraph(paragraphs[k] as Element);
 					}
 				}
 

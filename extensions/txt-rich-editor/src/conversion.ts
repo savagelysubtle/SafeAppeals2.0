@@ -29,18 +29,23 @@ async function loadDependencies() {
 }
 
 export async function docxToHtml(buffer: Uint8Array, useNativeParser: boolean = true): Promise<string> {
+	console.log('=== CONVERSION.TS: docxToHtml called ===');
+	console.log('Buffer size:', buffer.length);
+	console.log('useNativeParser:', useNativeParser);
+
 	// Try native DOCX XML parser first for better format preservation
 	if (useNativeParser) {
 		try {
 			console.log('Attempting native DOCX parser...');
 			const handler = new DocxXmlHandler();
 			const docxDoc = await handler.parseDocxBuffer(buffer);
-			console.log('DOCX parsed successfully, XML length:', docxDoc.xml.length);
+			console.log('✅ DOCX parsed successfully, XML length:', docxDoc.xml.length);
 			const html = handler.docxXmlToHtml(docxDoc);
-			console.log('Native parser succeeded, HTML length:', html.length);
+			console.log('✅ Native parser succeeded, HTML length:', html.length);
+			console.log('HTML preview:', html.substring(0, 300) + '...');
 			return html;
 		} catch (error) {
-			console.warn('Native DOCX parser failed, falling back to mammoth:', error);
+			console.error('❌ Native DOCX parser failed, falling back to mammoth:', error);
 		}
 	}
 
@@ -54,7 +59,8 @@ export async function docxToHtml(buffer: Uint8Array, useNativeParser: boolean = 
 
 	try {
 		const result = await mammoth.convertToHtml({ buffer });
-		console.log('Mammoth parser succeeded, HTML length:', result.value.length);
+		console.log('✅ Mammoth parser succeeded, HTML length:', result.value.length);
+		console.log('Mammoth HTML preview:', result.value.substring(0, 300) + '...');
 		return sanitizeHtml(result.value);
 	} catch (error) {
 		throw new Error(`Failed to convert DOCX to HTML: ${error}`);

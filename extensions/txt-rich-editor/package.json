@@ -136,6 +136,7 @@
     "watch": "gulp watch-extension:txt-rich-editor"
   },
   "dependencies": {
+    "@xmldom/xmldom": "^0.8.11",
     "html-to-docx": "^1.8.0",
     "jszip": "^3.10.1",
     "mammoth": "^1.6.0"

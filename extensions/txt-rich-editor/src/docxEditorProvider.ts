@@ -74,28 +74,34 @@ export class DocxEditorProvider implements vscode.CustomReadonlyEditorProvider<v
 
 	private async loadDocxContent(uri: vscode.Uri, webviewPanel: vscode.WebviewPanel): Promise<void> {
 		try {
-			this.logger.info('Loading DOCX content...');
+			this.logger.info('=== DOCX EDITOR PROVIDER: Starting DOCX load ===');
+			this.logger.info(`File: ${uri.fsPath}`);
 
 			// Read the DOCX file as binary
 			const fileData = await vscode.workspace.fs.readFile(uri);
-			this.logger.trace(`DOCX file size: ${fileData.length} bytes`);
+			this.logger.info(`DOCX file size: ${fileData.length} bytes`);
 
 			// Convert DOCX to HTML
+			this.logger.info('Calling docxToHtml...');
 			const html = await docxToHtml(fileData);
-			this.logger.info('DOCX converted to HTML successfully');
-			this.logger.trace(`HTML length: ${html.length} characters`);
+			this.logger.info('✅ DOCX converted to HTML successfully');
+			this.logger.info(`HTML length: ${html.length} characters`);
+			this.logger.info(`HTML preview: ${html.substring(0, 200)}...`);
 
 			this.currentHtml = html;
 
 			// Send to webview
+			this.logger.info('Sending content to webview...');
 			webviewPanel.webview.postMessage({
 				type: 'set-content',
 				content: html,
 				isHtml: true,
 				readonly: false // Allow editing
 			});
+			this.logger.info('✅ Content sent to webview');
+			this.logger.info('=== END DOCX EDITOR PROVIDER ===');
 		} catch (error) {
-			this.logger.error('Failed to load DOCX content', error);
+			this.logger.error('❌ Failed to load DOCX content', error);
 			const errorMessage = error instanceof Error ? error.message : String(error);
 
 			vscode.window.showErrorMessage(`Failed to open DOCX file: ${errorMessage}`);
