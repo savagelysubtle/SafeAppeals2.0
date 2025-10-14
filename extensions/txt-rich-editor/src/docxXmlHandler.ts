@@ -23,44 +23,60 @@ export class DocxXmlHandler {
 	 * Parse DOCX file buffer and extract XML components
 	 */
 	public async parseDocxBuffer(buffer: Uint8Array): Promise<DocxDocument> {
-		const zip = new JSZip();
-		const loadedZip = await zip.loadAsync(buffer);
+		try {
+			console.log('Loading DOCX buffer, size:', buffer.length);
+			const zip = new JSZip();
+			const loadedZip = await zip.loadAsync(buffer);
+			console.log('DOCX ZIP loaded successfully');
 
-		const docxDoc: DocxDocument = {
-			xml: '',
-		};
+			const docxDoc: DocxDocument = {
+				xml: '',
+			};
 
-		// Extract main document XML
-		const documentXml = loadedZip.file('word/document.xml');
-		if (documentXml) {
-			docxDoc.xml = await documentXml.async('text');
+			// Extract main document XML
+			const documentXml = loadedZip.file('word/document.xml');
+			if (documentXml) {
+				docxDoc.xml = await documentXml.async('text');
+				console.log('Extracted document.xml, length:', docxDoc.xml.length);
+			} else {
+				console.error('word/document.xml not found in DOCX');
+				throw new Error('Invalid DOCX file: missing document.xml');
+			}
+
+			// Extract styles
+			const stylesXml = loadedZip.file('word/styles.xml');
+			if (stylesXml) {
+				docxDoc.styles = await stylesXml.async('text');
+				console.log('Extracted styles.xml, length:', docxDoc.styles.length);
+			}
+
+			// Extract numbering (for lists)
+			const numberingXml = loadedZip.file('word/numbering.xml');
+			if (numberingXml) {
+				docxDoc.numbering = await numberingXml.async('text');
+				console.log('Extracted numbering.xml, length:', docxDoc.numbering.length);
+			}
+
+			// Extract relationships
+			const relsXml = loadedZip.file('word/_rels/document.xml.rels');
+			if (relsXml) {
+				docxDoc.relationships = await relsXml.async('text');
+				console.log('Extracted document.xml.rels, length:', docxDoc.relationships.length);
+			}
+
+			// Extract content types
+			const contentTypesXml = loadedZip.file('[Content_Types].xml');
+			if (contentTypesXml) {
+				docxDoc.contentTypes = await contentTypesXml.async('text');
+				console.log('Extracted [Content_Types].xml, length:', docxDoc.contentTypes.length);
+			}
+
+			console.log('DOCX parsing completed successfully');
+			return docxDoc;
+		} catch (error) {
+			console.error('Error parsing DOCX buffer:', error);
+			throw error;
 		}
-
-		// Extract styles
-		const stylesXml = loadedZip.file('word/styles.xml');
-		if (stylesXml) {
-			docxDoc.styles = await stylesXml.async('text');
-		}
-
-		// Extract numbering (for lists)
-		const numberingXml = loadedZip.file('word/numbering.xml');
-		if (numberingXml) {
-			docxDoc.numbering = await numberingXml.async('text');
-		}
-
-		// Extract relationships
-		const relsXml = loadedZip.file('word/_rels/document.xml.rels');
-		if (relsXml) {
-			docxDoc.relationships = await relsXml.async('text');
-		}
-
-		// Extract content types
-		const contentTypesXml = loadedZip.file('[Content_Types].xml');
-		if (contentTypesXml) {
-			docxDoc.contentTypes = await contentTypesXml.async('text');
-		}
-
-		return docxDoc;
 	}
 
 	/**
@@ -68,6 +84,9 @@ export class DocxXmlHandler {
 	 */
 	public docxXmlToHtml(docxDoc: DocxDocument): string {
 		try {
+			console.log('Starting DOCX XML to HTML conversion...');
+			console.log('XML preview:', docxDoc.xml.substring(0, 200) + '...');
+
 			const parser = new DOMParser();
 			const xmlDoc = parser.parseFromString(docxDoc.xml, 'text/xml');
 
@@ -78,32 +97,58 @@ export class DocxXmlHandler {
 				throw new Error('Failed to parse DOCX XML');
 			}
 
-			// Get the body element (try with and without namespace)
-			let body = xmlDoc.getElementsByTagName('w:body')[0];
+			// Get the body element using multiple methods
+			let body: Element | null = null;
+
+			// Try different ways to find the body element
+			body = xmlDoc.getElementsByTagName('w:body')[0] as Element;
 			if (!body) {
-				body = xmlDoc.getElementsByTagNameNS('*', 'body')[0];
+				body = xmlDoc.getElementsByTagNameNS('http://schemas.openxmlformats.org/wordprocessingml/2006/main', 'body')[0] as Element;
 			}
+			if (!body) {
+				// Search all elements for body
+				const allElements = xmlDoc.getElementsByTagName('*');
+				for (let i = 0; i < allElements.length; i++) {
+					const elem = allElements[i];
+					if (elem.localName === 'body' || elem.tagName === 'w:body') {
+						body = elem as Element;
+						break;
+					}
+				}
+			}
+
 			if (!body) {
 				console.warn('No body element found in DOCX');
 				return '<p>Empty document</p>';
 			}
 
+			console.log('Found body element:', body.tagName);
+
 			const htmlParts: string[] = [];
 
 			// Process each paragraph and other elements
 			const children = Array.from(body.children);
+			console.log('Body children count:', children.length);
+
 			for (const child of children) {
 				const localName = child.localName || child.tagName.split(':').pop();
+				console.log('Processing element:', child.tagName, 'localName:', localName);
 
 				if (localName === 'p') {
 					// Process paragraph
-					htmlParts.push(this.processParagraph(child as Element));
+					const html = this.processParagraph(child as Element);
+					console.log('Paragraph HTML:', html.substring(0, 100) + '...');
+					htmlParts.push(html);
 				} else if (localName === 'tbl') {
 					// Process table
-					htmlParts.push(this.processTable(child as Element));
+					const html = this.processTable(child as Element);
+					console.log('Table HTML:', html.substring(0, 100) + '...');
+					htmlParts.push(html);
 				} else if (localName === 'sectPr') {
 					// Section properties - skip
 					continue;
+				} else {
+					console.log('Unhandled element:', child.tagName);
 				}
 			}
 
@@ -187,13 +232,35 @@ export class DocxXmlHandler {
 	 */
 	private getChildrenByLocalName(elem: Element, localName: string): Element[] {
 		const result: Element[] = [];
-		for (let i = 0; i < elem.children.length; i++) {
-			const child = elem.children[i];
-			const childLocalName = child.localName || child.tagName.split(':').pop();
-			if (childLocalName === localName) {
-				result.push(child as Element);
+
+		// Try different methods to find elements
+		// Method 1: Direct tag name search
+		const directElements = elem.getElementsByTagName(localName);
+		for (let i = 0; i < directElements.length; i++) {
+			if (directElements[i].parentElement === elem) {
+				result.push(directElements[i] as Element);
 			}
 		}
+
+		// Method 2: Namespace-aware search
+		const nsElements = elem.getElementsByTagNameNS('http://schemas.openxmlformats.org/wordprocessingml/2006/main', localName);
+		for (let i = 0; i < nsElements.length; i++) {
+			if (nsElements[i].parentElement === elem && !result.includes(nsElements[i] as Element)) {
+				result.push(nsElements[i] as Element);
+			}
+		}
+
+		// Method 3: Manual traversal (fallback)
+		if (result.length === 0) {
+			for (let i = 0; i < elem.children.length; i++) {
+				const child = elem.children[i];
+				const childLocalName = child.localName || child.tagName.split(':').pop();
+				if (childLocalName === localName) {
+					result.push(child as Element);
+				}
+			}
+		}
+
 		return result;
 	}
 
@@ -201,6 +268,20 @@ export class DocxXmlHandler {
 	 * Helper to get first child by local name (namespace-agnostic)
 	 */
 	private getChildByLocalName(elem: Element, localName: string): Element | undefined {
+		// Try different methods to find element
+		// Method 1: Direct tag name search
+		const directElement = elem.getElementsByTagName(localName)[0];
+		if (directElement && directElement.parentElement === elem) {
+			return directElement as Element;
+		}
+
+		// Method 2: Namespace-aware search
+		const nsElement = elem.getElementsByTagNameNS('http://schemas.openxmlformats.org/wordprocessingml/2006/main', localName)[0];
+		if (nsElement && nsElement.parentElement === elem) {
+			return nsElement as Element;
+		}
+
+		// Method 3: Manual traversal (fallback)
 		for (let i = 0; i < elem.children.length; i++) {
 			const child = elem.children[i];
 			const childLocalName = child.localName || child.tagName.split(':').pop();
@@ -208,6 +289,7 @@ export class DocxXmlHandler {
 				return child as Element;
 			}
 		}
+
 		return undefined;
 	}
 
@@ -264,19 +346,45 @@ export class DocxXmlHandler {
 	 * Process a table element
 	 */
 	private processTable(tblElem: Element): string {
+		console.log('Processing table element:', tblElem.tagName);
+
 		const rows = this.getChildrenByLocalName(tblElem, 'tr');
+		console.log('Found rows:', rows.length);
+
+		if (rows.length === 0) {
+			console.warn('No rows found in table');
+			return '<p>Empty table</p>';
+		}
+
 		let html = '<table border="1" style="border-collapse: collapse; width: 100%; margin: 1em 0;">';
 
-		for (const row of rows) {
+		for (let i = 0; i < rows.length; i++) {
+			const row = rows[i];
+			console.log(`Processing row ${i}:`, row.tagName);
 			html += '<tr>';
-			const cells = this.getChildrenByLocalName(row, 'tc');
 
-			for (const cellElem of cells) {
+			const cells = this.getChildrenByLocalName(row, 'tc');
+			console.log(`Row ${i} has ${cells.length} cells`);
+
+			for (let j = 0; j < cells.length; j++) {
+				const cellElem = cells[j];
+				console.log(`Processing cell ${j}:`, cellElem.tagName);
+
 				const paragraphs = this.getChildrenByLocalName(cellElem, 'p');
 				let cellContent = '';
 
-				for (const para of paragraphs) {
-					cellContent += this.processParagraph(para);
+				if (paragraphs.length === 0) {
+					// Check for direct text content
+					cellContent = cellElem.textContent || '';
+					if (cellContent.trim()) {
+						cellContent = `<p>${this.escapeXml(cellContent)}</p>`;
+					} else {
+						cellContent = '<p>&nbsp;</p>';
+					}
+				} else {
+					for (const para of paragraphs) {
+						cellContent += this.processParagraph(para);
+					}
 				}
 
 				html += `<td style="padding: 8px; border: 1px solid #ddd; vertical-align: top;">${cellContent}</td>`;
@@ -286,6 +394,7 @@ export class DocxXmlHandler {
 		}
 
 		html += '</table>';
+		console.log('Generated table HTML:', html.substring(0, 200) + '...');
 		return html;
 	}
 
