@@ -168,8 +168,8 @@ export const TAB_DRAG_AND_DROP_BORDER = registerColor('tab.dragAndDropBorder', {
 //#region Tab Modified Border
 
 export const TAB_ACTIVE_MODIFIED_BORDER = registerColor('tab.activeModifiedBorder', {
-	dark: '#3399CC',
-	light: '#33AAEE',
+	dark: '#5FAA2A',
+	light: '#8CD94A',
 	hcDark: null,
 	hcLight: contrastBorder
 }, localize('tabActiveModifiedBorder', "Border on the top of modified active tabs in an active group. Tabs are the containers for editors in the editor area. Multiple tabs can be opened in one editor group. There can be multiple editor groups."));
@@ -239,7 +239,7 @@ export const EDITOR_DRAG_AND_DROP_BACKGROUND = registerColor('editorGroup.dropBa
 	dark: Color.fromHex('#53595D').transparent(0.5),
 	light: Color.fromHex('#2677CB').transparent(0.18),
 	hcDark: null,
-	hcLight: Color.fromHex('#0F4A85').transparent(0.50)
+	hcLight: Color.fromHex('#0B3D0B').transparent(0.50)
 }, localize('editorDragAndDropBackground', "Background color when dragging editors around. The color should have transparency so that the editor contents can still shine through."));
 
 export const EDITOR_DROP_INTO_PROMPT_FOREGROUND = registerColor('editorGroup.dropIntoPromptForeground', editorWidgetForeground, localize('editorDropIntoPromptForeground', "Foreground color of text shown over editors when dragging files. This text informs the user that they can hold shift to drop into the editor."));

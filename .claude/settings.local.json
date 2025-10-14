@@ -1,7 +1,11 @@
 {
   "permissions": {
     "allow": [
-      "Bash(git rm:*)"
+      "Bash(git rm:*)",
+      "Bash(cat:*)",
+      "Bash(npx tsc:*)",
+      "Bash(npx webpack:*)",
+      "Bash(node:*)"
     ],
     "deny": [],
     "ask": []

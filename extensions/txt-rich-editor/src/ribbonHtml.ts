@@ -11,9 +11,9 @@ import { isWebEnvironment } from './conversion';
  * Used by both text file and DOCX file editors
  */
 export function generateRibbonHtml(_webview: vscode.Webview, documentType: string = 'txt'): string {
-	const isWeb = isWebEnvironment();
+    const isWeb = isWebEnvironment();
 
-	return `<!DOCTYPE html>
+    return `<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -436,9 +436,45 @@ export function generateRibbonHtml(_webview: vscode.Webview, documentType: strin
             <!-- Similar to Home tab but with Insert features -->
         </div>
 
-        <!-- Other tabs hidden by default -->
-        <div class="ribbon-content" id="pageLayoutContent" style="display: none;"></div>
-        <div class="ribbon-content" id="viewContent" style="display: none;"></div>
+        <!-- Page Layout Tab -->
+        <div class="ribbon-content" id="pageLayoutContent" style="display: none;">
+            <div class="ribbon-group">
+                <div class="ribbon-group-title">Page Setup</div>
+                <div class="ribbon-group-content">
+                    <button class="ribbon-button" id="margins" title="Margins">📏</button>
+                    <button class="ribbon-button" id="orientation" title="Orientation">🔄</button>
+                    <button class="ribbon-button" id="pageSize" title="Page Size">📄</button>
+                </div>
+            </div>
+            <div class="ribbon-group">
+                <div class="ribbon-group-title">View</div>
+                <div class="ribbon-group-content">
+                    <button class="ribbon-button" id="xmlView" title="Show XML">🔍</button>
+                    <button class="ribbon-button" id="normalView" title="Normal View">📝</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- View Tab -->
+        <div class="ribbon-content" id="viewContent" style="display: none;">
+            <div class="ribbon-group">
+                <div class="ribbon-group-title">Zoom</div>
+                <div class="ribbon-group-content">
+                    <button class="ribbon-button" id="zoomIn" title="Zoom In">🔍+</button>
+                    <button class="ribbon-button" id="zoomOut" title="Zoom Out">🔍-</button>
+                    <button class="ribbon-button" id="zoomReset" title="Zoom Reset">🔍</button>
+                </div>
+            </div>
+            <div class="ribbon-group">
+                <div class="ribbon-group-title">Display</div>
+                <div class="ribbon-group-content">
+                    <button class="ribbon-button" id="showRulers" title="Show Rulers">📏</button>
+                    <button class="ribbon-button" id="showMargins" title="Show Margins">📐</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Format Tab -->
         <div class="ribbon-content" id="formatContent" style="display: none;"></div>
     </div>
 
@@ -490,51 +526,126 @@ export function generateRibbonHtml(_webview: vscode.Webview, documentType: strin
                     } else {
                         editor.textContent = message.content;
                     }
+
+                    // Apply page layout if provided
+                    if (message.pageLayout) {
+                        applyPageLayout(message.pageLayout);
+                    }
+
+                    // Redraw canvases after content is set
+                    setTimeout(redrawCanvases, 50);
+                    setTimeout(redrawCanvases, 200); // Backup
+                    break;
+                case 'set-xml-content':
+                    editor.innerHTML = '<pre style="font-family: monospace; font-size: 12px; line-height: 1.4; white-space: pre-wrap; word-wrap: break-word;">' +
+                        escapeHtml(message.content) + '</pre>';
                     break;
             }
         });
 
-        // Toolbar button handlers
-        document.getElementById('bold').addEventListener('click', () => document.execCommand('bold'));
-        document.getElementById('italic').addEventListener('click', () => document.execCommand('italic'));
-        document.getElementById('underline').addEventListener('click', () => document.execCommand('underline'));
-        document.getElementById('strikethrough').addEventListener('click', () => document.execCommand('strikeThrough'));
-        document.getElementById('undo').addEventListener('click', () => document.execCommand('undo'));
-        document.getElementById('redo').addEventListener('click', () => document.execCommand('redo'));
+        // Apply page layout to editor
+        function applyPageLayout(pageLayout) {
+            if (!pageLayout) return;
 
-        document.getElementById('alignLeft').addEventListener('click', () => document.execCommand('justifyLeft'));
-        document.getElementById('alignCenter').addEventListener('click', () => document.execCommand('justifyCenter'));
-        document.getElementById('alignRight').addEventListener('click', () => document.execCommand('justifyRight'));
-        document.getElementById('indent').addEventListener('click', () => document.execCommand('indent'));
-        document.getElementById('outdent').addEventListener('click', () => document.execCommand('outdent'));
+            // Convert twips to pixels (1 twip = 1/20 point, 1 point = 1.33 pixels at 96 DPI)
+            const twipsToPixels = (twips) => Math.round(twips * 1.33 / 20);
 
-        document.getElementById('bulletList').addEventListener('click', () => document.execCommand('insertUnorderedList'));
-        document.getElementById('numberList').addEventListener('click', () => document.execCommand('insertOrderedList'));
-        document.getElementById('blockquote').addEventListener('click', () => document.execCommand('formatBlock', false, 'blockquote'));
+            const margins = {
+                top: twipsToPixels(pageLayout.margins.top),
+                right: twipsToPixels(pageLayout.margins.right),
+                bottom: twipsToPixels(pageLayout.margins.bottom),
+                left: twipsToPixels(pageLayout.margins.left)
+            };
 
-        document.getElementById('heading').addEventListener('change', (e) => {
-            document.execCommand('formatBlock', false, e.target.value);
-        });
+            // Update margin indicators
+            const leftIndicator = document.getElementById('leftMarginIndicator');
+            const rightIndicator = document.getElementById('rightMarginIndicator');
 
-        document.getElementById('fontSize').addEventListener('change', (e) => {
-            document.execCommand('fontSize', false, '7');
-            const selection = window.getSelection();
-            if (selection) {
-                const fontElements = selection.anchorNode.parentElement.querySelectorAll('font[size="7"]');
-                fontElements.forEach(el => el.removeAttribute('size') && (el.style.fontSize = e.target.value + 'pt'));
+            if (leftIndicator) {
+                leftIndicator.style.left = (60 + margins.left) + 'px';
             }
-        });
+            if (rightIndicator) {
+                rightIndicator.style.right = (margins.right) + 'px';
+            }
 
-        document.getElementById('exportDocx').addEventListener('click', () => {
+            // Update editor padding
+            editor.style.paddingLeft = margins.left + 'px';
+            editor.style.paddingRight = margins.right + 'px';
+            editor.style.paddingTop = margins.top + 'px';
+            editor.style.paddingBottom = margins.bottom + 'px';
+
+            console.log('Applied page layout:', pageLayout, 'margins:', margins);
+        }
+
+        // Escape HTML for XML display
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // Unified command system - all buttons use the same command dispatch
+        function executeCommand(commandId, args = []) {
             vscode.postMessage({
-                type: 'request-export-docx',
-                html: editor.innerHTML
+                type: 'execute-command',
+                data: { command: commandId, args }
             });
+        }
+
+        // Format commands
+        document.getElementById('bold').addEventListener('click', () => executeCommand('txtRich.format.bold'));
+        document.getElementById('italic').addEventListener('click', () => executeCommand('txtRich.format.italic'));
+        document.getElementById('underline').addEventListener('click', () => executeCommand('txtRich.format.underline'));
+        document.getElementById('strikethrough').addEventListener('click', () => executeCommand('txtRich.format.strikethrough'));
+
+        // Undo/Redo commands
+        document.getElementById('undo').addEventListener('click', () => executeCommand('txtRich.undo'));
+        document.getElementById('redo').addEventListener('click', () => executeCommand('txtRich.redo'));
+
+        // Paragraph alignment commands
+        document.getElementById('alignLeft').addEventListener('click', () => executeCommand('txtRich.paragraph.alignLeft'));
+        document.getElementById('alignCenter').addEventListener('click', () => executeCommand('txtRich.paragraph.alignCenter'));
+        document.getElementById('alignRight').addEventListener('click', () => executeCommand('txtRich.paragraph.alignRight'));
+        document.getElementById('indent').addEventListener('click', () => executeCommand('txtRich.paragraph.indent'));
+        document.getElementById('outdent').addEventListener('click', () => executeCommand('txtRich.paragraph.outdent'));
+
+        // List commands
+        document.getElementById('bulletList').addEventListener('click', () => executeCommand('txtRich.list.bullet'));
+        document.getElementById('numberList').addEventListener('click', () => executeCommand('txtRich.list.numbered'));
+
+        // Style commands
+        document.getElementById('heading').addEventListener('change', (e) => {
+            const value = e.target.value;
+            if (value === 'h1') executeCommand('txtRich.style.heading1');
+            else if (value === 'h2') executeCommand('txtRich.style.heading2');
+            else if (value === 'h3') executeCommand('txtRich.style.heading3');
+            else executeCommand('txtRich.style.normal');
         });
 
-        document.getElementById('importDocx').addEventListener('click', () => {
-            vscode.postMessage({ type: 'request-import-docx' });
+        document.getElementById('blockquote').addEventListener('click', () => executeCommand('txtRich.style.blockquote'));
+
+        // Font size command
+        document.getElementById('fontSize').addEventListener('change', (e) => {
+            executeCommand('txtRich.format.fontSize', [e.target.value]);
         });
+
+        // File commands
+        document.getElementById('exportDocx').addEventListener('click', () => executeCommand('txtRich.exportDocx'));
+        document.getElementById('importDocx').addEventListener('click', () => executeCommand('txtRich.importDocx'));
+
+        // Page Layout commands
+        document.getElementById('margins').addEventListener('click', () => executeCommand('txtRich.page.margins'));
+        document.getElementById('orientation').addEventListener('click', () => executeCommand('txtRich.page.orientation'));
+        document.getElementById('pageSize').addEventListener('click', () => executeCommand('txtRich.page.size'));
+
+        // View commands
+        document.getElementById('xmlView').addEventListener('click', () => executeCommand('txtRich.view.xmlView'));
+        document.getElementById('normalView').addEventListener('click', () => executeCommand('txtRich.view.normalView'));
+        document.getElementById('zoomIn').addEventListener('click', () => executeCommand('txtRich.view.zoomIn'));
+        document.getElementById('zoomOut').addEventListener('click', () => executeCommand('txtRich.view.zoomOut'));
+        document.getElementById('zoomReset').addEventListener('click', () => executeCommand('txtRich.view.zoomReset'));
+        document.getElementById('showRulers').addEventListener('click', () => executeCommand('txtRich.view.showRulers'));
+        document.getElementById('showMargins').addEventListener('click', () => executeCommand('txtRich.view.showMargins'));
 
         // Track content changes
         editor.addEventListener('input', () => {
@@ -544,50 +655,141 @@ export function generateRibbonHtml(_webview: vscode.Webview, documentType: strin
             });
         });
 
-        // Keyboard shortcuts
+        // Keyboard shortcuts - unified with command system
         document.addEventListener('keydown', (e) => {
             if (e.ctrlKey || e.metaKey) {
-                if (e.key === 'b') {
-                    e.preventDefault();
-                    document.execCommand('bold');
-                } else if (e.key === 'i') {
-                    e.preventDefault();
-                    document.execCommand('italic');
-                } else if (e.key === 'u') {
-                    e.preventDefault();
-                    document.execCommand('underline');
+                switch (e.key) {
+                    case 'b':
+                        e.preventDefault();
+                        executeCommand('txtRich.format.bold');
+                        break;
+                    case 'i':
+                        e.preventDefault();
+                        executeCommand('txtRich.format.italic');
+                        break;
+                    case 'u':
+                        e.preventDefault();
+                        executeCommand('txtRich.format.underline');
+                        break;
+                    case 'z':
+                        e.preventDefault();
+                        if (e.shiftKey) {
+                            executeCommand('txtRich.redo');
+                        } else {
+                            executeCommand('txtRich.undo');
+                        }
+                        break;
+                    case 'y':
+                        e.preventDefault();
+                        executeCommand('txtRich.redo');
+                        break;
+                    case 's':
+                        e.preventDefault();
+                        executeCommand('txtRich.saveDoc');
+                        break;
+                    case '=':
+                    case '+':
+                        e.preventDefault();
+                        executeCommand('txtRich.view.zoomIn');
+                        break;
+                    case '-':
+                        e.preventDefault();
+                        executeCommand('txtRich.view.zoomOut');
+                        break;
+                    case '0':
+                        e.preventDefault();
+                        executeCommand('txtRich.view.zoomReset');
+                        break;
                 }
             }
         });
 
-        // Canvas rendering (simplified for now)
+        // Canvas rendering for rulers
         function drawRuler() {
             const canvas = document.getElementById('rulerCanvas');
+            if (!canvas) {
+                console.warn('Ruler canvas not found');
+                return;
+            }
+            const ctx = canvas.getContext('2d');
+            if (!ctx) {
+                console.warn('Canvas context not available');
+                return;
+            }
+
+            // Get actual dimensions
+            const rect = canvas.getBoundingClientRect();
+            const width = rect.width || canvas.offsetWidth || canvas.clientWidth;
+            const height = rect.height || canvas.offsetHeight || canvas.clientHeight;
+
+            if (width === 0 || height === 0) {
+                console.warn('Canvas dimensions are zero, retrying...');
+                setTimeout(drawRuler, 100);
+                return;
+            }
+
+            // Set canvas dimensions (important for proper rendering)
+            canvas.width = width;
+            canvas.height = height;
+
+            // Clear canvas
+            ctx.clearRect(0, 0, width, height);
+
+            // Background
+            ctx.fillStyle = '#fafafa';
+            ctx.fillRect(0, 0, width, height);
+
+            // Draw ruler marks
+            ctx.strokeStyle = '#999';
+            ctx.lineWidth = 1;
+
+            for (let i = 0; i < width; i += 10) {
+                const markHeight = i % 100 === 0 ? 12 : (i % 50 === 0 ? 8 : 4);
+                ctx.beginPath();
+                ctx.moveTo(i, height - markHeight);
+                ctx.lineTo(i, height);
+                ctx.stroke();
+            }
+
+            console.log('Ruler drawn successfully:', width, 'x', height);
+        }
+
+        // Draw margin canvas
+        function drawMargin() {
+            const canvas = document.getElementById('marginCanvas');
             if (!canvas) return;
             const ctx = canvas.getContext('2d');
             if (!ctx) return;
 
-            canvas.width = canvas.offsetWidth;
-            canvas.height = canvas.offsetHeight;
+            const rect = canvas.getBoundingClientRect();
+            const width = rect.width || canvas.offsetWidth || canvas.clientWidth;
+            const height = rect.height || canvas.offsetHeight || canvas.clientHeight;
 
-            ctx.fillStyle = '#fafafa';
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-            ctx.strokeStyle = '#999';
-            ctx.lineWidth = 1;
-
-            // Draw ruler marks
-            for (let i = 0; i < canvas.width; i += 10) {
-                const height = i % 100 === 0 ? 12 : (i % 50 === 0 ? 8 : 4);
-                ctx.beginPath();
-                ctx.moveTo(i, canvas.height - height);
-                ctx.lineTo(i, canvas.height);
-                ctx.stroke();
+            if (width === 0 || height === 0) {
+                setTimeout(drawMargin, 100);
+                return;
             }
+
+            canvas.width = width;
+            canvas.height = height;
+
+            ctx.clearRect(0, 0, width, height);
+            ctx.fillStyle = '#fafafa';
+            ctx.fillRect(0, 0, width, height);
         }
 
-        window.addEventListener('resize', drawRuler);
-        setTimeout(drawRuler, 100);
+        // Redraw all canvases
+        function redrawCanvases() {
+            drawRuler();
+            drawMargin();
+        }
+
+        // Listen for resize events
+        window.addEventListener('resize', redrawCanvases);
+
+        // Initial draw
+        setTimeout(redrawCanvases, 100);
+        setTimeout(redrawCanvases, 500); // Backup in case first attempt fails
     </script>
 </body>
 </html>`;

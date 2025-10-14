@@ -41,6 +41,14 @@ Hybrid integration: native Void IDE services with an extensibility surface. Phas
 
 ## Implementation Steps
 
+### Pre-requisites: Developer setup & environment
+
+- Node.js 20.x; use the repo's standard build (gulp) to compile Void. No new root build config changes in Phase 1.
+- Environment variables (fallbacks to settings):
+  - `OPENAI_API_KEY` (machine scope) used by embedding/tooling where settings are not present.
+  - `RAG_CHROMA_URL` (optional) if not set via settings; defaults to `http://localhost:8000`.
+- Storage directories: ensure `IEnvironmentService.userRoamingDataHome/.appealsnavigator/{databases,logs}` exist; normalize path separators on Windows.
+
 ### 0) Service contracts and settings
 
 - Create `common/ragServiceTypes.ts` with:
@@ -96,6 +104,7 @@ Hybrid integration: native Void IDE services with an extensibility surface. Phas
 - Create `electron-main/ragFileService.ts` (PDF/DOCX/TXT/MD), using `pdfjs-dist`, `mammoth` (730–920)
 - Normalize metadata fields, add language heuristic as in doc
 - Surface unsupported formats with clear errors; log warnings
+  - Explicitly return clear errors for `.rtf` and `.odt` (Phase 2 candidates); keep stubs to ease future enablement
 
 ### 6) Context pack assembly (browser-side)
 
@@ -116,6 +125,8 @@ Hybrid integration: native Void IDE services with an extensibility surface. Phas
 - Result-to-string includes annotated attributions from `ContextPack`
 - Add commands (palette only in Phase 1):
 - `void.rag.indexDocument`, `void.rag.searchPolicy`, `void.rag.searchWorkspace`
+  - Register command IDs in `src/vs/workbench/contrib/void/browser/void.contribution.ts` and wire them to the tools service
+  - Ensure commands are discoverable in the Command Palette and can be bound to keybindings (no webview/dashboard in Phase 1)
 
 ### 8) Settings UI and defaults
 
@@ -139,11 +150,23 @@ Hybrid integration: native Void IDE services with an extensibility surface. Phas
 - Packages to add (align with doc 106–117):
 - `chromadb`, `better-sqlite3`, `pdfjs-dist`, `mammoth`, `@langchain/core`, `@langchain/openai`
 - Note: native module (`better-sqlite3`) build/packaging—wire into existing build. Discuss before changing root configs (follows workspace rule).
+  - Dev types: `@types/better-sqlite3` as needed
+  - Electron-native guidance: ensure native compilation targets the Electron runtime; leverage existing repo pipelines for Windows builds (no new scripts)
+  - Use existing gulp tasks for compilation (e.g., `compile`, `compile-extensions`) instead of introducing new build commands
 
 ### 12) Tests (Phase 1)
 
 - Unit test main-side index/search with temp files (ref test 2690–2727)
 - Smoke test: index a sample TXT, search term returns top chunk
+
+### 13) Developer scaffolding & packaging (docs-only for this repo)
+
+- Provide `.env.example` values in docs (not in repo configs):
+  - `OPENAI_API_KEY=...`
+  - `RAG_CHROMA_URL=http://localhost:8000`
+- Document how to build and run locally using existing gulp tasks (no new packaging):
+  - Compile core + extensions; then launch Void as usual
+- Confirm logs written to `.appealsnavigator/logs` and database located under `.appealsnavigator/databases`
 
 ## Phase 2 (next)
 
@@ -160,6 +183,9 @@ Hybrid integration: native Void IDE services with an extensibility surface. Phas
 - Tools callable from chat and palette
 - Global/workspace storage honored per setting
 - Watchers re-index on change
+- Commands registered in `void.contribution.ts` and visible in palette
+- Logging file created under `.appealsnavigator/logs`; file path validation and CSP guardrails active
+- Environment configured (`OPENAI_API_KEY`; `ragChromaUrl` or `RAG_CHROMA_URL`), with sane defaults
 
 ## To-dos
 
@@ -173,6 +199,8 @@ Hybrid integration: native Void IDE services with an extensibility surface. Phas
 - [ ] Integrate tools in `toolsService.ts` + commands
 - [ ] Surface settings in Void settings pane
 - [ ] Add tests for index/search
+- [ ] Register command IDs in `void.contribution.ts` and wire to tools service
+- [ ] Document developer setup and environment variables (.env example in docs)
 
 ### To-dos
 
@@ -186,3 +214,4 @@ Hybrid integration: native Void IDE services with an extensibility surface. Phas
 - [ ] Register all services in void.contribution.ts
 - [ ] Add RAG configuration to Void settings
 - [ ] Add required packages to package.json
+- [ ] Ensure logging to `.appealsnavigator/logs` and DB placement under `.appealsnavigator/databases`

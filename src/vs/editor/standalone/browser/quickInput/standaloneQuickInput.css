@@ -9,7 +9,7 @@
 
 .quick-input-widget .monaco-highlighted-label .highlight,
 .quick-input-widget .monaco-highlighted-label .highlight {
-	color: #0066BF;
+	color: #0B3D0B;
 }
 
 .vs .quick-input-widget .monaco-list-row.focused .monaco-highlighted-label .highlight,
@@ -29,7 +29,7 @@
 
 .hc-light .quick-input-widget .monaco-highlighted-label .highlight,
 .hc-light .quick-input-widget .monaco-highlighted-label .highlight {
-	color: #0F4A85;
+	color: #0B3D0B;
 }
 
 .monaco-keybinding > .monaco-keybinding-key {
@@ -49,7 +49,7 @@
 
 .hc-light .monaco-keybinding > .monaco-keybinding-key {
 	background-color: transparent;
-	border: solid 1px #0F4A85;
+	border: solid 1px #0B3D0B;
 	box-shadow: none;
 	color: #292929;
 }

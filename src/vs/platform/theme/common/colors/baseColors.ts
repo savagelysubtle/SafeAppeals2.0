@@ -31,11 +31,11 @@ export const iconForeground = registerColor('icon.foreground',
 	nls.localize('iconForeground', "The default color for icons in the workbench."));
 
 export const focusBorder = registerColor('focusBorder',
-	{ dark: '#007FD4', light: '#0090F1', hcDark: '#F38518', hcLight: '#006BBD' },
+	{ dark: '#A6E22E', light: '#4F9E1F', hcDark: '#A6E22E', hcLight: '#0B3D0B' },
 	nls.localize('focusBorder', "Overall border color for focused elements. This color is only used if not overridden by a component."));
 
 export const contrastBorder = registerColor('contrastBorder',
-	{ light: null, dark: null, hcDark: '#6FC3DF', hcLight: '#0F4A85' },
+	{ light: null, dark: null, hcDark: '#6FC3DF', hcLight: '#0B3D0B' },
 	nls.localize('contrastBorder', "An extra border around elements to separate them from others for greater contrast."));
 
 export const activeContrastBorder = registerColor('contrastActiveBorder',
@@ -50,11 +50,11 @@ export const selectionBackground = registerColor('selection.background',
 // ------ text link
 
 export const textLinkForeground = registerColor('textLink.foreground',
-	{ light: '#006AB1', dark: '#3794FF', hcDark: '#21A6FF', hcLight: '#0F4A85' },
+	{ light: '#4F9E1F', dark: '#A6E22E', hcDark: '#A6E22E', hcLight: '#0B3D0B' },
 	nls.localize('textLinkForeground', "Foreground color for links in text."));
 
 export const textLinkActiveForeground = registerColor('textLink.activeForeground',
-	{ light: '#006AB1', dark: '#3794FF', hcDark: '#21A6FF', hcLight: '#0F4A85' },
+	{ light: '#4F9E1F', dark: '#A6E22E', hcDark: '#A6E22E', hcLight: '#0B3D0B' },
 	nls.localize('textLinkActiveForeground', "Foreground color for links in text when clicked on and on mouse hover."));
 
 export const textSeparatorForeground = registerColor('textSeparator.foreground',
@@ -69,7 +69,7 @@ export const textPreformatForeground = registerColor('textPreformat.foreground',
 	nls.localize('textPreformatForeground', "Foreground color for preformatted text segments."));
 
 export const textPreformatBackground = registerColor('textPreformat.background',
-	{ light: '#0000001A', dark: '#FFFFFF1A', hcDark: '#FFFFFF', hcLight: '#09345f' },
+	{ light: '#0000001A', dark: '#FFFFFF1A', hcDark: '#FFFFFF', hcLight: '#0B3D0B' },
 	nls.localize('textPreformatBackground', "Background color for preformatted text segments."));
 
 

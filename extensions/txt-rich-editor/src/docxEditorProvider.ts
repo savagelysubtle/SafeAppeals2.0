@@ -4,9 +4,10 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as vscode from 'vscode';
-import { docxToHtml, htmlToDocxBuffer } from './conversion';
+import { DocumentConverter, docxToHtmlWithLayout, htmlToDocxBuffer } from './conversion';
 import { Logger } from './logger';
 import { generateRibbonHtml } from './ribbonHtml';
+import { EditorProviderRegistry } from './editorProviderRegistry';
 
 /**
  * Custom editor provider for DOCX files (binary files)
@@ -15,10 +16,16 @@ import { generateRibbonHtml } from './ribbonHtml';
 export class DocxEditorProvider implements vscode.CustomReadonlyEditorProvider<vscode.CustomDocument> {
 	private currentDocument: vscode.CustomDocument | undefined;
 	private currentHtml: string = '';
+	private currentPageLayout: any = null;
+	private currentXml: string = '';
 
 	constructor(
 		private readonly context: vscode.ExtensionContext,
-		private readonly logger: Logger
+		private readonly logger: Logger,
+		private readonly _commandManager?: any,
+		private readonly _documentConverter?: DocumentConverter,
+		private readonly _aiDispatcher?: any,
+		private readonly _editorRegistry?: EditorProviderRegistry
 	) { }
 
 	async openCustomDocument(
@@ -43,6 +50,17 @@ export class DocxEditorProvider implements vscode.CustomReadonlyEditorProvider<v
 	): Promise<void> {
 		this.currentDocument = document;
 
+		// Register with editor registry for command routing
+		if (this._editorRegistry) {
+			this._editorRegistry.registerEditor(
+				document.uri.toString(),
+				this,
+				webviewPanel,
+				document,
+				'docx'
+			);
+		}
+
 		// Setup webview
 		webviewPanel.webview.options = {
 			enableScripts: true,
@@ -60,6 +78,12 @@ export class DocxEditorProvider implements vscode.CustomReadonlyEditorProvider<v
 						return;
 					case 'request-export-docx':
 						await this.handleExportDocx(message.html);
+						return;
+					case 'request-xml-view':
+						await this.handleXmlViewRequest(webviewPanel);
+						return;
+					case 'request-normal-view':
+						await this.handleNormalViewRequest(webviewPanel);
 						return;
 					case 'content-updated':
 						// Store the current HTML for export
@@ -82,21 +106,38 @@ export class DocxEditorProvider implements vscode.CustomReadonlyEditorProvider<v
 			this.logger.info(`DOCX file size: ${fileData.length} bytes`);
 
 			// Convert DOCX to HTML
-			this.logger.info('Calling docxToHtml...');
-			const html = await docxToHtml(fileData);
-			this.logger.info('✅ DOCX converted to HTML successfully');
-			this.logger.info(`HTML length: ${html.length} characters`);
-			this.logger.info(`HTML preview: ${html.substring(0, 200)}...`);
+			this.logger.info('Calling docxToHtmlWithLayout...');
+			const result = await docxToHtmlWithLayout(fileData);
+			if (!result.success) {
+				throw new Error(result.error || 'Failed to convert DOCX to HTML');
+			}
 
-			this.currentHtml = html;
+			this.logger.info('✅ DOCX converted to HTML successfully');
+			this.logger.info(`HTML length: ${result.content?.length || 0} characters`);
+			this.logger.info(`HTML preview: ${result.content?.substring(0, 200)}...`);
+
+			this.currentHtml = result.content || '';
+			this.currentPageLayout = result.pageLayout;
+
+			// Store the original XML for XML view
+			if (this._documentConverter) {
+				try {
+					const xmlResult = await this._documentConverter.xmlHandler.parseDocx(fileData);
+					this.currentXml = xmlResult.xml;
+					this.logger.info('Stored original XML for XML view');
+				} catch (error) {
+					this.logger.warn(`Failed to store original XML: ${error}`);
+				}
+			}
 
 			// Send to webview
 			this.logger.info('Sending content to webview...');
 			webviewPanel.webview.postMessage({
 				type: 'set-content',
-				content: html,
+				content: result.content || '',
 				isHtml: true,
-				readonly: false // Allow editing
+				readonly: false, // Allow editing
+				pageLayout: result.pageLayout
 			});
 			this.logger.info('✅ Content sent to webview');
 			this.logger.info('=== END DOCX EDITOR PROVIDER ===');
@@ -162,6 +203,41 @@ export class DocxEditorProvider implements vscode.CustomReadonlyEditorProvider<v
 			await this.handleExportDocx(this.currentHtml);
 		} else {
 			vscode.window.showErrorMessage('No content available to export');
+		}
+	}
+
+	private async handleXmlViewRequest(webviewPanel: vscode.WebviewPanel): Promise<void> {
+		try {
+			if (this.currentXml) {
+				this.logger.info('Sending XML view to webview');
+				webviewPanel.webview.postMessage({
+					type: 'set-xml-content',
+					content: this.currentXml
+				});
+			} else {
+				this.logger.warn('No XML content available for XML view');
+				webviewPanel.webview.postMessage({
+					type: 'set-xml-content',
+					content: 'No XML content available. Please reload the document.'
+				});
+			}
+		} catch (error) {
+			this.logger.error('Failed to handle XML view request:', error);
+		}
+	}
+
+	private async handleNormalViewRequest(webviewPanel: vscode.WebviewPanel): Promise<void> {
+		try {
+			this.logger.info('Sending normal view to webview');
+			webviewPanel.webview.postMessage({
+				type: 'set-content',
+				content: this.currentHtml,
+				isHtml: true,
+				readonly: false,
+				pageLayout: this.currentPageLayout
+			});
+		} catch (error) {
+			this.logger.error('Failed to handle normal view request:', error);
 		}
 	}
 

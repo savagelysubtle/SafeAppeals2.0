@@ -9,6 +9,7 @@ import './editCodeService.js'
 
 // register Sidebar pane, state, actions (keybinds, menus) (Ctrl+L)
 import './sidebarActions.js'
+import './voidExtensionApi.js'
 import './sidebarPane.js'
 
 // register quick edit (Ctrl+K)

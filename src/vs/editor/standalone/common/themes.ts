@@ -73,7 +73,7 @@ export const vs: IStandaloneThemeData = {
 		[editorInactiveSelection]: '#E5EBF1',
 		[editorIndentGuide1]: '#D3D3D3',
 		[editorActiveIndentGuide1]: '#939393',
-		[editorSelectionHighlight]: '#ADD6FF4D'
+		[editorSelectionHighlight]: '#C4FF6A4D'
 	}
 };
 /* -------------------------------- End vs theme -------------------------------- */
@@ -144,7 +144,7 @@ export const vs_dark: IStandaloneThemeData = {
 		[editorInactiveSelection]: '#3A3D41',
 		[editorIndentGuide1]: '#404040',
 		[editorActiveIndentGuide1]: '#707070',
-		[editorSelectionHighlight]: '#ADD6FF26'
+		[editorSelectionHighlight]: '#C4FF6A26'
 	}
 };
 /* -------------------------------- End vs-dark theme -------------------------------- */

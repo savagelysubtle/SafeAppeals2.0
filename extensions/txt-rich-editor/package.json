@@ -58,75 +58,564 @@
         "category": "Text Editor"
       },
       {
-        "command": "txtRichEditor.exportDocx",
-        "title": "Export as DOCX",
+        "command": "txtRichEditor.openAsPlainText",
+        "title": "Open as Plain Text",
         "category": "Text Editor"
-      },
-      {
-        "command": "txtRichEditor.importDocx",
-        "title": "Import DOCX",
-        "category": "Text Editor"
-      },
-      {
-        "command": "txtRichEditor.addToVoidChat",
-        "title": "Add Selection to Void Chat",
-        "category": "Text Editor",
-        "enablement": "richTextEditorActive"
-      },
-      {
-        "command": "txtRichEditor.inlineEdit",
-        "title": "Void Inline Edit",
-        "category": "Text Editor",
-        "enablement": "richTextEditorActive"
       },
       {
         "command": "txtRichEditor.showLogs",
         "title": "Show Rich Text Editor Logs",
         "category": "Text Editor"
+      },
+      {
+        "command": "txtRich.newDoc",
+        "title": "New Rich Document",
+        "category": "Rich Text Editor",
+        "icon": "$(file-add)"
+      },
+      {
+        "command": "txtRichEditor.ctrlL",
+        "title": "Add Selection to Void Chat",
+        "category": "Rich Text Editor",
+        "icon": "$(comment-discussion)"
+      },
+      {
+        "command": "txtRichEditor.ctrlK",
+        "title": "Edit Inline with Void",
+        "category": "Rich Text Editor",
+        "icon": "$(edit)"
+      },
+      {
+        "command": "txtRich.saveDoc",
+        "title": "Save Document",
+        "category": "Rich Text Editor",
+        "icon": "$(save)",
+        "enablement": "richActive"
+      },
+      {
+        "command": "txtRich.exportPdf",
+        "title": "Export → PDF",
+        "category": "Rich Text Editor",
+        "icon": "$(export)",
+        "enablement": "richActive"
+      },
+      {
+        "command": "txtRich.exportDocx",
+        "title": "Export → DOCX",
+        "category": "Rich Text Editor",
+        "icon": "$(export)",
+        "enablement": "richActive"
+      },
+      {
+        "command": "txtRich.importDocx",
+        "title": "Import DOCX",
+        "category": "Rich Text Editor",
+        "icon": "$(import)",
+        "enablement": "richActive"
+      },
+      {
+        "command": "txtRich.format.bold",
+        "title": "Bold",
+        "category": "Rich Text Editor",
+        "icon": "$(bold)",
+        "enablement": "richActive"
+      },
+      {
+        "command": "txtRich.format.italic",
+        "title": "Italic",
+        "category": "Rich Text Editor",
+        "icon": "$(italic)",
+        "enablement": "richActive"
+      },
+      {
+        "command": "txtRich.format.underline",
+        "title": "Underline",
+        "category": "Rich Text Editor",
+        "icon": "$(underline)",
+        "enablement": "richActive"
+      },
+      {
+        "command": "txtRich.format.strikethrough",
+        "title": "Strikethrough",
+        "category": "Rich Text Editor",
+        "icon": "$(strikethrough)",
+        "enablement": "richActive"
+      },
+      {
+        "command": "txtRich.paragraph.alignLeft",
+        "title": "Align Left",
+        "category": "Rich Text Editor",
+        "icon": "$(align-left)",
+        "enablement": "richActive"
+      },
+      {
+        "command": "txtRich.paragraph.alignCenter",
+        "title": "Align Center",
+        "category": "Rich Text Editor",
+        "icon": "$(align-center)",
+        "enablement": "richActive"
+      },
+      {
+        "command": "txtRich.paragraph.alignRight",
+        "title": "Align Right",
+        "category": "Rich Text Editor",
+        "icon": "$(align-right)",
+        "enablement": "richActive"
+      },
+      {
+        "command": "txtRich.list.bullet",
+        "title": "Bullet List",
+        "category": "Rich Text Editor",
+        "icon": "$(list-unordered)",
+        "enablement": "richActive"
+      },
+      {
+        "command": "txtRich.list.numbered",
+        "title": "Numbered List",
+        "category": "Rich Text Editor",
+        "icon": "$(list-ordered)",
+        "enablement": "richActive"
+      },
+      {
+        "command": "txtRich.style.heading1",
+        "title": "Heading 1",
+        "category": "Rich Text Editor",
+        "icon": "$(heading)",
+        "enablement": "richActive"
+      },
+      {
+        "command": "txtRich.style.heading2",
+        "title": "Heading 2",
+        "category": "Rich Text Editor",
+        "icon": "$(heading)",
+        "enablement": "richActive"
+      },
+      {
+        "command": "txtRich.style.heading3",
+        "title": "Heading 3",
+        "category": "Rich Text Editor",
+        "icon": "$(heading)",
+        "enablement": "richActive"
+      },
+      {
+        "command": "txtRich.style.normal",
+        "title": "Normal Text",
+        "category": "Rich Text Editor",
+        "icon": "$(text-size)",
+        "enablement": "richActive"
+      },
+      {
+        "command": "txtRich.undo",
+        "title": "Undo",
+        "category": "Rich Text Editor",
+        "icon": "$(undo)",
+        "enablement": "richActive"
+      },
+      {
+        "command": "txtRich.redo",
+        "title": "Redo",
+        "category": "Rich Text Editor",
+        "icon": "$(redo)",
+        "enablement": "richActive"
+      },
+      {
+        "command": "txtRich.ai.summarize",
+        "title": "AI Summarize",
+        "category": "Rich Text Editor",
+        "icon": "$(sparkle)",
+        "enablement": "richActive"
+      },
+      {
+        "command": "txtRich.ai.grammar",
+        "title": "AI Grammar Check",
+        "category": "Rich Text Editor",
+        "icon": "$(check)",
+        "enablement": "richActive"
+      },
+      {
+        "command": "txtRich.ai.improve",
+        "title": "AI Improve Text",
+        "category": "Rich Text Editor",
+        "icon": "$(wand)",
+        "enablement": "richActive"
+      },
+      {
+        "command": "txtRich.page.margins",
+        "title": "Page Margins",
+        "category": "Rich Text Editor",
+        "icon": "$(layout)",
+        "enablement": "richActive"
+      },
+      {
+        "command": "txtRich.page.orientation",
+        "title": "Page Orientation",
+        "category": "Rich Text Editor",
+        "icon": "$(rotate)",
+        "enablement": "richActive"
+      },
+      {
+        "command": "txtRich.page.size",
+        "title": "Page Size",
+        "category": "Rich Text Editor",
+        "icon": "$(file-media)",
+        "enablement": "richActive"
+      },
+      {
+        "command": "txtRich.view.zoomIn",
+        "title": "Zoom In",
+        "category": "Rich Text Editor",
+        "icon": "$(zoom-in)",
+        "enablement": "richActive"
+      },
+      {
+        "command": "txtRich.view.zoomOut",
+        "title": "Zoom Out",
+        "category": "Rich Text Editor",
+        "icon": "$(zoom-out)",
+        "enablement": "richActive"
+      },
+      {
+        "command": "txtRich.view.zoomReset",
+        "title": "Reset Zoom",
+        "category": "Rich Text Editor",
+        "icon": "$(zoom-reset)",
+        "enablement": "richActive"
+      },
+      {
+        "command": "txtRich.void.addToChat",
+        "title": "Add Selection to Void Chat",
+        "category": "Rich Text Editor",
+        "icon": "$(comment)",
+        "enablement": "richActive"
+      },
+      {
+        "command": "txtRich.void.inlineEdit",
+        "title": "Void Inline Edit",
+        "category": "Rich Text Editor",
+        "icon": "$(edit)",
+        "enablement": "richActive"
+      },
+      {
+        "command": "txtRich.testCommand",
+        "title": "Test Command Integration",
+        "category": "Rich Text Editor",
+        "icon": "$(test-view-icon)",
+        "enablement": "richActive"
+      },
+      {
+        "command": "txtRichEditor.diagnostic",
+        "title": "Show Integration Diagnostic",
+        "category": "Rich Text Editor",
+        "icon": "$(info)"
       }
     ],
     "keybindings": [
       {
-        "command": "txtRichEditor.addToVoidChat",
-        "key": "ctrl+l",
-        "mac": "cmd+l",
-        "when": "richTextEditorActive && editorTextFocus"
+        "command": "txtRich.format.bold",
+        "key": "ctrl+b",
+        "mac": "cmd+b",
+        "when": "richActive && editorTextFocus"
       },
       {
-        "command": "txtRichEditor.inlineEdit",
+        "command": "txtRich.format.italic",
+        "key": "ctrl+i",
+        "mac": "cmd+i",
+        "when": "richActive && editorTextFocus"
+      },
+      {
+        "command": "txtRich.format.underline",
+        "key": "ctrl+u",
+        "mac": "cmd+u",
+        "when": "richActive && editorTextFocus"
+      },
+      {
+        "command": "txtRich.undo",
+        "key": "ctrl+z",
+        "mac": "cmd+z",
+        "when": "richActive && editorTextFocus"
+      },
+      {
+        "command": "txtRich.redo",
+        "key": "ctrl+y",
+        "mac": "cmd+y",
+        "when": "richActive && editorTextFocus"
+      },
+      {
+        "command": "txtRich.redo",
+        "key": "ctrl+shift+z",
+        "mac": "cmd+shift+z",
+        "when": "richActive && editorTextFocus"
+      },
+      {
+        "command": "txtRich.saveDoc",
+        "key": "ctrl+s",
+        "mac": "cmd+s",
+        "when": "richActive && editorTextFocus"
+      },
+      {
+        "command": "txtRichEditor.ctrlL",
+        "key": "ctrl+l",
+        "mac": "cmd+l",
+        "when": "resourceExtname == .txt || resourceExtname == .gdoc || resourceExtname == .docx"
+      },
+      {
+        "command": "txtRichEditor.ctrlK",
         "key": "ctrl+k",
         "mac": "cmd+k",
-        "when": "richTextEditorActive && editorTextFocus"
+        "when": "resourceExtname == .txt || resourceExtname == .gdoc || resourceExtname == .docx"
+      },
+      {
+        "command": "txtRich.view.zoomIn",
+        "key": "ctrl+=",
+        "mac": "cmd+=",
+        "when": "richActive && editorTextFocus"
+      },
+      {
+        "command": "txtRich.view.zoomOut",
+        "key": "ctrl+-",
+        "mac": "cmd+-",
+        "when": "richActive && editorTextFocus"
+      },
+      {
+        "command": "txtRich.view.zoomReset",
+        "key": "ctrl+0",
+        "mac": "cmd+0",
+        "when": "richActive && editorTextFocus"
+      },
+      {
+        "command": "txtRich.void.addToChat",
+        "key": "ctrl+l",
+        "mac": "cmd+l",
+        "when": "richActive && editorTextFocus"
+      },
+      {
+        "command": "txtRich.void.inlineEdit",
+        "key": "ctrl+k",
+        "mac": "cmd+k",
+        "when": "richActive && editorTextFocus"
       }
     ],
     "menus": {
       "explorer/context": [
         {
           "command": "txtRichEditor.openWithRichEditor",
-          "when": "resourceExtname == '.txt'",
-          "group": "navigation"
+          "when": "resourceExtname == '.txt' || resourceExtname == '.gdoc' || resourceExtname == '.docx'",
+          "group": "navigation@1"
         },
         {
-          "command": "txtRichEditor.openWithRichEditor",
-          "when": "resourceExtname == '.gdoc'",
-          "group": "navigation"
-        },
-        {
-          "command": "txtRichEditor.openWithRichEditor",
-          "when": "resourceExtname == '.docx'",
-          "group": "navigation"
+          "command": "txtRichEditor.openAsPlainText",
+          "when": "resourceExtname == '.txt' || resourceExtname == '.gdoc' || resourceExtname == '.docx'",
+          "group": "navigation@2"
         }
       ],
       "editor/title": [
         {
-          "command": "txtRichEditor.exportDocx",
-          "when": "activeCustomEditor == 'txtRichEditor.editor'",
-          "group": "navigation"
+          "command": "txtRich.saveDoc",
+          "when": "richActive",
+          "group": "navigation@1"
         },
         {
-          "command": "txtRichEditor.importDocx",
-          "when": "activeCustomEditor == 'txtRichEditor.editor'",
-          "group": "navigation"
+          "command": "txtRich.exportDocx",
+          "when": "richActive",
+          "group": "navigation@2"
+        },
+        {
+          "command": "txtRich.exportPdf",
+          "when": "richActive",
+          "group": "navigation@3"
+        },
+        {
+          "command": "txtRich.importDocx",
+          "when": "richActive",
+          "group": "navigation@4"
+        }
+      ],
+      "editor/context": [
+        {
+          "command": "txtRich.format.bold",
+          "when": "richActive && editorTextFocus",
+          "group": "format@1"
+        },
+        {
+          "command": "txtRich.format.italic",
+          "when": "richActive && editorTextFocus",
+          "group": "format@2"
+        },
+        {
+          "command": "txtRich.format.underline",
+          "when": "richActive && editorTextFocus",
+          "group": "format@3"
+        },
+        {
+          "command": "txtRich.format.strikethrough",
+          "when": "richActive && editorTextFocus",
+          "group": "format@4"
+        },
+        {
+          "command": "txtRich.paragraph.alignLeft",
+          "when": "richActive && editorTextFocus",
+          "group": "paragraph@1"
+        },
+        {
+          "command": "txtRich.paragraph.alignCenter",
+          "when": "richActive && editorTextFocus",
+          "group": "paragraph@2"
+        },
+        {
+          "command": "txtRich.paragraph.alignRight",
+          "when": "richActive && editorTextFocus",
+          "group": "paragraph@3"
+        },
+        {
+          "command": "txtRich.list.bullet",
+          "when": "richActive && editorTextFocus",
+          "group": "list@1"
+        },
+        {
+          "command": "txtRich.list.numbered",
+          "when": "richActive && editorTextFocus",
+          "group": "list@2"
+        },
+        {
+          "command": "txtRich.ai.summarize",
+          "when": "richActive && editorTextFocus",
+          "group": "ai@1"
+        },
+        {
+          "command": "txtRich.ai.grammar",
+          "when": "richActive && editorTextFocus",
+          "group": "ai@2"
+        },
+        {
+          "command": "txtRich.ai.improve",
+          "when": "richActive && editorTextFocus",
+          "group": "ai@3"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "txtRich.newDoc",
+          "when": "true"
+        },
+        {
+          "command": "txtRich.saveDoc",
+          "when": "richActive"
+        },
+        {
+          "command": "txtRich.exportPdf",
+          "when": "richActive"
+        },
+        {
+          "command": "txtRich.exportDocx",
+          "when": "richActive"
+        },
+        {
+          "command": "txtRich.importDocx",
+          "when": "richActive"
+        },
+        {
+          "command": "txtRich.format.bold",
+          "when": "richActive"
+        },
+        {
+          "command": "txtRich.format.italic",
+          "when": "richActive"
+        },
+        {
+          "command": "txtRich.format.underline",
+          "when": "richActive"
+        },
+        {
+          "command": "txtRich.format.strikethrough",
+          "when": "richActive"
+        },
+        {
+          "command": "txtRich.paragraph.alignLeft",
+          "when": "richActive"
+        },
+        {
+          "command": "txtRich.paragraph.alignCenter",
+          "when": "richActive"
+        },
+        {
+          "command": "txtRich.paragraph.alignRight",
+          "when": "richActive"
+        },
+        {
+          "command": "txtRich.list.bullet",
+          "when": "richActive"
+        },
+        {
+          "command": "txtRich.list.numbered",
+          "when": "richActive"
+        },
+        {
+          "command": "txtRich.style.heading1",
+          "when": "richActive"
+        },
+        {
+          "command": "txtRich.style.heading2",
+          "when": "richActive"
+        },
+        {
+          "command": "txtRich.style.heading3",
+          "when": "richActive"
+        },
+        {
+          "command": "txtRich.style.normal",
+          "when": "richActive"
+        },
+        {
+          "command": "txtRich.undo",
+          "when": "richActive"
+        },
+        {
+          "command": "txtRich.redo",
+          "when": "richActive"
+        },
+        {
+          "command": "txtRich.ai.summarize",
+          "when": "richActive"
+        },
+        {
+          "command": "txtRich.ai.grammar",
+          "when": "richActive"
+        },
+        {
+          "command": "txtRich.ai.improve",
+          "when": "richActive"
+        },
+        {
+          "command": "txtRich.page.margins",
+          "when": "richActive"
+        },
+        {
+          "command": "txtRich.page.orientation",
+          "when": "richActive"
+        },
+        {
+          "command": "txtRich.page.size",
+          "when": "richActive"
+        },
+        {
+          "command": "txtRich.view.zoomIn",
+          "when": "richActive"
+        },
+        {
+          "command": "txtRich.view.zoomOut",
+          "when": "richActive"
+        },
+        {
+          "command": "txtRich.view.zoomReset",
+          "when": "richActive"
+        },
+        {
+          "command": "txtRich.void.addToChat",
+          "when": "richActive"
+        },
+        {
+          "command": "txtRich.void.inlineEdit",
+          "when": "richActive"
         }
       ]
     }
@@ -136,14 +625,17 @@
     "watch": "gulp watch-extension:txt-rich-editor"
   },
   "dependencies": {
-    "@xmldom/xmldom": "^0.8.11",
+    "@xmldom/xmldom": "^0.9.0",
     "html-to-docx": "^1.8.0",
     "jszip": "^3.10.1",
-    "mammoth": "^1.6.0"
+    "mammoth": "^1.8.0",
+    "yjs": "^13.6.0",
+    "puppeteer": "^23.0.0"
   },
   "devDependencies": {
     "@types/jszip": "^3.4.1",
-    "@types/node": "20.x"
+    "@types/node": "20.x",
+    "@types/mammoth": "^1.6.0"
   },
   "repository": {
     "type": "git",
