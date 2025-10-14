@@ -22,6 +22,7 @@ import { VOID_CTRL_L_ACTION_ID } from './actionIDs.js';
 import { localize2 } from '../../../../nls.js';
 import { IChatThreadService } from './chatThreadService.js';
 import { IViewsService } from '../../../services/views/common/viewsService.js';
+import { caseOrganizerInit_systemMessage, caseOrganizerInit_defaultPrompt } from '../common/prompt/prompts.js';
 
 // ---------- Register commands and keybindings ----------
 
@@ -248,6 +249,55 @@ registerAction2(class extends Action2 {
 	async run(accessor: ServicesAccessor): Promise<void> {
 		const commandService = accessor.get(ICommandService)
 		commandService.executeCommand(VOID_TOGGLE_SETTINGS_ACTION_ID)
+	}
+})
+
+
+// Case Organizer: Initialize Project
+const VOID_ORGANIZER_INIT_ACTION_ID = 'void.organizer.init'
+registerAction2(class extends Action2 {
+	constructor() {
+		super({
+			id: VOID_ORGANIZER_INIT_ACTION_ID,
+			title: localize2('voidOrganizerInit', 'Void: Initialize Case Organizer'),
+			f1: true,
+		});
+	}
+	async run(accessor: ServicesAccessor): Promise<void> {
+		const viewsService = accessor.get(IViewsService)
+		const chatThreadsService = accessor.get(IChatThreadService)
+		const commandService = accessor.get(ICommandService)
+		const metricsService = accessor.get(IMetricsService)
+
+		metricsService.capture('Case Organizer', { action: 'Initialize' })
+
+		// Open sidebar if not already open
+		const wasAlreadyOpen = viewsService.isViewContainerVisible(VOID_VIEW_CONTAINER_ID)
+		if (!wasAlreadyOpen) {
+			await commandService.executeCommand(VOID_OPEN_SIDEBAR_ACTION_ID)
+		}
+
+		// Create new thread for organizer
+		chatThreadsService.openNewThread()
+		await chatThreadsService.focusCurrentChat()
+
+		// Get the mounted UI and set the input with the organizer prompt
+		const currentThreadId = chatThreadsService.state.currentThreadId
+		const currentThread = chatThreadsService.state.allThreads[currentThreadId]
+		const mountedUI = await currentThread?.state.mountedInfo?.whenMounted
+
+		// Set the default prompt in the text area
+		if (mountedUI?.textAreaRef?.current) {
+			mountedUI.textAreaRef.current.value = caseOrganizerInit_defaultPrompt
+			// Optionally trigger the textarea resize/update event
+			const event = new Event('input', { bubbles: true })
+			mountedUI.textAreaRef.current.dispatchEvent(event)
+		}
+
+		// Set chat mode to 'agent' for full tool access
+		chatThreadsService.setCurrentThreadState({ 
+			chatMode: 'agent',
+		})
 	}
 })
 

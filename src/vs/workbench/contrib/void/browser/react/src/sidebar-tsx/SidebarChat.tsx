@@ -33,7 +33,7 @@ import { RawToolCallObj } from '../../../../common/sendLLMMessageTypes.js';
 import ErrorBoundary from './ErrorBoundary.js';
 import { ToolApprovalTypeSwitch } from '../void-settings-tsx/Settings.js';
 
-// // import { persistentTerminalNameOfId } from '../../../terminalToolService.js'; // Terminal functionality disabled // Terminal functionality disabled
+import { persistentTerminalNameOfId } from '../../../terminalToolService.js';
 import { removeMCPToolNamePrefix } from '../../../../common/mcpServiceTypes.js';
 
 
