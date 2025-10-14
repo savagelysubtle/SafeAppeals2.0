@@ -326,7 +326,12 @@ class ViewsExtensionHandler implements IWorkbenchContribution {
 				// move all views in this container into default view container
 				const views = this.viewsRegistry.getViews(viewContainer);
 				if (views.length) {
-					this.viewsRegistry.moveViews(views, this.getDefaultViewContainer());
+					const defaultContainer = this.getDefaultViewContainer();
+					if (defaultContainer) {
+						this.viewsRegistry.moveViews(views, defaultContainer);
+					} else {
+						this.logService.warn('Cannot move views to default container because EXPLORER container is not registered yet.');
+					}
 				}
 				this.deregisterCustomViewContainer(viewContainer);
 			}
@@ -451,6 +456,13 @@ class ViewsExtensionHandler implements IWorkbenchContribution {
 					collector.warn(localize('ViewContainerDoesnotExist', "View container '{0}' does not exist and all views registered to it will be added to 'Explorer'.", key));
 				}
 				const container = viewContainer || this.getDefaultViewContainer();
+
+				// Skip if no valid container is available
+				if (!container) {
+					collector.error(localize('NoValidViewContainer', "Cannot register views for container '{0}' because no valid view container is available.", key));
+					return;
+				}
+
 				const viewDescriptors: ICustomViewDescriptor[] = [];
 
 				for (let index = 0; index < value.length; index++) {
@@ -545,8 +557,8 @@ class ViewsExtensionHandler implements IWorkbenchContribution {
 		return undefined;
 	}
 
-	private getDefaultViewContainer(): ViewContainer {
-		return this.viewContainersRegistry.get(EXPLORER)!;
+	private getDefaultViewContainer(): ViewContainer | undefined {
+		return this.viewContainersRegistry.get(EXPLORER);
 	}
 
 	private removeViews(extensions: readonly IExtensionPointUser<ViewExtensionPointType>[]): void {
