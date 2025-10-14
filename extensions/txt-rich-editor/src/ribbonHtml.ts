@@ -540,6 +540,13 @@ export function generateRibbonHtml(_webview: vscode.Webview, documentType: strin
                     editor.innerHTML = '<pre style="font-family: monospace; font-size: 12px; line-height: 1.4; white-space: pre-wrap; word-wrap: break-word;">' +
                         escapeHtml(message.content) + '</pre>';
                     break;
+                case 'page-layout-changed':
+                    // Handle page layout updates from MarginController
+                    if (message.pageLayout) {
+                        applyPageLayout(message.pageLayout);
+                        redrawCanvases();
+                    }
+                    break;
             }
         });
 
@@ -547,25 +554,28 @@ export function generateRibbonHtml(_webview: vscode.Webview, documentType: strin
         function applyPageLayout(pageLayout) {
             if (!pageLayout) return;
 
-            // Convert twips to pixels (1 twip = 1/20 point, 1 point = 1.33 pixels at 96 DPI)
-            const twipsToPixels = (twips) => Math.round(twips * 1.33 / 20);
-
-            const margins = {
-                top: twipsToPixels(pageLayout.margins.top),
-                right: twipsToPixels(pageLayout.margins.right),
-                bottom: twipsToPixels(pageLayout.margins.bottom),
-                left: twipsToPixels(pageLayout.margins.left)
-            };
+            // Margins are already in pixels from MarginController
+            const margins = pageLayout.margins;
 
             // Update margin indicators
             const leftIndicator = document.getElementById('leftMarginIndicator');
             const rightIndicator = document.getElementById('rightMarginIndicator');
+            const leftHandle = document.getElementById('leftMarginHandle');
+            const rightHandle = document.getElementById('rightMarginHandle');
 
             if (leftIndicator) {
                 leftIndicator.style.left = (60 + margins.left) + 'px';
             }
             if (rightIndicator) {
-                rightIndicator.style.right = (margins.right) + 'px';
+                rightIndicator.style.right = margins.right + 'px';
+            }
+
+            // Update margin handles to match indicators
+            if (leftHandle) {
+                leftHandle.style.left = (60 + margins.left - 6) + 'px';
+            }
+            if (rightHandle) {
+                rightHandle.style.right = (margins.right - 6) + 'px';
             }
 
             // Update editor padding
@@ -574,7 +584,15 @@ export function generateRibbonHtml(_webview: vscode.Webview, documentType: strin
             editor.style.paddingTop = margins.top + 'px';
             editor.style.paddingBottom = margins.bottom + 'px';
 
-            console.log('Applied page layout:', pageLayout, 'margins:', margins);
+            // Apply zoom if provided
+            if (pageLayout.zoom !== undefined && pageLayout.zoom !== 1.0) {
+                editor.style.transform = \`scale(\${pageLayout.zoom})\`;
+                editor.style.transformOrigin = 'top left';
+            } else {
+                editor.style.transform = 'scale(1)';
+            }
+
+            console.log('Applied page layout:', pageLayout);
         }
 
         // Escape HTML for XML display
@@ -790,6 +808,77 @@ export function generateRibbonHtml(_webview: vscode.Webview, documentType: strin
         // Initial draw
         setTimeout(redrawCanvases, 100);
         setTimeout(redrawCanvases, 500); // Backup in case first attempt fails
+
+        // === MARGIN DRAG HANDLERS ===
+        let isDraggingMargin = false;
+        let draggedHandle = null;
+        let currentMargins = { top: 96, right: 96, bottom: 96, left: 96 };
+
+        // Initialize margin handles
+        const leftMarginHandle = document.getElementById('leftMarginHandle');
+        const rightMarginHandle = document.getElementById('rightMarginHandle');
+
+        function startMarginDrag(e, handle) {
+            isDraggingMargin = true;
+            draggedHandle = handle;
+            e.preventDefault();
+            e.stopPropagation();
+        }
+
+        function onMarginDrag(e) {
+            if (!isDraggingMargin || !draggedHandle) return;
+
+            const editorWrapper = document.getElementById('editorWrapper');
+            if (!editorWrapper) return;
+
+            const rect = editorWrapper.getBoundingClientRect();
+
+            if (draggedHandle === 'left') {
+                // Left margin drag
+                const newLeft = Math.max(20, Math.min(200, e.clientX - rect.left - 60));
+                currentMargins.left = newLeft;
+            } else if (draggedHandle === 'right') {
+                // Right margin drag
+                const newRight = Math.max(20, Math.min(200, rect.right - e.clientX));
+                currentMargins.right = newRight;
+            }
+
+            // Apply changes immediately for smooth dragging
+            applyPageLayout({ margins: currentMargins });
+        }
+
+        function endMarginDrag(e) {
+            if (!isDraggingMargin) return;
+
+            isDraggingMargin = false;
+            const handle = draggedHandle;
+            draggedHandle = null;
+
+            // Send update to extension
+            if (handle) {
+                vscode.postMessage({
+                    type: 'page-layout-update',
+                    data: {
+                        margins: currentMargins
+                    }
+                });
+            }
+        }
+
+        // Attach event listeners to margin handles
+        if (leftMarginHandle) {
+            leftMarginHandle.addEventListener('mousedown', (e) => startMarginDrag(e, 'left'));
+        }
+        if (rightMarginHandle) {
+            rightMarginHandle.addEventListener('mousedown', (e) => startMarginDrag(e, 'right'));
+        }
+
+        // Global drag and release handlers
+        document.addEventListener('mousemove', onMarginDrag);
+        document.addEventListener('mouseup', endMarginDrag);
+
+        // Request initial layout from extension
+        vscode.postMessage({ type: 'request-page-layout' });
     </script>
 </body>
 </html>`;
