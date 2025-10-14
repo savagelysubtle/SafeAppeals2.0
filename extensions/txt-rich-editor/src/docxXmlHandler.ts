@@ -4,584 +4,684 @@
  *--------------------------------------------------------------------------------------------*/
 
 import JSZip from 'jszip';
-import { DOMParser } from '@xmldom/xmldom';
-
-/**
- * DOCX XML Handler - Bidirectional converter between DOCX XML and HTML
- * Handles the full DOCX structure including formatting, styles, and document structure
- */
+import { DOMParser, XMLSerializer } from '@xmldom/xmldom';
+import { Logger } from './logger';
 
 export interface DocxDocument {
-	xml: string; // The word/document.xml content
-	styles?: string; // The word/styles.xml content
-	numbering?: string; // The word/numbering.xml content
-	relationships?: string; // The word/_rels/document.xml.rels
-	contentTypes?: string; // The [Content_Types].xml
+	xml: string;
+	styles?: string;
+	numbering?: string;
+	relationships?: string;
+	images: Map<string, Uint8Array>;
+	pageLayout?: DocxPageLayout;
+}
+
+export interface DocxPageLayout {
+	margins: {
+		top: number;
+		right: number;
+		bottom: number;
+		left: number;
+	};
+	pageSize: {
+		width: number;
+		height: number;
+	};
+	orientation: 'portrait' | 'landscape';
+}
+
+export interface DocxStyle {
+	id: string;
+	name: string;
+	type: 'paragraph' | 'character' | 'table';
+	properties: Record<string, string>;
 }
 
 export class DocxXmlHandler {
-	/**
-	 * Parse DOCX file buffer and extract XML components
-	 */
-	public async parseDocxBuffer(buffer: Uint8Array): Promise<DocxDocument> {
-		try {
-			console.log('Loading DOCX buffer, size:', buffer.length);
-			const zip = new JSZip();
-			const loadedZip = await zip.loadAsync(buffer);
-			console.log('DOCX ZIP loaded successfully');
+	private readonly logger: Logger;
 
-			const docxDoc: DocxDocument = {
-				xml: '',
-			};
+	constructor(logger: Logger) {
+		this.logger = logger;
+	}
+
+	/**
+	 * Parse DOCX file into structured document data
+	 */
+	async parseDocx(buffer: Uint8Array): Promise<DocxDocument> {
+		try {
+			this.logger.info('Parsing DOCX file...');
+			const zip = new JSZip();
+			await zip.loadAsync(buffer);
 
 			// Extract main document XML
-			const documentXml = loadedZip.file('word/document.xml');
-			if (documentXml) {
-				docxDoc.xml = await documentXml.async('text');
-				console.log('Extracted document.xml, length:', docxDoc.xml.length);
-			} else {
-				console.error('word/document.xml not found in DOCX');
-				throw new Error('Invalid DOCX file: missing document.xml');
+			const documentXml = await zip.file('word/document.xml')?.async('text') || '';
+			const stylesXml = await zip.file('word/styles.xml')?.async('text');
+			const numberingXml = await zip.file('word/numbering.xml')?.async('text');
+			const relationshipsXml = await zip.file('word/_rels/document.xml.rels')?.async('text');
+
+			// Extract images
+			const images = new Map<string, Uint8Array>();
+			const imageFiles = Object.keys(zip.files).filter(path =>
+				path.startsWith('word/media/') &&
+				(path.endsWith('.png') || path.endsWith('.jpg') || path.endsWith('.jpeg') || path.endsWith('.gif'))
+			);
+
+			for (const imagePath of imageFiles) {
+				const imageData = await zip.file(imagePath)?.async('uint8array');
+				if (imageData) {
+					const fileName = imagePath.split('/').pop() || '';
+					images.set(fileName, imageData);
+				}
 			}
 
-			// Extract styles
-			const stylesXml = loadedZip.file('word/styles.xml');
-			if (stylesXml) {
-				docxDoc.styles = await stylesXml.async('text');
-				console.log('Extracted styles.xml, length:', docxDoc.styles.length);
-			}
-
-			// Extract numbering (for lists)
-			const numberingXml = loadedZip.file('word/numbering.xml');
-			if (numberingXml) {
-				docxDoc.numbering = await numberingXml.async('text');
-				console.log('Extracted numbering.xml, length:', docxDoc.numbering.length);
-			}
-
-			// Extract relationships
-			const relsXml = loadedZip.file('word/_rels/document.xml.rels');
-			if (relsXml) {
-				docxDoc.relationships = await relsXml.async('text');
-				console.log('Extracted document.xml.rels, length:', docxDoc.relationships.length);
-			}
-
-			// Extract content types
-			const contentTypesXml = loadedZip.file('[Content_Types].xml');
-			if (contentTypesXml) {
-				docxDoc.contentTypes = await contentTypesXml.async('text');
-				console.log('Extracted [Content_Types].xml, length:', docxDoc.contentTypes.length);
-			}
-
-			console.log('DOCX parsing completed successfully');
-			return docxDoc;
-		} catch (error) {
-			console.error('Error parsing DOCX buffer:', error);
-			throw error;
-		}
-	}
-
-	/**
-	 * Convert DOCX XML to HTML for editing
-	 */
-	public docxXmlToHtml(docxDoc: DocxDocument): string {
-		try {
-			console.log('=== DOCX XML PARSER DEBUG ===');
-			console.log('Starting DOCX XML to HTML conversion...');
-			console.log('XML length:', docxDoc.xml.length);
-			console.log('XML preview:', docxDoc.xml.substring(0, 300) + '...');
-
+			// Extract page layout from document XML
 			const parser = new DOMParser();
-			const xmlDoc = parser.parseFromString(docxDoc.xml, 'text/xml');
+			const doc = parser.parseFromString(documentXml, 'text/xml');
+			const pageLayout = this.extractPageLayout(doc);
 
-			// Check for parsing errors
-			const parserError = xmlDoc.getElementsByTagName('parsererror');
-			if (parserError.length > 0) {
-				console.error('XML parsing error:', parserError[0].textContent);
-				throw new Error('Failed to parse DOCX XML');
-			}
+			this.logger.info(`Parsed DOCX with images and page layout`);
 
-			// Get the body element - DOCX uses w:body
-			const body = xmlDoc.getElementsByTagName('w:body')[0] as Element;
-			if (!body) {
-				console.warn('No w:body element found in DOCX');
-				return '<p>Empty document</p>';
-			}
-
-			console.log('✅ Found body element:', body.tagName);
-
-			const htmlParts: string[] = [];
-
-			// Process each paragraph and other elements
-			const children = Array.from(body.children);
-			console.log('Body children count:', children.length);
-
-			let paragraphCount = 0;
-			let tableCount = 0;
-			let otherCount = 0;
-
-			for (const child of children) {
-				const tagName = child.tagName;
-				console.log(`Processing element ${htmlParts.length}:`, tagName);
-
-				if (tagName === 'w:p') {
-					// Process paragraph
-					const html = this.processParagraph(child as Element);
-					console.log(`Paragraph ${paragraphCount} HTML:`, html.substring(0, 100) + '...');
-					htmlParts.push(html);
-					paragraphCount++;
-				} else if (tagName === 'w:tbl') {
-					// Process table
-					const html = this.processTable(child as Element);
-					console.log(`Table ${tableCount} HTML:`, html.substring(0, 100) + '...');
-					htmlParts.push(html);
-					tableCount++;
-				} else if (tagName === 'w:sectPr') {
-					// Section properties - skip
-					console.log('Skipping section properties');
-					continue;
-				} else {
-					console.log('Unhandled element:', tagName);
-					otherCount++;
-				}
-			}
-
-			console.log(`Processed: ${paragraphCount} paragraphs, ${tableCount} tables, ${otherCount} other elements`);
-			const result = htmlParts.join('\n');
-			console.log('✅ DOCX XML converted to HTML, length:', result.length);
-			console.log('=== END DOCX XML PARSER DEBUG ===');
-			return result;
+			return {
+				xml: documentXml,
+				styles: stylesXml,
+				numbering: numberingXml,
+				relationships: relationshipsXml,
+				images,
+				pageLayout
+			};
 		} catch (error) {
-			console.error('❌ Error converting DOCX XML to HTML:', error);
-			throw error;
+			this.logger.error('Failed to parse DOCX:', error);
+			throw new Error(`Failed to parse DOCX: ${error}`);
 		}
 	}
 
 	/**
-	 * Process a paragraph element
+	 * Convert DOCX XML to HTML
 	 */
-	private processParagraph(pElem: Element): string {
-		// Get runs - DOCX uses w:r elements
-		const runs = pElem.getElementsByTagName('w:r');
-		const paragraphProps = pElem.getElementsByTagName('w:pPr')[0];
+	docxXmlToHtml(docxDoc: DocxDocument): string {
+		try {
+			this.logger.info('Converting DOCX XML to HTML...');
+			const parser = new DOMParser();
+			const doc = parser.parseFromString(docxDoc.xml, 'text/xml');
 
-		// Check for heading level
-		let headingLevel = 0;
-		let alignment = '';
-		let isList = false;
+			// Parse styles if available
+			const styles = docxDoc.styles ? this.parseStyles(docxDoc.styles) : new Map<string, DocxStyle>();
 
-		if (paragraphProps) {
-			// Check for heading style
-			const pStyle = paragraphProps.getElementsByTagName('w:pStyle')[0];
-			if (pStyle) {
-				const styleVal = pStyle.getAttribute('w:val');
-				if (styleVal?.match(/^Heading(\d)$/)) {
-					headingLevel = parseInt(RegExp.$1);
+			// Convert document body
+			const bodyElement = doc.getElementsByTagName('w:body')[0];
+			if (!bodyElement) {
+				throw new Error('No document body found');
+			}
+
+			// Extract page layout information
+			const pageLayout = this.extractPageLayout(doc);
+
+			const htmlContent = this.convertElementToHtml(bodyElement, styles);
+
+			this.logger.info('Successfully converted DOCX XML to HTML');
+			return htmlContent;
+		} catch (error) {
+			this.logger.error('Failed to convert DOCX XML to HTML:', error);
+			throw new Error(`Failed to convert DOCX XML to HTML: ${error}`);
+		}
+	}
+
+	/**
+	 * Convert HTML to DOCX XML
+	 */
+	htmlToDocxXml(html: string): string {
+		try {
+			this.logger.info('Converting HTML to DOCX XML...');
+			const parser = new DOMParser();
+			const doc = parser.parseFromString(html, 'text/html');
+
+			// Create DOCX document structure
+			const docxDoc = this.createDocxDocument();
+			const bodyElement = docxDoc.getElementsByTagName('w:body')[0];
+
+			// Convert HTML elements to DOCX XML
+			const htmlBody = doc.body;
+			if (htmlBody) {
+				this.convertHtmlToDocxElements(htmlBody, bodyElement);
+			}
+
+			const serializer = new XMLSerializer();
+			const xmlString = serializer.serializeToString(docxDoc);
+
+			this.logger.info('Successfully converted HTML to DOCX XML');
+			return xmlString;
+		} catch (error) {
+			this.logger.error('Failed to convert HTML to DOCX XML:', error);
+			throw new Error(`Failed to convert HTML to DOCX XML: ${error}`);
+		}
+	}
+
+	/**
+	 * Generate DOCX buffer from XML
+	 */
+	async generateDocxBuffer(docxXml: string, images: Map<string, Uint8Array> = new Map()): Promise<Uint8Array> {
+		try {
+			this.logger.info('Generating DOCX buffer...');
+			const zip = new JSZip();
+
+			// Add document XML
+			zip.file('word/document.xml', docxXml);
+
+			// Add default styles
+			const defaultStyles = this.getDefaultStyles();
+			zip.file('word/styles.xml', defaultStyles);
+
+			// Add default numbering
+			const defaultNumbering = this.getDefaultNumbering();
+			zip.file('word/numbering.xml', defaultNumbering);
+
+			// Add relationships
+			const relationships = this.getDefaultRelationships();
+			zip.file('word/_rels/document.xml.rels', relationships);
+
+			// Add images
+			for (const [fileName, imageData] of images) {
+				zip.file(`word/media/${fileName}`, imageData);
+			}
+
+			// Add content types
+			const contentType = this.getContentTypes(images);
+			zip.file('[Content_Types].xml', contentType);
+
+			// Add app properties
+			const appProps = this.getAppProperties();
+			zip.file('docProps/app.xml', appProps);
+
+			// Add core properties
+			const coreProps = this.getCoreProperties();
+			zip.file('docProps/core.xml', coreProps);
+
+			const buffer = await zip.generateAsync({ type: 'uint8array' });
+			this.logger.info('Successfully generated DOCX buffer');
+			return buffer;
+		} catch (error) {
+			this.logger.error('Failed to generate DOCX buffer:', error);
+			throw new Error(`Failed to generate DOCX buffer: ${error}`);
+		}
+	}
+
+	/**
+	 * Extract page layout information from DOCX document
+	 */
+	private extractPageLayout(doc: Document): DocxPageLayout | undefined {
+		try {
+			// Look for section properties in the document
+			const sectPrElements = doc.getElementsByTagName('w:sectPr');
+			if (sectPrElements.length === 0) {
+				this.logger.info('No section properties found, using defaults');
+				return undefined;
+			}
+
+			const sectPr = sectPrElements[0];
+			const pageLayout: DocxPageLayout = {
+				margins: { top: 1440, right: 1440, bottom: 1440, left: 1440 }, // Default 1 inch in twips
+				pageSize: { width: 12240, height: 15840 }, // Default Letter size in twips
+				orientation: 'portrait'
+			};
+
+			// Extract page size
+			const pgSz = sectPr.getElementsByTagName('w:pgSz')[0];
+			if (pgSz) {
+				const width = pgSz.getAttribute('w:w');
+				const height = pgSz.getAttribute('w:h');
+				const orient = pgSz.getAttribute('w:orient');
+
+				if (width) pageLayout.pageSize.width = parseInt(width);
+				if (height) pageLayout.pageSize.height = parseInt(height);
+				if (orient === 'landscape') {
+					pageLayout.orientation = 'landscape';
+					// Swap width and height for landscape
+					const temp = pageLayout.pageSize.width;
+					pageLayout.pageSize.width = pageLayout.pageSize.height;
+					pageLayout.pageSize.height = temp;
 				}
 			}
 
-			// Check for alignment
-			const jc = paragraphProps.getElementsByTagName('w:jc')[0];
-			if (jc) {
-				const alignVal = jc.getAttribute('w:val');
-				if (alignVal === 'center') alignment = 'center';
-				else if (alignVal === 'right') alignment = 'right';
-				else if (alignVal === 'both') alignment = 'justify';
+			// Extract margins
+			const pgMar = sectPr.getElementsByTagName('w:pgMar')[0];
+			if (pgMar) {
+				const top = pgMar.getAttribute('w:top');
+				const right = pgMar.getAttribute('w:right');
+				const bottom = pgMar.getAttribute('w:bottom');
+				const left = pgMar.getAttribute('w:left');
+
+				if (top) pageLayout.margins.top = parseInt(top);
+				if (right) pageLayout.margins.right = parseInt(right);
+				if (bottom) pageLayout.margins.bottom = parseInt(bottom);
+				if (left) pageLayout.margins.left = parseInt(left);
 			}
 
-			// Check for numbering (lists)
-			const numPr = paragraphProps.getElementsByTagName('w:numPr')[0];
-			if (numPr) {
-				isList = true;
+			this.logger.info(`Extracted page layout: ${JSON.stringify(pageLayout)}`);
+			return pageLayout;
+		} catch (error) {
+			this.logger.error(`Failed to extract page layout: ${error}`);
+			return undefined;
+		}
+	}
+
+	/**
+	 * Parse DOCX styles into a map
+	 */
+	private parseStyles(stylesXml: string): Map<string, DocxStyle> {
+		const styles = new Map<string, DocxStyle>();
+		const parser = new DOMParser();
+		const doc = parser.parseFromString(stylesXml, 'text/xml');
+
+		const styleElements = doc.getElementsByTagName('w:style');
+		for (let i = 0; i < styleElements.length; i++) {
+			const styleElement = styleElements[i];
+			const styleId = styleElement.getAttribute('w:styleId');
+			const styleName = styleElement.getElementsByTagName('w:name')[0]?.getAttribute('w:val');
+			const styleType = styleElement.getAttribute('w:type');
+
+			if (styleId && styleName) {
+				const properties: Record<string, string> = {};
+
+				// Parse style properties
+				const pPr = styleElement.getElementsByTagName('w:pPr')[0];
+				const rPr = styleElement.getElementsByTagName('w:rPr')[0];
+
+				if (pPr) {
+					this.parseStyleProperties(pPr, properties);
+				}
+				if (rPr) {
+					this.parseStyleProperties(rPr, properties);
+				}
+
+				styles.set(styleId, {
+					id: styleId,
+					name: styleName,
+					type: styleType as 'paragraph' | 'character' | 'table',
+					properties
+				});
 			}
 		}
 
-		// Process text runs
-		let textContent = '';
-		for (let i = 0; i < runs.length; i++) {
-			textContent += this.processRun(runs[i] as Element);
-		}
+		return styles;
+	}
 
-		// If empty paragraph, add br
-		if (textContent.trim() === '') {
-			textContent = '&nbsp;';
-		}
+	/**
+	 * Parse style properties from XML element
+	 */
+	private parseStyleProperties(element: Element, properties: Record<string, string>): void {
+		const children = element.children;
+		for (let i = 0; i < children.length; i++) {
+			const child = children[i];
+			const tagName = child.tagName;
+			const val = child.getAttribute('w:val');
 
-		// Build HTML
+			switch (tagName) {
+				case 'w:b':
+					properties['bold'] = 'true';
+					break;
+				case 'w:i':
+					properties['italic'] = 'true';
+					break;
+				case 'w:u':
+					properties['underline'] = val || 'single';
+					break;
+				case 'w:sz':
+					properties['fontSize'] = val || '24';
+					break;
+				case 'w:color':
+					properties['color'] = val || '000000';
+					break;
+				case 'w:jc':
+					properties['justification'] = val || 'left';
+					break;
+			}
+		}
+	}
+
+	/**
+	 * Convert DOCX element to HTML
+	 */
+	private convertElementToHtml(element: Element, _styles: Map<string, DocxStyle>): string {
 		let html = '';
-		const style = alignment ? ` style="text-align: ${alignment}"` : '';
 
-		if (isList) {
-			html = `<li${style}>${textContent}</li>`;
-		} else if (headingLevel > 0) {
-			html = `<h${headingLevel}${style}>${textContent}</h${headingLevel}>`;
-		} else {
-			html = `<p${style}>${textContent}</p>`;
+		const children = element.children;
+		for (let i = 0; i < children.length; i++) {
+			const child = children[i];
+			const tagName = child.tagName;
+
+			switch (tagName) {
+				case 'w:p':
+					html += this.convertParagraphToHtml(child, _styles);
+					break;
+				case 'w:tbl':
+					html += this.convertTableToHtml(child, _styles);
+					break;
+				case 'w:sectPr':
+					// Section properties - skip for now
+					break;
+			}
 		}
 
 		return html;
 	}
 
-
 	/**
-	 * Process a run (text with formatting)
+	 * Convert DOCX paragraph to HTML
 	 */
-	private processRun(runElem: Element): string {
-		// Get text elements - DOCX uses w:t elements
-		const textElems = runElem.getElementsByTagName('w:t');
-		if (textElems.length === 0) {
-			// Check for breaks or tabs
-			const br = runElem.getElementsByTagName('w:br')[0];
-			if (br) return '<br>';
-			const tab = runElem.getElementsByTagName('w:tab')[0];
-			if (tab) return '&nbsp;&nbsp;&nbsp;&nbsp;';
-			return '';
+	private convertParagraphToHtml(paragraph: Element, styles: Map<string, DocxStyle>): string {
+		let html = '<p>';
+
+		const runs = paragraph.getElementsByTagName('w:r');
+		for (let i = 0; i < runs.length; i++) {
+			const run = runs[i];
+			html += this.convertRunToHtml(run, styles);
 		}
 
-		let text = '';
-		for (let i = 0; i < textElems.length; i++) {
-			text += textElems[i].textContent || '';
-		}
-
-		// Check for formatting
-		const runProps = runElem.getElementsByTagName('w:rPr')[0];
-		let isBold = false;
-		let isItalic = false;
-		let isUnderline = false;
-		let isStrikethrough = false;
-		let isHighlight = false;
-
-		if (runProps) {
-			isBold = runProps.getElementsByTagName('w:b').length > 0;
-			isItalic = runProps.getElementsByTagName('w:i').length > 0;
-			isUnderline = runProps.getElementsByTagName('w:u').length > 0;
-			isStrikethrough = runProps.getElementsByTagName('w:strike').length > 0;
-			isHighlight = runProps.getElementsByTagName('w:highlight').length > 0;
-		}
-
-		// Escape XML/HTML
-		text = this.escapeXml(text);
-
-		// Apply formatting
-		if (isHighlight) text = `<mark>${text}</mark>`;
-		if (isBold) text = `<b>${text}</b>`;
-		if (isItalic) text = `<i>${text}</i>`;
-		if (isUnderline) text = `<u>${text}</u>`;
-		if (isStrikethrough) text = `<s>${text}</s>`;
-
-		return text;
+		html += '</p>';
+		return html;
 	}
 
 	/**
-	 * Process a table element
+	 * Convert DOCX run to HTML
 	 */
-	private processTable(tblElem: Element): string {
-		console.log('Processing table element:', tblElem.tagName);
+	private convertRunToHtml(run: Element, _styles: Map<string, DocxStyle>): string {
+		let html = '';
+		const textElements = run.getElementsByTagName('w:t');
 
-		// DOCX uses w:tr for table rows
-		const rows = tblElem.getElementsByTagName('w:tr');
-		console.log('Found rows:', rows.length);
+		for (let i = 0; i < textElements.length; i++) {
+			const textElement = textElements[i];
+			const text = textElement.textContent || '';
 
-		if (rows.length === 0) {
-			console.warn('No rows found in table');
-			return '<p>Empty table</p>';
+			// Apply formatting based on run properties
+			const rPr = run.getElementsByTagName('w:rPr')[0];
+			if (rPr) {
+				html += this.applyRunFormatting(text, rPr);
+			} else {
+				html += text;
+			}
 		}
 
-		let html = '<table border="1" style="border-collapse: collapse; width: 100%; margin: 1em 0;">';
+		return html;
+	}
 
+	/**
+	 * Apply run formatting to text
+	 */
+	private applyRunFormatting(text: string, rPr: Element): string {
+		let formattedText = text;
+
+		// Check for bold
+		if (rPr.getElementsByTagName('w:b').length > 0) {
+			formattedText = `<b>${formattedText}</b>`;
+		}
+
+		// Check for italic
+		if (rPr.getElementsByTagName('w:i').length > 0) {
+			formattedText = `<i>${formattedText}</i>`;
+		}
+
+		// Check for underline
+		if (rPr.getElementsByTagName('w:u').length > 0) {
+			formattedText = `<u>${formattedText}</u>`;
+		}
+
+		return formattedText;
+	}
+
+	/**
+	 * Convert DOCX table to HTML
+	 */
+	private convertTableToHtml(table: Element, styles: Map<string, DocxStyle>): string {
+		let html = '<table>';
+
+		const rows = table.getElementsByTagName('w:tr');
 		for (let i = 0; i < rows.length; i++) {
-			const row = rows[i] as Element;
-			console.log(`Processing row ${i}:`, row.tagName);
+			const row = rows[i];
 			html += '<tr>';
 
-			// DOCX uses w:tc for table cells
 			const cells = row.getElementsByTagName('w:tc');
-			console.log(`Row ${i} has ${cells.length} cells`);
-
 			for (let j = 0; j < cells.length; j++) {
-				const cellElem = cells[j] as Element;
-				console.log(`Processing cell ${j}:`, cellElem.tagName);
-
-				// DOCX uses w:p for paragraphs in cells
-				const paragraphs = cellElem.getElementsByTagName('w:p');
-				let cellContent = '';
-
-				if (paragraphs.length === 0) {
-					// Check for direct text content
-					cellContent = cellElem.textContent || '';
-					if (cellContent.trim()) {
-						cellContent = `<p>${this.escapeXml(cellContent)}</p>`;
-					} else {
-						cellContent = '<p>&nbsp;</p>';
-					}
-				} else {
-					for (let k = 0; k < paragraphs.length; k++) {
-						cellContent += this.processParagraph(paragraphs[k] as Element);
-					}
-				}
-
-				html += `<td style="padding: 8px; border: 1px solid #ddd; vertical-align: top;">${cellContent}</td>`;
+				const cell = cells[j];
+				html += '<td>';
+				html += this.convertElementToHtml(cell, styles);
+				html += '</td>';
 			}
 
 			html += '</tr>';
 		}
 
 		html += '</table>';
-		console.log('Generated table HTML:', html.substring(0, 200) + '...');
 		return html;
 	}
 
 	/**
-	 * Convert HTML back to DOCX XML
+	 * Create basic DOCX document structure
 	 */
-	public htmlToDocxXml(html: string, baseDoc?: DocxDocument): DocxDocument {
+	private createDocxDocument(): Document {
 		const parser = new DOMParser();
-		const htmlDoc = parser.parseFromString(html, 'text/html');
+		const docxTemplate = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+	<w:body>
+	</w:body>
+</w:document>`;
+		return parser.parseFromString(docxTemplate, 'text/xml');
+	}
 
-		// Build DOCX XML structure
-		let documentXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n';
-		documentXml += '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">\n';
-		documentXml += '  <w:body>\n';
+	/**
+	 * Convert HTML elements to DOCX XML elements
+	 */
+	private convertHtmlToDocxElements(htmlElement: Element, docxElement: Element): void {
+		const children = htmlElement.children;
+		for (let i = 0; i < children.length; i++) {
+			const child = children[i];
+			const tagName = child.tagName.toLowerCase();
 
-		// Process HTML elements
-		const bodyChildren = Array.from(htmlDoc.body.children);
-		for (const child of bodyChildren) {
-			documentXml += this.htmlElementToDocxXml(child as Element, '    ');
+			switch (tagName) {
+				case 'p':
+					this.convertHtmlParagraphToDocx(child, docxElement);
+					break;
+				case 'h1':
+				case 'h2':
+				case 'h3':
+				case 'h4':
+				case 'h5':
+				case 'h6':
+					this.convertHtmlHeadingToDocx(child, docxElement);
+					break;
+				case 'ul':
+				case 'ol':
+					this.convertHtmlListToDocx(child, docxElement);
+					break;
+				case 'table':
+					this.convertHtmlTableToDocx(child, docxElement);
+					break;
+				case 'blockquote':
+					this.convertHtmlBlockquoteToDocx(child, docxElement);
+					break;
+			}
 		}
-
-		documentXml += '  </w:body>\n';
-		documentXml += '</w:document>';
-
-		return {
-			xml: documentXml,
-			styles: baseDoc?.styles || this.getDefaultStyles(),
-			numbering: baseDoc?.numbering,
-			relationships: baseDoc?.relationships || this.getDefaultRelationships(),
-			contentTypes: baseDoc?.contentTypes || this.getDefaultContentTypes(),
-		};
 	}
 
 	/**
-	 * Convert HTML element to DOCX XML
+	 * Convert HTML paragraph to DOCX
 	 */
-	private htmlElementToDocxXml(elem: Element, indent: string): string {
-		const tagName = elem.tagName.toLowerCase();
-		let xml = '';
+	private convertHtmlParagraphToDocx(htmlP: Element, docxElement: Element): void {
+		const pElement = docxElement.ownerDocument.createElement('w:p');
+		const pPrElement = docxElement.ownerDocument.createElement('w:pPr');
+		pElement.appendChild(pPrElement);
 
-		switch (tagName) {
-			case 'p':
-				xml = this.htmlParagraphToDocxXml(elem, indent);
-				break;
-			case 'h1':
-			case 'h2':
-			case 'h3':
-			case 'h4':
-			case 'h5':
-			case 'h6':
-				xml = this.htmlHeadingToDocxXml(elem, indent);
-				break;
-			case 'ul':
-			case 'ol':
-				xml = this.htmlListToDocxXml(elem, indent);
-				break;
-			case 'table':
-				xml = this.htmlTableToDocxXml(elem, indent);
-				break;
-			case 'br':
-				// Skip br tags as they're handled in paragraph processing
-				break;
-			default:
-				// For unknown elements, try to process children
-				const children = Array.from(elem.children);
-				for (const child of children) {
-					xml += this.htmlElementToDocxXml(child as Element, indent);
-				}
-				break;
-		}
+		// Convert inline elements
+		this.convertHtmlInlineToDocx(htmlP, pElement);
 
-		return xml;
+		docxElement.appendChild(pElement);
 	}
 
 	/**
-	 * Convert HTML paragraph to DOCX XML
+	 * Convert HTML heading to DOCX
 	 */
-	private htmlParagraphToDocxXml(elem: Element, indent: string): string {
-		const alignment = (elem as HTMLElement).style?.textAlign || '';
-		let xml = `${indent}<w:p>\n`;
+	private convertHtmlHeadingToDocx(htmlHeading: Element, docxElement: Element): void {
+		const pElement = docxElement.ownerDocument.createElement('w:p');
+		const pPrElement = docxElement.ownerDocument.createElement('w:pPr');
 
-		// Add paragraph properties if needed
-		if (alignment && alignment !== 'left') {
-			xml += `${indent}  <w:pPr>\n`;
-			xml += `${indent}    <w:jc w:val="${this.htmlAlignmentToDocx(alignment)}"/>\n`;
-			xml += `${indent}  </w:pPr>\n`;
-		}
+		// Set heading style
+		const pStyleElement = docxElement.ownerDocument.createElement('w:pStyle');
+		pStyleElement.setAttribute('w:val', `Heading${htmlHeading.tagName[1]}`);
+		pPrElement.appendChild(pStyleElement);
 
-		// Process text content with formatting
-		xml += this.htmlTextToDocxRuns(elem, indent + '  ');
+		pElement.appendChild(pPrElement);
 
-		xml += `${indent}</w:p>\n`;
-		return xml;
+		// Convert inline elements
+		this.convertHtmlInlineToDocx(htmlHeading, pElement);
+
+		docxElement.appendChild(pElement);
 	}
 
 	/**
-	 * Convert HTML heading to DOCX XML
+	 * Convert HTML list to DOCX
 	 */
-	private htmlHeadingToDocxXml(elem: Element, indent: string): string {
-		const level = elem.tagName[1]; // Get number from h1, h2, etc.
-		let xml = `${indent}<w:p>\n`;
-		xml += `${indent}  <w:pPr>\n`;
-		xml += `${indent}    <w:pStyle w:val="Heading${level}"/>\n`;
-		xml += `${indent}  </w:pPr>\n`;
-		xml += this.htmlTextToDocxRuns(elem, indent + '  ');
-		xml += `${indent}</w:p>\n`;
-		return xml;
-	}
-
-	/**
-	 * Convert HTML list to DOCX XML
-	 */
-	private htmlListToDocxXml(elem: Element, indent: string): string {
-		const listItems = elem.getElementsByTagName('li');
-		let xml = '';
-
+	private convertHtmlListToDocx(htmlList: Element, docxElement: Element): void {
+		const listItems = htmlList.getElementsByTagName('li');
 		for (let i = 0; i < listItems.length; i++) {
-			xml += `${indent}<w:p>\n`;
-			xml += `${indent}  <w:pPr>\n`;
-			xml += `${indent}    <w:numPr>\n`;
-			xml += `${indent}      <w:ilvl w:val="0"/>\n`;
-			xml += `${indent}      <w:numId w:val="1"/>\n`;
-			xml += `${indent}    </w:numPr>\n`;
-			xml += `${indent}  </w:pPr>\n`;
-			xml += this.htmlTextToDocxRuns(listItems[i] as Element, indent + '  ');
-			xml += `${indent}</w:p>\n`;
-		}
+			const listItem = listItems[i];
+			const pElement = docxElement.ownerDocument.createElement('w:p');
+			const pPrElement = docxElement.ownerDocument.createElement('w:pPr');
 
-		return xml;
+			// Set list style
+			const numPrElement = docxElement.ownerDocument.createElement('w:numPr');
+			const ilvlElement = docxElement.ownerDocument.createElement('w:ilvl');
+			ilvlElement.setAttribute('w:val', '0');
+			const numIdElement = docxElement.ownerDocument.createElement('w:numId');
+			numIdElement.setAttribute('w:val', htmlList.tagName === 'ol' ? '1' : '2');
+
+			numPrElement.appendChild(ilvlElement);
+			numPrElement.appendChild(numIdElement);
+			pPrElement.appendChild(numPrElement);
+			pElement.appendChild(pPrElement);
+
+			// Convert inline elements
+			this.convertHtmlInlineToDocx(listItem, pElement);
+
+			docxElement.appendChild(pElement);
+		}
 	}
 
 	/**
-	 * Convert HTML table to DOCX XML
+	 * Convert HTML table to DOCX
 	 */
-	private htmlTableToDocxXml(elem: Element, indent: string): string {
-		let xml = `${indent}<w:tbl>\n`;
-		const rows = elem.getElementsByTagName('tr');
+	private convertHtmlTableToDocx(htmlTable: Element, docxElement: Element): void {
+		const tableElement = docxElement.ownerDocument.createElement('w:tbl');
 
+		const rows = htmlTable.getElementsByTagName('tr');
 		for (let i = 0; i < rows.length; i++) {
-			xml += `${indent}  <w:tr>\n`;
-			const cells = (rows[i] as Element).getElementsByTagName('td');
+			const row = rows[i];
+			const trElement = docxElement.ownerDocument.createElement('w:tr');
 
+			const cells = row.getElementsByTagName('td');
 			for (let j = 0; j < cells.length; j++) {
-				xml += `${indent}    <w:tc>\n`;
-				xml += `${indent}      <w:tcPr><w:tcBorders/></w:tcPr>\n`;
+				const cell = cells[j];
+				const tcElement = docxElement.ownerDocument.createElement('w:tc');
 
-				// Process cell content
-				const cellChildren = Array.from((cells[j] as Element).children);
-				for (const child of cellChildren) {
-					xml += this.htmlElementToDocxXml(child as Element, indent + '      ');
-				}
+				// Convert cell content
+				this.convertHtmlInlineToDocx(cell, tcElement);
 
-				xml += `${indent}    </w:tc>\n`;
+				trElement.appendChild(tcElement);
 			}
 
-			xml += `${indent}  </w:tr>\n`;
+			tableElement.appendChild(trElement);
 		}
 
-		xml += `${indent}</w:tbl>\n`;
-		return xml;
+		docxElement.appendChild(tableElement);
 	}
 
 	/**
-	 * Convert HTML text content to DOCX runs
+	 * Convert HTML blockquote to DOCX
 	 */
-	private htmlTextToDocxRuns(elem: Element, indent: string): string {
-		let xml = '';
-		const processNode = (node: Node): string => {
-			if (node.nodeType === Node.TEXT_NODE) {
-				const text = node.textContent || '';
-				if (text.trim() === '') return '';
+	private convertHtmlBlockquoteToDocx(htmlBlockquote: Element, docxElement: Element): void {
+		const pElement = docxElement.ownerDocument.createElement('w:p');
+		const pPrElement = docxElement.ownerDocument.createElement('w:pPr');
 
-				return `${indent}<w:r>\n${indent}  <w:t xml:space="preserve">${this.escapeXml(text)}</w:t>\n${indent}</w:r>\n`;
-			} else if (node.nodeType === Node.ELEMENT_NODE) {
-				const el = node as Element;
-				const tagName = el.tagName.toLowerCase();
+		// Set blockquote style
+		const pStyleElement = docxElement.ownerDocument.createElement('w:pStyle');
+		pStyleElement.setAttribute('w:val', 'Blockquote');
+		pPrElement.appendChild(pStyleElement);
 
-				let runXml = `${indent}<w:r>\n`;
-				const hasFormatting = ['b', 'i', 'u', 's', 'strong', 'em'].includes(tagName);
+		pElement.appendChild(pPrElement);
 
-				if (hasFormatting) {
-					runXml += `${indent}  <w:rPr>\n`;
-					if (tagName === 'b' || tagName === 'strong') runXml += `${indent}    <w:b/>\n`;
-					if (tagName === 'i' || tagName === 'em') runXml += `${indent}    <w:i/>\n`;
-					if (tagName === 'u') runXml += `${indent}    <w:u w:val="single"/>\n`;
-					if (tagName === 's') runXml += `${indent}    <w:strike/>\n`;
-					runXml += `${indent}  </w:rPr>\n`;
+		// Convert inline elements
+		this.convertHtmlInlineToDocx(htmlBlockquote, pElement);
+
+		docxElement.appendChild(pElement);
+	}
+
+	/**
+	 * Convert HTML inline elements to DOCX
+	 */
+	private convertHtmlInlineToDocx(htmlElement: Element, docxElement: Element): void {
+		const textContent = htmlElement.textContent || '';
+		if (textContent.trim()) {
+			const runElement = docxElement.ownerDocument.createElement('w:r');
+			const textElement = docxElement.ownerDocument.createElement('w:t');
+			textElement.textContent = textContent;
+			runElement.appendChild(textElement);
+			docxElement.appendChild(runElement);
+		}
+
+		// Handle inline formatting
+		const children = htmlElement.children;
+		for (let i = 0; i < children.length; i++) {
+			const child = children[i];
+			const tagName = child.tagName.toLowerCase();
+
+			if (['b', 'strong', 'i', 'em', 'u', 's', 'strike'].includes(tagName)) {
+				const runElement = docxElement.ownerDocument.createElement('w:r');
+				const rPrElement = docxElement.ownerDocument.createElement('w:rPr');
+
+				// Apply formatting
+				if (['b', 'strong'].includes(tagName)) {
+					const boldElement = docxElement.ownerDocument.createElement('w:b');
+					rPrElement.appendChild(boldElement);
+				}
+				if (['i', 'em'].includes(tagName)) {
+					const italicElement = docxElement.ownerDocument.createElement('w:i');
+					rPrElement.appendChild(italicElement);
+				}
+				if (tagName === 'u') {
+					const underlineElement = docxElement.ownerDocument.createElement('w:u');
+					rPrElement.appendChild(underlineElement);
+				}
+				if (['s', 'strike'].includes(tagName)) {
+					const strikeElement = docxElement.ownerDocument.createElement('w:strike');
+					rPrElement.appendChild(strikeElement);
 				}
 
-				const text = el.textContent || '';
-				if (text.trim()) {
-					runXml += `${indent}  <w:t xml:space="preserve">${this.escapeXml(text)}</w:t>\n`;
-				}
-				runXml += `${indent}</w:r>\n`;
+				runElement.appendChild(rPrElement);
 
-				return runXml;
+				const textElement = docxElement.ownerDocument.createElement('w:t');
+				textElement.textContent = child.textContent || '';
+				runElement.appendChild(textElement);
+
+				docxElement.appendChild(runElement);
 			}
-
-			return '';
-		};
-
-		// Process child nodes
-		const children = Array.from(elem.childNodes);
-		for (const child of children) {
-			xml += processNode(child);
-		}
-
-		// If no runs were generated, add an empty one
-		if (xml === '') {
-			xml = `${indent}<w:r>\n${indent}  <w:t xml:space="preserve"> </w:t>\n${indent}</w:r>\n`;
-		}
-
-		return xml;
-	}
-
-	/**
-	 * Convert HTML alignment to DOCX alignment
-	 */
-	private htmlAlignmentToDocx(alignment: string): string {
-		switch (alignment) {
-			case 'center': return 'center';
-			case 'right': return 'right';
-			case 'justify': return 'both';
-			default: return 'left';
 		}
 	}
 
 	/**
-	 * Escape XML special characters
-	 */
-	private escapeXml(text: string): string {
-		return text
-			.replace(/&/g, '&amp;')
-			.replace(/</g, '&lt;')
-			.replace(/>/g, '&gt;')
-			.replace(/"/g, '&quot;')
-			.replace(/'/g, '&apos;');
-	}
-
-	/**
-	 * Get default styles.xml
+	 * Get default DOCX styles
 	 */
 	private getDefaultStyles(): string {
 		return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
   <w:style w:type="paragraph" w:styleId="Normal">
     <w:name w:val="Normal"/>
-    <w:rPr>
-      <w:rFonts w:ascii="Calibri" w:hAnsi="Calibri"/>
-      <w:sz w:val="22"/>
-    </w:rPr>
+		<w:qFormat/>
   </w:style>
   <w:style w:type="paragraph" w:styleId="Heading1">
     <w:name w:val="Heading 1"/>
     <w:basedOn w:val="Normal"/>
+		<w:qFormat/>
+		<w:pPr>
+			<w:spacing w:before="240" w:after="120"/>
+		</w:pPr>
     <w:rPr>
       <w:b/>
       <w:sz w:val="32"/>
@@ -590,14 +690,22 @@ export class DocxXmlHandler {
   <w:style w:type="paragraph" w:styleId="Heading2">
     <w:name w:val="Heading 2"/>
     <w:basedOn w:val="Normal"/>
+		<w:qFormat/>
+		<w:pPr>
+			<w:spacing w:before="200" w:after="100"/>
+		</w:pPr>
     <w:rPr>
       <w:b/>
-      <w:sz w:val="26"/>
+			<w:sz w:val="28"/>
     </w:rPr>
   </w:style>
   <w:style w:type="paragraph" w:styleId="Heading3">
     <w:name w:val="Heading 3"/>
     <w:basedOn w:val="Normal"/>
+		<w:qFormat/>
+		<w:pPr>
+			<w:spacing w:before="160" w:after="80"/>
+		</w:pPr>
     <w:rPr>
       <w:b/>
       <w:sz w:val="24"/>
@@ -607,62 +715,110 @@ export class DocxXmlHandler {
 	}
 
 	/**
-	 * Get default relationships
+	 * Get default DOCX numbering
+	 */
+	private getDefaultNumbering(): string {
+		return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:numbering xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+	<w:abstractNum w:abstractNumId="1">
+		<w:multiLevelType w:val="hybridMultilevel"/>
+		<w:lvl w:ilvl="0">
+			<w:start w:val="1"/>
+			<w:numFmt w:val="decimal"/>
+			<w:lvlText w:val="%1."/>
+			<w:lvlJc w:val="left"/>
+		</w:lvl>
+	</w:abstractNum>
+	<w:num w:numId="1">
+		<w:abstractNumId w:val="1"/>
+	</w:num>
+	<w:abstractNum w:abstractNumId="2">
+		<w:multiLevelType w:val="hybridMultilevel"/>
+		<w:lvl w:ilvl="0">
+			<w:start w:val="1"/>
+			<w:numFmt w:val="bullet"/>
+			<w:lvlText w:val="•"/>
+			<w:lvlJc w:val="left"/>
+		</w:lvl>
+	</w:abstractNum>
+	<w:num w:numId="2">
+		<w:abstractNumId w:val="2"/>
+	</w:num>
+</w:numbering>`;
+	}
+
+	/**
+	 * Get default DOCX relationships
 	 */
 	private getDefaultRelationships(): string {
 		return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
   <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>
+	<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/numbering" Target="numbering.xml"/>
 </Relationships>`;
 	}
 
 	/**
-	 * Get default content types
+	 * Get content types XML
 	 */
-	private getDefaultContentTypes(): string {
-		return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+	private getContentTypes(images: Map<string, Uint8Array>): string {
+		let contentTypes = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
   <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
   <Default Extension="xml" ContentType="application/xml"/>
   <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
   <Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>
-</Types>`;
+	<Override PartName="/word/numbering.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.numbering+xml"/>
+	<Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/>
+	<Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/>`;
+
+		// Add image content types
+		for (const fileName of images.keys()) {
+			const extension = fileName.split('.').pop()?.toLowerCase();
+			switch (extension) {
+				case 'png':
+					contentTypes += `\n\t<Override PartName="/word/media/${fileName}" ContentType="image/png"/>`;
+					break;
+				case 'jpg':
+				case 'jpeg':
+					contentTypes += `\n\t<Override PartName="/word/media/${fileName}" ContentType="image/jpeg"/>`;
+					break;
+				case 'gif':
+					contentTypes += `\n\t<Override PartName="/word/media/${fileName}" ContentType="image/gif"/>`;
+					break;
+			}
+		}
+
+		contentTypes += '\n</Types>';
+		return contentTypes;
 	}
 
 	/**
-	 * Generate a complete DOCX buffer from DocxDocument
+	 * Get app properties XML
 	 */
-	public async generateDocxBuffer(docxDoc: DocxDocument): Promise<Uint8Array> {
-		const zip = new JSZip();
+	private getAppProperties(): string {
+		return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties">
+	<Application>VS Code Rich Text Editor</Application>
+	<DocSecurity>0</DocSecurity>
+	<ScaleCrop>false</ScaleCrop>
+	<SharedDoc>false</SharedDoc>
+	<HyperlinksChanged>false</HyperlinksChanged>
+	<AppVersion>1.0</AppVersion>
+</Properties>`;
+	}
 
-		// Add main document
-		zip.file('word/document.xml', docxDoc.xml);
-
-		// Add styles
-		if (docxDoc.styles) {
-			zip.file('word/styles.xml', docxDoc.styles);
-		}
-
-		// Add numbering
-		if (docxDoc.numbering) {
-			zip.file('word/numbering.xml', docxDoc.numbering);
-		}
-
-		// Add relationships
-		zip.file('word/_rels/document.xml.rels', docxDoc.relationships || this.getDefaultRelationships());
-
-		// Add content types
-		zip.file('[Content_Types].xml', docxDoc.contentTypes || this.getDefaultContentTypes());
-
-		// Add _rels/.rels (root relationships)
-		zip.file('_rels/.rels', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
-  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>
-</Relationships>`);
-
-		// Generate ZIP
-		const buffer = await zip.generateAsync({ type: 'uint8array' });
-		return buffer;
+	/**
+	 * Get core properties XML
+	 */
+	private getCoreProperties(): string {
+		return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties">
+	<dc:title xmlns:dc="http://purl.org/dc/elements/1.1/">Rich Text Document</dc:title>
+	<dc:creator xmlns:dc="http://purl.org/dc/elements/1.1/">VS Code Rich Text Editor</dc:creator>
+	<cp:lastModifiedBy>VS Code Rich Text Editor</cp:lastModifiedBy>
+	<dcterms:created xmlns:dcterms="http://purl.org/dc/terms/" xsi:type="dcterms:W3CDTF" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">${new Date().toISOString()}</dcterms:created>
+	<dcterms:modified xmlns:dcterms="http://purl.org/dc/terms/" xsi:type="dcterms:W3CDTF" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">${new Date().toISOString()}</dcterms:modified>
+</cp:coreProperties>`;
 	}
 }
-

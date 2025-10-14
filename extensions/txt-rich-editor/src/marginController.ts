@@ -3,200 +3,392 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { MarginBounds } from './rulerManager';
+import { Logger } from './logger';
 
-export interface BreakPoint {
-	line: number;
-	char: number;
+export interface PageMargins {
+	top: number;
+	right: number;
+	bottom: number;
+	left: number;
+}
+
+export interface PageSize {
+	width: number;
+	height: number;
+	name: string;
+}
+
+export interface PageLayout {
+	margins: PageMargins;
+	orientation: 'portrait' | 'landscape';
+	size: PageSize;
+	zoom: number;
+}
+
+export interface RulerSettings {
+	unit: 'inches' | 'centimeters' | 'points';
+	showVertical: boolean;
+	showHorizontal: boolean;
+	markInterval: number;
 }
 
 export class MarginController {
-	private margins: MarginBounds;
-	private charWidth: number;
-	private viewportWidth: number;
-	private enabled: boolean = true;
+	private readonly logger: Logger;
+	private currentLayout: PageLayout;
+	private isLocked: boolean = false;
+	private eventListeners: Map<string, Function[]> = new Map();
 
-	constructor(margins: MarginBounds, charWidth: number, viewportWidth: number) {
-		this.margins = margins;
-		this.charWidth = charWidth;
-		this.viewportWidth = viewportWidth;
+	// Standard page sizes at 96 DPI
+	private readonly pageSizes: Map<string, PageSize> = new Map([
+		['letter', { width: 816, height: 1056, name: 'Letter' }],
+		['a4', { width: 794, height: 1123, name: 'A4' }],
+		['legal', { width: 816, height: 1344, name: 'Legal' }],
+		['tabloid', { width: 1056, height: 1632, name: 'Tabloid' }]
+	]);
+
+	constructor(logger: Logger, initialLayout?: Partial<PageLayout>) {
+		this.logger = logger;
+		this.currentLayout = {
+			margins: { top: 96, right: 96, bottom: 96, left: 96 }, // 1 inch at 96 DPI
+			orientation: 'portrait',
+			size: this.pageSizes.get('letter')!,
+			zoom: 1.0,
+			...initialLayout
+		};
 	}
 
-	public updateMargins(margins: MarginBounds): void {
-		this.margins = margins;
+	/**
+	 * Get current page layout
+	 */
+	getLayout(): PageLayout {
+		return { ...this.currentLayout };
 	}
 
-	public updateCharWidth(width: number): void {
-		this.charWidth = width;
+	/**
+	 * Set page layout
+	 */
+	setLayout(layout: Partial<PageLayout>): void {
+		this.currentLayout = { ...this.currentLayout, ...layout };
+
+		this.logger.info('Page layout changed');
+
+		this.emit('layout-changed', this.currentLayout);
 	}
 
-	public updateViewport(width: number): void {
-		this.viewportWidth = width;
+	/**
+	 * Set page margins
+	 */
+	setMargins(margins: Partial<PageMargins>): void {
+		const newMargins = { ...this.currentLayout.margins, ...margins };
+		this.setLayout({ margins: newMargins });
 	}
 
-	public setEnabled(enabled: boolean): void {
-		this.enabled = enabled;
-	}
+	/**
+	 * Set page orientation
+	 */
+	setOrientation(orientation: 'portrait' | 'landscape'): void {
+		const newSize = { ...this.currentLayout.size };
 
-	public isEnabled(): boolean {
-		return this.enabled;
-	}
-
-	public getAvailableWidth(): number {
-		return this.viewportWidth - this.margins.left - this.margins.right;
-	}
-
-	public getMaxCharsPerLine(): number {
-		const availableWidth = this.getAvailableWidth();
-		return Math.floor(availableWidth / this.charWidth);
-	}
-
-	public constrainText(text: string): string {
-		if (!this.enabled) {
-			return text;
+		// Swap dimensions for landscape
+		if (orientation === 'landscape') {
+			newSize.width = this.currentLayout.size.height;
+			newSize.height = this.currentLayout.size.width;
+		} else {
+			newSize.width = this.currentLayout.size.width;
+			newSize.height = this.currentLayout.size.height;
 		}
 
-		const lines = text.split('\n');
-		const constrainedLines: string[] = [];
-
-		for (const line of lines) {
-			if (line.length === 0) {
-				constrainedLines.push('');
-				continue;
-			}
-
-			const wrappedLines = this.wrapLine(line);
-			constrainedLines.push(...wrappedLines);
-		}
-
-		return constrainedLines.join('\n');
+		this.setLayout({ orientation, size: newSize });
 	}
 
-	private wrapLine(line: string): string[] {
-		const maxChars = this.getMaxCharsPerLine();
-		const wrappedLines: string[] = [];
-
-		if (line.length <= maxChars) {
-			wrappedLines.push(line);
-			return wrappedLines;
+	/**
+	 * Set page size
+	 */
+	setPageSize(sizeName: string): void {
+		const size = this.pageSizes.get(sizeName);
+		if (!size) {
+			this.logger.warn(`Unknown page size: ${sizeName}`);
+			return;
 		}
 
-		// Word-wrap algorithm
-		const words = line.split(' ');
-		let currentLine = '';
+		const newSize = { ...size };
 
-		for (const word of words) {
-			// If the word itself is longer than max chars, break it
-			if (word.length > maxChars) {
-				if (currentLine.length > 0) {
-					wrappedLines.push(currentLine.trim());
-					currentLine = '';
-				}
-
-				// Break the long word into chunks
-				for (let i = 0; i < word.length; i += maxChars) {
-					wrappedLines.push(word.substring(i, Math.min(i + maxChars, word.length)));
-				}
-				continue;
-			}
-
-			const testLine = currentLine.length === 0 ? word : currentLine + ' ' + word;
-
-			if (testLine.length > maxChars) {
-				// Current line is full, push it and start new line with this word
-				wrappedLines.push(currentLine.trim());
-				currentLine = word;
-			} else {
-				currentLine = testLine;
-			}
+		// Adjust for orientation
+		if (this.currentLayout.orientation === 'landscape') {
+			newSize.width = size.height;
+			newSize.height = size.width;
 		}
 
-		if (currentLine.length > 0) {
-			wrappedLines.push(currentLine.trim());
-		}
-
-		return wrappedLines;
+		this.setLayout({ size: newSize });
 	}
 
-	public applyIndentation(text: string, level: number = 0): string {
-		const indent = '  '.repeat(level); // 2 spaces per level
-		const lines = text.split('\n');
-		return lines.map(line => line.length > 0 ? indent + line : line).join('\n');
+	/**
+	 * Set zoom level
+	 */
+	setZoom(zoom: number): void {
+		const clampedZoom = Math.max(0.25, Math.min(3.0, zoom));
+		this.setLayout({ zoom: clampedZoom });
 	}
 
-	public calculateLineBreaks(text: string): BreakPoint[] {
-		const breakPoints: BreakPoint[] = [];
-		const maxChars = this.getMaxCharsPerLine();
+	/**
+	 * Lock margins (hide drag handles, freeze rulers)
+	 */
+	lockMargins(locked: boolean): void {
+		this.isLocked = locked;
+		this.logger.info(`Margins ${locked ? 'locked' : 'unlocked'}`);
+		this.emit('margins-locked', locked);
+	}
 
-		const lines = text.split('\n');
-		let globalLineIndex = 0;
+	/**
+	 * Check if margins are locked
+	 */
+	areMarginsLocked(): boolean {
+		return this.isLocked;
+	}
 
-		for (let i = 0; i < lines.length; i++) {
-			const line = lines[i];
+	/**
+	 * Get available page sizes
+	 */
+	getAvailablePageSizes(): PageSize[] {
+		return Array.from(this.pageSizes.values());
+	}
 
-			if (line.length === 0) {
-				globalLineIndex++;
-				continue;
-			}
+	/**
+	 * Get page size by name
+	 */
+	getPageSize(name: string): PageSize | undefined {
+		return this.pageSizes.get(name);
+	}
 
-			if (line.length <= maxChars) {
-				globalLineIndex++;
-				continue;
-			}
+	/**
+	 * Calculate content area dimensions
+	 */
+	getContentArea(): { width: number; height: number; x: number; y: number } {
+		const { margins, size, zoom } = this.currentLayout;
 
-			// Calculate break points for this line
-			const words = line.split(' ');
-			let currentLength = 0;
-			let charIndex = 0;
+		return {
+			width: (size.width - margins.left - margins.right) * zoom,
+			height: (size.height - margins.top - margins.bottom) * zoom,
+			x: margins.left * zoom,
+			y: margins.top * zoom
+		};
+	}
 
-			for (let j = 0; j < words.length; j++) {
-				const word = words[j];
-				const wordLength = word.length + (j > 0 ? 1 : 0); // +1 for space
+	/**
+	 * Convert inches to pixels at current DPI
+	 */
+	inchesToPixels(inches: number): number {
+		return inches * 96; // 96 DPI
+	}
 
-				if (currentLength + wordLength > maxChars && currentLength > 0) {
-					// Break here
-					breakPoints.push({ line: globalLineIndex, char: charIndex });
-					globalLineIndex++;
-					currentLength = word.length;
-				} else {
-					currentLength += wordLength;
-				}
+	/**
+	 * Convert pixels to inches at current DPI
+	 */
+	pixelsToInches(pixels: number): number {
+		return pixels / 96; // 96 DPI
+	}
 
-				charIndex += wordLength;
-			}
+	/**
+	 * Convert points to pixels
+	 */
+	pointsToPixels(points: number): number {
+		return points * (96 / 72); // 96 DPI, 72 points per inch
+	}
 
-			globalLineIndex++;
+	/**
+	 * Convert pixels to points
+	 */
+	pixelsToPoints(pixels: number): number {
+		return pixels * (72 / 96); // 96 DPI, 72 points per inch
+	}
+
+	/**
+	 * Get ruler marks for horizontal ruler
+	 */
+	getHorizontalRulerMarks(): Array<{ position: number; label: string; isMajor: boolean }> {
+		const marks: Array<{ position: number; label: string; isMajor: boolean }> = [];
+		const { size, zoom } = this.currentLayout;
+		const width = size.width * zoom;
+
+		// Mark every inch
+		for (let i = 0; i <= width; i += 96 * zoom) {
+			const inches = this.pixelsToInches(i / zoom);
+			marks.push({
+				position: i,
+				label: Math.floor(inches).toString(),
+				isMajor: Math.floor(inches) % 2 === 0
+			});
 		}
 
-		return breakPoints;
+		return marks;
 	}
 
-	public shouldBreakAt(text: string, position: number): boolean {
-		if (!this.enabled) {
+	/**
+	 * Get ruler marks for vertical ruler
+	 */
+	getVerticalRulerMarks(): Array<{ position: number; label: string; isMajor: boolean }> {
+		const marks: Array<{ position: number; label: string; isMajor: boolean }> = [];
+		const { size, zoom } = this.currentLayout;
+		const height = size.height * zoom;
+
+		// Mark every inch
+		for (let i = 0; i <= height; i += 96 * zoom) {
+			const inches = this.pixelsToInches(i / zoom);
+			marks.push({
+				position: i,
+				label: Math.floor(inches).toString(),
+				isMajor: Math.floor(inches) % 2 === 0
+			});
+		}
+
+		return marks;
+	}
+
+	/**
+	 * Get page break positions
+	 */
+	getPageBreaks(): number[] {
+		const breaks: number[] = [];
+		const { size, zoom } = this.currentLayout;
+		const pageHeight = size.height * zoom;
+
+		// Calculate where page breaks would occur
+		// This is a simplified version - in reality, you'd need to measure content height
+		let currentY = pageHeight;
+		while (currentY < 10000) { // Arbitrary limit
+			breaks.push(currentY);
+			currentY += pageHeight;
+		}
+
+		return breaks;
+	}
+
+	/**
+	 * Validate margins
+	 */
+	validateMargins(margins: PageMargins): { isValid: boolean; errors: string[] } {
+		const errors: string[] = [];
+		const { size } = this.currentLayout;
+
+		if (margins.left < 0) errors.push('Left margin cannot be negative');
+		if (margins.right < 0) errors.push('Right margin cannot be negative');
+		if (margins.top < 0) errors.push('Top margin cannot be negative');
+		if (margins.bottom < 0) errors.push('Bottom margin cannot be negative');
+
+		if (margins.left + margins.right >= size.width) {
+			errors.push('Left and right margins exceed page width');
+		}
+
+		if (margins.top + margins.bottom >= size.height) {
+			errors.push('Top and bottom margins exceed page height');
+		}
+
+		return {
+			isValid: errors.length === 0,
+			errors
+		};
+	}
+
+	/**
+	 * Reset to default layout
+	 */
+	resetToDefault(): void {
+		this.setLayout({
+			margins: { top: 96, right: 96, bottom: 96, left: 96 },
+			orientation: 'portrait',
+			size: this.pageSizes.get('letter')!,
+			zoom: 1.0
+		});
+	}
+
+	/**
+	 * Export layout as CSS
+	 */
+	exportAsCSS(): string {
+		const { margins, size, zoom } = this.currentLayout;
+		const contentArea = this.getContentArea();
+
+		return `
+			.document-page {
+				width: ${size.width}px;
+				height: ${size.height}px;
+				transform: scale(${zoom});
+				transform-origin: top left;
+			}
+
+			.document-content {
+				width: ${contentArea.width}px;
+				height: ${contentArea.height}px;
+				margin-left: ${contentArea.x}px;
+				margin-top: ${contentArea.y}px;
+			}
+
+			@page {
+				size: ${size.name} ${this.currentLayout.orientation};
+				margin: ${this.pixelsToInches(margins.top)}in ${this.pixelsToInches(margins.right)}in ${this.pixelsToInches(margins.bottom)}in ${this.pixelsToInches(margins.left)}in;
+			}
+		`;
+	}
+
+	/**
+	 * Export layout as JSON
+	 */
+	exportAsJSON(): string {
+		return JSON.stringify(this.currentLayout, null, 2);
+	}
+
+	/**
+	 * Import layout from JSON
+	 */
+	importFromJSON(json: string): boolean {
+		try {
+			const layout = JSON.parse(json);
+			this.setLayout(layout);
+			return true;
+		} catch (error) {
+			this.logger.error('Failed to import layout from JSON:', error);
 			return false;
 		}
-
-		const maxChars = this.getMaxCharsPerLine();
-
-		// Find current line
-		const beforeCursor = text.substring(0, position);
-		const lines = beforeCursor.split('\n');
-		const currentLine = lines[lines.length - 1];
-
-		return currentLine.length >= maxChars;
 	}
 
-	public insertLineBreak(text: string, position: number): string {
-		return text.substring(0, position) + '\n' + text.substring(position);
+	/**
+	 * Event emitter functionality
+	 */
+	on(event: string, listener: Function): void {
+		if (!this.eventListeners.has(event)) {
+			this.eventListeners.set(event, []);
+		}
+		this.eventListeners.get(event)!.push(listener);
 	}
 
-	public getLeftMarginIndent(): string {
-		// Calculate indent based on left margin width
-		const indentChars = Math.floor(this.margins.left / this.charWidth);
-		return ' '.repeat(Math.max(0, indentChars - 2)); // Subtract ruler width estimate
+	off(event: string, listener: Function): void {
+		const listeners = this.eventListeners.get(event);
+		if (listeners) {
+			const index = listeners.indexOf(listener);
+			if (index > -1) {
+				listeners.splice(index, 1);
+			}
+		}
 	}
 
-	public dispose(): void {
-		// Cleanup if needed
+	private emit(event: string, data: any): void {
+		const listeners = this.eventListeners.get(event);
+		if (listeners) {
+			listeners.forEach(listener => {
+				try {
+					listener(data);
+				} catch (error) {
+					this.logger.error(`Error in event listener for ${event}:`, error);
+				}
+			});
+		}
+	}
+
+	/**
+	 * Dispose the margin controller
+	 */
+	dispose(): void {
+		this.logger.info('Disposing margin controller');
+		this.eventListeners.clear();
 	}
 }

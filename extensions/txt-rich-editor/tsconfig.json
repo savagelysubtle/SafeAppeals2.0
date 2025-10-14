@@ -7,7 +7,9 @@
 		"lib": ["es2020", "dom"],
 		"moduleResolution": "node",
 		"allowSyntheticDefaultImports": true,
-		"esModuleInterop": true
+		"esModuleInterop": true,
+		"noUnusedLocals": false,
+		"noUnusedParameters": false
 	},
 	"include": ["src/**/*", "../../src/vscode-dts/vscode.d.ts"],
 	"files": ["src/types.d.ts"]

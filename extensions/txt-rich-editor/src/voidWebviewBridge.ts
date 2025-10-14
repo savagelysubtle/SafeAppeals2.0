@@ -71,7 +71,15 @@ export class VoidWebviewBridge {
 			}
 		);
 
-		this.context.subscriptions.push(addToChatCmd, inlineEditCmd);
+		// Register a command that Void can call to get rich text content
+		const getRichTextContentCmd = vscode.commands.registerCommand(
+			'txtRichEditor.getContentForChat',
+			async () => {
+				return await this.getRichTextContentForChat();
+			}
+		);
+
+		this.context.subscriptions.push(addToChatCmd, inlineEditCmd, getRichTextContentCmd);
 	}
 
 	/**
@@ -79,17 +87,75 @@ export class VoidWebviewBridge {
 	 */
 	private async handleAddToChat(plainText: string, selection?: { start: number; end: number }): Promise<void> {
 		try {
-			// Store the text temporarily
-			await this.context.workspaceState.update('richTextChatContent', {
-				text: plainText,
-				selection
-			});
+			// Get the current document URI
+			const activeEditor = vscode.window.activeTextEditor;
+			if (!activeEditor) {
+				vscode.window.showWarningMessage('No active editor found');
+				return;
+			}
 
-			// Call Void's add to chat command
-			await vscode.commands.executeCommand('void.cmdL');
+			const documentUri = activeEditor.document.uri;
+			const language = activeEditor.document.languageId || 'plaintext';
+
+			// Prepare the data for Void
+			const voidOptions: any = {
+				uri: documentUri.toString(),
+				language: language,
+				type: selection ? 'selection' : 'file'
+			};
+
+			// If there's a selection, include range information
+			// For rich text editors, we approximate line numbers based on character offsets
+			if (selection) {
+				// Calculate approximate line numbers
+				// This is a simplified approach - rich text doesn't have "lines" like code
+				const totalText = plainText.length;
+				const selectionStart = selection.start;
+				const selectionEnd = selection.end;
+
+				// Approximate: assume ~80 chars per line
+				const approxStartLine = Math.floor(selectionStart / 80) + 1;
+				const approxEndLine = Math.floor(selectionEnd / 80) + 1;
+
+				voidOptions.range = [approxStartLine, approxEndLine];
+			} else {
+				voidOptions.range = null;
+			}
+
+			// Call Void's extension API to add content directly to chat
+			try {
+				await vscode.commands.executeCommand('void.addContentToChat', voidOptions);
+
+				// Show success message
+				const message = selection
+					? `Added selection (${plainText.length} chars) to Void chat`
+					: `Added entire document to Void chat`;
+				vscode.window.showInformationMessage(message);
+
+			} catch (voidError) {
+				// If Void's API isn't available, fall back to workspace state
+				console.warn('Void API not available, using fallback method:', voidError);
+
+				await this.context.workspaceState.update('richTextChatContent', {
+					text: plainText,
+					selection,
+					uri: documentUri.toString(),
+					timestamp: Date.now()
+				});
+
+				// Try to open sidebar manually
+				try {
+					await vscode.commands.executeCommand('void.openSidebar');
+				} catch (error) {
+					vscode.window.showWarningMessage(
+						'Could not add to Void chat. Make sure Void is installed and up to date.'
+					);
+				}
+			}
+
 		} catch (error) {
-			vscode.window.showWarningMessage(
-				'Could not add to Void chat. Make sure Void is installed.'
+			vscode.window.showErrorMessage(
+				`Could not add to Void chat: ${error instanceof Error ? error.message : 'Unknown error'}`
 			);
 		}
 	}
@@ -106,7 +172,7 @@ export class VoidWebviewBridge {
 			});
 
 			// Call Void's inline edit command
-			await vscode.commands.executeCommand('void.ctrlK');
+			await vscode.commands.executeCommand('void.ctrlKAction');
 		} catch (error) {
 			vscode.window.showWarningMessage(
 				'Could not start inline edit. Make sure Void is installed.'
@@ -136,6 +202,28 @@ export class VoidWebviewBridge {
 				type: 'apply-html-edit',
 				html
 			});
+		}
+	}
+
+	/**
+	 * Get rich text content for chat integration
+	 */
+	private async getRichTextContentForChat(): Promise<{ text: string; uri: string } | null> {
+		try {
+			// Get the stored content from workspace state
+			const storedContent = this.context.workspaceState.get('richTextChatContent') as any;
+
+			if (storedContent && storedContent.text) {
+				return {
+					text: storedContent.text,
+					uri: storedContent.uri || ''
+				};
+			}
+
+			return null;
+		} catch (error) {
+			console.error('Error getting rich text content for chat:', error);
+			return null;
 		}
 	}
 }

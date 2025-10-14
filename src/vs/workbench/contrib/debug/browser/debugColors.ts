@@ -50,10 +50,10 @@ export function registerColors() {
 	const debugConsoleInputIconForeground = registerColor('debugConsoleInputIcon.foreground', foreground, 'Foreground color for debug console input marker icon.');
 
 	const debugIconPauseForeground = registerColor('debugIcon.pauseForeground', {
-		dark: '#75BEFF',
-		light: '#007ACC',
-		hcDark: '#75BEFF',
-		hcLight: '#007ACC'
+		dark: '#A6E22E',
+		light: '#3F8F1A',
+		hcDark: '#A6E22E',
+		hcLight: '#0B3D0B'
 	}, localize('debugIcon.pauseForeground', "Debug toolbar icon for pause."));
 
 	const debugIconStopForeground = registerColor('debugIcon.stopForeground', {
@@ -78,38 +78,38 @@ export function registerColors() {
 	}, localize('debugIcon.restartForeground', "Debug toolbar icon for restart."));
 
 	const debugIconStepOverForeground = registerColor('debugIcon.stepOverForeground', {
-		dark: '#75BEFF',
-		light: '#007ACC',
-		hcDark: '#75BEFF',
-		hcLight: '#007ACC'
+		dark: '#A6E22E',
+		light: '#3F8F1A',
+		hcDark: '#A6E22E',
+		hcLight: '#0B3D0B'
 	}, localize('debugIcon.stepOverForeground', "Debug toolbar icon for step over."));
 
 	const debugIconStepIntoForeground = registerColor('debugIcon.stepIntoForeground', {
-		dark: '#75BEFF',
-		light: '#007ACC',
-		hcDark: '#75BEFF',
-		hcLight: '#007ACC'
+		dark: '#A6E22E',
+		light: '#3F8F1A',
+		hcDark: '#A6E22E',
+		hcLight: '#0B3D0B'
 	}, localize('debugIcon.stepIntoForeground', "Debug toolbar icon for step into."));
 
 	const debugIconStepOutForeground = registerColor('debugIcon.stepOutForeground', {
-		dark: '#75BEFF',
-		light: '#007ACC',
-		hcDark: '#75BEFF',
-		hcLight: '#007ACC'
+		dark: '#A6E22E',
+		light: '#3F8F1A',
+		hcDark: '#A6E22E',
+		hcLight: '#0B3D0B'
 	}, localize('debugIcon.stepOutForeground', "Debug toolbar icon for step over."));
 
 	const debugIconContinueForeground = registerColor('debugIcon.continueForeground', {
-		dark: '#75BEFF',
-		light: '#007ACC',
-		hcDark: '#75BEFF',
-		hcLight: '#007ACC'
+		dark: '#A6E22E',
+		light: '#3F8F1A',
+		hcDark: '#A6E22E',
+		hcLight: '#0B3D0B'
 	}, localize('debugIcon.continueForeground', "Debug toolbar icon for continue."));
 
 	const debugIconStepBackForeground = registerColor('debugIcon.stepBackForeground', {
-		dark: '#75BEFF',
-		light: '#007ACC',
-		hcDark: '#75BEFF',
-		hcLight: '#007ACC'
+		dark: '#A6E22E',
+		light: '#3F8F1A',
+		hcDark: '#A6E22E',
+		hcLight: '#0B3D0B'
 	}, localize('debugIcon.stepBackForeground', "Debug toolbar icon for step back."));
 
 	registerThemingParticipant((theme, collector) => {

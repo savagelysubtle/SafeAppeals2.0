@@ -29,9 +29,9 @@
 <rect width="379" height="35" transform="translate(131 10)" fill="var(--vscode-quickInput-background)"/>
 <rect width="103" height="35" transform="translate(131 10)" fill="var(--vscode-editor-background)"/>
 <rect x="143" y="24" width="79" height="7" rx="3.5" fill="var(--vscode-foreground)" fill-opacity="0.25"/>
-<rect x="151" y="69" width="83" height="8" rx="4" fill="#007ACC"/>
-<rect x="151" y="89" width="65" height="8" rx="4" fill="#007ACC"/>
-<rect x="151" y="109" width="83" height="8" rx="4" fill="#007ACC"/>
+<rect x="151" y="69" width="83" height="8" rx="4" fill="#4F9E1F"/>
+<rect x="151" y="89" width="65" height="8" rx="4" fill="#4F9E1F"/>
+<rect x="151" y="109" width="83" height="8" rx="4" fill="#4F9E1F"/>
 <g clip-path="url(#clip0)">
 <rect width="379" height="24" transform="translate(131 147)" fill="var(--vscode-editor-stackFrameHighlightBackground)"/>
 <path d="M151.496 158.152L147.24 153.416L146.312 153H141.256L140.008 154.248V163.736L141.256 164.984H146.312L147.24 164.552L151.496 159.816V158.152ZM146.312 163.736H141.256V154.248H146.312L150.568 158.984L146.312 163.736Z" fill="#FFFF00"/>
@@ -42,9 +42,9 @@
 </g>
 <path fill-rule="evenodd" clip-rule="evenodd" d="M282 178V162L293.6 173.608H286.554L286.402 173.732L282 178Z" fill="var(--vscode-foreground)"/>
 <path fill-rule="evenodd" clip-rule="evenodd" d="M283 164.3V175.5L285.969 172.631L286.129 172.492L291.165 172.5L283 164.3Z" fill="black"/>
-<rect x="151" y="201" width="65" height="8" rx="4" fill="#007ACC"/>
-<rect x="151" y="221" width="65" height="8" rx="4" fill="#007ACC"/>
-<rect x="151" y="273" width="31" height="8" rx="4" fill="#007ACC"/>
+<rect x="151" y="201" width="65" height="8" rx="4" fill="#4F9E1F"/>
+<rect x="151" y="221" width="65" height="8" rx="4" fill="#4F9E1F"/>
+<rect x="151" y="273" width="31" height="8" rx="4" fill="#4F9E1F"/>
 <rect x="240" y="69" width="42" height="8" rx="4" fill="#D7BA7D"/>
 <rect x="222" y="89" width="42" height="8" rx="4" fill="#D7BA7D"/>
 <rect x="240" y="109" width="42" height="8" rx="4" fill="#D7BA7D"/>

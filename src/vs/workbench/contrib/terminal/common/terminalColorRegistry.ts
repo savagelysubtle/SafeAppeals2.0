@@ -63,14 +63,14 @@ export const TERMINAL_FIND_MATCH_BACKGROUND_COLOR = registerColor('terminal.find
 	light: editorFindMatch,
 	// Use regular selection background in high contrast with a thick border
 	hcDark: null,
-	hcLight: '#0F4A85'
+	hcLight: '#0B3D0B'
 }, nls.localize('terminal.findMatchBackground', 'Color of the current search match in the terminal. The color must not be opaque so as not to hide underlying terminal content.'), true);
 export const TERMINAL_HOVER_HIGHLIGHT_BACKGROUND_COLOR = registerColor('terminal.hoverHighlightBackground', transparent(editorHoverHighlight, 0.5), nls.localize('terminal.findMatchHighlightBorder', 'Border color of the other search matches in the terminal.'));
 export const TERMINAL_FIND_MATCH_BORDER_COLOR = registerColor('terminal.findMatchBorder', {
 	dark: null,
 	light: null,
 	hcDark: '#f38518',
-	hcLight: '#0F4A85'
+	hcLight: '#0B3D0B'
 }, nls.localize('terminal.findMatchBorder', 'Border color of the current search match in the terminal.'));
 export const TERMINAL_FIND_MATCH_HIGHLIGHT_BACKGROUND_COLOR = registerColor('terminal.findMatchHighlightBackground', {
 	dark: editorFindMatchHighlight,
@@ -82,13 +82,13 @@ export const TERMINAL_FIND_MATCH_HIGHLIGHT_BORDER_COLOR = registerColor('termina
 	dark: null,
 	light: null,
 	hcDark: '#f38518',
-	hcLight: '#0F4A85'
+	hcLight: '#0B3D0B'
 }, nls.localize('terminal.findMatchHighlightBorder', 'Border color of the other search matches in the terminal.'));
 export const TERMINAL_OVERVIEW_RULER_FIND_MATCH_FOREGROUND_COLOR = registerColor('terminalOverviewRuler.findMatchForeground', {
 	dark: overviewRulerFindMatchForeground,
 	light: overviewRulerFindMatchForeground,
 	hcDark: '#f38518',
-	hcLight: '#0F4A85'
+	hcLight: '#0B3D0B'
 }, nls.localize('terminalOverviewRuler.findMatchHighlightForeground', 'Overview ruler marker color for find matches in the terminal.'));
 export const TERMINAL_DRAG_AND_DROP_BACKGROUND = registerColor('terminal.dropBackground', EDITOR_DRAG_AND_DROP_BACKGROUND, nls.localize('terminal.dragAndDropBackground', "Background color when dragging on top of terminals. The color should have transparency so that the terminal contents can still shine through."), true);
 export const TERMINAL_TAB_ACTIVE_BORDER = registerColor('terminal.tab.activeBorder', TAB_ACTIVE_BORDER, nls.localize('terminal.tab.activeBorder', 'Border on the side of the terminal tab in the panel. This defaults to tab.activeBorder.'));

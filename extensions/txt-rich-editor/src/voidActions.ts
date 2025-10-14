@@ -30,18 +30,20 @@ export function registerVoidActions(
 				return;
 			}
 
-			// Get plain text (strip HTML formatting)
-			// const selection = editor.selection;
-
 			if (!isWebEnvironment() && monacoEditor) {
 				// Desktop: Monaco editor
-				// Get plain text - either selection or entire file
-				// const plainText = selection.isEmpty
-				// 	? monacoEditor.getPlainText(document)
-				// 	: document.getText(selection);
+				const selection = editor.selection;
 
-				// For now, Void integration needs to be completed
-				// This will extract and use plain text when full Void service integration is available
+				// Get plain text - either selection or entire file
+				const plainText = selection.isEmpty
+					? monacoEditor.getPlainText(document)
+					: document.getText(selection);
+
+				// Store the plain text in workspace state for Void to access
+				context.workspaceState.update(
+					`voidChatText:${document.uri.toString()}`,
+					plainText
+				);
 			} else {
 				// Web: Will be handled by webview bridge
 				vscode.commands.executeCommand('txtRichEditor.webview.addToChat');
@@ -51,7 +53,7 @@ export function registerVoidActions(
 			// Call Void's Ctrl+L command with our plain text
 			// This assumes Void's API is accessible
 			try {
-				await vscode.commands.executeCommand('void.cmdL');
+				await vscode.commands.executeCommand('void.ctrlLAction');
 			} catch (error) {
 				vscode.window.showWarningMessage(
 					'Void chat integration not available. Make sure Void is installed.'
@@ -100,7 +102,7 @@ export function registerVoidActions(
 
 				// Call Void's Ctrl+K command
 				try {
-					await vscode.commands.executeCommand('void.ctrlK');
+					await vscode.commands.executeCommand('void.ctrlKAction');
 				} catch (error) {
 					vscode.window.showWarningMessage(
 						'Void inline edit not available. Make sure Void is installed.'

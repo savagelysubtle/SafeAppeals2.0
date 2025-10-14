@@ -4,10 +4,11 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as vscode from 'vscode';
-import { docxToHtml, htmlToDocxBuffer, readDocxFile, writeDocxFile, isWebEnvironment } from './conversion';
+import { DocumentConverter, isWebEnvironment, docxToHtml, htmlToDocxBuffer, readDocxFile, writeDocxFile } from './conversion';
 import { MonacoRichTextEditor } from './monacoRichTextEditor';
 import { VoidWebviewBridge } from './voidWebviewBridge';
 import { Logger } from './logger';
+import { EditorProviderRegistry } from './editorProviderRegistry';
 
 export class RichTextEditorProvider implements vscode.CustomTextEditorProvider {
     private currentDocument: vscode.TextDocument | undefined;
@@ -17,7 +18,11 @@ export class RichTextEditorProvider implements vscode.CustomTextEditorProvider {
 
     constructor(
         private readonly context: vscode.ExtensionContext,
-        private readonly logger: Logger
+        private readonly logger: Logger,
+        private readonly _commandManager?: any,
+        private readonly _documentConverter?: DocumentConverter,
+        private readonly _aiDispatcher?: any,
+        private readonly _editorRegistry?: EditorProviderRegistry
     ) { }
 
     public setMonacoEditor(_editor: MonacoRichTextEditor): void {
@@ -39,6 +44,17 @@ export class RichTextEditorProvider implements vscode.CustomTextEditorProvider {
 
         this.currentDocument = document;
         this.currentWebviewPanel = webviewPanel;
+
+        // Register with editor registry for command routing
+        if (this._editorRegistry) {
+            this._editorRegistry.registerEditor(
+                document.uri.toString(),
+                this,
+                webviewPanel,
+                document,
+                'text'
+            );
+        }
 
         // If webview bridge is available (web environment), register the panel
         if (this.webviewBridge) {
@@ -72,6 +88,22 @@ export class RichTextEditorProvider implements vscode.CustomTextEditorProvider {
                         return;
                     case 'content-updated':
                         // Content was updated in webview, sync if needed
+                        return;
+                    case 'execute-command':
+                        // Handle command execution from webview
+                        await this.handleCommandExecution(message.data);
+                        return;
+                    case 'command-response':
+                        // Handle command response from webview
+                        this.logger.info(`Command response: ${message.data.success ? 'success' : 'failed'}`);
+                        return;
+                    case 'request-xml-view':
+                        // Handle XML view request
+                        await this.handleXmlViewRequest(webviewPanel);
+                        return;
+                    case 'request-normal-view':
+                        // Handle normal view request
+                        await this.handleNormalViewRequest(webviewPanel);
                         return;
                 }
             },
@@ -249,6 +281,100 @@ export class RichTextEditorProvider implements vscode.CustomTextEditorProvider {
         }
 
         await this.handleImportDocx(this.currentWebviewPanel);
+    }
+
+    private async handleCommandExecution(commandData: { command: string; args?: any[] }): Promise<void> {
+        try {
+            this.logger.info(`Executing command: ${commandData.command}`);
+
+            // Map VS Code commands to webview actions
+            const commandMap: { [key: string]: string } = {
+                'txtRich.format.bold': 'bold',
+                'txtRich.format.italic': 'italic',
+                'txtRich.format.underline': 'underline',
+                'txtRich.format.strikethrough': 'strikethrough',
+                'txtRich.paragraph.alignLeft': 'alignLeft',
+                'txtRich.paragraph.alignCenter': 'alignCenter',
+                'txtRich.paragraph.alignRight': 'alignRight',
+                'txtRich.paragraph.justify': 'justify',
+                'txtRich.list.bullet': 'bulletList',
+                'txtRich.list.numbered': 'numberList',
+                'txtRich.style.heading1': 'heading1',
+                'txtRich.style.heading2': 'heading2',
+                'txtRich.style.heading3': 'heading3',
+                'txtRich.style.normal': 'normalText',
+                'txtRich.undo': 'undo',
+                'txtRich.redo': 'redo',
+                'txtRich.view.zoomIn': 'zoomIn',
+                'txtRich.view.zoomOut': 'zoomOut',
+                'txtRich.view.zoomReset': 'zoomReset',
+                'txtRich.view.xmlView': 'xmlView',
+                'txtRich.view.normalView': 'normalView',
+                'txtRich.view.showRulers': 'showRulers',
+                'txtRich.view.showMargins': 'showMargins',
+                'txtRich.void.addToChat': 'addToChat',
+                'txtRich.void.inlineEdit': 'inlineEdit'
+            };
+
+            const webviewCommand = commandMap[commandData.command];
+            if (webviewCommand && this.currentWebviewPanel) {
+                // Send command to webview for execution
+                this.currentWebviewPanel.webview.postMessage({
+                    type: 'execute-webview-command',
+                    data: {
+                        command: webviewCommand,
+                        args: commandData.args || []
+                    }
+                });
+            } else {
+                this.logger.warn(`Unknown command: ${commandData.command}`);
+            }
+        } catch (error) {
+            this.logger.error(`Failed to execute command ${commandData.command}:`, error);
+        }
+    }
+
+    private async handleXmlViewRequest(webviewPanel: vscode.WebviewPanel): Promise<void> {
+        try {
+            if (!this.currentDocument) {
+                this.logger.warn('No current document for XML view');
+                return;
+            }
+
+            const documentType = this.getDocumentType();
+            if (documentType === 'docx') {
+                // For DOCX files, we need to get the raw XML
+                // This would require storing the original XML during conversion
+                this.logger.info('XML view requested for DOCX file');
+                webviewPanel.webview.postMessage({
+                    type: 'set-xml-content',
+                    content: 'XML view for DOCX files requires storing original XML during conversion. This feature is not yet implemented.'
+                });
+            } else {
+                // For text files, show the raw content
+                const content = this.currentDocument.getText();
+                webviewPanel.webview.postMessage({
+                    type: 'set-xml-content',
+                    content: content
+                });
+            }
+        } catch (error) {
+            this.logger.error('Failed to handle XML view request:', error);
+        }
+    }
+
+    private async handleNormalViewRequest(webviewPanel: vscode.WebviewPanel): Promise<void> {
+        try {
+            if (!this.currentDocument) {
+                this.logger.warn('No current document for normal view');
+                return;
+            }
+
+            // Send the normal content back to the webview
+            await this.sendInitialContent(this.currentDocument, webviewPanel);
+        } catch (error) {
+            this.logger.error('Failed to handle normal view request:', error);
+        }
     }
 
     private getDocumentType(): string {
@@ -529,6 +655,65 @@ export class RichTextEditorProvider implements vscode.CustomTextEditorProvider {
 
         .editor::selection {
             background: rgba(0, 120, 215, 0.25);
+        }
+
+        /* Selection Helper Widget */
+        .selection-helper {
+            position: absolute;
+            z-index: 1000;
+            pointer-events: auto;
+            user-select: none;
+        }
+
+        .selection-helper-content {
+            display: flex;
+            align-items: center;
+            background: var(--vscode-editor-background);
+            border: 1px solid var(--vscode-widget-border);
+            border-radius: 4px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+            padding: 4px;
+            font-size: 12px;
+            color: var(--vscode-editor-foreground);
+        }
+
+        .selection-helper-btn {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            padding: 6px 8px;
+            background: transparent;
+            border: none;
+            color: var(--vscode-editor-foreground);
+            cursor: pointer;
+            border-radius: 3px;
+            font-size: 12px;
+            transition: background-color 0.2s;
+        }
+
+        .selection-helper-btn:hover {
+            background: var(--vscode-list-hoverBackground);
+        }
+
+        .selection-helper-btn:active {
+            background: var(--vscode-list-activeSelectionBackground);
+        }
+
+        .selection-helper-divider {
+            width: 1px;
+            height: 16px;
+            background: var(--vscode-widget-border);
+            margin: 0 2px;
+        }
+
+        .keybinding {
+            padding: 2px 4px;
+            background: var(--vscode-keybindingLabel-background);
+            color: var(--vscode-keybindingLabel-foreground);
+            border: 1px solid var(--vscode-keybindingLabel-border);
+            border-radius: 3px;
+            font-size: 10px;
+            font-family: var(--vscode-editor-font-family);
         }
 
         .editor b {
@@ -916,6 +1101,25 @@ export class RichTextEditorProvider implements vscode.CustomTextEditorProvider {
 
         <div class="editor-wrapper" id="editorWrapper">
             <div class="editor" id="editor" contenteditable="true"></div>
+        </div>
+
+        <!-- Selection Helper Widget -->
+        <div class="selection-helper" id="selectionHelper" style="display: none;">
+            <div class="selection-helper-content">
+                <button class="selection-helper-btn" id="addToChatBtn" title="Add to Chat (Ctrl+L)">
+                    <span>Add to Chat</span>
+                    <span class="keybinding">Ctrl+L</span>
+                </button>
+                <div class="selection-helper-divider"></div>
+                <button class="selection-helper-btn" id="editInlineBtn" title="Edit Inline (Ctrl+K)">
+                    <span>Edit Inline</span>
+                    <span class="keybinding">Ctrl+K</span>
+                </button>
+                <div class="selection-helper-divider"></div>
+                <button class="selection-helper-btn" id="moreOptionsBtn" title="More Options">
+                    <span>⋯</span>
+                </button>
+            </div>
         </div>
     </div>
 
@@ -1666,6 +1870,241 @@ export class RichTextEditorProvider implements vscode.CustomTextEditorProvider {
         document.getElementById('clearFormatting')?.addEventListener('click', () => {
             document.execCommand('removeFormat');
             document.execCommand('unlink');
+        });
+
+        // Selection Helper Widget
+        const selectionHelper = document.getElementById('selectionHelper');
+        const addToChatBtn = document.getElementById('addToChatBtn');
+        const editInlineBtn = document.getElementById('editInlineBtn');
+        const moreOptionsBtn = document.getElementById('moreOptionsBtn');
+        let selectionHelperTimeout = null;
+
+        // Show/hide selection helper based on text selection
+        function updateSelectionHelper() {
+            const selection = window.getSelection();
+            const hasSelection = selection && !selection.isCollapsed && selection.toString().trim().length > 0;
+
+            if (hasSelection) {
+                // Clear any existing timeout
+                if (selectionHelperTimeout) {
+                    clearTimeout(selectionHelperTimeout);
+                }
+
+                // Position the helper near the selection
+                positionSelectionHelper(selection);
+                selectionHelper.style.display = 'flex';
+            } else {
+                // Hide with a small delay to allow for clicking the helper buttons
+                selectionHelperTimeout = setTimeout(() => {
+                    selectionHelper.style.display = 'none';
+                }, 100);
+            }
+        }
+
+        function positionSelectionHelper(selection) {
+            if (!selection || selection.rangeCount === 0) return;
+
+            const range = selection.getRangeAt(0);
+            const rect = range.getBoundingClientRect();
+            const editorRect = editor.getBoundingClientRect();
+
+            // Position the helper to the right of the selection
+            const left = rect.right - editorRect.left + 10;
+            const top = rect.top - editorRect.top;
+
+            // Ensure the helper stays within the editor bounds
+            const maxLeft = editorRect.width - selectionHelper.offsetWidth - 10;
+            const adjustedLeft = Math.min(left, maxLeft);
+
+            selectionHelper.style.left = Math.max(10, adjustedLeft) + 'px';
+            selectionHelper.style.top = Math.max(10, top) + 'px';
+        }
+
+        // Event listeners for selection changes
+        document.addEventListener('selectionchange', updateSelectionHelper);
+        editor.addEventListener('mouseup', updateSelectionHelper);
+        editor.addEventListener('keyup', updateSelectionHelper);
+
+        // Button event listeners
+        addToChatBtn?.addEventListener('click', () => {
+            vscode.postMessage({ type: 'request-plain-text-for-chat' });
+            selectionHelper.style.display = 'none';
+        });
+
+        editInlineBtn?.addEventListener('click', () => {
+            vscode.postMessage({ type: 'request-html-for-inline-edit' });
+            selectionHelper.style.display = 'none';
+        });
+
+        moreOptionsBtn?.addEventListener('click', () => {
+            // For now, just hide the helper
+            // Could add more options like "Copy", "Cut", etc.
+            selectionHelper.style.display = 'none';
+        });
+
+        // Hide helper when clicking outside
+        document.addEventListener('click', (e) => {
+            if (!selectionHelper.contains(e.target) && !editor.contains(e.target)) {
+                selectionHelper.style.display = 'none';
+            }
+        });
+
+        // Keyboard shortcuts
+        document.addEventListener('keydown', (e) => {
+            if (e.ctrlKey && e.key === 'l') {
+                e.preventDefault();
+                vscode.postMessage({ type: 'request-plain-text-for-chat' });
+            } else if (e.ctrlKey && e.key === 'k') {
+                e.preventDefault();
+                vscode.postMessage({ type: 'request-html-for-inline-edit' });
+            }
+        });
+
+        // Command execution system
+        const commandExecutors = {
+            bold: () => {
+                document.execCommand('bold');
+                updateButtonStates();
+            },
+            italic: () => {
+                document.execCommand('italic');
+                updateButtonStates();
+            },
+            underline: () => {
+                document.execCommand('underline');
+                updateButtonStates();
+            },
+            strikethrough: () => {
+                document.execCommand('strikeThrough');
+                updateButtonStates();
+            },
+            alignLeft: () => {
+                document.execCommand('justifyLeft');
+                updateButtonStates();
+            },
+            alignCenter: () => {
+                document.execCommand('justifyCenter');
+                updateButtonStates();
+            },
+            alignRight: () => {
+                document.execCommand('justifyRight');
+                updateButtonStates();
+            },
+            justify: () => {
+                document.execCommand('justifyFull');
+                updateButtonStates();
+            },
+            bulletList: () => {
+                document.execCommand('insertUnorderedList');
+                updateButtonStates();
+            },
+            numberList: () => {
+                document.execCommand('insertOrderedList');
+                updateButtonStates();
+            },
+            heading1: () => {
+                document.execCommand('formatBlock', false, 'h1');
+                updateButtonStates();
+            },
+            heading2: () => {
+                document.execCommand('formatBlock', false, 'h2');
+                updateButtonStates();
+            },
+            heading3: () => {
+                document.execCommand('formatBlock', false, 'h3');
+                updateButtonStates();
+            },
+            normalText: () => {
+                document.execCommand('formatBlock', false, 'div');
+                updateButtonStates();
+            },
+            undo: () => {
+                document.execCommand('undo');
+                updateButtonStates();
+            },
+            redo: () => {
+                document.execCommand('redo');
+                updateButtonStates();
+            },
+            zoomIn: () => {
+                currentZoom = Math.min(200, currentZoom + 10);
+                editor.style.fontSize = (14 * currentZoom / 100) + 'px';
+                document.getElementById('zoomLevel').value = currentZoom;
+            },
+            zoomOut: () => {
+                currentZoom = Math.max(50, currentZoom - 10);
+                editor.style.fontSize = (14 * currentZoom / 100) + 'px';
+                document.getElementById('zoomLevel').value = currentZoom;
+            },
+            zoomReset: () => {
+                currentZoom = 100;
+                editor.style.fontSize = '14px';
+                document.getElementById('zoomLevel').value = currentZoom;
+            },
+            addToChat: () => {
+                vscode.postMessage({ type: 'request-plain-text-for-chat' });
+            },
+            inlineEdit: () => {
+                vscode.postMessage({ type: 'request-html-for-inline-edit' });
+            },
+            xmlView: () => {
+                vscode.postMessage({ type: 'request-xml-view' });
+            },
+            normalView: () => {
+                vscode.postMessage({ type: 'request-normal-view' });
+            },
+            showRulers: () => {
+                const canvas = document.getElementById('rulerCanvas');
+                const marginCanvas = document.getElementById('marginCanvas');
+                if (canvas) canvas.style.display = canvas.style.display === 'none' ? 'block' : 'none';
+                if (marginCanvas) marginCanvas.style.display = marginCanvas.style.display === 'none' ? 'block' : 'none';
+            },
+            showMargins: () => {
+                const leftIndicator = document.getElementById('leftMarginIndicator');
+                const rightIndicator = document.getElementById('rightMarginIndicator');
+                const leftHandle = document.getElementById('leftMarginHandle');
+                const rightHandle = document.getElementById('rightMarginHandle');
+
+                const toggle = (element) => {
+                    if (element) element.style.display = element.style.display === 'none' ? 'block' : 'none';
+                };
+
+                toggle(leftIndicator);
+                toggle(rightIndicator);
+                toggle(leftHandle);
+                toggle(rightHandle);
+            }
+        };
+
+        // Handle command execution messages from extension
+        window.addEventListener('message', event => {
+            const message = event.data;
+            if (message.type === 'execute-webview-command') {
+                const { command, args } = message.data;
+                if (commandExecutors[command]) {
+                    try {
+                        commandExecutors[command](...args);
+                        // Send success response
+                        vscode.postMessage({
+                            type: 'command-response',
+                            data: { success: true, command }
+                        });
+                    } catch (error) {
+                        console.error('Command execution failed:', error);
+                        // Send error response
+                        vscode.postMessage({
+                            type: 'command-response',
+                            data: { success: false, command, error: error.message }
+                        });
+                    }
+                } else {
+                    console.warn('Unknown command:', command);
+                    vscode.postMessage({
+                        type: 'command-response',
+                        data: { success: false, command, error: 'Unknown command' }
+                    });
+                }
+            }
         });
     </script>
 </body>

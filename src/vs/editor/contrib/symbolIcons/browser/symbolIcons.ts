@@ -37,10 +37,10 @@ export const SYMBOL_ICON_ENUMERATOR_FOREGROUND = registerColor('symbolIcon.enume
 }, localize('symbolIcon.enumeratorForeground', 'The foreground color for enumerator symbols. These symbols appear in the outline, breadcrumb, and suggest widget.'));
 
 export const SYMBOL_ICON_ENUMERATOR_MEMBER_FOREGROUND = registerColor('symbolIcon.enumeratorMemberForeground', {
-	dark: '#75BEFF',
-	light: '#007ACC',
-	hcDark: '#75BEFF',
-	hcLight: '#007ACC'
+	dark: '#A6E22E',
+	light: '#3F8F1A',
+	hcDark: '#A6E22E',
+	hcLight: '#0B3D0B'
 }, localize('symbolIcon.enumeratorMemberForeground', 'The foreground color for enumerator member symbols. These symbols appear in the outline, breadcrumb, and suggest widget.'));
 
 export const SYMBOL_ICON_EVENT_FOREGROUND = registerColor('symbolIcon.eventForeground', {
@@ -51,10 +51,10 @@ export const SYMBOL_ICON_EVENT_FOREGROUND = registerColor('symbolIcon.eventForeg
 }, localize('symbolIcon.eventForeground', 'The foreground color for event symbols. These symbols appear in the outline, breadcrumb, and suggest widget.'));
 
 export const SYMBOL_ICON_FIELD_FOREGROUND = registerColor('symbolIcon.fieldForeground', {
-	dark: '#75BEFF',
-	light: '#007ACC',
-	hcDark: '#75BEFF',
-	hcLight: '#007ACC'
+	dark: '#A6E22E',
+	light: '#3F8F1A',
+	hcDark: '#A6E22E',
+	hcLight: '#0B3D0B'
 }, localize('symbolIcon.fieldForeground', 'The foreground color for field symbols. These symbols appear in the outline, breadcrumb, and suggest widget.'));
 
 export const SYMBOL_ICON_FILE_FOREGROUND = registerColor('symbolIcon.fileForeground', foreground, localize('symbolIcon.fileForeground', 'The foreground color for file symbols. These symbols appear in the outline, breadcrumb, and suggest widget.'));
@@ -69,10 +69,10 @@ export const SYMBOL_ICON_FUNCTION_FOREGROUND = registerColor('symbolIcon.functio
 }, localize('symbolIcon.functionForeground', 'The foreground color for function symbols. These symbols appear in the outline, breadcrumb, and suggest widget.'));
 
 export const SYMBOL_ICON_INTERFACE_FOREGROUND = registerColor('symbolIcon.interfaceForeground', {
-	dark: '#75BEFF',
-	light: '#007ACC',
-	hcDark: '#75BEFF',
-	hcLight: '#007ACC'
+	dark: '#A6E22E',
+	light: '#3F8F1A',
+	hcDark: '#A6E22E',
+	hcLight: '#0B3D0B'
 }, localize('symbolIcon.interfaceForeground', 'The foreground color for interface symbols. These symbols appear in the outline, breadcrumb, and suggest widget.'));
 
 export const SYMBOL_ICON_KEY_FOREGROUND = registerColor('symbolIcon.keyForeground', foreground, localize('symbolIcon.keyForeground', 'The foreground color for key symbols. These symbols appear in the outline, breadcrumb, and suggest widget.'));
@@ -117,8 +117,8 @@ export const SYMBOL_ICON_TYPEPARAMETER_FOREGROUND = registerColor('symbolIcon.ty
 export const SYMBOL_ICON_UNIT_FOREGROUND = registerColor('symbolIcon.unitForeground', foreground, localize('symbolIcon.unitForeground', 'The foreground color for unit symbols. These symbols appear in the outline, breadcrumb, and suggest widget.'));
 
 export const SYMBOL_ICON_VARIABLE_FOREGROUND = registerColor('symbolIcon.variableForeground', {
-	dark: '#75BEFF',
-	light: '#007ACC',
-	hcDark: '#75BEFF',
-	hcLight: '#007ACC',
+	dark: '#A6E22E',
+	light: '#3F8F1A',
+	hcDark: '#A6E22E',
+	hcLight: '#0B3D0B',
 }, localize('symbolIcon.variableForeground', 'The foreground color for variable symbols. These symbols appear in the outline, breadcrumb, and suggest widget.'));

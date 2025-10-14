@@ -27,11 +27,11 @@ export const quickInputTitleBackground = registerColor('quickInputTitle.backgrou
 	nls.localize('pickerTitleBackground', "Quick picker title background color. The quick picker widget is the container for pickers like the command palette."));
 
 export const pickerGroupForeground = registerColor('pickerGroup.foreground',
-	{ dark: '#3794FF', light: '#0066BF', hcDark: Color.white, hcLight: '#0F4A85' },
+	{ dark: '#A6E22E', light: '#4F9E1F', hcDark: Color.white, hcLight: '#0B3D0B' },
 	nls.localize('pickerGroupForeground', "Quick picker color for grouping labels."));
 
 export const pickerGroupBorder = registerColor('pickerGroup.border',
-	{ dark: '#3F3F46', light: '#CCCEDB', hcDark: Color.white, hcLight: '#0F4A85' },
+	{ dark: '#1F3A12', light: '#B7E67A', hcDark: Color.white, hcLight: '#0B3D0B' },
 	nls.localize('pickerGroupBorder', "Quick picker color for grouping borders."));
 
 export const _deprecatedQuickInputListFocusBackground = registerColor('quickInput.list.focusBackground',

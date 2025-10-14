@@ -30,7 +30,7 @@ export const editorStickyScrollBackground = registerColor('editorStickyScroll.ba
 	nls.localize('editorStickyScrollBackground', "Background color of sticky scroll in the editor"));
 
 export const editorStickyScrollHoverBackground = registerColor('editorStickyScrollHover.background',
-	{ dark: '#2A2D2E', light: '#F0F0F0', hcDark: null, hcLight: Color.fromHex('#0F4A85').transparent(0.1) },
+	{ dark: '#2A2D2E', light: '#F0F0F0', hcDark: null, hcLight: Color.fromHex('#0B3D0B').transparent(0.1) },
 	nls.localize('editorStickyScrollHoverBackground', "Background color of sticky scroll on hover in the editor"));
 
 export const editorStickyScrollBorder = registerColor('editorStickyScroll.border',
@@ -90,11 +90,11 @@ export const editorInfoBackground = registerColor('editorInfo.background',
 	nls.localize('editorInfo.background', 'Background color of info text in the editor. The color must not be opaque so as not to hide underlying decorations.'), true);
 
 export const editorInfoForeground = registerColor('editorInfo.foreground',
-	{ dark: '#3794FF', light: '#1a85ff', hcDark: '#3794FF', hcLight: '#1a85ff' },
+	{ dark: '#8CD94A', light: '#3F8F1A', hcDark: '#A6E22E', hcLight: '#0B3D0B' },
 	nls.localize('editorInfo.foreground', 'Foreground color of info squigglies in the editor.'));
 
 export const editorInfoBorder = registerColor('editorInfo.border',
-	{ dark: null, light: null, hcDark: Color.fromHex('#3794FF').transparent(0.8), hcLight: '#292929' },
+	{ dark: null, light: null, hcDark: Color.fromHex('#A6E22E').transparent(0.8), hcLight: '#292929' },
 	nls.localize('infoBorder', 'If set, color of double underlines for infos in the editor.'));
 
 
@@ -115,7 +115,7 @@ export const editorActiveLinkForeground = registerColor('editorLink.activeForegr
 // ----- editor selection
 
 export const editorSelectionBackground = registerColor('editor.selectionBackground',
-	{ light: '#ADD6FF', dark: '#264F78', hcDark: '#f3f518', hcLight: '#0F4A85' },
+	{ light: '#C4FF6A', dark: '#1F3A12', hcDark: '#f3f518', hcLight: '#0B3D0B' },
 	nls.localize('editorSelectionBackground', "Color of the editor selection."));
 
 export const editorSelectionForeground = registerColor('editor.selectionForeground',
@@ -177,7 +177,7 @@ export const editorFindRangeHighlightBorder = registerColor('editor.findRangeHig
 // ----- editor hover
 
 export const editorHoverHighlight = registerColor('editor.hoverHighlightBackground',
-	{ light: '#ADD6FF26', dark: '#264f7840', hcDark: '#ADD6FF26', hcLight: null },
+	{ light: '#C4FF6A26', dark: '#1F3A1240', hcDark: '#C4FF6A26', hcLight: null },
 	nls.localize('hoverHighlight', 'Highlight below the word for which a hover is shown. The color must not be opaque so as not to hide underlying decorations.'), true);
 
 export const editorHoverBackground = registerColor('editorHoverWidget.background',
@@ -227,11 +227,11 @@ export const editorInlayHintParameterBackground = registerColor('editorInlayHint
 // ----- editor lightbulb
 
 export const editorLightBulbForeground = registerColor('editorLightBulb.foreground',
-	{ dark: '#FFCC00', light: '#DDB100', hcDark: '#FFCC00', hcLight: '#007ACC' },
+	{ dark: '#FFCC00', light: '#DDB100', hcDark: '#FFCC00', hcLight: '#0B3D0B' },
 	nls.localize('editorLightBulbForeground', "The color used for the lightbulb actions icon."));
 
 export const editorLightBulbAutoFixForeground = registerColor('editorLightBulbAutoFix.foreground',
-	{ dark: '#75BEFF', light: '#007ACC', hcDark: '#75BEFF', hcLight: '#007ACC' },
+	{ dark: '#A6E22E', light: '#3F8F1A', hcDark: '#A6E22E', hcLight: '#0B3D0B' },
 	nls.localize('editorLightBulbAutoFixForeground', "The color used for the lightbulb auto fix actions icon."));
 
 export const editorLightBulbAiForeground = registerColor('editorLightBulbAi.foreground',
@@ -413,7 +413,7 @@ export const mergeCommonContentBackground = registerColor('merge.commonContentBa
 	nls.localize('mergeCommonContentBackground', 'Common ancestor content background in inline merge-conflicts. The color must not be opaque so as not to hide underlying decorations.'), true);
 
 export const mergeBorder = registerColor('merge.border',
-	{ dark: null, light: null, hcDark: '#C3DF6F', hcLight: '#007ACC' },
+	{ dark: null, light: null, hcDark: '#C3DF6F', hcLight: '#0B3D0B' },
 	nls.localize('mergeBorder', 'Border color on headers and the splitter in inline merge-conflicts.'));
 
 

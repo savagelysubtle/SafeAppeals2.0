@@ -15,15 +15,15 @@ import { scrollbarSliderBackground, scrollbarSliderHoverBackground, scrollbarSli
 
 
 export const minimapFindMatch = registerColor('minimap.findMatchHighlight',
-	{ light: '#d18616', dark: '#d18616', hcDark: '#AB5A00', hcLight: '#0F4A85' },
+	{ light: '#d18616', dark: '#d18616', hcDark: '#AB5A00', hcLight: '#0B3D0B' },
 	nls.localize('minimapFindMatchHighlight', 'Minimap marker color for find matches.'), true);
 
 export const minimapSelectionOccurrenceHighlight = registerColor('minimap.selectionOccurrenceHighlight',
-	{ light: '#c9c9c9', dark: '#676767', hcDark: '#ffffff', hcLight: '#0F4A85' },
+	{ light: '#c9c9c9', dark: '#676767', hcDark: '#ffffff', hcLight: '#0B3D0B' },
 	nls.localize('minimapSelectionOccurrenceHighlight', 'Minimap marker color for repeating editor selections.'), true);
 
 export const minimapSelection = registerColor('minimap.selectionHighlight',
-	{ light: '#ADD6FF', dark: '#264F78', hcDark: '#ffffff', hcLight: '#0F4A85' },
+	{ light: '#C4FF6A', dark: '#1F3A12', hcDark: '#ffffff', hcLight: '#0B3D0B' },
 	nls.localize('minimapSelectionHighlight', 'Minimap marker color for the editor selection.'), true);
 
 export const minimapInfo = registerColor('minimap.infoHighlight',

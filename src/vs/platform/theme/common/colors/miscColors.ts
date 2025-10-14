@@ -23,7 +23,7 @@ export const sashHoverBorder = registerColor('sash.hoverBorder',
 // ----- badge
 
 export const badgeBackground = registerColor('badge.background',
-	{ dark: '#4D4D4D', light: '#C4C4C4', hcDark: Color.black, hcLight: '#0F4A85' },
+	{ dark: '#4D4D4D', light: '#C4C4C4', hcDark: Color.black, hcLight: '#0B3D0B' },
 	nls.localize('badgeBackground', "Badge background color. Badges are small information labels, e.g. for search results count."));
 
 export const badgeForeground = registerColor('badge.foreground',
@@ -69,13 +69,13 @@ export const scrollbarSliderActiveBackground = registerColor('scrollbarSlider.ac
 // ----- progress bar
 
 export const progressBarBackground = registerColor('progressBar.background',
-	{ dark: Color.fromHex('#0E70C0'), light: Color.fromHex('#0E70C0'), hcDark: contrastBorder, hcLight: contrastBorder },
+	{ dark: Color.fromHex('#4F9E1F'), light: Color.fromHex('#4F9E1F'), hcDark: contrastBorder, hcLight: contrastBorder },
 	nls.localize('progressBarBackground', "Background color of the progress bar that can show for long running operations."));
 
 // ----- chart
 
 export const chartLine = registerColor('chart.line',
-	{ dark: '#236B8E', light: '#236B8E', hcDark: '#236B8E', hcLight: '#236B8E' },
+	{ dark: '#3F8F1A', light: '#3F8F1A', hcDark: '#3F8F1A', hcLight: '#3F8F1A' },
 	nls.localize('chartLine', "Line color for the chart."));
 
 export const chartAxis = registerColor('chart.axis',
