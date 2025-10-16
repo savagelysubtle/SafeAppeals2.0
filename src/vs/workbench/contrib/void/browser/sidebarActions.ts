@@ -22,7 +22,8 @@ import { VOID_CTRL_L_ACTION_ID } from './actionIDs.js';
 import { localize2 } from '../../../../nls.js';
 import { IChatThreadService } from './chatThreadService.js';
 import { IViewsService } from '../../../services/views/common/viewsService.js';
-import { caseOrganizerInit_systemMessage, caseOrganizerInit_defaultPrompt } from '../common/prompt/prompts.js';
+import { caseOrganizerInit_defaultPrompt } from '../common/prompt/prompts.js';
+import { IVoidSettingsService } from '../common/voidSettingsService.js';
 
 // ---------- Register commands and keybindings ----------
 
@@ -268,8 +269,12 @@ registerAction2(class extends Action2 {
 		const chatThreadsService = accessor.get(IChatThreadService)
 		const commandService = accessor.get(ICommandService)
 		const metricsService = accessor.get(IMetricsService)
+		const voidSettingsService = accessor.get(IVoidSettingsService)
 
 		metricsService.capture('Case Organizer', { action: 'Initialize' })
+
+		// Set chat mode to 'agent' for full tool access
+		voidSettingsService.setGlobalSetting('chatMode', 'agent')
 
 		// Open sidebar if not already open
 		const wasAlreadyOpen = viewsService.isViewContainerVisible(VOID_VIEW_CONTAINER_ID)
@@ -293,15 +298,8 @@ registerAction2(class extends Action2 {
 			const event = new Event('input', { bubbles: true })
 			mountedUI.textAreaRef.current.dispatchEvent(event)
 		}
-
-		// Set chat mode to 'agent' for full tool access
-		chatThreadsService.setCurrentThreadState({ 
-			chatMode: 'agent',
-		})
 	}
 })
-
-
 
 
 // export class TabSwitchListener extends Disposable {
