@@ -8,7 +8,7 @@ import { ProviderName, SettingName, displayInfoOfSettingName, providerNames, Voi
 import ErrorBoundary from '../sidebar-tsx/ErrorBoundary.js'
 import { VoidButtonBgDarken, VoidCustomDropdownBox, VoidInputBox2, VoidSimpleInputBox, VoidSwitch } from '../util/inputs.js'
 import { useAccessor, useIsDark, useIsOptedOut, useRefreshModelListener, useRefreshModelState, useSettingsState } from '../util/services.js'
-import { X, RefreshCw, Loader2, Check, Asterisk, Plus } from 'lucide-react'
+import { X, RefreshCw, Loader2, Check, Asterisk, Plus, Search } from 'lucide-react'
 import { URI } from '../../../../../../../base/common/uri.js'
 import { ModelDropdown } from './ModelDropdown.js'
 import { ChatMarkdownRender } from '../markdown/ChatMarkdownRender.js'
@@ -371,7 +371,7 @@ const SimpleModelSettingsDialog = ({
 
 
 
-export const ModelDump = ({ filteredProviders }: { filteredProviders?: ProviderName[] }) => {
+export const ModelDump = ({ filteredProviders, searchQuery = '' }: { filteredProviders?: ProviderName[], searchQuery?: string }) => {
 	const accessor = useAccessor()
 	const settingsStateService = accessor.get('IVoidSettingsService')
 	const settingsState = useSettingsState()
@@ -407,6 +407,14 @@ export const ModelDump = ({ filteredProviders }: { filteredProviders?: ProviderN
 		return Number(b.providerEnabled) - Number(a.providerEnabled)
 	})
 
+	// Filter models based on search query
+	const filteredModelDump = searchQuery
+		? modelDump.filter(m =>
+			m.modelName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+			displayInfoOfProviderName(m.providerName).title.toLowerCase().includes(searchQuery.toLowerCase())
+		)
+		: modelDump;
+
 	// Add model handler
 	const handleAddModel = () => {
 		if (!userChosenProviderName) {
@@ -436,10 +444,15 @@ export const ModelDump = ({ filteredProviders }: { filteredProviders?: ProviderN
 	};
 
 	return <div className=''>
-		{modelDump.map((m, i) => {
+		{filteredModelDump.length === 0 && searchQuery ? (
+			<div className="text-void-fg-3 text-sm py-4 text-center">
+				No models found matching "{searchQuery}"
+			</div>
+		) : null}
+		{filteredModelDump.map((m, i) => {
 			const { isHidden, type, modelName, providerName, providerEnabled } = m
 
-			const isNewProviderName = (i > 0 ? modelDump[i - 1] : undefined)?.providerName !== providerName
+			const isNewProviderName = (i > 0 ? filteredModelDump[i - 1] : undefined)?.providerName !== providerName
 
 			const providerTitle = displayInfoOfProviderName(providerName).title
 
@@ -1034,6 +1047,7 @@ export const Settings = () => {
 	// ─── sidebar nav ──────────────────────────
 	const [selectedSection, setSelectedSection] =
 		useState<Tab>('models');
+	const [searchQuery, setSearchQuery] = useState('');
 
 	const navItems: { tab: Tab; label: string }[] = [
 		{ tab: 'models', label: 'Models' },
@@ -1044,7 +1058,10 @@ export const Settings = () => {
 		{ tab: 'mcp', label: 'MCP' },
 		{ tab: 'all', label: 'All Settings' },
 	];
-	const shouldShowTab = (tab: Tab) => selectedSection === 'all' || selectedSection === tab;
+	const shouldShowTab = (tab: Tab) => {
+		if (selectedSection === 'all') return true;
+		return selectedSection === tab;
+	}
 	const accessor = useAccessor()
 	const commandService = accessor.get('ICommandService')
 	const environmentService = accessor.get('IEnvironmentService')
@@ -1123,7 +1140,7 @@ export const Settings = () => {
 
 
 	return (
-		<div className={`@@void-scope ${isDark ? 'dark' : ''}`} style={{ display: 'flex', flexDirection: 'column', height: '100%', width: '100%', overflow: 'auto' }}>
+		<div className={`void-scope ${isDark ? 'void-dark' : ''}`} style={{ display: 'flex', flexDirection: 'column', height: '100%', width: '100%', overflow: 'auto' }}>
 			<div className="flex flex-col md:flex-row w-full gap-6 max-w-[900px] mx-auto mb-32" style={{ minHeight: '80vh', flex: 1 }}>
 				{/* ──────────────  SIDEBAR  ────────────── */}
 
@@ -1165,6 +1182,19 @@ export const Settings = () => {
 
 						<div className='w-full h-[1px] my-2' />
 
+						{/* Search Bar */}
+						{selectedSection === 'models' && (
+							<div className="my-4">
+								<VoidSimpleInputBox
+									value={searchQuery}
+									onChangeValue={setSearchQuery}
+									placeholder="Search models or providers..."
+									compact={true}
+									className="w-full"
+								/>
+							</div>
+						)}
+
 						{/* Models section (formerly FeaturesTab) */}
 						<ErrorBoundary>
 							<RedoOnboardingButton />
@@ -1175,42 +1205,49 @@ export const Settings = () => {
 						{/* All sections in flex container with gap-12 */}
 						<div className='flex flex-col gap-12'>
 							{/* Models section (formerly FeaturesTab) */}
-							<div className={shouldShowTab('models') ? `` : 'hidden'}>
-								<ErrorBoundary>
-									<h2 className={`text-3xl mb-2`}>Models</h2>
-									<ModelDump />
-									<div className='w-full h-[1px] my-4' />
-									<AutoDetectLocalModelsToggle />
-									<RefreshableModels />
-								</ErrorBoundary>
-							</div>
+							{shouldShowTab('models') && (
+								<div>
+									<ErrorBoundary>
+										<h2 className={`text-3xl mb-2`}>Models</h2>
+										<ModelDump searchQuery={searchQuery} />
+										<div className='w-full h-[1px] my-4' />
+										<AutoDetectLocalModelsToggle />
+										<RefreshableModels />
+									</ErrorBoundary>
+								</div>
+							)}
 
 							{/* Local Providers section */}
-							<div className={shouldShowTab('localProviders') ? `` : 'hidden'}>
-								<ErrorBoundary>
-									<h2 className={`text-3xl mb-2`}>Local Providers</h2>
-									<h3 className={`text-void-fg-3 mb-2`}>{`Void can access any model that you host locally. We automatically detect your local models by default.`}</h3>
+							{shouldShowTab('localProviders') && (
+								<div>
+									<ErrorBoundary>
+										<h2 className={`text-3xl mb-2`}>Local Providers</h2>
+										<h3 className={`text-void-fg-3 mb-2`}>{`Void can access any model that you host locally. We automatically detect your local models by default.`}</h3>
 
-									<div className='opacity-80 mb-4'>
-										<OllamaSetupInstructions sayWeAutoDetect={true} />
-									</div>
+										<div className='opacity-80 mb-4'>
+											<OllamaSetupInstructions sayWeAutoDetect={true} />
+										</div>
 
-									<VoidProviderSettings providerNames={localProviderNames} />
-								</ErrorBoundary>
-							</div>
+										<VoidProviderSettings providerNames={localProviderNames} />
+									</ErrorBoundary>
+								</div>
+							)}
 
 							{/* Main Providers section */}
-							<div className={shouldShowTab('providers') ? `` : 'hidden'}>
-								<ErrorBoundary>
-									<h2 className={`text-3xl mb-2`}>Main Providers</h2>
-									<h3 className={`text-void-fg-3 mb-2`}>{`Void can access models from Anthropic, OpenAI, OpenRouter, and more.`}</h3>
+							{shouldShowTab('providers') && (
+								<div>
+									<ErrorBoundary>
+										<h2 className={`text-3xl mb-2`}>Main Providers</h2>
+										<h3 className={`text-void-fg-3 mb-2`}>{`Void can access models from Anthropic, OpenAI, OpenRouter, and more.`}</h3>
 
-									<VoidProviderSettings providerNames={nonlocalProviderNames} />
-								</ErrorBoundary>
-							</div>
+										<VoidProviderSettings providerNames={nonlocalProviderNames} />
+									</ErrorBoundary>
+								</div>
+							)}
 
 							{/* Feature Options section */}
-							<div className={shouldShowTab('featureOptions') ? `` : 'hidden'}>
+							{shouldShowTab('featureOptions') && (
+								<div>
 								<ErrorBoundary>
 									<h2 className={`text-3xl mb-2`}>Feature Options</h2>
 
@@ -1388,12 +1425,14 @@ export const Settings = () => {
 										</ErrorBoundary>
 									</div>
 								</ErrorBoundary>
-							</div>
+								</div>
+							)}
 
 							{/* General section */}
-							<div className={`${shouldShowTab('general') ? `` : 'hidden'} flex flex-col gap-12`}>
-								{/* One-Click Switch section */}
-								<div>
+							{shouldShowTab('general') && (
+								<div className='flex flex-col gap-12'>
+									{/* One-Click Switch section */}
+									<div>
 									<ErrorBoundary>
 										<h2 className='text-3xl mb-2'>One-Click Switch</h2>
 										<h4 className='text-void-fg-3 mb-4'>{`Transfer your editor settings into Void.`}</h4>
@@ -1524,13 +1563,15 @@ Alternatively, place a \`.voidrules\` file in the root of your workspace.
 									</div>
 								</div>
 
-							</div>
+								</div>
+							)}
 
 
 
 							{/* MCP section */}
-							<div className={shouldShowTab('mcp') ? `` : 'hidden'}>
-								<ErrorBoundary>
+							{shouldShowTab('mcp') && (
+								<div>
+									<ErrorBoundary>
 									<h2 className='text-3xl mb-2'>MCP</h2>
 									<h4 className={`text-void-fg-3 mb-4`}>
 										<ChatMarkdownRender inPTag={true} string={`
@@ -1546,8 +1587,9 @@ Use Model Context Protocol to provide Agent mode with more tools.
 									<ErrorBoundary>
 										<MCPServersList />
 									</ErrorBoundary>
-								</ErrorBoundary>
-							</div>
+									</ErrorBoundary>
+								</div>
+							)}
 
 
 

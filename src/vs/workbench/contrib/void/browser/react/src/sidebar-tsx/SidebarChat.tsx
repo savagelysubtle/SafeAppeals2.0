@@ -22,7 +22,7 @@ import { ChatMode, displayInfoOfProviderName, FeatureName, isFeatureNameDisabled
 import { ICommandService } from '../../../../../../../platform/commands/common/commands.js';
 import { WarningBox } from '../void-settings-tsx/WarningBox.js';
 import { getModelCapabilities, getIsReasoningEnabledState } from '../../../../common/modelCapabilities.js';
-import { AlertTriangle, File, Ban, Check, ChevronRight, Dot, FileIcon, Pencil, Undo, Undo2, X, Flag, Copy as CopyIcon, Info, CirclePlus, Ellipsis, CircleEllipsis, Folder, ALargeSmall, TypeOutline, Text } from 'lucide-react';
+import { AlertTriangle, File, Ban, Check, ChevronRight, Dot, FileIcon, Pencil, Undo, Undo2, X, Flag, Copy as CopyIcon, Info, CirclePlus, Ellipsis, CircleEllipsis, Folder, ALargeSmall, TypeOutline, Text, Trash2, RotateCw } from 'lucide-react';
 import { ChatMessage, CheckpointEntry, StagingSelectionItem, ToolMessage } from '../../../../common/chatThreadServiceTypes.js';
 import { approvalTypeOfBuiltinToolName, BuiltinToolCallParams, BuiltinToolName, ToolName, LintErrorItem, ToolApprovalType, toolApprovalTypes } from '../../../../common/toolsServiceTypes.js';
 import { CopyButton, EditToolAcceptRejectButtonsHTML, IconShell1, JumpToFileButton, JumpToTerminalButton, StatusIndicator, StatusIndicatorForApplyButton, useApplyStreamState, useEditToolStreamState } from '../markdown/ApplyBlockHoverButtons.js';
@@ -145,6 +145,68 @@ export const IconLoading = ({ className = '' }: { className?: string }) => {
 
 	return <div className={`${className}`}>{loadingText}</div>;
 
+}
+
+// Message Actions Component
+const MessageActions = ({
+	message,
+	messageIdx,
+	onCopy,
+	onEdit,
+	onRegenerate,
+	onDelete,
+	showEdit = true,
+	showRegenerate = false,
+	showDelete = false
+}: {
+	message: ChatMessage
+	messageIdx: number
+	onCopy: () => void
+	onEdit?: () => void
+	onRegenerate?: () => void
+	onDelete?: () => void
+	showEdit?: boolean
+	showRegenerate?: boolean
+	showDelete?: boolean
+}) => {
+	return (
+		<div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity absolute right-2 top-2 bg-void-bg-2 rounded p-1 border border-void-border-2">
+			<button
+				onClick={onCopy}
+				className="p-1 hover:bg-void-bg-1 rounded transition-colors"
+				data-tooltip-id="void-tooltip"
+				data-tooltip-content="Copy message">
+				<CopyIcon size={12} className="text-void-fg-3" />
+			</button>
+			{showEdit && onEdit && (
+				<button
+					onClick={onEdit}
+					className="p-1 hover:bg-void-bg-1 rounded transition-colors"
+					data-tooltip-id="void-tooltip"
+					data-tooltip-content="Edit message">
+					<Pencil size={12} className="text-void-fg-3" />
+				</button>
+			)}
+			{showRegenerate && onRegenerate && (
+				<button
+					onClick={onRegenerate}
+					className="p-1 hover:bg-void-bg-1 rounded transition-colors"
+					data-tooltip-id="void-tooltip"
+					data-tooltip-content="Regenerate response">
+					<RotateCw size={12} className="text-void-fg-3" />
+				</button>
+			)}
+			{showDelete && onDelete && (
+				<button
+					onClick={onDelete}
+					className="p-1 hover:bg-void-bg-1 rounded transition-colors"
+					data-tooltip-id="void-tooltip"
+					data-tooltip-content="Delete message">
+					<Trash2 size={12} className="text-red-400" />
+				</button>
+			)}
+		</div>
+	)
 }
 
 
@@ -337,6 +399,63 @@ export const VoidChatArea: React.FC<VoidChatAreaProps> = ({
 	featureName,
 	loadingIcon,
 }) => {
+	const [isDragging, setIsDragging] = useState(false)
+	const accessor = useAccessor()
+	const fileService = accessor.get('IFileService')
+	const textModelService = accessor.get('ITextModelService')
+
+	const handleDrop = async (e: React.DragEvent) => {
+		e.preventDefault()
+		e.stopPropagation()
+		setIsDragging(false)
+
+		if (!setSelections || !selections) return
+
+		const files = Array.from(e.dataTransfer.files)
+		const newSelections: StagingSelectionItem[] = []
+
+		for (const file of files) {
+			try {
+				const uri = URI.file(file.path)
+				const exists = await fileService.exists(uri)
+
+				if (exists) {
+					newSelections.push({
+						type: 'File',
+						uri,
+						state: { wasAddedAsCurrentFile: false }
+					})
+				}
+			} catch (err) {
+				console.error('Error adding file:', err)
+			}
+		}
+
+		if (newSelections.length > 0) {
+			setSelections([...selections, ...newSelections])
+		}
+	}
+
+	const handleDragOver = (e: React.DragEvent) => {
+		e.preventDefault()
+		e.stopPropagation()
+	}
+
+	const handleDragEnter = (e: React.DragEvent) => {
+		e.preventDefault()
+		e.stopPropagation()
+		setIsDragging(true)
+	}
+
+	const handleDragLeave = (e: React.DragEvent) => {
+		e.preventDefault()
+		e.stopPropagation()
+		// Only set to false if leaving the container entirely
+		if (e.currentTarget === e.target) {
+			setIsDragging(false)
+		}
+	}
+
 	return (
 		<div
 			ref={divRef}
@@ -346,14 +465,26 @@ export const VoidChatArea: React.FC<VoidChatAreaProps> = ({
                 rounded-md
                 bg-void-bg-1
 				transition-all duration-200
-				border border-void-border-3 focus-within:border-void-border-1 hover:border-void-border-1
+				border ${isDragging ? 'border-[#0e70c0] border-2 bg-[#0e70c0]/10' : 'border-void-border-3 focus-within:border-void-border-1 hover:border-void-border-1'}
 				max-h-[80vh] overflow-y-auto
                 ${className}
             `}
 			onClick={(e) => {
 				onClickAnywhere?.()
 			}}
+			onDrop={handleDrop}
+			onDragOver={handleDragOver}
+			onDragEnter={handleDragEnter}
+			onDragLeave={handleDragLeave}
 		>
+			{isDragging && (
+				<div className="absolute inset-0 flex items-center justify-center bg-[#0e70c0]/20 z-50 pointer-events-none rounded-md">
+					<div className="text-[#0e70c0] font-medium flex items-center gap-2">
+						<File size={20} />
+						<span>Drop files to attach</span>
+					</div>
+				</div>
+			)}
 			{/* Selections section */}
 			{showSelections && selections && setSelections && (
 				<SelectedFiles
@@ -1085,6 +1216,16 @@ const UserMessageComponent = ({ chatMessage, messageIdx, isCheckpointGhost, curr
 	const EditSymbol = mode === 'display' ? Pencil : X
 
 
+	const handleCopyMessage = () => {
+		navigator.clipboard.writeText(chatMessage.displayContent || '')
+	}
+
+	const handleRegenerateFrom = async () => {
+		const threadId = chatThreadsService.state.currentThreadId
+		await chatThreadsService.abortRunning(threadId)
+		await chatThreadsService.regenerateFromIndex(messageIdx)
+	}
+
 	let chatbubbleContents: React.ReactNode
 	if (mode === 'display') {
 		chatbubbleContents = <>
@@ -1174,7 +1315,7 @@ const UserMessageComponent = ({ chatMessage, messageIdx, isCheckpointGhost, curr
 	return <div
 		// align chatbubble accoridng to role
 		className={`
-        relative ml-auto
+        relative ml-auto group
         ${mode === 'edit' ? 'w-full max-w-full'
 				: mode === 'display' ? `self-end w-fit max-w-full whitespace-pre-wrap` : '' // user words should be pre
 			}
@@ -1184,6 +1325,18 @@ const UserMessageComponent = ({ chatMessage, messageIdx, isCheckpointGhost, curr
 		onMouseEnter={() => setIsHovered(true)}
 		onMouseLeave={() => setIsHovered(false)}
 	>
+		{mode === 'display' && (
+			<MessageActions
+				message={chatMessage}
+				messageIdx={messageIdx}
+				onCopy={handleCopyMessage}
+				onEdit={onOpenEdit}
+				onRegenerate={handleRegenerateFrom}
+				showEdit={true}
+				showRegenerate={true}
+				showDelete={false}
+			/>
+		)}
 		<div
 			// style chatbubble according to role
 			className={`
@@ -1340,7 +1493,27 @@ const AssistantMessageComponent = ({ chatMessage, isCheckpointGhost, isCommitted
 	const isEmpty = !chatMessage.displayContent && !chatMessage.reasoning
 	if (isEmpty) return null
 
-	return <>
+	const handleCopyMessage = () => {
+		const textToCopy = [reasoningStr, chatMessage.displayContent].filter(Boolean).join('\n\n')
+		navigator.clipboard.writeText(textToCopy)
+	}
+
+	const handleRegenerateFrom = async () => {
+		const threadId = chatThreadsService.state.currentThreadId
+		await chatThreadsService.abortRunning(threadId)
+		await chatThreadsService.regenerateFromIndex(messageIdx)
+	}
+
+	return <div className="relative group">
+		<MessageActions
+			message={chatMessage}
+			messageIdx={messageIdx}
+			onCopy={handleCopyMessage}
+			onRegenerate={handleRegenerateFrom}
+			showEdit={false}
+			showRegenerate={true}
+			showDelete={false}
+		/>
 		{/* reasoning token */}
 		{hasReasoning &&
 			<div className={`${isCheckpointGhost ? 'opacity-50' : ''}`}>
@@ -1370,7 +1543,7 @@ const AssistantMessageComponent = ({ chatMessage, isCheckpointGhost, isCommitted
 				</ProseWrapper>
 			</div>
 		}
-	</>
+	</div>
 
 }
 
@@ -1528,16 +1701,16 @@ const toolNameToDesc = (toolName: BuiltinToolName, _toolParams: BuiltinToolCallP
 		},
 		// 'run_command': () => {
 		// 	const toolParams = _toolParams as BuiltinToolCallParams['run_command'] // Terminal functionality disabled
-			return {
-				desc1: `"${toolParams.command}"`,
-			}
-		},
+		// 	return {
+		// 		desc1: `"${toolParams.command}"`,
+		// 	}
+		// },
 		// 'run_persistent_command': () => {
 		// 	const toolParams = _toolParams as BuiltinToolCallParams['run_persistent_command'] // Terminal functionality disabled
-			return {
-				desc1: `"${toolParams.command}"`,
-			}
-		},
+		// 	return {
+		// 		desc1: `"${toolParams.command}"`,
+		// 	}
+		// },
 		'open_persistent_terminal': () => {
 			const toolParams = _toolParams as BuiltinToolCallParams['open_persistent_terminal']
 			return { desc1: '' }
