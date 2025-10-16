@@ -18,7 +18,7 @@ import { inputBackground, inputForeground } from '../../../../../../../platform/
 import { useFloating, autoUpdate, offset, flip, shift, size, autoPlacement } from '@floating-ui/react';
 import { URI } from '../../../../../../../base/common/uri.js';
 import { getBasename, getFolderName } from '../sidebar-tsx/SidebarChat.js';
-import { ChevronRight, File, Folder, FolderClosed, LucideProps } from 'lucide-react';
+import { ChevronRight, File, Folder, FolderClosed, LucideProps, Loader2 } from 'lucide-react';
 import { StagingSelectionItem } from '../../../../common/chatThreadServiceTypes.js';
 import { DiffEditorWidget } from '../../../../../../../editor/browser/widget/diffEditor/diffEditorWidget.js';
 import { extractSearchReplaceBlocks, ExtractedSearchReplaceBlock } from '../../../../common/helpers/extractCodeFromResult.js';
@@ -1716,11 +1716,45 @@ export const BlockCode = ({ initValue, language, maxHeight, showScrollbars }: Bl
 }
 
 
-export const VoidButtonBgDarken = ({ children, disabled, onClick, className }: { children: React.ReactNode; disabled?: boolean; onClick: () => void; className?: string }) => {
-	return <button disabled={disabled}
-		className={`px-3 py-1 bg-black/10 dark:bg-white/10 rounded-sm overflow-hidden whitespace-nowrap flex items-center justify-center ${className || ''}`}
+export const VoidButtonBgDarken = ({
+	children,
+	disabled,
+	onClick,
+	className,
+	loading,
+	tooltip,
+	variant = 'default'
+}: {
+	children: React.ReactNode
+	disabled?: boolean
+	onClick: () => void
+	className?: string
+	loading?: boolean
+	tooltip?: string
+	variant?: 'default' | 'primary' | 'danger'
+}) => {
+	const variantClasses = {
+		default: 'bg-black/10 dark:bg-white/10',
+		primary: 'bg-[#0e70c0] hover:bg-[#1177cb] text-white',
+		danger: 'bg-red-600 hover:bg-red-700 text-white'
+	}
+
+	return <button
+		disabled={disabled || loading}
+		className={`
+			px-3 py-1 rounded-sm overflow-hidden whitespace-nowrap flex items-center justify-center gap-2
+			transition-all duration-200
+			${variantClasses[variant]}
+			${(disabled || loading) ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer hover:brightness-110'}
+			${className || ''}
+		`}
 		onClick={onClick}
-	>{children}</button>
+		data-tooltip-id={tooltip ? 'void-tooltip' : undefined}
+		data-tooltip-content={tooltip}
+	>
+		{loading && <Loader2 size={14} className="animate-spin" />}
+		{children}
+	</button>
 }
 
 // export const VoidScrollableElt = ({ options, children }: { options: ScrollableElementCreationOptions, children: React.ReactNode }) => {
