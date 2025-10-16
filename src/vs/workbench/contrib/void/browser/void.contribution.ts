@@ -84,3 +84,6 @@ import '../common/voidUpdateService.js'
 
 // model service
 import '../common/voidModelService.js'
+
+// case profile service
+import '../common/caseProfileService.js'

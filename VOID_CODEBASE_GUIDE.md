@@ -39,7 +39,7 @@ Here's some terminology you might want to know about when working inside VSCode:
 - VSCode is organized into "**Services**". A service is just a class that mounts a single time (in computer science theory this is called a "singleton"). You can register services with `registerSingleton` so that you can easily use them in any constructor with `@<Service>`. See _dummyContrib for an example we put together on how to register them. The registration is the same every time.
 
 - "**Actions**" are functions you register on VSCode so that either you or the user can call them later. They're also called "**Commands**".
- 	- You can run actions as a user by pressing Cmd+Shift+P (opens the command pallete), or you can run them internally by using the commandService to call them by ID. We use actions to register keybinding listeners like Cmd+L, Cmd+K, etc. The nice thing about actions is the user can change the keybindings.
+  - You can run actions as a user by pressing Cmd+Shift+P (opens the command pallete), or you can run them internally by using the commandService to call them by ID. We use actions to register keybinding listeners like Cmd+L, Cmd+K, etc. The nice thing about actions is the user can change the keybindings.
 
 ### Internal LLM Message Pipeline
 
