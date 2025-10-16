@@ -5,7 +5,9 @@
       "Bash(cat:*)",
       "Bash(npx tsc:*)",
       "Bash(npx webpack:*)",
-      "Bash(node:*)"
+      "Bash(node:*)",
+      "Bash(npm install:*)",
+      "Bash(ls:*)"
     ],
     "deny": [],
     "ask": []

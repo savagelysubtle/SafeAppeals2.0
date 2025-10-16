@@ -7,95 +7,27 @@
 @tailwind components;
 @tailwind utilities;
 
-& {
-	--void-bg-1: var(--vscode-input-background);
-	--void-bg-1-alt: var(--vscode-badge-background);
-	--void-bg-2: var(--vscode-sideBar-background);
-	--void-bg-2-alt: color-mix(in srgb, var(--vscode-editor-background) 30%, var(--vscode-sideBar-background) 70%);
-	--void-bg-2-hover: color-mix(in srgb, var(--vscode-editor-foreground) 2%, var(--vscode-sideBar-background) 98%);
-	--void-bg-3: var(--vscode-editor-background);
+.void-scope {
+	--void-bg-1: var(--vscode-input-background, #1e1e1e);
+	--void-bg-1-alt: var(--vscode-badge-background, #252526);
+	--void-bg-2: var(--vscode-sideBar-background, #252526);
+	--void-bg-2-alt: var(--vscode-editor-background, #1e1e1e);
+	--void-bg-2-hover: var(--vscode-sideBar-background, #252526);
+	--void-bg-3: var(--vscode-editor-background, #1e1e1e);
 
-	--void-fg-0: color-mix(in srgb, var(--vscode-tab-activeForeground) 90%, black 10%);
-	--void-fg-1: var(--vscode-editor-foreground);
-	--void-fg-2: var(--vscode-input-foreground);
-	--void-fg-3: var(--vscode-input-placeholderForeground);
-	/* --void-fg-4: var(--vscode-tab-inactiveForeground); */
-	--void-fg-4: var(--vscode-list-deemphasizedForeground);
+	--void-fg-0: var(--vscode-tab-activeForeground, #ffffff);
+	--void-fg-1: var(--vscode-editor-foreground, #cccccc);
+	--void-fg-2: var(--vscode-input-foreground, #cccccc);
+	--void-fg-3: var(--vscode-input-placeholderForeground, #8c8c8c);
+	--void-fg-4: var(--vscode-list-deemphasizedForeground, #8c8c8c);
 
-	--void-warning: var(--vscode-charts-yellow);
+	--void-warning: var(--vscode-charts-yellow, #f0d754);
 
-	--void-border-1: var(--vscode-commandCenter-activeBorder);
-	--void-border-2: var(--vscode-commandCenter-border);
-	--void-border-3: var(--vscode-commandCenter-inactiveBorder);
-	--void-border-4: var(--vscode-editorGroup-border);
+	--void-border-1: var(--vscode-commandCenter-activeBorder, #007acc);
+	--void-border-2: var(--vscode-commandCenter-border, #3e3e42);
+	--void-border-3: var(--vscode-commandCenter-inactiveBorder, #3e3e42);
+	--void-border-4: var(--vscode-editorGroup-border, #3e3e42);
 
 	--void-ring-color: #A6E22E;
 	--void-link-color: #A6E22E;
 }
-
-.select-child-restyle select {
-	text-overflow: ellipsis;
-	white-space: nowrap;
-	padding-right: 24px;
-}
-
-.void-force-child-placeholder-void-fg-1 ::placeholder {
-	color: var(--void-fg-3);
-}
-
-* {
-	outline: none !important;
-}
-
-
-
-.inherit-bg-all-restyle > * {
-	background-color: inherit !important;
-}
-
-
-.bg-editor-style-override {
-	--vscode-sideBar-background: var(--vscode-editor-background);
-}
-
-
-
-/* html {
-	font-size: var(--vscode-font-size);
-}
-
-.btn {
-	@apply cursor-pointer transition-colors;
-
-	&.btn-primary {
-		@apply bg-vscode-button-bg text-vscode-button-fg;
-
-		&:not(:disabled) {
-			@apply hover:bg-vscode-button-hoverBg;
-		}
-	}
-
-	&.btn-sm {
-		@apply px-3 py-1 text-sm;
-	}
-
-	&.btn-secondary {
-		@apply bg-vscode-button-secondary-bg text-vscode-button-secondary-fg;
-
-		&:not(:disabled) {
-			@apply hover:bg-vscode-button-secondary-hoverBg;
-		}
-	}
-
-	&:disabled {
-		@apply opacity-75 cursor-not-allowed;
-	}
-}
-
-.input {
-	@apply bg-vscode-input-bg text-vscode-input-fg border-vscode-input-border focus:outline-vscode-focus-border;
-}
-
-.dropdown {
-	@apply bg-vscode-dropdown-bg text-vscode-dropdown-foreground border-vscode-dropdown-border focus:outline-vscode-focus-border;
-} */
