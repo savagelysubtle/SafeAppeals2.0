@@ -809,7 +809,7 @@ export const VoidInputBox2 = forwardRef<HTMLTextAreaElement, InputBox2Props>(fun
 		{isMenuOpen && (
 			<div
 				ref={refs.setFloating}
-				className="z-[100] border-void-border-3 bg-void-bg-2-alt border rounded shadow-lg flex flex-col overflow-hidden"
+				className="z-[100] border-void-border-3 bg-void-bg-2 border rounded shadow-lg flex flex-col overflow-hidden"
 				style={{
 					position: strategy,
 					top: y ?? 0,
@@ -819,7 +819,7 @@ export const VoidInputBox2 = forwardRef<HTMLTextAreaElement, InputBox2Props>(fun
 				onWheel={(e) => e.stopPropagation()}
 			>
 				{/* Breadcrumbs Header */}
-				{isBreadcrumbsShowing && <div className="px-2 py-1 text-void-fg-1 bg-void-bg-2-alt border-b border-void-border-3 sticky top-0 bg-void-bg-1 z-10 select-none pointer-events-none">
+				{isBreadcrumbsShowing && <div className="px-2 py-1 text-void-fg-1 bg-void-bg-2 border-b border-void-border-3 sticky top-0 z-10 select-none pointer-events-none">
 					{optionText ?
 						<div className="flex items-center">
 							{/* {optionPath.map((path, index) => (
@@ -836,7 +836,7 @@ export const VoidInputBox2 = forwardRef<HTMLTextAreaElement, InputBox2Props>(fun
 
 
 				{/* Options list */}
-				<div className='max-h-[400px] w-full max-w-full overflow-y-auto overflow-x-auto'>
+				<div className='max-h-[400px] w-full max-w-full overflow-y-auto overflow-x-auto bg-void-bg-2'>
 					<div className="w-max min-w-full flex flex-col gap-0 text-nowrap flex-nowrap">
 						{options.length === 0 ?
 							<div className="text-void-fg-3 px-3 py-0.5">No results found</div>
@@ -850,7 +850,7 @@ export const VoidInputBox2 = forwardRef<HTMLTextAreaElement, InputBox2Props>(fun
 										className={`
 											flex items-center gap-2
 											px-3 py-1 cursor-pointer
-											${oIdx === optionIdx ? 'bg-blue-500 text-white/80' : 'bg-void-bg-2-alt text-void-fg-1'}
+											${oIdx === optionIdx ? 'bg-void-button-primary text-void-button-primary-text' : 'text-void-fg-1 hover:bg-void-button-primary/20'}
 										`}
 										onClick={() => { onSelectOption(); }}
 										onMouseMove={() => { setOptionIdx(oIdx) }}
@@ -1416,7 +1416,7 @@ export const VoidCustomDropdownBox = <T extends NonNullable<any>>({
 			{isOpen && (
 				<div
 					ref={refs.setFloating}
-					className="z-[100] bg-void-bg-1 border-void-border-3 border rounded shadow-lg"
+					className="z-[100] bg-void-bg-2 border-void-border-3 border rounded shadow-lg"
 					style={{
 						position: strategy,
 						top: y ?? 0,
@@ -1429,7 +1429,7 @@ export const VoidCustomDropdownBox = <T extends NonNullable<any>>({
 							))
 					}}
 					onWheel={(e) => e.stopPropagation()}
-				><div className='overflow-auto max-h-80'>
+				><div className='overflow-auto max-h-80 bg-void-bg-2'>
 
 						{options.map((option) => {
 							const thisOptionIsSelected = getOptionsEqual(option, selectedOption);
@@ -1441,7 +1441,7 @@ export const VoidCustomDropdownBox = <T extends NonNullable<any>>({
 									key={optionName}
 									className={`flex items-center px-2 py-1 pr-4 cursor-pointer whitespace-nowrap
 									transition-all duration-100
-									${thisOptionIsSelected ? 'bg-blue-500 text-white/80' : 'hover:bg-blue-500 hover:text-white/80'}
+									${thisOptionIsSelected ? 'bg-void-button-primary text-void-button-primary-text' : 'hover:bg-void-button-primary/20'}
 								`}
 									onClick={() => {
 										onChangeOption(option);
@@ -1735,7 +1735,7 @@ export const VoidButtonBgDarken = ({
 }) => {
 	const variantClasses = {
 		default: 'void-bg-black/10 dark:void-bg-white/10',
-		primary: 'void-bg-blue-600 hover:void-bg-blue-700 void-text-white',
+		primary: 'void-bg-void-button-primary hover:void-bg-void-button-primary-hover void-text-void-button-primary-text',
 		danger: 'void-bg-red-600 hover:void-bg-red-700 void-text-white'
 	}
 
