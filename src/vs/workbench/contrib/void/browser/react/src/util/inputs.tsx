@@ -1734,25 +1734,25 @@ export const VoidButtonBgDarken = ({
 	variant?: 'default' | 'primary' | 'danger'
 }) => {
 	const variantClasses = {
-		default: 'bg-black/10 dark:bg-white/10',
-		primary: 'bg-[#0e70c0] hover:bg-[#1177cb] text-white',
-		danger: 'bg-red-600 hover:bg-red-700 text-white'
+		default: 'void-bg-black/10 dark:void-bg-white/10',
+		primary: 'void-bg-blue-600 hover:void-bg-blue-700 void-text-white',
+		danger: 'void-bg-red-600 hover:void-bg-red-700 void-text-white'
 	}
 
 	return <button
 		disabled={disabled || loading}
 		className={`
-			px-3 py-1 rounded-sm overflow-hidden whitespace-nowrap flex items-center justify-center gap-2
-			transition-all duration-200
+			void-px-3 void-py-1 void-rounded-sm void-overflow-hidden void-whitespace-nowrap void-flex void-items-center void-justify-center void-gap-2
+			void-transition-all void-duration-200
 			${variantClasses[variant]}
-			${(disabled || loading) ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer hover:brightness-110'}
+			${(disabled || loading) ? 'void-opacity-50 void-cursor-not-allowed' : 'void-cursor-pointer hover:void-brightness-110'}
 			${className || ''}
 		`}
 		onClick={onClick}
 		data-tooltip-id={tooltip ? 'void-tooltip' : undefined}
 		data-tooltip-content={tooltip}
 	>
-		{loading && <Loader2 size={14} className="animate-spin" />}
+		{loading && <Loader2 size={14} className="void-animate-spin" />}
 		{children}
 	</button>
 }

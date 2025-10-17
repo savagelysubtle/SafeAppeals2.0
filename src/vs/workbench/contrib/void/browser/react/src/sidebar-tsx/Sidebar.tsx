@@ -11,11 +11,11 @@ import '../styles.css'
 import { SidebarChat } from './SidebarChat.js';
 import ErrorBoundary from './ErrorBoundary.js';
 
-export const Sidebar = ({ className }: { className: string }) => {
+export const Sidebar = ({ className = '' }: { className?: string }) => {
 
 	const isDark = useIsDark()
 	return <div
-		className={`void-scope ${isDark ? 'void-dark' : ''}`}
+		className={`void-scope ${isDark ? 'void-dark' : ''} ${className}`}
 		style={{ width: '100%', height: '100%' }}
 	>
 		<div

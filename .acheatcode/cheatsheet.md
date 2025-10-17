@@ -1,138 +1,103 @@
-# Compilation Commands
+# Quick Reference Cheatsheet
 
-## Root Project (VS Code Fork)
+> **📚 For complete documentation, see [complete-cheatsheet.md](./complete-cheatsheet.md)**
+
+## 🚀 Essential Commands
+
+### Development Workflow
 
 ```bash
-cd src && npx tsc --skipLibCheck
-node ./node_modules/gulp/bin/gulp.js compile-extensions
+# 1. Build React components (Void features)
+npm run buildreact
+
+# 2. Compile VS Code core
+npm run compile
+
+# 3. Launch VS Code
+./scripts/code.sh
 ```
 
-## txt-rich-editor Extension
+### Quick Builds
 
 ```bash
-# TypeScript only (fast) - WORKS
-npx tsc --skipLibCheck --project extensions/txt-rich-editor/tsconfig.json
-
-# Full extension build
-cd extensions/txt-rich-editor && npm run compile
-
-# Extension development watch mode
-cd extensions/txt-rich-editor && npm run watch
-```
-
-## Quick Commands
-
-### TypeScript only (fast)
-
-```bash
-# Root project
+# TypeScript only (fastest)
 cd src && npx tsc --skipLibCheck
 
-# Extension only
-npx tsc --skipLibCheck --project extensions/txt-rich-editor/tsconfig.json
+# Full compilation
+npm run compile
+
+# React components
+npm run buildreact
 ```
 
-### Full build
+### Watch Mode
 
 ```bash
-node ./node_modules/gulp/bin/gulp.js compile-extensions
+# Watch everything (background)
+npm run watchd
+
+# Kill watch processes
+npm run kill-watchd
 ```
 
-### Extension development
-
-```bash
-cd extensions/txt-rich-editor && npm run watch
-```
-
-## txt-rich-editor Void Integration
-
-### ⚠️ CRITICAL: How to Open Files in Rich Text Editor
-
-**The screenshot shows a PLAIN TEXT editor, not the rich text editor!**
-
-To test the Void integration, you MUST open files in the rich text editor webview:
-
-1. **Right-click the file** in Explorer → "Open With..." → "Rich Text Editor"
-2. OR change `package.json` line 32: `"priority": "option"` (instead of `"default"`)
-3. OR remove the `priority` field entirely to make it the default
-
-**You'll know you're in the rich text editor when you see:**
-
-- ✅ Ribbon toolbar with Bold, Italic, etc. buttons
-- ✅ Rich formatting (actual bold/italic text)
-- ✅ Page-like layout with margins
-
-**You're in the wrong editor if you see:**
-
-- ❌ Line numbers
-- ❌ Minimap
-- ❌ Monospace font
-
-### Add to Chat (Ctrl+L) & Edit Inline (Ctrl+K)
-
-The txt-rich-editor integrates with Void's AI chat and inline editing features:
-
-**Commands registered:**
-
-- `txtRichEditor.ctrlL` - Add selection to Void chat (bound to Ctrl+L/Cmd+L)
-- `txtRichEditor.ctrlK` - Edit inline with Void (bound to Ctrl+K/Cmd+K)
-
-**How it works:**
-
-1. User selects text in txt-rich-editor
-2. Selection helper popup appears with "Add to Chat" and "Edit Inline" options
-3. Clicking or pressing keybinding triggers custom command
-4. Command checks if file is .txt, .gdoc, or .docx
-5. Webview extracts plain text and sends to extension
-6. Extension stores content in workspace state
-7. Extension opens Void sidebar
-8. Void reads content via `txtRichEditor.getContentForChat` command
-
-**Files involved:**
-
-- `extensions/txt-rich-editor/src/extension.ts` - Command registration
-- `extensions/txt-rich-editor/src/voidWebviewBridge.ts` - Bridge between webview and Void
-- `extensions/txt-rich-editor/src/richTextEditorProvider.ts` - Webview message handling
-- `extensions/txt-rich-editor/package.json` - Command definitions and keybindings
-
-**Testing:**
-
-1. Open a .txt file in txt-rich-editor
-2. Select some text
-3. Press Ctrl+L or click "Add to Chat" in the popup
-4. Void sidebar should open with the content ready to use
-
-## Compilation & Testing
+## 🧪 Testing
 
 ### After Making Changes
 
 ```bash
-# 1. Compile VS Code core (for new Void API)
-cd src && npx tsc --skipLibCheck
+# 1. Build React components (if changed)
+npm run buildreact
 
-# 2. Compile txt-rich-editor extension
-npx tsc --skipLibCheck --project extensions/txt-rich-editor/tsconfig.json
+# 2. Compile VS Code core
+npm run compile
 
 # 3. Reload VS Code
 # Press Ctrl+Shift+P → "Developer: Reload Window"
 ```
 
-### Diagnostic Command
+### Common Tests
 
-To debug the integration:
+```bash
+# Unit tests
+npm run test-node
 
+# Browser tests
+npm run test-browser
+
+# Integration tests
+./scripts/test-integration.sh
 ```
-Ctrl+Shift+P → "Rich Text Editor: Show Integration Diagnostic"
+
+## 🐛 Common Issues
+
+### "Cannot find module './react/out/...'"
+
+```bash
+npm run buildreact
 ```
 
-This shows:
+### TypeScript errors
 
-- Whether rich text editor is active
-- Editor registry state
-- Registered commands count
+```bash
+cd src && npx tsc --skipLibCheck
+```
 
-### See Complete Documentation
+### Watch processes stuck
 
-- **`extensions/txt-rich-editor/INTEGRATION_COMPLETE.md`** - Full implementation details
-- **`extensions/txt-rich-editor/TESTING_INSTRUCTIONS.md`** - Testing guide
-- **`extensions/txt-rich-editor/VOID_INTEGRATION.md`** - Architecture docs
+```bash
+npm run kill-watchd
+npm run restart-watchd
+```
+
+## 📋 Most Used Commands
+
+```bash
+npm run buildreact    # Build React components
+npm run compile       # Compile VS Code
+npm run watchd        # Watch mode (background)
+./scripts/code.sh     # Launch VS Code
+```
+
+---
+
+**💡 See [complete-cheatsheet.md](./complete-cheatsheet.md) for full documentation!**
