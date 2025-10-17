@@ -467,7 +467,7 @@ export const VoidChatArea: React.FC<VoidChatAreaProps> = ({
                 rounded-md
                 bg-void-bg-1
 				transition-all duration-200
-				border ${isDragging ? 'border-[#0e70c0] border-2 bg-[#0e70c0]/10' : 'border-void-border-3 focus-within:border-void-border-1 hover:border-void-border-1'}
+				border ${isDragging ? 'border-void-button-primary border-2 bg-void-button-primary/10' : 'border-void-border-3 focus-within:border-void-border-1 hover:border-void-border-1'}
 				max-h-[80vh] overflow-y-auto
                 ${className}
             `}
@@ -480,8 +480,8 @@ export const VoidChatArea: React.FC<VoidChatAreaProps> = ({
 			onDragLeave={handleDragLeave}
 		>
 			{isDragging && (
-				<div className="absolute inset-0 flex items-center justify-center bg-[#0e70c0]/20 z-50 pointer-events-none rounded-md">
-					<div className="text-[#0e70c0] font-medium flex items-center gap-2">
+				<div className="absolute inset-0 flex items-center justify-center bg-void-button-primary/20 z-50 pointer-events-none rounded-md">
+					<div className="text-void-button-primary font-medium flex items-center gap-2">
 						<File size={20} />
 						<span>Drop files to attach</span>
 					</div>

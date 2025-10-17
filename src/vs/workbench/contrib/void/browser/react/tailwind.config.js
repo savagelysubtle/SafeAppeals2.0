@@ -80,6 +80,11 @@ module.exports = {
 				'void-ring-color': 'var(--void-ring-color)',
 				'void-link-color': 'var(--void-link-color)',
 
+				// Button colors
+				'void-button-primary': 'var(--void-button-primary-bg)',
+				'void-button-primary-hover': 'var(--void-button-primary-hover)',
+				'void-button-primary-text': 'var(--void-button-primary-text)',
+
 				vscode: {
 					// see: https://code.visualstudio.com/api/extension-guides/webview#theming-webview-content
 

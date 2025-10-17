@@ -163,7 +163,7 @@ const AddButton = ({ disabled, text = 'Add', ...props }: { disabled?: boolean, t
 
 	return <button
 		disabled={disabled}
-		className={`bg-[#0e70c0] px-3 py-1 text-white rounded-sm ${!disabled ? 'hover:bg-blue-700 cursor-pointer' : 'opacity-50 cursor-not-allowed bg-opacity-70'}`}
+		className={`bg-void-button-primary px-3 py-1 text-void-button-primary-text rounded-sm ${!disabled ? 'hover:bg-void-button-primary-hover cursor-pointer' : 'opacity-50 cursor-not-allowed bg-opacity-70'}`}
 		{...props}
 	>{text}</button>
 
@@ -359,7 +359,7 @@ const SimpleModelSettingsDialog = ({
 					</VoidButtonBgDarken>
 					<VoidButtonBgDarken
 						onClick={onSave}
-						className="px-3 py-1 bg-blue-600 text-white"
+						className="px-3 py-1 bg-void-button-primary text-void-button-primary-text"
 					>
 						Save
 					</VoidButtonBgDarken>
@@ -468,9 +468,9 @@ export const ModelDump = ({ filteredProviders, searchQuery = '' }: { filteredPro
 
 
 			const detailAboutModel = type === 'autodetected' ?
-				<Asterisk size={14} className="inline-block align-text-top brightness-115 stroke-[2] text-blue-600" data-tooltip-id='void-tooltip' data-tooltip-place='right' data-tooltip-content='Detected locally' />
+				<Asterisk size={14} className="inline-block align-text-top brightness-115 stroke-[2] text-void-button-primary" data-tooltip-id='void-tooltip' data-tooltip-place='right' data-tooltip-content='Detected locally' />
 				: type === 'custom' ?
-					<Asterisk size={14} className="inline-block align-text-top brightness-115 stroke-[2] text-blue-600" data-tooltip-id='void-tooltip' data-tooltip-place='right' data-tooltip-content='Custom model' />
+					<Asterisk size={14} className="inline-block align-text-top brightness-115 stroke-[2] text-void-button-primary" data-tooltip-id='void-tooltip' data-tooltip-place='right' data-tooltip-content='Custom model' />
 					: undefined
 
 			const hasOverrides = !!settingsState.overridesOfModel?.[providerName]?.[modelName]
@@ -538,7 +538,7 @@ export const ModelDump = ({ filteredProviders, searchQuery = '' }: { filteredPro
 		{/* Add Model Section */}
 		{showCheckmark ? (
 			<div className="mt-4">
-				<AnimatedCheckmarkButton text='Added' className="bg-blue-600 text-white px-3 py-1 rounded-sm" />
+				<AnimatedCheckmarkButton text='Added' className="bg-void-button-primary text-void-button-primary-text px-3 py-1 rounded-sm" />
 			</div>
 		) : isAddModelOpen ? (
 			<div className="mt-4">
@@ -1162,7 +1162,7 @@ export const Settings = () => {
 								className={`
           py-2 px-4 rounded-md text-left transition-all duration-200
           ${selectedSection === tab
-										? 'bg-blue-600/80 text-white font-medium shadow-sm'
+										? 'bg-void-button-primary/80 text-void-button-primary-text font-medium shadow-sm'
 										: 'bg-void-bg-2 hover:bg-void-bg-2/80 text-void-fg-1'}
         `}
 							>

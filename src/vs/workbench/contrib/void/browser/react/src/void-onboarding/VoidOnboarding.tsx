@@ -159,7 +159,7 @@ const AddProvidersPage = ({ pageIndex, setPageIndex }: { pageIndex: number, setP
 					<button
 						key={tab}
 						className={`py-2 px-4 rounded-md text-left ${currentTab === tab
-							? 'bg-[#0e70c0]/80 text-white font-medium shadow-sm'
+							? 'bg-void-button-primary/80 text-void-button-primary-text font-medium shadow-sm'
 							: 'bg-void-bg-2 hover:bg-void-bg-2/80 text-void-fg-1'
 							} transition-all duration-200`}
 						onClick={() => {
@@ -210,7 +210,7 @@ const AddProvidersPage = ({ pageIndex, setPageIndex }: { pageIndex: number, setP
 								data-tooltip-id="void-tooltip-provider-info"
 								data-tooltip-content="Gemini 2.5 Pro offers 25 free messages a day, and Gemini 2.5 Flash offers 500. We recommend using models down the line as you run out of free credits."
 								data-tooltip-place="right"
-								className="ml-1 text-xs align-top text-blue-400"
+								className="ml-1 text-xs align-top text-void-button-primary"
 							>*</span>
 						)}
 						{providerName === 'openRouter' && (
@@ -218,7 +218,7 @@ const AddProvidersPage = ({ pageIndex, setPageIndex }: { pageIndex: number, setP
 								data-tooltip-id="void-tooltip-provider-info"
 								data-tooltip-content="OpenRouter offers 50 free messages a day, and 1000 if you deposit $10. Only applies to models labeled ':free'."
 								data-tooltip-place="right"
-								className="ml-1 text-xs align-top text-blue-400"
+								className="ml-1 text-xs align-top text-void-button-primary"
 							>*</span>
 						)}
 					</div>
