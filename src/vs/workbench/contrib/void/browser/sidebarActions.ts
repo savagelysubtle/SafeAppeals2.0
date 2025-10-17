@@ -280,23 +280,34 @@ registerAction2(class extends Action2 {
 		const wasAlreadyOpen = viewsService.isViewContainerVisible(VOID_VIEW_CONTAINER_ID)
 		if (!wasAlreadyOpen) {
 			await commandService.executeCommand(VOID_OPEN_SIDEBAR_ACTION_ID)
+			// Give the sidebar time to mount after opening
+			await new Promise(resolve => setTimeout(resolve, 100))
 		}
 
 		// Create new thread for organizer
 		chatThreadsService.openNewThread()
-		await chatThreadsService.focusCurrentChat()
 
-		// Get the mounted UI and set the input with the organizer prompt
+		// Get the thread info before focusing (this ensures mountedInfo is set up)
 		const currentThreadId = chatThreadsService.state.currentThreadId
 		const currentThread = chatThreadsService.state.allThreads[currentThreadId]
-		const mountedUI = await currentThread?.state.mountedInfo?.whenMounted
 
-		// Set the default prompt in the text area
-		if (mountedUI?.textAreaRef?.current) {
-			mountedUI.textAreaRef.current.value = caseOrganizerInit_defaultPrompt
-			// Optionally trigger the textarea resize/update event
-			const event = new Event('input', { bubbles: true })
-			mountedUI.textAreaRef.current.dispatchEvent(event)
+		// Focus the chat (this triggers React render)
+		await chatThreadsService.focusCurrentChat()
+
+		// Now wait for the React component to mount and resolve the promise
+		try {
+			const mountedUI = await currentThread?.state.mountedInfo?.whenMounted
+
+			// Set the default prompt in the text area
+			if (mountedUI?.textAreaRef?.current) {
+				mountedUI.textAreaRef.current.value = caseOrganizerInit_defaultPrompt
+				// Trigger the textarea resize/update event
+				const event = new Event('input', { bubbles: true })
+				mountedUI.textAreaRef.current.dispatchEvent(event)
+			}
+		} catch (error) {
+			// If mounting fails or times out, log but don't crash
+			console.error('Case Organizer: Failed to mount UI or set prompt', error)
 		}
 	}
 })

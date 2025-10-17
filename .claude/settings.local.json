@@ -7,7 +7,13 @@
       "Bash(npx webpack:*)",
       "Bash(node:*)",
       "Bash(npm install:*)",
-      "Bash(ls:*)"
+      "Bash(ls:*)",
+      "Read(//d/Coding/void/void/src/vs/workbench/contrib/void/**)",
+      "Bash(npm run build:*)",
+      "Bash(npm run:*)",
+      "Read(//d/**)",
+      "Bash(npx tailwindcss:*)",
+      "Bash(grep:*)"
     ],
     "deny": [],
     "ask": []

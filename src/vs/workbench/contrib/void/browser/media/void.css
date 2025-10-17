@@ -230,26 +230,9 @@
 	caret-color: #A6E22E;
 }
 
-.void-chat-panel button,
-.void-chat-panel [role="button"] {
-	background: #A6E22E;
-	color: #0b0b0b;
-	border: none;
-	border-radius: 4px;
-	padding: 6px 12px;
-	cursor: pointer;
-	transition: background-color 0.2s ease;
-}
-
-.void-chat-panel button:hover,
-.void-chat-panel [role="button"]:hover {
-	background: #8CBF22;
-}
-
-.void-chat-panel button:active,
-.void-chat-panel [role="button"]:active {
-	background: #8CBF22;
-}
+/* Removed overly broad button styling that was overriding React component Tailwind styles */
+/* The buttons in React components (SidebarChat, VoidOnboarding) use their own Tailwind classes */
+/* such as bg-white, bg-black/90, etc. and should not be overridden here */
 
 .void-chat-panel input,
 .void-chat-panel textarea {

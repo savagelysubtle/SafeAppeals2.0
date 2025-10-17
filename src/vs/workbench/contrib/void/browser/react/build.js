@@ -103,7 +103,7 @@ if (isWatch) {
 		'--watch', 'src',
 		'--ext', 'ts,tsx,css',
 		'--exec',
-		'npx scope-tailwind ./src -o src2/ -s void-scope -c styles.css -p "void-"'
+		'npx scope-tailwind ./src -o src2/ -s void-scope -c styles.css -p "void-" && npx tailwindcss -i ./src/styles.css -o ./src2/styles.css --content "./src2/**/*.{tsx,jsx}"'
 	]);
 
 	const tsupWatcher = spawn('npx', [
@@ -144,8 +144,53 @@ if (isWatch) {
 	// Build mode
 	console.log('📦 Building...');
 
-	// Run scope-tailwind once
-	execSync('npx scope-tailwind ./src -o src2/ -s void-scope -c styles.css -p "void-"', { stdio: 'inherit' });
+	// Run scope-tailwind once - suppress stderr to avoid Tailwind debug output corruption
+	try {
+		execSync('npx scope-tailwind ./src -o src2/ -s void-scope -c styles.css -p "void-" 2>nul', { stdio: ['inherit', 'inherit', 'pipe'] });
+	} catch (err) {
+		console.warn('⚠️  scope-tailwind had issues, but src2/ may still be usable. Continuing...');
+	}
+
+	// Run Tailwind CSS compilation to generate utility classes
+	console.log('🎨 Compiling Tailwind CSS...');
+	try {
+		// Don't minify to preserve CSS variables - tsup will minify the final bundle
+		execSync('npx tailwindcss -i ./src/styles.css -o ./src2/styles-tailwind.css --content "./src2/**/*.{tsx,jsx}"', { stdio: 'inherit' });
+		console.log('✅ Tailwind CSS compiled successfully!');
+
+		// Append custom CSS variables to the Tailwind output
+		console.log('🔧 Appending CSS variables...');
+		const tailwindCss = fs.readFileSync('./src2/styles-tailwind.css', 'utf8');
+		const customCss = `\n\n.void-scope {
+	--void-bg-1: var(--vscode-input-background, #1e1e1e);
+	--void-bg-1-alt: var(--vscode-badge-background, #252526);
+	--void-bg-2: var(--vscode-sideBar-background, #252526);
+	--void-bg-2-alt: var(--vscode-editor-background, #1e1e1e);
+	--void-bg-2-hover: var(--vscode-sideBar-background, #252526);
+	--void-bg-3: var(--vscode-editor-background, #1e1e1e);
+
+	--void-fg-0: var(--vscode-tab-activeForeground, #ffffff);
+	--void-fg-1: var(--vscode-editor-foreground, #cccccc);
+	--void-fg-2: var(--vscode-input-foreground, #cccccc);
+	--void-fg-3: var(--vscode-input-placeholderForeground, #8c8c8c);
+	--void-fg-4: var(--vscode-list-deemphasizedForeground, #8c8c8c);
+
+	--void-warning: var(--vscode-charts-yellow, #f0d754);
+
+	--void-border-1: var(--vscode-commandCenter-activeBorder, #007acc);
+	--void-border-2: var(--vscode-commandCenter-border, #3e3e42);
+	--void-border-3: var(--vscode-commandCenter-inactiveBorder, #3e3e42);
+	--void-border-4: var(--vscode-editorGroup-border, #3e3e42);
+
+	--void-ring-color: #A6E22E;
+	--void-link-color: #A6E22E;
+}\n`;
+		fs.writeFileSync('./src2/styles.css', tailwindCss + customCss, 'utf8');
+		console.log('✅ CSS variables appended successfully!');
+	} catch (err) {
+		console.error('❌ Tailwind CSS compilation failed:', err);
+		process.exit(1);
+	}
 
 	// Run tsup once
 	execSync('npx tsup', { stdio: 'inherit' });

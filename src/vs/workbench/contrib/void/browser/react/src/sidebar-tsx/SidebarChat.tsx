@@ -402,7 +402,6 @@ export const VoidChatArea: React.FC<VoidChatAreaProps> = ({
 	const [isDragging, setIsDragging] = useState(false)
 	const accessor = useAccessor()
 	const fileService = accessor.get('IFileService')
-	const textModelService = accessor.get('ITextModelService')
 
 	const handleDrop = async (e: React.DragEvent) => {
 		e.preventDefault()
@@ -416,13 +415,16 @@ export const VoidChatArea: React.FC<VoidChatAreaProps> = ({
 
 		for (const file of files) {
 			try {
-				const uri = URI.file(file.path)
+				// In Electron, the File object has a path property
+				const filePath = (file as any).path || file.name
+				const uri = URI.file(filePath)
 				const exists = await fileService.exists(uri)
 
 				if (exists) {
 					newSelections.push({
 						type: 'File',
 						uri,
+						language: 'plaintext',
 						state: { wasAddedAsCurrentFile: false }
 					})
 				}
@@ -1223,7 +1225,12 @@ const UserMessageComponent = ({ chatMessage, messageIdx, isCheckpointGhost, curr
 	const handleRegenerateFrom = async () => {
 		const threadId = chatThreadsService.state.currentThreadId
 		await chatThreadsService.abortRunning(threadId)
-		await chatThreadsService.regenerateFromIndex(messageIdx)
+		// Re-send the user message to regenerate the response
+		await chatThreadsService.editUserMessageAndStreamResponse({
+			userMessage: chatMessage.content,
+			messageIdx,
+			threadId
+		})
 	}
 
 	let chatbubbleContents: React.ReactNode
@@ -1501,7 +1508,22 @@ const AssistantMessageComponent = ({ chatMessage, isCheckpointGhost, isCommitted
 	const handleRegenerateFrom = async () => {
 		const threadId = chatThreadsService.state.currentThreadId
 		await chatThreadsService.abortRunning(threadId)
-		await chatThreadsService.regenerateFromIndex(messageIdx)
+		// Find the previous user message to regenerate from
+		const thread = chatThreadsService.getCurrentThread()
+		let userMessageIdx = messageIdx - 1
+		while (userMessageIdx >= 0 && thread.messages[userMessageIdx].role !== 'user') {
+			userMessageIdx--
+		}
+		if (userMessageIdx >= 0) {
+			const userMessage = thread.messages[userMessageIdx]
+			if (userMessage.role === 'user') {
+				await chatThreadsService.editUserMessageAndStreamResponse({
+					userMessage: userMessage.content,
+					messageIdx: userMessageIdx,
+					threadId
+				})
+			}
+		}
 	}
 
 	return <div className="relative group">
@@ -1585,8 +1607,8 @@ const titleOfBuiltinToolName = {
 	'delete_file_or_folder': { done: `Deleted`, proposed: `Delete`, running: loadingTitleWrapper(`Deleting`) },
 	'edit_file': { done: `Edited file`, proposed: 'Edit file', running: loadingTitleWrapper('Editing file') },
 	'rewrite_file': { done: `Wrote file`, proposed: 'Write file', running: loadingTitleWrapper('Writing file') },
-		// 'run_command': { done: `Ran terminal`, proposed: 'Run terminal', running: loadingTitleWrapper('Running terminal') }, // Terminal functionality disabled
-		// 'run_persistent_command': { done: `Ran terminal`, proposed: 'Run terminal', running: loadingTitleWrapper('Running terminal') }, // Terminal functionality disabled
+	'run_command': { done: `Ran terminal`, proposed: 'Run terminal', running: loadingTitleWrapper('Running terminal') }, // Terminal functionality disabled
+	'run_persistent_command': { done: `Ran terminal`, proposed: 'Run terminal', running: loadingTitleWrapper('Running terminal') }, // Terminal functionality disabled
 
 	'open_persistent_terminal': { done: `Opened terminal`, proposed: 'Open terminal', running: loadingTitleWrapper('Opening terminal') },
 	'kill_persistent_terminal': { done: `Killed terminal`, proposed: 'Kill terminal', running: loadingTitleWrapper('Killing terminal') },
@@ -1699,18 +1721,18 @@ const toolNameToDesc = (toolName: BuiltinToolName, _toolParams: BuiltinToolCallP
 				desc1Info: getRelative(toolParams.uri, accessor),
 			}
 		},
-		// 'run_command': () => {
-		// 	const toolParams = _toolParams as BuiltinToolCallParams['run_command'] // Terminal functionality disabled
-		// 	return {
-		// 		desc1: `"${toolParams.command}"`,
-		// 	}
-		// },
-		// 'run_persistent_command': () => {
-		// 	const toolParams = _toolParams as BuiltinToolCallParams['run_persistent_command'] // Terminal functionality disabled
-		// 	return {
-		// 		desc1: `"${toolParams.command}"`,
-		// 	}
-		// },
+		'run_command': () => {
+			const toolParams = _toolParams as BuiltinToolCallParams['run_command'] // Terminal functionality disabled
+			return {
+				desc1: `"${toolParams.command}"`,
+			}
+		},
+		'run_persistent_command': () => {
+			const toolParams = _toolParams as BuiltinToolCallParams['run_persistent_command'] // Terminal functionality disabled
+			return {
+				desc1: `"${toolParams.command}"`,
+			}
+		},
 		'open_persistent_terminal': () => {
 			const toolParams = _toolParams as BuiltinToolCallParams['open_persistent_terminal']
 			return { desc1: '' }
@@ -2536,17 +2558,17 @@ const builtinToolNameToComponent: { [T in BuiltinToolName]: { resultWrapper: Res
 
 	// ---
 
-	// 'run_command': {
-	// 	resultWrapper: (params) => {
-	// 		return <CommandTool {...params} type='run_command' />
-	// 	}
-	// }, // Terminal functionality disabled
+	'run_command': {
+		resultWrapper: (params) => {
+			return <CommandTool {...params} type='run_command' />
+		}
+	}, // Terminal functionality disabled
 
-	// 'run_persistent_command': {
-	// 	resultWrapper: (params) => {
-	// 		return <CommandTool {...params} type='run_persistent_command' />
-	// 	}
-	// }, // Terminal functionality disabled
+	'run_persistent_command': {
+		resultWrapper: (params) => {
+			return <CommandTool {...params} type='run_persistent_command' />
+		}
+	}, // Terminal functionality disabled
 	'open_persistent_terminal': {
 		resultWrapper: ({ toolMessage }) => {
 			const accessor = useAccessor()

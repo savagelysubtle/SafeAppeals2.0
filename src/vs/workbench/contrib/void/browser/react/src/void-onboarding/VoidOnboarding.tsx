@@ -12,6 +12,7 @@ import { OllamaSetupInstructions, OneClickSwitchButton, SettingsForProvider, Mod
 import { ColorScheme } from '../../../../../../../platform/theme/common/theme.js';
 import ErrorBoundary from '../sidebar-tsx/ErrorBoundary.js';
 import { isLinux } from '../../../../../../../base/common/platform.js';
+import '../styles.css';
 
 const OVERRIDE_VALUE = false
 
@@ -23,7 +24,7 @@ export const VoidOnboarding = () => {
 	const isDark = useIsDark()
 
 	return (
-		<div className={`void-scope ${isDark ? 'void-dark' : ''}`}>
+		<div className={`@@void-scope ${isDark ? 'dark' : ''}`}>
 			<div
 				className={`
 					bg-void-bg-3 fixed top-0 right-0 bottom-0 left-0 width-full z-[99999]

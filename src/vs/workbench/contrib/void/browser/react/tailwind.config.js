@@ -7,6 +7,12 @@
 module.exports = {
 	darkMode: 'selector', // '{prefix-}dark' className is used to identify `dark:`
 	content: ['./src2/**/*.{jsx,tsx}'], // uses these files to decide how to transform the css file
+	future: {
+		hoverOnlyWhenSupported: true,
+	},
+	corePlugins: {
+		preflight: true,
+	},
 	theme: {
 		extend: {
 			typography: theme => ({
