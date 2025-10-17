@@ -13,7 +13,9 @@
       "Bash(npm run:*)",
       "Read(//d/**)",
       "Bash(npx tailwindcss:*)",
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "Bash(git commit -m \"$(cat <<''EOF''\nROLLBACK: Stable version - Settings and Chat panel fully functional\n\nThis commit represents a stable state for both Settings and Chat panels\nwith complete styling and functionality. Use as rollback point if needed.\n\nMajor fixes implemented:\n- Fixed Settings page rendering (className, Tailwind compilation, CSS variables)\n- Enhanced Chat panel functionality and styling\n- Improved build process with proper CSS variable handling\n- Updated build.js to append CSS variables after Tailwind compilation\n- Fixed void.css scrollbar styling and scoping\n\nSettings fixes:\n- Corrected invalid className from @@void-scope to void-scope\n- Added Tailwind CSS compilation step to build process\n- Implemented CSS variable appending after Tailwind to prevent stripping\n- All Tailwind utility classes now properly generated and scoped\n\nChat panel enhancements:\n- Updated sidebar actions and chat interactions\n- Improved input components and styling\n- Enhanced onboarding flow\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n)\")",
+      "Bash(git log:*)"
     ],
     "deny": [],
     "ask": []
