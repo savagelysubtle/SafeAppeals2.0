@@ -35,6 +35,12 @@ export class ChromaPersistentAdapter implements VectorAdapter {
 	// Store embeddings in memory for search
 	private embeddings: Map<string, { vector: number[]; metadata: Record<string, any> }> = new Map();
 
+	// Rate limiting
+	private lastEmbeddingCallTime: number = 0;
+	private readonly EMBEDDING_DELAY_MS: number = 100; // 10 requests/second max
+	private readonly MAX_RETRIES: number = 3;
+	private readonly RETRY_DELAY_MS: number = 1000; // 1 second base delay for retries
+
 	constructor(
 		private config: PersistentVectorAdapterConfig,
 		private logService: ILogService
@@ -71,6 +77,42 @@ export class ChromaPersistentAdapter implements VectorAdapter {
 		this.logService.info(`Collections ready for scope: ${scope}`);
 	}
 
+	/**
+	 * Rate-limited embedding generation with retry logic
+	 */
+	private async generateEmbeddingWithRateLimit(text: string, retryCount: number = 0): Promise<number[] | null> {
+		// Enforce rate limit
+		const now = Date.now();
+		const timeSinceLastCall = now - this.lastEmbeddingCallTime;
+		if (timeSinceLastCall < this.EMBEDDING_DELAY_MS) {
+			const delay = this.EMBEDDING_DELAY_MS - timeSinceLastCall;
+			await new Promise(resolve => setTimeout(resolve, delay));
+		}
+
+		this.lastEmbeddingCallTime = Date.now();
+
+		try {
+			const response = await this.openai.embeddings.create({
+				model: this.config.openAIModel,
+				input: text
+			});
+			return response.data[0].embedding;
+		} catch (error: any) {
+			// Handle rate limit errors with exponential backoff
+			if (error?.status === 429 && retryCount < this.MAX_RETRIES) {
+				const backoffDelay = this.RETRY_DELAY_MS * Math.pow(2, retryCount);
+				this.logService.warn(`Rate limit hit, retrying in ${backoffDelay}ms (attempt ${retryCount + 1}/${this.MAX_RETRIES})...`);
+				await new Promise(resolve => setTimeout(resolve, backoffDelay));
+				return this.generateEmbeddingWithRateLimit(text, retryCount + 1);
+			}
+
+			// Log and re-throw other errors
+			const errorMsg = error instanceof Error ? error.message : String(error);
+			this.logService.error(`Failed to generate embedding: ${errorMsg}`);
+			return null;
+		}
+	}
+
 	async add(chunks: ChunkRecord[], metadatas: Array<Record<string, any>>): Promise<void> {
 		if (!this.initialized) {
 			await this.initialize();
@@ -79,28 +121,28 @@ export class ChromaPersistentAdapter implements VectorAdapter {
 		if (chunks.length === 0 || !this.openai) return;
 
 		try {
-			// Generate embeddings for all chunks
+			// Generate embeddings for all chunks with rate limiting
+			let successCount = 0;
+			let failCount = 0;
+
 			for (let i = 0; i < chunks.length; i++) {
 				const chunk = chunks[i];
 				const metadata = metadatas[i];
 
-				try {
-					const response = await this.openai.embeddings.create({
-						model: this.config.openAIModel,
-						input: chunk.text
-					});
+				const embedding = await this.generateEmbeddingWithRateLimit(chunk.text);
 
-					const embedding = response.data[0].embedding;
+				if (embedding) {
 					this.embeddings.set(chunk.chunkId, {
 						vector: embedding,
 						metadata
 					});
-				} catch (error) {
-					this.logService.warn(`Failed to generate embedding for chunk ${chunk.chunkId}:`, error);
+					successCount++;
+				} else {
+					failCount++;
 				}
 			}
 
-			this.logService.info(`Added ${chunks.length} chunks to vector store`);
+			this.logService.info(`Added ${successCount} chunks to vector store${failCount > 0 ? ` (${failCount} failed)` : ''}`);
 		} catch (error) {
 			this.logService.error('Failed to add chunks:', error);
 		}
@@ -117,13 +159,13 @@ export class ChromaPersistentAdapter implements VectorAdapter {
 		}
 
 		try {
-			// Generate query embedding
-			const response = await this.openai.embeddings.create({
-				model: this.config.openAIModel,
-				input: text
-			});
+			// Generate query embedding with rate limiting
+			const queryVector = await this.generateEmbeddingWithRateLimit(text);
 
-			const queryVector = response.data[0].embedding;
+			if (!queryVector) {
+				this.logService.error('Failed to generate query embedding');
+				return [];
+			}
 
 			// Calculate cosine similarity with all stored embeddings
 			const results: Array<{ id: string; score: number; metadata: Record<string, any> }> = [];
