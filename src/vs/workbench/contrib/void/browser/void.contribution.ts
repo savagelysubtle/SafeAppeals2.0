@@ -3,6 +3,7 @@
  *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
  *--------------------------------------------------------------------------------------*/
 
+import { Registry } from '../../../../platform/registry/common/platform.js';
 
 // register inline diffs
 import './editCodeService.js'
@@ -87,3 +88,30 @@ import '../common/voidModelService.js'
 
 // case profile service
 import '../common/caseProfileService.js'
+
+// RAG services
+import '../common/ragService.js'
+import '../common/ragPathService.js'
+import '../common/ragContextService.js'
+
+// RAG workspace service
+import './ragWorkspaceService.js'
+import { IRAGWorkspaceService } from './ragWorkspaceService.js'
+
+// RAG actions
+import './ragActions.js'
+
+// Ensure RAG workspace service starts
+import { IWorkbenchContributionsRegistry, Extensions as WorkbenchExtensions } from '../../../common/contributions.js';
+import { LifecyclePhase } from '../../../services/lifecycle/common/lifecycle.js';
+
+class RAGWorkspaceContribution {
+	constructor(
+		@IRAGWorkspaceService _ragWorkspaceService: IRAGWorkspaceService
+	) {
+		// Just injecting the service causes it to instantiate
+	}
+}
+
+Registry.as<IWorkbenchContributionsRegistry>(WorkbenchExtensions.Workbench)
+	.registerWorkbenchContribution(RAGWorkspaceContribution, LifecyclePhase.Restored);

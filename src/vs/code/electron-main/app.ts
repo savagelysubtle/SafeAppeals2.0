@@ -133,6 +133,10 @@ import { LLMMessageChannel } from '../../workbench/contrib/void/electron-main/se
 import { VoidSCMService } from '../../workbench/contrib/void/electron-main/voidSCMMainService.js';
 import { IVoidSCMService } from '../../workbench/contrib/void/common/voidSCMTypes.js';
 import { MCPChannel } from '../../workbench/contrib/void/electron-main/mcpChannel.js';
+import { RAGMainService } from '../../workbench/contrib/void/electron-main/ragMainService.js';
+import { IRAGMainService } from '../../workbench/contrib/void/common/ragServiceTypes.js';
+import { RAGMainChannel } from '../../workbench/contrib/void/electron-main/ragMainChannel.js';
+import { RAGPathService, IRAGPathService } from '../../workbench/contrib/void/common/ragPathService.js';
 /**
  * The main VS Code application. There will only ever be one instance,
  * even if the user starts many instances (e.g. from the command line).
@@ -1105,6 +1109,8 @@ export class CodeApplication extends Disposable {
 		services.set(IMetricsService, new SyncDescriptor(MetricsMainService, undefined, false));
 		services.set(IVoidUpdateService, new SyncDescriptor(VoidMainUpdateService, undefined, false));
 		services.set(IVoidSCMService, new SyncDescriptor(VoidSCMService, undefined, false));
+		services.set(IRAGPathService, new SyncDescriptor(RAGPathService, undefined, false));
+		services.set(IRAGMainService, new SyncDescriptor(RAGMainService, undefined, false));
 
 		// Default Extensions Profile Init
 		services.set(IExtensionsProfileScannerService, new SyncDescriptor(ExtensionsProfileScannerService, undefined, true));
@@ -1253,6 +1259,10 @@ export class CodeApplication extends Disposable {
 		// Void added this
 		const mcpChannel = new MCPChannel();
 		mainProcessElectronServer.registerChannel('void-channel-mcp', mcpChannel);
+
+		// Void RAG service
+		const ragMainChannel = new RAGMainChannel(accessor.get(IRAGMainService));
+		mainProcessElectronServer.registerChannel('void-channel-rag', ragMainChannel);
 
 		// Extension Host Debug Broadcasting
 		const electronExtensionHostDebugBroadcastChannel = new ElectronExtensionHostDebugBroadcastChannel(accessor.get(IWindowsMainService));

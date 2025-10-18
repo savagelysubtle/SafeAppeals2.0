@@ -22,14 +22,9 @@ SafeAppealNavigator is a next-generation IDE and research platform built on VSCo
 
 ---
 
-## 🎯 Dual-Purpose Platform
+## 🎯 SafeAppealNavigator
 
-### 💻 **AI-Powered Code Editor**
-
-- Fork of VSCode with enhanced AI agent capabilities
-- Use AI agents on your codebase with checkpoint and change visualization
-- Bring any model or host locally—messages sent directly to providers without data retention
-- Vibrant lime green accents for a modern, open-source Cursor alternative
+*Support this project: [paypal.me/safeappealnavigator](https://paypal.me/safeappealnavigator)*
 
 ### ⚖️ **Legal Research & Case Management**
 
@@ -48,6 +43,8 @@ SafeAppealNavigator is a next-generation IDE and research platform built on VSCo
 ---
 
 ## ✨ Key Features
+
+*Support this project: [paypal.me/safeappealnavigator](https://paypal.me/safeappealnavigator)*
 
 ### 📁 Smart Case Organization
 
@@ -87,6 +84,8 @@ SafeAppealNavigator is a next-generation IDE and research platform built on VSCo
 ---
 
 ## 🚀 Installation & Setup
+
+*Support this project: [paypal.me/safeappealnavigator](https://paypal.me/safeappealnavigator)*
 
 ### Prerequisites
 
@@ -169,6 +168,8 @@ For detailed development instructions, see [`.vscode/README.md`](./.vscode/READM
 
 ## 📖 How to Use
 
+*Support this project: [paypal.me/safeappealnavigator](https://paypal.me/safeappealnavigator)*
+
 ### 🏥 Legal Case Management
 
 1. **Create New Case**: Set up a case file with injury and claim information
@@ -186,7 +187,9 @@ For detailed development instructions, see [`.vscode/README.md`](./.vscode/READM
 
 ---
 
-## 📊 Real-World Success Stories
+## 📊 Real-World Success Stories (Coming Soon)
+
+*Support this project: [paypal.me/safeappealnavigator](https://paypal.me/safeappealnavigator)*
 
 ### 🏗️ Construction Worker - Denied Surgery Coverage
 
@@ -274,4 +277,8 @@ SafeAppealNavigator is a fork of the [vscode](https://github.com/microsoft/vscod
 
 ## Note
 
+*Support this project: [paypal.me/safeappealnavigator](https://paypal.me/safeappealnavigator)*
+
 SafeAppealNavigator is actively maintained and developed. Stay updated with new releases by watching the repository!
+
+*Support this project: [paypal.me/safeappealnavigator](https://paypal.me/safeappealnavigator)*

@@ -42,6 +42,9 @@ function code() {
 	export ELECTRON_ENABLE_STACK_DUMPING=1
 	export ELECTRON_ENABLE_LOGGING=1
 
+	# Enable garbage collection for better memory management with large PDFs
+	export NODE_OPTIONS="--expose-gc --max-old-space-size=4096"
+
 	DISABLE_TEST_EXTENSION="--disable-extension=vscode.vscode-api-tests"
 	if [[ "$@" == *"--extensionTestsPath"* ]]; then
 		DISABLE_TEST_EXTENSION=""
