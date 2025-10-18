@@ -1,0 +1,58 @@
+---
+description: VSCode core concepts and terminology reference
+alwaysApply: true
+---
+
+# VSCode Terminology & Core Concepts
+
+## Key Types and Concepts
+
+### Editor vs Model
+
+- **Editor** (`ICodeEditor`) - The visual component where you type code
+  - Multiple editors can exist (split views)
+  - 10 open tabs = still just one editor (unless split)
+
+- **Model** (`ITextModel`) - Internal representation of file contents
+  - Shared between editors (changes sync automatically)
+  - One model per file, even if displayed in multiple editors
+
+- **URI** (resource) - File path representation
+  - Example: `/Users/.../my_file.txt`
+  - Use URIs to reference files throughout VSCode
+
+### Application Structure
+
+- **Workbench** - Container for editors, terminal, file tree, panels, etc.
+- **Panel** - Bottom area (terminal, problems, output)
+- **Sidebar** - Left/right areas (file explorer, extensions, etc.)
+- **Auxbar** - Additional auxiliary views
+
+## Actions & Commands
+
+**Actions** (aka **Commands**) are registered functions callable by users or code:
+
+```typescript
+registerAction2(class MyAction extends Action2 {
+  constructor() {
+    super({
+      id: 'my.action.id',
+      title: 'My Action',
+      keybinding: { primary: KeyMod.CtrlCmd | KeyCode.KeyK }
+    });
+  }
+  async run(accessor: ServicesAccessor) {
+    // implementation
+  }
+});
+```
+
+- Users invoke via Command Palette (Cmd+Shift+P)
+- Code invokes via `commandService.executeCommand(actionId)`
+- Keybindings are user-customizable
+
+## Events & Disposables
+
+- Use `Emitter<T>` and `Event<T>` for pub/sub patterns
+- Always dispose of subscriptions and event listeners
+- Follow the disposable pattern to prevent memory leaks
