@@ -6,7 +6,8 @@
 
 import { defaultModelsOfProvider, defaultProviderSettings, ModelOverrides } from './modelCapabilities.js';
 import { ToolApprovalType } from './toolsServiceTypes.js';
-import { VoidSettingsState } from './voidSettingsService.js'
+import { VoidSettingsState } from './voidSettingsService.js';
+import { RAGStorageScope, RAGVectorBackend, RAGOpenAIModel } from './ragServiceTypes.js';
 
 
 type UnionOfKeys<T> = T extends T ? keyof T : never;
@@ -452,6 +453,21 @@ export type GlobalSettings = {
 	isOnboardingComplete: boolean;
 	disableSystemMessage: boolean;
 	autoAcceptLLMChanges: boolean;
+	// RAG settings
+	ragEnabled: boolean;
+	ragChunkSize: number;
+	ragChunkOverlap: number;
+	ragSearchLimit: number;
+	ragStorageScope: RAGStorageScope;
+	ragVectorBackend: RAGVectorBackend;
+	ragOpenAIModel: RAGOpenAIModel;
+	ragChromaUrl?: string;
+	ragAutoIndexPolicyFolder: boolean;
+	ragPolicyFolderName: string;
+	ragWatchPolicyFolder: boolean;
+	ragShowIndexedBadge: boolean;
+	caseOrganizerAutoCreateTosort: boolean;
+	caseOrganizerTosortFolderName: string;
 }
 
 export const defaultGlobalSettings: GlobalSettings = {
@@ -468,6 +484,21 @@ export const defaultGlobalSettings: GlobalSettings = {
 	isOnboardingComplete: false,
 	disableSystemMessage: false,
 	autoAcceptLLMChanges: false,
+	// RAG defaults
+	ragEnabled: true,
+	ragChunkSize: 1000,
+	ragChunkOverlap: 100,
+	ragSearchLimit: 5,
+	ragStorageScope: 'workspace_docs',
+	ragVectorBackend: 'chroma-http',
+	ragOpenAIModel: 'text-embedding-3-small',
+	ragChromaUrl: 'http://localhost:8000',
+	ragAutoIndexPolicyFolder: true,
+	ragPolicyFolderName: 'policy-manuals',
+	ragWatchPolicyFolder: true,
+	ragShowIndexedBadge: true,
+	caseOrganizerAutoCreateTosort: true,
+	caseOrganizerTosortFolderName: 'tosort',
 }
 
 export type GlobalSettingName = keyof GlobalSettings

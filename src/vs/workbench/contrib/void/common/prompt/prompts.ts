@@ -329,6 +329,41 @@ export const builtinTools: {
 		name: 'kill_persistent_terminal',
 		description: `Interrupts and closes a persistent terminal that you opened with open_persistent_terminal.`,
 		params: { persistent_terminal_id: { description: `The ID of the persistent terminal.` } }
+	},
+
+	// --- RAG (Retrieval Augmented Generation) ---
+
+	rag_index_document: {
+		name: 'rag_index_document',
+		description: `Indexes a document for RAG search. Use this to make documents searchable.`,
+		params: {
+			...uriParam('document'),
+			is_policy_manual: { description: 'Whether this is a policy manual (true) or workspace document (false). Defaults to false.' }
+		}
+	},
+
+	rag_search_policy: {
+		name: 'rag_search_policy',
+		description: `Searches indexed policy manuals for relevant content. Returns a context pack with relevant snippets.`,
+		params: {
+			query: { description: 'The search query to find relevant policy manual content.' },
+			limit: { description: 'Maximum number of results to return. Defaults to 5.' }
+		}
+	},
+
+	rag_search_workspace: {
+		name: 'rag_search_workspace',
+		description: `Searches indexed workspace documents for relevant content. Returns a context pack with relevant snippets.`,
+		params: {
+			query: { description: 'The search query to find relevant workspace document content.' },
+			limit: { description: 'Maximum number of results to return. Defaults to 5.' }
+		}
+	},
+
+	rag_get_stats: {
+		name: 'rag_get_stats',
+		description: `Gets statistics about the RAG index (number of documents, chunks, etc.).`,
+		params: {}
 	}
 
 
@@ -1211,7 +1246,7 @@ Ask user: "Review the plan above. Type 'proceed' to continue, 'edit' to modify, 
 User: "I want to organize my case files"
 You: "I'll help organize your workers compensation case files. Which mode would you like?
 1. Full Auto - I'll handle everything with backups
-2. Interactive - You'll confirm uncertain categorizations  
+2. Interactive - You'll confirm uncertain categorizations
 3. Manual - Just create the folder structure
 
 Type 1, 2, or 3 to choose."
@@ -1221,7 +1256,7 @@ export const caseOrganizerInit_defaultPrompt = `I need to organize my workers co
 
 **Context:** I have documents that need to be categorized into:
 - Medical_Reports
-- Correspondence  
+- Correspondence
 - Decisions_and_Orders
 - Evidence
 - Personal_Notes
@@ -1236,6 +1271,6 @@ Please follow the Case Organizer workflow:
 6. Generate organization_log.json and undo_plan.json
 
 **System:** ${os}
-**Commands:** Use ${os === 'windows' ? 'PowerShell (New-Item, Copy-Item, Move-Item)' : 'bash (mkdir, cp, mv)'} 
+**Commands:** Use ${os === 'windows' ? 'PowerShell (New-Item, Copy-Item, Move-Item)' : 'bash (mkdir, cp, mv)'}
 
 **Safety:** Always backup before moving files. Ask before overwriting logs.`

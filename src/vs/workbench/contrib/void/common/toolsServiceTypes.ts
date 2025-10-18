@@ -18,7 +18,7 @@ export type ShallowDirectoryItem = {
 }
 
 
-export const approvalTypeOfBuiltinToolName: Partial<{ [T in BuiltinToolName]?: 'edits' | 'terminal' | 'MCP tools' }> = {
+export const approvalTypeOfBuiltinToolName: Partial<{ [T in BuiltinToolName]?: 'edits' | 'terminal' | 'MCP tools' | 'RAG tools' }> = {
 	'create_file_or_folder': 'edits',
 	'delete_file_or_folder': 'edits',
 	'rewrite_file': 'edits',
@@ -27,6 +27,10 @@ export const approvalTypeOfBuiltinToolName: Partial<{ [T in BuiltinToolName]?: '
 	'run_persistent_command': 'terminal',
 	'open_persistent_terminal': 'terminal',
 	'kill_persistent_terminal': 'terminal',
+	'rag_index_document': 'RAG tools',
+	'rag_search_policy': 'RAG tools',
+	'rag_search_workspace': 'RAG tools',
+	'rag_get_stats': 'RAG tools',
 }
 
 
@@ -36,6 +40,7 @@ export type ToolApprovalType = NonNullable<(typeof approvalTypeOfBuiltinToolName
 export const toolApprovalTypes = new Set<ToolApprovalType>([
 	...Object.values(approvalTypeOfBuiltinToolName),
 	'MCP tools',
+	'RAG tools',
 ])
 
 
@@ -60,6 +65,11 @@ export type BuiltinToolCallParams = {
 	'open_persistent_terminal': { cwd: string | null },
 	'run_persistent_command': { command: string; persistentTerminalId: string },
 	'kill_persistent_terminal': { persistentTerminalId: string },
+	// --- RAG tools
+	'rag_index_document': { uri: URI, isPolicyManual: boolean },
+	'rag_search_policy': { query: string, limit: number },
+	'rag_search_workspace': { query: string, limit: number },
+	'rag_get_stats': {},
 }
 
 // RESULT OF TOOL CALL
@@ -81,6 +91,11 @@ export type BuiltinToolResultType = {
 	'run_persistent_command': { result: string; resolveReason: TerminalResolveReason; },
 	'open_persistent_terminal': { persistentTerminalId: string },
 	'kill_persistent_terminal': {},
+	// --- RAG tools
+	'rag_index_document': { success: boolean, message: string },
+	'rag_search_policy': { contextPack: string },
+	'rag_search_workspace': { contextPack: string },
+	'rag_get_stats': { stats: string },
 }
 
 

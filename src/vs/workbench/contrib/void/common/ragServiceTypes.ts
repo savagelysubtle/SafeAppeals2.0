@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------*/
 
 import { URI } from '../../../../base/common/uri.js';
+import { createDecorator } from '../../../../platform/instantiation/common/instantiation.js';
 
 export interface DocumentRecord {
 	id: string;
@@ -15,6 +16,8 @@ export interface DocumentRecord {
 	lastIndexed: string;
 	checksum?: string;
 	metadata?: string; // JSON string of additional metadata
+	isPolicyManual?: boolean;
+	workspaceId?: string;
 }
 
 export interface ChunkRecord {
@@ -87,7 +90,7 @@ export interface ExtractedContent {
 
 export interface RAGSearchParams {
 	query: string;
-	scope: 'policy_manual' | 'workspace_docs' | 'both';
+	scope: RAGStorageScope;
 	limit: number;
 	workspaceId?: string;
 }
@@ -112,6 +115,22 @@ export interface RAGStats {
 	totalSize: number;
 }
 
-export type RAGStorageScope = 'global' | 'workspace' | 'both';
+export type RAGStorageScope = 'policy_manual' | 'workspace_docs' | 'both';
 export type RAGVectorBackend = 'chroma-http' | 'sqlite-vec';
 export type RAGOpenAIModel = 'text-embedding-3-small' | 'text-embedding-3-large';
+
+// Main service interface (implemented in electron-main)
+export const IRAGMainService = createDecorator<IRAGMainService>('ragMainService');
+
+export interface IRAGMainService {
+	readonly _serviceBrand: undefined;
+
+	indexDocument(params: RAGIndexParams): Promise<{ success: boolean; message: string }>;
+	search(params: RAGSearchParams): Promise<ContextPack>;
+	getStats(): Promise<RAGStats>;
+	deleteDocument(docId: string): Promise<void>;
+	isDocumentIndexed(uri: URI): Promise<boolean>;
+	getDocumentsByType(isPolicyManual: boolean): Promise<any[]>;
+	initialize(openAIApiKey?: string): Promise<void>;
+	clearAllEmbeddings(): Promise<{ success: boolean; message: string }>;
+}

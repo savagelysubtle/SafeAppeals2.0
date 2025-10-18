@@ -6,12 +6,17 @@ The Case Organizer is a specialized agent workflow for organizing workers compen
 
 ## Quick Start
 
+### Automatic Folder Creation
+
+When you open a new workspace, SafeAppeals automatically creates a `tosort` folder where you can place documents to be organized. This happens automatically - no manual setup required!
+
 ### Launch the Organizer
 
 1. **Command Palette**: Press `F1` and type "Void: Initialize Case Organizer"
 2. **Or** use the command: `void.organizer.init`
 
 This will:
+
 - Open the Void sidebar
 - Create a new chat thread in Agent mode
 - Pre-fill a prompt with Case Organizer instructions
@@ -19,6 +24,7 @@ This will:
 ### Organization Modes
 
 **1. Full Auto** ⚡
+
 - Analyzes files automatically
 - Creates backups in `tosort/_originals/`
 - Shows dry-run plan for approval
@@ -26,11 +32,13 @@ This will:
 - Generates logs and undo plans
 
 **2. Interactive** 🤝
+
 - Same as Full Auto but asks for confirmation on uncertain files
 - You review and adjust categories before execution
 - Perfect for first-time organization
 
 **3. Manual** 📁
+
 - Only creates the folder scaffold
 - You manually move files
 - No automated file operations
@@ -97,6 +105,7 @@ The agent uses filename pattern matching:
 ## OS-Specific Commands
 
 ### Windows (PowerShell)
+
 ```powershell
 # Create directory
 New-Item -ItemType Directory -Path ".\Case_Files\Medical_Reports" -Force
@@ -109,6 +118,7 @@ Move-Item -Path ".\tosort\file.pdf" -Destination ".\Case_Files\Medical_Reports\f
 ```
 
 ### macOS/Linux (bash)
+
 ```bash
 # Create directory
 mkdir -p ./Case_Files/Medical_Reports
@@ -123,18 +133,20 @@ mv ./tosort/file.pdf ./Case_Files/Medical_Reports/file.pdf
 ## Workflow Example
 
 ### Step 1: Initialize
+
 ```
 User: Runs "Void: Initialize Case Organizer"
-Agent: "I'll help organize your workers compensation case files. 
+Agent: "I'll help organize your workers compensation case files.
         Which mode would you like?
         1. Full Auto - I'll handle everything with backups
-        2. Interactive - You'll confirm uncertain categorizations  
+        2. Interactive - You'll confirm uncertain categorizations
         3. Manual - Just create the folder structure
-        
+
         Type 1, 2, or 3 to choose."
 ```
 
 ### Step 2: Analysis
+
 ```
 Agent: "Analyzing files in ./tosort...
         Found 25 files:
@@ -144,15 +156,17 @@ Agent: "Analyzing files in ./tosort...
 ```
 
 ### Step 3: Dry-Run Preview
+
 ```
 Agent: "Here's the organization plan:
         [Shows JSON plan]
-        
-        Review the plan above. Type 'proceed' to continue, 
+
+        Review the plan above. Type 'proceed' to continue,
         'edit' to modify, or 'cancel' to stop."
 ```
 
 ### Step 4: Execution
+
 ```
 User: "proceed"
 Agent: "Creating backups in ./tosort/_originals/...
@@ -162,7 +176,7 @@ Agent: "Creating backups in ./tosort/_originals/...
         Moving files...
         ✓ Moved 23 files
         ⚠ Skipped 2 files (errors logged)
-        
+
         Summary: 23 moved, 2 skipped, 1 conflict resolved
         Logs: organization_log.json, undo_plan.json"
 ```
@@ -170,7 +184,9 @@ Agent: "Creating backups in ./tosort/_originals/...
 ## Generated Files
 
 ### `organization_log.json`
+
 Complete record of all operations performed:
+
 ```json
 {
   "timestamp": "2025-01-15T10:30:00Z",
@@ -201,7 +217,9 @@ Complete record of all operations performed:
 ```
 
 ### `undo_plan.json`
+
 Reverse operations to restore original state:
+
 ```json
 {
   "operations": [
@@ -217,14 +235,18 @@ Reverse operations to restore original state:
 ## Advanced Usage
 
 ### Custom Source Folder
+
 If your files aren't in `tosort/`:
+
 ```
 User: "My files are in D:\Documents\WC_Docs\"
 Agent: "I'll analyze D:\Documents\WC_Docs\ instead..."
 ```
 
 ### Add Custom Categories
+
 Create a `.voidrules` file:
+
 ```
 When organizing case files:
 - Add a "Legal_Correspondence" category for lawyer communications
@@ -233,6 +255,7 @@ When organizing case files:
 ```
 
 ### Batch Multiple Folders
+
 ```
 User: "I have 3 case folders to organize: case_2023, case_2024, case_2025"
 Agent: "I'll process each folder separately with the same structure..."
@@ -241,41 +264,49 @@ Agent: "I'll process each folder separately with the same structure..."
 ## Troubleshooting
 
 ### "tosort folder not found"
+
 - Create the folder manually: `mkdir tosort`
 - Or specify a different folder when prompted
 
 ### "Permission denied"
+
 - Run VSCode as administrator (Windows)
 - Check folder permissions (macOS/Linux)
 
 ### "Files not moving"
+
 - Check the `organization_log.json` for specific errors
 - Ensure destination folders were created
 - Verify files aren't locked/in use
 
 ### "Want to undo organization"
+
 - Check `undo_plan.json` for reverse operations
 - Or restore from `tosort/_originals/` (Full Auto mode)
 
 ## Implementation Details
 
 ### Files Modified
+
 - `src/vs/workbench/contrib/void/common/prompt/prompts.ts` - System prompt and default prompt
 - `src/vs/workbench/contrib/void/browser/sidebarActions.ts` - Command registration
 - Terminal tools enabled in `toolsService.ts`, `toolsServiceTypes.ts`
 
 ### Tools Used
+
 - `run_command` - Execute PowerShell/bash commands
 - `get_dir_tree` - Analyze folder structure
 - `read_file` - Sample file content for uncertain categorizations
 - `ls_dir` - List directory contents
 
 ### Command ID
+
 `void.organizer.init`
 
 ## Future Enhancements
 
 Potential additions:
+
 - MCP server for richer file operations
 - Template-based categorization rules
 - Bulk rename operations
@@ -286,6 +317,6 @@ Potential additions:
 ## Support
 
 For issues or questions:
-- GitHub: https://github.com/savagelysubtle/SafeAppeals2.0
-- Documentation: See VOID_CODEBASE_GUIDE.md
 
+- GitHub: <https://github.com/savagelysubtle/SafeAppeals2.0>
+- Documentation: See VOID_CODEBASE_GUIDE.md

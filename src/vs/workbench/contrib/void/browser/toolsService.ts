@@ -19,6 +19,8 @@ import { RawToolParamsObj } from '../common/sendLLMMessageTypes.js'
 import { MAX_CHILDREN_URIs_PAGE, MAX_FILE_CHARS_PAGE, MAX_TERMINAL_INACTIVE_TIME, MAX_TERMINAL_BG_COMMAND_TIME } from '../common/prompt/prompts.js'
 import { IVoidSettingsService } from '../common/voidSettingsService.js'
 import { generateUuid } from '../../../../base/common/uuid.js'
+import { IRAGService } from '../common/ragService.js'
+import { RAGContextService } from '../common/ragContextService.js'
 
 
 // tool use for AI
@@ -153,6 +155,7 @@ export class ToolsService implements IToolsService {
 		@IDirectoryStrService private readonly directoryStrService: IDirectoryStrService,
 		@IMarkerService private readonly markerService: IMarkerService,
 		@IVoidSettingsService private readonly voidSettingsService: IVoidSettingsService,
+		@IRAGService private readonly ragService: IRAGService,
 	) {
 		const queryBuilder = instantiationService.createInstance(QueryBuilder);
 
@@ -288,6 +291,29 @@ export class ToolsService implements IToolsService {
 				const { persistent_terminal_id: terminalIdUnknown } = params;
 				const persistentTerminalId = validateProposedTerminalId(terminalIdUnknown);
 				return { persistentTerminalId };
+			},
+
+			// --- RAG tools
+			rag_index_document: (params: RawToolParamsObj) => {
+				const { uri: uriStr, is_policy_manual: isPolicyManualUnknown } = params;
+				const uri = validateURI(uriStr);
+				const isPolicyManual = validateBoolean(isPolicyManualUnknown, { default: false });
+				return { uri, isPolicyManual };
+			},
+			rag_search_policy: (params: RawToolParamsObj) => {
+				const { query: queryUnknown, limit: limitUnknown } = params;
+				const query = validateStr('query', queryUnknown);
+				const limit = validateNumber(limitUnknown, { default: 5 }) || 5;
+				return { query, limit };
+			},
+			rag_search_workspace: (params: RawToolParamsObj) => {
+				const { query: queryUnknown, limit: limitUnknown } = params;
+				const query = validateStr('query', queryUnknown);
+				const limit = validateNumber(limitUnknown, { default: 5 }) || 5;
+				return { query, limit };
+			},
+			rag_get_stats: (params: RawToolParamsObj) => {
+				return {};
 			},
 
 		}
@@ -461,6 +487,60 @@ export class ToolsService implements IToolsService {
 				await this.terminalToolService.killPersistentTerminal(persistentTerminalId)
 				return { result: {} }
 			},
+
+			// --- RAG tools
+			rag_index_document: async ({ uri, isPolicyManual }) => {
+				try {
+					const result = await this.ragService.indexDocument({ uri, isPolicyManual });
+					return { result };
+				} catch (error) {
+					return { result: { success: false, message: `Failed to index document: ${error.message}` } };
+				}
+			},
+			rag_search_policy: async ({ query, limit }) => {
+				try {
+					const contextPack = await this.ragService.search({
+						query,
+						scope: 'policy_manual',
+						limit
+					});
+					const contextService = new RAGContextService();
+					const formatted = contextService.formatContextPack(contextPack);
+					return { result: { contextPack: formatted } };
+				} catch (error) {
+					return { result: { contextPack: `Search failed: ${error.message}` } };
+				}
+			},
+			rag_search_workspace: async ({ query, limit }) => {
+				try {
+					const contextPack = await this.ragService.search({
+						query,
+						scope: 'workspace_docs',
+						limit
+					});
+					const contextService = new RAGContextService();
+					const formatted = contextService.formatContextPack(contextPack);
+					return { result: { contextPack: formatted } };
+				} catch (error) {
+					return { result: { contextPack: `Search failed: ${error.message}` } };
+				}
+			},
+			rag_get_stats: async () => {
+				try {
+					const stats = await this.ragService.getStats();
+					const statsStr = `RAG Statistics:
+Total Documents: ${stats.totalDocuments}
+Total Size: ${(stats.totalSize / 1024 / 1024).toFixed(2)} MB
+Total Chunks: ${stats.chunks.totalChunks}
+Average Tokens per Chunk: ${stats.chunks.avgTokens}
+
+Documents by Type:
+${stats.documents.map(d => `  ${d.filetype}: ${d.typeCount} files (${(d.totalSize / 1024 / 1024).toFixed(2)} MB)`).join('\n')}`;
+					return { result: { stats: statsStr } };
+				} catch (error) {
+					return { result: { stats: `Failed to get stats: ${error.message}` } };
+				}
+			},
 		}
 
 
@@ -563,6 +643,24 @@ export class ToolsService implements IToolsService {
 			},
 			kill_persistent_terminal: (params, _result) => {
 				return `Successfully closed terminal "${params.persistentTerminalId}".`;
+			},
+
+			// --- RAG tools
+			rag_index_document: (params, result) => {
+				if (result.success) {
+					return `Successfully indexed document: ${params.uri.fsPath}\n${result.message}`;
+				} else {
+					return `Failed to index document: ${params.uri.fsPath}\n${result.message}`;
+				}
+			},
+			rag_search_policy: (_params, result) => {
+				return result.contextPack;
+			},
+			rag_search_workspace: (_params, result) => {
+				return result.contextPack;
+			},
+			rag_get_stats: (_params, result) => {
+				return result.stats;
 			},
 		}
 
