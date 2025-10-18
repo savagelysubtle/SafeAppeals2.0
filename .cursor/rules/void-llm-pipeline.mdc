@@ -1,0 +1,41 @@
+---
+description: LLM message pipeline and provider communication flow
+---
+
+# Void LLM Message Pipeline
+
+## Message Flow
+
+1. **User Input** - React sidebar component (`SidebarChat.tsx`)
+2. **Thread Update** - `chatThreadService` updates thread state
+3. **Context Gathering** - `contextGatheringService` collects context
+   - Open files, current selection, workspace info
+   - Codebase context (if enabled)
+4. **Message Conversion** - `convertToLLMMessageService` formats for provider
+   - Converts to provider-specific message format
+   - Handles multimodal content (text, images, tools)
+5. **IPC to Main** - Message sent to `electron-main/` process
+   - Avoids CSP (Content Security Policy) issues
+   - Enables direct node_modules access (provider SDKs)
+6. **Provider Call** - SDK makes API request from main process
+   - OpenAI, Anthropic, Ollama, etc.
+7. **Streaming Response** - Response streams back to browser process
+8. **UI Update** - Sidebar reflects new messages
+
+## Why Main Process?
+
+Sending LLM messages from the main process provides:
+
+- **CSP Bypass** - No Content Security Policy restrictions for local providers
+- **Node Modules** - Direct access to provider SDKs without bundling
+- **Better Error Handling** - Node.js environment for network operations
+
+## Model Capabilities
+
+**CRITICAL**: Keep `modelCapabilities.ts` updated when providers release new models!
+
+This file is referenced throughout the pipeline to:
+
+- Determine available models per provider
+- Check model capabilities (streaming, vision, tool use)
+- Set default parameters (context windows, temperature)

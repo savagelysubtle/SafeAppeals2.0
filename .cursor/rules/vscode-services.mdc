@@ -1,0 +1,49 @@
+---
+description: VSCode service pattern and dependency injection conventions
+globs: src/vs/workbench/contrib/void/**/*Service.ts
+---
+
+# VSCode Service Patterns
+
+## Service Registration
+
+Services are **singletons** - classes that mount once and are shared across the application.
+
+### Registration Pattern
+
+```typescript
+import { registerSingleton } from 'vs/platform/instantiation/common/extensions';
+import { IMyService } from './myService';
+
+export class MyService implements IMyService {
+  // implementation
+}
+
+registerSingleton(IMyService, MyService, InstantiationType.Delayed);
+```
+
+### Dependency Injection
+
+Use constructor injection with `@IServiceName` decorator:
+
+```typescript
+constructor(
+  @IVoidSettingsService private readonly voidSettingsService: IVoidSettingsService,
+  @ICodeEditorService private readonly codeEditorService: ICodeEditorService,
+) {}
+```
+
+## Core Void Services
+
+- **voidSettingsService** (common/) - Central settings store for providers, models, global settings, MCP state
+- **editCodeService** (browser/) - Manages Apply/Cmd+K operations, diff zones, streaming changes
+- **chatThreadService** (browser/) - Chat thread state and message history
+- **contextGatheringService** (browser/) - Collects context for LLM (files, selection, workspace)
+- **convertToLLMMessageService** (browser/) - Converts messages to provider-specific formats
+- **toolsService** (browser/) - MCP tool execution and management
+- **mcpService** (common/) - MCP server connection and lifecycle management
+- **voidModelService** (browser/) - URI/model handling for file operations
+
+## Service Architecture
+
+Services form a dependency graph. `voidSettingsService` is a foundational dependency for most Void services.
