@@ -15,25 +15,12 @@ export const Sidebar = ({ className = '' }: { className?: string }) => {
 
 	const isDark = useIsDark()
 	return <div
-		className={`void-scope ${isDark ? 'void-dark' : ''} ${className}`}
-		style={{ width: '100%', height: '100%' }}
+		className={`void-scope ${isDark ? 'void-dark' : ''} void-bg-void-bg-2 void-text-void-fg-1 ${className}`}
+		style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column' }}
 	>
-		<div
-			// default background + text styles for sidebar
-			className={`
-				void-w-full void-h-full
-				void-bg-void-bg-2
-				void-text-void-fg-1
-			`}
-		>
-
-			<div className={`void-w-full void-h-full`}>
-				<ErrorBoundary>
-					<SidebarChat />
-				</ErrorBoundary>
-
-			</div>
-		</div>
+		<ErrorBoundary>
+			<SidebarChat />
+		</ErrorBoundary>
 	</div>
 
 
