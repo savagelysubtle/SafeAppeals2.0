@@ -154,7 +154,11 @@ export class RAGIndexService {
 	}
 
 	generateDocumentId(uri: URI): string {
-		return createHash('sha256').update(uri.fsPath).digest('hex').substring(0, 16);
+		const path = uri.fsPath || uri.path;
+		this.logService.info(`Generating document ID for: ${path}`);
+		const docId = createHash('sha256').update(path).digest('hex').substring(0, 16);
+		this.logService.info(`Generated document ID: ${docId}`);
+		return docId;
 	}
 
 	private calculateChecksum(uri: URI): string {
@@ -573,15 +577,28 @@ export class RAGIndexService {
 	}
 
 	async getDocumentById(docId: string): Promise<DocumentRecord | null> {
-		if (!this.db) return null;
+		if (!this.db) {
+			this.logService.warn('Database not initialized when checking document');
+			return null;
+		}
 
 		return new Promise((resolve, reject) => {
+			this.logService.info(`Querying database for document ID: ${docId}`);
 			this.db!.get(
 				'SELECT * FROM documents WHERE id = ?',
 				[docId],
 				(err, row) => {
-					if (err) reject(err);
-					else resolve(row as DocumentRecord || null);
+					if (err) {
+						this.logService.error(`Error querying document: ${err}`);
+						reject(err);
+					} else {
+						const found = row as DocumentRecord || null;
+						this.logService.info(`Document query result: ${found ? 'FOUND' : 'NOT FOUND'}`);
+						if (found) {
+							this.logService.info(`Found document: ${found.filename} (uploaded: ${found.uploadedAt})`);
+						}
+						resolve(found);
+					}
 				}
 			);
 		});
