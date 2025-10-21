@@ -11,6 +11,8 @@ import { PDFViewerEditor } from './pdfViewer/pdfViewerEditor.js';
 import { PDFViewerInput } from './pdfViewer/pdfViewerInput.js';
 import { IEditorFactoryRegistry, EditorExtensions as EditorFactoryExtensions } from '../../../../common/editor.js';
 import { PDFViewerInputSerializer } from './pdfViewer/pdfViewerInputSerializer.js';
+// Import PDF Quick Edit actions (registers Ctrl+K handler)
+import './pdfViewer/pdfQuickEditActions.js';
 import { IEditorResolverService, RegisteredEditorPriority } from '../../../../services/editor/common/editorResolverService.js';
 import { IInstantiationService } from '../../../../../platform/instantiation/common/instantiation.js';
 import { Disposable } from '../../../../../base/common/lifecycle.js';
