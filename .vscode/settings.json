@@ -168,7 +168,7 @@
 	"explorer.fileNesting.enabled": true,
 	"explorer.fileNesting.expand": false,
 	"explorer.fileNesting.patterns": {
-		"package.json": "package-lock.json,yarn.lock,pnpm-lock.yaml",
+		"package.json": "package-lock.json,yarn.lock,pnpm-lock.yaml,bun.lockb,bun.lock",
 		"product.json": "cgmanifest.json,cglicenses.json,ThirdPartyNotices.txt",
 		"README.md": "HOW_TO_CONTRIBUTE.md,VOID_CODEBASE_GUIDE.md,CLAUDE.md,CASE_ORGANIZER_IMPLEMENTATION_REVIEW.md",
 		".lsifrc.json": ".mention-bot,.voidrules,tsfmt.json,CodeQL.yml",
