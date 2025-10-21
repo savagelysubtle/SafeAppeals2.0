@@ -18,7 +18,6 @@ export class RAGMainService implements IRAGMainService {
 	private fileService: RAGFileService;
 	private vectorAdapter!: VectorAdapter;
 	private initialized = false;
-	private openAIApiKey: string = '';
 
 	constructor(
 		@ILogService private readonly logService: ILogService,
@@ -32,12 +31,9 @@ export class RAGMainService implements IRAGMainService {
 		if (this.initialized) return;
 
 		try {
-			// Store API key if provided
+			// Ignore openAIApiKey parameter - we use local embeddings now
 			if (openAIApiKey) {
-				this.openAIApiKey = openAIApiKey;
-				this.logService.info('RAG: Using OpenAI API key from settings');
-			} else {
-				this.logService.warn('RAG: No OpenAI API key provided - embeddings will be skipped');
+				this.logService.info('RAG: Using local embeddings (OpenAI API key no longer required)');
 			}
 
 			// Ensure directories exist
@@ -47,19 +43,25 @@ export class RAGMainService implements IRAGMainService {
 			const chromaPath = this.pathService.getGlobalChromaDir();
 
 			const config: PersistentVectorAdapterConfig = {
-				persistPath: chromaPath,
-				openAIApiKey: this.openAIApiKey,
-				openAIModel: 'text-embedding-3-small'
+				persistPath: chromaPath
 			};
 
 			this.vectorAdapter = new ChromaPersistentAdapter(config, this.logService);
+
+			// Log first-time initialization message
+			this.logService.info('Initializing local embedding model (first time may take 1-2 minutes to download ~23 MB model)...');
 			await this.vectorAdapter.initialize();
+			this.logService.info('Local embedding model ready');
 
 			// Initialize index service
 			await this.indexService.initialize();
 
 			// Ensure collections exist
 			await this.vectorAdapter.ensureCollections('both');
+
+			// CRITICAL: Reload embeddings from database if they exist
+			// The in-memory vector store loses all embeddings on restart
+			await this.reloadEmbeddingsFromDatabase();
 
 			this.initialized = true;
 			this.logService.info('RAG service initialized successfully');
@@ -101,6 +103,7 @@ export class RAGMainService implements IRAGMainService {
 			}
 
 			// Extract content from file
+			this.logService.info('Extracting content from document...');
 			const extractedContent = await this.fileService.extractContent(params.uri);
 
 			// Log memory after extraction
@@ -108,6 +111,7 @@ export class RAGMainService implements IRAGMainService {
 			this.logService.info(`Memory after extraction: ${(memAfterExtraction.heapUsed / 1024 / 1024).toFixed(2)} MB (delta: ${((memAfterExtraction.heapUsed - memStart.heapUsed) / 1024 / 1024).toFixed(2)} MB)`);
 
 			// Index the document
+			this.logService.info('Chunking document...');
 			const result = await this.indexService.indexDocument({
 				uri: params.uri,
 				isPolicyManual: params.isPolicyManual,
@@ -115,6 +119,8 @@ export class RAGMainService implements IRAGMainService {
 				content: extractedContent.text,
 				metadata: extractedContent.metadata
 			});
+
+			this.logService.info(`Created ${result.chunks.length} chunks`);
 
 			// Log memory after chunking
 			const memAfterChunking = process.memoryUsage();
@@ -128,12 +134,14 @@ export class RAGMainService implements IRAGMainService {
 				// Process chunks in batches for memory efficiency
 				const EMBEDDING_BATCH_SIZE = 50; // Process 50 chunks at a time
 				const totalChunks = result.chunks.length;
+				const totalBatches = Math.ceil(totalChunks / EMBEDDING_BATCH_SIZE);
 
-				this.logService.info(`Adding ${totalChunks} chunks to vector store in batches of ${EMBEDDING_BATCH_SIZE}...`);
+				this.logService.info(`Generating embeddings for ${totalChunks} chunks in ${totalBatches} batches...`);
 
 				for (let i = 0; i < totalChunks; i += EMBEDDING_BATCH_SIZE) {
 					const batchEnd = Math.min(i + EMBEDDING_BATCH_SIZE, totalChunks);
 					const batchChunks = result.chunks.slice(i, batchEnd);
+					const batchNum = Math.floor(i / EMBEDDING_BATCH_SIZE) + 1;
 					const batchMetadatas = batchChunks.map(chunk => ({
 						docId: result.docId,
 						chunkId: chunk.chunkId,
@@ -142,7 +150,7 @@ export class RAGMainService implements IRAGMainService {
 						chunkIndex: chunk.chunkIndex
 					}));
 
-					this.logService.info(`Processing embedding batch ${Math.floor(i / EMBEDDING_BATCH_SIZE) + 1}/${Math.ceil(totalChunks / EMBEDDING_BATCH_SIZE)} (chunks ${i + 1}-${batchEnd})...`);
+					this.logService.info(`Processing embedding batch ${batchNum}/${totalBatches} (chunks ${i + 1}-${batchEnd})...`);
 
 					await this.vectorAdapter.add(batchChunks, batchMetadatas);
 
@@ -162,7 +170,10 @@ export class RAGMainService implements IRAGMainService {
 			this.logService.info(`Memory at end: ${(memEnd.heapUsed / 1024 / 1024).toFixed(2)} MB (total delta: ${((memEnd.heapUsed - memStart.heapUsed) / 1024 / 1024).toFixed(2)} MB)`);
 
 			this.logService.info(`Successfully indexed document: ${params.uri.fsPath}`);
-			return { success: true, message: `Document indexed successfully. Created ${result.chunks.length} chunks.` };
+			return {
+				success: true,
+				message: `Document indexed successfully. Created ${result.chunks.length} chunks from ${extractedContent.metadata.pageCount || '?'} pages.`
+			};
 		} catch (error) {
 			const filepath = params.uri.fsPath || params.uri.path || 'unknown';
 			const errorMsg = error instanceof Error ? error.message : String(error);
@@ -272,8 +283,13 @@ export class RAGMainService implements IRAGMainService {
 
 		try {
 			const docId = this.indexService.generateDocumentId(uri);
+			this.logService.info(`Checking if document is indexed: ${uri.fsPath} (docId: ${docId})`);
+
 			const doc = await this.indexService.getDocumentById(docId);
-			return doc !== null;
+			const isIndexed = doc !== null;
+
+			this.logService.info(`Document ${uri.fsPath} is ${isIndexed ? 'already indexed' : 'not indexed'}`);
+			return isIndexed;
 		} catch (error) {
 			this.logService.error(`Failed to check if document is indexed:`, error);
 			return false;
@@ -320,6 +336,35 @@ export class RAGMainService implements IRAGMainService {
 				success: false,
 				message: `Failed to clear embeddings: ${errorMsg}`
 			};
+		}
+	}
+
+	/**
+	 * Reload embeddings from database into vector store
+	 * This is necessary because the in-memory vector store loses data on restart
+	 */
+	private async reloadEmbeddingsFromDatabase(): Promise<void> {
+		try {
+			this.logService.info('Checking if embeddings need to be reloaded from database...');
+
+			// Get all documents from database
+			const stats = await this.indexService.getStats();
+			const totalDocs = stats.totalDocuments;
+
+			if (totalDocs === 0) {
+				this.logService.info('No documents in database, skipping embedding reload');
+				return;
+			}
+
+			this.logService.warn(`Found ${totalDocs} documents in database but vector store is empty.`);
+			this.logService.warn('Embeddings will need to be regenerated. Use "RAG: Clear All Embeddings" and re-index documents.');
+			this.logService.warn('Note: With local embeddings, this is free but takes time.');
+
+			// TODO: In the future, we could store embeddings in SQLite and reload them
+			// For now, user must clear and re-index with the new local embedding model
+
+		} catch (error) {
+			this.logService.error('Failed to check for embeddings reload:', error);
 		}
 	}
 }
