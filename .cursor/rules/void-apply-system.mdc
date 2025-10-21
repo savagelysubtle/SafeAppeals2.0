@@ -1,0 +1,65 @@
+---
+description: Apply system, DiffZones, and code editing mechanisms
+globs: src/vs/workbench/contrib/void/browser/editCodeService.ts,src/vs/workbench/contrib/void/browser/*Apply*
+---
+
+# Void Apply System
+
+## Apply Modes
+
+Void has two Apply modes:
+
+1. **Fast Apply** - Uses Search/Replace blocks
+   - LLM outputs ORIGINAL/UPDATED blocks (like git conflict markers)
+   - Efficient for large files (only replaces changed sections)
+
+2. **Slow Apply** - Rewrites entire file
+   - Used when Fast Apply fails or for complete rewrites
+
+### Fast Apply Format
+
+```
+<<<<<<< ORIGINAL
+// original code goes here
+=======
+// replaced code goes here
+>>>>>>> UPDATED
+```
+
+## Core Terminology
+
+### DiffZone
+
+- A `{startLine, endLine}` region showing red/green diffs
+- Supports streaming changes from LLM
+- Each DiffZone has an `llmCancelToken` for cancellation
+- When file changes, all DiffZones refresh their diffs
+
+### DiffArea
+
+- Generalization that tracks line numbers
+- DiffZone is the only DiffArea type that can stream
+
+## How Apply Works
+
+1. **Apply Button** → Create DiffZone over full file → Stream LLM changes → Show diffs
+2. **LLM Edit Tool** → Internally calls Apply system
+3. **Cmd+K** → Same as Apply but smaller DiffZone (selection only, not whole file)
+
+## Implementation Location
+
+All Apply logic lives in `editCodeService.ts` (`browser/`).
+
+The same code handles:
+
+- Apply button clicks
+- LLM Edit tool calls
+- Cmd+K quick edits
+
+## File Writing
+
+Void writes to files by modifying their `ITextModel`:
+
+- Only need the file's URI to write
+- No need to manually load or save
+- `voidModelService` handles URI/model management

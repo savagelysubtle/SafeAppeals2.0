@@ -3214,7 +3214,7 @@ export const SidebarChat = () => {
 		className={`
 			flex flex-col
 			px-4 py-4 space-y-4
-			w-full h-full
+			w-full flex-1 min-h-0
 			overflow-x-hidden
 			overflow-y-auto
 			${previousMessagesHTML.length === 0 && !displayContentSoFar ? 'hidden' : ''}
@@ -3308,7 +3308,7 @@ export const SidebarChat = () => {
 
 
 
-	const threadPageInput = <div key={'input' + chatThreadsState.currentThreadId}>
+	const threadPageInput = <div key={'input' + chatThreadsState.currentThreadId} className='flex-shrink-0'>
 		<div className='px-4'>
 			<CommandBarInChat />
 		</div>
@@ -3373,13 +3373,11 @@ export const SidebarChat = () => {
 
 
 	return (
-		<div className="void-chat-panel">
-			<Fragment key={threadId} // force rerender when change thread
-			>
-				{isLandingPage ?
-					landingPageContent
-					: threadPageContent}
-			</Fragment>
-		</div>
+		<Fragment key={threadId} // force rerender when change thread
+		>
+			{isLandingPage ?
+				landingPageContent
+				: threadPageContent}
+		</Fragment>
 	)
 }

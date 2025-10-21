@@ -117,6 +117,39 @@ This document tracks all new features added to SafeAppeals2.0 (Void fork).
 - ✅ `RAG: Search Workspace Documents` - Workspace search
 - ✅ `RAG: Get RAG Statistics` - Show index stats
 - ✅ `RAG: Create Policy Manuals Folder` - Manual folder creation
+- ✅ `RAG: Clear All RAG Embeddings` - Reset vector store and metadata
+
+#### 8. **Cost & Performance Optimizations**
+
+**Rate Limiting** (Added Oct 2025)
+
+- ✅ Automatic rate limiting for OpenAI embeddings API (10 requests/second max)
+- ✅ Exponential backoff retry logic for 429 errors (3 retries max)
+- ✅ Configurable delay between embedding requests (100ms default)
+- ✅ Per-batch memory logging to track resource usage
+
+**Duplicate Prevention** (Added Oct 2025)
+
+- ✅ Agent system prompt updated with RAG awareness guidelines
+- ✅ Automatic duplicate check before indexing documents
+- ✅ Tool handler checks `isDocumentIndexed()` before processing
+- ✅ Clear user feedback when skipping already-indexed documents
+- ✅ Prevents double-embedding and double-cost for same document
+
+**Rate Limiting Configuration**:
+
+```typescript
+EMBEDDING_DELAY_MS: 100 // 10 requests/second
+MAX_RETRIES: 3
+RETRY_DELAY_MS: 1000 // Base delay, exponential backoff
+```
+
+**Agent Prompt Guidance**:
+
+- Agent instructed to check RAG stats before indexing
+- Must verify document not already indexed to avoid duplicate costs
+- Encourages using `rag_get_stats` and context awareness
+- Tool description emphasizes checking before indexing
 
 **Explorer Context Menu**
 
@@ -255,9 +288,14 @@ Main Process (RAGMainService)
 
 ### RAG System
 
+- ✅ **Resolved**: Rate limiting prevents API throttling (added Oct 2025)
+- ✅ **Resolved**: Duplicate indexing prevented with auto-check (added Oct 2025)
 - ⚠️ **Issue**: Auto-indexing doesn't trigger on file copy (watcher limitation)
   - **Workaround**: Use right-click "Index as Policy Manual"
   - **Fix Planned**: Polling fallback for file system events
+- ⚠️ **Issue**: OpenAI embeddings cost money (paid API)
+  - **Workaround**: Use sparingly, rate-limited to 10/sec
+  - **Fix Planned**: Local embeddings with Transformers.js (see rag-ux-complete.plan.md)
 - 🔄 **Planned**: SQLite-vec backend as Chroma alternative
 - 🔄 **Planned**: File decorations in Explorer for indexed files
 - 🔄 **Planned**: Settings UI panel for RAG configuration

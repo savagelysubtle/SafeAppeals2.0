@@ -491,6 +491,19 @@ export class ToolsService implements IToolsService {
 			// --- RAG tools
 			rag_index_document: async ({ uri, isPolicyManual }) => {
 				try {
+					// CRITICAL: Check if document is already indexed to avoid duplicate costs
+					const isAlreadyIndexed = await this.ragService.isDocumentIndexed(uri);
+
+					if (isAlreadyIndexed) {
+						return {
+							result: {
+								success: true,
+								message: `Document already indexed (skipped to avoid duplicate costs): ${uri.fsPath || uri.path}`
+							}
+						};
+					}
+
+					// Document not indexed yet, proceed with indexing
 					const result = await this.ragService.indexDocument({ uri, isPolicyManual });
 					return { result };
 				} catch (error) {

@@ -335,7 +335,7 @@ export const builtinTools: {
 
 	rag_index_document: {
 		name: 'rag_index_document',
-		description: `Indexes a document for RAG search. Use this to make documents searchable.`,
+		description: `Indexes a document for RAG search. **CRITICAL: Check if document is already indexed FIRST using the file path and rag_get_stats or by checking context.** Only index if NOT already indexed to avoid duplicate costs.`,
 		params: {
 			...uriParam('document'),
 			is_policy_manual: { description: 'Whether this is a policy manual (true) or workspace document (false). Defaults to false.' }
@@ -516,6 +516,14 @@ ${directoryStr}
 		details.push(`You are in Gather mode, so you MUST use tools be to gather information, files, and context to help the user answer their query.`)
 		details.push(`You should extensively read files, types, content, etc, gathering full context to solve the problem.`)
 	}
+
+	// RAG-specific guidelines
+	details.push(`When working with documents and RAG (Retrieval Augmented Generation):
+- BEFORE indexing any document, ALWAYS check if it's already indexed using the appropriate tool to avoid duplicate work and costs.
+- Use rag_search_policy to search policy manuals for relevant information.
+- Use rag_search_workspace to search workspace documents.
+- Use rag_get_stats to see what documents are already indexed.
+- Only use rag_index_document if you've confirmed the document is NOT already indexed.`)
 
 	details.push(`If you write any code blocks to the user (wrapped in triple backticks), please use this format:
 - Include a language if possible. Terminal should have the language 'shell'.

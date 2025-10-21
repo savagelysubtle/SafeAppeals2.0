@@ -1,0 +1,42 @@
+---
+globs: src/vs/workbench/contrib/void/**
+description: Core structure and organization patterns for Void codebase
+---
+
+# Void Codebase Structure Rules
+
+## Directory Organization
+
+All Void code lives in `src/vs/workbench/contrib/void/` with three main subdirectories:
+
+- **browser/** - UI components and services running in browser/renderer process
+  - Can use `window`, DOM APIs, and browser-specific code
+  - Cannot directly import node_modules (must bundle or use IPC)
+  - Contains React components in `react/` subdirectory
+  - Service files follow `*Service.ts` naming pattern
+
+- **electron-main/** - Backend services running in Node.js main process
+  - Full access to `node_modules` and Node.js APIs
+  - Handles file system, network, and OS-level operations
+  - Communicates with browser process via IPC channels
+
+- **common/** - Shared business logic usable by both processes
+  - No special imports (no DOM, no Node.js)
+  - Pure TypeScript/JavaScript logic
+  - Settings, types, and core business logic
+
+## Process Boundaries
+
+**CRITICAL**: When browser code needs Node.js functionality:
+
+1. Implement the logic in `electron-main/`
+2. Create an IPC communication channel between processes
+3. Never try to import node_modules directly in browser code
+
+**Example**: LLM message sending is implemented in electron-main to avoid CSP issues and access provider SDKs.
+
+## File Modification Policy
+
+**NEVER modify files outside `src/vs/workbench/contrib/void/` without explicit user approval.**
+
+Most Void-specific code belongs in the void/ directory. Only venture outside when integrating with core VSCode functionality.
