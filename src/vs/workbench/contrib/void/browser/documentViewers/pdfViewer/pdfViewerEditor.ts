@@ -138,8 +138,37 @@ export class PDFViewerEditor extends EditorPane {
 			case 'clearSelection':
 				this._currentInput.selection = null;
 				break;
+			case 'selectionRect':
+				// Store selection rectangle for widget positioning
+				if (this._selectionRectResolve) {
+					this._selectionRectResolve(message.rect);
+					this._selectionRectResolve = undefined;
+				}
+				break;
 		}
 	}
+
+	// Public methods for Ctrl+K integration
+	public getInput(): PDFViewerInput | undefined {
+		return this._currentInput;
+	}
+
+	public async getSelectionRect(): Promise<DOMRect | undefined> {
+		return new Promise((resolve) => {
+			this._selectionRectResolve = resolve;
+			// Request selection rect from webview
+			this.webview?.postMessage({ type: 'getSelectionRect' });
+			// Timeout after 1 second
+			setTimeout(() => {
+				if (this._selectionRectResolve) {
+					this._selectionRectResolve(undefined);
+					this._selectionRectResolve = undefined;
+				}
+			}, 1000);
+		});
+	}
+
+	private _selectionRectResolve?: (rect: DOMRect | undefined) => void;
 
 	override layout(dimension: Dimension): void {
 		this._dimension = dimension;

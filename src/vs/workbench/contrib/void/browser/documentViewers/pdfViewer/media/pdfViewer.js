@@ -123,6 +123,30 @@
 					ctx.clearRect(0, 0, canvas.width, canvas.height);
 				}
 				break;
+			case 'getSelectionRect':
+				// Send back selection rectangle for Ctrl+K positioning
+				const selection = window.getSelection();
+				if (selection && selection.rangeCount > 0) {
+					const range = selection.getRangeAt(0);
+					const rect = range.getBoundingClientRect();
+					vscode.postMessage({
+						type: 'selectionRect',
+						rect: {
+							left: rect.left,
+							top: rect.top,
+							right: rect.right,
+							bottom: rect.bottom,
+							width: rect.width,
+							height: rect.height
+						}
+					});
+				} else {
+					vscode.postMessage({
+						type: 'selectionRect',
+						rect: null
+					});
+				}
+				break;
 		}
 	});
 
@@ -203,6 +227,9 @@
 				// Set text layer dimensions to match canvas exactly
 				textLayer.style.width = viewport.width + 'px';
 				textLayer.style.height = viewport.height + 'px';
+
+				// Set the scale factor CSS variable (required by PDF.js)
+				textLayer.style.setProperty('--scale-factor', scale.toString());
 
 				try {
 					const textContent = await page.getTextContent();

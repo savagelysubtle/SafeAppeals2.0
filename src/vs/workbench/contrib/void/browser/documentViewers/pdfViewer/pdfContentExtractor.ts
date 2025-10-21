@@ -23,12 +23,14 @@ export class PDFContentExtractor implements DocumentContentExtractor {
 
 	async extractContent(uri: URI): Promise<string> {
 		try {
-			// Call electron-main extraction via IPC
+			// For PDF files added via Ctrl+L, limit to first page to avoid context window issues
+			// If user wants full PDF, they should use specific page range via extractContentRange
 			const result = await this.channel.call<{ text: string }>('extractPDFContent', {
 				uri: uri.toString(),
-				allPages: true
+				startPage: 1,
+				endPage: 1 // Only extract first page by default
 			});
-			return result.text;
+			return `[PDF Preview - Page 1 only. Use Ctrl+K with selection for specific content]\n\n${result.text}`;
 		} catch (error) {
 			console.error(`Failed to extract PDF content from ${uri.toString()}:`, error);
 			throw error;
