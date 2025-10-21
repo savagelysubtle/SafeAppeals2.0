@@ -217,14 +217,38 @@ export class PDFViewerEditor extends EditorPane {
 			<link rel="stylesheet" nonce="${nonce}" href="${cssUri}">
 		</head>
 		<body>
-			<div id="pdf-container">
-				<canvas id="pdf-canvas"></canvas>
-				<div id="pdf-controls">
-					<button id="prev-page">Previous</button>
-					<span id="page-info">Page <span id="current-page">1</span> of <span id="total-pages">1</span></span>
-					<button id="next-page">Next</button>
-					<button id="zoom-in">Zoom In</button>
-					<button id="zoom-out">Zoom Out</button>
+			<div id="pdf-viewer-layout">
+				<div id="sidebar">
+					<div id="sidebar-header">
+						<button id="toggle-sidebar" title="Toggle Sidebar">☰</button>
+						<div id="sidebar-tabs">
+							<button class="sidebar-tab active" data-tab="thumbnails">Thumbnails</button>
+							<button class="sidebar-tab" data-tab="outline">Outline</button>
+						</div>
+					</div>
+					<div id="sidebar-content">
+						<div id="thumbnails-view" class="tab-content active">
+							<div id="thumbnails-container"></div>
+						</div>
+						<div id="outline-view" class="tab-content">
+							<div id="outline-container"></div>
+						</div>
+					</div>
+				</div>
+				<div id="pdf-container">
+					<div id="pdf-controls">
+						<button id="prev-page">Previous</button>
+						<span id="page-info">Page <span id="current-page">1</span> of <span id="total-pages">1</span></span>
+						<button id="next-page">Next</button>
+						<button id="zoom-in">Zoom In</button>
+						<button id="zoom-out">Zoom Out</button>
+					</div>
+					<div id="canvas-wrapper">
+						<div id="pdf-render-container">
+							<canvas id="pdf-canvas"></canvas>
+							<div id="pdf-text-layer" class="pdf-text-layer"></div>
+						</div>
+					</div>
 				</div>
 			</div>
 			<script nonce="${nonce}">
