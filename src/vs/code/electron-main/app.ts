@@ -136,6 +136,7 @@ import { MCPChannel } from '../../workbench/contrib/void/electron-main/mcpChanne
 import { RAGMainService } from '../../workbench/contrib/void/electron-main/ragMainService.js';
 import { IRAGMainService } from '../../workbench/contrib/void/common/ragServiceTypes.js';
 import { RAGMainChannel } from '../../workbench/contrib/void/electron-main/ragMainChannel.js';
+import { PDFExtractorChannel } from '../../workbench/contrib/void/electron-main/pdfExtractorChannel.js';
 import { RAGPathService, IRAGPathService } from '../../workbench/contrib/void/common/ragPathService.js';
 /**
  * The main VS Code application. There will only ever be one instance,
@@ -1261,8 +1262,13 @@ export class CodeApplication extends Disposable {
 		mainProcessElectronServer.registerChannel('void-channel-mcp', mcpChannel);
 
 		// Void RAG service
-		const ragMainChannel = new RAGMainChannel(accessor.get(IRAGMainService));
+		const ragMainService = accessor.get(IRAGMainService);
+		const ragMainChannel = new RAGMainChannel(ragMainService);
 		mainProcessElectronServer.registerChannel('void-channel-rag', ragMainChannel);
+
+		// Void PDF extractor service (uses RAGMainService directly)
+		const pdfExtractorChannel = new PDFExtractorChannel(ragMainService as any);
+		mainProcessElectronServer.registerChannel('void-channel-pdf-extractor', pdfExtractorChannel);
 
 		// Extension Host Debug Broadcasting
 		const electronExtensionHostDebugBroadcastChannel = new ElectronExtensionHostDebugBroadcastChannel(accessor.get(IWindowsMainService));
