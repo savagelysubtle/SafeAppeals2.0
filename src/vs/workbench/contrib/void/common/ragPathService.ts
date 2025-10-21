@@ -18,6 +18,7 @@ export interface IRAGPathService {
 	getWorkspaceChromaDir(workspaceId: string): string;
 	getWorkspaceSqlitePath(workspaceId: string): string;
 	getLogsDir(): string;
+	getModelCacheDir(): string;
 	ensureDirectories(): Promise<void>;
 }
 
@@ -55,13 +56,18 @@ export class RAGPathService implements IRAGPathService {
 		return join(this.getBaseDir(), 'logs');
 	}
 
+	getModelCacheDir(): string {
+		return join(this.getBaseDir(), 'models');
+	}
+
 	async ensureDirectories(): Promise<void> {
 		const directories = [
 			this.getBaseDir(),
 			join(this.getBaseDir(), 'databases'),
 			join(this.getBaseDir(), 'databases', 'chroma'),
 			join(this.getBaseDir(), 'databases', 'workspaces'),
-			this.getLogsDir()
+			this.getLogsDir(),
+			this.getModelCacheDir()
 		];
 
 		for (const dir of directories) {
