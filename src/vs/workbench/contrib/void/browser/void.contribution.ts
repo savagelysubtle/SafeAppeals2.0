@@ -101,6 +101,12 @@ import { IRAGWorkspaceService } from './ragWorkspaceService.js'
 // RAG actions
 import './ragActions.js'
 
+// Document viewer service
+import '../common/documentViewerService.js'
+
+// PDF viewer components
+import './documentViewers/documentViewer.contribution.js'
+
 // Ensure RAG workspace service starts
 import { IWorkbenchContributionsRegistry, Extensions as WorkbenchExtensions } from '../../../common/contributions.js';
 import { LifecyclePhase } from '../../../services/lifecycle/common/lifecycle.js';

@@ -24,6 +24,9 @@ import { IChatThreadService } from './chatThreadService.js';
 import { IViewsService } from '../../../services/views/common/viewsService.js';
 import { caseOrganizerInit_defaultPrompt } from '../common/prompt/prompts.js';
 import { IVoidSettingsService } from '../common/voidSettingsService.js';
+import { IEditorService } from '../../../services/editor/common/editorService.js';
+import { IDocumentViewerService } from '../common/documentViewerService.js';
+import { PDFViewerInput } from './documentViewers/pdfViewer/pdfViewerInput.js';
 
 // ---------- Register commands and keybindings ----------
 
@@ -95,13 +98,54 @@ registerAction2(class extends Action2 {
 		const commandService = accessor.get(ICommandService)
 		const viewsService = accessor.get(IViewsService)
 		const metricsService = accessor.get(IMetricsService)
-		const editorService = accessor.get(ICodeEditorService)
+		const codeEditorService = accessor.get(ICodeEditorService)
+		const editorService = accessor.get(IEditorService)
 		const chatThreadService = accessor.get(IChatThreadService)
+		const documentViewerService = accessor.get(IDocumentViewerService)
 
 		metricsService.capture('Ctrl+L', {})
 
+		// Check for PDF viewer first
+		const activePane = editorService.activeEditorPane
+		if (activePane?.input instanceof PDFViewerInput) {
+			const pdfInput = activePane.input as PDFViewerInput
+
+			// Get text based on selection or whole document
+			let textContent: string | null
+			if (pdfInput.selection) {
+				textContent = await documentViewerService.getTextContentRange(
+					pdfInput.resource,
+					pdfInput.selection.startPage,
+					pdfInput.selection.endPage
+				)
+			} else {
+				textContent = await documentViewerService.getTextContent(pdfInput.resource)
+			}
+
+			if (textContent) {
+				// open panel
+				const wasAlreadyOpen = viewsService.isViewContainerVisible(VOID_VIEW_CONTAINER_ID)
+				if (!wasAlreadyOpen) {
+					await commandService.executeCommand(VOID_OPEN_SIDEBAR_ACTION_ID)
+				}
+
+				// Note: textContent is not part of the StagingSelectionItem type
+				// For now, we'll just add the file reference. The text extraction
+				// will be handled separately when the AI needs it.
+				chatThreadService.addNewStagingSelection({
+					type: 'File',
+					uri: pdfInput.resource,
+					language: 'pdf',
+					state: { wasAddedAsCurrentFile: false }
+				})
+
+				await chatThreadService.focusCurrentChat()
+			}
+			return
+		}
+
 		// capture selection and model before opening the chat panel
-		const editor = editorService.getActiveCodeEditor()
+		const editor = codeEditorService.getActiveCodeEditor()
 		const model = editor?.getModel()
 		if (!model) return
 
