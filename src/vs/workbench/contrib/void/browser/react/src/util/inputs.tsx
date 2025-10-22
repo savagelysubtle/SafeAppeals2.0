@@ -1415,21 +1415,24 @@ export const VoidCustomDropdownBox = <T extends NonNullable<any>>({
 			{/* Dropdown Menu */}
 			{isOpen && (
 				<div
-					ref={refs.setFloating}
-					className="z-[100] bg-void-bg-2 border-void-border-3 border rounded shadow-lg"
-					style={{
-						position: strategy,
-						top: y ?? 0,
-						left: x ?? 0,
-						width: (matchInputWidth
-							? (refs.reference.current instanceof HTMLElement ? refs.reference.current.offsetWidth : 0)
-							: Math.max(
-								(refs.reference.current instanceof HTMLElement ? refs.reference.current.offsetWidth : 0),
-								(measureRef.current instanceof HTMLElement ? measureRef.current.offsetWidth : 0)
-							))
-					}}
-					onWheel={(e) => e.stopPropagation()}
-				><div className='overflow-auto max-h-80 bg-void-bg-2'>
+											ref={refs.setFloating}
+						className="border-void-border-3 border rounded shadow-lg"
+						style={{
+							zIndex: 10000,
+							position: strategy,
+							top: y ?? 0,
+							left: x ?? 0,
+							width: (matchInputWidth
+								? (refs.reference.current instanceof HTMLElement ? refs.reference.current.offsetWidth : 0)
+								: Math.max(
+									(refs.reference.current instanceof HTMLElement ? refs.reference.current.offsetWidth : 0),
+									(measureRef.current instanceof HTMLElement ? measureRef.current.offsetWidth : 0)
+								)),
+							backgroundColor: 'var(--vscode-menu-background, var(--vscode-editorWidget-background, var(--void-bg-2, #1e1e1e)))',
+							color: 'var(--vscode-menu-foreground, var(--vscode-editorWidget-foreground, var(--void-fg-1, #cccccc)))'
+						}}
+						onWheel={(e) => e.stopPropagation()}
+				><div className='overflow-auto max-h-80' style={{ backgroundColor: 'var(--vscode-menu-background, var(--vscode-editorWidget-background, var(--void-bg-2, #1e1e1e)))', color: 'var(--vscode-menu-foreground, var(--vscode-editorWidget-foreground, var(--void-fg-1, #cccccc)))' }}>
 
 						{options.map((option) => {
 							const thisOptionIsSelected = getOptionsEqual(option, selectedOption);
@@ -1439,10 +1442,12 @@ export const VoidCustomDropdownBox = <T extends NonNullable<any>>({
 							return (
 								<div
 									key={optionName}
-									className={`flex items-center px-2 py-1 pr-4 cursor-pointer whitespace-nowrap
-									transition-all duration-100
-									${thisOptionIsSelected ? 'bg-void-button-primary text-void-button-primary-text' : 'hover:bg-void-button-primary/20'}
-								`}
+																	className={`flex items-center px-2 py-1 pr-4 cursor-pointer whitespace-nowrap transition-all duration-100 hover:opacity-90`}
+									style={{
+										width: '100%',
+										backgroundColor: thisOptionIsSelected ? 'var(--vscode-menu-selectionBackground, var(--vscode-editorWidget-background, #2a2a2a))' : 'var(--vscode-menu-background, var(--vscode-editorWidget-background, var(--void-bg-2, #1e1e1e)))',
+										color: thisOptionIsSelected ? 'var(--vscode-menu-selectionForeground, var(--vscode-editorWidget-foreground, #ffffff))' : 'var(--vscode-menu-foreground, var(--vscode-editorWidget-foreground, var(--void-fg-1, #cccccc)))'
+									}}
 									onClick={() => {
 										onChangeOption(option);
 										setIsOpen(false);

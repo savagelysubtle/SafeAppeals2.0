@@ -24,7 +24,8 @@ import { WarningBox } from '../void-settings-tsx/WarningBox.js';
 import { getModelCapabilities, getIsReasoningEnabledState } from '../../../../common/modelCapabilities.js';
 import { AlertTriangle, File, Ban, Check, ChevronRight, Dot, FileIcon, Pencil, Undo, Undo2, X, Flag, Copy as CopyIcon, Info, CirclePlus, Ellipsis, CircleEllipsis, Folder, ALargeSmall, TypeOutline, Text, Trash2, RotateCw } from 'lucide-react';
 import { ChatMessage, CheckpointEntry, StagingSelectionItem, ToolMessage } from '../../../../common/chatThreadServiceTypes.js';
-import { approvalTypeOfBuiltinToolName, BuiltinToolCallParams, BuiltinToolName, ToolName, LintErrorItem, ToolApprovalType, toolApprovalTypes } from '../../../../common/toolsServiceTypes.js';
+import { approvalTypeOfBuiltinToolName, BuiltinToolCallParams, BuiltinToolName, ToolName, LintErrorItem, ToolApprovalType } from '../../../../common/toolsServiceTypes.js';
+import { removeMCPToolNamePrefix } from '../../../../common/mcpServiceTypes.js';
 import { CopyButton, EditToolAcceptRejectButtonsHTML, IconShell1, JumpToFileButton, JumpToTerminalButton, StatusIndicator, StatusIndicatorForApplyButton, useApplyStreamState, useEditToolStreamState } from '../markdown/ApplyBlockHoverButtons.js';
 import { IsRunningType } from '../../../chatThreadService.js';
 import { acceptAllBg, acceptBorder, buttonFontSize, buttonTextColor, rejectAllBg, rejectBg, rejectBorder } from '../../../../common/helpers/colors.js';
@@ -34,7 +35,6 @@ import ErrorBoundary from './ErrorBoundary.js';
 import { ToolApprovalTypeSwitch } from '../void-settings-tsx/Settings.js';
 
 import { persistentTerminalNameOfId } from '../../../terminalToolService.js';
-import { removeMCPToolNamePrefix } from '../../../../common/mcpServiceTypes.js';
 
 
 
@@ -1615,6 +1615,10 @@ const titleOfBuiltinToolName = {
 
 	'read_lint_errors': { done: `Read lint errors`, proposed: 'Read lint errors', running: loadingTitleWrapper('Reading lint errors') },
 	'search_in_file': { done: 'Searched in file', proposed: 'Search in file', running: loadingTitleWrapper('Searching in file') },
+	'rag_index_document': { done: 'Indexed document', proposed: 'Index document', running: loadingTitleWrapper('Indexing document') },
+	'rag_search_policy': { done: 'Searched policy', proposed: 'Search policy', running: loadingTitleWrapper('Searching policy') },
+	'rag_search_workspace': { done: 'Searched workspace', proposed: 'Search workspace', running: loadingTitleWrapper('Searching workspace') },
+	'rag_get_stats': { done: 'Got stats', proposed: 'Get stats', running: loadingTitleWrapper('Getting stats') },
 } as const satisfies Record<BuiltinToolName, { done: any, proposed: any, running: any }>
 
 
@@ -1753,6 +1757,30 @@ const toolNameToDesc = (toolName: BuiltinToolName, _toolParams: BuiltinToolCallP
 			return {
 				desc1: getBasename(toolParams.uri.fsPath),
 				desc1Info: getRelative(toolParams.uri, accessor),
+			}
+		},
+		'rag_index_document': () => {
+			const toolParams = _toolParams as BuiltinToolCallParams['rag_index_document']
+			return {
+				desc1: getBasename(toolParams.uri.fsPath),
+				desc1Info: getRelative(toolParams.uri, accessor),
+			}
+		},
+		'rag_search_policy': () => {
+			const toolParams = _toolParams as BuiltinToolCallParams['rag_search_policy']
+			return {
+				desc1: `"${toolParams.query}"`,
+			}
+		},
+		'rag_search_workspace': () => {
+			const toolParams = _toolParams as BuiltinToolCallParams['rag_search_workspace']
+			return {
+				desc1: `"${toolParams.query}"`,
+			}
+		},
+		'rag_get_stats': () => {
+			return {
+				desc1: '',
 			}
 		}
 	}
@@ -2629,6 +2657,152 @@ const builtinToolNameToComponent: { [T in BuiltinToolName]: { resultWrapper: Res
 				const { persistentTerminalId } = params
 				// componentParams.desc1 = persistentTerminalNameOfId(persistentTerminalId) // Terminal functionality disabled
 				componentParams.onClick = () => terminalToolsService.focusPersistentTerminal(persistentTerminalId)
+			}
+			else if (toolMessage.type === 'tool_error') {
+				const { result } = toolMessage
+				componentParams.bottomChildren = <BottomChildren title='Error'>
+					<CodeChildren>
+						{result}
+					</CodeChildren>
+				</BottomChildren>
+			}
+
+			return <ToolHeaderWrapper {...componentParams} />
+		},
+	},
+	'rag_index_document': {
+		resultWrapper: ({ toolMessage }) => {
+			const accessor = useAccessor()
+			const title = getTitle(toolMessage)
+			const { desc1, desc1Info } = toolNameToDesc(toolMessage.name, toolMessage.params, accessor)
+			const icon = null
+
+			if (toolMessage.type === 'tool_request') return null
+			if (toolMessage.type === 'running_now') return null
+
+			const isError = false
+			const isRejected = toolMessage.type === 'rejected'
+			const componentParams: ToolHeaderParams = { title, desc1, desc1Info, isError, icon, isRejected }
+
+			if (toolMessage.type === 'success') {
+				const { result } = toolMessage
+				componentParams.children = <ToolChildrenWrapper>
+					<CodeChildren>
+						{result.message}
+					</CodeChildren>
+				</ToolChildrenWrapper>
+			}
+			else if (toolMessage.type === 'tool_error') {
+				const { result } = toolMessage
+				componentParams.bottomChildren = <BottomChildren title='Error'>
+					<CodeChildren>
+						{result}
+					</CodeChildren>
+				</BottomChildren>
+			}
+
+			return <ToolHeaderWrapper {...componentParams} />
+		},
+	},
+	'rag_search_policy': {
+		resultWrapper: ({ toolMessage }) => {
+			const accessor = useAccessor()
+			const title = getTitle(toolMessage)
+			const { desc1 } = toolNameToDesc(toolMessage.name, toolMessage.params, accessor)
+			const icon = null
+
+			if (toolMessage.type === 'tool_request') return null
+			if (toolMessage.type === 'running_now') return null
+
+			const isError = false
+			const isRejected = toolMessage.type === 'rejected'
+			const componentParams: ToolHeaderParams = { title, desc1, isError, icon, isRejected }
+
+			if (toolMessage.type === 'success') {
+				const { result } = toolMessage
+				componentParams.children = <ToolChildrenWrapper>
+					<SmallProseWrapper>
+						<ChatMarkdownRender
+							string={result.contextPack}
+							chatMessageLocation={undefined}
+							isApplyEnabled={false}
+							isLinkDetectionEnabled={true}
+						/>
+					</SmallProseWrapper>
+				</ToolChildrenWrapper>
+			}
+			else if (toolMessage.type === 'tool_error') {
+				const { result } = toolMessage
+				componentParams.bottomChildren = <BottomChildren title='Error'>
+					<CodeChildren>
+						{result}
+					</CodeChildren>
+				</BottomChildren>
+			}
+
+			return <ToolHeaderWrapper {...componentParams} />
+		},
+	},
+	'rag_search_workspace': {
+		resultWrapper: ({ toolMessage }) => {
+			const accessor = useAccessor()
+			const title = getTitle(toolMessage)
+			const { desc1 } = toolNameToDesc(toolMessage.name, toolMessage.params, accessor)
+			const icon = null
+
+			if (toolMessage.type === 'tool_request') return null
+			if (toolMessage.type === 'running_now') return null
+
+			const isError = false
+			const isRejected = toolMessage.type === 'rejected'
+			const componentParams: ToolHeaderParams = { title, desc1, isError, icon, isRejected }
+
+			if (toolMessage.type === 'success') {
+				const { result } = toolMessage
+				componentParams.children = <ToolChildrenWrapper>
+					<SmallProseWrapper>
+						<ChatMarkdownRender
+							string={result.contextPack}
+							chatMessageLocation={undefined}
+							isApplyEnabled={false}
+							isLinkDetectionEnabled={true}
+						/>
+					</SmallProseWrapper>
+				</ToolChildrenWrapper>
+			}
+			else if (toolMessage.type === 'tool_error') {
+				const { result } = toolMessage
+				componentParams.bottomChildren = <BottomChildren title='Error'>
+					<CodeChildren>
+						{result}
+					</CodeChildren>
+				</BottomChildren>
+			}
+
+			return <ToolHeaderWrapper {...componentParams} />
+		},
+	},
+	'rag_get_stats': {
+		resultWrapper: ({ toolMessage }) => {
+			const accessor = useAccessor()
+			const title = getTitle(toolMessage)
+			const { desc1 } = toolNameToDesc(toolMessage.name, toolMessage.params, accessor)
+			const icon = null
+
+			if (toolMessage.type === 'tool_request') return null
+			if (toolMessage.type === 'running_now') return null
+
+			const isError = false
+			const isRejected = toolMessage.type === 'rejected'
+			const componentParams: ToolHeaderParams = { title, desc1, isError, icon, isRejected }
+
+			if (toolMessage.type === 'success') {
+				const { result } = toolMessage
+				componentParams.children = <ToolChildrenWrapper>
+					<CodeChildren>
+						{result.stats}
+					</CodeChildren>
+				</ToolChildrenWrapper>
 			}
 			else if (toolMessage.type === 'tool_error') {
 				const { result } = toolMessage
