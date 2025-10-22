@@ -15,6 +15,8 @@ import { KeybindingWeight } from '../../../../../../platform/keybinding/common/k
 import { INotificationService } from '../../../../../../platform/notification/common/notification.js';
 import { IChatThreadService } from '../../chatThreadService.js';
 import { IMetricsService } from '../../../common/metricsService.js';
+import { IRAGService } from '../../../common/ragService.js';
+import { RAGContextService } from '../../../common/ragContextService.js';
 
 class PDFQuickEditAction extends Action2 {
 	constructor() {
@@ -131,6 +133,7 @@ class PDFAddToChatAction extends Action2 {
 		const notificationService = accessor.get(INotificationService);
 		const chatThreadService = accessor.get(IChatThreadService);
 		const metricsService = accessor.get(IMetricsService);
+		const ragService = accessor.get(IRAGService);
 
 		const activeEditor = editorService.activeEditorPane;
 
@@ -149,7 +152,8 @@ class PDFAddToChatAction extends Action2 {
 			const hasSelection = !!(input.selection && input.selection.text);
 			metricsService.capture('PDF Ctrl+L', {
 				hasSelection,
-				currentPage: input.currentPage
+				currentPage: input.currentPage,
+				usingRAG: true
 			});
 
 			// Get the current thread
@@ -159,34 +163,60 @@ class PDFAddToChatAction extends Action2 {
 				chatThreadService.openNewThread();
 			}
 
-			// Extract PDF context based on selection
-			const contextGathering = new PDFContextGathering(mainProcessService);
-			let pdfContext;
+			// Check if PDF is indexed in RAG
+			const isIndexed = await ragService.isDocumentIndexed(input.resource);
 
-			if (hasSelection) {
-				// With selection - get selected text + current page
-				pdfContext = await contextGathering.getPDFContext(
-					input.resource,
-					input.selection!.text,
-					input.currentPage,
-					input.selection!.endPage,
-					0 // Don't include surrounding pages for Ctrl+L
-				);
-			} else {
-				// No selection - get just current page
-				pdfContext = await contextGathering.getPDFContext(
-					input.resource,
-					'', // No selection
-					input.currentPage,
-					input.currentPage,
-					0 // No surrounding pages
-				);
+			if (!isIndexed) {
+				// Index the PDF first
+				notificationService.info('Indexing PDF for the first time...');
+				const indexResult = await ragService.indexDocument({
+					uri: input.resource,
+					isPolicyManual: true // PDFs are typically policy manuals
+				});
+
+				if (!indexResult.success) {
+					notificationService.error('Failed to index PDF: ' + indexResult.message);
+					return;
+				}
+
+				notificationService.info('PDF indexed successfully!');
 			}
 
-			const formattedContext = contextGathering.formatContextForAI(pdfContext);
+			// Use RAG to search for relevant chunks based on selection or current page
+			let searchQuery: string;
+			if (hasSelection && input.selection!.text) {
+				// Use selected text as search query
+				searchQuery = input.selection!.text;
+			} else {
+				// Use page number as search query (get text from current page)
+				const contextGathering = new PDFContextGathering(mainProcessService);
+				const pageContext = await contextGathering.getPDFContext(
+					input.resource,
+					'',
+					input.currentPage,
+					input.currentPage,
+					0
+				);
+				searchQuery = pageContext.currentPageText.substring(0, 500); // First 500 chars as query
+			}
 
-			// Add the formatted context directly to the thread's staging selections as content
-			// This way we control exactly what gets sent, not the entire PDF
+			// Search RAG for relevant chunks
+			const ragResults = await ragService.search({
+				query: searchQuery,
+				scope: 'policy_manual',
+				limit: 5 // Get top 5 most relevant chunks
+			});
+
+			// Format the RAG context
+			const ragContextService = new RAGContextService();
+			const formattedContext = ragContextService.formatContextPack(ragResults);
+
+			console.log('[PDF Ctrl+L with RAG] Query:', searchQuery.substring(0, 100));
+			console.log('[PDF Ctrl+L with RAG] Found chunks:', ragResults.totalResults);
+			console.log('[PDF Ctrl+L with RAG] Context:', formattedContext);
+			console.log('[PDF Ctrl+L with RAG] Context size:', formattedContext.length, 'characters');
+
+			// Add the PDF reference to staging (RAG context will be used automatically)
 			const currentState = chatThreadService.getCurrentThreadState();
 			const existingStaging = currentState.stagingSelections || [];
 
@@ -195,7 +225,7 @@ class PDFAddToChatAction extends Action2 {
 				s.type !== 'File' || !s.uri.fsPath.toLowerCase().endsWith('.pdf')
 			);
 
-			// Add a marker file reference (won't extract content, just shows PDF is referenced)
+			// Add PDF reference
 			chatThreadService.setCurrentThreadState({
 				stagingSelections: [
 					...nonPdfStaging,
@@ -208,24 +238,20 @@ class PDFAddToChatAction extends Action2 {
 				]
 			});
 
-			// Log the context that will be sent (the PDF extractor will use this)
-			console.log('[PDF Ctrl+L] Context to send:', formattedContext);
-			console.log('[PDF Ctrl+L] Context size:', formattedContext.length, 'characters');
-
 			// Show notification
+			const fileName = input.resource.fsPath.split(/[\\/]/).pop() || 'PDF';
 			if (hasSelection) {
 				const preview = input.selection!.text.length > 50
 					? input.selection!.text.substring(0, 50) + '...'
 					: input.selection!.text;
-				notificationService.info(`PDF context added (Page ${pdfContext.pageNumber}): "${preview}"`);
+				notificationService.info(`PDF context added via RAG (${ragResults.totalResults} chunks): "${preview}"`);
 			} else {
-				const fileName = input.resource.fsPath.split(/[\\/]/).pop() || 'PDF';
-				notificationService.info(`PDF context added: ${fileName} (Page ${input.currentPage} only)`);
+				notificationService.info(`PDF context added via RAG: ${fileName} (Page ${input.currentPage}, ${ragResults.totalResults} relevant chunks)`);
 			}
 
 		} catch (error) {
 			console.error('[PDF Add to Chat] Error:', error);
-			notificationService.error('Failed to add PDF to chat');
+			notificationService.error('Failed to add PDF to chat: ' + (error as Error).message);
 		}
 	}
 }

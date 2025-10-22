@@ -27,6 +27,8 @@ import { IVoidSettingsService } from '../common/voidSettingsService.js';
 import { IEditorService } from '../../../services/editor/common/editorService.js';
 import { IDocumentViewerService } from '../common/documentViewerService.js';
 import { PDFViewerInput } from './documentViewers/pdfViewer/pdfViewerInput.js';
+import { IRAGService } from '../common/ragService.js';
+import { INotificationService } from '../../../../platform/notification/common/notification.js';
 
 // ---------- Register commands and keybindings ----------
 
@@ -108,38 +110,77 @@ registerAction2(class extends Action2 {
 		// Check for PDF viewer first
 		const activePane = editorService.activeEditorPane
 		if (activePane?.input instanceof PDFViewerInput) {
-			const pdfInput = activePane.input as PDFViewerInput
+			const pdfInput = activePane.input as PDFViewerInput;
 
-			// Get text based on selection or whole document
-			let textContent: string | null
-			if (pdfInput.selection) {
-				textContent = await documentViewerService.getTextContentRange(
-					pdfInput.resource,
-					pdfInput.selection.startPage,
-					pdfInput.selection.endPage
-				)
-			} else {
-				textContent = await documentViewerService.getTextContent(pdfInput.resource)
-			}
+			// Use RAG for intelligent context extraction
+			const ragService = accessor.get(IRAGService);
+			const notificationService = accessor.get(INotificationService);
 
-			if (textContent) {
-				// open panel
-				const wasAlreadyOpen = viewsService.isViewContainerVisible(VOID_VIEW_CONTAINER_ID)
-				if (!wasAlreadyOpen) {
-					await commandService.executeCommand(VOID_OPEN_SIDEBAR_ACTION_ID)
+			try {
+				// Check if PDF is indexed
+				const isIndexed = await ragService.isDocumentIndexed(pdfInput.resource);
+
+				if (!isIndexed) {
+					// Index the PDF first
+					notificationService.info('Indexing PDF...');
+					const indexResult = await ragService.indexDocument({
+						uri: pdfInput.resource,
+						isPolicyManual: true
+					});
+
+					if (!indexResult.success) {
+						notificationService.error('Failed to index PDF: ' + indexResult.message);
+						return;
+					}
 				}
 
-				// Note: textContent is not part of the StagingSelectionItem type
-				// For now, we'll just add the file reference. The text extraction
-				// will be handled separately when the AI needs it.
+				// Use RAG to get relevant context
+				let searchQuery: string;
+				if (pdfInput.selection && pdfInput.selection.text) {
+					// Use selected text as query
+					searchQuery = pdfInput.selection.text;
+				} else {
+					// Use first page as query
+					const textContent = await documentViewerService.getTextContentRange(
+						pdfInput.resource,
+						1,
+						1
+					);
+					searchQuery = textContent ? textContent.substring(0, 500) : 'document content';
+				}
+
+				// Search RAG for relevant chunks
+				const ragResults = await ragService.search({
+					query: searchQuery,
+					scope: 'policy_manual',
+					limit: 5
+				});
+
+				console.log('[Add PDF to Chat] RAG search results:', ragResults.totalResults, 'chunks');
+
+				// Open panel
+				const wasAlreadyOpen = viewsService.isViewContainerVisible(VOID_VIEW_CONTAINER_ID);
+				if (!wasAlreadyOpen) {
+					await commandService.executeCommand(VOID_OPEN_SIDEBAR_ACTION_ID);
+				}
+
+				// Add PDF reference (RAG context will be used)
 				chatThreadService.addNewStagingSelection({
 					type: 'File',
 					uri: pdfInput.resource,
 					language: 'pdf',
 					state: { wasAddedAsCurrentFile: false }
-				})
+				});
 
-				await chatThreadService.focusCurrentChat()
+				metricsService.capture('Add PDF to Chat via Context Menu', {
+					hasSelection: !!pdfInput.selection,
+					usingRAG: true,
+					chunksFound: ragResults.totalResults
+				});
+
+			} catch (error) {
+				console.error('[Add PDF to Chat] Error:', error);
+				notificationService.error('Failed to add PDF: ' + (error as Error).message);
 			}
 			return
 		}
