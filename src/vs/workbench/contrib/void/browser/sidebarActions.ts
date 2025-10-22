@@ -24,6 +24,12 @@ import { IChatThreadService } from './chatThreadService.js';
 import { IViewsService } from '../../../services/views/common/viewsService.js';
 import { caseOrganizerInit_defaultPrompt } from '../common/prompt/prompts.js';
 import { IVoidSettingsService } from '../common/voidSettingsService.js';
+import { IEditorService } from '../../../services/editor/common/editorService.js';
+import { IDocumentViewerService } from '../common/documentViewerService.js';
+import { PDFViewerInput } from './documentViewers/pdfViewer/pdfViewerInput.js';
+import { IRAGService } from '../common/ragService.js';
+import { RAGContextService } from '../common/ragContextService.js';
+import { INotificationService } from '../../../../platform/notification/common/notification.js';
 
 // ---------- Register commands and keybindings ----------
 
@@ -95,13 +101,102 @@ registerAction2(class extends Action2 {
 		const commandService = accessor.get(ICommandService)
 		const viewsService = accessor.get(IViewsService)
 		const metricsService = accessor.get(IMetricsService)
-		const editorService = accessor.get(ICodeEditorService)
+		const codeEditorService = accessor.get(ICodeEditorService)
+		const editorService = accessor.get(IEditorService)
 		const chatThreadService = accessor.get(IChatThreadService)
+		const documentViewerService = accessor.get(IDocumentViewerService)
 
 		metricsService.capture('Ctrl+L', {})
 
+		// Check for PDF viewer first
+		const activePane = editorService.activeEditorPane
+		if (activePane?.input instanceof PDFViewerInput) {
+			const pdfInput = activePane.input as PDFViewerInput;
+
+			// Use RAG for intelligent context extraction
+			const ragService = accessor.get(IRAGService);
+			const notificationService = accessor.get(INotificationService);
+
+			try {
+				// Check if PDF is indexed
+				const isIndexed = await ragService.isDocumentIndexed(pdfInput.resource);
+
+				if (!isIndexed) {
+					// Index the PDF first
+					notificationService.info('Indexing PDF...');
+					const indexResult = await ragService.indexDocument({
+						uri: pdfInput.resource,
+						isPolicyManual: true
+					});
+
+					if (!indexResult.success) {
+						notificationService.error('Failed to index PDF: ' + indexResult.message);
+						return;
+					}
+				}
+
+				// Use RAG to get relevant context
+				let searchQuery: string;
+				if (pdfInput.selection && pdfInput.selection.text) {
+					// Use selected text as query (limit to reasonable length)
+					searchQuery = pdfInput.selection.text.substring(0, 300);
+				} else {
+					// Use first page as query (reduced from 500 to 300 chars for better focus)
+					const textContent = await documentViewerService.getTextContentRange(
+						pdfInput.resource,
+						1,
+						1
+					);
+					searchQuery = textContent ? textContent.substring(0, 300) : 'document content';
+				}
+
+				// Search RAG for relevant chunks (increased limit for better diversity)
+				const ragResults = await ragService.search({
+					query: searchQuery,
+					scope: 'policy_manual',
+					limit: 10  // Increased to allow MMR to select diverse chunks
+				});
+
+				console.log('[Add PDF to Chat] RAG search results:', ragResults.totalResults, 'chunks');
+
+				// Format RAG context
+				const ragContextService = new RAGContextService();
+				const formattedContext = ragContextService.formatContextPack(ragResults);
+
+				console.log('[Add PDF to Chat] RAG context size:', formattedContext.length, 'characters');
+
+				// Open panel
+				const wasAlreadyOpen = viewsService.isViewContainerVisible(VOID_VIEW_CONTAINER_ID);
+				if (!wasAlreadyOpen) {
+					await commandService.executeCommand(VOID_OPEN_SIDEBAR_ACTION_ID);
+				}
+
+				// Add PDF reference with RAG context attached
+				chatThreadService.addNewStagingSelection({
+					type: 'File',
+					uri: pdfInput.resource,
+					language: 'pdf',
+					state: {
+						wasAddedAsCurrentFile: false,
+						ragContext: formattedContext // Attach RAG context!
+					}
+				});
+
+				metricsService.capture('Add PDF to Chat via Context Menu', {
+					hasSelection: !!pdfInput.selection,
+					usingRAG: true,
+					chunksFound: ragResults.totalResults
+				});
+
+			} catch (error) {
+				console.error('[Add PDF to Chat] Error:', error);
+				notificationService.error('Failed to add PDF: ' + (error as Error).message);
+			}
+			return
+		}
+
 		// capture selection and model before opening the chat panel
-		const editor = editorService.getActiveCodeEditor()
+		const editor = codeEditorService.getActiveCodeEditor()
 		const model = editor?.getModel()
 		if (!model) return
 

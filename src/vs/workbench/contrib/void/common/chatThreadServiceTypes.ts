@@ -74,7 +74,10 @@ export type StagingSelectionItem = {
 	type: 'File';
 	uri: URI;
 	language: string;
-	state: { wasAddedAsCurrentFile: boolean; };
+	state: {
+		wasAddedAsCurrentFile: boolean;
+		ragContext?: string; // RAG-generated context for PDFs
+	};
 } | {
 	type: 'CodeSelection';
 	range: [number, number];

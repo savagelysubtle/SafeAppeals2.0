@@ -1,0 +1,337 @@
+/* PDF Viewer Styles */
+body {
+	margin: 0;
+	padding: 0;
+	overflow: hidden;
+	background-color: #525252;
+	font-family: var(--vscode-font-family);
+}
+
+#pdf-viewer-layout {
+	display: flex;
+	height: 100vh;
+	width: 100vw;
+}
+
+/* Sidebar Styles */
+#sidebar {
+	width: 250px;
+	min-width: 250px;
+	background-color: var(--vscode-sideBar-background);
+	border-right: 1px solid var(--vscode-sideBar-border);
+	display: flex;
+	flex-direction: column;
+	transition: margin-left 0.3s ease;
+	position: relative;
+}
+
+#sidebar.collapsed {
+	margin-left: -250px;
+}
+
+#sidebar-header {
+	background-color: var(--vscode-sideBarTitle-background);
+	padding: 8px;
+	border-bottom: 1px solid var(--vscode-sideBar-border);
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+
+#toggle-sidebar {
+	padding: 4px 8px;
+	background-color: var(--vscode-button-secondaryBackground);
+	color: var(--vscode-button-secondaryForeground);
+	border: none;
+	border-radius: 3px;
+	cursor: pointer;
+	font-size: 16px;
+	position: relative;
+	z-index: 1000;
+	transition: transform 0.3s ease;
+}
+
+/* When sidebar is collapsed, move toggle button to the right edge */
+#sidebar.collapsed #toggle-sidebar {
+	transform: translateX(250px);
+}
+
+#toggle-sidebar:hover {
+	background-color: var(--vscode-button-secondaryHoverBackground);
+}
+
+#sidebar-tabs {
+	display: flex;
+	gap: 4px;
+	flex: 1;
+}
+
+.sidebar-tab {
+	padding: 4px 12px;
+	background-color: transparent;
+	color: var(--vscode-foreground);
+	border: none;
+	border-radius: 3px;
+	cursor: pointer;
+	font-size: 12px;
+	opacity: 0.7;
+}
+
+.sidebar-tab:hover {
+	opacity: 1;
+	background-color: var(--vscode-list-hoverBackground);
+}
+
+.sidebar-tab.active {
+	opacity: 1;
+	background-color: var(--vscode-list-activeSelectionBackground);
+	color: var(--vscode-list-activeSelectionForeground);
+}
+
+#sidebar-content {
+	flex: 1;
+	overflow: auto;
+	position: relative;
+}
+
+.tab-content {
+	display: none;
+	height: 100%;
+}
+
+.tab-content.active {
+	display: block;
+}
+
+/* Thumbnails */
+#thumbnails-container {
+	padding: 8px;
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+}
+
+.thumbnail-item {
+	cursor: pointer;
+	border: 2px solid transparent;
+	border-radius: 4px;
+	padding: 4px;
+	background-color: var(--vscode-list-inactiveSelectionBackground);
+	transition: all 0.2s ease;
+}
+
+.thumbnail-item:hover {
+	background-color: var(--vscode-list-hoverBackground);
+	border-color: var(--vscode-focusBorder);
+}
+
+.thumbnail-item.active {
+	border-color: var(--vscode-focusBorder);
+	background-color: var(--vscode-list-activeSelectionBackground);
+}
+
+.thumbnail-canvas {
+	width: 100%;
+	display: block;
+	background-color: white;
+}
+
+.thumbnail-label {
+	text-align: center;
+	font-size: 11px;
+	color: var(--vscode-foreground);
+	margin-top: 4px;
+}
+
+/* Outline */
+#outline-container {
+	padding: 8px;
+}
+
+.outline-item {
+	padding: 4px 8px;
+	cursor: pointer;
+	border-radius: 3px;
+	font-size: 13px;
+	color: var(--vscode-foreground);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.outline-item:hover {
+	background-color: var(--vscode-list-hoverBackground);
+}
+
+.outline-item.level-1 {
+	font-weight: bold;
+	padding-left: 8px;
+}
+
+.outline-item.level-2 {
+	padding-left: 24px;
+}
+
+.outline-item.level-3 {
+	padding-left: 40px;
+	font-size: 12px;
+}
+
+.outline-empty {
+	padding: 16px;
+	text-align: center;
+	color: var(--vscode-descriptionForeground);
+	font-size: 12px;
+}
+
+/* PDF Container */
+#pdf-container {
+	display: flex;
+	flex-direction: column;
+	flex: 1;
+	min-width: 0;
+}
+
+#pdf-controls {
+	display: flex;
+	justify-content: center;
+	align-items: center;
+	gap: 10px;
+	padding: 10px;
+	background-color: var(--vscode-editorWidget-background);
+	border-bottom: 1px solid var(--vscode-editorWidget-border);
+	flex-shrink: 0;
+	z-index: 100;
+}
+
+#canvas-wrapper {
+	flex: 1;
+	overflow: auto;
+	display: flex;
+	justify-content: center;
+	align-items: flex-start;
+	padding: 20px;
+}
+
+#pdf-render-container {
+	position: relative;
+	display: inline-block;
+	/* Ensure crisp rendering */
+	image-rendering: -webkit-optimize-contrast;
+	image-rendering: crisp-edges;
+}
+
+#pdf-canvas {
+	display: block;
+	background-color: white;
+	box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
+	/* Prevent blurry text */
+	-webkit-font-smoothing: antialiased;
+	-moz-osx-font-smoothing: grayscale;
+}
+
+#pdf-text-layer {
+	position: absolute;
+	left: 0;
+	top: 0;
+	right: 0;
+	bottom: 0;
+	overflow: hidden;
+	opacity: 1;
+	line-height: 1.0;
+	user-select: text;
+	pointer-events: auto;
+}
+
+#pdf-text-layer > span {
+	color: transparent;
+	position: absolute;
+	white-space: pre;
+	cursor: text;
+	transform-origin: 0% 0%;
+	/* Improve text precision */
+	font-size: 1px;
+	line-height: 1;
+	letter-spacing: normal;
+	word-spacing: normal;
+}
+
+/* SVG Highlight Layer - between canvas and text layer */
+#pdf-highlight-layer {
+	position: absolute;
+	left: 0;
+	top: 0;
+	pointer-events: none;
+	z-index: 2;
+}
+
+/* Improve selection visibility and precision */
+#pdf-text-layer ::selection {
+	background: rgba(0, 120, 215, 0.3);
+	/* Use box-shadow for precise outline */
+	box-shadow: 0 0 0 1px rgba(0, 120, 215, 0.6);
+}
+
+#pdf-text-layer ::-moz-selection {
+	background: rgba(0, 120, 215, 0.3);
+	box-shadow: 0 0 0 1px rgba(0, 120, 215, 0.6);
+}
+
+/* Selection anchor visual feedback */
+#pdf-text-layer .selection-anchor {
+	position: absolute;
+	width: 2px;
+	height: 1em;
+	background: #0078d7;
+	pointer-events: none;
+	animation: blink 1s infinite;
+	z-index: 10;
+}
+
+@keyframes blink {
+	0%, 49% { opacity: 1; }
+	50%, 100% { opacity: 0.3; }
+}
+
+/* Better text rendering */
+#pdf-text-layer > span > br {
+	user-select: none;
+}
+
+#pdf-text-layer > .endOfContent {
+	display: block;
+	position: absolute;
+	left: 0;
+	top: 100%;
+	right: 0;
+	bottom: 0;
+	z-index: -1;
+	cursor: default;
+	user-select: none;
+}
+
+#pdf-controls button {
+	padding: 6px 12px;
+	background-color: var(--vscode-button-background);
+	color: var(--vscode-button-foreground);
+	border: none;
+	border-radius: 3px;
+	cursor: pointer;
+	font-size: 13px;
+}
+
+#pdf-controls button:hover {
+	background-color: var(--vscode-button-hoverBackground);
+}
+
+#pdf-controls button:disabled {
+	opacity: 0.5;
+	cursor: not-allowed;
+}
+
+#page-info {
+	color: var(--vscode-foreground);
+	font-size: 13px;
+	user-select: none;
+}
+

@@ -17,8 +17,18 @@ This document tracks all new features added to SafeAppeals2.0 (Void fork).
 - ✅ PDF, DOCX, TXT, MD file support
 - ✅ Hybrid SQLite (metadata) + ChromaDB (vector embeddings) storage
 - ✅ Chunking with configurable size and overlap
-- ✅ OpenAI embeddings integration (text-embedding-3-small/large)
+- ✅ **Local embeddings** via Transformers.js (all-MiniLM-L6-v2)
 - ✅ Semantic search with relevance scoring
+- ✅ **No API costs** - free, offline embeddings
+
+**Embedding Model Details**:
+
+- Model: `all-MiniLM-L6-v2` (Hugging Face)
+- Size: ~23 MB (auto-downloaded and cached)
+- Dimension: 384 (optimized for speed/quality balance)
+- Performance: ~50-100 embeddings/second on CPU
+- Cost: $0 (vs. ~$0.02 per 1M tokens with OpenAI)
+- Offline: Works without internet after first download
 
 #### 2. **Workspace Integration**
 
@@ -52,6 +62,7 @@ This document tracks all new features added to SafeAppeals2.0 (Void fork).
 - Global: `%APPDATA%/SafeAppealNavigator/User/rag/`
 - Chroma: `<global>/chroma/`
 - SQLite: `<global>/workspace.db`
+- Model Cache: `<global>/models/` (Transformers.js model storage)
 
 #### 4. **Settings**
 
@@ -63,7 +74,7 @@ This document tracks all new features added to SafeAppeals2.0 (Void fork).
 - ✅ `ragSearchLimit` - Max results per search (default: 5)
 - ✅ `ragStorageScope` - 'policy_manual' | 'workspace_docs' | 'both'
 - ✅ `ragVectorBackend` - 'chroma-http' | 'sqlite-vec'
-- ✅ `ragOpenAIModel` - Embedding model selection
+- ~~❌ `ragOpenAIModel` - **Removed** (using local embeddings)~~
 - ✅ `ragAutoIndexPolicyFolder` - Auto-index policy folder (default: true)
 - ✅ `ragPolicyFolderName` - Custom folder name (default: 'policy-manuals')
 - ✅ `ragWatchPolicyFolder` - Watch for file changes (default: true)
