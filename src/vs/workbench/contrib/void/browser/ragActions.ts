@@ -6,6 +6,7 @@
 import { registerAction2, Action2, MenuId } from '../../../../platform/actions/common/actions.js';
 import { ServicesAccessor } from '../../../../platform/instantiation/common/instantiation.js';
 import { INotificationService } from '../../../../platform/notification/common/notification.js';
+import { IProgressService, ProgressLocation } from '../../../../platform/progress/common/progress.js';
 import { URI } from '../../../../base/common/uri.js';
 import { IRAGService } from '../common/ragService.js';
 import { ContextKeyExpr } from '../../../../platform/contextkey/common/contextkey.js';
@@ -112,6 +113,7 @@ class IndexAsPolicyManualAction extends Action2 {
 	async run(accessor: ServicesAccessor): Promise<void> {
 		const ragService = accessor.get(IRAGService);
 		const notificationService = accessor.get(INotificationService);
+		const progressService = accessor.get(IProgressService);
 		const explorerService = accessor.get(IExplorerService);
 
 		// Get the selected resource from explorer
@@ -127,23 +129,52 @@ class IndexAsPolicyManualAction extends Action2 {
 			return;
 		}
 
-		// Debug: Log URI properties
-		console.log('URI Debug:', {
-			scheme: uri.scheme,
-			authority: uri.authority,
-			path: uri.path,
-			fsPath: uri.fsPath,
-			toString: uri.toString()
-		});
+		const filename = uri.fsPath ? uri.fsPath.split(/[\\/]/).pop() : uri.path.split(/[\\/]/).pop();
 
 		try {
-			const result = await ragService.indexDocument({ uri, isPolicyManual: true });
-			if (result.success) {
-				const filename = uri.fsPath ? uri.fsPath.split(/[\\/]/).pop() : uri.path.split(/[\\/]/).pop();
-				notificationService.info(`✓ Indexed: ${filename}`);
-			} else {
-				notificationService.error(result.message || 'Failed to index document');
+			// Check if document is already indexed
+			console.log('[RAG] Checking if document is already indexed:', uri.fsPath);
+			const isAlreadyIndexed = await ragService.isDocumentIndexed(uri);
+			console.log('[RAG] isAlreadyIndexed result:', isAlreadyIndexed);
+
+			if (isAlreadyIndexed) {
+				notificationService.warn(`Document already indexed: ${filename}\nUse "RAG: Clear All Embeddings" if you need to re-index.`);
+				return;
 			}
+
+			// Show progress notification
+			await progressService.withProgress(
+				{
+					location: ProgressLocation.Notification,
+					title: `Indexing: ${filename}`,
+					cancellable: false
+				},
+				async (progress) => {
+					// Initial progress
+					progress.report({ message: 'Extracting content from PDF...' });
+
+					// Start indexing
+					const result = await ragService.indexDocument({ uri, isPolicyManual: true });
+
+					if (result.success) {
+						// Extract chunk count from success message if available
+						const chunkMatch = result.message.match(/(\d+) chunks/);
+						const chunkCount = chunkMatch ? chunkMatch[1] : 'multiple';
+
+						progress.report({ message: `Generated embeddings for ${chunkCount} chunks` });
+
+						// Small delay to show completion message
+						await new Promise(resolve => setTimeout(resolve, 800));
+					} else {
+						throw new Error(result.message || 'Failed to index document');
+					}
+
+					return result;
+				}
+			);
+
+			// Show success notification
+			notificationService.info(`✓ Successfully indexed: ${filename}`);
 		} catch (e) {
 			const errorMsg = e instanceof Error ? e.message : String(e);
 			notificationService.error(`Failed to index document: ${errorMsg}`);

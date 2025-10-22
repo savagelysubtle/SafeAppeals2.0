@@ -68,6 +68,16 @@ export class RAGFileService {
 	}
 
 	private async extractPDF(uri: URI): Promise<ExtractedContent> {
+		return await this.extractPDFPages(uri);
+	}
+
+	/**
+	 * Extract PDF pages with optional page range support
+	 * @param uri The URI of the PDF file
+	 * @param startPage Optional start page (1-indexed), defaults to 1
+	 * @param endPage Optional end page (1-indexed), defaults to last page
+	 */
+	async extractPDFPages(uri: URI, startPage?: number, endPage?: number): Promise<ExtractedContent> {
 		let pdf: any = null;
 		let loadingTask: any = null;
 
@@ -91,7 +101,11 @@ export class RAGFileService {
 			pdf = await loadingTask.promise;
 			const totalPages = pdf.numPages;
 
-			this.logService.info(`PDF has ${totalPages} pages. Starting extraction...`);
+			// Determine page range
+			const firstPage = Math.max(1, startPage || 1);
+			const lastPage = Math.min(totalPages, endPage || totalPages);
+
+			this.logService.info(`PDF has ${totalPages} pages. Extracting pages ${firstPage} to ${lastPage}...`);
 
 			const metadata: ExtractedContent['metadata'] = {
 				title: '',
@@ -106,11 +120,11 @@ export class RAGFileService {
 			const BATCH_SIZE = 10; // Process pages in batches to avoid memory buildup
 
 			// Extract text from pages in batches
-			for (let batch = 0; batch < totalPages; batch += BATCH_SIZE) {
-				const batchEnd = Math.min(batch + BATCH_SIZE, totalPages);
-				this.logService.info(`Processing pages ${batch + 1} to ${batchEnd}...`);
+			for (let batch = firstPage; batch <= lastPage; batch += BATCH_SIZE) {
+				const batchEnd = Math.min(batch + BATCH_SIZE - 1, lastPage);
+				this.logService.info(`Processing pages ${batch} to ${batchEnd}...`);
 
-				for (let pageNum = batch + 1; pageNum <= batchEnd; pageNum++) {
+				for (let pageNum = batch; pageNum <= batchEnd; pageNum++) {
 					let page: any = null;
 					try {
 						page = await pdf.getPage(pageNum);
@@ -139,15 +153,17 @@ export class RAGFileService {
 				}
 			}
 
-			// Extract metadata if available
-			try {
-				const pdfMetadata = await pdf.getMetadata();
-				if (pdfMetadata?.info) {
-					metadata.title = pdfMetadata.info.Title || '';
-					metadata.author = pdfMetadata.info.Author || '';
+			// Extract metadata if available (only for full document extraction)
+			if (!startPage && !endPage) {
+				try {
+					const pdfMetadata = await pdf.getMetadata();
+					if (pdfMetadata?.info) {
+						metadata.title = pdfMetadata.info.Title || '';
+						metadata.author = pdfMetadata.info.Author || '';
+					}
+				} catch (metaError) {
+					this.logService.warn('Could not extract PDF metadata:', metaError);
 				}
-			} catch (metaError) {
-				this.logService.warn('Could not extract PDF metadata:', metaError);
 			}
 
 			// Join all text parts

@@ -303,13 +303,13 @@ export class ToolsService implements IToolsService {
 			rag_search_policy: (params: RawToolParamsObj) => {
 				const { query: queryUnknown, limit: limitUnknown } = params;
 				const query = validateStr('query', queryUnknown);
-				const limit = validateNumber(limitUnknown, { default: 5 }) || 5;
+				const limit = validateNumber(limitUnknown, { default: 8 }) || 8;  // Increased default for MMR diversity
 				return { query, limit };
 			},
 			rag_search_workspace: (params: RawToolParamsObj) => {
 				const { query: queryUnknown, limit: limitUnknown } = params;
 				const query = validateStr('query', queryUnknown);
-				const limit = validateNumber(limitUnknown, { default: 5 }) || 5;
+				const limit = validateNumber(limitUnknown, { default: 8 }) || 8;  // Increased default for MMR diversity
 				return { query, limit };
 			},
 			rag_get_stats: (params: RawToolParamsObj) => {
@@ -519,7 +519,13 @@ export class ToolsService implements IToolsService {
 					});
 					const contextService = new RAGContextService();
 					const formatted = contextService.formatContextPack(contextPack);
-					return { result: { contextPack: formatted } };
+
+					// Add helpful metadata about the search
+					const enhancedResult = contextPack.totalResults === 0
+						? `No relevant documents found for query: "${query}"\n\nTry:\n- Using different search terms\n- Checking if documents are indexed with rag_get_stats\n- Indexing policy documents first`
+						: `Found ${contextPack.totalResults} relevant chunks (after MMR re-ranking and filtering):\n\n${formatted}`;
+
+					return { result: { contextPack: enhancedResult } };
 				} catch (error) {
 					return { result: { contextPack: `Search failed: ${error.message}` } };
 				}
@@ -533,7 +539,13 @@ export class ToolsService implements IToolsService {
 					});
 					const contextService = new RAGContextService();
 					const formatted = contextService.formatContextPack(contextPack);
-					return { result: { contextPack: formatted } };
+
+					// Add helpful metadata about the search
+					const enhancedResult = contextPack.totalResults === 0
+						? `No relevant documents found for query: "${query}"\n\nTry:\n- Using different search terms\n- Checking if documents are indexed with rag_get_stats\n- Indexing workspace documents first`
+						: `Found ${contextPack.totalResults} relevant chunks (after MMR re-ranking and filtering):\n\n${formatted}`;
+
+					return { result: { contextPack: enhancedResult } };
 				} catch (error) {
 					return { result: { contextPack: `Search failed: ${error.message}` } };
 				}
@@ -541,14 +553,34 @@ export class ToolsService implements IToolsService {
 			rag_get_stats: async () => {
 				try {
 					const stats = await this.ragService.getStats();
-					const statsStr = `RAG Statistics:
-Total Documents: ${stats.totalDocuments}
-Total Size: ${(stats.totalSize / 1024 / 1024).toFixed(2)} MB
-Total Chunks: ${stats.chunks.totalChunks}
-Average Tokens per Chunk: ${stats.chunks.avgTokens}
+					const hasContent = stats.totalDocuments > 0;
 
-Documents by Type:
-${stats.documents.map(d => `  ${d.filetype}: ${d.typeCount} files (${(d.totalSize / 1024 / 1024).toFixed(2)} MB)`).join('\n')}`;
+					const statsStr = hasContent
+						? `RAG Index Status: ✓ Active
+
+📊 Statistics:
+• Total Documents: ${stats.totalDocuments}
+• Total Size: ${(stats.totalSize / 1024 / 1024).toFixed(2)} MB
+• Total Chunks: ${stats.chunks.totalChunks}
+• Average Tokens per Chunk: ${stats.chunks.avgTokens}
+
+📁 Documents by Type:
+${stats.documents.map(d => `  • ${d.filetype}: ${d.typeCount} files (${(d.totalSize / 1024 / 1024).toFixed(2)} MB)`).join('\n')}
+
+💡 Search Tips:
+- Use rag_search_policy for policy manual queries
+- Use rag_search_workspace for workspace document queries
+- Be specific with search terms for better results
+- Increase limit (8-10) for complex topics`
+						: `RAG Index Status: ⚠️ Empty
+
+No documents indexed yet. To get started:
+1. Use rag_index_document to index PDFs or documents
+2. For policy manuals: set is_policy_manual to true
+3. For workspace docs: set is_policy_manual to false
+
+Example: rag_index_document with uri="/path/to/document.pdf" and is_policy_manual=true`;
+
 					return { result: { stats: statsStr } };
 				} catch (error) {
 					return { result: { stats: `Failed to get stats: ${error.message}` } };

@@ -73,6 +73,7 @@ export const defaultProviderSettings = {
 
 export const defaultModelsOfProvider = {
 	openAI: [ // https://platform.openai.com/docs/models/gp
+		'gpt-5',
 		'gpt-4.1',
 		'gpt-4.1-mini',
 		'gpt-4.1-nano',
@@ -84,12 +85,16 @@ export const defaultModelsOfProvider = {
 		// 'gpt-4o-mini',
 	],
 	anthropic: [ // https://docs.anthropic.com/en/docs/about-claude/models
-		'claude-opus-4-0',
-		'claude-sonnet-4-0',
-		'claude-3-7-sonnet-latest',
-		'claude-3-5-sonnet-latest',
-		'claude-3-5-haiku-latest',
-		'claude-3-opus-latest',
+		'claude-sonnet-4-5',
+		'claude-haiku-4-5',
+		'claude-opus-4-20250514',
+		'claude-sonnet-4-20250514',
+		'claude-3-7-sonnet-20250219',
+		'claude-3-5-sonnet-20241022',
+		'claude-3-5-haiku-20241022',
+		'claude-3-opus-20240229',
+		'claude-3-sonnet-20240229',
+		'claude-3-haiku-20240307',
 	],
 	xAI: [ // https://docs.x.ai/docs/models?cluster=us-east-1
 		'grok-2',
@@ -416,6 +421,10 @@ const extensiveModelOptionsFallback: VoidStaticProviderInfo['modelOptionsFallbac
 
 	if (lower.includes('gemini') && (lower.includes('2.5') || lower.includes('2-5'))) return toFallback(geminiModelOptions, 'gemini-2.5-pro-exp-03-25')
 
+	if (lower.includes('claude-4') && lower.includes('opus')) return toFallback(anthropicModelOptions, 'claude-opus-4-20250514')
+	if (lower.includes('claude-4') && lower.includes('haiku')) return toFallback(anthropicModelOptions, 'claude-haiku-4-5')
+	if (lower.includes('claude-4-5') || lower.includes('claude-sonnet-4-5') || (lower.includes('claude-4') && lower.includes('sonnet'))) return toFallback(anthropicModelOptions, 'claude-sonnet-4-5')
+	if (lower.includes('claude-3-7') || lower.includes('claude-3.7')) return toFallback(anthropicModelOptions, 'claude-3-7-sonnet-20250219')
 	if (lower.includes('claude-3-5') || lower.includes('claude-3.5')) return toFallback(anthropicModelOptions, 'claude-3-5-sonnet-20241022')
 	if (lower.includes('claude')) return toFallback(anthropicModelOptions, 'claude-3-7-sonnet-20250219')
 
@@ -454,6 +463,8 @@ const extensiveModelOptionsFallback: VoidStaticProviderInfo['modelOptionsFallbac
 	if (lower.includes('gpt') && lower.includes('nano') && (lower.includes('4.1') || lower.includes('4-1'))) return toFallback(openAIModelOptions, 'gpt-4.1-nano')
 	if (lower.includes('gpt') && (lower.includes('4.1') || lower.includes('4-1'))) return toFallback(openAIModelOptions, 'gpt-4.1')
 
+	if (lower.includes('gpt') && lower.includes('5')) return toFallback(openAIModelOptions, 'gpt-5')
+
 	if (lower.includes('4o') && lower.includes('mini')) return toFallback(openAIModelOptions, 'gpt-4o-mini')
 	if (lower.includes('4o')) return toFallback(openAIModelOptions, 'gpt-4o')
 
@@ -477,7 +488,7 @@ const extensiveModelOptionsFallback: VoidStaticProviderInfo['modelOptionsFallbac
 
 // ---------------- ANTHROPIC ----------------
 const anthropicModelOptions = {
-	'claude-3-7-sonnet-20250219': { // https://docs.anthropic.com/en/docs/about-claude/models/all-models#model-comparison-table
+	'claude-sonnet-4-5': { // https://docs.anthropic.com/en/docs/about-claude/models/all-models#model-comparison-table
 		contextWindow: 200_000,
 		reservedOutputTokenSpace: 8_192,
 		cost: { input: 3.00, cache_read: 0.30, cache_write: 3.75, output: 15.00 },
@@ -489,10 +500,19 @@ const anthropicModelOptions = {
 			supportsReasoning: true,
 			canTurnOffReasoning: true,
 			canIOReasoning: true,
-			reasoningReservedOutputTokenSpace: 8192, // can bump it to 128_000 with beta mode output-128k-2025-02-19
-			reasoningSlider: { type: 'budget_slider', min: 1024, max: 8192, default: 1024 }, // they recommend batching if max > 32_000. we cap at 8192 because above is typically not necessary (often even buggy)
+			reasoningReservedOutputTokenSpace: 8192,
+			reasoningSlider: { type: 'budget_slider', min: 1024, max: 8192, default: 1024 },
 		},
-
+	},
+	'claude-haiku-4-5': {
+		contextWindow: 200_000,
+		reservedOutputTokenSpace: 8_192,
+		cost: { input: 0.80, cache_read: 0.08, cache_write: 1.00, output: 4.00 },
+		downloadable: false,
+		supportsFIM: false,
+		specialToolFormat: 'anthropic-style',
+		supportsSystemMessage: 'separated',
+		reasoningCapabilities: false,
 	},
 	'claude-opus-4-20250514': {
 		contextWindow: 200_000,
@@ -515,6 +535,23 @@ const anthropicModelOptions = {
 		contextWindow: 200_000,
 		reservedOutputTokenSpace: 8_192,
 		cost: { input: 3.00, cache_read: 0.30, cache_write: 3.75, output: 6.00 },
+		downloadable: false,
+		supportsFIM: false,
+		specialToolFormat: 'anthropic-style',
+		supportsSystemMessage: 'separated',
+		reasoningCapabilities: {
+			supportsReasoning: true,
+			canTurnOffReasoning: true,
+			canIOReasoning: true,
+			reasoningReservedOutputTokenSpace: 8192, // can bump it to 128_000 with beta mode output-128k-2025-02-19
+			reasoningSlider: { type: 'budget_slider', min: 1024, max: 8192, default: 1024 }, // they recommend batching if max > 32_000. we cap at 8192 because above is typically not necessary (often even buggy)
+		},
+
+	},
+	'claude-3-7-sonnet-20250219': { // https://docs.anthropic.com/en/docs/about-claude/models/all-models#model-comparison-table
+		contextWindow: 200_000,
+		reservedOutputTokenSpace: 8_192,
+		cost: { input: 3.00, cache_read: 0.30, cache_write: 3.75, output: 15.00 },
 		downloadable: false,
 		supportsFIM: false,
 		specialToolFormat: 'anthropic-style',
@@ -586,9 +623,10 @@ const anthropicSettings: VoidStaticProviderInfo = {
 	modelOptionsFallback: (modelName) => {
 		const lower = modelName.toLowerCase()
 		let fallbackName: keyof typeof anthropicModelOptions | null = null
-		if (lower.includes('claude-4-opus') || lower.includes('claude-opus-4')) fallbackName = 'claude-opus-4-20250514'
-		if (lower.includes('claude-4-sonnet') || lower.includes('claude-sonnet-4')) fallbackName = 'claude-sonnet-4-20250514'
-
+		if (lower.includes('claude-4-5') || lower.includes('claude-sonnet-4-5') || lower.includes('claude-4.5')) fallbackName = 'claude-sonnet-4-5'
+		if (lower.includes('claude-haiku-4-5') || lower.includes('claude-haiku-4.5')) fallbackName = 'claude-haiku-4-5'
+		if (lower.includes('claude-4') && lower.includes('opus')) fallbackName = 'claude-opus-4-20250514'
+		if (lower.includes('claude-4') && lower.includes('sonnet') && !fallbackName) fallbackName = 'claude-sonnet-4-20250514'
 
 		if (lower.includes('claude-3-7-sonnet')) fallbackName = 'claude-3-7-sonnet-20250219'
 		if (lower.includes('claude-3-5-sonnet')) fallbackName = 'claude-3-5-sonnet-20241022'
@@ -603,6 +641,16 @@ const anthropicSettings: VoidStaticProviderInfo = {
 
 // ---------------- OPENAI ----------------
 const openAIModelOptions = { // https://platform.openai.com/docs/pricing
+	'gpt-5': {
+		contextWindow: 1_047_576,
+		reservedOutputTokenSpace: 32_768,
+		cost: { input: 3.00, output: 12.00, cache_read: 0.75 },
+		downloadable: false,
+		supportsFIM: false,
+		specialToolFormat: 'openai-style',
+		supportsSystemMessage: 'developer-role',
+		reasoningCapabilities: false,
+	},
 	'o3': {
 		contextWindow: 1_047_576,
 		reservedOutputTokenSpace: 32_768,
@@ -718,6 +766,7 @@ const openAISettings: VoidStaticProviderInfo = {
 	modelOptionsFallback: (modelName) => {
 		const lower = modelName.toLowerCase()
 		let fallbackName: keyof typeof openAIModelOptions | null = null
+		if (lower.includes('gpt-5')) { fallbackName = 'gpt-5' }
 		if (lower.includes('o1')) { fallbackName = 'o1' }
 		if (lower.includes('o3-mini')) { fallbackName = 'o3-mini' }
 		if (lower.includes('gpt-4o')) { fallbackName = 'gpt-4o' }

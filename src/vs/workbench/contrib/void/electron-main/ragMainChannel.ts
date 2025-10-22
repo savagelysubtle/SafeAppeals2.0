@@ -33,7 +33,7 @@ export class RAGMainChannel implements IServerChannel {
 				if (args && args.uri) {
 					args.uri = URI.revive(args.uri as UriComponents);
 				}
-				return this.service.isDocumentIndexed(args);
+				return this.service.isDocumentIndexed(args.uri);
 			case 'getDocumentsByType':
 				return this.service.getDocumentsByType(args);
 			case 'initialize':

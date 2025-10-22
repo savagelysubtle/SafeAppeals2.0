@@ -214,9 +214,20 @@ Typical 50 MB PDF (500 pages):
 2. **PDF Parsing**: +100-150 MB (pdfjs internal structures)
 3. **Text Extraction**: +50-100 MB (page text accumulation)
 4. **Chunking**: +50-100 MB (chunk creation)
-5. **Embeddings**: +200-400 MB (OpenAI API calls, batched)
+5. **Embeddings**: +200-400 MB (Local Transformers.js model, batched)
 
 **Total Peak**: ~450-800 MB (vs. 2-4 GB before optimization)
+
+## Local Embedding Model
+
+As of the local embeddings update:
+
+- **Model**: `all-MiniLM-L6-v2` via Transformers.js
+- **Model Size**: ~23 MB (downloaded once, cached locally)
+- **Embedding Dimension**: 384 (vs. 1536 for OpenAI)
+- **Performance**: ~50-100 embeddings/second on CPU
+- **Cost**: $0 (no API calls)
+- **Offline**: Works without internet after first download
 
 ## Best Practices for Users
 
@@ -261,13 +272,14 @@ if (fileSizeMB > 50) { /* warn */ }
 
 ## Future Optimizations
 
-1. **Streaming Embeddings**: Stream chunks to OpenAI API instead of batching
+1. **Streaming Embeddings**: Stream chunks through local model more efficiently
 2. **Worker Threads**: Process pages in parallel worker threads
 3. **Disk Caching**: Cache intermediate results to disk
 4. **Progressive Indexing**: Allow partial results while indexing continues
 5. **Compression**: Compress text before chunking
 6. **SQLite WAL Mode**: Better performance for large transactions
 7. **Memory Pool**: Pre-allocate and reuse buffers
+8. **GPU Acceleration**: Use GPU for embeddings when available (via ONNX Runtime)
 
 ## Troubleshooting
 
@@ -326,7 +338,8 @@ if (global.gc) {
 - `src/vs/workbench/contrib/void/electron-main/ragFileService.ts` - PDF extraction
 - `src/vs/workbench/contrib/void/electron-main/ragMainService.ts` - Indexing orchestration
 - `src/vs/workbench/contrib/void/electron-main/ragIndexService.ts` - Chunking
-- `src/vs/workbench/contrib/void/common/ragVectorAdapter.ts` - Embeddings
+- `src/vs/workbench/contrib/void/common/ragVectorAdapter.ts` - Vector storage
+- `src/vs/workbench/contrib/void/common/ragLocalEmbeddings.ts` - Local embedding generation
 - `scripts/code.bat` - Windows startup script
 - `scripts/code.sh` - Unix startup script
 
@@ -335,5 +348,3 @@ if (global.gc) {
 - [Node.js Memory Management](https://nodejs.org/en/docs/guides/simple-profiling)
 - [pdfjs-dist Documentation](https://github.com/mozilla/pdf.js)
 - [V8 Garbage Collection](https://v8.dev/blog/trash-talk)
-
-
