@@ -24,31 +24,44 @@ export interface PersistentVectorAdapterConfig {
 	persistPath: string;
 }
 
-// Simple in-memory vector store with local embeddings (no external dependencies)
+// Persistent vector store with local embeddings stored on disk
 // Uses Transformers.js for free, offline embeddings
+// Stores embeddings in SQLite for persistence across restarts
 export class ChromaPersistentAdapter implements VectorAdapter {
 	private embeddingService: LocalEmbeddingService;
 	private initialized = false;
-	// Store embeddings in memory for search
+	// In-memory cache for fast search (loaded from disk on init)
 	private embeddings: Map<string, { vector: number[]; metadata: Record<string, any> }> = new Map();
+	private embeddingsDbPath: string;
 
 	constructor(
 		private config: PersistentVectorAdapterConfig,
 		private logService: ILogService
 	) {
 		this.embeddingService = new LocalEmbeddingService(logService);
+		this.embeddingsDbPath = config.persistPath + '/embeddings.db';
 	}
 
 	async initialize(): Promise<void> {
 		if (this.initialized) return;
 
 		try {
+			// Ensure persist path exists
+			const fs = await import('fs');
+			if (!fs.existsSync(this.config.persistPath)) {
+				fs.mkdirSync(this.config.persistPath, { recursive: true });
+			}
+
 			// Initialize local embedding service
 			const modelCachePath = this.config.persistPath + '/models';
 			await this.embeddingService.initialize(modelCachePath);
 
+			// Load embeddings from disk into memory
+			await this.loadEmbeddingsFromDisk();
+
 			this.initialized = true;
 			this.logService.info(`Vector adapter initialized with local embeddings (${this.embeddingService.getModelName()}, ${this.embeddingService.getEmbeddingDimension()}D)`);
+			this.logService.info(`Loaded ${this.embeddings.size} embeddings from persistent storage`);
 		} catch (error) {
 			this.logService.error('Failed to initialize vector adapter:', error);
 			throw error;
@@ -58,6 +71,111 @@ export class ChromaPersistentAdapter implements VectorAdapter {
 	async ensureCollections(scope: RAGStorageScope): Promise<void> {
 		await this.initialize();
 		this.logService.info(`Collections ready for scope: ${scope}`);
+	}
+
+	// Load embeddings from SQLite into memory on startup
+	private async loadEmbeddingsFromDisk(): Promise<void> {
+		try {
+			const fs = await import('fs');
+			if (!fs.existsSync(this.embeddingsDbPath)) {
+				this.logService.info('No existing embeddings database found - starting fresh');
+				return;
+			}
+
+			const sqlite3 = await import('@vscode/sqlite3');
+			const db = new sqlite3.Database(this.embeddingsDbPath);
+
+			return new Promise((resolve, reject) => {
+				// Create table if it doesn't exist
+				db.run(`
+					CREATE TABLE IF NOT EXISTS embeddings (
+						id TEXT PRIMARY KEY,
+						vector TEXT NOT NULL,
+						metadata TEXT NOT NULL
+					)
+				`, (err) => {
+					if (err) {
+						reject(err);
+						return;
+					}
+
+					// Load all embeddings into memory
+					db.all('SELECT id, vector, metadata FROM embeddings', (err, rows: any[]) => {
+						if (err) {
+							reject(err);
+							return;
+						}
+
+						for (const row of rows) {
+							try {
+								const vector = JSON.parse(row.vector);
+								const metadata = JSON.parse(row.metadata);
+								this.embeddings.set(row.id, { vector, metadata });
+							} catch (parseErr) {
+								this.logService.error(`Failed to parse embedding ${row.id}:`, parseErr);
+							}
+						}
+
+						db.close();
+						resolve();
+					});
+				});
+			});
+		} catch (error) {
+			this.logService.error('Failed to load embeddings from disk:', error);
+			// Continue anyway - we'll start fresh
+		}
+	}
+
+	// Save a single embedding to disk
+	private async saveEmbeddingToDisk(id: string, vector: number[], metadata: Record<string, any>): Promise<void> {
+		try {
+			const sqlite3 = await import('@vscode/sqlite3');
+			const db = new sqlite3.Database(this.embeddingsDbPath);
+
+			return new Promise((resolve, reject) => {
+				const vectorJson = JSON.stringify(vector);
+				const metadataJson = JSON.stringify(metadata);
+
+				db.run(
+					'INSERT OR REPLACE INTO embeddings (id, vector, metadata) VALUES (?, ?, ?)',
+					[id, vectorJson, metadataJson],
+					(err) => {
+						db.close();
+						if (err) {
+							reject(err);
+						} else {
+							resolve();
+						}
+					}
+				);
+			});
+		} catch (error) {
+			this.logService.error(`Failed to save embedding ${id} to disk:`, error);
+			throw error;
+		}
+	}
+
+	// Delete an embedding from disk
+	private async deleteEmbeddingFromDisk(id: string): Promise<void> {
+		try {
+			const sqlite3 = await import('@vscode/sqlite3');
+			const db = new sqlite3.Database(this.embeddingsDbPath);
+
+			return new Promise((resolve, reject) => {
+				db.run('DELETE FROM embeddings WHERE id = ?', [id], (err) => {
+					db.close();
+					if (err) {
+						reject(err);
+					} else {
+						resolve();
+					}
+				});
+			});
+		} catch (error) {
+			this.logService.error(`Failed to delete embedding ${id} from disk:`, error);
+			throw error;
+		}
 	}
 
 	async add(chunks: ChunkRecord[], metadatas: Array<Record<string, any>>): Promise<void> {
@@ -74,19 +192,23 @@ export class ChromaPersistentAdapter implements VectorAdapter {
 			// Generate embeddings using local model
 			const embeddings = await this.embeddingService.generateEmbeddings(texts);
 
-			// Store embeddings in memory
+			// Store embeddings in memory AND on disk
 			for (let i = 0; i < chunks.length; i++) {
 				const chunk = chunks[i];
 				const metadata = metadatas[i];
 				const embedding = embeddings[i];
 
+				// Store in memory
 				this.embeddings.set(chunk.chunkId, {
 					vector: embedding,
 					metadata
 				});
+
+				// Persist to disk
+				await this.saveEmbeddingToDisk(chunk.chunkId, embedding, metadata);
 			}
 
-			this.logService.info(`Added ${chunks.length} chunks to vector store with local embeddings`);
+			this.logService.info(`Added ${chunks.length} chunks to vector store (memory + disk) with local embeddings`);
 		} catch (error) {
 			this.logService.error('Failed to add chunks:', error);
 			throw error;
@@ -109,6 +231,7 @@ export class ChromaPersistentAdapter implements VectorAdapter {
 
 			// Calculate cosine similarity with all stored embeddings
 			const results: Array<{ id: string; score: number; metadata: Record<string, any> }> = [];
+			const MIN_SIMILARITY_THRESHOLD = 0.15; // Minimum similarity threshold
 
 			for (const [id, data] of this.embeddings.entries()) {
 				// Check scope
@@ -117,11 +240,15 @@ export class ChromaPersistentAdapter implements VectorAdapter {
 				if (scope === 'workspace_docs' && isPolicyManual) continue;
 
 				const similarity = this.cosineSimilarity(queryVector, data.vector);
-				results.push({
-					id,
-					score: similarity,
-					metadata: data.metadata
-				});
+
+				// Only include results above threshold
+				if (similarity >= MIN_SIMILARITY_THRESHOLD) {
+					results.push({
+						id,
+						score: similarity,
+						metadata: data.metadata
+					});
+				}
 			}
 
 			// Sort by score descending and return top n
@@ -144,8 +271,10 @@ export class ChromaPersistentAdapter implements VectorAdapter {
 			}
 		}
 
+		// Delete from memory and disk
 		for (const id of toDelete) {
 			this.embeddings.delete(id);
+			await this.deleteEmbeddingFromDisk(id);
 		}
 
 		this.logService.info(`Deleted ${toDelete.length} embeddings for document ${docId}`);
@@ -153,7 +282,19 @@ export class ChromaPersistentAdapter implements VectorAdapter {
 
 	async clearAll(): Promise<void> {
 		this.embeddings.clear();
-		this.logService.info('Cleared all vector embeddings from memory');
+
+		// Clear disk storage
+		try {
+			const fs = await import('fs');
+			if (fs.existsSync(this.embeddingsDbPath)) {
+				fs.unlinkSync(this.embeddingsDbPath);
+				this.logService.info('Deleted embeddings database file');
+			}
+		} catch (error) {
+			this.logService.error('Failed to delete embeddings database:', error);
+		}
+
+		this.logService.info('Cleared all vector embeddings from memory and disk');
 	}
 
 	private cosineSimilarity(a: number[], b: number[]): number {

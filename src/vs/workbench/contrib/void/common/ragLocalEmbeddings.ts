@@ -57,6 +57,7 @@ export class LocalEmbeddingService {
 			transformers.env.allowRemoteModels = true;
 
 			// Create feature extraction pipeline
+			// Note: dtype option not available in this version, using default quantization
 			this.pipe = await transformers.pipeline('feature-extraction', this.MODEL_NAME);
 
 			this.initialized = true;

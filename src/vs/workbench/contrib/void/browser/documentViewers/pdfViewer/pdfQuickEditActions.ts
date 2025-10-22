@@ -17,6 +17,9 @@ import { IChatThreadService } from '../../chatThreadService.js';
 import { IMetricsService } from '../../../common/metricsService.js';
 import { IRAGService } from '../../../common/ragService.js';
 import { RAGContextService } from '../../../common/ragContextService.js';
+import { IClipboardService } from '../../../../../../platform/clipboard/common/clipboardService.js';
+import { ContextKeyExpr } from '../../../../../../platform/contextkey/common/contextkey.js';
+import { MenuId } from '../../../../../../platform/actions/common/actions.js';
 
 class PDFQuickEditAction extends Action2 {
 	constructor() {
@@ -63,24 +66,25 @@ class PDFQuickEditAction extends Action2 {
 				currentPage: input.currentPage
 			});
 
-			// Gather PDF context
+			// Gather PDF context with sliding window for more focused context
 			const contextGathering = new PDFContextGathering(mainProcessService);
-			const pdfContext = await contextGathering.getPDFContext(
+			const pdfContext = await contextGathering.getPDFContextWithSlidingWindow(
 				input.resource,
 				input.selection.text,
 				input.currentPage,
 				input.selection.endPage, // Use endPage as totalPages estimate
-				1 // Include ±1 surrounding page
+				5 // ±5 sentences around selection for richer context
 			);
 
 			const formattedContext = contextGathering.formatContextForAI(pdfContext);
 
-			console.log('[PDF Quick Edit] Context gathered:', {
+			console.log('[PDF Quick Edit] Context gathered with sliding window:', {
 				selectedText: pdfContext.selectedText.substring(0, 100) + '...',
 				pageNumber: pdfContext.pageNumber,
 				totalPages: pdfContext.totalPages,
 				documentTitle: pdfContext.documentTitle,
-				fullContext: formattedContext
+				contextLength: formattedContext.length,
+				estimatedTokens: Math.ceil(formattedContext.length / 4)
 			});
 
 			// Get the current thread
@@ -90,13 +94,15 @@ class PDFQuickEditAction extends Action2 {
 				chatThreadService.openNewThread();
 			}
 
-			// Add PDF context to staging selections as a File type
-			// The context will be extracted when the AI processes the message
+			// Add PDF context to staging selections with the context attached
 			chatThreadService.addNewStagingSelection({
 				type: 'File',
 				uri: input.resource,
 				language: 'pdf',
-				state: { wasAddedAsCurrentFile: false }
+				state: {
+					wasAddedAsCurrentFile: false,
+					ragContext: formattedContext // Attach the sliding window context!
+				}
 			});
 
 			// Show notification
@@ -104,7 +110,8 @@ class PDFQuickEditAction extends Action2 {
 				? pdfContext.selectedText.substring(0, 100) + '...'
 				: pdfContext.selectedText;
 
-			notificationService.info(`PDF context added to chat: "${preview}"\n\nPage ${pdfContext.pageNumber} of ${pdfContext.totalPages}`);
+			const contextSize = Math.ceil(formattedContext.length / 4); // Rough token estimate
+			notificationService.info(`PDF context added to chat: "${preview}"\n\nPage ${pdfContext.pageNumber} (~${contextSize} tokens)`);
 
 			console.log('[PDF Quick Edit] Context added to staging. Full context:', formattedContext);
 
@@ -112,6 +119,107 @@ class PDFQuickEditAction extends Action2 {
 			console.error('[PDF Quick Edit] Error:', error);
 			notificationService.error('Failed to process PDF selection');
 		}
+	}
+}
+
+class PDFCopyWithPageNumberAction extends Action2 {
+	constructor() {
+		super({
+			id: 'void.pdf.copyWithPageNumber',
+			title: localize('void.pdf.copyWithPageNumber', 'Copy Selection with Page Number'),
+			keybinding: {
+				primary: KeyMod.CtrlCmd | KeyMod.Shift | KeyCode.KeyC,
+				weight: KeybindingWeight.EditorContrib
+			},
+			menu: {
+				id: MenuId.EditorContext,
+				when: ContextKeyExpr.equals('resourceExtname', '.pdf'),
+				group: 'void_pdf',
+				order: 2
+			}
+		});
+	}
+
+	async run(accessor: ServicesAccessor): Promise<void> {
+		const editorService = accessor.get(IEditorService);
+		const clipboardService = accessor.get(IClipboardService);
+		const notificationService = accessor.get(INotificationService);
+
+		const activeEditor = editorService.activeEditorPane;
+
+		// Check if active editor is PDF viewer
+		if (!(activeEditor instanceof PDFViewerEditor)) {
+			return;
+		}
+
+		const input = activeEditor.getInput();
+		if (!input) {
+			return;
+		}
+
+		try {
+			// Get current selection from the PDF input
+			const selection = input.selection;
+
+			if (!selection || !selection.text) {
+				notificationService.warn('No text selected in PDF');
+				return;
+			}
+
+			const filename = input.resource.fsPath.split(/[\\/]/).pop() || 'document.pdf';
+			const pageInfo = `Page ${selection.startPage}${selection.startPage !== selection.endPage ? `-${selection.endPage}` : ''}`;
+
+			// Format like code selections with line-style format
+			const formattedText = this.formatSelectionWithPageNumbers(
+				selection.text,
+				filename,
+				selection.startPage,
+				selection.endPage
+			);
+
+			await clipboardService.writeText(formattedText);
+
+			const preview = selection.text.length > 50
+				? selection.text.substring(0, 50) + '...'
+				: selection.text;
+
+			notificationService.info(`Copied with page number: "${preview}" (${pageInfo})`);
+
+		} catch (error) {
+			console.error('[PDF Copy] Error:', error);
+			notificationService.error('Failed to copy PDF selection');
+		}
+	}
+
+	/**
+	 * Format PDF selection similar to code selections with line numbers
+	 * @example
+	 * ```
+	 * rscm_volume_ii-pdf-en.pdf (Page 36)
+	 *      1|#5.00 COVERAGE OF WORKERS
+	 *      2|It is a well established principle of workers' compensation...
+	 *      3|...
+	 * ```
+	 */
+	private formatSelectionWithPageNumbers(
+		text: string,
+		filename: string,
+		startPage: number,
+		endPage: number
+	): string {
+		const lines = text.split('\n').filter(line => line.trim().length > 0);
+
+		// Add line numbers (right-aligned to 6 chars, followed by |)
+		const numberedLines = lines.map((line, index) => {
+			const lineNum = (index + 1).toString().padStart(6, ' ');
+			return `${lineNum}|${line}`;
+		}).join('\n');
+
+		const pageInfo = startPage === endPage
+			? `Page ${startPage}`
+			: `Pages ${startPage}-${endPage}`;
+
+		return `${filename} (${pageInfo})\n${numberedLines}`;
 	}
 }
 
@@ -182,13 +290,28 @@ class PDFAddToChatAction extends Action2 {
 				notificationService.info('PDF indexed successfully!');
 			}
 
-			// Use RAG to search for relevant chunks based on selection or current page
-			let searchQuery: string;
+			// Use RAG to search for relevant chunks OR use actual selection directly
+			let contextToAdd: string;
+
 			if (hasSelection && input.selection!.text) {
-				// Use selected text as search query
-				searchQuery = input.selection!.text;
+				// User has selected specific text - use it DIRECTLY with context window
+				// Don't do RAG search because that finds similar content elsewhere
+				const contextGathering = new PDFContextGathering(mainProcessService);
+				const pdfContext = await contextGathering.getPDFContextWithSlidingWindow(
+					input.resource,
+					input.selection!.text,
+					input.currentPage,
+					input.selection!.endPage || input.currentPage,
+					3 // Smaller window for Ctrl+L vs Ctrl+K
+				);
+
+				contextToAdd = contextGathering.formatContextForAI(pdfContext);
+
+				console.log('[PDF Ctrl+L with Selection] Using actual selected text with context window');
+				console.log('[PDF Ctrl+L with Selection] Page:', input.currentPage);
+				console.log('[PDF Ctrl+L with Selection] Context size:', contextToAdd.length, 'characters');
 			} else {
-				// Use page number as search query (get text from current page)
+				// No selection - use RAG to find relevant content from current page area
 				const contextGathering = new PDFContextGathering(mainProcessService);
 				const pageContext = await contextGathering.getPDFContext(
 					input.resource,
@@ -197,26 +320,25 @@ class PDFAddToChatAction extends Action2 {
 					input.currentPage,
 					0
 				);
-				searchQuery = pageContext.currentPageText.substring(0, 500); // First 500 chars as query
+				const searchQuery = pageContext.currentPageText.substring(0, 500); // First 500 chars as query
+
+				// Search RAG for relevant chunks
+				const ragResults = await ragService.search({
+					query: searchQuery,
+					scope: 'policy_manual',
+					limit: 5 // Get top 5 most relevant chunks
+				});
+
+				// Format the RAG context
+				const ragContextService = new RAGContextService();
+				contextToAdd = ragContextService.formatContextPack(ragResults);
+
+				console.log('[PDF Ctrl+L with RAG] Query:', searchQuery.substring(0, 100));
+				console.log('[PDF Ctrl+L with RAG] Found chunks:', ragResults.totalResults);
+				console.log('[PDF Ctrl+L with RAG] Context size:', contextToAdd.length, 'characters');
 			}
 
-			// Search RAG for relevant chunks
-			const ragResults = await ragService.search({
-				query: searchQuery,
-				scope: 'policy_manual',
-				limit: 5 // Get top 5 most relevant chunks
-			});
-
-			// Format the RAG context
-			const ragContextService = new RAGContextService();
-			const formattedContext = ragContextService.formatContextPack(ragResults);
-
-			console.log('[PDF Ctrl+L with RAG] Query:', searchQuery.substring(0, 100));
-			console.log('[PDF Ctrl+L with RAG] Found chunks:', ragResults.totalResults);
-			console.log('[PDF Ctrl+L with RAG] Context:', formattedContext);
-			console.log('[PDF Ctrl+L with RAG] Context size:', formattedContext.length, 'characters');
-
-			// Add the PDF reference to staging (RAG context will be used automatically)
+			// Add the PDF reference to staging WITH the context attached
 			const currentState = chatThreadService.getCurrentThreadState();
 			const existingStaging = currentState.stagingSelections || [];
 
@@ -225,7 +347,7 @@ class PDFAddToChatAction extends Action2 {
 				s.type !== 'File' || !s.uri.fsPath.toLowerCase().endsWith('.pdf')
 			);
 
-			// Add PDF reference
+			// Add PDF reference with context
 			chatThreadService.setCurrentThreadState({
 				stagingSelections: [
 					...nonPdfStaging,
@@ -233,7 +355,10 @@ class PDFAddToChatAction extends Action2 {
 						type: 'File',
 						uri: input.resource,
 						language: 'pdf',
-						state: { wasAddedAsCurrentFile: false }
+						state: {
+							wasAddedAsCurrentFile: false,
+							ragContext: contextToAdd // Attach the context (RAG or direct)
+						}
 					}
 				]
 			});
@@ -244,9 +369,9 @@ class PDFAddToChatAction extends Action2 {
 				const preview = input.selection!.text.length > 50
 					? input.selection!.text.substring(0, 50) + '...'
 					: input.selection!.text;
-				notificationService.info(`PDF context added via RAG (${ragResults.totalResults} chunks): "${preview}"`);
+				notificationService.info(`PDF selection added to chat: "${preview}" (Page ${input.currentPage})`);
 			} else {
-				notificationService.info(`PDF context added via RAG: ${fileName} (Page ${input.currentPage}, ${ragResults.totalResults} relevant chunks)`);
+				notificationService.info(`PDF context added: ${fileName} (Page ${input.currentPage})`);
 			}
 
 		} catch (error) {
@@ -258,5 +383,6 @@ class PDFAddToChatAction extends Action2 {
 
 // Register both actions
 registerAction2(PDFQuickEditAction);
+registerAction2(PDFCopyWithPageNumberAction);
 registerAction2(PDFAddToChatAction);
 

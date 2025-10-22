@@ -219,6 +219,29 @@
 				await page.render(renderContext).promise;
 			}
 
+			// Create/update SVG highlight layer if it doesn't exist
+			let highlightLayer = document.getElementById('pdf-highlight-layer');
+			if (!highlightLayer) {
+				highlightLayer = document.createElement('div');
+				highlightLayer.id = 'pdf-highlight-layer';
+				highlightLayer.style.position = 'absolute';
+				highlightLayer.style.left = '0';
+				highlightLayer.style.top = '0';
+				highlightLayer.style.width = viewport.width + 'px';
+				highlightLayer.style.height = viewport.height + 'px';
+				highlightLayer.style.pointerEvents = 'none';
+				highlightLayer.style.zIndex = '2'; // Between canvas and text layer
+
+				// Insert between render container and text layer
+				const renderContainer = document.getElementById('pdf-render-container');
+				if (renderContainer && textLayer) {
+					renderContainer.insertBefore(highlightLayer, textLayer);
+				}
+			} else {
+				highlightLayer.style.width = viewport.width + 'px';
+				highlightLayer.style.height = viewport.height + 'px';
+			}
+
 			// Render text layer for selection/copying
 			if (textLayer) {
 				// Clear previous text layer
@@ -245,6 +268,9 @@
 
 					await textLayerRenderTask.promise;
 					console.log('Text layer rendered successfully');
+
+					// Fine-tune text positioning for better alignment
+					improveTextLayerAlignment(textLayer, scale);
 				} catch (error) {
 					console.error('Error rendering text layer:', error);
 				}
@@ -276,6 +302,31 @@
 		} finally {
 			rendering = false;
 		}
+	}
+
+	// Improve text layer alignment for better selection precision
+	function improveTextLayerAlignment(textLayerElement, currentScale) {
+		const spans = textLayerElement.querySelectorAll('span');
+		spans.forEach(span => {
+			// Skip empty spans
+			if (!span.textContent || span.textContent.trim().length === 0) {
+				return;
+			}
+
+			// Get computed font size
+			const computedStyle = window.getComputedStyle(span);
+			const fontSize = parseFloat(computedStyle.fontSize);
+
+			// Apply baseline correction (empirically determined)
+			// This helps align text with the underlying canvas
+			const baselineOffset = fontSize * 0.12 * currentScale;
+
+			// Get existing transform or create new one
+			const currentTransform = span.style.transform || '';
+			if (!currentTransform.includes('translateY')) {
+				span.style.transform = `${currentTransform} translateY(${baselineOffset}px)`.trim();
+			}
+		});
 	}
 
 	// Generate thumbnails for all pages
@@ -436,6 +487,44 @@
 				renderPage(currentPage + 1);
 			}
 		});
+	}
+
+	// Zoom controls with wheel
+	let isZooming = false;
+	const canvasWrapper = document.getElementById('canvas-wrapper');
+	if (canvasWrapper) {
+		canvasWrapper.addEventListener('wheel', (e) => {
+			// Only handle zoom with Ctrl key
+			if (!e.ctrlKey) {
+				return;
+			}
+
+			e.preventDefault();
+
+			// Debounce zoom for performance
+			if (isZooming) {
+				return;
+			}
+
+			isZooming = true;
+
+			// Calculate new scale
+			const delta = e.deltaY > 0 ? 0.9 : 1.1;
+			const newScale = Math.max(0.5, Math.min(3.0, scale * delta));
+
+			// Only rerender if scale changed significantly
+			if (Math.abs(newScale - scale) > 0.01) {
+				scale = newScale;
+				console.log(`[PDF Zoom] New scale: ${scale.toFixed(2)}`);
+
+				// Rerender current page with new scale
+				renderPage(currentPage).then(() => {
+					isZooming = false;
+				});
+			} else {
+				isZooming = false;
+			}
+		}, { passive: false });
 	}
 
 	if (zoomInButton) {

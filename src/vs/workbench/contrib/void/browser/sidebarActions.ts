@@ -28,6 +28,7 @@ import { IEditorService } from '../../../services/editor/common/editorService.js
 import { IDocumentViewerService } from '../common/documentViewerService.js';
 import { PDFViewerInput } from './documentViewers/pdfViewer/pdfViewerInput.js';
 import { IRAGService } from '../common/ragService.js';
+import { RAGContextService } from '../common/ragContextService.js';
 import { INotificationService } from '../../../../platform/notification/common/notification.js';
 
 // ---------- Register commands and keybindings ----------
@@ -137,26 +138,32 @@ registerAction2(class extends Action2 {
 				// Use RAG to get relevant context
 				let searchQuery: string;
 				if (pdfInput.selection && pdfInput.selection.text) {
-					// Use selected text as query
-					searchQuery = pdfInput.selection.text;
+					// Use selected text as query (limit to reasonable length)
+					searchQuery = pdfInput.selection.text.substring(0, 300);
 				} else {
-					// Use first page as query
+					// Use first page as query (reduced from 500 to 300 chars for better focus)
 					const textContent = await documentViewerService.getTextContentRange(
 						pdfInput.resource,
 						1,
 						1
 					);
-					searchQuery = textContent ? textContent.substring(0, 500) : 'document content';
+					searchQuery = textContent ? textContent.substring(0, 300) : 'document content';
 				}
 
-				// Search RAG for relevant chunks
+				// Search RAG for relevant chunks (increased limit for better diversity)
 				const ragResults = await ragService.search({
 					query: searchQuery,
 					scope: 'policy_manual',
-					limit: 5
+					limit: 10  // Increased to allow MMR to select diverse chunks
 				});
 
 				console.log('[Add PDF to Chat] RAG search results:', ragResults.totalResults, 'chunks');
+
+				// Format RAG context
+				const ragContextService = new RAGContextService();
+				const formattedContext = ragContextService.formatContextPack(ragResults);
+
+				console.log('[Add PDF to Chat] RAG context size:', formattedContext.length, 'characters');
 
 				// Open panel
 				const wasAlreadyOpen = viewsService.isViewContainerVisible(VOID_VIEW_CONTAINER_ID);
@@ -164,12 +171,15 @@ registerAction2(class extends Action2 {
 					await commandService.executeCommand(VOID_OPEN_SIDEBAR_ACTION_ID);
 				}
 
-				// Add PDF reference (RAG context will be used)
+				// Add PDF reference with RAG context attached
 				chatThreadService.addNewStagingSelection({
 					type: 'File',
 					uri: pdfInput.resource,
 					language: 'pdf',
-					state: { wasAddedAsCurrentFile: false }
+					state: {
+						wasAddedAsCurrentFile: false,
+						ragContext: formattedContext // Attach RAG context!
+					}
 				});
 
 				metricsService.capture('Add PDF to Chat via Context Menu', {
