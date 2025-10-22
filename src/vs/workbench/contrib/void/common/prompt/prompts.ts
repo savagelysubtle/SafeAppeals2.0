@@ -344,25 +344,25 @@ export const builtinTools: {
 
 	rag_search_policy: {
 		name: 'rag_search_policy',
-		description: `Searches indexed policy manuals for relevant content. Returns a context pack with relevant snippets.`,
+		description: `Searches indexed policy manuals for relevant content. Returns a context pack with relevant snippets. Results are automatically re-ranked using MMR for diversity and filtered by relevance.`,
 		params: {
-			query: { description: 'The search query to find relevant policy manual content.' },
-			limit: { description: 'Maximum number of results to return. Defaults to 5.' }
+			query: { description: 'The search query to find relevant policy manual content. Be specific and include key terms or concepts.' },
+			limit: { description: 'Maximum number of results to return. Defaults to 8 for optimal diversity after MMR re-ranking.' }
 		}
 	},
 
 	rag_search_workspace: {
 		name: 'rag_search_workspace',
-		description: `Searches indexed workspace documents for relevant content. Returns a context pack with relevant snippets.`,
+		description: `Searches indexed workspace documents for relevant content. Returns a context pack with relevant snippets. Results are automatically re-ranked using MMR for diversity and filtered by relevance.`,
 		params: {
-			query: { description: 'The search query to find relevant workspace document content.' },
-			limit: { description: 'Maximum number of results to return. Defaults to 5.' }
+			query: { description: 'The search query to find relevant workspace document content. Be specific and include key terms or concepts.' },
+			limit: { description: 'Maximum number of results to return. Defaults to 8 for optimal diversity after MMR re-ranking.' }
 		}
 	},
 
 	rag_get_stats: {
 		name: 'rag_get_stats',
-		description: `Gets statistics about the RAG index (number of documents, chunks, etc.).`,
+		description: `Gets statistics about the RAG index (number of documents, chunks, etc.). Use this BEFORE searching to understand what content is available.`,
 		params: {}
 	}
 
@@ -510,6 +510,14 @@ ${directoryStr}
 		details.push(`You will OFTEN need to gather context before making a change. Do not immediately make a change unless you have ALL relevant context.`)
 		details.push(`ALWAYS have maximal certainty in a change BEFORE you make it. If you need more information about a file, variable, function, or type, you should inspect it, search it, or take all required actions to maximize your certainty that your change is correct.`)
 		details.push(`NEVER modify a file outside the user's workspace without permission from the user.`)
+
+		// RAG-specific agent workflow
+		details.push(`When dealing with documents/PDFs in agent mode:
+		1. Check index status with rag_get_stats before searching
+		2. If documents need indexing, explain what you're doing: "I'll index this document to make it searchable"
+		3. Search iteratively - if first search is insufficient, try different query terms
+		4. Synthesize information from multiple searches when needed
+		5. Always ground your actions in the retrieved context`)
 	}
 
 	if (mode === 'gather') {
@@ -517,13 +525,41 @@ ${directoryStr}
 		details.push(`You should extensively read files, types, content, etc, gathering full context to solve the problem.`)
 	}
 
-	// RAG-specific guidelines
+	// RAG-specific guidelines with structured approach
 	details.push(`When working with documents and RAG (Retrieval Augmented Generation):
-- BEFORE indexing any document, ALWAYS check if it's already indexed using the appropriate tool to avoid duplicate work and costs.
-- Use rag_search_policy to search policy manuals for relevant information.
-- Use rag_search_workspace to search workspace documents.
-- Use rag_get_stats to see what documents are already indexed.
-- Only use rag_index_document if you've confirmed the document is NOT already indexed.`)
+
+WORKFLOW:
+1. First, check if documents are indexed using rag_get_stats
+2. If not indexed, use rag_index_document (verify it's needed first)
+3. Search using rag_search_policy or rag_search_workspace with specific queries
+4. Use the retrieved context to answer, following the format below
+
+ANSWERING FORMAT:
+- Step 1: Identify the relevant section(s) in the provided context
+- Step 2: Extract and summarize the key information
+- Step 3: Provide a clear, structured answer using ONLY the context
+
+CITATION RULES:
+- ALWAYS cite sources: "According to [Section from filename - Part X]..."
+- If multiple chunks contain relevant info, cite all: "Per [Section A] and [Section B]..."
+- For direct quotes, use: "The document states: '[quote]' [Section from filename - Part X]"
+
+HANDLING LIMITATIONS:
+- If context is insufficient: "The provided documents do not contain enough information about [topic]."
+- If context is contradictory: "The documents show conflicting information: [explain contradiction with citations]."
+- NEVER use general knowledge - only answer from provided chunks
+
+DOCUMENT-SPECIFIC GUIDANCE:
+- Policy manuals: Focus on eligibility criteria, timelines, requirements, definitions
+- Legal documents: Explain practical implications, who it affects, key obligations
+- Technical docs: Break down complex terms, explain processes step-by-step
+- If user asks "what is this?", explain the document's purpose and key points
+
+SEARCH OPTIMIZATION:
+- Use specific terms from the user's question in your search query
+- Try multiple search queries if initial results are insufficient
+- Increase limit parameter (8-10) for complex topics needing diverse perspectives`)
+
 
 	details.push(`If you write any code blocks to the user (wrapped in triple backticks), please use this format:
 - Include a language if possible. Terminal should have the language 'shell'.
@@ -622,6 +658,15 @@ export const messageOfSelection = async (
 		return str
 	}
 	else if (s.type === 'File') {
+		// Check if RAG context is available (for PDFs)
+		if (s.state.ragContext) {
+			// Use pre-generated RAG context instead of extracting full file
+			// Frame it as document excerpts to guide the LLM to focus on content, not structure
+			const str = `${s.uri.fsPath} (relevant excerpts):\n${tripleTick[0]}\n${s.state.ragContext}\n${tripleTick[1]}`
+			return str
+		}
+
+		// Standard file extraction for non-PDF or non-RAG files
 		const { val } = await readFile(opts.fileService, s.uri, DEFAULT_FILE_SIZE_LIMIT)
 
 		const innerVal = val
@@ -675,7 +720,18 @@ export const chat_userMessageContent = async (
 	str += `${instructions}`
 
 	const selnsStr = selnsStrs.join('\n\n') ?? ''
-	if (selnsStr) str += `\n---\nSELECTIONS\n${selnsStr}`
+	if (selnsStr) {
+		// Check if any selections are PDFs with RAG context
+		const hasPDFExcerpts = (currSelns ?? []).some(s =>
+			s.type === 'File' && s.language === 'pdf' && s.state.ragContext
+		);
+
+		const header = hasPDFExcerpts
+			? 'SELECTIONS\nThe user has selected the following document excerpts for you to reference and explain:'
+			: 'SELECTIONS';
+
+		str += `\n---\n${header}\n${selnsStr}`;
+	}
 	return str;
 }
 
