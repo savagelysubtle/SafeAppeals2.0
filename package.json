@@ -14,6 +14,8 @@
     "buildreact": "cd ./src/vs/workbench/contrib/void/browser/react/ && bun run build.js && cd ../../../../../../../",
     "watchreact": "cd ./src/vs/workbench/contrib/void/browser/react/ && bun run build.js --watch && cd ../../../../../../../",
     "watchreactd": "deemon bun run watchreact",
+    "kill-watchreactd": "deemon --kill bun run watchreact",
+    "install": "npm install",
     "test": "echo Please run any of the test scripts from the scripts folder.",
     "test-browser": "bunx playwright install && bun test/unit/browser/index.js",
     "test-browser-no-install": "bun test/unit/browser/index.js",
