@@ -33,6 +33,9 @@ export class PDFViewerEditor extends EditorPane {
 	private _currentInput?: PDFViewerInput;
 	private _webviewReady: boolean = false;
 	private _pendingInput?: { input: PDFViewerInput; savedPage: number }; // Track input waiting for webview ready
+	private _lastLoadedPdfUri?: string; // Track what PDF we last sent to the webview
+	private _pdfDataCache?: { uri: string; data: string }; // Cache PDF data to avoid reloading
+	private _isLoading: boolean = false; // Prevent concurrent loads
 	private static readonly PAGE_STORAGE_PREFIX = 'pdfViewer.lastPage.';
 
 	constructor(
@@ -69,6 +72,12 @@ export class PDFViewerEditor extends EditorPane {
 		const storageKey = PDFViewerEditor.PAGE_STORAGE_PREFIX + input.resource.toString();
 		const savedPage = this.storageService.getNumber(storageKey, -1 /* StorageScope.WORKSPACE */, 1);
 		console.log('[PDF Viewer] Saved page from storage:', savedPage);
+		console.log('[PDF Viewer] Webview state:', {
+			hasWebview: !!this.webview,
+			webviewReady: this._webviewReady,
+			lastLoadedUri: this._lastLoadedPdfUri,
+			hasCachedData: !!this._pdfDataCache
+		});
 
 		// Create webview if it doesn't exist
 		if (!this.webview && this._element) {
@@ -106,15 +115,40 @@ export class PDFViewerEditor extends EditorPane {
 			}
 		}
 
-		// If webview exists and is ready, ask it what its current state is
+		// If webview exists and is ready, check if we need to reload
 		if (this.webview && this._webviewReady) {
-			console.log('[PDF Viewer] Asking webview for state');
-			this.webview.postMessage({
-				type: 'getState',
-				requestedUri: input.resource.toString(),
-				savedPage: savedPage // Pass the saved page to webview
+			const currentUri = input.resource.toString();
+
+			console.log('[PDF Viewer] Checking cache:', {
+				lastLoadedUri: this._lastLoadedPdfUri,
+				currentUri: currentUri,
+				hasCachedData: !!this._pdfDataCache,
+				cachedUri: this._pdfDataCache?.uri,
+				uriMatches: this._lastLoadedPdfUri === currentUri,
+				cacheMatches: this._pdfDataCache?.uri === currentUri
 			});
-			// The webview will respond with 'state' message, handled in handleWebviewMessage
+
+			// If same PDF is already loaded and cached, send it again (webview might have been reloaded)
+			if (this._pdfDataCache?.uri === currentUri) {
+				console.log('✅ [PDF Viewer] Same PDF cached, resending to webview and navigating to page:', savedPage);
+				this.webview.postMessage({
+					type: 'loadPDF',
+					data: this._pdfDataCache.data,
+					encoding: 'base64',
+					preloadStrategy: this.voidSettingsService.state.globalSettings.pdfPreloadStrategy,
+					startPage: savedPage,
+					pdfUri: currentUri,
+					skipPreload: true // Skip preload since we're just restoring state
+				});
+
+				// Update lastLoadedUri
+				this._lastLoadedPdfUri = currentUri;
+				return;
+			}
+
+			// Different PDF, load it
+			console.log('[PDF Viewer] Different PDF, loading at page:', savedPage);
+			this.loadPDF(input, savedPage);
 			return;
 		}
 
@@ -126,11 +160,18 @@ export class PDFViewerEditor extends EditorPane {
 		}
 
 		// No webview - load PDF at saved page
-		console.log('[PDF Viewer] No webview, loading PDF at page:', savedPage);
+		console.log('[PDF Viewer] No webview exists, loading PDF at page:', savedPage);
 		this.loadPDF(input, savedPage);
 	}
 
 	private async loadPDF(input: PDFViewerInput, startPage: number): Promise<void> {
+		// Prevent concurrent loads
+		if (this._isLoading) {
+			console.log('[PDF Viewer] Already loading, skipping duplicate load request');
+			return;
+		}
+
+		this._isLoading = true;
 		console.log('[PDF Viewer] Loading PDF, starting at page:', startPage);
 		try {
 			const pdfUri = input.resource;
@@ -147,17 +188,30 @@ export class PDFViewerEditor extends EditorPane {
 					base64 += String.fromCharCode.apply(null, Array.from(chunk));
 				}
 
+				const base64Data = btoa(base64);
+
+				// Cache the PDF data for fast restoration
+				this._pdfDataCache = {
+					uri: input.resource.toString(),
+					data: base64Data
+				};
+
 				this.webview.postMessage({
 					type: 'loadPDF',
-					data: btoa(base64),
+					data: base64Data,
 					encoding: 'base64',
 					preloadStrategy: this.voidSettingsService.state.globalSettings.pdfPreloadStrategy,
 					startPage: startPage,
 					pdfUri: input.resource.toString()
 				});
+
+				// Track that we've loaded this PDF
+				this._lastLoadedPdfUri = input.resource.toString();
 			}
 		} catch (error) {
 			console.error('Failed to load PDF:', error);
+		} finally {
+			this._isLoading = false;
 		}
 	}
 
@@ -192,26 +246,6 @@ export class PDFViewerEditor extends EditorPane {
 		}
 
 		switch (data.type) {
-			case 'state': {
-				// Webview reported its current state
-				console.log('[PDF Viewer] Webview state:', data);
-				const webviewUri = data.loadedPdfUri;
-				const webviewPage = data.currentPage;
-				const requestedUri = this._currentInput?.resource.toString();
-
-				if (webviewUri === requestedUri && webviewPage) {
-					// Same PDF already loaded, just make sure we're on the right page
-					console.log('[PDF Viewer] Same PDF loaded, staying on page:', webviewPage);
-					// Webview already has correct state, do nothing
-				} else {
-					// Different PDF or no PDF loaded, load it at saved page
-					const storageKey = PDFViewerEditor.PAGE_STORAGE_PREFIX + requestedUri;
-					const savedPage = this.storageService.getNumber(storageKey, -1, 1);
-					console.log('[PDF Viewer] Different or no PDF, loading at page:', savedPage);
-					this.loadPDF(this._currentInput!, savedPage);
-				}
-				break;
-			}
 			case 'pageChanged': {
 				// Track current page and save to storage
 				console.log('[PDF Viewer] Page changed to:', data.page);
@@ -284,6 +318,7 @@ export class PDFViewerEditor extends EditorPane {
 	override clearInput(): void {
 		if (this.webview) {
 			this.webview.postMessage({ type: 'clearPDF' });
+			this._lastLoadedPdfUri = undefined; // Clear the loaded PDF tracker
 		}
 		this._currentInput = undefined;
 		super.clearInput();
