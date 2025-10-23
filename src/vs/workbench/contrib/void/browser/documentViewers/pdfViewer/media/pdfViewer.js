@@ -3,10 +3,13 @@
 	// Communication with host
 	const vscode = acquireVsCodeApi();
 
+	// Get previous state if it exists
+	const previousState = vscode.getState() || {};
+
 	let pdfDoc = null;
-	let currentPage = 1;
-	let loadedPdfUri = null; // Track which PDF is loaded
-	let scale = 1.5;
+	let currentPage = previousState.currentPage || 1;
+	let loadedPdfUri = previousState.loadedPdfUri || null; // Track which PDF is loaded
+	let scale = previousState.scale || 1.5;
 	let rendering = false;
 	let pdfJsReady = false;
 	let pendingLoadMessage = null;
@@ -195,14 +198,23 @@
 			}
 			console.log('Loading PDF...');
 
-			// Track the URI of this PDF
-			loadedPdfUri = message.pdfUri;
-
 			// Get preload strategy and start page from message
 			preloadStrategy = message.preloadStrategy || 'all';
 			const startPage = message.startPage || 1;
+			const skipPreload = message.skipPreload || false;
 			console.log('PDF preload strategy:', preloadStrategy);
 			console.log('PDF starting page:', startPage);
+			console.log('PDF skip preload:', skipPreload);
+
+			// Track the URI of this PDF
+			loadedPdfUri = message.pdfUri;
+
+			// Save state
+			vscode.setState({
+				currentPage: startPage,
+				loadedPdfUri: loadedPdfUri,
+				scale: scale
+			});
 
 			// Load PDF from base64 encoded data
 			let uint8Array;
@@ -239,11 +251,13 @@
 			// Render saved page (or page 1 if invalid)
 			await renderPage(currentPage);
 
-			// Apply preload strategy
-			if (preloadStrategy === 'all') {
-				await preloadAllPages();
-			} else if (preloadStrategy === 'adjacent') {
-				await preloadAdjacentPages(currentPage);
+			// Apply preload strategy (skip if we're just restoring state)
+			if (!skipPreload) {
+				if (preloadStrategy === 'all') {
+					await preloadAllPages();
+				} else if (preloadStrategy === 'adjacent') {
+					await preloadAdjacentPages(currentPage);
+				}
 			}
 			// 'on-demand' doesn't preload anything
 
@@ -401,6 +415,13 @@
 
 			currentPage = pageNum;
 
+			// Save state to persist across tab switches
+			vscode.setState({
+				currentPage: currentPage,
+				loadedPdfUri: loadedPdfUri,
+				scale: scale
+			});
+
 			// Update UI
 			if (currentPageSpan) {
 				currentPageSpan.textContent = currentPage.toString();
@@ -460,10 +481,19 @@
 
 	// Generate thumbnails for all pages
 	async function generateThumbnails() {
-		if (!pdfDoc || !thumbnailsContainer) return;
+		if (!pdfDoc || !thumbnailsContainer) {
+			console.log('Skipping thumbnail generation - PDF not loaded or container missing');
+			return;
+		}
 
 		thumbnailsContainer.innerHTML = '';
 		console.log('Generating thumbnails for', pdfDoc.numPages, 'pages...');
+
+		// Double-check pdfDoc is still valid
+		if (!pdfDoc) {
+			console.warn('PDF became null during thumbnail generation');
+			return;
+		}
 
 		// Generate thumbnails in batches to avoid blocking
 		const batchSize = 10;
