@@ -468,6 +468,8 @@ export type GlobalSettings = {
 	ragShowIndexedBadge: boolean;
 	caseOrganizerAutoCreateTosort: boolean;
 	caseOrganizerTosortFolderName: string;
+	// PDF Viewer settings
+	pdfPreloadStrategy: 'on-demand' | 'adjacent' | 'all';
 }
 
 export const defaultGlobalSettings: GlobalSettings = {
@@ -499,6 +501,8 @@ export const defaultGlobalSettings: GlobalSettings = {
 	ragShowIndexedBadge: true,
 	caseOrganizerAutoCreateTosort: true,
 	caseOrganizerTosortFolderName: 'tosort',
+	// PDF Viewer defaults
+	pdfPreloadStrategy: 'all',
 }
 
 export type GlobalSettingName = keyof GlobalSettings

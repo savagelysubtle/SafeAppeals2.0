@@ -5,9 +5,12 @@
 
 import { Registry } from '../../../../platform/registry/common/platform.js';
 import {
-	Extensions as ViewContainerExtensions, IViewContainersRegistry,
-	ViewContainerLocation, IViewsRegistry, Extensions as ViewExtensions,
+	IViewContainersRegistry,
 	IViewDescriptorService,
+	IViewsRegistry,
+	Extensions as ViewContainerExtensions,
+	ViewContainerLocation,
+	Extensions as ViewExtensions,
 } from '../../../common/views.js';
 
 import * as nls from '../../../../nls.js';
@@ -27,23 +30,23 @@ import { IContextKeyService } from '../../../../platform/contextkey/common/conte
 import { IInstantiationService } from '../../../../platform/instantiation/common/instantiation.js';
 // import { IDisposable } from '../../../../base/common/lifecycle.js';
 import { IConfigurationService } from '../../../../platform/configuration/common/configuration.js';
-import { IThemeService } from '../../../../platform/theme/common/themeService.js';
 import { IContextMenuService } from '../../../../platform/contextview/browser/contextView.js';
+import { IHoverService } from '../../../../platform/hover/browser/hover.js';
 import { IKeybindingService } from '../../../../platform/keybinding/common/keybinding.js';
 import { IOpenerService } from '../../../../platform/opener/common/opener.js';
 import { ITelemetryService } from '../../../../platform/telemetry/common/telemetry.js';
-import { IHoverService } from '../../../../platform/hover/browser/hover.js';
+import { IThemeService } from '../../../../platform/theme/common/themeService.js';
 import { mountSidebar } from './react/out/sidebar-tsx/index.js';
 
-import { Codicon } from '../../../../base/common/codicons.js';
 import { Orientation } from '../../../../base/browser/ui/sash/sash.js';
+import { Codicon } from '../../../../base/common/codicons.js';
 // import { IDisposable } from '../../../../base/common/lifecycle.js';
 import { toDisposable } from '../../../../base/common/lifecycle.js';
-import { Action2, registerAction2 } from '../../../../platform/actions/common/actions.js';
 import { ServicesAccessor } from '../../../../editor/browser/editorExtensions.js';
-import { IViewsService } from '../../../services/views/common/viewsService.js';
-import { IWorkbenchContribution, registerWorkbenchContribution2, WorkbenchPhase } from '../../../common/contributions.js';
+import { Action2, registerAction2 } from '../../../../platform/actions/common/actions.js';
 import { ICommandService } from '../../../../platform/commands/common/commands.js';
+import { IWorkbenchContribution, registerWorkbenchContribution2, WorkbenchPhase } from '../../../common/contributions.js';
+import { IViewsService } from '../../../services/views/common/viewsService.js';
 
 // compare against search.contribution.ts and debug.contribution.ts, scm.contribution.ts (source control)
 
@@ -168,7 +171,11 @@ export class SidebarStartContribution implements IWorkbenchContribution {
 	constructor(
 		@ICommandService private readonly commandService: ICommandService,
 	) {
-		this.commandService.executeCommand(VOID_OPEN_SIDEBAR_ACTION_ID)
+		// Execute command asynchronously to avoid blocking workbench startup
+		// Use queueMicrotask to defer execution until after current call stack completes
+		queueMicrotask(() => {
+			this.commandService.executeCommand(VOID_OPEN_SIDEBAR_ACTION_ID);
+		});
 	}
 }
 registerWorkbenchContribution2(SidebarStartContribution.ID, SidebarStartContribution, WorkbenchPhase.AfterRestored);

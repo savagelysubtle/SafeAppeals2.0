@@ -5,10 +5,15 @@
 
 	let pdfDoc = null;
 	let currentPage = 1;
+	let loadedPdfUri = null; // Track which PDF is loaded
 	let scale = 1.5;
 	let rendering = false;
 	let pdfJsReady = false;
 	let pendingLoadMessage = null;
+
+	// Page cache for preloading
+	let pageCache = new Map();
+	let preloadStrategy = 'all'; // Default strategy
 
 	// Get DOM elements
 	const canvas = document.getElementById('pdf-canvas');
@@ -77,6 +82,9 @@
 			}
 			pdfJsReady = true;
 
+			// Notify host that webview is ready
+			vscode.postMessage({ type: 'ready' });
+
 			// Process any pending load message
 			if (pendingLoadMessage) {
 				console.log('Processing pending PDF load');
@@ -116,9 +124,38 @@
 					pendingLoadMessage = message;
 				}
 				break;
+			case 'getState':
+				// Host asking for current state
+				const savedPageFromHost = message.savedPage || 1;
+				vscode.postMessage({
+					type: 'state',
+					loadedPdfUri: loadedPdfUri,
+					currentPage: currentPage,
+					hasPDF: !!pdfDoc,
+					savedPage: savedPageFromHost
+				});
+
+				// If we have the same PDF loaded but are on wrong page, navigate to saved page
+				if (pdfDoc && loadedPdfUri === message.requestedUri && currentPage !== savedPageFromHost) {
+					console.log('[PDF Viewer] Same PDF, navigating from page', currentPage, 'to saved page', savedPageFromHost);
+					await renderPage(savedPageFromHost);
+				}
+				break;
+			case 'goToPage':
+				// Navigate to a specific page without reloading the PDF
+				if (pdfDoc && message.page) {
+					const targetPage = Math.max(1, Math.min(message.page, pdfDoc.numPages));
+					console.log('[PDF Viewer] Navigating to saved page:', targetPage);
+					await renderPage(targetPage);
+				} else {
+					console.warn('[PDF Viewer] Cannot navigate - PDF not loaded yet');
+				}
+				break;
 			case 'clearPDF':
 				pdfDoc = null;
 				currentPage = 1;
+				loadedPdfUri = null;
+				pageCache.clear();
 				if (ctx && canvas) {
 					ctx.clearRect(0, 0, canvas.width, canvas.height);
 				}
@@ -158,6 +195,15 @@
 			}
 			console.log('Loading PDF...');
 
+			// Track the URI of this PDF
+			loadedPdfUri = message.pdfUri;
+
+			// Get preload strategy and start page from message
+			preloadStrategy = message.preloadStrategy || 'all';
+			const startPage = message.startPage || 1;
+			console.log('PDF preload strategy:', preloadStrategy);
+			console.log('PDF starting page:', startPage);
+
 			// Load PDF from base64 encoded data
 			let uint8Array;
 			if (message.encoding === 'base64') {
@@ -177,8 +223,11 @@
 			pdfDoc = await loadingTask.promise;
 			console.log('PDF loaded successfully, pages:', pdfDoc.numPages);
 
-			currentPage = 1;
+			// Validate and clamp start page
+			currentPage = Math.max(1, Math.min(startPage, pdfDoc.numPages));
 			scale = 1.5;
+			pageCache.clear();
+
 			if (totalPagesSpan) {
 				totalPagesSpan.textContent = pdfDoc.numPages.toString();
 			}
@@ -187,7 +236,17 @@
 			await generateThumbnails();
 			await extractOutline();
 
-			await renderPage(1);
+			// Render saved page (or page 1 if invalid)
+			await renderPage(currentPage);
+
+			// Apply preload strategy
+			if (preloadStrategy === 'all') {
+				await preloadAllPages();
+			} else if (preloadStrategy === 'adjacent') {
+				await preloadAdjacentPages(currentPage);
+			}
+			// 'on-demand' doesn't preload anything
+
 		} catch (error) {
 			console.error('Error loading PDF:', error);
 			vscode.postMessage({
@@ -197,13 +256,77 @@
 		}
 	}
 
+	// Preload all pages into memory (aggressive strategy)
+	async function preloadAllPages() {
+		if (!pdfDoc) return;
+
+		const maxPages = 500; // Safety limit
+		if (pdfDoc.numPages > maxPages) {
+			console.warn(`PDF has ${pdfDoc.numPages} pages, limiting preload to ${maxPages} for memory safety`);
+		}
+
+		const pagesToPreload = Math.min(pdfDoc.numPages, maxPages);
+		console.log(`Preloading all ${pagesToPreload} pages into memory...`);
+
+		const preloadPromises = [];
+		for (let i = 1; i <= pagesToPreload; i++) {
+			if (!pageCache.has(i)) {
+				preloadPromises.push(
+					pdfDoc.getPage(i).then(page => {
+						pageCache.set(i, page);
+					}).catch(err => {
+						console.error(`Failed to preload page ${i}:`, err);
+					})
+				);
+			}
+		}
+
+		await Promise.all(preloadPromises);
+		console.log(`✓ All ${pagesToPreload} pages preloaded into memory!`);
+	}
+
+	// Preload adjacent pages (smart strategy)
+	async function preloadAdjacentPages(centerPage) {
+		if (!pdfDoc) return;
+
+		const PRELOAD_RANGE = 2; // Preload ±2 pages
+		const startPage = Math.max(1, centerPage - PRELOAD_RANGE);
+		const endPage = Math.min(pdfDoc.numPages, centerPage + PRELOAD_RANGE);
+
+		// Preload adjacent pages
+		for (let i = startPage; i <= endPage; i++) {
+			if (!pageCache.has(i)) {
+				pdfDoc.getPage(i).then(page => {
+					pageCache.set(i, page);
+				}).catch(err => {
+					console.error(`Failed to preload page ${i}:`, err);
+				});
+			}
+		}
+
+		// Clear old cache entries (keep only ±5 pages)
+		const minKeep = Math.max(1, centerPage - 5);
+		const maxKeep = Math.min(pdfDoc.numPages, centerPage + 5);
+		for (let [pageNum] of pageCache) {
+			if (pageNum < minKeep || pageNum > maxKeep) {
+				pageCache.delete(pageNum);
+			}
+		}
+	}
+
 	async function renderPage(pageNum) {
 		if (!pdfDoc || rendering) return;
 
 		rendering = true;
 
 		try {
-			const page = await pdfDoc.getPage(pageNum);
+			// Use cached page if available, otherwise fetch
+			let page = pageCache.get(pageNum);
+			if (!page) {
+				page = await pdfDoc.getPage(pageNum);
+				pageCache.set(pageNum, page);
+			}
+
 			const viewport = page.getViewport({ scale });
 
 			// Render canvas first
@@ -297,6 +420,12 @@
 				type: 'pageChanged',
 				page: pageNum
 			});
+
+			// Preload adjacent pages if using adjacent strategy
+			if (preloadStrategy === 'adjacent') {
+				preloadAdjacentPages(pageNum);
+			}
+
 		} catch (error) {
 			console.error('Error rendering page:', error);
 		} finally {
@@ -575,4 +704,3 @@
 		}
 	});
 })();
-

@@ -3,25 +3,26 @@
  *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
  *--------------------------------------------------------------------------------------*/
 
-import { EditorPane } from '../../../../../browser/parts/editor/editorPane.js';
-import { ITelemetryService } from '../../../../../../platform/telemetry/common/telemetry.js';
-import { IThemeService } from '../../../../../../platform/theme/common/themeService.js';
-import { IStorageService } from '../../../../../../platform/storage/common/storage.js';
-import { PDFViewerInput, PDFSelection } from './pdfViewerInput.js';
-import { IEditorOptions } from '../../../../../../platform/editor/common/editor.js';
-import { IEditorOpenContext } from '../../../../../common/editor.js';
-import { CancellationToken } from '../../../../../../base/common/cancellation.js';
-import { IWebviewService, IOverlayWebview } from '../../../../webview/browser/webview.js';
-import { asWebviewUri } from '../../../../webview/common/webview.js';
-import { IFileService } from '../../../../../../platform/files/common/files.js';
 import * as DOM from '../../../../../../base/browser/dom.js';
 import { Dimension } from '../../../../../../base/browser/dom.js';
-import { generateUuid } from '../../../../../../base/common/uuid.js';
 import { CodeWindow } from '../../../../../../base/browser/window.js';
+import { CancellationToken } from '../../../../../../base/common/cancellation.js';
 import { FileAccess } from '../../../../../../base/common/network.js';
 import { URI } from '../../../../../../base/common/uri.js';
+import { generateUuid } from '../../../../../../base/common/uuid.js';
+import { IEditorOptions } from '../../../../../../platform/editor/common/editor.js';
+import { IFileService } from '../../../../../../platform/files/common/files.js';
+import { IStorageService } from '../../../../../../platform/storage/common/storage.js';
+import { ITelemetryService } from '../../../../../../platform/telemetry/common/telemetry.js';
+import { IThemeService } from '../../../../../../platform/theme/common/themeService.js';
+import { EditorPane } from '../../../../../browser/parts/editor/editorPane.js';
+import { IEditorOpenContext } from '../../../../../common/editor.js';
 import { EditorInput } from '../../../../../common/editor/editorInput.js';
 import { IEditorGroup } from '../../../../../services/editor/common/editorGroupsService.js';
+import { IOverlayWebview, IWebviewService } from '../../../../webview/browser/webview.js';
+import { asWebviewUri } from '../../../../webview/common/webview.js';
+import { IVoidSettingsService } from '../../../common/voidSettingsService.js';
+import { PDFSelection, PDFViewerInput } from './pdfViewerInput.js';
 
 export class PDFViewerEditor extends EditorPane {
 	static readonly ID = 'void.pdfViewer';
@@ -30,14 +31,18 @@ export class PDFViewerEditor extends EditorPane {
 	private _dimension?: Dimension;
 	private webview?: IOverlayWebview;
 	private _currentInput?: PDFViewerInput;
+	private _webviewReady: boolean = false;
+	private _pendingInput?: { input: PDFViewerInput; savedPage: number }; // Track input waiting for webview ready
+	private static readonly PAGE_STORAGE_PREFIX = 'pdfViewer.lastPage.';
 
 	constructor(
 		group: IEditorGroup,
 		@ITelemetryService telemetryService: ITelemetryService,
 		@IThemeService themeService: IThemeService,
-		@IStorageService storageService: IStorageService,
+		@IStorageService private readonly storageService: IStorageService,
 		@IWebviewService private readonly webviewService: IWebviewService,
-		@IFileService private readonly fileService: IFileService
+		@IFileService private readonly fileService: IFileService,
+		@IVoidSettingsService private readonly voidSettingsService: IVoidSettingsService
 	) {
 		super(PDFViewerEditor.ID, group, telemetryService, themeService, storageService);
 	}
@@ -58,6 +63,14 @@ export class PDFViewerEditor extends EditorPane {
 
 		this._currentInput = input;
 
+		console.log('[PDF Viewer] setInput called for:', input.resource.toString());
+
+		// Get saved page for this PDF from storage
+		const storageKey = PDFViewerEditor.PAGE_STORAGE_PREFIX + input.resource.toString();
+		const savedPage = this.storageService.getNumber(storageKey, -1 /* StorageScope.WORKSPACE */, 1);
+		console.log('[PDF Viewer] Saved page from storage:', savedPage);
+
+		// Create webview if it doesn't exist
 		if (!this.webview && this._element) {
 			// Create webview with proper options
 			this.webview = this.webviewService.createWebviewOverlay({
@@ -93,7 +106,32 @@ export class PDFViewerEditor extends EditorPane {
 			}
 		}
 
-		// Load PDF file
+		// If webview exists and is ready, ask it what its current state is
+		if (this.webview && this._webviewReady) {
+			console.log('[PDF Viewer] Asking webview for state');
+			this.webview.postMessage({
+				type: 'getState',
+				requestedUri: input.resource.toString(),
+				savedPage: savedPage // Pass the saved page to webview
+			});
+			// The webview will respond with 'state' message, handled in handleWebviewMessage
+			return;
+		}
+
+		// Webview exists but not ready yet - wait for it to become ready
+		if (this.webview && !this._webviewReady) {
+			console.log('[PDF Viewer] Webview exists but not ready, will load when ready');
+			this._pendingInput = { input, savedPage };
+			return;
+		}
+
+		// No webview - load PDF at saved page
+		console.log('[PDF Viewer] No webview, loading PDF at page:', savedPage);
+		this.loadPDF(input, savedPage);
+	}
+
+	private async loadPDF(input: PDFViewerInput, startPage: number): Promise<void> {
+		console.log('[PDF Viewer] Loading PDF, starting at page:', startPage);
 		try {
 			const pdfUri = input.resource;
 			const pdfContent = await this.fileService.readFile(pdfUri);
@@ -112,28 +150,82 @@ export class PDFViewerEditor extends EditorPane {
 				this.webview.postMessage({
 					type: 'loadPDF',
 					data: btoa(base64),
-					encoding: 'base64'
+					encoding: 'base64',
+					preloadStrategy: this.voidSettingsService.state.globalSettings.pdfPreloadStrategy,
+					startPage: startPage,
+					pdfUri: input.resource.toString()
 				});
 			}
 		} catch (error) {
 			console.error('Failed to load PDF:', error);
-			// Could show an error message in the webview here
 		}
 	}
 
 	private handleWebviewMessage(message: any): void {
+		console.log('[PDF Viewer] Received message from webview:', JSON.stringify(message));
+
+		// Unwrap the message - VSCode webview wraps messages in a 'message' property
+		const data = message.message || message;
+
+		switch (data.type) {
+			case 'ready': {
+				// Webview is now ready to receive messages
+				console.log('[PDF Viewer] Webview ready');
+				this._webviewReady = true;
+
+				// If there's a pending input waiting for webview to be ready, load it now
+				if (this._pendingInput) {
+					console.log('[PDF Viewer] Processing pending input, loading PDF');
+					const { input, savedPage } = this._pendingInput;
+					this._pendingInput = undefined;
+
+					// Webview is fresh and has no PDF, so load it directly
+					this.loadPDF(input, savedPage);
+				}
+				break;
+			}
+		}
+
+		// For all other messages, we need a current input
 		if (!this._currentInput) {
 			return;
 		}
 
-		switch (message.type) {
-			case 'pageChanged':
-				// Track current page for Ctrl+K
-				this._currentInput.currentPage = message.page;
+		switch (data.type) {
+			case 'state': {
+				// Webview reported its current state
+				console.log('[PDF Viewer] Webview state:', data);
+				const webviewUri = data.loadedPdfUri;
+				const webviewPage = data.currentPage;
+				const requestedUri = this._currentInput?.resource.toString();
+
+				if (webviewUri === requestedUri && webviewPage) {
+					// Same PDF already loaded, just make sure we're on the right page
+					console.log('[PDF Viewer] Same PDF loaded, staying on page:', webviewPage);
+					// Webview already has correct state, do nothing
+				} else {
+					// Different PDF or no PDF loaded, load it at saved page
+					const storageKey = PDFViewerEditor.PAGE_STORAGE_PREFIX + requestedUri;
+					const savedPage = this.storageService.getNumber(storageKey, -1, 1);
+					console.log('[PDF Viewer] Different or no PDF, loading at page:', savedPage);
+					this.loadPDF(this._currentInput!, savedPage);
+				}
 				break;
+			}
+			case 'pageChanged': {
+				// Track current page and save to storage
+				console.log('[PDF Viewer] Page changed to:', data.page);
+				this._currentInput.currentPage = data.page;
+
+				// Save to storage for persistence across sessions
+				const storageKey = PDFViewerEditor.PAGE_STORAGE_PREFIX + this._currentInput.resource.toString();
+				this.storageService.store(storageKey, data.page, -1 /* StorageScope.WORKSPACE */, 0 /* StorageTarget.USER */);
+				console.log('[PDF Viewer] Saved page to storage:', data.page);
+				break;
+			}
 			case 'textSelected':
 				// Store selection for Ctrl+K
-				this._currentInput.selection = message.selection as PDFSelection;
+				this._currentInput.selection = data.selection as PDFSelection;
 				break;
 			case 'clearSelection':
 				this._currentInput.selection = null;
@@ -141,7 +233,7 @@ export class PDFViewerEditor extends EditorPane {
 			case 'selectionRect':
 				// Store selection rectangle for widget positioning
 				if (this._selectionRectResolve) {
-					this._selectionRectResolve(message.rect);
+					this._selectionRectResolve(data.rect);
 					this._selectionRectResolve = undefined;
 				}
 				break;
