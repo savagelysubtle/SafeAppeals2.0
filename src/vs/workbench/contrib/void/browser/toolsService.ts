@@ -1,26 +1,29 @@
+import { timeout } from '../../../../base/common/async.js'
 import { CancellationToken } from '../../../../base/common/cancellation.js'
 import { URI } from '../../../../base/common/uri.js'
+import { generateUuid } from '../../../../base/common/uuid.js'
+import { EndOfLinePreference } from '../../../../editor/common/model.js'
 import { IFileService } from '../../../../platform/files/common/files.js'
-import { registerSingleton, InstantiationType } from '../../../../platform/instantiation/common/extensions.js'
+import { InstantiationType, registerSingleton } from '../../../../platform/instantiation/common/extensions.js'
 import { createDecorator, IInstantiationService } from '../../../../platform/instantiation/common/instantiation.js'
+import { IMarkerService, MarkerSeverity } from '../../../../platform/markers/common/markers.js'
 import { IWorkspaceContextService } from '../../../../platform/workspace/common/workspace.js'
 import { QueryBuilder } from '../../../services/search/common/queryBuilder.js'
 import { ISearchService } from '../../../services/search/common/search.js'
+import { computeDirectoryTree1Deep, IDirectoryStrService, stringifyDirectoryTree1Deep } from '../common/directoryStrService.js'
+import { IDocumentViewerService } from '../common/documentViewerService.js'
+import { MAX_CHILDREN_URIs_PAGE, MAX_FILE_CHARS_PAGE, MAX_TERMINAL_BG_COMMAND_TIME, MAX_TERMINAL_INACTIVE_TIME } from '../common/prompt/prompts.js'
+import { RAGContextService } from '../common/ragContextService.js'
+import { IRAGService } from '../common/ragService.js'
+import { RawToolParamsObj } from '../common/sendLLMMessageTypes.js'
+import { BuiltinToolCallParams, BuiltinToolName, BuiltinToolResultType, LintErrorItem } from '../common/toolsServiceTypes.js'
+import { IVoidModelService } from '../common/voidModelService.js'
+import { IVoidSettingsService } from '../common/voidSettingsService.js'
+import { IDocumentCreatorService } from './documentCreatorService.js'
+import { IDocumentEditorService } from './documentViewers/documentEditorService.js'
 import { IEditCodeService } from './editCodeServiceInterface.js'
 import { ITerminalToolService } from './terminalToolService.js'
-import { LintErrorItem, BuiltinToolCallParams, BuiltinToolResultType, BuiltinToolName } from '../common/toolsServiceTypes.js'
-import { IVoidModelService } from '../common/voidModelService.js'
-import { EndOfLinePreference } from '../../../../editor/common/model.js'
 import { IVoidCommandBarService } from './voidCommandBarService.js'
-import { computeDirectoryTree1Deep, IDirectoryStrService, stringifyDirectoryTree1Deep } from '../common/directoryStrService.js'
-import { IMarkerService, MarkerSeverity } from '../../../../platform/markers/common/markers.js'
-import { timeout } from '../../../../base/common/async.js'
-import { RawToolParamsObj } from '../common/sendLLMMessageTypes.js'
-import { MAX_CHILDREN_URIs_PAGE, MAX_FILE_CHARS_PAGE, MAX_TERMINAL_INACTIVE_TIME, MAX_TERMINAL_BG_COMMAND_TIME } from '../common/prompt/prompts.js'
-import { IVoidSettingsService } from '../common/voidSettingsService.js'
-import { generateUuid } from '../../../../base/common/uuid.js'
-import { IRAGService } from '../common/ragService.js'
-import { RAGContextService } from '../common/ragContextService.js'
 
 
 // tool use for AI
@@ -156,6 +159,9 @@ export class ToolsService implements IToolsService {
 		@IMarkerService private readonly markerService: IMarkerService,
 		@IVoidSettingsService private readonly voidSettingsService: IVoidSettingsService,
 		@IRAGService private readonly ragService: IRAGService,
+		@IDocumentViewerService private readonly documentViewerService: IDocumentViewerService,
+		@IDocumentEditorService private readonly documentEditorService: IDocumentEditorService,
+		@IDocumentCreatorService private readonly documentCreatorService: IDocumentCreatorService,
 	) {
 		const queryBuilder = instantiationService.createInstance(QueryBuilder);
 
@@ -316,11 +322,65 @@ export class ToolsService implements IToolsService {
 				return {};
 			},
 
+			edit_document: (params: RawToolParamsObj) => {
+				const { uri: uriStr, operations: operationsUnknown } = params;
+				const uri = validateURI(uriStr);
+
+				// Handle case where operations is sent as a JSON string (common LLM mistake)
+				let operationsArray: any[];
+				if (typeof operationsUnknown === 'string') {
+					try {
+						operationsArray = JSON.parse(operationsUnknown);
+						if (!Array.isArray(operationsArray)) {
+							throw new Error('Parsed value is not an array');
+						}
+					} catch (parseError) {
+						console.error('[edit_document] Failed to parse operations string:', operationsUnknown);
+						throw new Error(`Invalid LLM output: operations is a string but not valid JSON. Send operations as a JSON array directly, not as a string.`);
+					}
+				} else if (Array.isArray(operationsUnknown)) {
+					operationsArray = operationsUnknown;
+				} else {
+					console.error('[edit_document] Invalid operations format. Expected array, got:', typeof operationsUnknown, operationsUnknown);
+					throw new Error(`Invalid LLM output: operations must be a JSON array. Received: ${typeof operationsUnknown}. Example: [{"type": "insert_text", "position": 0, "text": "Hello"}]`);
+				}
+
+				// Validate each operation has required fields
+				const operations = operationsArray.map((op: any, index: number) => {
+					if (!op.type) {
+						console.error(`[edit_document] Invalid operation at index ${index}: missing type field`, op);
+						throw new Error(`Invalid operation at index ${index}: missing "type" field. Each operation must have {"type": "...", ...}`);
+					}
+					return op;
+				});
+
+				return { uri, operations };
+			},
+
 		}
 
 
 		this.callTool = {
 			read_file: async ({ uri, startLine, endLine, pageNumber }) => {
+				// Check if this is a document file (DOCX, XLSX, PDF, etc.)
+				if (this.documentViewerService.isDocumentFile(uri)) {
+					const content = await this.documentViewerService.getTextContent(uri);
+					if (content !== null) {
+						const totalFileLen = content.length;
+						const totalNumLines = content.split('\n').length;
+
+						// Apply pagination
+						const fromIdx = MAX_FILE_CHARS_PAGE * (pageNumber - 1);
+						const toIdx = MAX_FILE_CHARS_PAGE * pageNumber - 1;
+						const fileContents = content.slice(fromIdx, toIdx + 1);
+						const hasNextPage = (content.length - 1) - toIdx >= 1;
+
+						return { result: { fileContents, totalFileLen, hasNextPage, totalNumLines } };
+					}
+					// If extraction failed, fall through to regular file handling
+				}
+
+				// Regular text file handling
 				await voidModelService.initializeModel(uri)
 				const { model } = await voidModelService.getModelSafe(uri)
 				if (model === null) { throw new Error(`No contents; File does not exist.`) }
@@ -423,10 +483,22 @@ export class ToolsService implements IToolsService {
 			// ---
 
 			create_file_or_folder: async ({ uri, isFolder }) => {
-				if (isFolder)
+				if (isFolder) {
 					await fileService.createFolder(uri)
-				else {
-					await fileService.createFile(uri)
+				} else {
+					// Check if this is a document file (DOCX, XLSX)
+					const fileExt = uri.path.toLowerCase().split('.').pop();
+
+					if (fileExt === 'docx') {
+						// Create a proper empty DOCX file
+						await this.documentCreatorService.createEmptyDOCX(uri);
+					} else if (fileExt === 'xlsx' || fileExt === 'xls') {
+						// Create a proper empty XLSX file
+						await this.documentCreatorService.createEmptyXLSX(uri);
+					} else {
+						// Create regular empty file
+						await fileService.createFile(uri);
+					}
 				}
 				return { result: {} }
 			},
@@ -437,6 +509,11 @@ export class ToolsService implements IToolsService {
 			},
 
 			rewrite_file: async ({ uri, newContent }) => {
+				// Check if this is a document file (DOCX, XLSX, etc.)
+				if (this.documentViewerService.isDocumentFile(uri)) {
+					throw new Error(`Cannot use rewrite_file on document files (DOCX, XLSX, etc.). Please use the edit_document tool instead to modify document files.`)
+				}
+
 				await voidModelService.initializeModel(uri)
 				if (this.commandBarService.getStreamState(uri) === 'streaming') {
 					throw new Error(`Another LLM is currently making changes to this file. Please stop streaming for now and ask the user to resume later.`)
@@ -453,6 +530,11 @@ export class ToolsService implements IToolsService {
 			},
 
 			edit_file: async ({ uri, searchReplaceBlocks }) => {
+				// Check if this is a document file (DOCX, XLSX, etc.)
+				if (this.documentViewerService.isDocumentFile(uri)) {
+					throw new Error(`Cannot use edit_file on document files (DOCX, XLSX, etc.). Please use the edit_document tool instead to modify document files.`)
+				}
+
 				await voidModelService.initializeModel(uri)
 				if (this.commandBarService.getStreamState(uri) === 'streaming') {
 					throw new Error(`Another LLM is currently making changes to this file. Please stop streaming for now and ask the user to resume later.`)
@@ -586,6 +668,34 @@ Example: rag_index_document with uri="/path/to/document.pdf" and is_policy_manua
 					return { result: { stats: `Failed to get stats: ${error.message}` } };
 				}
 			},
+
+			edit_document: async ({ uri, operations }) => {
+				try {
+					const fileExt = uri.path.toLowerCase().split('.').pop();
+
+					if (fileExt === 'docx') {
+						const result = await this.documentEditorService.editDOCX({ uri, operations: operations as any });
+						return { result };
+					} else if (fileExt === 'xlsx' || fileExt === 'xls') {
+						const result = await this.documentEditorService.editXLSX({ uri, operations: operations as any });
+						return { result };
+					} else {
+						return {
+							result: {
+								success: false,
+								error: `Unsupported file type: ${fileExt}. Only DOCX and XLSX files are supported.`
+							}
+						};
+					}
+				} catch (error) {
+					return {
+						result: {
+							success: false,
+							error: `Failed to edit document: ${error.message}`
+						}
+					};
+				}
+			},
 		}
 
 
@@ -706,6 +816,14 @@ Example: rag_index_document with uri="/path/to/document.pdf" and is_policy_manua
 			},
 			rag_get_stats: (_params, result) => {
 				return result.stats;
+			},
+
+			edit_document: (params, result) => {
+				if (result.success) {
+					return result.message || `Successfully edited document: ${params.uri.fsPath}\nOperations applied: ${params.operations.length}`;
+				} else {
+					return `Failed to edit document: ${params.uri.fsPath}\nError: ${result.error}`;
+				}
 			},
 		}
 

@@ -5,8 +5,8 @@
 
 import { URI } from '../../../../../base/common/uri.js';
 import { IFileService } from '../../../../../platform/files/common/files.js';
-import { IDirectoryStrService } from '../directoryStrService.js';
 import { StagingSelectionItem } from '../chatThreadServiceTypes.js';
+import { IDirectoryStrService } from '../directoryStrService.js';
 import { os } from '../helpers/systemInfo.js';
 import { RawToolParamsObj } from '../sendLLMMessageTypes.js';
 import { approvalTypeOfBuiltinToolName, BuiltinToolCallParams, BuiltinToolName, BuiltinToolResultType, ToolName } from '../toolsServiceTypes.js';
@@ -190,7 +190,7 @@ export const builtinTools: {
 
 	read_file: {
 		name: 'read_file',
-		description: `Returns full contents of a given file.`,
+		description: `Returns full contents of a given file. Automatically extracts text from DOCX, XLSX, and PDF files.`,
 		params: {
 			...uriParam('file'),
 			start_line: { description: 'Optional. Do NOT fill this field in unless you were specifically given exact line numbers to search. Defaults to the beginning of the file.' },
@@ -266,7 +266,7 @@ export const builtinTools: {
 
 	create_file_or_folder: {
 		name: 'create_file_or_folder',
-		description: `Create a file or folder at the given path. To create a folder, the path MUST end with a trailing slash.`,
+		description: `Create a file or folder at the given path. For DOCX and XLSX files, this creates a valid empty document that can then be edited with edit_document. For other file types, creates an empty file. To create a folder, the path MUST end with a trailing slash.`,
 		params: {
 			...uriParam('file or folder'),
 		},
@@ -283,7 +283,7 @@ export const builtinTools: {
 
 	edit_file: {
 		name: 'edit_file',
-		description: `Edit the contents of a file. You must provide the file's URI as well as a SINGLE string of SEARCH/REPLACE block(s) that will be used to apply the edit.`,
+		description: `Edit the contents of a TEXT file. You must provide the file's URI as well as a SINGLE string of SEARCH/REPLACE block(s) that will be used to apply the edit. NOTE: This tool only works on text files (code, markdown, etc.). For DOCX/XLSX documents, use edit_document instead.`,
 		params: {
 			...uriParam('file'),
 			search_replace_blocks: { description: replaceTool_description }
@@ -292,7 +292,7 @@ export const builtinTools: {
 
 	rewrite_file: {
 		name: 'rewrite_file',
-		description: `Edits a file, deleting all the old contents and replacing them with your new contents. Use this tool if you want to edit a file you just created.`,
+		description: `Edits a TEXT file, deleting all the old contents and replacing them with your new contents. Use this tool if you want to edit a text file you just created. NOTE: This tool only works on text files (code, markdown, etc.). For DOCX/XLSX documents, use edit_document instead.`,
 		params: {
 			...uriParam('file'),
 			new_content: { description: `The new contents of the file. Must be a string.` }
@@ -364,7 +364,35 @@ export const builtinTools: {
 		name: 'rag_get_stats',
 		description: `Gets statistics about the RAG index (number of documents, chunks, etc.). Use this BEFORE searching to understand what content is available.`,
 		params: {}
-	}
+	},
+
+	edit_document: {
+		name: 'edit_document',
+		description: `Edit DOCX or XLSX documents with formatting, content insertion, and cell manipulation. The document must be open in a viewer to edit. Supports multiple edit operations in a single call.
+
+IMPORTANT: The operations parameter must be a JSON array of operation objects. Each operation must have a "type" field and type-specific fields.
+
+DOCX Operations Examples:
+- {"type": "format_text", "range": {"start": 0, "end": 50}, "format": {"bold": true, "fontSize": 16}}
+- {"type": "insert_text", "position": 100, "text": "New content"}
+- {"type": "insert_table", "position": 100, "rows": 3, "cols": 4}
+- {"type": "insert_page_break", "position": 100}
+- {"type": "set_margins", "margins": {"top": 50, "right": 50, "bottom": 50, "left": 50}}
+- {"type": "replace_text", "search": "old", "replace": "new", "all": true}
+
+XLSX Operations Examples:
+- {"type": "set_cell_value", "sheet": 0, "cell": "A1", "value": "Header"}
+- {"type": "set_cell_formula", "sheet": 0, "cell": "B2", "formula": "=SUM(A1:A10)"}
+- {"type": "format_cell", "sheet": 0, "cell": "A1", "format": {"bold": true, "backgroundColor": "#FFFF00"}}
+- {"type": "insert_row", "sheet": 0, "rowIndex": 5}
+- {"type": "delete_column", "sheet": 0, "colIndex": 3}`,
+		params: {
+			...uriParam('document (DOCX or XLSX)'),
+			operations: {
+				description: `JSON array of edit operations. Must be a valid JSON array, not a string. Example: [{"type": "insert_text", "position": 0, "text": "Hello"}]`
+			}
+		}
+	},
 
 
 	// go_to_definition

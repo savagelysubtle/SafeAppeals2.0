@@ -3,11 +3,11 @@
  *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
  *--------------------------------------------------------------------------------------*/
 
+import { readFileSync } from 'fs';
+import { normalize } from 'path';
 import { URI } from '../../../../base/common/uri.js';
 import { ILogService } from '../../../../platform/log/common/log.js';
 import { ExtractedContent } from '../common/ragServiceTypes.js';
-import { readFileSync } from 'fs';
-import { normalize } from 'path';
 
 export class RAGFileService {
 	constructor(@ILogService private readonly logService: ILogService) { }
@@ -24,6 +24,9 @@ export class RAGFileService {
 					return await this.extractPDF(uri);
 				case 'docx':
 					return await this.extractDOCX(uri);
+				case 'xlsx':
+				case 'xls':
+					return await this.extractXLSX(uri);
 				case 'txt':
 				case 'md':
 					return await this.extractText(uri);
@@ -213,6 +216,24 @@ export class RAGFileService {
 
 			const filepath = this.getFilePath(uri);
 			const buffer = readFileSync(filepath);
+
+			// Check if file is empty or too small to be a valid DOCX
+			if (buffer.length === 0) {
+				this.logService.warn(`DOCX file is empty: ${uri.fsPath}`);
+				return {
+					text: '[Empty DOCX file - file contains no data]',
+					metadata: { wordCount: 0 }
+				};
+			}
+
+			if (buffer.length < 100) {
+				this.logService.warn(`DOCX file may be corrupted (too small): ${uri.fsPath}`);
+				return {
+					text: '[Corrupted or incomplete DOCX file - file is too small to be valid]',
+					metadata: { wordCount: 0 }
+				};
+			}
+
 			const result = await mammoth.extractRawText({ buffer });
 
 			const metadata: ExtractedContent['metadata'] = {
@@ -231,7 +252,52 @@ export class RAGFileService {
 			};
 		} catch (error) {
 			this.logService.error(`DOCX extraction failed for ${uri.fsPath}:`, error);
-			throw new Error(`Failed to extract DOCX content: ${error.message}`);
+			// Return a helpful error message instead of throwing
+			return {
+				text: `[Error reading DOCX file: ${error.message}. The file may be corrupted or was not created properly.]`,
+				metadata: { wordCount: 0 }
+			};
+		}
+	}
+
+	private async extractXLSX(uri: URI): Promise<ExtractedContent> {
+		try {
+			// Dynamic import to avoid bundling issues
+			const XLSX = await import('xlsx');
+
+			const filepath = this.getFilePath(uri);
+			const buffer = readFileSync(filepath);
+
+			// Parse workbook
+			const workbook = XLSX.read(buffer, { type: 'buffer' });
+
+			// Extract text from all sheets
+			const textParts: string[] = [];
+			workbook.SheetNames.forEach((sheetName) => {
+				textParts.push(`\n=== Sheet: ${sheetName} ===\n`);
+				const worksheet = workbook.Sheets[sheetName];
+
+				// Convert sheet to CSV-like text
+				const csv = XLSX.utils.sheet_to_csv(worksheet);
+				textParts.push(csv);
+			});
+
+			const fullText = textParts.join('\n');
+
+			const metadata: ExtractedContent['metadata'] = {
+				wordCount: this.countWords(fullText),
+				language: 'unknown', // Spreadsheets don't have a primary language
+				title: workbook.Props?.Title || '',
+				author: workbook.Props?.Author || ''
+			};
+
+			return {
+				text: fullText.trim(),
+				metadata
+			};
+		} catch (error) {
+			this.logService.error(`XLSX extraction failed for ${uri.fsPath}:`, error);
+			throw new Error(`Failed to extract XLSX content: ${error instanceof Error ? error.message : 'Unknown error'}`);
 		}
 	}
 
@@ -285,5 +351,103 @@ export class RAGFileService {
 		if (spanishCount > englishCount && spanishCount > frenchCount) return 'es';
 		if (frenchCount > englishCount && frenchCount > spanishCount) return 'fr';
 		return 'en'; // Default to English
+	}
+
+	/**
+	 * Create an empty but valid DOCX file
+	 */
+	async createEmptyDOCX(uri: URI): Promise<void> {
+		try {
+			const { Document, Packer, Paragraph } = await import('docx');
+			const { writeFileSync } = await import('fs');
+
+			// Create a minimal valid DOCX document
+			// Based on docx 9.5.1 documentation: sections must have children array,
+			// and Paragraph must have children array (even if empty)
+			const doc = new Document({
+				sections: [{
+					properties: {},
+					children: [
+						new Paragraph({
+							children: [], // Empty children array is the correct minimal structure
+						})
+					]
+				}]
+			});
+
+			// Generate buffer and validate it
+			this.logService.info('[createEmptyDOCX] Starting Packer.toBuffer()...');
+			const buffer = await Packer.toBuffer(doc);
+
+			// Verify buffer integrity
+			this.logService.info(`[createEmptyDOCX] Buffer created - Type: ${buffer.constructor.name}, Size: ${buffer.length} bytes`);
+			this.logService.info(`[createEmptyDOCX] Is Buffer? ${Buffer.isBuffer(buffer)}`);
+
+			// Check for valid ZIP signature (first 4 bytes should be 50 4B 03 04)
+			if (buffer.length >= 4) {
+				const zipSignature = buffer.slice(0, 4);
+				const isValidZip = zipSignature[0] === 0x50 && zipSignature[1] === 0x4B;
+				this.logService.info(`[createEmptyDOCX] Valid ZIP signature: ${isValidZip} (${Array.from(zipSignature.slice(0, 4)).map(b => '0x' + b.toString(16).toUpperCase()).join(' ')})`);
+
+				if (!isValidZip) {
+					throw new Error(`Invalid ZIP signature in buffer. Expected 0x50 0x4B, got ${Array.from(zipSignature.slice(0, 2)).map(b => '0x' + b.toString(16)).join(' ')}`);
+				}
+			} else {
+				throw new Error(`Buffer too small: ${buffer.length} bytes. Expected minimum 1200 bytes for valid DOCX.`);
+			}
+
+			// Expected size range: 1200-2000 bytes for minimal empty DOCX
+			if (buffer.length < 1000) {
+				this.logService.warn(`[createEmptyDOCX] Buffer size (${buffer.length} bytes) is smaller than expected (1200-2000 bytes). File may be incomplete.`);
+			}
+
+			// Write to disk
+			const filepath = this.getFilePath(uri);
+			this.logService.info(`[createEmptyDOCX] Writing ${buffer.length} bytes to: ${filepath}`);
+			writeFileSync(filepath, buffer);
+
+			// Verify file was written correctly
+			const { statSync } = await import('fs');
+			const stats = statSync(filepath);
+			this.logService.info(`[createEmptyDOCX] File written successfully. Disk size: ${stats.size} bytes`);
+
+			if (stats.size !== buffer.length) {
+				throw new Error(`File size mismatch! Buffer: ${buffer.length} bytes, Disk: ${stats.size} bytes`);
+			}
+
+			if (stats.size === 0) {
+				throw new Error(`Created file is 0 bytes! This indicates a writeFileSync failure.`);
+			}
+
+			this.logService.info(`[createEmptyDOCX] ✅ Successfully created valid DOCX file: ${filepath} (${stats.size} bytes)`);
+		} catch (error) {
+			this.logService.error(`[createEmptyDOCX] ❌ Failed to create empty DOCX file:`, error);
+			throw new Error(`Failed to create DOCX file: ${error.message}`);
+		}
+	}
+
+	/**
+	 * Create an empty but valid XLSX file
+	 */
+	async createEmptyXLSX(uri: URI): Promise<void> {
+		try {
+			const XLSX = await import('xlsx');
+			const { writeFileSync } = await import('fs');
+
+			// Create a minimal valid XLSX workbook
+			const workbook = XLSX.utils.book_new();
+			const worksheet = XLSX.utils.aoa_to_sheet([[]]); // Empty sheet
+			XLSX.utils.book_append_sheet(workbook, worksheet, 'Sheet1');
+
+			// Write the XLSX
+			const filepath = this.getFilePath(uri);
+			const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+			writeFileSync(filepath, buffer);
+
+			this.logService.info(`Created empty XLSX file: ${filepath}`);
+		} catch (error) {
+			this.logService.error(`Failed to create empty XLSX file:`, error);
+			throw new Error(`Failed to create XLSX file: ${error.message}`);
+		}
 	}
 }

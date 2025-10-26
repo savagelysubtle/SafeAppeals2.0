@@ -1,4 +1,4 @@
-import { URI } from '../../../../base/common/uri.js'
+import { URI } from '../../../../base/common/uri.js';
 import { RawMCPToolCall } from './mcpServiceTypes.js';
 import { builtinTools } from './prompt/prompts.js';
 import { RawToolParamsObj } from './sendLLMMessageTypes.js';
@@ -23,6 +23,7 @@ export const approvalTypeOfBuiltinToolName: Partial<{ [T in BuiltinToolName]?: '
 	'delete_file_or_folder': 'edits',
 	'rewrite_file': 'edits',
 	'edit_file': 'edits',
+	'edit_document': 'edits',
 	'run_command': 'terminal',
 	'run_persistent_command': 'terminal',
 	'open_persistent_terminal': 'terminal',
@@ -60,6 +61,7 @@ export type BuiltinToolCallParams = {
 	'edit_file': { uri: URI, searchReplaceBlocks: string },
 	'create_file_or_folder': { uri: URI, isFolder: boolean },
 	'delete_file_or_folder': { uri: URI, isRecursive: boolean, isFolder: boolean },
+	'edit_document': { uri: URI, operations: Array<{ type: string;[key: string]: any }> },
 	// ---
 	'run_command': { command: string; cwd: string | null, terminalId: string },
 	'open_persistent_terminal': { cwd: string | null },
@@ -86,6 +88,7 @@ export type BuiltinToolResultType = {
 	'edit_file': Promise<{ lintErrors: LintErrorItem[] | null }>,
 	'create_file_or_folder': {},
 	'delete_file_or_folder': {},
+	'edit_document': { success: boolean, error?: string, message?: string },
 	// ---
 	'run_command': { result: string; resolveReason: TerminalResolveReason; },
 	'run_persistent_command': { result: string; resolveReason: TerminalResolveReason; },
