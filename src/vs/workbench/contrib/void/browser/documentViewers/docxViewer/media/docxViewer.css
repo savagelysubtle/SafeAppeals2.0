@@ -1,0 +1,369 @@
+/* DOCX Viewer CSS */
+
+body {
+	margin: 0;
+	padding: 0;
+	overflow: hidden;
+	height: 100vh;
+	display: flex;
+	flex-direction: column;
+	background-color: var(--vscode-editor-background);
+	color: var(--vscode-editor-foreground);
+	font-family: var(--vscode-font-family);
+}
+
+#docx-toolbar {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 8px 12px;
+	background-color: var(--vscode-editorGroupHeader-tabsBackground);
+	border-bottom: 1px solid var(--vscode-panel-border);
+	flex-shrink: 0;
+}
+
+#docx-toolbar button {
+	padding: 6px 12px;
+	background-color: var(--vscode-button-secondaryBackground);
+	color: var(--vscode-button-secondaryForeground);
+	border: none;
+	border-radius: 4px;
+	cursor: pointer;
+	font-size: 13px;
+	font-family: var(--vscode-font-family);
+	transition: background-color 0.1s;
+}
+
+#docx-toolbar button:hover {
+	background-color: var(--vscode-button-secondaryHoverBackground);
+}
+
+#docx-toolbar button:active {
+	background-color: var(--vscode-button-background);
+}
+
+#docx-toolbar button:disabled {
+	opacity: 0.5;
+	cursor: not-allowed;
+}
+
+#status-text {
+	margin-left: auto;
+	font-size: 12px;
+	color: var(--vscode-descriptionForeground);
+}
+
+/* Ribbon toolbar styling */
+#docx-ribbon {
+	display: flex;
+	gap: 16px;
+	padding: 8px 12px;
+	background-color: var(--vscode-editorGroupHeader-tabsBackground);
+	border-bottom: 1px solid var(--vscode-panel-border);
+	flex-wrap: wrap;
+	align-items: center;
+	flex-shrink: 0;
+}
+
+.ribbon-group {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	padding: 4px 8px;
+	border-right: 1px solid var(--vscode-panel-border);
+}
+
+.ribbon-group:last-child {
+	border-right: none;
+}
+
+.ribbon-group label {
+	font-size: 10px;
+	color: var(--vscode-descriptionForeground);
+	margin-right: 4px;
+	font-weight: 600;
+	text-transform: uppercase;
+}
+
+.ribbon-group select {
+	padding: 4px 8px;
+	background-color: var(--vscode-dropdown-background);
+	color: var(--vscode-dropdown-foreground);
+	border: 1px solid var(--vscode-dropdown-border);
+	border-radius: 4px;
+	cursor: pointer;
+	font-size: 12px;
+	font-family: var(--vscode-font-family);
+}
+
+.ribbon-group select:hover {
+	background-color: var(--vscode-dropdown-listBackground);
+}
+
+.ribbon-group .format-btn {
+	min-width: 32px;
+	height: 28px;
+	padding: 4px 8px;
+	background-color: var(--vscode-button-secondaryBackground);
+	color: var(--vscode-button-secondaryForeground);
+	border: none;
+	border-radius: 4px;
+	cursor: pointer;
+	font-size: 14px;
+	font-weight: bold;
+	transition: background-color 0.1s;
+}
+
+.ribbon-group .format-btn:hover {
+	background-color: var(--vscode-button-secondaryHoverBackground);
+}
+
+.ribbon-group .format-btn:active,
+.ribbon-group .format-btn.active {
+	background-color: var(--vscode-button-background);
+	color: var(--vscode-button-foreground);
+}
+
+.ribbon-group input[type="color"] {
+	width: 32px;
+	height: 28px;
+	border: 1px solid var(--vscode-panel-border);
+	border-radius: 4px;
+	cursor: pointer;
+	background: transparent;
+	padding: 2px;
+}
+
+.ribbon-group input[type="color"]::-webkit-color-swatch-wrapper {
+	padding: 2px;
+}
+
+.ribbon-group input[type="color"]::-webkit-color-swatch {
+	border: none;
+	border-radius: 2px;
+}
+
+#docx-container {
+	flex: 1;
+	overflow: auto;
+	padding: 20px;
+	background-color: var(--vscode-editor-background);
+}
+
+/* DOCX content styling */
+.docx-wrapper {
+	max-width: 800px;
+	margin: 0 auto;
+	background: var(--vscode-editor-background);
+	padding: 40px;
+	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+	min-height: calc(100vh - 100px);
+	cursor: text;
+}
+
+/* Show cursor when hovering over editable content */
+.docx-editable:hover {
+	background-color: var(--vscode-input-background);
+}
+
+.docx-editable:focus-within {
+	outline: 2px solid var(--vscode-focusBorder);
+	outline-offset: 2px;
+}
+
+.docx {
+	line-height: 1.6;
+	font-size: 14px;
+}
+
+.docx p {
+	margin: 0 0 12px 0;
+}
+
+.docx h1 {
+	font-size: 2em;
+	margin: 0.67em 0;
+	font-weight: bold;
+}
+
+.docx h2 {
+	font-size: 1.5em;
+	margin: 0.75em 0;
+	font-weight: bold;
+}
+
+.docx h3 {
+	font-size: 1.17em;
+	margin: 0.83em 0;
+	font-weight: bold;
+}
+
+.docx-editable {
+	outline: none;
+}
+
+.docx-editable:focus {
+	background-color: var(--vscode-editor-selectionBackground);
+}
+
+/* Table styling */
+.docx table {
+	border-collapse: collapse;
+	width: 100%;
+	margin: 12px 0;
+}
+
+.docx table td,
+.docx table th {
+	border: 1px solid var(--vscode-panel-border);
+	padding: 8px;
+}
+
+.docx table th {
+	background-color: var(--vscode-editorGroupHeader-tabsBackground);
+	font-weight: bold;
+}
+
+/* List styling */
+.docx ul,
+.docx ol {
+	margin: 12px 0;
+	padding-left: 30px;
+}
+
+.docx li {
+	margin: 4px 0;
+}
+
+/* Selection styling */
+::selection {
+	background-color: var(--vscode-editor-selectionBackground);
+	color: var(--vscode-editor-selectionForeground);
+}
+
+/* Scrollbar styling */
+#docx-container::-webkit-scrollbar {
+	width: 14px;
+	height: 14px;
+}
+
+#docx-container::-webkit-scrollbar-thumb {
+	background-color: var(--vscode-scrollbarSlider-background);
+	border-radius: 7px;
+}
+
+#docx-container::-webkit-scrollbar-thumb:hover {
+	background-color: var(--vscode-scrollbarSlider-hoverBackground);
+}
+
+#docx-container::-webkit-scrollbar-track {
+	background-color: var(--vscode-editor-background);
+}
+
+/* Page break styling */
+.page-break {
+	border-top: 2px dashed var(--vscode-panel-border);
+	margin: 20px 0;
+	padding: 10px 0;
+	text-align: center;
+	color: var(--vscode-descriptionForeground);
+	page-break-after: always;
+	user-select: none;
+	cursor: default;
+	position: relative;
+	background-color: var(--vscode-editor-background);
+}
+
+.page-break span {
+	background-color: var(--vscode-editor-background);
+	padding: 0 10px;
+	font-size: 11px;
+	text-transform: uppercase;
+	letter-spacing: 0.5px;
+}
+
+.page-break hr {
+	border: none;
+	border-top: 2px dashed var(--vscode-panel-border);
+	margin: 0;
+}
+
+/* Margins dialog styling */
+.margins-dialog {
+	position: fixed;
+	top: 0;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	background-color: rgba(0, 0, 0, 0.5);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	z-index: 1000;
+}
+
+.dialog-content {
+	background-color: var(--vscode-editor-background);
+	border: 1px solid var(--vscode-panel-border);
+	border-radius: 6px;
+	padding: 24px;
+	min-width: 320px;
+	box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+}
+
+.dialog-content h3 {
+	margin: 0 0 16px 0;
+	font-size: 16px;
+	color: var(--vscode-editor-foreground);
+}
+
+.dialog-content label {
+	display: block;
+	margin-bottom: 12px;
+	font-size: 13px;
+	color: var(--vscode-editor-foreground);
+}
+
+.dialog-content input[type="number"] {
+	width: 80px;
+	padding: 6px 8px;
+	background-color: var(--vscode-input-background);
+	color: var(--vscode-input-foreground);
+	border: 1px solid var(--vscode-input-border);
+	border-radius: 4px;
+	margin-left: 8px;
+	font-size: 13px;
+	font-family: var(--vscode-font-family);
+}
+
+.dialog-content input[type="number"]:focus {
+	outline: 1px solid var(--vscode-focusBorder);
+	outline-offset: 0;
+}
+
+.dialog-content button {
+	padding: 8px 16px;
+	background-color: var(--vscode-button-background);
+	color: var(--vscode-button-foreground);
+	border: none;
+	border-radius: 4px;
+	cursor: pointer;
+	font-size: 13px;
+	font-family: var(--vscode-font-family);
+	margin-top: 16px;
+	margin-right: 8px;
+	transition: background-color 0.1s;
+}
+
+.dialog-content button:hover {
+	background-color: var(--vscode-button-hoverBackground);
+}
+
+.dialog-content button#cancel-margins {
+	background-color: var(--vscode-button-secondaryBackground);
+	color: var(--vscode-button-secondaryForeground);
+}
+
+.dialog-content button#cancel-margins:hover {
+	background-color: var(--vscode-button-secondaryHoverBackground);
+}

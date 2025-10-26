@@ -1,0 +1,104 @@
+# Enhanced Drag-and-Drop Implementation Plan
+
+## ✅ Phase 1: COMPLETED (Ready to Test!)
+
+- [x] Add imports for getPathForFile and DataTransfers to SidebarChat.tsx
+- [x] Add logic to handle DataTransfers.RESOURCES for VSCode Explorer drags
+- [x] Replace (file as any).path with getPathForFile() utility
+- [x] Implement collectFilesFromFolder helper and integrate into handleDrop
+- [x] Handle text/uri-list format as fallback for edge cases
+- [x] Add file size checks (1MB warning, 50MB max)
+- [x] Add confirmation dialogs for 10+ files
+- [x] Basic file filtering (node_modules, .git, dist, build, etc.)
+- [x] VSCode notifications for success/errors/warnings
+- [x] Update drag overlay to show folder-specific messages and file counts
+
+## 🧪 Phase 2: TESTING (Do This First!)
+
+Test all scenarios:
+
+- [x ] Drag single file from Windows Explorer → Void Chat
+- [ ] Drag multiple files from Windows Explorer → Void Chat
+- [ ] Drag folder from Windows Explorer → Void Chat
+- [ ] Drag single file from VSCode Explorer → Void Chat
+- [ ] Drag multiple files from VSCode Explorer → Void Chat
+- [ ] Drag folder from VSCode Explorer → Void Chat
+- [ ] Test file size warnings (>1MB file)
+- [ ] Test file size rejection (>50MB file)
+- [ ] Test confirmation dialog (>10 files)
+- [ ] Test filtering (drop node_modules folder, should be filtered)
+- [ ] Test notifications appear correctly
+
+## 🚀 Phase 3: Advanced VSCode Integration (After Testing)
+
+Based on Perplexity research - integrate with real VSCode configuration:
+
+### 3.1 Configuration Service Integration
+
+- [ ] Access IConfigurationService in component
+- [ ] Read `files.exclude` patterns from VSCode settings
+- [ ] Read `search.exclude` patterns from VSCode settings
+- [ ] Watch for configuration changes and update patterns
+- [ ] Merge user patterns with our hardcoded defaults
+
+### 3.2 Workspace Service Integration
+
+- [ ] Access IWorkspaceContextService
+- [ ] Read `.gitignore` files from workspace folders
+- [ ] Parse `.gitignore` patterns correctly
+- [ ] Check `explorer.excludeGitIgnore` setting
+- [ ] Support global gitignore files if enabled
+
+### 3.3 Pattern Matching Enhancement
+
+- [ ] Research VSCode's internal pattern matching (glob library used)
+- [ ] Replace simple string matching with proper glob matching
+- [ ] Support conditional patterns like `{"when": "$(basename).ts"}`
+- [ ] Handle dot files properly (`.` prefix files)
+- [ ] Support `matchBase` option for basename matching
+
+### 3.4 Advanced Features
+
+- [ ] Add "Show Filtered Files" option in confirmation dialog
+- [ ] Implement file type filtering (only code files)
+- [ ] Add workspace-relative path display in notifications
+- [ ] Support dragging from other VSCode panels (Search results, etc.)
+- [ ] Progress bar for very large folder operations (>100 files)
+
+## 📝 Implementation Notes
+
+### Key Research Findings Applied:
+
+1. **VSCode Internal Access**: We're inside VSCode, not an extension, so we can use IConfigurationService, IWorkspaceContextService directly
+
+2. **Configuration Reading Pattern**:
+
+```typescript
+const configService = accessor.get("IConfigurationService");
+const filesExclude =
+	configService.getValue<Record<string, boolean>>("files.exclude");
+```
+
+3. **Pattern Matching**: VSCode uses glob patterns, need proper library (minimatch or VSCode's internal)
+
+4. **Multiple Exclusion Sources**:
+   - `files.exclude` - UI Explorer exclusions
+   - `search.exclude` - Search-specific exclusions
+   - `.gitignore` - Git exclusions (if enabled)
+   - Global ignore files (user-specific)
+
+### Current Limitations to Address:
+
+1. **Hardcoded patterns**: Currently using fixed list, need dynamic from config
+2. **Simple string matching**: Need proper glob pattern matching
+3. **No .gitignore support**: Should read and parse .gitignore files
+4. **No config watching**: Should update when user changes settings
+
+## 🎯 Success Metrics
+
+- ✅ Drop node_modules folder → Files filtered out automatically
+- ✅ Drop project folder → Only source files added, build artifacts skipped
+- ✅ Change files.exclude in settings → Filtering updates immediately
+- ✅ Large file warning appears for >1MB files
+- ✅ Confirmation dialog for >10 files with details about filtered files
+- ✅ All drag sources work: external file manager, VSCode Explorer, text/uri-list

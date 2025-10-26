@@ -1,0 +1,734 @@
+import { timeout } from '../../../../base/common/async.js';
+import { CancellationToken } from '../../../../base/common/cancellation.js';
+import { URI } from '../../../../base/common/uri.js';
+import { generateUuid } from '../../../../base/common/uuid.js';
+import { registerSingleton } from '../../../../platform/instantiation/common/extensions.js';
+import { createDecorator } from '../../../../platform/instantiation/common/instantiation.js';
+import { MarkerSeverity } from '../../../../platform/markers/common/markers.js';
+import { QueryBuilder } from '../../../services/search/common/queryBuilder.js';
+import { computeDirectoryTree1Deep, stringifyDirectoryTree1Deep } from '../common/directoryStrService.js';
+import { MAX_CHILDREN_URIs_PAGE, MAX_FILE_CHARS_PAGE, MAX_TERMINAL_BG_COMMAND_TIME, MAX_TERMINAL_INACTIVE_TIME } from '../common/prompt/prompts.js';
+import { RAGContextService } from '../common/ragContextService.js';
+const isFalsy = (u) => {
+    return !u || u === 'null' || u === 'undefined';
+};
+const validateStr = (argName, value) => {
+    if (value === null)
+        throw new Error(`Invalid LLM output: ${argName} was null.`);
+    if (typeof value !== 'string')
+        throw new Error(`Invalid LLM output format: ${argName} must be a string, but its type is "${typeof value}". Full value: ${JSON.stringify(value)}.`);
+    return value;
+};
+// We are NOT checking to make sure in workspace
+const validateURI = (uriStr) => {
+    if (uriStr === null)
+        throw new Error(`Invalid LLM output: uri was null.`);
+    if (typeof uriStr !== 'string')
+        throw new Error(`Invalid LLM output format: Provided uri must be a string, but it's a(n) ${typeof uriStr}. Full value: ${JSON.stringify(uriStr)}.`);
+    // Check if it's already a full URI with scheme (e.g., vscode-remote://, file://, etc.)
+    // Look for :// pattern which indicates a scheme is present
+    // Examples of supported URIs:
+    // - vscode-remote://wsl+Ubuntu/home/user/file.txt (WSL)
+    // - vscode-remote://ssh-remote+myserver/home/user/file.txt (SSH)
+    // - file:///home/user/file.txt (local file with scheme)
+    // - /home/user/file.txt (local file path, will be converted to file://)
+    // - C:\Users\file.txt (Windows local path, will be converted to file://)
+    if (uriStr.includes('://')) {
+        try {
+            const uri = URI.parse(uriStr);
+            return uri;
+        }
+        catch (e) {
+            // If parsing fails, it's a malformed URI
+            throw new Error(`Invalid URI format: ${uriStr}. Error: ${e}`);
+        }
+    }
+    else {
+        // No scheme present, treat as file path
+        // This handles regular file paths like /home/user/file.txt or C:\Users\file.txt
+        const uri = URI.file(uriStr);
+        return uri;
+    }
+};
+const validateOptionalURI = (uriStr) => {
+    if (isFalsy(uriStr))
+        return null;
+    return validateURI(uriStr);
+};
+const validateOptionalStr = (argName, str) => {
+    if (isFalsy(str))
+        return null;
+    return validateStr(argName, str);
+};
+const validatePageNum = (pageNumberUnknown) => {
+    if (!pageNumberUnknown)
+        return 1;
+    const parsedInt = Number.parseInt(pageNumberUnknown + '');
+    if (!Number.isInteger(parsedInt))
+        throw new Error(`Page number was not an integer: "${pageNumberUnknown}".`);
+    if (parsedInt < 1)
+        throw new Error(`Invalid LLM output format: Specified page number must be 1 or greater: "${pageNumberUnknown}".`);
+    return parsedInt;
+};
+const validateNumber = (numStr, opts) => {
+    if (typeof numStr === 'number')
+        return numStr;
+    if (isFalsy(numStr))
+        return opts.default;
+    if (typeof numStr === 'string') {
+        const parsedInt = Number.parseInt(numStr + '');
+        if (!Number.isInteger(parsedInt))
+            return opts.default;
+        return parsedInt;
+    }
+    return opts.default;
+};
+const validateBoolean = (b, opts) => {
+    if (typeof b === 'string') {
+        if (b === 'true')
+            return true;
+        if (b === 'false')
+            return false;
+    }
+    if (typeof b === 'boolean') {
+        return b;
+    }
+    return opts.default;
+};
+const validateProposedTerminalId = (terminalIdUnknown) => {
+    if (typeof terminalIdUnknown !== 'string')
+        throw new Error(`Invalid LLM output format: persistentTerminalId must be a string, but its type is "${typeof terminalIdUnknown}".`);
+    return terminalIdUnknown;
+};
+const checkIfIsFolder = (uriStr) => {
+    uriStr = uriStr.trim();
+    if (uriStr.endsWith('/') || uriStr.endsWith('\\'))
+        return true;
+    return false;
+};
+export const IToolsService = createDecorator('ToolsService');
+export class ToolsService {
+    terminalToolService;
+    commandBarService;
+    directoryStrService;
+    markerService;
+    voidSettingsService;
+    ragService;
+    documentViewerService;
+    documentEditorService;
+    _serviceBrand;
+    validateParams;
+    callTool;
+    stringOfResult;
+    constructor(fileService, workspaceContextService, searchService, instantiationService, voidModelService, editCodeService, terminalToolService, commandBarService, directoryStrService, markerService, voidSettingsService, ragService, documentViewerService, documentEditorService) {
+        this.terminalToolService = terminalToolService;
+        this.commandBarService = commandBarService;
+        this.directoryStrService = directoryStrService;
+        this.markerService = markerService;
+        this.voidSettingsService = voidSettingsService;
+        this.ragService = ragService;
+        this.documentViewerService = documentViewerService;
+        this.documentEditorService = documentEditorService;
+        const queryBuilder = instantiationService.createInstance(QueryBuilder);
+        this.validateParams = {
+            read_file: (params) => {
+                const { uri: uriStr, start_line: startLineUnknown, end_line: endLineUnknown, page_number: pageNumberUnknown } = params;
+                const uri = validateURI(uriStr);
+                const pageNumber = validatePageNum(pageNumberUnknown);
+                let startLine = validateNumber(startLineUnknown, { default: null });
+                let endLine = validateNumber(endLineUnknown, { default: null });
+                if (startLine !== null && startLine < 1)
+                    startLine = null;
+                if (endLine !== null && endLine < 1)
+                    endLine = null;
+                return { uri, startLine, endLine, pageNumber };
+            },
+            ls_dir: (params) => {
+                const { uri: uriStr, page_number: pageNumberUnknown } = params;
+                const uri = validateURI(uriStr);
+                const pageNumber = validatePageNum(pageNumberUnknown);
+                return { uri, pageNumber };
+            },
+            get_dir_tree: (params) => {
+                const { uri: uriStr, } = params;
+                const uri = validateURI(uriStr);
+                return { uri };
+            },
+            search_pathnames_only: (params) => {
+                const { query: queryUnknown, search_in_folder: includeUnknown, page_number: pageNumberUnknown } = params;
+                const queryStr = validateStr('query', queryUnknown);
+                const pageNumber = validatePageNum(pageNumberUnknown);
+                const includePattern = validateOptionalStr('include_pattern', includeUnknown);
+                return { query: queryStr, includePattern, pageNumber };
+            },
+            search_for_files: (params) => {
+                const { query: queryUnknown, search_in_folder: searchInFolderUnknown, is_regex: isRegexUnknown, page_number: pageNumberUnknown } = params;
+                const queryStr = validateStr('query', queryUnknown);
+                const pageNumber = validatePageNum(pageNumberUnknown);
+                const searchInFolder = validateOptionalURI(searchInFolderUnknown);
+                const isRegex = validateBoolean(isRegexUnknown, { default: false });
+                return {
+                    query: queryStr,
+                    isRegex,
+                    searchInFolder,
+                    pageNumber
+                };
+            },
+            search_in_file: (params) => {
+                const { uri: uriStr, query: queryUnknown, is_regex: isRegexUnknown } = params;
+                const uri = validateURI(uriStr);
+                const query = validateStr('query', queryUnknown);
+                const isRegex = validateBoolean(isRegexUnknown, { default: false });
+                return { uri, query, isRegex };
+            },
+            read_lint_errors: (params) => {
+                const { uri: uriUnknown, } = params;
+                const uri = validateURI(uriUnknown);
+                return { uri };
+            },
+            // ---
+            create_file_or_folder: (params) => {
+                const { uri: uriUnknown } = params;
+                const uri = validateURI(uriUnknown);
+                const uriStr = validateStr('uri', uriUnknown);
+                const isFolder = checkIfIsFolder(uriStr);
+                return { uri, isFolder };
+            },
+            delete_file_or_folder: (params) => {
+                const { uri: uriUnknown, is_recursive: isRecursiveUnknown } = params;
+                const uri = validateURI(uriUnknown);
+                const isRecursive = validateBoolean(isRecursiveUnknown, { default: false });
+                const uriStr = validateStr('uri', uriUnknown);
+                const isFolder = checkIfIsFolder(uriStr);
+                return { uri, isRecursive, isFolder };
+            },
+            rewrite_file: (params) => {
+                const { uri: uriStr, new_content: newContentUnknown } = params;
+                const uri = validateURI(uriStr);
+                const newContent = validateStr('newContent', newContentUnknown);
+                return { uri, newContent };
+            },
+            edit_file: (params) => {
+                const { uri: uriStr, search_replace_blocks: searchReplaceBlocksUnknown } = params;
+                const uri = validateURI(uriStr);
+                const searchReplaceBlocks = validateStr('searchReplaceBlocks', searchReplaceBlocksUnknown);
+                return { uri, searchReplaceBlocks };
+            },
+            // ---
+            run_command: (params) => {
+                const { command: commandUnknown, cwd: cwdUnknown } = params;
+                const command = validateStr('command', commandUnknown);
+                const cwd = validateOptionalStr('cwd', cwdUnknown);
+                const terminalId = generateUuid();
+                return { command, cwd, terminalId };
+            },
+            run_persistent_command: (params) => {
+                const { command: commandUnknown, persistent_terminal_id: persistentTerminalIdUnknown } = params;
+                const command = validateStr('command', commandUnknown);
+                const persistentTerminalId = validateProposedTerminalId(persistentTerminalIdUnknown);
+                return { command, persistentTerminalId };
+            },
+            open_persistent_terminal: (params) => {
+                const { cwd: cwdUnknown } = params;
+                const cwd = validateOptionalStr('cwd', cwdUnknown);
+                // No parameters needed; will open a new background terminal
+                return { cwd };
+            },
+            kill_persistent_terminal: (params) => {
+                const { persistent_terminal_id: terminalIdUnknown } = params;
+                const persistentTerminalId = validateProposedTerminalId(terminalIdUnknown);
+                return { persistentTerminalId };
+            },
+            // --- RAG tools
+            rag_index_document: (params) => {
+                const { uri: uriStr, is_policy_manual: isPolicyManualUnknown } = params;
+                const uri = validateURI(uriStr);
+                const isPolicyManual = validateBoolean(isPolicyManualUnknown, { default: false });
+                return { uri, isPolicyManual };
+            },
+            rag_search_policy: (params) => {
+                const { query: queryUnknown, limit: limitUnknown } = params;
+                const query = validateStr('query', queryUnknown);
+                const limit = validateNumber(limitUnknown, { default: 8 }) || 8; // Increased default for MMR diversity
+                return { query, limit };
+            },
+            rag_search_workspace: (params) => {
+                const { query: queryUnknown, limit: limitUnknown } = params;
+                const query = validateStr('query', queryUnknown);
+                const limit = validateNumber(limitUnknown, { default: 8 }) || 8; // Increased default for MMR diversity
+                return { query, limit };
+            },
+            rag_get_stats: (params) => {
+                return {};
+            },
+            edit_document: (params) => {
+                const { uri: uriStr, operations: operationsUnknown } = params;
+                const uri = validateURI(uriStr);
+                // Handle case where operations is sent as a JSON string (common LLM mistake)
+                let operationsArray;
+                if (typeof operationsUnknown === 'string') {
+                    try {
+                        operationsArray = JSON.parse(operationsUnknown);
+                        if (!Array.isArray(operationsArray)) {
+                            throw new Error('Parsed value is not an array');
+                        }
+                    }
+                    catch (parseError) {
+                        console.error('[edit_document] Failed to parse operations string:', operationsUnknown);
+                        throw new Error(`Invalid LLM output: operations is a string but not valid JSON. Send operations as a JSON array directly, not as a string.`);
+                    }
+                }
+                else if (Array.isArray(operationsUnknown)) {
+                    operationsArray = operationsUnknown;
+                }
+                else {
+                    console.error('[edit_document] Invalid operations format. Expected array, got:', typeof operationsUnknown, operationsUnknown);
+                    throw new Error(`Invalid LLM output: operations must be a JSON array. Received: ${typeof operationsUnknown}. Example: [{"type": "insert_text", "position": 0, "text": "Hello"}]`);
+                }
+                // Validate each operation has required fields
+                const operations = operationsArray.map((op, index) => {
+                    if (!op.type) {
+                        console.error(`[edit_document] Invalid operation at index ${index}: missing type field`, op);
+                        throw new Error(`Invalid operation at index ${index}: missing "type" field. Each operation must have {"type": "...", ...}`);
+                    }
+                    return op;
+                });
+                return { uri, operations };
+            },
+        };
+        this.callTool = {
+            read_file: async ({ uri, startLine, endLine, pageNumber }) => {
+                // Check if this is a document file (DOCX, XLSX, PDF, etc.)
+                if (this.documentViewerService.isDocumentFile(uri)) {
+                    const content = await this.documentViewerService.getTextContent(uri);
+                    if (content !== null) {
+                        const totalFileLen = content.length;
+                        const totalNumLines = content.split('\n').length;
+                        // Apply pagination
+                        const fromIdx = MAX_FILE_CHARS_PAGE * (pageNumber - 1);
+                        const toIdx = MAX_FILE_CHARS_PAGE * pageNumber - 1;
+                        const fileContents = content.slice(fromIdx, toIdx + 1);
+                        const hasNextPage = (content.length - 1) - toIdx >= 1;
+                        return { result: { fileContents, totalFileLen, hasNextPage, totalNumLines } };
+                    }
+                    // If extraction failed, fall through to regular file handling
+                }
+                // Regular text file handling
+                await voidModelService.initializeModel(uri);
+                const { model } = await voidModelService.getModelSafe(uri);
+                if (model === null) {
+                    throw new Error(`No contents; File does not exist.`);
+                }
+                let contents;
+                if (startLine === null && endLine === null) {
+                    contents = model.getValue(1 /* EndOfLinePreference.LF */);
+                }
+                else {
+                    const startLineNumber = startLine === null ? 1 : startLine;
+                    const endLineNumber = endLine === null ? model.getLineCount() : endLine;
+                    contents = model.getValueInRange({ startLineNumber, startColumn: 1, endLineNumber, endColumn: Number.MAX_SAFE_INTEGER }, 1 /* EndOfLinePreference.LF */);
+                }
+                const totalNumLines = model.getLineCount();
+                const fromIdx = MAX_FILE_CHARS_PAGE * (pageNumber - 1);
+                const toIdx = MAX_FILE_CHARS_PAGE * pageNumber - 1;
+                const fileContents = contents.slice(fromIdx, toIdx + 1); // paginate
+                const hasNextPage = (contents.length - 1) - toIdx >= 1;
+                const totalFileLen = contents.length;
+                return { result: { fileContents, totalFileLen, hasNextPage, totalNumLines } };
+            },
+            ls_dir: async ({ uri, pageNumber }) => {
+                const dirResult = await computeDirectoryTree1Deep(fileService, uri, pageNumber);
+                return { result: dirResult };
+            },
+            get_dir_tree: async ({ uri }) => {
+                const str = await this.directoryStrService.getDirectoryStrTool(uri);
+                return { result: { str } };
+            },
+            search_pathnames_only: async ({ query: queryStr, includePattern, pageNumber }) => {
+                const query = queryBuilder.file(workspaceContextService.getWorkspace().folders.map(f => f.uri), {
+                    filePattern: queryStr,
+                    includePattern: includePattern ?? undefined,
+                    sortByScore: true, // makes results 10x better
+                });
+                const data = await searchService.fileSearch(query, CancellationToken.None);
+                const fromIdx = MAX_CHILDREN_URIs_PAGE * (pageNumber - 1);
+                const toIdx = MAX_CHILDREN_URIs_PAGE * pageNumber - 1;
+                const uris = data.results
+                    .slice(fromIdx, toIdx + 1) // paginate
+                    .map(({ resource, results }) => resource);
+                const hasNextPage = (data.results.length - 1) - toIdx >= 1;
+                return { result: { uris, hasNextPage } };
+            },
+            search_for_files: async ({ query: queryStr, isRegex, searchInFolder, pageNumber }) => {
+                const searchFolders = searchInFolder === null ?
+                    workspaceContextService.getWorkspace().folders.map(f => f.uri)
+                    : [searchInFolder];
+                const query = queryBuilder.text({
+                    pattern: queryStr,
+                    isRegExp: isRegex,
+                }, searchFolders);
+                const data = await searchService.textSearch(query, CancellationToken.None);
+                const fromIdx = MAX_CHILDREN_URIs_PAGE * (pageNumber - 1);
+                const toIdx = MAX_CHILDREN_URIs_PAGE * pageNumber - 1;
+                const uris = data.results
+                    .slice(fromIdx, toIdx + 1) // paginate
+                    .map(({ resource, results }) => resource);
+                const hasNextPage = (data.results.length - 1) - toIdx >= 1;
+                return { result: { queryStr, uris, hasNextPage } };
+            },
+            search_in_file: async ({ uri, query, isRegex }) => {
+                await voidModelService.initializeModel(uri);
+                const { model } = await voidModelService.getModelSafe(uri);
+                if (model === null) {
+                    throw new Error(`No contents; File does not exist.`);
+                }
+                const contents = model.getValue(1 /* EndOfLinePreference.LF */);
+                const contentOfLine = contents.split('\n');
+                const totalLines = contentOfLine.length;
+                const regex = isRegex ? new RegExp(query) : null;
+                const lines = [];
+                for (let i = 0; i < totalLines; i++) {
+                    const line = contentOfLine[i];
+                    if ((isRegex && regex.test(line)) || (!isRegex && line.includes(query))) {
+                        const matchLine = i + 1;
+                        lines.push(matchLine);
+                    }
+                }
+                return { result: { lines } };
+            },
+            read_lint_errors: async ({ uri }) => {
+                await timeout(1000);
+                const { lintErrors } = this._getLintErrors(uri);
+                return { result: { lintErrors } };
+            },
+            // ---
+            create_file_or_folder: async ({ uri, isFolder }) => {
+                if (isFolder)
+                    await fileService.createFolder(uri);
+                else {
+                    await fileService.createFile(uri);
+                }
+                return { result: {} };
+            },
+            delete_file_or_folder: async ({ uri, isRecursive }) => {
+                await fileService.del(uri, { recursive: isRecursive });
+                return { result: {} };
+            },
+            rewrite_file: async ({ uri, newContent }) => {
+                // Check if this is a document file (DOCX, XLSX, etc.)
+                if (this.documentViewerService.isDocumentFile(uri)) {
+                    throw new Error(`Cannot use rewrite_file on document files (DOCX, XLSX, etc.). Please use the edit_document tool instead to modify document files.`);
+                }
+                await voidModelService.initializeModel(uri);
+                if (this.commandBarService.getStreamState(uri) === 'streaming') {
+                    throw new Error(`Another LLM is currently making changes to this file. Please stop streaming for now and ask the user to resume later.`);
+                }
+                await editCodeService.callBeforeApplyOrEdit(uri);
+                editCodeService.instantlyRewriteFile({ uri, newContent });
+                // at end, get lint errors
+                const lintErrorsPromise = Promise.resolve().then(async () => {
+                    await timeout(2000);
+                    const { lintErrors } = this._getLintErrors(uri);
+                    return { lintErrors };
+                });
+                return { result: lintErrorsPromise };
+            },
+            edit_file: async ({ uri, searchReplaceBlocks }) => {
+                // Check if this is a document file (DOCX, XLSX, etc.)
+                if (this.documentViewerService.isDocumentFile(uri)) {
+                    throw new Error(`Cannot use edit_file on document files (DOCX, XLSX, etc.). Please use the edit_document tool instead to modify document files.`);
+                }
+                await voidModelService.initializeModel(uri);
+                if (this.commandBarService.getStreamState(uri) === 'streaming') {
+                    throw new Error(`Another LLM is currently making changes to this file. Please stop streaming for now and ask the user to resume later.`);
+                }
+                await editCodeService.callBeforeApplyOrEdit(uri);
+                editCodeService.instantlyApplySearchReplaceBlocks({ uri, searchReplaceBlocks });
+                // at end, get lint errors
+                const lintErrorsPromise = Promise.resolve().then(async () => {
+                    await timeout(2000);
+                    const { lintErrors } = this._getLintErrors(uri);
+                    return { lintErrors };
+                });
+                return { result: lintErrorsPromise };
+            },
+            // ---
+            run_command: async ({ command, cwd, terminalId }) => {
+                const { resPromise, interrupt } = await this.terminalToolService.runCommand(command, { type: 'temporary', cwd, terminalId });
+                return { result: resPromise, interruptTool: interrupt };
+            },
+            run_persistent_command: async ({ command, persistentTerminalId }) => {
+                const { resPromise, interrupt } = await this.terminalToolService.runCommand(command, { type: 'persistent', persistentTerminalId });
+                return { result: resPromise, interruptTool: interrupt };
+            },
+            open_persistent_terminal: async ({ cwd }) => {
+                const persistentTerminalId = await this.terminalToolService.createPersistentTerminal({ cwd });
+                return { result: { persistentTerminalId } };
+            },
+            kill_persistent_terminal: async ({ persistentTerminalId }) => {
+                // Close the background terminal by sending exit
+                await this.terminalToolService.killPersistentTerminal(persistentTerminalId);
+                return { result: {} };
+            },
+            // --- RAG tools
+            rag_index_document: async ({ uri, isPolicyManual }) => {
+                try {
+                    // CRITICAL: Check if document is already indexed to avoid duplicate costs
+                    const isAlreadyIndexed = await this.ragService.isDocumentIndexed(uri);
+                    if (isAlreadyIndexed) {
+                        return {
+                            result: {
+                                success: true,
+                                message: `Document already indexed (skipped to avoid duplicate costs): ${uri.fsPath || uri.path}`
+                            }
+                        };
+                    }
+                    // Document not indexed yet, proceed with indexing
+                    const result = await this.ragService.indexDocument({ uri, isPolicyManual });
+                    return { result };
+                }
+                catch (error) {
+                    return { result: { success: false, message: `Failed to index document: ${error.message}` } };
+                }
+            },
+            rag_search_policy: async ({ query, limit }) => {
+                try {
+                    const contextPack = await this.ragService.search({
+                        query,
+                        scope: 'policy_manual',
+                        limit
+                    });
+                    const contextService = new RAGContextService();
+                    const formatted = contextService.formatContextPack(contextPack);
+                    // Add helpful metadata about the search
+                    const enhancedResult = contextPack.totalResults === 0
+                        ? `No relevant documents found for query: "${query}"\n\nTry:\n- Using different search terms\n- Checking if documents are indexed with rag_get_stats\n- Indexing policy documents first`
+                        : `Found ${contextPack.totalResults} relevant chunks (after MMR re-ranking and filtering):\n\n${formatted}`;
+                    return { result: { contextPack: enhancedResult } };
+                }
+                catch (error) {
+                    return { result: { contextPack: `Search failed: ${error.message}` } };
+                }
+            },
+            rag_search_workspace: async ({ query, limit }) => {
+                try {
+                    const contextPack = await this.ragService.search({
+                        query,
+                        scope: 'workspace_docs',
+                        limit
+                    });
+                    const contextService = new RAGContextService();
+                    const formatted = contextService.formatContextPack(contextPack);
+                    // Add helpful metadata about the search
+                    const enhancedResult = contextPack.totalResults === 0
+                        ? `No relevant documents found for query: "${query}"\n\nTry:\n- Using different search terms\n- Checking if documents are indexed with rag_get_stats\n- Indexing workspace documents first`
+                        : `Found ${contextPack.totalResults} relevant chunks (after MMR re-ranking and filtering):\n\n${formatted}`;
+                    return { result: { contextPack: enhancedResult } };
+                }
+                catch (error) {
+                    return { result: { contextPack: `Search failed: ${error.message}` } };
+                }
+            },
+            rag_get_stats: async () => {
+                try {
+                    const stats = await this.ragService.getStats();
+                    const hasContent = stats.totalDocuments > 0;
+                    const statsStr = hasContent
+                        ? `RAG Index Status: ✓ Active
+
+📊 Statistics:
+• Total Documents: ${stats.totalDocuments}
+• Total Size: ${(stats.totalSize / 1024 / 1024).toFixed(2)} MB
+• Total Chunks: ${stats.chunks.totalChunks}
+• Average Tokens per Chunk: ${stats.chunks.avgTokens}
+
+📁 Documents by Type:
+${stats.documents.map(d => `  • ${d.filetype}: ${d.typeCount} files (${(d.totalSize / 1024 / 1024).toFixed(2)} MB)`).join('\n')}
+
+💡 Search Tips:
+- Use rag_search_policy for policy manual queries
+- Use rag_search_workspace for workspace document queries
+- Be specific with search terms for better results
+- Increase limit (8-10) for complex topics`
+                        : `RAG Index Status: ⚠️ Empty
+
+No documents indexed yet. To get started:
+1. Use rag_index_document to index PDFs or documents
+2. For policy manuals: set is_policy_manual to true
+3. For workspace docs: set is_policy_manual to false
+
+Example: rag_index_document with uri="/path/to/document.pdf" and is_policy_manual=true`;
+                    return { result: { stats: statsStr } };
+                }
+                catch (error) {
+                    return { result: { stats: `Failed to get stats: ${error.message}` } };
+                }
+            },
+            edit_document: async ({ uri, operations }) => {
+                try {
+                    const fileExt = uri.path.toLowerCase().split('.').pop();
+                    if (fileExt === 'docx') {
+                        const result = await this.documentEditorService.editDOCX({ uri, operations: operations });
+                        return { result };
+                    }
+                    else if (fileExt === 'xlsx' || fileExt === 'xls') {
+                        const result = await this.documentEditorService.editXLSX({ uri, operations: operations });
+                        return { result };
+                    }
+                    else {
+                        return {
+                            result: {
+                                success: false,
+                                error: `Unsupported file type: ${fileExt}. Only DOCX and XLSX files are supported.`
+                            }
+                        };
+                    }
+                }
+                catch (error) {
+                    return {
+                        result: {
+                            success: false,
+                            error: `Failed to edit document: ${error.message}`
+                        }
+                    };
+                }
+            },
+        };
+        const nextPageStr = (hasNextPage) => hasNextPage ? '\n\n(more on next page...)' : '';
+        const stringifyLintErrors = (lintErrors) => {
+            return lintErrors
+                .map((e, i) => `Error ${i + 1}:\nLines Affected: ${e.startLineNumber}-${e.endLineNumber}\nError message:${e.message}`)
+                .join('\n\n')
+                .substring(0, MAX_FILE_CHARS_PAGE);
+        };
+        // given to the LLM after the call for successful tool calls
+        this.stringOfResult = {
+            read_file: (params, result) => {
+                return `${params.uri.fsPath}\n\`\`\`\n${result.fileContents}\n\`\`\`${nextPageStr(result.hasNextPage)}${result.hasNextPage ? `\nMore info because truncated: this file has ${result.totalNumLines} lines, or ${result.totalFileLen} characters.` : ''}`;
+            },
+            ls_dir: (params, result) => {
+                const dirTreeStr = stringifyDirectoryTree1Deep(params, result);
+                return dirTreeStr; // + nextPageStr(result.hasNextPage) // already handles num results remaining
+            },
+            get_dir_tree: (params, result) => {
+                return result.str;
+            },
+            search_pathnames_only: (params, result) => {
+                return result.uris.map(uri => uri.fsPath).join('\n') + nextPageStr(result.hasNextPage);
+            },
+            search_for_files: (params, result) => {
+                return result.uris.map(uri => uri.fsPath).join('\n') + nextPageStr(result.hasNextPage);
+            },
+            search_in_file: (params, result) => {
+                const { model } = voidModelService.getModel(params.uri);
+                if (!model)
+                    return '<Error getting string of result>';
+                const lines = result.lines.map(n => {
+                    const lineContent = model.getValueInRange({ startLineNumber: n, startColumn: 1, endLineNumber: n, endColumn: Number.MAX_SAFE_INTEGER }, 1 /* EndOfLinePreference.LF */);
+                    return `Line ${n}:\n\`\`\`\n${lineContent}\n\`\`\``;
+                }).join('\n\n');
+                return lines;
+            },
+            read_lint_errors: (params, result) => {
+                return result.lintErrors ?
+                    stringifyLintErrors(result.lintErrors)
+                    : 'No lint errors found.';
+            },
+            // ---
+            create_file_or_folder: (params, result) => {
+                return `URI ${params.uri.fsPath} successfully created.`;
+            },
+            delete_file_or_folder: (params, result) => {
+                return `URI ${params.uri.fsPath} successfully deleted.`;
+            },
+            edit_file: (params, result) => {
+                const lintErrsString = (this.voidSettingsService.state.globalSettings.includeToolLintErrors ?
+                    (result.lintErrors ? ` Lint errors found after change:\n${stringifyLintErrors(result.lintErrors)}.\nIf this is related to a change made while calling this tool, you might want to fix the error.`
+                        : ` No lint errors found.`)
+                    : '');
+                return `Change successfully made to ${params.uri.fsPath}.${lintErrsString}`;
+            },
+            rewrite_file: (params, result) => {
+                const lintErrsString = (this.voidSettingsService.state.globalSettings.includeToolLintErrors ?
+                    (result.lintErrors ? ` Lint errors found after change:\n${stringifyLintErrors(result.lintErrors)}.\nIf this is related to a change made while calling this tool, you might want to fix the error.`
+                        : ` No lint errors found.`)
+                    : '');
+                return `Change successfully made to ${params.uri.fsPath}.${lintErrsString}`;
+            },
+            run_command: (params, result) => {
+                const { resolveReason, result: result_, } = result;
+                // success
+                if (resolveReason.type === 'done') {
+                    return `${result_}\n(exit code ${resolveReason.exitCode})`;
+                }
+                // normal command
+                if (resolveReason.type === 'timeout') {
+                    return `${result_}\nTerminal command ran, but was automatically killed by Void after ${MAX_TERMINAL_INACTIVE_TIME}s of inactivity and did not finish successfully. To try with more time, open a persistent terminal and run the command there.`;
+                }
+                throw new Error(`Unexpected internal error: Terminal command did not resolve with a valid reason.`);
+            },
+            run_persistent_command: (params, result) => {
+                const { resolveReason, result: result_, } = result;
+                const { persistentTerminalId } = params;
+                // success
+                if (resolveReason.type === 'done') {
+                    return `${result_}\n(exit code ${resolveReason.exitCode})`;
+                }
+                // bg command
+                if (resolveReason.type === 'timeout') {
+                    return `${result_}\nTerminal command is running in terminal ${persistentTerminalId}. The given outputs are the results after ${MAX_TERMINAL_BG_COMMAND_TIME} seconds.`;
+                }
+                throw new Error(`Unexpected internal error: Terminal command did not resolve with a valid reason.`);
+            },
+            open_persistent_terminal: (_params, result) => {
+                const { persistentTerminalId } = result;
+                return `Successfully created persistent terminal. persistentTerminalId="${persistentTerminalId}"`;
+            },
+            kill_persistent_terminal: (params, _result) => {
+                return `Successfully closed terminal "${params.persistentTerminalId}".`;
+            },
+            // --- RAG tools
+            rag_index_document: (params, result) => {
+                if (result.success) {
+                    return `Successfully indexed document: ${params.uri.fsPath}\n${result.message}`;
+                }
+                else {
+                    return `Failed to index document: ${params.uri.fsPath}\n${result.message}`;
+                }
+            },
+            rag_search_policy: (_params, result) => {
+                return result.contextPack;
+            },
+            rag_search_workspace: (_params, result) => {
+                return result.contextPack;
+            },
+            rag_get_stats: (_params, result) => {
+                return result.stats;
+            },
+            edit_document: (params, result) => {
+                if (result.success) {
+                    return result.message || `Successfully edited document: ${params.uri.fsPath}\nOperations applied: ${params.operations.length}`;
+                }
+                else {
+                    return `Failed to edit document: ${params.uri.fsPath}\nError: ${result.error}`;
+                }
+            },
+        };
+    }
+    _getLintErrors(uri) {
+        const lintErrors = this.markerService
+            .read({ resource: uri })
+            .filter(l => l.severity === MarkerSeverity.Error || l.severity === MarkerSeverity.Warning)
+            .slice(0, 100)
+            .map(l => ({
+            code: typeof l.code === 'string' ? l.code : l.code?.value || '',
+            message: (l.severity === MarkerSeverity.Error ? '(error) ' : '(warning) ') + l.message,
+            startLineNumber: l.startLineNumber,
+            endLineNumber: l.endLineNumber,
+        }));
+        if (!lintErrors.length)
+            return { lintErrors: null };
+        return { lintErrors, };
+    }
+}
+registerSingleton(IToolsService, ToolsService, 0 /* InstantiationType.Eager */);
