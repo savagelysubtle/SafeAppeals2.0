@@ -27,6 +27,14 @@ export interface ChunkRecord {
 	chunkIndex: number;
 	embedding?: Float32Array;
 	tokens?: number;
+	// Hierarchical chunking metadata
+	sectionId?: string;        // e.g., "policy.eligibility.3.2.1"
+	parentSection?: string;    // e.g., "policy.eligibility"
+	sectionNumber?: string;    // e.g., "3.2.1"
+	sectionTitle?: string;     // e.g., "Age Requirements"
+	breadcrumbPath?: string[]; // e.g., ["Policy Manual", "Eligibility", "Age Requirements"]
+	chunkType?: 'child' | 'parent'; // Child (300 tokens) or parent (800 tokens)
+	parentChunkId?: string;    // Reference to parent chunk for context
 }
 
 export interface PolicySection {

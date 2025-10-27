@@ -1,6 +1,6 @@
 ---
 description: Apply system, DiffZones, and code editing mechanisms
-globs: src/vs/workbench/contrib/void/browser/editCodeService.ts,src/vs/workbench/contrib/void/browser/*Apply*
+globs: src/vs/workbench/contrib/void/browser/editCodeService.ts,src/vs/workbench/contrib/void/browser/*
 ---
 
 # Void Apply System
