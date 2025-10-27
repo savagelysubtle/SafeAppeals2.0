@@ -339,10 +339,10 @@ const ReasoningOptionSlider = ({
 				<span className="text-void-fg-3 text-xs pointer-events-none inline-block w-10 pr-1">
 					Thinking
 				</span>
-			<VoidSwitch
+				<VoidSwitch
 					size="xxs"
-				value={isReasoningEnabled}
-				onChange={(newVal) => {
+					value={isReasoningEnabled}
+					onChange={(newVal) => {
 						const isOff = canTurnOffReasoning && !newVal;
 						voidSettingsService.setOptionsOfModelSelection(
 							featureName,
@@ -350,9 +350,9 @@ const ReasoningOptionSlider = ({
 							modelSelection.modelName,
 							{ reasoningEnabled: !isOff }
 						);
-				}}
-			/>
-		</div>
+					}}
+				/>
+			</div>
 		);
 	}
 
@@ -376,14 +376,14 @@ const ReasoningOptionSlider = ({
 				<span className="text-void-fg-3 text-xs pointer-events-none inline-block w-10 pr-1">
 					Thinking
 				</span>
-			<VoidSlider
-				width={50}
+				<VoidSlider
+					width={50}
 					size="xs"
-				min={min}
-				max={max}
-				step={stepSize}
-				value={value}
-				onChange={(newVal) => {
+					min={min}
+					max={max}
+					step={stepSize}
+					value={value}
+					onChange={(newVal) => {
 						const isOff = canTurnOffReasoning && newVal === valueIfOff;
 						voidSettingsService.setOptionsOfModelSelection(
 							featureName,
@@ -396,7 +396,7 @@ const ReasoningOptionSlider = ({
 				<span className="text-void-fg-3 text-xs pointer-events-none">
 					{isReasoningEnabled ? `${value} tokens` : "Thinking disabled"}
 				</span>
-		</div>
+			</div>
 		);
 	}
 
@@ -424,14 +424,14 @@ const ReasoningOptionSlider = ({
 				<span className="text-void-fg-3 text-xs pointer-events-none inline-block w-10 pr-1">
 					Thinking
 				</span>
-			<VoidSlider
-				width={30}
+				<VoidSlider
+					width={30}
 					size="xs"
-				min={min}
-				max={max}
-				step={1}
-				value={value}
-				onChange={(newVal) => {
+					min={min}
+					max={max}
+					step={1}
+					value={value}
+					onChange={(newVal) => {
 						const isOff = canTurnOffReasoning && newVal === valueIfOff;
 						voidSettingsService.setOptionsOfModelSelection(
 							featureName,
@@ -449,7 +449,7 @@ const ReasoningOptionSlider = ({
 						? `${currentEffortCapitalized}`
 						: "Thinking disabled"}
 				</span>
-		</div>
+			</div>
 		);
 	}
 
@@ -457,15 +457,15 @@ const ReasoningOptionSlider = ({
 };
 
 const nameOfChatMode = {
-	normal: "Chat",
-	gather: "Gather",
-	agent: "Agent",
+	drafting: "Drafting",
+	research: "Research",
+	case_manager: "Case Manager",
 };
 
 const detailOfChatMode = {
-	normal: "Normal chat",
-	gather: "Reads files, but can't edit",
-	agent: "Edits files and uses tools",
+	drafting: "Interactive document creation with guidance",
+	research: "Deep policy and case document analysis",
+	case_manager: "Proactive case workflow management",
 };
 
 const ChatModeDropdown = ({ className }: { className: string }) => {
@@ -474,7 +474,10 @@ const ChatModeDropdown = ({ className }: { className: string }) => {
 	const voidSettingsService = accessor.get("IVoidSettingsService");
 	const settingsState = useSettingsState();
 
-	const options: ChatMode[] = useMemo(() => ["normal", "gather", "agent"], []);
+	const options: ChatMode[] = useMemo(
+		() => ["drafting", "research", "case_manager"],
+		[]
+	);
 
 	const onChangeOption = useCallback(
 		(newVal: ChatMode) => {
@@ -485,15 +488,15 @@ const ChatModeDropdown = ({ className }: { className: string }) => {
 
 	return (
 		<VoidCustomDropdownBox
-		className={className}
-		options={options}
-		selectedOption={settingsState.globalSettings.chatMode}
-		onChangeOption={onChangeOption}
-		getOptionDisplayName={(val) => nameOfChatMode[val]}
-		getOptionDropdownName={(val) => nameOfChatMode[val]}
-		getOptionDropdownDetail={(val) => detailOfChatMode[val]}
-		getOptionsEqual={(a, b) => a === b}
-	/>
+			className={className}
+			options={options}
+			selectedOption={settingsState.globalSettings.chatMode}
+			onChangeOption={onChangeOption}
+			getOptionDisplayName={(val) => nameOfChatMode[val]}
+			getOptionDropdownName={(val) => nameOfChatMode[val]}
+			getOptionDropdownDetail={(val) => detailOfChatMode[val]}
+			getOptionsEqual={(a, b) => a === b}
+		/>
 	);
 };
 
@@ -555,49 +558,53 @@ export const VoidChatArea: React.FC<VoidChatAreaProps> = ({
 
 	// Common exclusion patterns (like .gitignore)
 	const shouldExcludeFile = (uri: URI): boolean => {
-		const path = uri.fsPath.toLowerCase();
+		const path = uri.fsPath;
 		const excludePatterns = [
-			'node_modules',
-			'.git',
-			'.vscode',
-			'.idea',
-			'__pycache__',
-			'.pytest_cache',
-			'.venv',
-			'venv',
-			'dist',
-			'build',
-			'out',
-			'target',
-			'.next',
-			'.nuxt',
-			'.cache',
-			'coverage',
-			'.nyc_output',
-			'*.pyc',
-			'*.pyo',
-			'*.class',
-			'*.dll',
-			'*.exe',
-			'*.o',
-			'*.so',
+			"node_modules",
+			".git",
+			".vscode",
+			".idea",
+			"__pycache__",
+			".pytest_cache",
+			".venv",
+			"venv",
+			"*.pyc",
+			"*.pyo",
+			"*.class",
+			"*.dll",
+			"*.exe",
+			"*.o",
+			"*.so",
 		];
 
-		// Check if path contains any excluded pattern
-		return excludePatterns.some(pattern => {
-			if (pattern.startsWith('*.')) {
-				// Handle file extension patterns
-				const ext = pattern.substring(1);
-				return path.endsWith(ext);
+		// Check if path contains any excluded pattern as a complete directory name
+		return excludePatterns.some((pattern) => {
+			if (pattern.startsWith("*.")) {
+				// Handle file extension patterns - exact match only
+				const ext = pattern.substring(1).toLowerCase();
+				return path.toLowerCase().endsWith(ext);
 			}
-			// Check if any path segment matches the pattern
+
+			// Split path into segments
 			const segments = path.split(/[/\\]/);
-			return segments.some(segment => segment === pattern || segment.startsWith(pattern + '.'));
+
+			// Check if any directory segment exactly matches the pattern
+			// Don't match partial filenames
+			for (let i = 0; i < segments.length - 1; i++) {
+				// Exclude last segment (filename)
+				if (segments[i] === pattern) {
+					return true;
+				}
+			}
+
+			return false;
 		});
 	};
 
 	// Check file size and warn if too large
-	const checkFileSize = async (uri: URI): Promise<{ isValid: boolean; size: number }> => {
+	const checkFileSize = async (
+		uri: URI
+	): Promise<{ isValid: boolean; size: number }> => {
 		try {
 			const stat = await fileService.stat(uri);
 			const sizeInMB = stat.size / (1024 * 1024);
@@ -615,7 +622,7 @@ export const VoidChatArea: React.FC<VoidChatAreaProps> = ({
 
 			return { isValid: true, size: sizeInMB };
 		} catch (err) {
-			console.error('Error checking file size:', err);
+			console.error("Error checking file size:", err);
 			return { isValid: true, size: 0 };
 		}
 	};
@@ -624,7 +631,11 @@ export const VoidChatArea: React.FC<VoidChatAreaProps> = ({
 	const collectFilesFromFolder = async (
 		folderUri: URI,
 		maxFiles: number = 50
-	): Promise<{ uris: URI[]; skippedCount: number; largeFilesSkipped: number }> => {
+	): Promise<{
+		uris: URI[];
+		skippedCount: number;
+		largeFilesSkipped: number;
+	}> => {
 		const fileUris: URI[] = [];
 		let skippedCount = 0;
 		let largeFilesSkipped = 0;
@@ -633,7 +644,7 @@ export const VoidChatArea: React.FC<VoidChatAreaProps> = ({
 			const entries = await fileService.resolve(folderUri, {
 				resolveMetadata: true,
 			});
-			
+
 			if (entries.children) {
 				for (const child of entries.children) {
 					// Stop if we've reached the max file limit
@@ -671,7 +682,7 @@ export const VoidChatArea: React.FC<VoidChatAreaProps> = ({
 		} catch (err) {
 			console.error("Error reading folder:", err);
 		}
-		
+
 		return { uris: fileUris, skippedCount, largeFilesSkipped };
 	};
 
@@ -685,7 +696,7 @@ export const VoidChatArea: React.FC<VoidChatAreaProps> = ({
 		const newSelections: StagingSelectionItem[] = [];
 		const MAX_FILES = 50; // Limit to prevent performance issues
 		const CONFIRMATION_THRESHOLD = 10; // Show confirmation for more than 10 files
-		
+
 		let totalFilesProcessed = 0;
 		let totalSkipped = 0;
 		let totalLargeFilesSkipped = 0;
@@ -719,25 +730,30 @@ export const VoidChatArea: React.FC<VoidChatAreaProps> = ({
 								uri,
 								MAX_FILES - newSelections.length
 							);
-							
+
 							totalSkipped += result.skippedCount;
 							totalLargeFilesSkipped += result.largeFilesSkipped;
 
 							// Show confirmation if many files
 							if (result.uris.length >= CONFIRMATION_THRESHOLD) {
-								const folderName = uri.fsPath.split(/[/\\]/).pop() || 'folder';
+								const folderName = uri.fsPath.split(/[/\\]/).pop() || "folder";
 								const response = await dialogService.confirm({
 									message: `Add ${result.uris.length} files from "${folderName}"?`,
-									detail: totalSkipped > 0 
-										? `${totalSkipped} files were filtered out (node_modules, build artifacts, etc.)${totalLargeFilesSkipped > 0 ? `\n${totalLargeFilesSkipped} files skipped (>50MB)` : ''}`
-										: totalLargeFilesSkipped > 0 
+									detail:
+										totalSkipped > 0
+											? `${totalSkipped} files were filtered out (node_modules, build artifacts, etc.)${
+													totalLargeFilesSkipped > 0
+														? `\n${totalLargeFilesSkipped} files skipped (>50MB)`
+														: ""
+											  }`
+											: totalLargeFilesSkipped > 0
 											? `${totalLargeFilesSkipped} files skipped (>50MB)`
 											: undefined,
-									type: 'question',
+									type: "question",
 								});
 
 								if (!response.confirmed) {
-									notificationService.info('File drop cancelled');
+									notificationService.info("File drop cancelled");
 									return;
 								}
 							}
@@ -755,7 +771,11 @@ export const VoidChatArea: React.FC<VoidChatAreaProps> = ({
 							// Check file size for single files
 							const sizeCheck = await checkFileSize(uri);
 							if (!sizeCheck.isValid) {
-								notificationService.warn(`File too large: ${uri.fsPath} (${sizeCheck.size.toFixed(2)}MB, max 50MB)`);
+								notificationService.warn(
+									`File too large: ${uri.fsPath} (${sizeCheck.size.toFixed(
+										2
+									)}MB, max 50MB)`
+								);
 								continue;
 							}
 
@@ -807,22 +827,30 @@ export const VoidChatArea: React.FC<VoidChatAreaProps> = ({
 									uri,
 									MAX_FILES - newSelections.length
 								);
-								
+
 								totalSkipped += result.skippedCount;
 								totalLargeFilesSkipped += result.largeFilesSkipped;
 
 								if (result.uris.length >= CONFIRMATION_THRESHOLD) {
-									const folderName = uri.fsPath.split(/[/\\]/).pop() || 'folder';
+									const folderName =
+										uri.fsPath.split(/[/\\]/).pop() || "folder";
 									const response = await dialogService.confirm({
 										message: `Add ${result.uris.length} files from "${folderName}"?`,
-										detail: totalSkipped > 0 
-											? `${totalSkipped} files were filtered out${totalLargeFilesSkipped > 0 ? `, ${totalLargeFilesSkipped} files skipped (>50MB)` : ''}`
-											: totalLargeFilesSkipped > 0 ? `${totalLargeFilesSkipped} files skipped (>50MB)` : undefined,
-										type: 'question',
+										detail:
+											totalSkipped > 0
+												? `${totalSkipped} files were filtered out${
+														totalLargeFilesSkipped > 0
+															? `, ${totalLargeFilesSkipped} files skipped (>50MB)`
+															: ""
+												  }`
+												: totalLargeFilesSkipped > 0
+												? `${totalLargeFilesSkipped} files skipped (>50MB)`
+												: undefined,
+										type: "question",
 									});
 
 									if (!response.confirmed) {
-										notificationService.info('File drop cancelled');
+										notificationService.info("File drop cancelled");
 										return;
 									}
 								}
@@ -839,7 +867,11 @@ export const VoidChatArea: React.FC<VoidChatAreaProps> = ({
 							} else {
 								const sizeCheck = await checkFileSize(uri);
 								if (!sizeCheck.isValid) {
-									notificationService.warn(`File too large: ${uri.fsPath} (${sizeCheck.size.toFixed(2)}MB)`);
+									notificationService.warn(
+										`File too large: ${uri.fsPath} (${sizeCheck.size.toFixed(
+											2
+										)}MB)`
+									);
 									continue;
 								}
 
@@ -888,22 +920,29 @@ export const VoidChatArea: React.FC<VoidChatAreaProps> = ({
 								uri,
 								MAX_FILES - newSelections.length
 							);
-							
+
 							totalSkipped += result.skippedCount;
 							totalLargeFilesSkipped += result.largeFilesSkipped;
 
 							if (result.uris.length >= CONFIRMATION_THRESHOLD) {
-								const folderName = uri.fsPath.split(/[/\\]/).pop() || 'folder';
+								const folderName = uri.fsPath.split(/[/\\]/).pop() || "folder";
 								const response = await dialogService.confirm({
 									message: `Add ${result.uris.length} files from "${folderName}"?`,
-									detail: totalSkipped > 0 
-										? `${totalSkipped} files were filtered out${totalLargeFilesSkipped > 0 ? `, ${totalLargeFilesSkipped} files skipped (>50MB)` : ''}`
-										: totalLargeFilesSkipped > 0 ? `${totalLargeFilesSkipped} files skipped (>50MB)` : undefined,
-									type: 'question',
+									detail:
+										totalSkipped > 0
+											? `${totalSkipped} files were filtered out${
+													totalLargeFilesSkipped > 0
+														? `, ${totalLargeFilesSkipped} files skipped (>50MB)`
+														: ""
+											  }`
+											: totalLargeFilesSkipped > 0
+											? `${totalLargeFilesSkipped} files skipped (>50MB)`
+											: undefined,
+									type: "question",
 								});
 
 								if (!response.confirmed) {
-									notificationService.info('File drop cancelled');
+									notificationService.info("File drop cancelled");
 									return;
 								}
 							}
@@ -921,7 +960,11 @@ export const VoidChatArea: React.FC<VoidChatAreaProps> = ({
 							// Check file size
 							const sizeCheck = await checkFileSize(uri);
 							if (!sizeCheck.isValid) {
-								notificationService.warn(`File too large: ${file.name} (${sizeCheck.size.toFixed(2)}MB, max 50MB)`);
+								notificationService.warn(
+									`File too large: ${file.name} (${sizeCheck.size.toFixed(
+										2
+									)}MB, max 50MB)`
+								);
 								continue;
 							}
 
@@ -950,19 +993,23 @@ export const VoidChatArea: React.FC<VoidChatAreaProps> = ({
 				if (totalSkipped > 0 || totalLargeFilesSkipped > 0) {
 					const details = [];
 					if (totalSkipped > 0) details.push(`${totalSkipped} filtered`);
-					if (totalLargeFilesSkipped > 0) details.push(`${totalLargeFilesSkipped} too large`);
-					message += ` (${details.join(', ')})`;
+					if (totalLargeFilesSkipped > 0)
+						details.push(`${totalLargeFilesSkipped} too large`);
+					message += ` (${details.join(", ")})`;
 				}
 				notificationService.info(message);
 
-				console.log(`Added ${newSelections.length} file(s), skipped ${totalSkipped}, ${totalLargeFilesSkipped} too large`);
+				console.log(
+					`Added ${newSelections.length} file(s), skipped ${totalSkipped}, ${totalLargeFilesSkipped} too large`
+				);
 			} else {
-				const reason = totalSkipped > 0 
-					? `All ${totalSkipped} files were filtered out (node_modules, build artifacts, etc.)`
-					: totalLargeFilesSkipped > 0 
+				const reason =
+					totalSkipped > 0
+						? `All ${totalSkipped} files were filtered out (node_modules, build artifacts, etc.)`
+						: totalLargeFilesSkipped > 0
 						? `All files were too large (>50MB)`
-						: 'No valid files or folders found in drop event';
-				
+						: "No valid files or folders found in drop event";
+
 				notificationService.warn(reason);
 				console.warn(reason);
 			}
@@ -1125,17 +1172,17 @@ export const ButtonSubmit = ({
 	return (
 		<button
 			type="button"
-		className={`rounded-full flex-shrink-0 flex-grow-0 flex items-center justify-center
+			className={`rounded-full flex-shrink-0 flex-grow-0 flex items-center justify-center
 			${disabled ? "bg-vscode-disabled-fg cursor-default" : "bg-white cursor-pointer"}
 			${className}
 		`}
-		// data-tooltip-id='void-tooltip'
-		// data-tooltip-content={'Send'}
-		// data-tooltip-place='left'
-		{...props}
-	>
-		<IconArrowUp size={DEFAULT_BUTTON_SIZE} className="stroke-[2] p-[2px]" />
-	</button>
+			// data-tooltip-id='void-tooltip'
+			// data-tooltip-content={'Send'}
+			// data-tooltip-place='left'
+			{...props}
+		>
+			<IconArrowUp size={DEFAULT_BUTTON_SIZE} className="stroke-[2] p-[2px]" />
+		</button>
 	);
 };
 
@@ -1145,15 +1192,15 @@ export const ButtonStop = ({
 }: ButtonHTMLAttributes<HTMLButtonElement>) => {
 	return (
 		<button
-		className={`rounded-full flex-shrink-0 flex-grow-0 cursor-pointer flex items-center justify-center
+			className={`rounded-full flex-shrink-0 flex-grow-0 cursor-pointer flex items-center justify-center
 			bg-white
 			${className}
 		`}
 			type="button"
-		{...props}
-	>
-		<IconSquare size={DEFAULT_BUTTON_SIZE} className="stroke-[3] p-[7px]" />
-	</button>
+			{...props}
+		>
+			<IconSquare size={DEFAULT_BUTTON_SIZE} className="stroke-[3] p-[7px]" />
+		</button>
 	);
 };
 
@@ -1408,20 +1455,20 @@ export const SelectedFiles = ({
 
 				return (
 					<div // container for summarybox and code
-					key={thisKey}
-					className={`flex flex-col space-y-[1px]`}
-				>
-					{/* tooltip for file path */}
+						key={thisKey}
+						className={`flex flex-col space-y-[1px]`}
+					>
+						{/* tooltip for file path */}
 						<span
 							className="truncate overflow-hidden text-ellipsis"
 							data-tooltip-id="void-tooltip"
-						data-tooltip-content={getRelative(selection.uri, accessor)}
+							data-tooltip-content={getRelative(selection.uri, accessor)}
 							data-tooltip-place="top"
-						data-tooltip-delay-show={3000}
-					>
-						{/* summarybox */}
-						<div
-							className={`
+							data-tooltip-delay-show={3000}
+						>
+							{/* summarybox */}
+							<div
+								className={`
 								flex items-center gap-1 relative
 								px-1
 								w-fit h-fit
@@ -1437,19 +1484,19 @@ export const SelectedFiles = ({
 								hover:border-void-border-1
 								transition-all duration-150
 							`}
-							onClick={() => {
+								onClick={() => {
 									if (type !== "staging") return; // (never)
 									if (isThisSelectionProspective) {
 										// add prospective selection to selections
 										setSelections([...selections, selection]);
 									} else if (selection.type === "File") {
 										// open files
-									voidOpenFileFn(selection.uri, accessor);
+										voidOpenFileFn(selection.uri, accessor);
 
 										const wasAddedAsCurrentFile =
 											selection.state.wasAddedAsCurrentFile;
-									if (wasAddedAsCurrentFile) {
-										// make it so the file is added permanently, not just as the current file
+										if (wasAddedAsCurrentFile) {
+											// make it so the file is added permanently, not just as the current file
 											const newSelection: StagingSelectionItem = {
 												...selection,
 												state: {
@@ -1457,20 +1504,20 @@ export const SelectedFiles = ({
 													wasAddedAsCurrentFile: false,
 												},
 											};
-										setSelections([
-											...selections.slice(0, i),
-											newSelection,
+											setSelections([
+												...selections.slice(0, i),
+												newSelection,
 												...selections.slice(i + 1),
 											]);
-									}
+										}
 									} else if (selection.type === "CodeSelection") {
-									voidOpenFileFn(selection.uri, accessor, selection.range);
+										voidOpenFileFn(selection.uri, accessor, selection.range);
 									} else if (selection.type === "Folder") {
-									// TODO!!! reveal in tree
-								}
-							}}
-						>
-							{<SelectionIcon size={10} />}
+										// TODO!!! reveal in tree
+									}
+								}}
+							>
+								{<SelectionIcon size={10} />}
 
 								{
 									// file name and range
@@ -1487,15 +1534,15 @@ export const SelectedFiles = ({
 									<span
 										className={`text-[8px] 'void-opacity-60 text-void-fg-4`}
 									>
-									{`(Current File)`}
-								</span>
+										{`(Current File)`}
+									</span>
 								) : null}
 
 								{type === "staging" && !isThisSelectionProspective ? ( // X button
-								<div // box for making it easier to click
+									<div // box for making it easier to click
 										className="cursor-pointer z-1 self-stretch flex items-center justify-center"
-									onClick={(e) => {
-										e.stopPropagation(); // don't open/close selection
+										onClick={(e) => {
+											e.stopPropagation(); // don't open/close selection
 											if (type !== "staging") return;
 											setSelections([
 												...selections.slice(0, i),
@@ -1504,13 +1551,13 @@ export const SelectedFiles = ({
 										}}
 									>
 										<IconX className="stroke-[2]" size={10} />
-								</div>
+									</div>
 								) : (
 									<></>
 								)}
-						</div>
-					</span>
-				</div>
+							</div>
+						</span>
+					</div>
 				);
 			})}
 		</div>
@@ -1566,14 +1613,14 @@ const ToolHeaderWrapper = ({
 
 	const desc1HTML = (
 		<span
-		className={`text-void-fg-4 text-xs italic truncate ml-2
+			className={`text-void-fg-4 text-xs italic truncate ml-2
 			${
 				isDesc1Clickable
 					? "cursor-pointer hover:brightness-125 transition-all duration-150"
 					: ""
 			}
 		`}
-		onClick={desc1OnClick}
+			onClick={desc1OnClick}
 			{...(desc1Info
 				? {
 						"data-tooltip-id": "void-tooltip",
@@ -1592,18 +1639,18 @@ const ToolHeaderWrapper = ({
 			<div
 				className={`w-full border border-void-border-3 rounded px-2 py-1 bg-void-bg-3 overflow-hidden ${className}`}
 			>
-			{/* header */}
-			<div className={`select-none flex items-center min-h-[24px]`}>
+				{/* header */}
+				<div className={`select-none flex items-center min-h-[24px]`}>
 					<div
 						className={`flex items-center w-full gap-x-2 overflow-hidden justify-between ${
 							isRejected ? "line-through" : ""
 						}`}
 					>
-					{/* left */}
-					<div // container for if desc1 is clickable
+						{/* left */}
+						<div // container for if desc1 is clickable
 							className="ml-1 flex items-center overflow-hidden"
-					>
-						{/* title eg "> Edited File" */}
+						>
+							{/* title eg "> Edited File" */}
 							<div
 								className={`
 							flex items-center min-w-0 overflow-hidden grow
@@ -1613,7 +1660,7 @@ const ToolHeaderWrapper = ({
 									: ""
 							}
 						`}
-							onClick={() => {
+								onClick={() => {
 									if (isDropdown) {
 										setIsOpen((v) => !v);
 									}
@@ -1624,27 +1671,27 @@ const ToolHeaderWrapper = ({
 							>
 								{isDropdown && (
 									<ChevronRight
-								className={`
+										className={`
 								text-void-fg-3 mr-0.5 h-4 w-4 flex-shrink-0 transition-transform duration-100 ease-[cubic-bezier(0.4,0,0.2,1)]
 								${isExpanded ? "rotate-90" : ""}
 							`}
 									/>
 								)}
-							<span className="text-void-fg-3 flex-shrink-0">{title}</span>
+								<span className="text-void-fg-3 flex-shrink-0">{title}</span>
 
-							{!isDesc1Clickable && desc1HTML}
+								{!isDesc1Clickable && desc1HTML}
+							</div>
+							{isDesc1Clickable && desc1HTML}
 						</div>
-						{isDesc1Clickable && desc1HTML}
-					</div>
 
-					{/* right */}
-					<div className="flex items-center gap-x-2 flex-shrink-0">
+						{/* right */}
+						<div className="flex items-center gap-x-2 flex-shrink-0">
 							{info && (
 								<CircleEllipsis
 									className="ml-2 text-void-fg-4 opacity-60 flex-shrink-0"
-							size={14}
+									size={14}
 									data-tooltip-id="void-tooltip"
-							data-tooltip-content={info}
+									data-tooltip-content={info}
 									data-tooltip-place="top-end"
 								/>
 							)}
@@ -1652,7 +1699,7 @@ const ToolHeaderWrapper = ({
 							{isError && (
 								<AlertTriangle
 									className="text-void-warning opacity-90 flex-shrink-0"
-							size={14}
+									size={14}
 									data-tooltip-id="void-tooltip"
 									data-tooltip-content={"Error running tool"}
 									data-tooltip-place="top"
@@ -1661,7 +1708,7 @@ const ToolHeaderWrapper = ({
 							{isRejected && (
 								<Ban
 									className="text-void-fg-4 opacity-90 flex-shrink-0"
-							size={14}
+									size={14}
 									data-tooltip-id="void-tooltip"
 									data-tooltip-content={"Canceled"}
 									data-tooltip-place="top"
@@ -1669,20 +1716,20 @@ const ToolHeaderWrapper = ({
 							)}
 							{desc2 && (
 								<span className="text-void-fg-4 text-xs" onClick={desc2OnClick}>
-							{desc2}
+									{desc2}
 								</span>
 							)}
-						{numResults !== undefined && (
-							<span className="text-void-fg-4 text-xs ml-auto mr-1">
+							{numResults !== undefined && (
+								<span className="text-void-fg-4 text-xs ml-auto mr-1">
 									{`${numResults}${hasNextPage ? "+" : ""} result${
 										numResults !== 1 ? "s" : ""
 									}`}
-							</span>
-						)}
+								</span>
+							)}
+						</div>
 					</div>
 				</div>
-			</div>
-			{/* children */}
+				{/* children */}
 				{
 					<div
 						className={`overflow-hidden transition-all duration-200 ease-in-out ${
@@ -1690,13 +1737,13 @@ const ToolHeaderWrapper = ({
 						}
 					text-void-fg-4 rounded-sm overflow-x-auto
 				  `}
-			//    bg-black bg-opacity-10 border border-void-border-4 border-opacity-50
-			>
-				{children}
+						//    bg-black bg-opacity-10 border border-void-border-4 border-opacity-50
+					>
+						{children}
 					</div>
 				}
-		</div>
-		{bottomChildren}
+			</div>
+			{bottomChildren}
 		</div>
 	);
 };
@@ -1742,7 +1789,7 @@ const EditTool = ({
 		componentParams.children = (
 			<ToolChildrenWrapper className="bg-void-bg-3">
 				<EditToolChildren uri={params.uri} code={content} type={editToolType} />
-		</ToolChildrenWrapper>
+			</ToolChildrenWrapper>
 		);
 		// JumpToFileButton removed in favor of FileLinkText
 	} else if (
@@ -1758,32 +1805,32 @@ const EditTool = ({
 		});
 		componentParams.desc2 = (
 			<EditToolHeaderButtons
-			applyBoxId={applyBoxId}
-			uri={params.uri}
-			codeStr={content}
-			toolName={name}
-			threadId={threadId}
-		/>
+				applyBoxId={applyBoxId}
+				uri={params.uri}
+				codeStr={content}
+				toolName={name}
+				threadId={threadId}
+			/>
 		);
 
 		// add children
 		componentParams.children = (
 			<ToolChildrenWrapper className="bg-void-bg-3">
 				<EditToolChildren uri={params.uri} code={content} type={editToolType} />
-		</ToolChildrenWrapper>
+			</ToolChildrenWrapper>
 		);
 
 		if (toolMessage.type === "success" || toolMessage.type === "rejected") {
 			const { result } = toolMessage;
 			componentParams.bottomChildren = (
 				<BottomChildren title="Lint errors">
-				{result?.lintErrors?.map((error, i) => (
+					{result?.lintErrors?.map((error, i) => (
 						<div key={i} className="whitespace-nowrap">
 							Lines {error.startLineNumber}-{error.endLineNumber}:{" "}
 							{error.message}
 						</div>
-				))}
-			</BottomChildren>
+					))}
+				</BottomChildren>
 			);
 		} else if (toolMessage.type === "tool_error") {
 			// error
@@ -1791,7 +1838,7 @@ const EditTool = ({
 			componentParams.bottomChildren = (
 				<BottomChildren title="Error">
 					<CodeChildren>{result}</CodeChildren>
-			</BottomChildren>
+				</BottomChildren>
 			);
 		}
 	}
@@ -1839,8 +1886,8 @@ const SimplifiedToolHeader = ({
 						className={`overflow-hidden transition-all duration-200 ease-in-out ${
 							isOpen ? "opacity-100" : "max-h-0 opacity-0"
 						} text-void-fg-4`}
-				>
-					{children}
+					>
+						{children}
 					</div>
 				}
 			</div>
@@ -2023,33 +2070,33 @@ const UserMessageComponent = ({
 		chatbubbleContents = (
 			<VoidChatArea
 				featureName="Chat"
-			onSubmit={onSubmit}
-			onAbort={onAbort}
-			isStreaming={false}
-			isDisabled={isDisabled}
-			showSelections={true}
-			showProspectiveSelections={false}
-			selections={stagingSelections}
-			setSelections={setStagingSelections}
-		>
-			<VoidInputBox2
-				enableAtToMention
-				ref={setTextAreaRef}
+				onSubmit={onSubmit}
+				onAbort={onAbort}
+				isStreaming={false}
+				isDisabled={isDisabled}
+				showSelections={true}
+				showProspectiveSelections={false}
+				selections={stagingSelections}
+				setSelections={setStagingSelections}
+			>
+				<VoidInputBox2
+					enableAtToMention
+					ref={setTextAreaRef}
 					className="min-h-[81px] max-h-[500px] px-0.5"
-				placeholder="Edit your message..."
-				onChangeText={(text) => setIsDisabled(!text)}
-				onFocus={() => {
+					placeholder="Edit your message..."
+					onChangeText={(text) => setIsDisabled(!text)}
+					onFocus={() => {
 						setIsFocused(true);
-					chatThreadsService.setCurrentlyFocusedMessageIdx(messageIdx);
-				}}
-				onBlur={() => {
+						chatThreadsService.setCurrentlyFocusedMessageIdx(messageIdx);
+					}}
+					onBlur={() => {
 						setIsFocused(false);
-				}}
-				onKeyDown={onKeyDown}
-				fnsRef={textAreaFnsRef}
-				multiline={true}
-			/>
-		</VoidChatArea>
+					}}
+					onKeyDown={onKeyDown}
+					fnsRef={textAreaFnsRef}
+					multiline={true}
+				/>
+			</VoidChatArea>
 		);
 	}
 
@@ -2058,8 +2105,8 @@ const UserMessageComponent = ({
 
 	return (
 		<div
-		// align chatbubble accoridng to role
-		className={`
+			// align chatbubble accoridng to role
+			className={`
         relative ml-auto group
         ${
 					mode === "edit"
@@ -2075,24 +2122,24 @@ const UserMessageComponent = ({
 						: ""
 				}
     `}
-		onMouseEnter={() => setIsHovered(true)}
-		onMouseLeave={() => setIsHovered(false)}
-	>
+			onMouseEnter={() => setIsHovered(true)}
+			onMouseLeave={() => setIsHovered(false)}
+		>
 			{mode === "display" && (
-			<MessageActions
-				message={chatMessage}
-				messageIdx={messageIdx}
-				onCopy={handleCopyMessage}
-				onEdit={onOpenEdit}
-				onRegenerate={handleRegenerateFrom}
-				showEdit={true}
-				showRegenerate={true}
-				showDelete={false}
-			/>
-		)}
-		<div
-			// style chatbubble according to role
-			className={`
+				<MessageActions
+					message={chatMessage}
+					messageIdx={messageIdx}
+					onCopy={handleCopyMessage}
+					onEdit={onOpenEdit}
+					onRegenerate={handleRegenerateFrom}
+					showEdit={true}
+					showRegenerate={true}
+					showDelete={false}
+				/>
+			)}
+			<div
+				// style chatbubble according to role
+				className={`
             text-left rounded-lg max-w-full
             ${
 							mode === "edit"
@@ -2107,19 +2154,19 @@ const UserMessageComponent = ({
 						onOpenEdit();
 					}
 				}}
-		>
-			{chatbubbleContents}
-		</div>
+			>
+				{chatbubbleContents}
+			</div>
 
-		<div
-			className="absolute -top-1 -right-1 translate-x-0 -translate-y-0 z-1"
-		// data-tooltip-id='void-tooltip'
-		// data-tooltip-content='Edit message'
-		// data-tooltip-place='left'
-		>
-			<EditSymbol
-				size={18}
-				className={`
+			<div
+				className="absolute -top-1 -right-1 translate-x-0 -translate-y-0 z-1"
+				// data-tooltip-id='void-tooltip'
+				// data-tooltip-content='Edit message'
+				// data-tooltip-place='left'
+			>
+				<EditSymbol
+					size={18}
+					className={`
                     cursor-pointer
                     p-[2px]
                     bg-void-bg-1 border border-void-border-1 rounded-md
@@ -2130,16 +2177,16 @@ const UserMessageComponent = ({
 												: "opacity-0"
 										}
                 `}
-				onClick={() => {
+					onClick={() => {
 						if (mode === "display") {
 							onOpenEdit();
 						} else if (mode === "edit") {
 							onCloseEdit();
-					}
-				}}
-			/>
+						}
+					}}
+				/>
+			</div>
 		</div>
-	</div>
 	);
 };
 
@@ -2204,8 +2251,8 @@ prose-pre:my-2
 prose-table:text-[13px]
 "
 		>
-		{children}
-	</div>
+			{children}
+		</div>
 	);
 };
 
@@ -2237,9 +2284,9 @@ prose-ul:leading-normal
 
 max-w-none
 "
-	>
-		{children}
-	</div>
+		>
+			{children}
+		</div>
 	);
 };
 const AssistantMessageComponent = ({
@@ -2302,48 +2349,48 @@ const AssistantMessageComponent = ({
 
 	return (
 		<div className="relative group">
-		<MessageActions
-			message={chatMessage}
-			messageIdx={messageIdx}
-			onCopy={handleCopyMessage}
-			onRegenerate={handleRegenerateFrom}
-			showEdit={false}
-			showRegenerate={true}
-			showDelete={false}
-		/>
-		{/* reasoning token */}
+			<MessageActions
+				message={chatMessage}
+				messageIdx={messageIdx}
+				onCopy={handleCopyMessage}
+				onRegenerate={handleRegenerateFrom}
+				showEdit={false}
+				showRegenerate={true}
+				showDelete={false}
+			/>
+			{/* reasoning token */}
 			{hasReasoning && (
 				<div className={`${isCheckpointGhost ? "opacity-50" : ""}`}>
 					<ReasoningWrapper
 						isDoneReasoning={isDoneReasoning}
 						isStreaming={!isCommitted}
 					>
-					<SmallProseWrapper>
-						<ChatMarkdownRender
-							string={reasoningStr}
-							chatMessageLocation={chatMessageLocation}
-							isApplyEnabled={false}
-							isLinkDetectionEnabled={true}
-						/>
-					</SmallProseWrapper>
-				</ReasoningWrapper>
-			</div>
+						<SmallProseWrapper>
+							<ChatMarkdownRender
+								string={reasoningStr}
+								chatMessageLocation={chatMessageLocation}
+								isApplyEnabled={false}
+								isLinkDetectionEnabled={true}
+							/>
+						</SmallProseWrapper>
+					</ReasoningWrapper>
+				</div>
 			)}
 
-		{/* assistant message */}
+			{/* assistant message */}
 			{chatMessage.displayContent && (
 				<div className={`${isCheckpointGhost ? "opacity-50" : ""}`}>
-				<ProseWrapper>
-					<ChatMarkdownRender
+					<ProseWrapper>
+						<ChatMarkdownRender
 							string={chatMessage.displayContent || ""}
-						chatMessageLocation={chatMessageLocation}
-						isApplyEnabled={true}
-						isLinkDetectionEnabled={true}
-					/>
-				</ProseWrapper>
-			</div>
+							chatMessageLocation={chatMessageLocation}
+							isApplyEnabled={true}
+							isLinkDetectionEnabled={true}
+						/>
+					</ProseWrapper>
+				</div>
 			)}
-	</div>
+		</div>
 	);
 };
 
@@ -2369,10 +2416,10 @@ const ReasoningWrapper = ({
 			isOpen={isOpen}
 			onClick={() => setIsOpen((v) => !v)}
 		>
-		<ToolChildrenWrapper>
+			<ToolChildrenWrapper>
 				<div className="!select-text cursor-auto">{children}</div>
-		</ToolChildrenWrapper>
-	</ToolHeaderWrapper>
+			</ToolChildrenWrapper>
+		</ToolHeaderWrapper>
 	);
 };
 
@@ -2381,9 +2428,9 @@ const ReasoningWrapper = ({
 const loadingTitleWrapper = (item: React.ReactNode): React.ReactNode => {
 	return (
 		<span className="flex items-center flex-nowrap">
-		{item}
+			{item}
 			<IconLoading className="w-3 text-sm" />
-	</span>
+		</span>
 	);
 };
 
@@ -2779,10 +2826,10 @@ const ToolRequestAcceptRejectButtons = ({
 
 	return (
 		<div className="flex gap-2 mx-0.5 items-center">
-		{approveButton}
-		{cancelButton}
-		{approvalToggle}
-	</div>
+			{approveButton}
+			{cancelButton}
+			{approvalToggle}
+		</div>
 	);
 };
 
@@ -2809,7 +2856,7 @@ export const CodeChildren = ({
 	return (
 		<div className={`${className ?? ""} p-1 rounded-sm overflow-auto text-sm`}>
 			<div className="!select-text cursor-auto">{children}</div>
-	</div>
+		</div>
 	);
 };
 
@@ -2828,7 +2875,7 @@ export const ListableToolItem = ({
 }) => {
 	return (
 		<div
-		className={`
+			className={`
 			${
 				onClick
 					? "hover:brightness-125 hover:cursor-pointer transition-all duration-200 "
@@ -2837,8 +2884,8 @@ export const ListableToolItem = ({
 			flex items-center flex-nowrap whitespace-nowrap
 			${className ? className : ""}
 			`}
-		onClick={onClick}
-	>
+			onClick={onClick}
+		>
 			{showDot === false ? null : (
 				<div className="flex-shrink-0">
 					<svg
@@ -2847,7 +2894,7 @@ export const ListableToolItem = ({
 					>
 						<rect x="0" y="15" width="100" height="10" />
 					</svg>
-	</div>
+				</div>
 			)}
 			<div
 				className={`${
@@ -2871,7 +2918,7 @@ const EditToolChildren = ({
 }) => {
 	const content =
 		type === "diff" ? (
-		<VoidDiffEditor uri={uri} searchReplaceBlocks={code} />
+			<VoidDiffEditor uri={uri} searchReplaceBlocks={code} />
 		) : (
 			<ChatMarkdownRender
 				string={`\`\`\`\n${code}\n\`\`\``}
@@ -2883,19 +2930,19 @@ const EditToolChildren = ({
 	return (
 		<div className="!select-text cursor-auto">
 			<SmallProseWrapper>{content}</SmallProseWrapper>
-	</div>
+		</div>
 	);
 };
 
 const LintErrorChildren = ({ lintErrors }: { lintErrors: LintErrorItem[] }) => {
 	return (
 		<div className="text-xs text-void-fg-4 opacity-80 border-l-2 border-void-warning px-2 py-0.5 flex flex-col gap-0.5 overflow-x-auto whitespace-nowrap">
-		{lintErrors.map((error, i) => (
+			{lintErrors.map((error, i) => (
 				<div key={i}>
 					Lines {error.startLineNumber}-{error.endLineNumber}: {error.message}
 				</div>
-		))}
-	</div>
+			))}
+		</div>
 	);
 };
 
@@ -2953,8 +3000,8 @@ const EditToolHeaderButtons = ({
 	const { streamState } = useEditToolStreamState({ applyBoxId, uri });
 	return (
 		<div className="flex items-center gap-1">
-		{/* <StatusIndicatorForApplyButton applyBoxId={applyBoxId} uri={uri} /> */}
-		{/* <JumpToFileButton uri={uri} /> */}
+			{/* <StatusIndicatorForApplyButton applyBoxId={applyBoxId} uri={uri} /> */}
+			{/* <JumpToFileButton uri={uri} /> */}
 			{streamState === "idle-no-changes" && (
 				<CopyButton codeStr={codeStr} toolTipName="Copy" />
 			)}
@@ -2965,7 +3012,7 @@ const EditToolHeaderButtons = ({
 				uri={uri}
 				threadId={threadId}
 			/>
-	</div>
+		</div>
 	);
 };
 
@@ -3123,15 +3170,15 @@ const CommandTool = ({
 			<ToolChildrenWrapper className="whitespace-pre text-nowrap overflow-auto text-sm">
 				<div className="!select-text cursor-auto">
 					<BlockCode initValue={`${msg.trim()}`} language="shellscript" />
-			</div>
-		</ToolChildrenWrapper>
+				</div>
+			</ToolChildrenWrapper>
 		);
 	} else if (toolMessage.type === "tool_error") {
 		const { result } = toolMessage;
 		componentParams.bottomChildren = (
 			<BottomChildren title="Error">
 				<CodeChildren>{result}</CodeChildren>
-		</BottomChildren>
+			</BottomChildren>
 		);
 	} else if (toolMessage.type === "running_now") {
 		if (type === "run_command")
@@ -3200,22 +3247,22 @@ const MCPToolWrapper = ({ toolMessage }: WrapperProps<string>) => {
 		const resultStr = result ? mcpService.stringifyResult(result) : "null";
 		componentParams.children = (
 			<ToolChildrenWrapper>
-			<SmallProseWrapper>
-				<ChatMarkdownRender
-					string={`\`\`\`json\n${resultStr}\n\`\`\``}
-					chatMessageLocation={undefined}
-					isApplyEnabled={false}
-					isLinkDetectionEnabled={true}
-				/>
-			</SmallProseWrapper>
-		</ToolChildrenWrapper>
+				<SmallProseWrapper>
+					<ChatMarkdownRender
+						string={`\`\`\`json\n${resultStr}\n\`\`\``}
+						chatMessageLocation={undefined}
+						isApplyEnabled={false}
+						isLinkDetectionEnabled={true}
+					/>
+				</SmallProseWrapper>
+			</ToolChildrenWrapper>
 		);
 	} else if (toolMessage.type === "tool_error") {
 		const { result } = toolMessage;
 		componentParams.bottomChildren = (
 			<BottomChildren title="Error">
 				<CodeChildren>{result}</CodeChildren>
-		</BottomChildren>
+			</BottomChildren>
 		);
 	}
 
@@ -3295,7 +3342,7 @@ const builtinToolNameToComponent: {
 				componentParams.bottomChildren = (
 					<BottomChildren title="Error">
 						<CodeChildren>{result}</CodeChildren>
-				</BottomChildren>
+					</BottomChildren>
 				);
 			}
 
@@ -3339,27 +3386,27 @@ const builtinToolNameToComponent: {
 				const { result } = toolMessage;
 				componentParams.children = (
 					<ToolChildrenWrapper>
-					<SmallProseWrapper>
-						<ChatMarkdownRender
-							string={`\`\`\`\n${result.str}\n\`\`\``}
-							chatMessageLocation={undefined}
-							isApplyEnabled={false}
-							isLinkDetectionEnabled={true}
-						/>
-					</SmallProseWrapper>
-				</ToolChildrenWrapper>
+						<SmallProseWrapper>
+							<ChatMarkdownRender
+								string={`\`\`\`\n${result.str}\n\`\`\``}
+								chatMessageLocation={undefined}
+								isApplyEnabled={false}
+								isLinkDetectionEnabled={true}
+							/>
+						</SmallProseWrapper>
+					</ToolChildrenWrapper>
 				);
 			} else if (toolMessage.type === "tool_error") {
 				const { result } = toolMessage;
 				componentParams.bottomChildren = (
 					<BottomChildren title="Error">
 						<CodeChildren>{result}</CodeChildren>
-				</BottomChildren>
+					</BottomChildren>
 				);
 			}
 
 			return <ToolHeaderWrapper {...componentParams} />;
-	},
+		},
 	},
 	ls_dir: {
 		resultWrapper: ({ toolMessage }) => {
@@ -3407,11 +3454,11 @@ const builtinToolNameToComponent: {
 									key={i}
 									name={`${child.name}${child.isDirectory ? "/" : ""}`}
 									className="w-full overflow-auto"
-							onClick={() => {
+									onClick={() => {
 										voidOpenFileFn(child.uri, accessor);
-								// commandService.executeCommand('workbench.view.explorer'); // open in explorer folders view instead
-								// explorerService.select(child.uri, true);
-							}}
+										// commandService.executeCommand('workbench.view.explorer'); // open in explorer folders view instead
+										// explorerService.select(child.uri, true);
+									}}
 								/>
 							))}
 							{result.hasNextPage && (
@@ -3421,19 +3468,19 @@ const builtinToolNameToComponent: {
 									className="w-full overflow-auto"
 								/>
 							)}
-					</ToolChildrenWrapper>
+						</ToolChildrenWrapper>
 					);
 			} else if (toolMessage.type === "tool_error") {
 				const { result } = toolMessage;
 				componentParams.bottomChildren = (
 					<BottomChildren title="Error">
 						<CodeChildren>{result}</CodeChildren>
-				</BottomChildren>
+					</BottomChildren>
 				);
 			}
 
 			return <ToolHeaderWrapper {...componentParams} />;
-	},
+		},
 	},
 	search_pathnames_only: {
 		resultWrapper: ({ toolMessage }) => {
@@ -3476,7 +3523,7 @@ const builtinToolNameToComponent: {
 							{result.uris.map((uri, i) => (
 								<ListableToolItem
 									key={i}
-							name={getBasename(uri.fsPath)}
+									name={getBasename(uri.fsPath)}
 									className="w-full overflow-auto"
 									onClick={() => {
 										voidOpenFileFn(uri, accessor);
@@ -3490,19 +3537,19 @@ const builtinToolNameToComponent: {
 									className="w-full overflow-auto"
 								/>
 							)}
-					</ToolChildrenWrapper>
+						</ToolChildrenWrapper>
 					);
 			} else if (toolMessage.type === "tool_error") {
 				const { result } = toolMessage;
 				componentParams.bottomChildren = (
 					<BottomChildren title="Error">
 						<CodeChildren>{result}</CodeChildren>
-				</BottomChildren>
+					</BottomChildren>
 				);
 			}
 
 			return <ToolHeaderWrapper {...componentParams} />;
-	},
+		},
 	},
 	search_for_files: {
 		resultWrapper: ({ toolMessage }) => {
@@ -3567,14 +3614,14 @@ const builtinToolNameToComponent: {
 									className="w-full overflow-auto"
 								/>
 							)}
-					</ToolChildrenWrapper>
+						</ToolChildrenWrapper>
 					);
 			} else if (toolMessage.type === "tool_error") {
 				const { result } = toolMessage;
 				componentParams.bottomChildren = (
 					<BottomChildren title="Error">
 						<CodeChildren>{result}</CodeChildren>
-				</BottomChildren>
+					</BottomChildren>
 				);
 			}
 			return <ToolHeaderWrapper {...componentParams} />;
@@ -3619,23 +3666,23 @@ const builtinToolNameToComponent: {
 				componentParams.numResults = result.lines.length;
 				componentParams.children =
 					result.lines.length === 0 ? undefined : (
-					<ToolChildrenWrapper>
+						<ToolChildrenWrapper>
 							<CodeChildren className="bg-void-bg-3">
 								<pre className="font-mono whitespace-pre">
 									{toolsService.stringOfResult["search_in_file"](
 										params,
 										result
 									)}
-							</pre>
-						</CodeChildren>
-					</ToolChildrenWrapper>
+								</pre>
+							</CodeChildren>
+						</ToolChildrenWrapper>
 					);
 			} else if (toolMessage.type === "tool_error") {
 				const { result } = toolMessage;
 				componentParams.bottomChildren = (
 					<BottomChildren title="Error">
 						<CodeChildren>{result}</CodeChildren>
-				</BottomChildren>
+					</BottomChildren>
 				);
 			}
 
@@ -3691,7 +3738,7 @@ const builtinToolNameToComponent: {
 				componentParams.bottomChildren = (
 					<BottomChildren title="Error">
 						<CodeChildren>{result}</CodeChildren>
-				</BottomChildren>
+					</BottomChildren>
 				);
 			}
 
@@ -3746,7 +3793,7 @@ const builtinToolNameToComponent: {
 				componentParams.bottomChildren = (
 					<BottomChildren title="Error">
 						<CodeChildren>{result}</CodeChildren>
-				</BottomChildren>
+					</BottomChildren>
 				);
 			} else if (toolMessage.type === "running_now") {
 				// nothing more is needed
@@ -3755,7 +3802,7 @@ const builtinToolNameToComponent: {
 			}
 
 			return <ToolHeaderWrapper {...componentParams} />;
-	},
+		},
 	},
 	delete_file_or_folder: {
 		resultWrapper: ({ toolMessage }) => {
@@ -3803,7 +3850,7 @@ const builtinToolNameToComponent: {
 				componentParams.bottomChildren = (
 					<BottomChildren title="Error">
 						<CodeChildren>{result}</CodeChildren>
-				</BottomChildren>
+					</BottomChildren>
 				);
 			} else if (toolMessage.type === "running_now") {
 				const { result } = toolMessage;
@@ -3825,7 +3872,7 @@ const builtinToolNameToComponent: {
 			return (
 				<EditTool {...params} content={params.toolMessage.params.newContent} />
 			);
-	},
+		},
 	},
 	edit_file: {
 		resultWrapper: (params) => {
@@ -3897,7 +3944,7 @@ const builtinToolNameToComponent: {
 				componentParams.bottomChildren = (
 					<BottomChildren title="Error">
 						<CodeChildren>{result}</CodeChildren>
-				</BottomChildren>
+					</BottomChildren>
 				);
 			}
 
@@ -3943,7 +3990,7 @@ const builtinToolNameToComponent: {
 				componentParams.bottomChildren = (
 					<BottomChildren title="Error">
 						<CodeChildren>{result}</CodeChildren>
-				</BottomChildren>
+					</BottomChildren>
 				);
 			}
 
@@ -3980,14 +4027,14 @@ const builtinToolNameToComponent: {
 				componentParams.children = (
 					<ToolChildrenWrapper>
 						<CodeChildren>{result.message}</CodeChildren>
-				</ToolChildrenWrapper>
+					</ToolChildrenWrapper>
 				);
 			} else if (toolMessage.type === "tool_error") {
 				const { result } = toolMessage;
 				componentParams.bottomChildren = (
 					<BottomChildren title="Error">
 						<CodeChildren>{result}</CodeChildren>
-				</BottomChildren>
+					</BottomChildren>
 				);
 			}
 
@@ -4022,22 +4069,22 @@ const builtinToolNameToComponent: {
 				const { result } = toolMessage;
 				componentParams.children = (
 					<ToolChildrenWrapper>
-					<SmallProseWrapper>
-						<ChatMarkdownRender
-							string={result.contextPack}
-							chatMessageLocation={undefined}
-							isApplyEnabled={false}
-							isLinkDetectionEnabled={true}
-						/>
-					</SmallProseWrapper>
-				</ToolChildrenWrapper>
+						<SmallProseWrapper>
+							<ChatMarkdownRender
+								string={result.contextPack}
+								chatMessageLocation={undefined}
+								isApplyEnabled={false}
+								isLinkDetectionEnabled={true}
+							/>
+						</SmallProseWrapper>
+					</ToolChildrenWrapper>
 				);
 			} else if (toolMessage.type === "tool_error") {
 				const { result } = toolMessage;
 				componentParams.bottomChildren = (
 					<BottomChildren title="Error">
 						<CodeChildren>{result}</CodeChildren>
-				</BottomChildren>
+					</BottomChildren>
 				);
 			}
 
@@ -4072,22 +4119,22 @@ const builtinToolNameToComponent: {
 				const { result } = toolMessage;
 				componentParams.children = (
 					<ToolChildrenWrapper>
-					<SmallProseWrapper>
-						<ChatMarkdownRender
-							string={result.contextPack}
-							chatMessageLocation={undefined}
-							isApplyEnabled={false}
-							isLinkDetectionEnabled={true}
-						/>
-					</SmallProseWrapper>
-				</ToolChildrenWrapper>
+						<SmallProseWrapper>
+							<ChatMarkdownRender
+								string={result.contextPack}
+								chatMessageLocation={undefined}
+								isApplyEnabled={false}
+								isLinkDetectionEnabled={true}
+							/>
+						</SmallProseWrapper>
+					</ToolChildrenWrapper>
 				);
 			} else if (toolMessage.type === "tool_error") {
 				const { result } = toolMessage;
 				componentParams.bottomChildren = (
 					<BottomChildren title="Error">
 						<CodeChildren>{result}</CodeChildren>
-				</BottomChildren>
+					</BottomChildren>
 				);
 			}
 
@@ -4123,14 +4170,14 @@ const builtinToolNameToComponent: {
 				componentParams.children = (
 					<ToolChildrenWrapper>
 						<CodeChildren>{result.stats}</CodeChildren>
-				</ToolChildrenWrapper>
+					</ToolChildrenWrapper>
 				);
 			} else if (toolMessage.type === "tool_error") {
 				const { result } = toolMessage;
 				componentParams.bottomChildren = (
 					<BottomChildren title="Error">
 						<CodeChildren>{result}</CodeChildren>
-				</BottomChildren>
+					</BottomChildren>
 				);
 			}
 
@@ -4166,8 +4213,8 @@ const Checkpoint = ({
 
 	return (
 		<div className={`flex items-center justify-center px-2 `}>
-		<div
-			className={`
+			<div
+				className={`
                     text-xs
                     text-void-fg-3
                     select-none
@@ -4175,12 +4222,12 @@ const Checkpoint = ({
 					${isDisabled ? "cursor-default" : "cursor-pointer"}
                 `}
 				style={{ position: "relative", display: "inline-block" }} // allow absolute icon
-			onClick={() => {
+				onClick={() => {
 					if (threadIsRunning) return;
 					if (isDisabled) return;
-				chatThreadService.jumpToCheckpointBeforeMessageIdx({
-					threadId,
-					messageIdx,
+					chatThreadService.jumpToCheckpointBeforeMessageIdx({
+						threadId,
+						messageIdx,
 						jumpToUserModified:
 							messageIdx ===
 							(chatThreadService.state.allThreads[threadId]?.messages.length ??
@@ -4197,10 +4244,10 @@ const Checkpoint = ({
 							"data-tooltip-place": "top",
 					  }
 					: {})}
-		>
-			Checkpoint
+			>
+				Checkpoint
+			</div>
 		</div>
-	</div>
 	);
 };
 
@@ -4218,8 +4265,8 @@ type ChatBubbleProps = {
 const ChatBubble = (props: ChatBubbleProps) => {
 	return (
 		<ErrorBoundary>
-		<_ChatBubble {...props} />
-	</ErrorBoundary>
+			<_ChatBubble {...props} />
+		</ErrorBoundary>
 	);
 };
 
@@ -4240,21 +4287,21 @@ const _ChatBubble = ({
 	if (role === "user") {
 		return (
 			<UserMessageComponent
-			chatMessage={chatMessage}
-			isCheckpointGhost={isCheckpointGhost}
-			currCheckpointIdx={currCheckpointIdx}
-			messageIdx={messageIdx}
-			_scrollToBottom={_scrollToBottom}
-		/>
+				chatMessage={chatMessage}
+				isCheckpointGhost={isCheckpointGhost}
+				currCheckpointIdx={currCheckpointIdx}
+				messageIdx={messageIdx}
+				_scrollToBottom={_scrollToBottom}
+			/>
 		);
 	} else if (role === "assistant") {
 		return (
 			<AssistantMessageComponent
-			chatMessage={chatMessage}
-			isCheckpointGhost={isCheckpointGhost}
-			messageIdx={messageIdx}
-			isCommitted={isCommitted}
-		/>
+				chatMessage={chatMessage}
+				isCheckpointGhost={isCheckpointGhost}
+				messageIdx={messageIdx}
+				isCommitted={isCommitted}
+			/>
 		);
 	} else if (role === "tool") {
 		if (chatMessage.type === "invalid_params") {
@@ -4265,7 +4312,7 @@ const _ChatBubble = ({
 						message={chatMessage.content}
 						mcpServerName={chatMessage.mcpServerName}
 					/>
-			</div>
+				</div>
 			);
 		}
 
@@ -4280,19 +4327,19 @@ const _ChatBubble = ({
 			return (
 				<>
 					<div className={`${isCheckpointGhost ? "opacity-50" : ""}`}>
-					<ToolResultWrapper
-						toolMessage={chatMessage}
-						messageIdx={messageIdx}
-						threadId={threadId}
-					/>
-				</div>
+						<ToolResultWrapper
+							toolMessage={chatMessage}
+							messageIdx={messageIdx}
+							threadId={threadId}
+						/>
+					</div>
 					{chatMessage.type === "tool_request" ? (
 						<div
 							className={`${
 								isCheckpointGhost ? "opacity-50 pointer-events-none" : ""
 							}`}
 						>
-						<ToolRequestAcceptRejectButtons toolName={chatMessage.name} />
+							<ToolRequestAcceptRejectButtons toolName={chatMessage.name} />
 						</div>
 					) : null}
 				</>
@@ -4305,17 +4352,17 @@ const _ChatBubble = ({
 					toolName={chatMessage.name}
 					mcpServerName={chatMessage.mcpServerName}
 				/>
-		</div>
+			</div>
 		);
 	} else if (role === "checkpoint") {
 		return (
 			<Checkpoint
-			threadId={threadId}
-			message={chatMessage}
-			messageIdx={messageIdx}
-			isCheckpointGhost={isCheckpointGhost}
-			threadIsRunning={!!chatIsRunning}
-		/>
+				threadId={threadId}
+				message={chatMessage}
+				messageIdx={messageIdx}
+				isCheckpointGhost={isCheckpointGhost}
+				threadIsRunning={!!chatIsRunning}
+			/>
 		);
 	}
 };
@@ -4407,54 +4454,54 @@ const CommandBarInChat = () => {
 
 	const acceptRejectAllButtons = (
 		<div
-		// do this with opacity so that the height remains the same at all times
-		className={`flex items-center gap-0.5
+			// do this with opacity so that the height remains the same at all times
+			className={`flex items-center gap-0.5
 			${isFinishedMakingThreadChanges ? "" : "opacity-0 pointer-events-none"}`}
-	>
-		<IconShell1 // RejectAllButtonWrapper
-			// text="Reject All"
-			// className="text-xs"
-			Icon={X}
-			onClick={() => {
+		>
+			<IconShell1 // RejectAllButtonWrapper
+				// text="Reject All"
+				// className="text-xs"
+				Icon={X}
+				onClick={() => {
 					sortedCommandBarURIs.forEach((uri) => {
-					editCodeService.acceptOrRejectAllDiffAreas({
-						uri,
-						removeCtrlKs: true,
-						behavior: "reject",
-						_addToHistory: true,
+						editCodeService.acceptOrRejectAllDiffAreas({
+							uri,
+							removeCtrlKs: true,
+							behavior: "reject",
+							_addToHistory: true,
+						});
 					});
-				});
-			}}
+				}}
 				data-tooltip-id="void-tooltip"
 				data-tooltip-place="top"
 				data-tooltip-content="Reject all"
-		/>
+			/>
 
-		<IconShell1 // AcceptAllButtonWrapper
-			// text="Accept All"
-			// className="text-xs"
-			Icon={Check}
-			onClick={() => {
+			<IconShell1 // AcceptAllButtonWrapper
+				// text="Accept All"
+				// className="text-xs"
+				Icon={Check}
+				onClick={() => {
 					sortedCommandBarURIs.forEach((uri) => {
-					editCodeService.acceptOrRejectAllDiffAreas({
-						uri,
-						removeCtrlKs: true,
-						behavior: "accept",
-						_addToHistory: true,
+						editCodeService.acceptOrRejectAllDiffAreas({
+							uri,
+							removeCtrlKs: true,
+							behavior: "accept",
+							_addToHistory: true,
+						});
 					});
-				});
-			}}
+				}}
 				data-tooltip-id="void-tooltip"
 				data-tooltip-place="top"
 				data-tooltip-content="Accept all"
 			/>
-	</div>
+		</div>
 	);
 
 	// !select-text cursor-auto
 	const fileDetailsContent = (
 		<div className="px-2 gap-1 w-full overflow-y-auto">
-		{sortedCommandBarURIs.map((uri, i) => {
+			{sortedCommandBarURIs.map((uri, i) => {
 				const basename = getBasename(uri.fsPath);
 
 				const { sortedDiffIds, isStreaming } =
@@ -4469,12 +4516,12 @@ const CommandBarInChat = () => {
 
 				const fileNameHTML = (
 					<div
-				className="flex items-center gap-1.5 text-void-fg-3 hover:brightness-125 transition-all duration-200 cursor-pointer"
-				onClick={() => voidOpenFileFn(uri, accessor)}
-			>
-				{/* <FileIcon size={14} className="text-void-fg-3" /> */}
-				<span className="text-void-fg-3">{basename}</span>
-			</div>
+						className="flex items-center gap-1.5 text-void-fg-3 hover:brightness-125 transition-all duration-200 cursor-pointer"
+						onClick={() => voidOpenFileFn(uri, accessor)}
+					>
+						{/* <FileIcon size={14} className="text-void-fg-3" /> */}
+						<span className="text-void-fg-3">{basename}</span>
+					</div>
 				);
 
 				const detailsContent = (
@@ -4482,24 +4529,24 @@ const CommandBarInChat = () => {
 						<span className="text-void-fg-3 opacity-80">
 							{numDiffs} diff{numDiffs !== 1 ? "s" : ""}
 						</span>
-			</div>
+					</div>
 				);
 
 				const acceptRejectButtons = (
 					<div
-				// do this with opacity so that the height remains the same at all times
-				className={`flex items-center gap-0.5
+						// do this with opacity so that the height remains the same at all times
+						className={`flex items-center gap-0.5
 					${isFinishedMakingFileChanges ? "" : "opacity-0 pointer-events-none"}
 				`}
-			>
-				{/* <JumpToFileButton
+					>
+						{/* <JumpToFileButton
 					uri={uri}
 					data-tooltip-id='void-tooltip'
 					data-tooltip-place='top'
 					data-tooltip-content='Go to file'
 				/> */}
-				<IconShell1 // RejectAllButtonWrapper
-					Icon={X}
+						<IconShell1 // RejectAllButtonWrapper
+							Icon={X}
 							onClick={() => {
 								editCodeService.acceptOrRejectAllDiffAreas({
 									uri,
@@ -4511,9 +4558,9 @@ const CommandBarInChat = () => {
 							data-tooltip-id="void-tooltip"
 							data-tooltip-place="top"
 							data-tooltip-content="Reject file"
-				/>
-				<IconShell1 // AcceptAllButtonWrapper
-					Icon={Check}
+						/>
+						<IconShell1 // AcceptAllButtonWrapper
+							Icon={Check}
 							onClick={() => {
 								editCodeService.acceptOrRejectAllDiffAreas({
 									uri,
@@ -4526,7 +4573,7 @@ const CommandBarInChat = () => {
 							data-tooltip-place="top"
 							data-tooltip-content="Accept file"
 						/>
-			</div>
+					</div>
 				);
 
 				const fileStatusHTML = (
@@ -4537,21 +4584,21 @@ const CommandBarInChat = () => {
 					/>
 				);
 
-			return (
-				// name, details
-				<div key={i} className="flex justify-between items-center">
-					<div className="flex items-center">
-						{fileNameHTML}
-						{detailsContent}
+				return (
+					// name, details
+					<div key={i} className="flex justify-between items-center">
+						<div className="flex items-center">
+							{fileNameHTML}
+							{detailsContent}
+						</div>
+						<div className="flex items-center gap-2">
+							{acceptRejectButtons}
+							{fileStatusHTML}
+						</div>
 					</div>
-					<div className="flex items-center gap-2">
-						{acceptRejectButtons}
-						{fileStatusHTML}
-					</div>
-				</div>
 				);
-		})}
-	</div>
+			})}
+		</div>
 	);
 
 	const fileDetailsButton = (
@@ -4650,9 +4697,9 @@ const EditToolSoFar = ({
 		<span className="flex items-center">
 			{uriDone
 				? getBasename(toolCallSoFar.rawParams["uri"] ?? "unknown")
-			: `Generating`}
-		<IconLoading />
-	</span>
+				: `Generating`}
+			<IconLoading />
+		</span>
 	);
 
 	const desc1OnClick = () => {
@@ -4662,17 +4709,17 @@ const EditToolSoFar = ({
 	// If URI has not been specified
 	return (
 		<ToolHeaderWrapper title={title} desc1={desc1} desc1OnClick={desc1OnClick}>
-		<EditToolChildren
-			uri={uri}
+			<EditToolChildren
+				uri={uri}
 				code={
 					toolCallSoFar.rawParams.search_replace_blocks ??
 					toolCallSoFar.rawParams.new_content ??
 					""
 				}
 				type={"rewrite"} // as it streams, show in rewrite format, don't make a diff editor
-		/>
-		<IconLoading />
-	</ToolHeaderWrapper>
+			/>
+			<IconLoading />
+		</ToolHeaderWrapper>
 	);
 };
 
@@ -4728,15 +4775,15 @@ export const SidebarChat = () => {
 
 			const threadId = chatThreadsService.state.currentThreadId;
 
-		// send message to LLM
+			// send message to LLM
 			const userMessage = _forceSubmit || textAreaRef.current?.value || "";
 
-		try {
+			try {
 				await chatThreadsService.addUserMessageAndStreamResponse({
 					userMessage,
 					threadId,
 				});
-		} catch (e) {
+			} catch (e) {
 				console.error("Error while sending message in chat:", e);
 			}
 
@@ -4790,15 +4837,15 @@ export const SidebarChat = () => {
 		return previousMessages.map((message, i) => {
 			return (
 				<ChatBubble
-				key={i}
-				currCheckpointIdx={currCheckpointIdx}
-				chatMessage={message}
-				messageIdx={i}
-				isCommitted={true}
-				chatIsRunning={isRunning}
-				threadId={threadId}
-				_scrollToBottom={() => scrollToBottom(scrollContainerRef)}
-			/>
+					key={i}
+					currCheckpointIdx={currCheckpointIdx}
+					chatMessage={message}
+					messageIdx={i}
+					isCommitted={true}
+					chatIsRunning={isRunning}
+					threadId={threadId}
+					_scrollToBottom={() => scrollToBottom(scrollContainerRef)}
+				/>
 			);
 		});
 	}, [previousMessages, threadId, currCheckpointIdx, isRunning]);
@@ -4806,20 +4853,20 @@ export const SidebarChat = () => {
 	const streamingChatIdx = previousMessagesHTML.length;
 	const currStreamingMessageHTML =
 		reasoningSoFar || displayContentSoFar || isRunning ? (
-		<ChatBubble
+			<ChatBubble
 				key={"curr-streaming-msg"}
-			currCheckpointIdx={currCheckpointIdx}
-			chatMessage={{
+				currCheckpointIdx={currCheckpointIdx}
+				chatMessage={{
 					role: "assistant",
 					displayContent: displayContentSoFar ?? "",
 					reasoning: reasoningSoFar ?? "",
-				anthropicReasoning: null,
-			}}
-			messageIdx={streamingChatIdx}
-			isCommitted={false}
-			chatIsRunning={isRunning}
-			threadId={threadId}
-			_scrollToBottom={null}
+					anthropicReasoning: null,
+				}}
+				messageIdx={streamingChatIdx}
+				isCommitted={false}
+				chatIsRunning={isRunning}
+				threadId={threadId}
+				_scrollToBottom={null}
 			/>
 		) : null;
 
@@ -4829,16 +4876,16 @@ export const SidebarChat = () => {
 		toolCallSoFar.name === "rewrite_file" ? (
 			<EditToolSoFar
 				key={"curr-streaming-tool"}
-			toolCallSoFar={toolCallSoFar}
-		/>
+				toolCallSoFar={toolCallSoFar}
+			/>
 		) : null
 	) : null;
 
 	const messagesHTML = (
 		<ScrollToBottomContainer
 			key={"messages" + chatThreadsState.currentThreadId} // force rerender on all children if id changes
-		scrollContainerRef={scrollContainerRef}
-		className={`
+			scrollContainerRef={scrollContainerRef}
+			className={`
 			flex flex-col
 			px-4 py-4 space-y-4
 			w-full flex-1 min-h-0
@@ -4846,32 +4893,32 @@ export const SidebarChat = () => {
 			overflow-y-auto
 			${previousMessagesHTML.length === 0 && !displayContentSoFar ? "hidden" : ""}
 		`}
-	>
-		{/* previous messages */}
-		{previousMessagesHTML}
-		{currStreamingMessageHTML}
+		>
+			{/* previous messages */}
+			{previousMessagesHTML}
+			{currStreamingMessageHTML}
 
-		{/* Generating tool */}
-		{generatingTool}
+			{/* Generating tool */}
+			{generatingTool}
 
-		{/* loading indicator */}
+			{/* loading indicator */}
 			{isRunning === "LLM" || (isRunning === "idle" && !toolIsGenerating) ? (
 				<ProseWrapper>
 					{<IconLoading className="opacity-50 text-sm" />}
 				</ProseWrapper>
 			) : null}
 
-		{/* error message */}
+			{/* error message */}
 			{latestError === undefined ? null : (
 				<div className="px-2 my-1">
-				<ErrorDisplay
-					message={latestError.message}
-					fullError={latestError.fullError}
+					<ErrorDisplay
+						message={latestError.message}
+						fullError={latestError.fullError}
 						onDismiss={() => {
 							chatThreadsService.dismissStreamError(currentThread.id);
 						}}
-					showDismiss={true}
-				/>
+						showDismiss={true}
+					/>
 
 					<WarningBox
 						className="text-sm my-2 mx-4"
@@ -4880,9 +4927,9 @@ export const SidebarChat = () => {
 						}}
 						text="Open settings"
 					/>
-			</div>
+				</div>
 			)}
-	</ScrollToBottomContainer>
+		</ScrollToBottomContainer>
 	);
 
 	const onChangeText = useCallback(
@@ -4905,34 +4952,34 @@ export const SidebarChat = () => {
 	const inputChatArea = (
 		<VoidChatArea
 			featureName="Chat"
-		onSubmit={() => onSubmit()}
-		onAbort={onAbort}
-		isStreaming={!!isRunning}
-		isDisabled={isDisabled}
-		showSelections={true}
-		// showProspectiveSelections={previousMessagesHTML.length === 0}
-		selections={selections}
-		setSelections={setSelections}
+			onSubmit={() => onSubmit()}
+			onAbort={onAbort}
+			isStreaming={!!isRunning}
+			isDisabled={isDisabled}
+			showSelections={true}
+			// showProspectiveSelections={previousMessagesHTML.length === 0}
+			selections={selections}
+			setSelections={setSelections}
 			onClickAnywhere={() => {
 				textAreaRef.current?.focus();
 			}}
-	>
-		<VoidInputBox2
-			enableAtToMention
-			className={`min-h-[81px] px-0.5 py-0.5`}
+		>
+			<VoidInputBox2
+				enableAtToMention
+				className={`min-h-[81px] px-0.5 py-0.5`}
 				placeholder={`@ to mention, ${
 					keybindingString ? `${keybindingString} to add a selection. ` : ""
 				}Enter instructions...`}
-			onChangeText={onChangeText}
-			onKeyDown={onKeyDown}
+				onChangeText={onChangeText}
+				onKeyDown={onKeyDown}
 				onFocus={() => {
 					chatThreadsService.setCurrentlyFocusedMessageIdx(undefined);
 				}}
-			ref={textAreaRef}
-			fnsRef={textAreaFnsRef}
-			multiline={true}
-		/>
-	</VoidChatArea>
+				ref={textAreaRef}
+				fnsRef={textAreaFnsRef}
+				multiline={true}
+			/>
+		</VoidChatArea>
 	);
 
 	const isLandingPage = previousMessages.length === 0;
@@ -4943,16 +4990,16 @@ export const SidebarChat = () => {
 				"Summarize my codebase",
 				"How do types work in Rust?",
 				"Create a .voidrules file for me",
-		].map((text, index) => (
-			<div
-				key={index}
+			].map((text, index) => (
+				<div
+					key={index}
 					className="py-1 px-2 rounded text-sm bg-zinc-700/5 hover:bg-zinc-700/10 dark:bg-zinc-300/5 dark:hover:bg-zinc-300/10 cursor-pointer opacity-80 hover:opacity-100"
-				onClick={() => onSubmit(text)}
-			>
-				{text}
-			</div>
-		))}
-	</div>
+					onClick={() => onSubmit(text)}
+				>
+					{text}
+				</div>
+			))}
+		</div>
 	);
 
 	const threadPageInput = (
@@ -4961,8 +5008,8 @@ export const SidebarChat = () => {
 			className="flex-shrink-0"
 		>
 			<div className="px-4">
-			<CommandBarInChat />
-		</div>
+				<CommandBarInChat />
+			</div>
 			<div className="px-2 pb-2">{inputChatArea}</div>
 		</div>
 	);
@@ -4975,27 +5022,27 @@ export const SidebarChat = () => {
 
 	const landingPageContent = (
 		<div
-		ref={sidebarRef}
+			ref={sidebarRef}
 			className="w-full h-full max-h-full flex flex-col overflow-auto px-4"
-	>
+		>
 			<ErrorBoundary>{landingPageInput}</ErrorBoundary>
 
 			{Object.keys(chatThreadsState.allThreads).length > 1 ? ( // show if there are threads
-			<ErrorBoundary>
+				<ErrorBoundary>
 					<div className="pt-8 mb-2 text-void-fg-3 text-root select-none pointer-events-none">
 						Previous Threads
 					</div>
-				<PastThreadsList />
-			</ErrorBoundary>
+					<PastThreadsList />
+				</ErrorBoundary>
 			) : (
-			<ErrorBoundary>
+				<ErrorBoundary>
 					<div className="pt-8 mb-2 text-void-fg-3 text-root select-none pointer-events-none">
 						Suggestions
 					</div>
-				{initiallySuggestedPromptsHTML}
-			</ErrorBoundary>
+					{initiallySuggestedPromptsHTML}
+				</ErrorBoundary>
 			)}
-	</div>
+		</div>
 	);
 
 	// const threadPageContent = <div>
@@ -5013,12 +5060,12 @@ export const SidebarChat = () => {
 	// </div>
 	const threadPageContent = (
 		<div
-		ref={sidebarRef}
+			ref={sidebarRef}
 			className="w-full h-full flex flex-col overflow-hidden"
 		>
 			<ErrorBoundary>{messagesHTML}</ErrorBoundary>
 			<ErrorBoundary>{threadPageInput}</ErrorBoundary>
-	</div>
+		</div>
 	);
 
 	return (

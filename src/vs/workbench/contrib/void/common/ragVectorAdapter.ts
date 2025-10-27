@@ -3,9 +3,9 @@
  *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
  *--------------------------------------------------------------------------------------*/
 
-import { ChunkRecord, RAGStorageScope } from './ragServiceTypes.js';
 import { ILogService } from '../../../../platform/log/common/log.js';
 import { LocalEmbeddingService } from './ragLocalEmbeddings.js';
+import { ChunkRecord, RAGStorageScope } from './ragServiceTypes.js';
 
 export interface VectorAdapter {
 	initialize(): Promise<void>;
@@ -226,12 +226,22 @@ export class ChromaPersistentAdapter implements VectorAdapter {
 		}
 
 		try {
+			// IMPROVEMENT 1: Preprocess query to handle terminology variations
+			const preprocessedQuery = this.preprocessQuery(text);
+			this.logService.info(`Original query: "${text}"`);
+			this.logService.info(`Preprocessed query: "${preprocessedQuery}"`);
+
 			// Generate query embedding using local model
-			const queryVector = await this.embeddingService.generateEmbedding(text);
+			const queryVector = await this.embeddingService.generateEmbedding(preprocessedQuery);
 
 			// Calculate cosine similarity with all stored embeddings
 			const results: Array<{ id: string; score: number; metadata: Record<string, any> }> = [];
-			const MIN_SIMILARITY_THRESHOLD = 0.15; // Minimum similarity threshold
+
+			// IMPROVEMENT 2: Lower threshold for better recall (can filter later with reranking)
+			// Research shows 0.05-0.10 works better for local embeddings
+			const MIN_SIMILARITY_THRESHOLD = 0.07; // Lowered from 0.15 to catch more relevant results
+
+			this.logService.info(`Searching ${this.embeddings.size} embeddings with threshold ${MIN_SIMILARITY_THRESHOLD}...`);
 
 			for (const [id, data] of this.embeddings.entries()) {
 				// Check scope
@@ -251,15 +261,121 @@ export class ChromaPersistentAdapter implements VectorAdapter {
 				}
 			}
 
-			// Sort by score descending and return top n
-			return results
+			this.logService.info(`Found ${results.length} results above threshold`);
+
+			// IMPROVEMENT 3: Retrieve more results initially for better diversity
+			// Best practice: retrieve 2-3x the desired results, then apply MMR
+			const initialK = Math.min(n * 3, results.length);
+
+			// Sort by score descending
+			const topKResults = results
 				.sort((a, b) => b.score - a.score)
-				.slice(0, n);
+				.slice(0, initialK);
+
+			// IMPROVEMENT 4: Apply MMR (Maximal Marginal Relevance) for diversity
+			const diverseResults = this.applyMMR(topKResults, queryVector, n);
+
+			this.logService.info(`Applied MMR to ${topKResults.length} results, returning top ${diverseResults.length}`);
+
+			return diverseResults;
 
 		} catch (error) {
 			this.logService.error('Failed to query:', error);
 			return [];
 		}
+	}
+
+	/**
+	 * Preprocess query to improve retrieval quality
+	 * Handles medical/legal terminology and expands query
+	 */
+	private preprocessQuery(query: string): string {
+		let processed = query.toLowerCase().trim();
+
+		// Common medical terminology expansions for workers' compensation
+		const expansions: Record<string, string> = {
+			'pre-existing': 'pre-existing preexisting prior existing previous',
+			'preexisting': 'pre-existing preexisting prior existing previous',
+			'prior condition': 'pre-existing preexisting prior condition previous condition',
+			'aggravation': 'aggravation exacerbation worsening',
+			'disability': 'disability impairment limitation restriction',
+			'permanent': 'permanent lasting long-term chronic',
+			'injury': 'injury harm damage trauma',
+		};
+
+		// Expand terminology
+		for (const [term, expansion] of Object.entries(expansions)) {
+			if (processed.includes(term)) {
+				processed = processed + ' ' + expansion;
+				break; // Only expand the first matching term to avoid query bloat
+			}
+		}
+
+		return processed;
+	}
+
+	/**
+	 * Apply Maximal Marginal Relevance (MMR) for diversity
+	 * Balances relevance and diversity in results
+	 * Formula: MMR = λ * sim(query, doc) - (1-λ) * max sim(doc, selected)
+	 */
+	private applyMMR(
+		candidates: Array<{ id: string; score: number; metadata: Record<string, any> }>,
+		queryVector: number[],
+		n: number
+	): Array<{ id: string; score: number; metadata: Record<string, any> }> {
+		if (candidates.length <= n) {
+			return candidates;
+		}
+
+		const selected: Array<{ id: string; score: number; metadata: Record<string, any> }> = [];
+		const remaining = [...candidates];
+		const lambda = 0.7; // Balance between relevance (high λ) and diversity (low λ)
+
+		// Always select the highest scoring document first
+		selected.push(remaining.shift()!);
+
+		// Iteratively select documents that maximize MMR score
+		while (selected.length < n && remaining.length > 0) {
+			let bestIndex = -1;
+			let bestScore = -Infinity;
+
+			for (let i = 0; i < remaining.length; i++) {
+				const candidate = remaining[i];
+				const candidateVector = this.embeddings.get(candidate.id)?.vector;
+
+				if (!candidateVector) continue;
+
+				// Calculate relevance score (already have this)
+				const relevanceScore = candidate.score;
+
+				// Calculate max similarity to already selected documents
+				let maxSimToSelected = 0;
+				for (const selectedDoc of selected) {
+					const selectedVector = this.embeddings.get(selectedDoc.id)?.vector;
+					if (selectedVector) {
+						const sim = this.cosineSimilarity(candidateVector, selectedVector);
+						maxSimToSelected = Math.max(maxSimToSelected, sim);
+					}
+				}
+
+				// Calculate MMR score
+				const mmrScore = lambda * relevanceScore - (1 - lambda) * maxSimToSelected;
+
+				if (mmrScore > bestScore) {
+					bestScore = mmrScore;
+					bestIndex = i;
+				}
+			}
+
+			if (bestIndex >= 0) {
+				selected.push(remaining.splice(bestIndex, 1)[0]);
+			} else {
+				break;
+			}
+		}
+
+		return selected;
 	}
 
 	async deleteByDocId(docId: string): Promise<void> {

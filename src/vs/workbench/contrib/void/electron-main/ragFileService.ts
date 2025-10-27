@@ -47,7 +47,12 @@ export class RAGFileService {
 	 * Safely get the file system path from a URI, handling Windows paths correctly
 	 */
 	private getFilePath(uri: URI): string {
-		this.logService.info('URI Debug:', {
+		// Validate that we received a valid URI object
+		if (!uri) {
+			throw new Error('Invalid URI: URI is null or undefined');
+		}
+
+		this.logService.info('[getFilePath] URI Debug:', {
 			scheme: uri.scheme,
 			authority: uri.authority,
 			path: uri.path,
@@ -58,16 +63,44 @@ export class RAGFileService {
 		// Try fsPath first (handles Windows drive letters correctly)
 		if (uri.fsPath) {
 			const normalized = normalize(uri.fsPath);
-			this.logService.info(`Normalized path: ${uri.fsPath} -> ${normalized}`);
+			this.logService.info(`[getFilePath] Normalized path from fsPath: ${uri.fsPath} -> ${normalized}`);
 			return normalized;
 		}
-		// Fallback to path
-		if (uri.path) {
-			const normalized = normalize(uri.path);
-			this.logService.info(`Normalized path from uri.path: ${uri.path} -> ${normalized}`);
+
+		// Fallback: manually construct Windows path from URI.path
+		// For URIs like file:///d%3A/path or file:///d:/path
+		if (uri.path && uri.scheme === 'file') {
+			let decodedPath = decodeURIComponent(uri.path);
+
+			// Handle Windows paths: /d:/path/to/file -> d:\path\to\file
+			// or /D:/path -> D:\path
+			const windowsPathMatch = decodedPath.match(/^\/([a-zA-Z]:)(\/.*)/);
+			if (windowsPathMatch) {
+				// Extract drive letter and rest of path
+				const driveLetter = windowsPathMatch[1]; // e.g., "d:" or "D:"
+				const restOfPath = windowsPathMatch[2];  // e.g., "/Coding/test3"
+
+				// Convert forward slashes to backslashes
+				const windowsPath = driveLetter + restOfPath.replace(/\//g, '\\');
+				const normalized = normalize(windowsPath);
+				this.logService.info(`[getFilePath] Converted Windows path: ${decodedPath} -> ${windowsPath} -> ${normalized}`);
+				return normalized;
+			}
+
+			// For non-Windows paths or if regex didn't match, just normalize
+			const normalized = normalize(decodedPath);
+			this.logService.info(`[getFilePath] Normalized path from uri.path: ${uri.path} -> ${decodedPath} -> ${normalized}`);
 			return normalized;
 		}
-		throw new Error('Invalid URI: no path available');
+
+		// If we reach here, the URI is invalid
+		throw new Error(`Invalid URI: no valid path available. URI details: ${JSON.stringify({
+			scheme: uri.scheme,
+			authority: uri.authority,
+			path: uri.path,
+			fsPath: uri.fsPath,
+			toString: uri.toString()
+		})}`);
 	}
 
 	private async extractPDF(uri: URI): Promise<ExtractedContent> {
@@ -354,22 +387,204 @@ export class RAGFileService {
 	}
 
 	/**
+	 * Edit a DOCX file with the given operations
+	 */
+	async editDOCX(uri: URI, operations: Array<{
+		type: 'insert_text' | 'replace_text';
+		position?: number;
+		text?: string;
+		search?: string;
+		replace?: string;
+		all?: boolean;
+	}>): Promise<{ success: boolean; message: string }> {
+		try {
+			const { Document, Packer, Paragraph, TextRun } = await import('docx');
+			const mammoth = await import('mammoth');
+			const { readFileSync, writeFileSync } = await import('fs');
+
+			this.logService.info(`[RAGFileService] Editing DOCX: ${uri.fsPath}`);
+
+			// Read existing DOCX file
+			const filepath = this.getFilePath(uri);
+			const buffer = readFileSync(filepath);
+
+			// Extract text content using mammoth
+			this.logService.info('[RAGFileService] Extracting text from DOCX...');
+			const { value: extractedText } = await mammoth.extractRawText({ buffer });
+			this.logService.info(`[RAGFileService] Extracted ${extractedText.length} characters`);
+
+			let modifiedText = extractedText;
+
+			// Apply operations sequentially
+			for (const op of operations) {
+				switch (op.type) {
+					case 'insert_text':
+						if (typeof op.position === 'number' && op.text) {
+							const pos = Math.min(op.position, modifiedText.length);
+							modifiedText = modifiedText.slice(0, pos) + op.text + modifiedText.slice(pos);
+							this.logService.info(`[RAGFileService] Inserted text at position ${pos}`);
+						}
+						break;
+
+					case 'replace_text':
+						if (op.search && typeof op.replace === 'string') {
+							if (op.all) {
+								const count = (modifiedText.match(new RegExp(op.search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g')) || []).length;
+								modifiedText = modifiedText.split(op.search).join(op.replace);
+								this.logService.info(`[RAGFileService] Replaced ${count} occurrences: "${op.search}" -> "${op.replace}"`);
+							} else {
+								modifiedText = modifiedText.replace(op.search, op.replace);
+								this.logService.info(`[RAGFileService] Replaced first occurrence: "${op.search}" -> "${op.replace}"`);
+							}
+						}
+						break;
+				}
+			}
+
+			// Create new document with modified content
+			this.logService.info('[RAGFileService] Creating new document with modified text...');
+			const paragraphs = modifiedText.split('\n').map(line =>
+				new Paragraph({
+					children: [new TextRun(line || ' ')]
+				})
+			);
+
+			const doc = new Document({
+				creator: 'Safe Appeals Navigator',
+				title: 'Edited Document',
+				description: 'Edited by Safe Appeals Navigator',
+				sections: [{
+					properties: {},
+					children: paragraphs
+				}]
+			});
+
+			// Generate and save
+			const newBuffer = await Packer.toBuffer(doc);
+			writeFileSync(filepath, newBuffer);
+
+			this.logService.info(`[RAGFileService] ✅ Successfully saved edited DOCX: ${filepath} (${newBuffer.length} bytes)`);
+
+			return {
+				success: true,
+				message: `Successfully edited DOCX file: ${operations.length} operation(s) applied`
+			};
+		} catch (error) {
+			this.logService.error('[RAGFileService] Failed to edit DOCX:', error);
+			throw error;
+		}
+	}
+
+	/**
+	 * Edit an XLSX file with the given operations
+	 */
+	async editXLSX(uri: URI, operations: Array<{
+		type: 'set_cell_value' | 'set_cell_formula';
+		sheet: string | number;
+		cell: string;
+		value?: any;
+		formula?: string;
+	}>): Promise<{ success: boolean; message: string }> {
+		try {
+			const XLSX = await import('xlsx');
+			const { readFileSync, writeFileSync } = await import('fs');
+
+			this.logService.info(`[RAGFileService] Editing XLSX: ${uri.fsPath}`);
+
+			// Read and parse workbook
+			const filepath = this.getFilePath(uri);
+			const buffer = readFileSync(filepath);
+			const workbook = XLSX.read(buffer, { type: 'buffer' });
+
+			this.logService.info(`[RAGFileService] Loaded workbook with ${workbook.SheetNames.length} sheets`);
+
+			// Apply operations
+			for (const op of operations) {
+				// Resolve sheet name
+				let sheetName: string;
+				if (typeof op.sheet === 'number') {
+					sheetName = workbook.SheetNames[op.sheet];
+					if (!sheetName) {
+						throw new Error(`Sheet index ${op.sheet} out of range (workbook has ${workbook.SheetNames.length} sheets)`);
+					}
+				} else {
+					sheetName = op.sheet;
+					if (!workbook.Sheets[sheetName]) {
+						throw new Error(`Sheet "${sheetName}" not found in workbook`);
+					}
+				}
+
+				const worksheet = workbook.Sheets[sheetName];
+
+				switch (op.type) {
+					case 'set_cell_value':
+						if (op.value !== undefined) {
+							worksheet[op.cell] = {
+								t: typeof op.value === 'number' ? 'n' : 's',
+								v: op.value
+							};
+							this.logService.info(`[RAGFileService] Set ${sheetName}!${op.cell} = ${op.value}`);
+						}
+						break;
+
+					case 'set_cell_formula':
+						if (op.formula) {
+							worksheet[op.cell] = {
+								t: 'n',
+								f: op.formula
+							};
+							this.logService.info(`[RAGFileService] Set ${sheetName}!${op.cell} = ${op.formula}`);
+						}
+						break;
+				}
+			}
+
+			// Write back to file
+			const newBuffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+			writeFileSync(filepath, newBuffer);
+
+			this.logService.info(`[RAGFileService] ✅ Successfully saved edited XLSX: ${filepath} (${newBuffer.length} bytes)`);
+
+			return {
+				success: true,
+				message: `Successfully edited XLSX file: ${operations.length} operation(s) applied`
+			};
+		} catch (error) {
+			this.logService.error('[RAGFileService] Failed to edit XLSX:', error);
+			throw error;
+		}
+	}
+
+	/**
 	 * Create an empty but valid DOCX file
 	 */
 	async createEmptyDOCX(uri: URI): Promise<void> {
 		try {
-			const { Document, Packer, Paragraph } = await import('docx');
+			const { Document, Packer, Paragraph, TextRun } = await import('docx');
 			const { writeFileSync } = await import('fs');
 
-			// Create a minimal valid DOCX document
-			// Based on docx 9.5.1 documentation: sections must have children array,
-			// and Paragraph must have children array (even if empty)
+			// Create a minimal valid DOCX document following docx.js v9.5.1 official patterns
+			// Based on official documentation: https://docx.js.org/index
+			// A proper paragraph should have children with TextRun objects, not raw text property
 			const doc = new Document({
+				creator: 'Safe Appeals Navigator',
+				title: 'New Document',
+				description: 'Created by Safe Appeals Navigator',
 				sections: [{
 					properties: {},
 					children: [
+						// Use proper TextRun structure as per docx.js documentation
+						// A single space ensures the paragraph is visible and valid
 						new Paragraph({
-							children: [], // Empty children array is the correct minimal structure
+							children: [
+								new TextRun(' ')
+							]
+						}),
+						// Add a second paragraph to ensure proper document structure
+						new Paragraph({
+							children: [
+								new TextRun('')
+							]
 						})
 					]
 				}]
@@ -396,9 +611,9 @@ export class RAGFileService {
 				throw new Error(`Buffer too small: ${buffer.length} bytes. Expected minimum 1200 bytes for valid DOCX.`);
 			}
 
-			// Expected size range: 1200-2000 bytes for minimal empty DOCX
+			// Expected size range: 1200-2500 bytes for minimal empty DOCX with proper structure
 			if (buffer.length < 1000) {
-				this.logService.warn(`[createEmptyDOCX] Buffer size (${buffer.length} bytes) is smaller than expected (1200-2000 bytes). File may be incomplete.`);
+				this.logService.warn(`[createEmptyDOCX] Buffer size (${buffer.length} bytes) is smaller than expected (1200-2500 bytes). File may be incomplete.`);
 			}
 
 			// Write to disk

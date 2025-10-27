@@ -136,11 +136,63 @@ export class DOCXViewerEditor extends EditorPane {
 			const currentUri = input.resource.toString();
 			console.log('[DOCX Viewer] Loading DOCX:', currentUri);
 
-			// Read file as buffer
-			const fileContent = await this.fileService.readFile(input.resource);
+			// Retry logic for newly created files that may still be populating
+			let fileContent: Awaited<ReturnType<typeof this.fileService.readFile>> | undefined;
+			let retries = 0;
+			const maxRetries = 5; // Try up to 5 times
+			const retryDelay = 100; // Wait 100ms between retries
+
+			while (retries < maxRetries) {
+				try {
+					fileContent = await this.fileService.readFile(input.resource);
+					console.log(`[DOCX Viewer] File read attempt ${retries + 1}/${maxRetries} - Size: ${fileContent.value.byteLength} bytes`);
+
+					// If file is empty, it might still be populating - wait and retry
+					if (fileContent.value.byteLength === 0) {
+						if (retries < maxRetries - 1) {
+							console.warn(`[DOCX Viewer] File is empty, waiting ${retryDelay}ms before retry...`);
+							await new Promise(resolve => setTimeout(resolve, retryDelay));
+							retries++;
+							continue;
+						} else {
+							// Last retry failed
+							throw new Error('DOCX file is empty (0 bytes) after multiple retries. The file may not have been created correctly.');
+						}
+					}
+
+					// File has content, break out of retry loop
+					break;
+
+				} catch (error) {
+					if (retries < maxRetries - 1) {
+						console.warn(`[DOCX Viewer] Error reading file on attempt ${retries + 1}, retrying...`, error);
+						await new Promise(resolve => setTimeout(resolve, retryDelay));
+						retries++;
+					} else {
+						throw error;
+					}
+				}
+			}
+
+			// Ensure fileContent was successfully read
+			if (!fileContent) {
+				throw new Error('Failed to read file after multiple retries');
+			}
 
 			// Convert to base64 manually (like PDF viewer)
 			const uint8Array = new Uint8Array(fileContent.value.buffer);
+
+			// Verify ZIP signature
+			if (uint8Array.length >= 4) {
+				const signature = Array.from(uint8Array.slice(0, 4)).map(b => '0x' + b.toString(16).toUpperCase()).join(' ');
+				console.log('[DOCX Viewer] File ZIP signature:', signature);
+				const isValidZip = uint8Array[0] === 0x50 && uint8Array[1] === 0x4B;
+				if (!isValidZip) {
+					console.error('[DOCX Viewer] Invalid ZIP signature - file may be corrupted');
+					throw new Error(`File does not have a valid ZIP signature. Expected 0x50 0x4B, got ${signature.substring(0, 11)}`);
+				}
+			}
+
 			let base64 = '';
 			const chunkSize = 8192;
 
@@ -150,6 +202,7 @@ export class DOCXViewerEditor extends EditorPane {
 			}
 
 			const base64Data = btoa(base64);
+			console.log('[DOCX Viewer] Base64 encoded - Length:', base64Data.length);
 
 			// Cache the data
 			this._docxDataCache = { uri: currentUri, data: base64Data };

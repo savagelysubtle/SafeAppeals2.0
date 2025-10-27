@@ -60,6 +60,7 @@
 			"command": "bun run buildreact",
 			"label": "Initial React Build",
 			"presentation": {
+				"group": "buildWatchers",
 				"reveal": "silent",
 				"close": true
 			},

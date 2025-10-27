@@ -6,7 +6,9 @@
 import { URI } from '../../../../../base/common/uri.js';
 import { InstantiationType, registerSingleton } from '../../../../../platform/instantiation/common/extensions.js';
 import { createDecorator } from '../../../../../platform/instantiation/common/instantiation.js';
+import { ILogService } from '../../../../../platform/log/common/log.js';
 import { IEditorService } from '../../../../services/editor/common/editorService.js';
+import { IDocumentCreatorService } from '../documentCreatorService.js';
 import { DOCXViewerEditor } from './docxViewer/docxViewerEditor.js';
 import { XLSXViewerEditor } from './xlsxViewer/xlsxViewerEditor.js';
 
@@ -59,6 +61,8 @@ export class DocumentEditorService implements IDocumentEditorService {
 
 	constructor(
 		@IEditorService private readonly editorService: IEditorService,
+		@IDocumentCreatorService private readonly documentCreatorService: IDocumentCreatorService,
+		@ILogService private readonly logService: ILogService,
 	) { }
 
 	isDocumentOpen(uri: URI): boolean {
@@ -74,17 +78,70 @@ export class DocumentEditorService implements IDocumentEditorService {
 	}
 
 	async editDOCX(params: { uri: URI; operations: DOCXEditOperation[] }): Promise<{ success: boolean; error?: string; message?: string }> {
-		// If document is open, send edit commands to viewer via webview message
+		// If document is open, send edit commands to viewer via webview message (live editing)
 		if (this.isDocumentOpen(params.uri)) {
 			return this.editOpenDOCX(params);
 		}
 
-		// If document is closed, return error for now
-		return {
-			success: false,
-			error: 'Document must be open to edit. Please open the document first.',
-			message: 'Editing closed DOCX files is not yet implemented. Open the file in the viewer first.'
-		};
+		// If document is closed, edit using backend docx library
+		return this.editClosedDOCX(params);
+	}
+
+	/**
+	 * Edit a closed DOCX file using the backend service via IPC
+	 * This delegates to the main process where Node modules are available
+	 */
+	private async editClosedDOCX(params: { uri: URI; operations: DOCXEditOperation[] }): Promise<{ success: boolean; error?: string; message?: string }> {
+		try {
+			this.logService.info(`[DocumentEditorService] Editing closed DOCX via IPC: ${params.uri.fsPath}`);
+
+			// Filter operations to only those supported by backend
+			const supportedOps = params.operations.filter(op =>
+				op.type === 'insert_text' || op.type === 'replace_text'
+			);
+
+			if (supportedOps.length === 0) {
+				return {
+					success: false,
+					error: `No supported operations found. Available operations for closed documents: insert_text, replace_text`,
+					message: `Operations like format_text, insert_table require the document to be open in the viewer.`
+				};
+			}
+
+			// Check for unsupported operations
+			const unsupportedOps = params.operations.filter(op =>
+				op.type !== 'insert_text' && op.type !== 'replace_text'
+			);
+
+			if (unsupportedOps.length > 0) {
+				this.logService.warn(`[DocumentEditorService] Skipping ${unsupportedOps.length} unsupported operation(s): ${unsupportedOps.map(o => o.type).join(', ')}`);
+			}
+
+			// Convert operations to backend format (strip type info for TypeScript compatibility)
+			const backendOps = supportedOps.map(op => ({
+				type: op.type,
+				position: 'position' in op ? op.position : undefined,
+				text: 'text' in op ? op.text : undefined,
+				search: 'search' in op ? op.search : undefined,
+				replace: 'replace' in op ? op.replace : undefined,
+				all: 'all' in op ? op.all : undefined
+			}));
+
+			// Call backend via IPC
+			const result = await this.documentCreatorService.editDOCX(params.uri, backendOps as any);
+
+			this.logService.info(`[DocumentEditorService] Backend edit result:`, result);
+
+			return result;
+
+		} catch (error) {
+			this.logService.error(`[DocumentEditorService] Failed to edit closed DOCX:`, error);
+			return {
+				success: false,
+				error: error instanceof Error ? error.message : String(error),
+				message: `Failed to edit document: ${error instanceof Error ? error.message : String(error)}`
+			};
+		}
 	}
 
 	private async editOpenDOCX(params: { uri: URI; operations: DOCXEditOperation[] }): Promise<{ success: boolean; error?: string; message?: string }> {
@@ -121,17 +178,69 @@ export class DocumentEditorService implements IDocumentEditorService {
 	}
 
 	async editXLSX(params: { uri: URI; operations: XLSXEditOperation[] }): Promise<{ success: boolean; error?: string; message?: string }> {
-		// If document is open, send edit commands to viewer via webview message
+		// If document is open, send edit commands to viewer via webview message (live editing)
 		if (this.isDocumentOpen(params.uri)) {
 			return this.editOpenXLSX(params);
 		}
 
-		// If document is closed, return error for now
-		return {
-			success: false,
-			error: 'Document must be open to edit. Please open the document first.',
-			message: 'Editing closed XLSX files is not yet implemented. Open the file in the viewer first.'
-		};
+		// If document is closed, edit using backend xlsx library
+		return this.editClosedXLSX(params);
+	}
+
+	/**
+	 * Edit a closed XLSX file using the backend service via IPC
+	 * This delegates to the main process where Node modules are available
+	 */
+	private async editClosedXLSX(params: { uri: URI; operations: XLSXEditOperation[] }): Promise<{ success: boolean; error?: string; message?: string }> {
+		try {
+			this.logService.info(`[DocumentEditorService] Editing closed XLSX via IPC: ${params.uri.fsPath}`);
+
+			// Filter operations to only those supported by backend
+			const supportedOps = params.operations.filter(op =>
+				op.type === 'set_cell_value' || op.type === 'set_cell_formula'
+			);
+
+			if (supportedOps.length === 0) {
+				return {
+					success: false,
+					error: `No supported operations found. Available operations for closed documents: set_cell_value, set_cell_formula`,
+					message: `Operations like format_cell, insert_row require the document to be open in the viewer.`
+				};
+			}
+
+			// Check for unsupported operations
+			const unsupportedOps = params.operations.filter(op =>
+				op.type !== 'set_cell_value' && op.type !== 'set_cell_formula'
+			);
+
+			if (unsupportedOps.length > 0) {
+				this.logService.warn(`[DocumentEditorService] Skipping ${unsupportedOps.length} unsupported operation(s): ${unsupportedOps.map(o => o.type).join(', ')}`);
+			}
+
+			// Convert operations to backend format
+			const backendOps = supportedOps.map(op => ({
+				type: op.type,
+				sheet: op.sheet,
+				cell: op.cell,
+				value: 'value' in op ? op.value : undefined,
+				formula: 'formula' in op ? op.formula : undefined
+			}));
+
+			// Call backend via IPC
+			const result = await this.documentCreatorService.editXLSX(params.uri, backendOps as any);
+
+			this.logService.info(`[DocumentEditorService] Backend edit result:`, result);
+
+			return result;
+
+		} catch (error) {
+			this.logService.error(`[DocumentEditorService] Failed to edit closed XLSX:`, error);
+			return {
+				success: false,
+				error: error instanceof Error ? error.message : String(error),
+				message: `Failed to edit document: ${error instanceof Error ? error.message : String(error)}`
+			};
+		}
 	}
 
 	private async editOpenXLSX(params: { uri: URI; operations: XLSXEditOperation[] }): Promise<{ success: boolean; error?: string; message?: string }> {

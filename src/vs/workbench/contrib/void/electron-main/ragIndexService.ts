@@ -3,13 +3,13 @@
  *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
  *--------------------------------------------------------------------------------------*/
 
-import { URI } from '../../../../base/common/uri.js';
-import { ILogService } from '../../../../platform/log/common/log.js';
 import type { Database } from '@vscode/sqlite3';
-import { IRAGPathService } from '../common/ragPathService.js';
-import { DocumentRecord, ChunkRecord, SearchResult, RAGStats, ExtractedContent } from '../common/ragServiceTypes.js';
 import { createHash } from 'crypto';
 import { readFileSync } from 'fs';
+import { URI } from '../../../../base/common/uri.js';
+import { ILogService } from '../../../../platform/log/common/log.js';
+import { IRAGPathService } from '../common/ragPathService.js';
+import { ChunkRecord, DocumentRecord, ExtractedContent, RAGStats, SearchResult } from '../common/ragServiceTypes.js';
 
 export interface IndexDocumentParams {
 	uri: URI;
@@ -287,7 +287,10 @@ export class RAGIndexService {
 		stmt.finalize();
 	}
 
-	private chunkText(text: string, docId: string, chunkSize: number = 1000, overlap: number = 100): ChunkRecord[] {
+	private chunkText(text: string, docId: string, chunkSize: number = 1200, overlap: number = 200): ChunkRecord[] {
+		// IMPROVEMENT: Larger chunks (1200 vs 1000) and more overlap (200 vs 100)
+		// Better for medical/legal documents where context is critical
+
 		// Try heading-based chunking first
 		const headingChunks = this.chunkByHeadings(text, docId, chunkSize);
 		if (headingChunks.length > 0) {
@@ -302,22 +305,26 @@ export class RAGIndexService {
 			return paragraphChunks;
 		}
 
-		// Final fallback to sentence-based chunking
-		this.logService.info(`Using sentence-based chunking fallback`);
+		// Final fallback to sentence-based chunking with overlap
+		this.logService.info(`Using sentence-based chunking fallback with ${overlap} char overlap`);
 		return this.chunkBySentences(text, docId, chunkSize, overlap);
 	}
 
 	private chunkByHeadings(text: string, docId: string, chunkSize: number): ChunkRecord[] {
 		const chunks: ChunkRecord[] = [];
 
-		// Split by common heading patterns
+		// IMPROVEMENT: Added more medical/policy document patterns
 		const headingPatterns = [
 			/\n\s*#{1,6}\s+.+/g,  // Markdown headers (# ## ###)
 			/\n\s*\d+\.\s+.+/g,   // Numbered sections (1. 2. 3.)
+			/\n\s*\d+\.\d+\s+.+/g, // Subsections (1.1, 1.2, etc.)
 			/\n\s*[A-Z][A-Z\s]+$/gm, // ALL CAPS headings
 			/\n\s*Chapter\s+\d+/gi,  // Chapter headings
 			/\n\s*Section\s+\d+/gi,  // Section headings
 			/\n\s*Part\s+[IVX\d]+/gi, // Part headings
+			/\n\s*Article\s+[IVX\d]+/gi, // Article headings (legal docs)
+			/\n\s*Rule\s+\d+/gi,     // Rule headings (policy manuals)
+			/\n\s*Appendix\s+[A-Z\d]+/gi, // Appendix sections
 		];
 
 		let sections: string[] = [text];
