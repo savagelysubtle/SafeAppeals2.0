@@ -133,4 +133,26 @@ export interface IRAGMainService {
 	getDocumentsByType(isPolicyManual: boolean): Promise<any[]>;
 	initialize(openAIApiKey?: string): Promise<void>;
 	clearAllEmbeddings(): Promise<{ success: boolean; message: string }>;
+
+	// Document creation methods (delegated to fileService)
+	createEmptyDOCX(uri: URI): Promise<void>;
+	createEmptyXLSX(uri: URI): Promise<void>;
+
+	// Document editing methods (delegated to fileService)
+	editDOCX(uri: URI, operations: Array<{
+		type: 'insert_text' | 'replace_text';
+		position?: number;
+		text?: string;
+		search?: string;
+		replace?: string;
+		all?: boolean;
+	}>): Promise<{ success: boolean; message: string }>;
+
+	editXLSX(uri: URI, operations: Array<{
+		type: 'set_cell_value' | 'set_cell_formula';
+		sheet: string | number;
+		cell: string;
+		value?: any;
+		formula?: string;
+	}>): Promise<{ success: boolean; message: string }>;
 }

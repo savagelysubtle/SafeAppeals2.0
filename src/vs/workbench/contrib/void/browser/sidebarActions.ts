@@ -368,8 +368,8 @@ registerAction2(class extends Action2 {
 
 		metricsService.capture('Case Organizer', { action: 'Initialize' })
 
-		// Set chat mode to 'agent' for full tool access
-		voidSettingsService.setGlobalSetting('chatMode', 'agent')
+		// Set chat mode to 'case_manager' for full tool access
+		voidSettingsService.setGlobalSetting('chatMode', 'case_manager')
 
 		// Open sidebar if not already open
 		const wasAlreadyOpen = viewsService.isViewContainerVisible(VOID_VIEW_CONTAINER_ID)

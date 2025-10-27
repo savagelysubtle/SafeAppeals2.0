@@ -5,11 +5,11 @@
 
 import { URI } from '../../../../base/common/uri.js';
 import { ILogService } from '../../../../platform/log/common/log.js';
-import { RAGIndexParams, RAGSearchParams, RAGStats, ContextPack, IRAGMainService } from '../common/ragServiceTypes.js';
-import { RAGIndexService } from './ragIndexService.js';
-import { RAGFileService } from './ragFileService.js';
-import { VectorAdapter, ChromaPersistentAdapter, PersistentVectorAdapterConfig } from '../common/ragVectorAdapter.js';
 import { IRAGPathService } from '../common/ragPathService.js';
+import { ContextPack, IRAGMainService, RAGIndexParams, RAGSearchParams, RAGStats } from '../common/ragServiceTypes.js';
+import { ChromaPersistentAdapter, PersistentVectorAdapterConfig, VectorAdapter } from '../common/ragVectorAdapter.js';
+import { RAGFileService } from './ragFileService.js';
+import { RAGIndexService } from './ragIndexService.js';
 
 export class RAGMainService implements IRAGMainService {
 	readonly _serviceBrand: undefined;
@@ -366,5 +366,46 @@ export class RAGMainService implements IRAGMainService {
 		} catch (error) {
 			this.logService.error('Failed to check for embeddings reload:', error);
 		}
+	}
+
+	/**
+	 * Create an empty but valid DOCX file (delegates to fileService)
+	 */
+	async createEmptyDOCX(uri: URI): Promise<void> {
+		return this.fileService.createEmptyDOCX(uri);
+	}
+
+	/**
+	 * Create an empty but valid XLSX file (delegates to fileService)
+	 */
+	async createEmptyXLSX(uri: URI): Promise<void> {
+		return this.fileService.createEmptyXLSX(uri);
+	}
+
+	/**
+	 * Edit a DOCX file with the given operations (delegates to fileService)
+	 */
+	async editDOCX(uri: URI, operations: Array<{
+		type: 'insert_text' | 'replace_text';
+		position?: number;
+		text?: string;
+		search?: string;
+		replace?: string;
+		all?: boolean;
+	}>): Promise<{ success: boolean; message: string }> {
+		return this.fileService.editDOCX(uri, operations);
+	}
+
+	/**
+	 * Edit an XLSX file with the given operations (delegates to fileService)
+	 */
+	async editXLSX(uri: URI, operations: Array<{
+		type: 'set_cell_value' | 'set_cell_formula';
+		sheet: string | number;
+		cell: string;
+		value?: any;
+		formula?: string;
+	}>): Promise<{ success: boolean; message: string }> {
+		return this.fileService.editXLSX(uri, operations);
 	}
 }

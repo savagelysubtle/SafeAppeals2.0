@@ -130,8 +130,8 @@ import { IRAGPathService, RAGPathService } from '../../workbench/contrib/void/co
 import { IRAGMainService } from '../../workbench/contrib/void/common/ragServiceTypes.js';
 import { IVoidSCMService } from '../../workbench/contrib/void/common/voidSCMTypes.js';
 import { IVoidUpdateService } from '../../workbench/contrib/void/common/voidUpdateService.js';
-import { DOCXExtractorChannel } from '../../workbench/contrib/void/electron-main/docxExtractorChannel.js';
 import { DOCXCreatorChannel } from '../../workbench/contrib/void/electron-main/docxCreatorChannel.js';
+import { DOCXExtractorChannel } from '../../workbench/contrib/void/electron-main/docxExtractorChannel.js';
 import { MCPChannel } from '../../workbench/contrib/void/electron-main/mcpChannel.js';
 import { MetricsMainService } from '../../workbench/contrib/void/electron-main/metricsMainService.js';
 import { PDFExtractorChannel } from '../../workbench/contrib/void/electron-main/pdfExtractorChannel.js';
@@ -1282,7 +1282,7 @@ export class CodeApplication extends Disposable {
 		mainProcessElectronServer.registerChannel('void-channel-xlsx-extractor', xlsxExtractorChannel);
 
 		// Void DOCX/XLSX creator service (uses RAGMainService directly)
-		const docxCreatorChannel = new DOCXCreatorChannel(ragMainService as any);
+		const docxCreatorChannel = new DOCXCreatorChannel(ragMainService);
 		mainProcessElectronServer.registerChannel('void-channel-docx-creator', docxCreatorChannel);
 
 		// Extension Host Debug Broadcasting

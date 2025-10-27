@@ -82,15 +82,35 @@
 	async function handleLoadDOCX(message) {
 		try {
 			console.log('[DOCX Webview] Loading DOCX...');
+			console.log('[DOCX Webview] Base64 data length:', message.data.length);
 			docxUri = message.docxUri;
 
 			// Convert base64 to Blob
 			const binaryString = atob(message.data);
+			console.log('[DOCX Webview] Binary string length:', binaryString.length);
+
 			const bytes = new Uint8Array(binaryString.length);
 			for (let i = 0; i < binaryString.length; i++) {
 				bytes[i] = binaryString.charCodeAt(i);
 			}
+
+			// Verify ZIP signature (first 4 bytes should be PK.. = 0x50 0x4B 0x03 0x04)
+			if (bytes.length >= 4) {
+				const signature = Array.from(bytes.slice(0, 4)).map(b => '0x' + b.toString(16).toUpperCase()).join(' ');
+				console.log('[DOCX Webview] First 4 bytes (ZIP signature):', signature);
+				console.log('[DOCX Webview] Is valid ZIP?', bytes[0] === 0x50 && bytes[1] === 0x4B);
+			}
+
 			const blob = new Blob([bytes], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
+			console.log('[DOCX Webview] Blob size:', blob.size, 'bytes');
+
+			// If blob is 0 or very small, show error immediately
+			if (blob.size === 0) {
+				throw new Error('DOCX file is empty (0 bytes). The file may not have been created yet or is corrupted.');
+			}
+			if (blob.size < 100) {
+				throw new Error(`DOCX file is too small (${blob.size} bytes). Minimum expected size is ~1200 bytes for a valid DOCX.`);
+			}
 
 			// Clear container
 			container.innerHTML = '';

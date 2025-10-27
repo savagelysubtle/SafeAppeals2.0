@@ -5,9 +5,9 @@
  *--------------------------------------------------------------------------------------*/
 
 import { defaultModelsOfProvider, defaultProviderSettings, ModelOverrides } from './modelCapabilities.js';
+import { RAGOpenAIModel, RAGStorageScope, RAGVectorBackend } from './ragServiceTypes.js';
 import { ToolApprovalType } from './toolsServiceTypes.js';
 import { VoidSettingsState } from './voidSettingsService.js';
-import { RAGStorageScope, RAGVectorBackend, RAGOpenAIModel } from './ragServiceTypes.js';
 
 
 type UnionOfKeys<T> = T extends T ? keyof T : never;
@@ -436,7 +436,7 @@ export const isFeatureNameDisabled = (featureName: FeatureName, settingsState: V
 
 
 
-export type ChatMode = 'agent' | 'gather' | 'normal'
+export type ChatMode = 'case_manager' | 'research' | 'drafting'
 
 
 export type GlobalSettings = {
@@ -479,18 +479,18 @@ export const defaultGlobalSettings: GlobalSettings = {
 	syncApplyToChat: true,
 	syncSCMToChat: true,
 	enableFastApply: true,
-	chatMode: 'agent',
+	chatMode: 'case_manager',
 	autoApprove: {},
 	showInlineSuggestions: true,
 	includeToolLintErrors: true,
 	isOnboardingComplete: false,
 	disableSystemMessage: false,
 	autoAcceptLLMChanges: false,
-	// RAG defaults
+	// RAG defaults - IMPROVED for better retrieval quality
 	ragEnabled: true,
-	ragChunkSize: 1000,
-	ragChunkOverlap: 100,
-	ragSearchLimit: 5,
+	ragChunkSize: 1200,  // Increased from 1000 for better context
+	ragChunkOverlap: 200, // Increased from 100 for better continuity
+	ragSearchLimit: 8,    // Increased from 5 for better diversity after MMR
 	ragStorageScope: 'workspace_docs',
 	ragVectorBackend: 'chroma-http',
 	ragOpenAIModel: 'text-embedding-3-small',

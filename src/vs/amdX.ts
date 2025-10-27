@@ -176,7 +176,6 @@ class AMDModuleImporter {
 		try {
 			const fs = (await import(`${'fs'}`)).default;
 			const vm = (await import(`${'vm'}`)).default;
-			const path = (await import(`${'path'}`)).default;
 			const module = (await import(`${'module'}`)).default;
 
 			const filePath = URI.parse(scriptSrc).fsPath;
@@ -184,18 +183,7 @@ class AMDModuleImporter {
 			const scriptSource = module.wrap(content.replace(/^#!.*/, ''));
 			const script = new vm.Script(scriptSource);
 			const compileWrapper = script.runInThisContext();
-
-			// Create a mock module object for the AMD module
-			const mockExports = {};
-			const mockModule = { exports: mockExports };
-			const mockRequire = (id: string) => {
-				throw new Error(`Cannot require '${id}' in AMD module context`);
-			};
-			const dirname = path.dirname(filePath);
-
-			// Call the wrapper with proper CommonJS parameters
-			compileWrapper.call(mockModule.exports, mockExports, mockRequire, mockModule, filePath, dirname);
-
+			compileWrapper.apply();
 			return this._defineCalls.pop();
 		} catch (error) {
 			throw error;

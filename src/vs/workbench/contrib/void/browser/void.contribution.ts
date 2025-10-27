@@ -6,106 +6,110 @@
 import { Registry } from '../../../../platform/registry/common/platform.js';
 
 // register inline diffs
-import './editCodeService.js'
+import './editCodeService.js';
 
 // register Sidebar pane, state, actions (keybinds, menus) (Ctrl+L)
-import './sidebarActions.js'
-import './voidExtensionApi.js'
-import './sidebarPane.js'
+import './sidebarActions.js';
+import './sidebarPane.js';
+import './voidExtensionApi.js';
 
 // register quick edit (Ctrl+K)
-import './quickEditActions.js'
+import './quickEditActions.js';
 
 
 // register Autocomplete
-import './autocompleteService.js'
+import './autocompleteService.js';
 
 // register Context services
 // import './contextGatheringService.js'
 // import './contextUserChangesService.js'
 
 // settings pane
-import './voidSettingsPane.js'
+import './voidSettingsPane.js';
 
 // register css
-import './media/void.css'
+import './media/void.css';
 
 // update (frontend part, also see platform/)
-import './voidUpdateActions.js'
+import './voidUpdateActions.js';
 
-import './convertToLLMMessageWorkbenchContrib.js'
+import './convertToLLMMessageWorkbenchContrib.js';
 
 // tools
-import './toolsService.js'
-import './terminalToolService.js'
+import './terminalToolService.js';
+import './toolsService.js';
 
 // register Thread History
-import './chatThreadService.js'
+import './chatThreadService.js';
 
 // ping
-import './metricsPollService.js'
+import './metricsPollService.js';
 
 // helper services
-import './helperServices/consistentItemService.js'
+import './helperServices/consistentItemService.js';
 
 // register selection helper
-import './voidSelectionHelperWidget.js'
+import './voidSelectionHelperWidget.js';
 
 // register tooltip service
-import './tooltipService.js'
+import './tooltipService.js';
 
 // register onboarding service
-import './voidOnboardingService.js'
+import './voidOnboardingService.js';
 
 // register misc service
-import './miscWokrbenchContrib.js'
+import './miscWokrbenchContrib.js';
 
 // register file service (for explorer context menu)
-import './fileService.js'
+import './fileService.js';
 
 // register source control management
-import './voidSCMService.js'
+import './voidSCMService.js';
 
 // ---------- common (unclear if these actually need to be imported, because they're already imported wherever they're used) ----------
 
 // llmMessage
-import '../common/sendLLMMessageService.js'
+import '../common/sendLLMMessageService.js';
 
 // voidSettings
-import '../common/voidSettingsService.js'
+import '../common/voidSettingsService.js';
 
 // refreshModel
-import '../common/refreshModelService.js'
+import '../common/refreshModelService.js';
 
 // metrics
-import '../common/metricsService.js'
+import '../common/metricsService.js';
 
 // updates
-import '../common/voidUpdateService.js'
+import '../common/voidUpdateService.js';
 
 // model service
-import '../common/voidModelService.js'
+import '../common/voidModelService.js';
 
 // case profile service
-import '../common/caseProfileService.js'
+import '../common/caseProfileService.js';
 
 // RAG services
-import '../common/ragService.js'
-import '../common/ragPathService.js'
-import '../common/ragContextService.js'
+import '../common/ragContextService.js';
+import '../common/ragPathService.js';
+import '../common/ragService.js';
 
 // RAG workspace service
-import './ragWorkspaceService.js'
-import { IRAGWorkspaceService } from './ragWorkspaceService.js'
+import './ragWorkspaceService.js';
+import { IRAGWorkspaceService } from './ragWorkspaceService.js';
 
 // RAG actions
-import './ragActions.js'
+import './ragActions.js';
 
 // Document viewer service
-import '../common/documentViewerService.js'
+import '../common/documentViewerService.js';
 
 // PDF viewer components
-import './documentViewers/documentViewer.contribution.js'
+import './documentViewers/documentViewer.contribution.js';
+
+// Document file creation handler (for DOCX/XLSX auto-population)
+import './documentCreatorService.js';
+import './documentFileCreation.contribution.js';
 
 // Ensure RAG workspace service starts
 import { IWorkbenchContributionsRegistry, Extensions as WorkbenchExtensions } from '../../../common/contributions.js';
