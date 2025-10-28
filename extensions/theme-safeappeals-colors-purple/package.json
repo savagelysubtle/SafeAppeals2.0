@@ -1,0 +1,21 @@
+{
+	"name": "theme-safeappeals-colors-purple",
+	"displayName": "Safe Appeals Purple Dark",
+	"description": "Creative purple theme - Modern and sophisticated",
+	"version": "1.0.0",
+	"publisher": "safeappeals",
+	"license": "MIT",
+	"engines": {
+		"vscode": "*"
+	},
+	"categories": ["Themes"],
+	"contributes": {
+		"themes": [
+			{
+				"label": "Safe Appeals Purple Dark",
+				"uiTheme": "vs-dark",
+				"path": "./themes/purple-color-theme.json"
+			}
+		]
+	}
+}
