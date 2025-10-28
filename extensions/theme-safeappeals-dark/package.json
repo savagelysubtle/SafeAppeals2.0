@@ -1,0 +1,16 @@
+{
+    "name": "theme-safeappeals-dark",
+    "displayName": "Safe Appeals Icons (Dark)",
+    "description": "Dark mode optimized",
+    "version": "1.0.0",
+    "publisher": "safeappeals",
+    "license": "MIT",
+    "engines": { "vscode": "*" },
+    "contributes": {
+        "iconThemes": [{
+            "id": "safeappeals-icons-dark",
+            "label": "Safe Appeals Icons (Dark)",
+            "path": "./safeappeals-icon-theme-dark.json"
+        }]
+    }
+}

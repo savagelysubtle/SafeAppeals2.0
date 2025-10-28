@@ -1,0 +1,21 @@
+{
+	"name": "theme-safeappeals-colors-icy",
+	"displayName": "Safe Appeals Icy Dark",
+	"description": "Arctic icy theme - Cool and refreshing",
+	"version": "1.0.0",
+	"publisher": "safeappeals",
+	"license": "MIT",
+	"engines": {
+		"vscode": "*"
+	},
+	"categories": ["Themes"],
+	"contributes": {
+		"themes": [
+			{
+				"label": "Safe Appeals Icy Dark",
+				"uiTheme": "vs-dark",
+				"path": "./themes/icy-color-theme.json"
+			}
+		]
+	}
+}

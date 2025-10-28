@@ -1,0 +1,16 @@
+{
+    "name": "theme-safeappeals-material",
+    "displayName": "Safe Appeals Icons (Material)",
+    "description": "Material Design - Google-inspired",
+    "version": "1.0.0",
+    "publisher": "safeappeals",
+    "license": "MIT",
+    "engines": { "vscode": "*" },
+    "contributes": {
+        "iconThemes": [{
+            "id": "safeappeals-icons-material",
+            "label": "Safe Appeals Icons (Material)",
+            "path": "./safeappeals-icon-theme-material.json"
+        }]
+    }
+}
