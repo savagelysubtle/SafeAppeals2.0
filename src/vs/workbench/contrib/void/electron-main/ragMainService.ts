@@ -43,23 +43,23 @@ export class RAGMainService implements IRAGMainService {
 			// Ensure directories exist
 			await this.pathService.ensureDirectories();
 
-		// Use persistent local Chroma - no server needed!
-		const chromaPath = this.pathService.getGlobalChromaDir();
+			// Use persistent local Chroma - no server needed!
+			const chromaPath = this.pathService.getGlobalChromaDir();
 
-		const config: PersistentVectorAdapterConfig = {
+			const config: PersistentVectorAdapterConfig = {
 			persistPath: chromaPath,
 			useReranking: true // Enable reranking by default
-		};
+			};
 
-		this.vectorAdapter = new ChromaPersistentAdapter(config, this.logService);
+			this.vectorAdapter = new ChromaPersistentAdapter(config, this.logService);
 
-		// Log first-time initialization message
-		this.logService.info('Initializing local embedding model (first time may take 1-2 minutes to download ~23 MB model)...');
-		await this.vectorAdapter.initialize();
-		this.logService.info('Local embedding model ready');
+			// Log first-time initialization message
+			this.logService.info('Initializing local embedding model (first time may take 1-2 minutes to download ~23 MB model)...');
+			await this.vectorAdapter.initialize();
+			this.logService.info('Local embedding model ready');
 
-		// Initialize index service
-		await this.indexService.initialize();
+			// Initialize index service
+			await this.indexService.initialize();
 
 		// Initialize hybrid retriever
 		this.hybridRetriever = new HybridRetriever(
@@ -73,8 +73,8 @@ export class RAGMainService implements IRAGMainService {
 		this.reranker = new LocalCrossEncoderReranker(this.logService);
 		await this.reranker.initialize(modelCachePath);
 
-		// Ensure collections exist
-		await this.vectorAdapter.ensureCollections('both');
+			// Ensure collections exist
+			await this.vectorAdapter.ensureCollections('both');
 
 			// CRITICAL: Reload embeddings from database if they exist
 			// The in-memory vector store loses all embeddings on restart
