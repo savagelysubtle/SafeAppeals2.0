@@ -37,9 +37,28 @@
 		"serviceUrl": "https://marketplace.visualstudio.com/_apis/public/gallery",
 		"itemUrl": "https://marketplace.visualstudio.com/items"
 	},
-	"builtInExtensions": [],
+	"builtInExtensions": [
+		{
+			"name": "theme-safeappeals",
+			"version": "1.0.0",
+			"repo": "https://github.com/savagelysubtle/SafeAppeals2.0",
+			"metadata": {
+				"id": "safeappeals.theme-safeappeals",
+				"publisherId": "safeappeals",
+				"publisherDisplayName": "Safe Appeals Navigator",
+				"targetPlatform": "undefined",
+				"isApplicationScoped": true,
+				"updated": false,
+				"isPreReleaseVersion": false,
+				"installedTimestamp": 0,
+				"pinned": true,
+				"preRelease": false
+			}
+		}
+	],
 	"disableExtensionInstalls": true,
 	"settings.experimentalDefaults": {
+		"workbench.iconTheme": "safeappeals-icons",
 		"files.associations": {
 			"*.md": "markdown",
 			"*.markdown": "markdown",

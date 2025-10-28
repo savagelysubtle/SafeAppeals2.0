@@ -1,0 +1,21 @@
+{
+	"name": "theme-safeappeals",
+	"displayName": "Safe Appeals File Icons",
+	"description": "File icon theme for Safe Appeals Navigator",
+	"version": "1.0.0",
+	"publisher": "safeappeals",
+	"license": "MIT",
+	"engines": {
+		"vscode": "*"
+	},
+	"contributes": {
+		"iconThemes": [
+			{
+				"id": "safeappeals-icons",
+				"label": "Safe Appeals Icons",
+				"path": "./safeappeals-icon-theme.json"
+			}
+		]
+	}
+}
+
