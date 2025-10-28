@@ -50,7 +50,7 @@ export class RAGIndexService {
 		if (this.db) return;
 
 		try {
-			const dbPath = this.pathService.getGlobalSqlitePath();
+		const dbPath = this.pathService.getGlobalSqlitePath();
 			this.logService.info(`RAG: Initializing SQLite database at: ${dbPath}`);
 
 			// Ensure parent directory exists
@@ -71,8 +71,8 @@ export class RAGIndexService {
 			this.db = new sqlite3.Database(dbPath);
 			this.logService.info('RAG: SQLite database initialized successfully');
 
-			await this.createTables();
-			this.logService.info('RAG index service initialized');
+		await this.createTables();
+		this.logService.info('RAG index service initialized');
 		} catch (error) {
 			this.logService.error('RAG: Failed to initialize SQLite database:', error);
 			throw error;
@@ -81,15 +81,6 @@ export class RAGIndexService {
 
 	private async createTables(): Promise<void> {
 		if (!this.db) throw new Error('Database not initialized');
-
-		// Check current schema version
-		const currentVersion = await this.getSchemaVersion();
-		this.logService.info(`Current schema version: ${currentVersion}`);
-
-		if (currentVersion < RAGIndexService.CURRENT_SCHEMA_VERSION) {
-			this.logService.info(`Migrating schema from v${currentVersion} to v${RAGIndexService.CURRENT_SCHEMA_VERSION}`);
-			await this.migrateSchema(currentVersion);
-		}
 
 		const createDocumentsTable = `
 			CREATE TABLE IF NOT EXISTS documents (
@@ -107,13 +98,13 @@ export class RAGIndexService {
 			)
 		`;
 
-	const createChunksTable = `
-		CREATE TABLE IF NOT EXISTS chunks (
-			chunk_id TEXT PRIMARY KEY,
-			doc_id TEXT NOT NULL,
-			text TEXT NOT NULL,
-			chunk_index INTEGER NOT NULL,
-			tokens INTEGER,
+		const createChunksTable = `
+			CREATE TABLE IF NOT EXISTS chunks (
+				chunk_id TEXT PRIMARY KEY,
+				doc_id TEXT NOT NULL,
+				text TEXT NOT NULL,
+				chunk_index INTEGER NOT NULL,
+				tokens INTEGER,
 			section_id TEXT,
 			parent_section TEXT,
 			section_number TEXT,
@@ -123,13 +114,13 @@ export class RAGIndexService {
 			parent_chunk_id TEXT,
 			FOREIGN KEY (doc_id) REFERENCES documents (id) ON DELETE CASCADE,
 			FOREIGN KEY (parent_chunk_id) REFERENCES chunks (chunk_id) ON DELETE SET NULL
-		)
-	`;
+			)
+		`;
 
-	const createIndexes = `
-		CREATE INDEX IF NOT EXISTS idx_documents_workspace ON documents(workspace_id);
-		CREATE INDEX IF NOT EXISTS idx_documents_policy ON documents(is_policy_manual);
-		CREATE INDEX IF NOT EXISTS idx_chunks_doc ON chunks(doc_id);
+		const createIndexes = `
+			CREATE INDEX IF NOT EXISTS idx_documents_workspace ON documents(workspace_id);
+			CREATE INDEX IF NOT EXISTS idx_documents_policy ON documents(is_policy_manual);
+			CREATE INDEX IF NOT EXISTS idx_chunks_doc ON chunks(doc_id);
 		CREATE INDEX IF NOT EXISTS idx_chunks_section ON chunks(section_id);
 		CREATE INDEX IF NOT EXISTS idx_chunks_type ON chunks(chunk_type);
 		CREATE INDEX IF NOT EXISTS idx_chunks_parent ON chunks(parent_chunk_id);
@@ -199,6 +190,15 @@ export class RAGIndexService {
 		});
 
 	this.logService.info('Created FTS5 virtual table and triggers for keyword search');
+
+		// Check current schema version and migrate if needed
+		const currentVersion = await this.getSchemaVersion();
+		this.logService.info(`Current schema version: ${currentVersion}`);
+
+		if (currentVersion < RAGIndexService.CURRENT_SCHEMA_VERSION) {
+			this.logService.info(`Migrating schema from v${currentVersion} to v${RAGIndexService.CURRENT_SCHEMA_VERSION}`);
+			await this.migrateSchema(currentVersion);
+		}
 }
 
 /**
@@ -230,15 +230,15 @@ private async getSchemaVersion(): Promise<number> {
 				);
 			});
 
-			// Insert initial version
+			// Insert current version (2) for new databases since we create tables with latest schema
 			await new Promise<void>((resolve, reject) => {
-				this.db!.run('INSERT INTO schema_version (version) VALUES (1)', (err) => {
+				this.db!.run('INSERT INTO schema_version (version) VALUES (2)', (err) => {
 					if (err) reject(err);
 					else resolve();
 				});
 			});
 
-			return 1;
+			return 2;
 		}
 
 		// Get current version
@@ -349,9 +349,9 @@ private async checkColumnExists(tableName: string, columnName: string): Promise<
 
 			const columnExists = rows.some(row => row.name === columnName);
 			resolve(columnExists);
+			});
 		});
-	});
-}
+	}
 
 	async indexDocument(params: IndexDocumentParams): Promise<{ docId: string; chunks: ChunkRecord[] }> {
 		if (!this.db) throw new Error('Database not initialized');
@@ -1086,16 +1086,16 @@ private async checkColumnExists(tableName: string, columnName: string): Promise<
 					// Ensure text is a string (defensive check)
 					const text = String(row.text || '');
 					return {
-						docId: row.docId,
-						chunkId: row.chunkId,
-						score: 0.8, // Placeholder score - would be calculated by vector search
+					docId: row.docId,
+					chunkId: row.chunkId,
+					score: 0.8, // Placeholder score - would be calculated by vector search
 						snippet: this.highlightQuery(text, query),
-						source: {
-							filename: row.filename,
-							filetype: row.filetype,
-							chunkIndex: row.chunkIndex,
-							isPolicyManual: row.isPolicyManual === 1
-						}
+					source: {
+						filename: row.filename,
+						filetype: row.filetype,
+						chunkIndex: row.chunkIndex,
+						isPolicyManual: row.isPolicyManual === 1
+					}
 					};
 				});
 
@@ -1111,8 +1111,8 @@ private async checkColumnExists(tableName: string, columnName: string): Promise<
 
 		// Simple highlighting - can be improved
 		try {
-			const regex = new RegExp(`(${query})`, 'gi');
-			return text.replace(regex, '**$1**');
+		const regex = new RegExp(`(${query})`, 'gi');
+		return text.replace(regex, '**$1**');
 		} catch (err) {
 			// If regex fails (e.g., invalid regex chars), return text as-is
 			return text;
@@ -1245,10 +1245,22 @@ private async checkColumnExists(tableName: string, columnName: string): Promise<
 		// Build scope filter
 		const scopeFilter = this.getScopeFilter(scope);
 
-		// Escape FTS5 query to prevent column name interpretation
-		// Wrap the entire query in double quotes to treat it as a phrase
-		// and escape any internal double quotes
-		const escapedQuery = `"${query.replace(/"/g, '""')}"`;
+		// Convert query to FTS5 format: use OR to match any term
+		// Split on whitespace, escape special chars, and join with OR
+		const terms = query
+			.split(/\s+/)
+			.filter(t => t.length > 0)
+			.map(term => {
+				// Escape FTS5 special characters
+				const escaped = term.replace(/(["\-\*\^\(\)~])/g, '\\$1');
+				// Quote individual terms to handle hyphens and special chars
+				return `"${escaped}"`;
+			});
+
+		// Join with OR for broad matching
+		const ftsQuery = terms.join(' OR ');
+
+		this.logService.info(`FTS5 query: ${ftsQuery}`);
 
 		// FTS5 bm25() returns negative scores where more negative = more relevant
 		// We negate to get positive scores for easier handling
@@ -1267,7 +1279,7 @@ private async checkColumnExists(tableName: string, columnName: string): Promise<
 		return new Promise((resolve, reject) => {
 			this.db!.all(
 				sql,
-				[k1, b, escapedQuery, k1, b, n],
+				[k1, b, ftsQuery, k1, b, n],
 				(err, rows: any[]) => {
 					if (err) {
 						this.logService.error('Keyword search failed:', err);

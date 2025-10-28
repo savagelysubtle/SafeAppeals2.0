@@ -33,7 +33,7 @@ export class RAGPathService implements IRAGPathService {
 	) { }
 
 	private getBaseDir(): string {
-		return join(this.environmentService.userRoamingDataHome.fsPath, '.appealsnavigator');
+		return join(this.environmentService.userRoamingDataHome.fsPath, '.safe-appeals-navigator');
 	}
 
 	getGlobalChromaDir(): string {

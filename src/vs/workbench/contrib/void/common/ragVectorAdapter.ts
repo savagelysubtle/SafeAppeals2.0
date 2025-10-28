@@ -99,43 +99,43 @@ export class ChromaPersistentAdapter implements VectorAdapter {
 
 		const require = createRequire(import.meta.url);
 		const sqlite3 = require('@vscode/sqlite3');
-		const db = new sqlite3.Database(this.embeddingsDbPath);
+			const db = new sqlite3.Database(this.embeddingsDbPath);
 
 			return new Promise((resolve, reject) => {
-			// Create table if it doesn't exist
-			db.run(`
-				CREATE TABLE IF NOT EXISTS embeddings (
-					id TEXT PRIMARY KEY,
-					vector TEXT NOT NULL,
-					metadata TEXT NOT NULL
-				)
+				// Create table if it doesn't exist
+				db.run(`
+					CREATE TABLE IF NOT EXISTS embeddings (
+						id TEXT PRIMARY KEY,
+						vector TEXT NOT NULL,
+						metadata TEXT NOT NULL
+					)
 			`, (err: Error | null) => {
-				if (err) {
-					reject(err);
-					return;
-				}
-
-				// Load all embeddings into memory
-				db.all('SELECT id, vector, metadata FROM embeddings', (err: Error | null, rows: any[]) => {
 					if (err) {
 						reject(err);
 						return;
 					}
 
-					for (const row of rows) {
-						try {
-							const vector = JSON.parse(row.vector);
-							const metadata = JSON.parse(row.metadata);
-							this.embeddings.set(row.id, { vector, metadata });
-						} catch (parseErr) {
-							this.logService.error(`Failed to parse embedding ${row.id}:`, parseErr);
+					// Load all embeddings into memory
+				db.all('SELECT id, vector, metadata FROM embeddings', (err: Error | null, rows: any[]) => {
+						if (err) {
+							reject(err);
+							return;
 						}
-					}
 
-					db.close();
-					resolve();
+						for (const row of rows) {
+							try {
+								const vector = JSON.parse(row.vector);
+								const metadata = JSON.parse(row.metadata);
+								this.embeddings.set(row.id, { vector, metadata });
+							} catch (parseErr) {
+								this.logService.error(`Failed to parse embedding ${row.id}:`, parseErr);
+							}
+						}
+
+						db.close();
+						resolve();
+					});
 				});
-			});
 			});
 		} catch (error) {
 			this.logService.error('Failed to load embeddings from disk:', error);
@@ -148,9 +148,9 @@ export class ChromaPersistentAdapter implements VectorAdapter {
 		try {
 		const require = createRequire(import.meta.url);
 		const sqlite3 = require('@vscode/sqlite3');
-		const db = new sqlite3.Database(this.embeddingsDbPath);
+			const db = new sqlite3.Database(this.embeddingsDbPath);
 
-		return new Promise((resolve, reject) => {
+			return new Promise((resolve, reject) => {
 			// Ensure table exists before inserting
 			db.run(`
 				CREATE TABLE IF NOT EXISTS embeddings (
@@ -181,7 +181,7 @@ export class ChromaPersistentAdapter implements VectorAdapter {
 					}
 				);
 			});
-		});
+			});
 		} catch (error) {
 			this.logService.error(`Failed to save embedding ${id} to disk:`, error);
 			throw error;
@@ -193,18 +193,18 @@ export class ChromaPersistentAdapter implements VectorAdapter {
 		try {
 		const require = createRequire(import.meta.url);
 		const sqlite3 = require('@vscode/sqlite3');
-		const db = new sqlite3.Database(this.embeddingsDbPath);
+			const db = new sqlite3.Database(this.embeddingsDbPath);
 
-		return new Promise((resolve, reject) => {
+			return new Promise((resolve, reject) => {
 			db.run('DELETE FROM embeddings WHERE id = ?', [id], (err: Error | null) => {
-				db.close();
-				if (err) {
-					reject(err);
-				} else {
-					resolve();
-				}
+					db.close();
+					if (err) {
+						reject(err);
+					} else {
+						resolve();
+					}
+				});
 			});
-		});
 		} catch (error) {
 			this.logService.error(`Failed to delete embedding ${id} from disk:`, error);
 			throw error;
@@ -274,7 +274,7 @@ export class ChromaPersistentAdapter implements VectorAdapter {
 			// Research shows 0.05-0.10 works better for local embeddings
 			const MIN_SIMILARITY_THRESHOLD = 0.07; // Lowered from 0.15 to catch more relevant results
 
-		this.logService.info(`Searching ${this.embeddings.size} embeddings with threshold ${MIN_SIMILARITY_THRESHOLD}...`);
+			this.logService.info(`Searching ${this.embeddings.size} embeddings with threshold ${MIN_SIMILARITY_THRESHOLD}...`);
 
 		// Debug: Count embeddings by scope
 		let policyManualCount = 0;
@@ -288,24 +288,24 @@ export class ChromaPersistentAdapter implements VectorAdapter {
 		this.logService.info(`Search scope: ${scope}`);
 
 		let scopeMatchCount = 0;
-		for (const [id, data] of this.embeddings.entries()) {
-			// Check scope
-			const isPolicyManual = data.metadata.isPolicyManual ?? false;
-			if (scope === 'policy_manual' && !isPolicyManual) continue;
-			if (scope === 'workspace_docs' && isPolicyManual) continue;
+			for (const [id, data] of this.embeddings.entries()) {
+				// Check scope
+				const isPolicyManual = data.metadata.isPolicyManual ?? false;
+				if (scope === 'policy_manual' && !isPolicyManual) continue;
+				if (scope === 'workspace_docs' && isPolicyManual) continue;
 
 			scopeMatchCount++;
-			const similarity = this.cosineSimilarity(queryVector, data.vector);
+				const similarity = this.cosineSimilarity(queryVector, data.vector);
 
-			// Only include results above threshold
-			if (similarity >= MIN_SIMILARITY_THRESHOLD) {
-				results.push({
-					id,
-					score: similarity,
-					metadata: data.metadata
-				});
+				// Only include results above threshold
+				if (similarity >= MIN_SIMILARITY_THRESHOLD) {
+					results.push({
+						id,
+						score: similarity,
+						metadata: data.metadata
+					});
+				}
 			}
-		}
 
 		this.logService.info(`Scope matched ${scopeMatchCount} embeddings, ${results.length} above threshold`);
 
