@@ -189,20 +189,67 @@
 
 	// Font family and size
 	fontFamilySelect.addEventListener('change', (e) => {
-		execFormatCommand('fontName', e.target.value);
+		const fontFamily = e.target.value;
+		const selection = window.getSelection();
+
+		if (selection.rangeCount > 0 && !selection.isCollapsed) {
+			// Apply to selected text
+			const range = selection.getRangeAt(0);
+
+			try {
+				const span = document.createElement('span');
+				span.style.fontFamily = fontFamily;
+				range.surroundContents(span);
+			} catch (err) {
+				// If surroundContents fails (e.g., partial element selection), extract and wrap
+				const fragment = range.extractContents();
+				const span = document.createElement('span');
+				span.style.fontFamily = fontFamily;
+				span.appendChild(fragment);
+				range.insertNode(span);
+
+				// Restore selection
+				const newRange = document.createRange();
+				newRange.selectNodeContents(span);
+				selection.removeAllRanges();
+				selection.addRange(newRange);
+			}
+		}
+
+		trackModification();
+		updateActiveStates();
 	});
 
 	fontSizeSelect.addEventListener('change', (e) => {
-		execFormatCommand('fontSize', '7'); // fontSize uses 1-7 scale
-		// Use custom size for better control
+		const fontSize = e.target.value + 'px';
 		const selection = window.getSelection();
-		if (selection.rangeCount > 0) {
+
+		if (selection.rangeCount > 0 && !selection.isCollapsed) {
+			// Apply to selected text
 			const range = selection.getRangeAt(0);
-			const span = document.createElement('span');
-			span.style.fontSize = e.target.value + 'px';
-			range.surroundContents(span);
-			trackModification();
+
+			try {
+				const span = document.createElement('span');
+				span.style.fontSize = fontSize;
+				range.surroundContents(span);
+			} catch (err) {
+				// Fallback: manually wrap contents
+				const fragment = range.extractContents();
+				const span = document.createElement('span');
+				span.style.fontSize = fontSize;
+				span.appendChild(fragment);
+				range.insertNode(span);
+
+				// Restore selection
+				const newRange = document.createRange();
+				newRange.selectNodeContents(span);
+				selection.removeAllRanges();
+				selection.addRange(newRange);
+			}
 		}
+
+		trackModification();
+		updateActiveStates();
 	});
 
 	// Text color
@@ -383,14 +430,30 @@
 			bulletsBtn.classList.toggle('active', document.queryCommandState('insertUnorderedList'));
 			numberingBtn.classList.toggle('active', document.queryCommandState('insertOrderedList'));
 
-			// Update font family
-			const fontName = document.queryCommandValue('fontName');
-			if (fontName) {
-				fontFamilySelect.value = fontName.replace(/['"]/g, '');
+			// Update font family - check both queryCommandValue and computed style
+			const selection = window.getSelection();
+			if (selection.anchorNode) {
+				const element = selection.anchorNode.nodeType === Node.TEXT_NODE
+					? selection.anchorNode.parentElement
+					: selection.anchorNode;
+
+				if (element) {
+					const computedStyle = window.getComputedStyle(element);
+					const fontFamily = computedStyle.fontFamily.replace(/['"]/g, '').split(',')[0].trim();
+
+					// Try to match with dropdown options
+					const options = Array.from(fontFamilySelect.options);
+					const matchingOption = options.find(opt =>
+						opt.value.toLowerCase() === fontFamily.toLowerCase()
+					);
+
+					if (matchingOption) {
+						fontFamilySelect.value = matchingOption.value;
+					}
+				}
 			}
 
 			// Update heading style based on current block
-			const selection = window.getSelection();
 			if (selection.anchorNode) {
 				let parent = selection.anchorNode.parentElement;
 				while (parent && parent !== container) {

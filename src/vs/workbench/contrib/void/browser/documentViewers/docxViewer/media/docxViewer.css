@@ -94,10 +94,53 @@ body {
 	cursor: pointer;
 	font-size: 12px;
 	font-family: var(--vscode-font-family);
+	appearance: none;
+	-webkit-appearance: none;
+	-moz-appearance: none;
+	padding-right: 24px;
+	background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 12 12"><path fill="rgb(204,204,204)" d="M6 9L1 4h10z"/></svg>');
+	background-repeat: no-repeat;
+	background-position: right 6px center;
+	background-size: 12px;
 }
 
 .ribbon-group select:hover {
-	background-color: var(--vscode-dropdown-listBackground);
+	background-color: var(--vscode-list-activeSelectionBackground);
+	color: var(--vscode-list-activeSelectionForeground);
+}
+
+.ribbon-group select:focus {
+	outline: 1px solid var(--vscode-focusBorder);
+	outline-offset: -1px;
+	background-color: var(--vscode-list-activeSelectionBackground);
+	color: var(--vscode-list-activeSelectionForeground);
+}
+
+/* Force option styling - note: browser support varies */
+.ribbon-group select option {
+	background-color: var(--vscode-dropdown-listBackground) !important;
+	color: var(--vscode-dropdown-foreground) !important;
+	padding: 8px 12px;
+}
+
+.ribbon-group select option:hover,
+.ribbon-group select option:focus,
+.ribbon-group select option:active {
+	background-color: var(--vscode-list-activeSelectionBackground) !important;
+	color: var(--vscode-list-activeSelectionForeground) !important;
+}
+
+.ribbon-group select option:checked {
+	background-color: var(--vscode-list-activeSelectionBackground) !important;
+	color: var(--vscode-list-activeSelectionForeground) !important;
+	font-weight: 600;
+}
+
+/* Additional specificity for Windows/Chrome dropdown styling */
+.ribbon-group select:focus option:hover,
+.ribbon-group select:focus option:checked {
+	background-color: var(--vscode-list-activeSelectionBackground) !important;
+	color: var(--vscode-list-activeSelectionForeground) !important;
 }
 
 .ribbon-group .format-btn {
