@@ -76,7 +76,15 @@ export class VoidSCMService implements IVoidSCMService {
 		return git('git branch --show-current', path)
 	}
 
-	gitLog(path: string): Promise<string> {
-		return git('git log --pretty=format:"%h|%s|%ad" --date=short --no-merges -n 5', path)
+	async gitLog(path: string): Promise<string> {
+		try {
+			return await git('git log --pretty=format:"%h|%s|%ad" --date=short --no-merges -n 5', path)
+		} catch (error: any) {
+			// Handle case when repository has no commits yet
+			if (error?.message?.includes('does not have any commits yet')) {
+				return 'No commits yet (new repository)'
+			}
+			throw error
+		}
 	}
 }
