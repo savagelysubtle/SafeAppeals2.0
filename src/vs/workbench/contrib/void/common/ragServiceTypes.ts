@@ -27,6 +27,14 @@ export interface ChunkRecord {
 	chunkIndex: number;
 	embedding?: Float32Array;
 	tokens?: number;
+	// Hierarchical chunking metadata
+	sectionId?: string;        // e.g., "policy.eligibility.3.2.1"
+	parentSection?: string;    // e.g., "policy.eligibility"
+	sectionNumber?: string;    // e.g., "3.2.1"
+	sectionTitle?: string;     // e.g., "Age Requirements"
+	breadcrumbPath?: string[]; // e.g., ["Policy Manual", "Eligibility", "Age Requirements"]
+	chunkType?: 'child' | 'parent'; // Child (300 tokens) or parent (800 tokens)
+	parentChunkId?: string;    // Reference to parent chunk for context
 }
 
 export interface PolicySection {
@@ -133,4 +141,26 @@ export interface IRAGMainService {
 	getDocumentsByType(isPolicyManual: boolean): Promise<any[]>;
 	initialize(openAIApiKey?: string): Promise<void>;
 	clearAllEmbeddings(): Promise<{ success: boolean; message: string }>;
+
+	// Document creation methods (delegated to fileService)
+	createEmptyDOCX(uri: URI): Promise<void>;
+	createEmptyXLSX(uri: URI): Promise<void>;
+
+	// Document editing methods (delegated to fileService)
+	editDOCX(uri: URI, operations: Array<{
+		type: 'insert_text' | 'replace_text';
+		position?: number;
+		text?: string;
+		search?: string;
+		replace?: string;
+		all?: boolean;
+	}>): Promise<{ success: boolean; message: string }>;
+
+	editXLSX(uri: URI, operations: Array<{
+		type: 'set_cell_value' | 'set_cell_formula';
+		sheet: string | number;
+		cell: string;
+		value?: any;
+		formula?: string;
+	}>): Promise<{ success: boolean; message: string }>;
 }

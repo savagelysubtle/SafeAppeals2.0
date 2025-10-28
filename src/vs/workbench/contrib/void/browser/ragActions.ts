@@ -94,6 +94,73 @@ class RAGGetStatsAction extends Action2 {
 	}
 }
 
+// Context menu action for indexing as workspace document (case files)
+class IndexAsWorkspaceDocAction extends Action2 {
+	constructor() {
+		super({
+			id: 'void.rag.indexAsWorkspaceDoc',
+			title: { value: 'Index as Case Document', original: 'Index as Case Document' },
+			category: { value: 'RAG', original: 'RAG' },
+			menu: {
+				id: MenuId.ExplorerContext,
+				group: 'z_rag@1',
+				when: ContextKeyExpr.regex('resourceExtname', /\.(pdf|md|txt|doc|docx)$/i)
+			}
+		});
+	}
+
+	async run(accessor: ServicesAccessor, uri?: URI): Promise<void> {
+		const ragService = accessor.get(IRAGService);
+		const notificationService = accessor.get(INotificationService);
+		const progressService = accessor.get(IProgressService);
+		const explorerService = accessor.get(IExplorerService);
+
+		// Get URI from context or focused element
+		if (!uri) {
+			const focusedItem = explorerService.getContext(false);
+			uri = focusedItem.length > 0 ? focusedItem[0].resource : undefined;
+		}
+
+		if (!uri) {
+			notificationService.error('No file selected');
+			return;
+		}
+
+		try {
+			// Check if already indexed
+			const isIndexed = await ragService.isDocumentIndexed(uri);
+			if (isIndexed) {
+				notificationService.info(`Document already indexed: ${uri.path.split('/').pop()}`);
+				return;
+			}
+
+			// Index as workspace document (case file)
+			await progressService.withProgress(
+				{
+					location: ProgressLocation.Notification,
+					title: `Indexing case document: ${uri.path.split('/').pop()}`,
+					cancellable: false
+				},
+				async () => {
+					const result = await ragService.indexDocument({
+						uri,
+						isPolicyManual: false  // ← This makes it a workspace document!
+					});
+
+					if (result.success) {
+						notificationService.info(`Successfully indexed case document: ${uri.path.split('/').pop()}`);
+					} else {
+						throw new Error(result.message);
+					}
+				}
+			);
+		} catch (error) {
+			const errorMsg = error instanceof Error ? error.message : String(error);
+			notificationService.error(`Failed to index document: ${errorMsg}`);
+		}
+	}
+}
+
 // Context menu action for Explorer
 class IndexAsPolicyManualAction extends Action2 {
 	constructor() {
@@ -258,6 +325,7 @@ registerAction2(RAGIndexDocumentAction);
 registerAction2(RAGSearchPolicyAction);
 registerAction2(RAGSearchWorkspaceAction);
 registerAction2(RAGGetStatsAction);
+registerAction2(IndexAsWorkspaceDocAction);  // ← New action for case documents
 registerAction2(IndexAsPolicyManualAction);
 registerAction2(CreatePolicyFolderAction);
 registerAction2(ClearAllEmbeddingsAction);
