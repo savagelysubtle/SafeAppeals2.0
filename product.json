@@ -54,6 +54,227 @@
 				"pinned": true,
 				"preRelease": false
 			}
+		},
+		{
+			"name": "theme-safeappeals-grey",
+			"version": "1.0.0",
+			"repo": "https://github.com/savagelysubtle/SafeAppeals2.0",
+			"metadata": {
+				"id": "safeappeals.theme-safeappeals-grey",
+				"publisherId": "safeappeals",
+				"publisherDisplayName": "Safe Appeals Navigator",
+				"targetPlatform": "undefined",
+				"isApplicationScoped": true,
+				"updated": false,
+				"isPreReleaseVersion": false,
+				"installedTimestamp": 0,
+				"pinned": true,
+				"preRelease": false
+			}
+		},
+		{
+			"name": "theme-safeappeals-colors-green",
+			"version": "1.0.0",
+			"repo": "https://github.com/savagelysubtle/SafeAppeals2.0",
+			"metadata": {
+				"id": "safeappeals.theme-safeappeals-colors-green",
+				"publisherId": "safeappeals",
+				"publisherDisplayName": "Safe Appeals Navigator",
+				"targetPlatform": "undefined",
+				"isApplicationScoped": true,
+				"updated": false,
+				"isPreReleaseVersion": false,
+				"installedTimestamp": 0,
+				"pinned": true,
+				"preRelease": false
+			}
+		},
+		{
+			"name": "theme-safeappeals-colors-grey",
+			"version": "1.0.0",
+			"repo": "https://github.com/savagelysubtle/SafeAppeals2.0",
+			"metadata": {
+				"id": "safeappeals.theme-safeappeals-colors-grey",
+				"publisherId": "safeappeals",
+				"publisherDisplayName": "Safe Appeals Navigator",
+				"targetPlatform": "undefined",
+				"isApplicationScoped": true,
+				"updated": false,
+				"isPreReleaseVersion": false,
+				"installedTimestamp": 0,
+				"pinned": true,
+				"preRelease": false
+			}
+		},
+		{
+			"name": "theme-safeappeals-colors-purple",
+			"version": "1.0.0",
+			"repo": "https://github.com/savagelysubtle/SafeAppeals2.0",
+			"metadata": {
+				"id": "safeappeals.theme-safeappeals-colors-purple",
+				"publisherId": "safeappeals",
+				"publisherDisplayName": "Safe Appeals Navigator",
+				"targetPlatform": "undefined",
+				"isApplicationScoped": true,
+				"updated": false,
+				"isPreReleaseVersion": false,
+				"installedTimestamp": 0,
+				"pinned": true,
+				"preRelease": false
+			}
+		},
+		{
+			"name": "theme-safeappeals-colors-teal",
+			"version": "1.0.0",
+			"repo": "https://github.com/savagelysubtle/SafeAppeals2.0",
+			"metadata": {
+				"id": "safeappeals.theme-safeappeals-colors-teal",
+				"publisherId": "safeappeals",
+				"publisherDisplayName": "Safe Appeals Navigator",
+				"targetPlatform": "undefined",
+				"isApplicationScoped": true,
+				"updated": false,
+				"isPreReleaseVersion": false,
+				"installedTimestamp": 0,
+				"pinned": true,
+				"preRelease": false
+			}
+		},
+		{
+			"name": "theme-safeappeals-colors-red",
+			"version": "1.0.0",
+			"repo": "https://github.com/savagelysubtle/SafeAppeals2.0",
+			"metadata": {
+				"id": "safeappeals.theme-safeappeals-colors-red",
+				"publisherId": "safeappeals",
+				"publisherDisplayName": "Safe Appeals Navigator",
+				"targetPlatform": "undefined",
+				"isApplicationScoped": true,
+				"updated": false,
+				"isPreReleaseVersion": false,
+				"installedTimestamp": 0,
+				"pinned": true,
+				"preRelease": false
+			}
+		},
+		{
+			"name": "theme-safeappeals-colors-yellow",
+			"version": "1.0.0",
+			"repo": "https://github.com/savagelysubtle/SafeAppeals2.0",
+			"metadata": {
+				"id": "safeappeals.theme-safeappeals-colors-yellow",
+				"publisherId": "safeappeals",
+				"publisherDisplayName": "Safe Appeals Navigator",
+				"targetPlatform": "undefined",
+				"isApplicationScoped": true,
+				"updated": false,
+				"isPreReleaseVersion": false,
+				"installedTimestamp": 0,
+				"pinned": true,
+				"preRelease": false
+			}
+		},
+		{
+			"name": "theme-safeappeals-colors-contrast",
+			"version": "1.0.0",
+			"repo": "https://github.com/savagelysubtle/SafeAppeals2.0",
+			"metadata": {
+				"id": "safeappeals.theme-safeappeals-colors-contrast",
+				"publisherId": "safeappeals",
+				"publisherDisplayName": "Safe Appeals Navigator",
+				"targetPlatform": "undefined",
+				"isApplicationScoped": true,
+				"updated": false,
+				"isPreReleaseVersion": false,
+				"installedTimestamp": 0,
+				"pinned": true,
+				"preRelease": false
+			}
+		},
+		{
+			"name": "theme-safeappeals-colors-dark",
+			"version": "1.0.0",
+			"repo": "https://github.com/savagelysubtle/SafeAppeals2.0",
+			"metadata": {
+				"id": "safeappeals.theme-safeappeals-colors-dark",
+				"publisherId": "safeappeals",
+				"publisherDisplayName": "Safe Appeals Navigator",
+				"targetPlatform": "undefined",
+				"isApplicationScoped": true,
+				"updated": false,
+				"isPreReleaseVersion": false,
+				"installedTimestamp": 0,
+				"pinned": true,
+				"preRelease": false
+			}
+		},
+		{
+			"name": "theme-safeappeals-colors-pastel",
+			"version": "1.0.0",
+			"repo": "https://github.com/savagelysubtle/SafeAppeals2.0",
+			"metadata": {
+				"id": "safeappeals.theme-safeappeals-colors-pastel",
+				"publisherId": "safeappeals",
+				"publisherDisplayName": "Safe Appeals Navigator",
+				"targetPlatform": "undefined",
+				"isApplicationScoped": true,
+				"updated": false,
+				"isPreReleaseVersion": false,
+				"installedTimestamp": 0,
+				"pinned": true,
+				"preRelease": false
+			}
+		},
+		{
+			"name": "theme-safeappeals-colors-neon",
+			"version": "1.0.0",
+			"repo": "https://github.com/savagelysubtle/SafeAppeals2.0",
+			"metadata": {
+				"id": "safeappeals.theme-safeappeals-colors-neon",
+				"publisherId": "safeappeals",
+				"publisherDisplayName": "Safe Appeals Navigator",
+				"targetPlatform": "undefined",
+				"isApplicationScoped": true,
+				"updated": false,
+				"isPreReleaseVersion": false,
+				"installedTimestamp": 0,
+				"pinned": true,
+				"preRelease": false
+			}
+		},
+		{
+			"name": "theme-safeappeals-colors-icy",
+			"version": "1.0.0",
+			"repo": "https://github.com/savagelysubtle/SafeAppeals2.0",
+			"metadata": {
+				"id": "safeappeals.theme-safeappeals-colors-icy",
+				"publisherId": "safeappeals",
+				"publisherDisplayName": "Safe Appeals Navigator",
+				"targetPlatform": "undefined",
+				"isApplicationScoped": true,
+				"updated": false,
+				"isPreReleaseVersion": false,
+				"installedTimestamp": 0,
+				"pinned": true,
+				"preRelease": false
+			}
+		},
+		{
+			"name": "theme-safeappeals-colors-material",
+			"version": "1.0.0",
+			"repo": "https://github.com/savagelysubtle/SafeAppeals2.0",
+			"metadata": {
+				"id": "safeappeals.theme-safeappeals-colors-material",
+				"publisherId": "safeappeals",
+				"publisherDisplayName": "Safe Appeals Navigator",
+				"targetPlatform": "undefined",
+				"isApplicationScoped": true,
+				"updated": false,
+				"isPreReleaseVersion": false,
+				"installedTimestamp": 0,
+				"pinned": true,
+				"preRelease": false
+			}
 		}
 	],
 	"disableExtensionInstalls": true,

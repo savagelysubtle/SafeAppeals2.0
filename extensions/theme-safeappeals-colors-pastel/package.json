@@ -1,0 +1,21 @@
+{
+	"name": "theme-safeappeals-colors-pastel",
+	"displayName": "Safe Appeals Pastel Dark",
+	"description": "Soft pastel theme - Calming and minimal",
+	"version": "1.0.0",
+	"publisher": "safeappeals",
+	"license": "MIT",
+	"engines": {
+		"vscode": "*"
+	},
+	"categories": ["Themes"],
+	"contributes": {
+		"themes": [
+			{
+				"label": "Safe Appeals Pastel Dark",
+				"uiTheme": "vs-dark",
+				"path": "./themes/pastel-color-theme.json"
+			}
+		]
+	}
+}

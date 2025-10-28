@@ -1,0 +1,16 @@
+{
+    "name": "theme-safeappeals-teal",
+    "displayName": "Safe Appeals Icons (Teal)",
+    "description": "Teal folder variant - Fresh Professional",
+    "version": "1.0.0",
+    "publisher": "safeappeals",
+    "license": "MIT",
+    "engines": { "vscode": "*" },
+    "contributes": {
+        "iconThemes": [{
+            "id": "safeappeals-icons-teal",
+            "label": "Safe Appeals Icons (Teal)",
+            "path": "./safeappeals-icon-theme-teal.json"
+        }]
+    }
+}

@@ -1,0 +1,16 @@
+{
+    "name": "theme-safeappeals-purple",
+    "displayName": "Safe Appeals Icons (Purple)",
+    "description": "Purple folder variant - Creative Modern",
+    "version": "1.0.0",
+    "publisher": "safeappeals",
+    "license": "MIT",
+    "engines": { "vscode": "*" },
+    "contributes": {
+        "iconThemes": [{
+            "id": "safeappeals-icons-purple",
+            "label": "Safe Appeals Icons (Purple)",
+            "path": "./safeappeals-icon-theme-purple.json"
+        }]
+    }
+}
