@@ -1,0 +1,16 @@
+{
+    "name": "theme-safeappeals-icy",
+    "displayName": "Safe Appeals Icons (Icy)",
+    "description": "Icy folder variant - Arctic Theme",
+    "version": "1.0.0",
+    "publisher": "safeappeals",
+    "license": "MIT",
+    "engines": { "vscode": "*" },
+    "contributes": {
+        "iconThemes": [{
+            "id": "safeappeals-icons-icy",
+            "label": "Safe Appeals Icons (Icy)",
+            "path": "./safeappeals-icon-theme-icy.json"
+        }]
+    }
+}
