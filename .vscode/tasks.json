@@ -2,8 +2,8 @@
 	"version": "2.0.0",
 	"tasks": [
 		{
-			"type": "npm",
-			"script": "watch-clientd",
+			"type": "shell",
+			"command": "bun run watch-clientd",
 			"label": "Core - Build",
 			"isBackground": true,
 			"presentation": {
@@ -14,9 +14,7 @@
 			"problemMatcher": {
 				"owner": "typescript",
 				"applyTo": "closedDocuments",
-				"fileLocation": [
-					"absolute"
-				],
+				"fileLocation": ["absolute"],
 				"pattern": {
 					"regexp": "Error: ([^(]+)\\((\\d+|\\d+,\\d+|\\d+,\\d+,\\d+,\\d+)\\): (.*)$",
 					"file": 1,
@@ -29,9 +27,10 @@
 				}
 			}
 		},
-		{   // Void added this
-			"type": "npm",
-			"script": "watchreactd",
+		{
+			// Void added this
+			"type": "shell",
+			"command": "bun run watchreactd",
 			"label": "React - Build",
 			"isBackground": true,
 			"presentation": {
@@ -42,9 +41,7 @@
 			"problemMatcher": {
 				"owner": "typescript",
 				"applyTo": "closedDocuments",
-				"fileLocation": [
-					"absolute"
-				],
+				"fileLocation": ["absolute"],
 				"pattern": {
 					"regexp": "Error: ([^(]+)\\((\\d+|\\d+,\\d+|\\d+,\\d+,\\d+,\\d+)\\): (.*)$",
 					"file": 1,
@@ -55,11 +52,23 @@
 					"beginsPattern": "Starting compilation",
 					"endsPattern": "Finished compilation"
 				}
-			}
+			},
+			"dependsOn": ["Initial React Build"]
 		},
 		{
-			"type": "npm",
-			"script": "watch-extensionsd",
+			"type": "shell",
+			"command": "bun run buildreact",
+			"label": "Initial React Build",
+			"presentation": {
+				"group": "buildWatchers",
+				"reveal": "silent",
+				"close": true
+			},
+			"problemMatcher": []
+		},
+		{
+			"type": "shell",
+			"command": "bun run watch-extensionsd",
 			"label": "Ext - Build",
 			"isBackground": true,
 			"presentation": {
@@ -70,9 +79,7 @@
 			"problemMatcher": {
 				"owner": "typescript",
 				"applyTo": "closedDocuments",
-				"fileLocation": [
-					"absolute"
-				],
+				"fileLocation": ["absolute"],
 				"pattern": {
 					"regexp": "Error: ([^(]+)\\((\\d+|\\d+,\\d+|\\d+,\\d+,\\d+,\\d+)\\): (.*)$",
 					"file": 1,
@@ -87,11 +94,7 @@
 		},
 		{
 			"label": "VS Code - Build",
-			"dependsOn": [
-				"Core - Build",
-				"React - Build",
-				"Ext - Build"
-			],
+			"dependsOn": ["Core - Build", "React - Build", "Ext - Build"],
 			"group": {
 				"kind": "build",
 				"isDefault": true
@@ -99,8 +102,8 @@
 			"problemMatcher": []
 		},
 		{
-			"type": "npm",
-			"script": "kill-watch-clientd",
+			"type": "shell",
+			"command": "bun run kill-watch-clientd",
 			"label": "Kill Core - Build",
 			"group": "build",
 			"presentation": {
@@ -111,8 +114,8 @@
 			"problemMatcher": "$tsc"
 		},
 		{
-			"type": "npm",
-			"script": "kill-watch-extensionsd",
+			"type": "shell",
+			"command": "bun run kill-watch-extensionsd",
 			"label": "Kill Ext - Build",
 			"group": "build",
 			"presentation": {
@@ -124,37 +127,27 @@
 		},
 		{
 			"label": "Kill VS Code - Build",
-			"dependsOn": [
-				"Kill Core - Build",
-				"Kill Ext - Build"
-			],
+			"dependsOn": ["Kill Core - Build", "Kill Ext - Build"],
 			"group": "build",
 			"problemMatcher": []
 		},
 		{
 			"label": "Restart VS Code - Build",
-			"dependsOn": [
-				"Kill VS Code - Build",
-				"VS Code - Build"
-			],
+			"dependsOn": ["Kill VS Code - Build", "VS Code - Build"],
 			"group": "build",
 			"dependsOrder": "sequence",
 			"problemMatcher": []
 		},
 		{
 			"label": "Kill VS Code - Build, Npm, VS Code - Build",
-			"dependsOn": [
-				"Kill VS Code - Build",
-				"npm: install",
-				"VS Code - Build"
-			],
+			"dependsOn": ["Kill VS Code - Build", "bun: install", "VS Code - Build"],
 			"group": "build",
 			"dependsOrder": "sequence",
 			"problemMatcher": []
 		},
 		{
-			"type": "npm",
-			"script": "watch-webd",
+			"type": "shell",
+			"command": "bun run watch-webd",
 			"label": "Web Ext - Build",
 			"group": "build",
 			"isBackground": true,
@@ -164,9 +157,7 @@
 			"problemMatcher": {
 				"owner": "typescript",
 				"applyTo": "closedDocuments",
-				"fileLocation": [
-					"absolute"
-				],
+				"fileLocation": ["absolute"],
 				"pattern": {
 					"regexp": "Error: ([^(]+)\\((\\d+|\\d+,\\d+|\\d+,\\d+,\\d+,\\d+)\\): (.*)$",
 					"file": 1,
@@ -180,8 +171,8 @@
 			}
 		},
 		{
-			"type": "npm",
-			"script": "kill-watch-webd",
+			"type": "shell",
+			"command": "bun run kill-watch-webd",
 			"label": "Kill Web Ext - Build",
 			"group": "build",
 			"presentation": {
@@ -212,9 +203,15 @@
 			"problemMatcher": []
 		},
 		{
-			"type": "npm",
-			"script": "electron",
+			"type": "shell",
+			"command": "bun run electron",
 			"label": "Download electron"
+		},
+		{
+			"type": "shell",
+			"command": "bun install",
+			"label": "bun: install",
+			"problemMatcher": []
 		},
 		{
 			"type": "gulp",
@@ -227,7 +224,13 @@
 			"windows": {
 				"command": ".\\scripts\\code-server.bat"
 			},
-			"args": ["--no-launch", "--connection-token", "dev-token", "--port", "8080"],
+			"args": [
+				"--no-launch",
+				"--connection-token",
+				"dev-token",
+				"--port",
+				"8080"
+			],
 			"label": "Run code server",
 			"isBackground": true,
 			"problemMatcher": {
@@ -266,8 +269,9 @@
 			}
 		},
 		{
-			"type": "npm",
-			"script": "eslint",
+			"type": "shell",
+			"command": "bun run eslint",
+			"label": "npm: eslint",
 			"problemMatcher": {
 				"source": "eslint",
 				"base": "$eslint-stylish"
@@ -283,8 +287,8 @@
 			}
 		},
 		{
-			"type": "npm",
-			"script": "tsec-compile-check",
+			"type": "shell",
+			"command": "bun run tsec-compile-check",
 			"problemMatcher": [
 				{
 					"base": "$tsc",
@@ -293,7 +297,7 @@
 				}
 			],
 			"group": "build",
-			"label": "npm: tsec-compile-check",
+			"label": "bun: tsec-compile-check",
 			"detail": "node_modules/tsec/bin/tsec -p src/tsconfig.json --noEmit"
 		},
 		{
@@ -312,9 +316,7 @@
 					"endsPattern": ".*"
 				}
 			},
-			"dependsOn": [
-				"Core - Build"
-			]
+			"dependsOn": ["Core - Build"]
 		}
 	]
 }

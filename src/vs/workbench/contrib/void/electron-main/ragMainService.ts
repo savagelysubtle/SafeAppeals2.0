@@ -5,11 +5,13 @@
 
 import { URI } from '../../../../base/common/uri.js';
 import { ILogService } from '../../../../platform/log/common/log.js';
-import { RAGIndexParams, RAGSearchParams, RAGStats, ContextPack, IRAGMainService } from '../common/ragServiceTypes.js';
-import { RAGIndexService } from './ragIndexService.js';
-import { RAGFileService } from './ragFileService.js';
-import { VectorAdapter, ChromaPersistentAdapter, PersistentVectorAdapterConfig } from '../common/ragVectorAdapter.js';
+import { HybridRetriever } from '../common/ragHybridRetriever.js';
 import { IRAGPathService } from '../common/ragPathService.js';
+import { LocalCrossEncoderReranker } from '../common/ragReranker.js';
+import { ContextPack, IRAGMainService, RAGIndexParams, RAGSearchParams, RAGStats } from '../common/ragServiceTypes.js';
+import { ChromaPersistentAdapter, PersistentVectorAdapterConfig, VectorAdapter } from '../common/ragVectorAdapter.js';
+import { RAGFileService } from './ragFileService.js';
+import { RAGIndexService } from './ragIndexService.js';
 
 export class RAGMainService implements IRAGMainService {
 	readonly _serviceBrand: undefined;
@@ -17,6 +19,8 @@ export class RAGMainService implements IRAGMainService {
 	private indexService: RAGIndexService;
 	private fileService: RAGFileService;
 	private vectorAdapter!: VectorAdapter;
+	private hybridRetriever!: HybridRetriever;
+	private reranker!: LocalCrossEncoderReranker;
 	private initialized = false;
 
 	constructor(
@@ -43,7 +47,8 @@ export class RAGMainService implements IRAGMainService {
 			const chromaPath = this.pathService.getGlobalChromaDir();
 
 			const config: PersistentVectorAdapterConfig = {
-				persistPath: chromaPath
+			persistPath: chromaPath,
+			useReranking: true // Enable reranking by default
 			};
 
 			this.vectorAdapter = new ChromaPersistentAdapter(config, this.logService);
@@ -55,6 +60,18 @@ export class RAGMainService implements IRAGMainService {
 
 			// Initialize index service
 			await this.indexService.initialize();
+
+		// Initialize hybrid retriever
+		this.hybridRetriever = new HybridRetriever(
+			this.vectorAdapter,
+			this.indexService,
+			this.logService
+		);
+
+		// Initialize reranker
+		const modelCachePath = chromaPath + '/models';
+		this.reranker = new LocalCrossEncoderReranker(this.logService);
+		await this.reranker.initialize(modelCachePath);
 
 			// Ensure collections exist
 			await this.vectorAdapter.ensureCollections('both');
@@ -197,44 +214,124 @@ export class RAGMainService implements IRAGMainService {
 			await this.initialize();
 		}
 
+		const startTime = Date.now();
+
 		try {
-			this.logService.info(`Searching RAG with query: ${params.query}`);
+			this.logService.info(`RAG search: "${params.query}" (scope: ${params.scope}, limit: ${params.limit})`);
 
-			// Search vector store
-			const vectorResults = await this.vectorAdapter.query(params.query, params.limit, params.scope);
+			// Stage 1: Hybrid retrieval (high recall)
+			// Get 4x desired results for reranking
+			const initialK = params.limit * 4;
+			this.logService.info(`Stage 1: Hybrid retrieval (retrieving ${initialK} candidates)`);
 
-			// Get additional metadata from SQLite
+			const hybridResults = await this.hybridRetriever.search(
+				params.query,
+				initialK,
+				params.scope,
+				20,  // RRF_K = 20 (optimized for medical/legal precision)
+				0.8, // BM25 k1 = 0.8
+				0.5  // BM25 b = 0.5
+			);
+
+			this.logService.info(`Hybrid search returned ${hybridResults.length} candidates`);
+
+			// Early return if no results
+			if (hybridResults.length === 0) {
+				this.logService.warn(`No results from hybrid search for query: "${params.query}" with scope: ${params.scope}`);
+				this.logService.warn(`This could mean: 1) No embeddings exist for this scope, 2) Query terms don't match, 3) Similarity threshold too high`);
+				return {
+					answerContext: '',
+					attributions: [],
+					totalResults: 0,
+					responseTime: Date.now() - startTime
+				};
+			}
+
+			// Get full chunk text from SQLite
+			const chunkIds = hybridResults.map(r => r.chunkId);
+			this.logService.info(`Fetching ${chunkIds.length} chunks from SQLite...`);
+
 			const searchResults = await this.indexService.searchChunks(
-				vectorResults.map(r => r.id),
+				chunkIds,
 				params.query
 			);
 
-			// Assemble context pack
-			const answerContext = searchResults
-				.map(result => result.snippet)
-				.join('\n\n');
+			this.logService.info(`Retrieved ${searchResults.length} chunks from SQLite`);
 
-			const attributions = searchResults.map(result => ({
-				docId: result.docId,
-				chunkId: result.chunkId,
-				filename: result.source.filename,
-				rangeHint: `Chunk ${result.source.chunkIndex + 1}`,
+			// Check for mismatch
+			if (searchResults.length === 0 && chunkIds.length > 0) {
+				this.logService.error(`CRITICAL: Hybrid search returned ${chunkIds.length} chunk IDs, but SQLite found 0 chunks!`);
+				this.logService.error(`This means chunk IDs in embeddings don't match chunk IDs in SQLite database`);
+				this.logService.error(`Sample chunk IDs from embeddings: ${chunkIds.slice(0, 3).join(', ')}`);
+				return {
+					answerContext: '',
+					attributions: [],
+					totalResults: 0,
+					responseTime: Date.now() - startTime
+				};
+			}
+
+			// Stage 2: Reranking (high precision)
+			this.logService.info(`Stage 2: Cross-encoder reranking (top ${params.limit} from ${searchResults.length} candidates)`);
+
+			const documentsForReranking = searchResults.map(result => ({
+				id: result.chunkId,
+				text: result.snippet,
 				score: result.score
 			}));
+
+			// DEBUG: Log first document to see what we're passing to reranker
+			if (documentsForReranking.length > 0) {
+				const firstDoc = documentsForReranking[0];
+				this.logService.info(`First document for reranking: id=${firstDoc.id}, textType=${typeof firstDoc.text}, textLength=${firstDoc.text?.length || 'undefined'}, score=${firstDoc.score}`);
+				if (typeof firstDoc.text !== 'string') {
+					this.logService.error(`ERROR: First document text is not a string! It's: ${JSON.stringify(firstDoc.text).substring(0, 100)}`);
+				}
+			}
+
+			const reranked = await this.reranker.rerank(
+				params.query,
+				documentsForReranking,
+				params.limit
+			);
+
+			this.logService.info(`Reranked to top ${reranked.length} results`);
+
+			// Assemble context pack
+			const answerContext = reranked
+				.map(r => {
+					const original = searchResults.find(s => s.chunkId === r.chunkId);
+					return original?.snippet || r.text;
+				})
+				.join('\n\n');
+
+			const attributions = reranked.map(r => {
+				const original = searchResults.find(s => s.chunkId === r.chunkId);
+				return {
+					docId: original?.docId || '',
+					chunkId: r.chunkId,
+					filename: original?.source.filename || '',
+					rangeHint: `Chunk ${(original?.source.chunkIndex || 0) + 1}`,
+					score: r.relevanceScore
+				};
+			});
+
+			const responseTime = Date.now() - startTime;
+			this.logService.info(`Search completed in ${responseTime}ms with ${reranked.length} results`);
 
 			return {
 				answerContext,
 				attributions,
-				totalResults: searchResults.length,
-				responseTime: Date.now() // Simple timing for now
+				totalResults: reranked.length,
+				responseTime
 			};
 		} catch (error) {
-			this.logService.error(`RAG search failed:`, error);
+			this.logService.error('RAG search failed:', error);
 			return {
 				answerContext: '',
 				attributions: [],
 				totalResults: 0,
-				responseTime: 0
+				responseTime: Date.now() - startTime
 			};
 		}
 	}
@@ -316,18 +413,30 @@ export class RAGMainService implements IRAGMainService {
 
 		try {
 			this.logService.info('RAG: Clearing all embeddings and metadata...');
+			this.logService.info('RAG: Step 1/3 - Clearing vector embeddings...');
 
-			// Clear vector store
+			// Step 1: Clear vector store (embeddings)
 			await this.vectorAdapter.clearAll();
-			this.logService.info('RAG: Cleared vector embeddings');
+			this.logService.info('RAG: ✓ Vector embeddings cleared');
 
-			// Clear SQLite index
+			this.logService.info('RAG: Step 2/3 - Clearing document metadata...');
+
+			// Step 2: Get stats before clearing for confirmation message
+			const statsBeforeClearing = await this.indexService.getStats();
+			const documentCount = statsBeforeClearing.totalDocuments;
+			const chunkCount = statsBeforeClearing.chunks.totalChunks;
+
+			this.logService.info('RAG: Step 3/3 - Clearing SQLite index (documents, chunks, FTS5 keyword index)...');
+
+			// Step 3: Clear SQLite index (documents, chunks, FTS5)
 			await this.indexService.clearAll();
-			this.logService.info('RAG: Cleared SQLite index');
+			this.logService.info('RAG: ✓ SQLite index cleared (documents, chunks, FTS5)');
+
+			this.logService.info('RAG: ✓ All RAG data cleared successfully');
 
 			return {
 				success: true,
-				message: 'All RAG embeddings and metadata cleared successfully. You can now re-index documents.'
+				message: `Successfully cleared all RAG data:\n- ${documentCount} documents\n- ${chunkCount} chunks\n- Vector embeddings\n- Keyword search index (FTS5)\n\nYou can now re-index documents.`
 			};
 		} catch (error) {
 			const errorMsg = error instanceof Error ? error.message : String(error);
@@ -366,5 +475,46 @@ export class RAGMainService implements IRAGMainService {
 		} catch (error) {
 			this.logService.error('Failed to check for embeddings reload:', error);
 		}
+	}
+
+	/**
+	 * Create an empty but valid DOCX file (delegates to fileService)
+	 */
+	async createEmptyDOCX(uri: URI): Promise<void> {
+		return this.fileService.createEmptyDOCX(uri);
+	}
+
+	/**
+	 * Create an empty but valid XLSX file (delegates to fileService)
+	 */
+	async createEmptyXLSX(uri: URI): Promise<void> {
+		return this.fileService.createEmptyXLSX(uri);
+	}
+
+	/**
+	 * Edit a DOCX file with the given operations (delegates to fileService)
+	 */
+	async editDOCX(uri: URI, operations: Array<{
+		type: 'insert_text' | 'replace_text';
+		position?: number;
+		text?: string;
+		search?: string;
+		replace?: string;
+		all?: boolean;
+	}>): Promise<{ success: boolean; message: string }> {
+		return this.fileService.editDOCX(uri, operations);
+	}
+
+	/**
+	 * Edit an XLSX file with the given operations (delegates to fileService)
+	 */
+	async editXLSX(uri: URI, operations: Array<{
+		type: 'set_cell_value' | 'set_cell_formula';
+		sheet: string | number;
+		cell: string;
+		value?: any;
+		formula?: string;
+	}>): Promise<{ success: boolean; message: string }> {
+		return this.fileService.editXLSX(uri, operations);
 	}
 }

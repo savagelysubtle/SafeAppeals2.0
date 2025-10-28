@@ -5,9 +5,9 @@
  *--------------------------------------------------------------------------------------*/
 
 import { defaultModelsOfProvider, defaultProviderSettings, ModelOverrides } from './modelCapabilities.js';
+import { RAGOpenAIModel, RAGStorageScope, RAGVectorBackend } from './ragServiceTypes.js';
 import { ToolApprovalType } from './toolsServiceTypes.js';
 import { VoidSettingsState } from './voidSettingsService.js';
-import { RAGStorageScope, RAGVectorBackend, RAGOpenAIModel } from './ragServiceTypes.js';
 
 
 type UnionOfKeys<T> = T extends T ? keyof T : never;
@@ -436,7 +436,7 @@ export const isFeatureNameDisabled = (featureName: FeatureName, settingsState: V
 
 
 
-export type ChatMode = 'agent' | 'gather' | 'normal'
+export type ChatMode = 'case_manager' | 'research' | 'drafting'
 
 
 export type GlobalSettings = {
@@ -466,6 +466,25 @@ export type GlobalSettings = {
 	ragPolicyFolderName: string;
 	ragWatchPolicyFolder: boolean;
 	ragShowIndexedBadge: boolean;
+	// RAG Enhancement Settings (Phase 1-6)
+	ragUseHybridSearch: boolean;           // Enable BM25 + vector hybrid search
+	ragRRFConstant: number;                // Reciprocal Rank Fusion k constant (default: 20 for medical/legal)
+	ragBM25K1: number;                     // BM25 k1 parameter (term frequency saturation, default: 0.8)
+	ragBM25B: number;                      // BM25 b parameter (document length normalization, default: 0.5)
+	ragUseReranking: boolean;              // Enable cross-encoder reranking
+	ragRerankModel: 'ms-marco-MiniLM' | 'bge-reranker-base'; // Reranker model selection
+	ragRerankBatchSize: number;            // Batch size for reranking (default: 10)
+	ragRerankTopK: number;                 // Number of final results after reranking (default: 5)
+	ragEnableQueryDecomposition: boolean;  // Enable query decomposition and routing
+	ragEnableQueryRouting: boolean;        // Enable automatic scope routing based on query keywords
+	ragUseContextualChunking: boolean;     // Enable document metadata enrichment in chunks
+	ragInitialRetrievalMultiplier: number; // Multiplier for initial retrieval before reranking (default: 4)
+	// Hierarchical Chunking Settings (Phase 1)
+	ragChildChunkSize: number;             // Token size for child chunks (default: 300, for precise retrieval)
+	ragParentChunkSize: number;            // Token size for parent chunks (default: 800, for context)
+	ragChunkOverlapPercent: number;        // Overlap percentage for hierarchical chunks (default: 15%)
+	ragMinChunkSize: number;               // Minimum chunk size in tokens (default: 100)
+	ragMaxChunkSize: number;               // Maximum chunk size in tokens (default: 1024)
 	caseOrganizerAutoCreateTosort: boolean;
 	caseOrganizerTosortFolderName: string;
 	// PDF Viewer settings
@@ -479,18 +498,18 @@ export const defaultGlobalSettings: GlobalSettings = {
 	syncApplyToChat: true,
 	syncSCMToChat: true,
 	enableFastApply: true,
-	chatMode: 'agent',
+	chatMode: 'case_manager',
 	autoApprove: {},
 	showInlineSuggestions: true,
 	includeToolLintErrors: true,
 	isOnboardingComplete: false,
 	disableSystemMessage: false,
 	autoAcceptLLMChanges: false,
-	// RAG defaults
+	// RAG defaults - IMPROVED for better retrieval quality
 	ragEnabled: true,
-	ragChunkSize: 1000,
-	ragChunkOverlap: 100,
-	ragSearchLimit: 5,
+	ragChunkSize: 1200,  // Increased from 1000 for better context
+	ragChunkOverlap: 200, // Increased from 100 for better continuity
+	ragSearchLimit: 8,    // Increased from 5 for better diversity after MMR
 	ragStorageScope: 'workspace_docs',
 	ragVectorBackend: 'chroma-http',
 	ragOpenAIModel: 'text-embedding-3-small',
@@ -499,6 +518,25 @@ export const defaultGlobalSettings: GlobalSettings = {
 	ragPolicyFolderName: 'policy-manuals',
 	ragWatchPolicyFolder: true,
 	ragShowIndexedBadge: true,
+	// RAG Enhancement Defaults (Research-backed values from docs/RAG_ENHANCEMENT_RESEARCH.md)
+	ragUseHybridSearch: true,              // Enable BM25 + vector hybrid search for better recall
+	ragRRFConstant: 20,                    // k=20 optimized for medical/legal precision (NOT 60!)
+	ragBM25K1: 0.8,                        // Domain-specific TF saturation for policy manuals
+	ragBM25B: 0.5,                         // Reduced length normalization for structured documents
+	ragUseReranking: true,                 // Enable cross-encoder for 20%+ accuracy improvement
+	ragRerankModel: 'ms-marco-MiniLM',     // Best speed/accuracy trade-off (~90MB, fast inference)
+	ragRerankBatchSize: 10,                // Memory-efficient batch processing
+	ragRerankTopK: 5,                      // Final result count after reranking
+	ragEnableQueryDecomposition: true,     // Enable query decomposition for complex queries
+	ragEnableQueryRouting: true,           // Enable automatic scope routing (60-70% fast path)
+	ragUseContextualChunking: true,        // Enable document metadata enrichment
+	ragInitialRetrievalMultiplier: 4,      // Retrieve 4x desired results before reranking
+	// Hierarchical Chunking Defaults (Research-backed from Section 4)
+	ragChildChunkSize: 300,                // Child chunks: 300 tokens for precise retrieval
+	ragParentChunkSize: 800,               // Parent chunks: 800 tokens for contextual understanding
+	ragChunkOverlapPercent: 15,            // 15% overlap balances context vs redundancy
+	ragMinChunkSize: 100,                  // Minimum viable chunk size (merge smaller)
+	ragMaxChunkSize: 1024,                 // Hard limit for embedding model compatibility
 	caseOrganizerAutoCreateTosort: true,
 	caseOrganizerTosortFolderName: 'tosort',
 	// PDF Viewer defaults
