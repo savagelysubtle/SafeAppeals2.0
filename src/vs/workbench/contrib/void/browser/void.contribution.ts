@@ -28,7 +28,8 @@ import './autocompleteService.js';
 import './voidSettingsPane.js';
 
 // register css
-import './media/void.css';
+// TEMPORARILY DISABLED: CSS imports cause module loading errors
+// import './media/void.css';
 
 // update (frontend part, also see platform/)
 import './voidUpdateActions.js';
@@ -65,6 +66,17 @@ import './fileService.js';
 
 // register source control management
 import './voidSCMService.js';
+
+// register file organizer
+import './fileOrganizer/fileOrganizerContribution.js';
+
+// register email dashboard - FULLY DISABLED FOR DEBUGGING
+// import '../common/emailService.js';
+// import './emailService.js';
+// import './emailDraftService.js';
+// import './emailWorkspaceService.js';
+// import './emailDashboard/emailDashboardContribution.js';
+// import './emailViewers/emailViewer.contribution.js';
 
 // ---------- common (unclear if these actually need to be imported, because they're already imported wherever they're used) ----------
 

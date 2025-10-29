@@ -23,16 +23,16 @@
 
 	--void-warning: var(--vscode-charts-yellow, #f0d754);
 
-	--void-border-1: #A6E22E;
+	--void-border-1: var(--vscode-focusBorder, #007acc);
 	--void-border-2: var(--vscode-commandCenter-border, #3e3e42);
 	--void-border-3: var(--vscode-commandCenter-inactiveBorder, #3e3e42);
 	--void-border-4: var(--vscode-editorGroup-border, #3e3e42);
 
-	--void-ring-color: #A6E22E;
-	--void-link-color: #A6E22E;
+	--void-ring-color: var(--vscode-focusBorder, #007acc);
+	--void-link-color: var(--vscode-textLink-foreground, #3794ff);
 
 	/* Button colors */
-	--void-button-primary-bg: #A6E22E;
-	--void-button-primary-hover: #8BC826;
-	--void-button-primary-text: #1e1e1e;
+	--void-button-primary-bg: var(--vscode-button-background, #0e639c);
+	--void-button-primary-hover: var(--vscode-button-hoverBackground, #1177bb);
+	--void-button-primary-text: var(--vscode-button-foreground, #ffffff);
 }
