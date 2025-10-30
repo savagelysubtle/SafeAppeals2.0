@@ -15,6 +15,7 @@ export default defineConfig({
 		'./src2/quick-edit-tsx/index.tsx',
 		'./src2/diff/index.tsx',
 		'./src2/file-organizer-tsx/index.tsx',
+		'./src2/case-info-dashboard-tsx/index.tsx',
 		'./src2/email-dashboard-tsx/index.tsx',
 	],
 	outDir: './out',

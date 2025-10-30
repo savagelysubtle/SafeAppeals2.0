@@ -1,0 +1,9 @@
+Failure Scenario,Frequency,Impact,Fallback Strategy,Recovery Time
+Provider API endpoint unreachable,Common,High,"Cached capability data, XML fallback",Immediate
+Authentication failure during capability check,Common,High,"Retry with different auth, assume XML-only",5-30 seconds
+Model version detection timeout,Occasional,Medium,"Use default model capabilities, XML fallback",10-60 seconds
+Tool capability response malformed,Rare,Medium,"Parse partial response, fallback to XML",Immediate
+Network proxy blocking capability detection,Common,High,"Direct connection attempt, XML fallback",Immediate
+Rate limiting during detection phase,Occasional,Low,"Exponential backoff, cached capabilities",30-300 seconds
+Provider returns conflicting capability info,Rare,Medium,Use most restrictive capability set,Immediate
+API version mismatch between client and server,Occasional,High,Version compatibility matrix lookup,Immediate

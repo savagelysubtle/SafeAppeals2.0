@@ -3,11 +3,10 @@
  *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
  *--------------------------------------------------------------------------------------*/
 
-import React, { useState, useEffect, useCallback } from 'react';
-import { IFileOrganizerService } from '../../../fileOrganizer/fileOrganizerService.js';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { useAccessor } from '../util/services.js';
 
 interface ReviewChangesProps {
-	accessor: any;
 	files: any[];
 	rules: any[];
 	proposedChanges: any[];
@@ -15,47 +14,77 @@ interface ReviewChangesProps {
 }
 
 export const ReviewChanges: React.FC<ReviewChangesProps> = ({
-	accessor,
 	files,
 	rules,
 	proposedChanges,
 	onChangesGenerated
 }) => {
+	const accessor = useAccessor();
+
+	// Get the service immediately on mount (synchronously) to avoid accessor expiration
+	const fileOrganizerService = useMemo(() => {
+		try {
+			return accessor.get('IFileOrganizerService');
+		} catch (error) {
+			console.error('[ReviewChanges] Failed to get FileOrganizerService:', error);
+			return null;
+		}
+	}, [accessor]);
+
 	const [changes, setChanges] = useState<any[]>([]);
 	const [processing, setProcessing] = useState(false);
 	const [progress, setProgress] = useState({ current: 0, total: 0 });
 	const [results, setResults] = useState<any[]>([]);
 
-	useEffect(() => {
-		generatePreview();
-	}, [files, rules]);
-
 	const generatePreview = useCallback(async () => {
+		if (!fileOrganizerService) {
+			console.error('FileOrganizerService not available');
+			return;
+		}
 		try {
-			const fileOrganizerService = accessor.get(IFileOrganizerService);
 			const previewChanges = await fileOrganizerService.previewChanges(files, rules);
 			setChanges(previewChanges);
 			onChangesGenerated(previewChanges);
 		} catch (error) {
 			console.error('Failed to generate preview:', error);
 		}
-	}, [accessor, files, rules, onChangesGenerated]);
+	}, [fileOrganizerService, files, rules, onChangesGenerated]);
+
+	// Group changes by target folder for better visualization
+	const changesByFolder = useMemo(() => {
+		const grouped: Record<string, any[]> = {};
+		changes.forEach(change => {
+			const folderName = change.proposed.location?.path?.split('/').pop() || 'Current Location';
+			if (!grouped[folderName]) {
+				grouped[folderName] = [];
+			}
+			grouped[folderName].push(change);
+		});
+		return grouped;
+	}, [changes]);
+
+	useEffect(() => {
+		generatePreview();
+	}, [generatePreview]);
 
 	const handleProcess = useCallback(async () => {
+		if (!fileOrganizerService) {
+			alert('File Organizer Service is not available.');
+			return;
+		}
+
 		setProcessing(true);
 		setProgress({ current: 0, total: changes.length });
 
 		try {
-			const fileOrganizerService = accessor.get(IFileOrganizerService);
 			const processResults = await fileOrganizerService.applyChanges(changes);
-
 			setResults(processResults);
 			setProcessing(false);
 		} catch (error) {
 			console.error('Failed to process files:', error);
 			setProcessing(false);
 		}
-	}, [accessor, changes]);
+	}, [fileOrganizerService, changes]);
 
 	return (
 		<div style={{

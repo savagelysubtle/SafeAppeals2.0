@@ -16,12 +16,20 @@ export const mountFnGenerator = (Component: (params: any) => React.ReactNode) =>
 		return
 	}
 
+	if (!accessor) {
+		console.error('[mountFnGenerator] Accessor is undefined!');
+		return;
+	}
+
 	const disposables = _registerServices(accessor)
 
 	const root = ReactDOM.createRoot(rootElement)
 
 	const rerender = (props?: any) => {
-		root.render(<Component {...props} />); // tailwind dark theme indicator
+		// Ensure accessor is always passed, even if props override it
+		const componentProps = { ...props, accessor };
+		console.log('[mountFnGenerator] Rendering component with accessor:', !!componentProps.accessor);
+		root.render(<Component {...componentProps} />); // tailwind dark theme indicator
 	}
 	const dispose = () => {
 		root.unmount();

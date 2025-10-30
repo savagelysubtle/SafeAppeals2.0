@@ -139,6 +139,7 @@
     "ollama": "^0.5.15",
     "open": "^8.4.2",
     "openai": "^4.96.0",
+    "partial-xml-stream-parser": "^1.9.2",
     "pdfjs-dist": "^4.7.67",
     "posthog-node": "^4.14.0",
     "react": "^19.1.0",

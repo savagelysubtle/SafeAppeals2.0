@@ -69,6 +69,10 @@ import './voidSCMService.js';
 
 // register file organizer
 import './fileOrganizer/fileOrganizerContribution.js';
+import './fileOrgContextService.js';
+
+// register case info panel
+import './caseInfo/caseInfo.contribution.js';
 
 // register email dashboard - FULLY DISABLED FOR DEBUGGING
 // import '../common/emailService.js';

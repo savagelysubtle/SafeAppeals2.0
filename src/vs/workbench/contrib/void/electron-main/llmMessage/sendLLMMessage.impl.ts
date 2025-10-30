@@ -273,10 +273,13 @@ const rawToolCallObjOfAnthropicParams = (toolBlock: Anthropic.Messages.ToolUseBl
 const _sendOpenAICompatibleChat = async ({ messages, onText, onFinalMessage, onError, settingsOfProvider, modelSelectionOptions, modelName: modelName_, _setAborter, providerName, chatMode, separateSystemMessage, overridesOfModel, mcpTools }: SendChatParams_Internal) => {
 	const {
 		modelName,
-		specialToolFormat,
+		specialToolFormat: _unused_specialToolFormat,
 		reasoningCapabilities,
 		additionalOpenAIPayload,
 	} = getModelCapabilities(providerName, modelName_, overridesOfModel)
+
+	// FORCE XML tool parsing for all chat modes
+	const specialToolFormat = undefined
 
 	const { providerReasoningIOSettings } = getProviderCapabilities(providerName)
 
@@ -458,8 +461,11 @@ const anthropicTools = (chatMode: ChatMode | null, mcpTools: InternalToolInfo[] 
 const sendAnthropicChat = async ({ messages, providerName, onText, onFinalMessage, onError, settingsOfProvider, modelSelectionOptions, overridesOfModel, modelName: modelName_, _setAborter, separateSystemMessage, chatMode, mcpTools }: SendChatParams_Internal) => {
 	const {
 		modelName,
-		specialToolFormat,
+		specialToolFormat: _unused_specialToolFormat,
 	} = getModelCapabilities(providerName, modelName_, overridesOfModel)
+
+	// FORCE XML tool parsing for all chat modes
+	const specialToolFormat = undefined
 
 	const thisConfig = settingsOfProvider.anthropic
 	const { providerReasoningIOSettings } = getProviderCapabilities(providerName)
@@ -484,6 +490,17 @@ const sendAnthropicChat = async ({ messages, providerName, onText, onFinalMessag
 		dangerouslyAllowBrowser: true
 	});
 
+	// manually parse out tool results if XML - MUST be done BEFORE creating runOnText!
+	console.log('[sendAnthropicChat] specialToolFormat:', specialToolFormat, 'chatMode:', chatMode)
+	if (!specialToolFormat) {
+		console.log('[sendAnthropicChat] Calling extractXMLToolsWrapper')
+		const { newOnText, newOnFinalMessage } = extractXMLToolsWrapper(onText, onFinalMessage, chatMode, mcpTools)
+		onText = newOnText
+		onFinalMessage = newOnFinalMessage
+	} else {
+		console.log('[sendAnthropicChat] SKIPPING XML extraction because specialToolFormat is:', specialToolFormat)
+	}
+
 	const stream = anthropic.messages.stream({
 		system: separateSystemMessage ?? undefined,
 		messages: messages as AnthropicLLMChatMessage[],
@@ -493,13 +510,6 @@ const sendAnthropicChat = async ({ messages, providerName, onText, onFinalMessag
 		...nativeToolsObj,
 
 	})
-
-	// manually parse out tool results if XML
-	if (!specialToolFormat) {
-		const { newOnText, newOnFinalMessage } = extractXMLToolsWrapper(onText, onFinalMessage, chatMode, mcpTools)
-		onText = newOnText
-		onFinalMessage = newOnFinalMessage
-	}
 
 	// when receive text
 	let fullText = ''
@@ -736,9 +746,12 @@ const sendGeminiChat = async ({
 
 	const {
 		modelName,
-		specialToolFormat,
+		specialToolFormat: _unused_specialToolFormat,
 		// reasoningCapabilities,
 	} = getModelCapabilities(providerName, modelName_, overridesOfModel)
+
+	// FORCE XML tool parsing for all chat modes
+	const specialToolFormat = undefined
 
 	// const { providerReasoningIOSettings } = getProviderCapabilities(providerName)
 
