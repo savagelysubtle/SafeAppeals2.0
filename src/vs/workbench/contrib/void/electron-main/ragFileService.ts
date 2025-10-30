@@ -402,32 +402,50 @@ export class RAGFileService {
 			const mammoth = await import('mammoth');
 			const { readFileSync, writeFileSync } = await import('fs');
 
+			this.logService.info(`[RAGFileService] ========== editDOCX START ==========`);
 			this.logService.info(`[RAGFileService] Editing DOCX: ${uri.fsPath}`);
+			this.logService.info(`[RAGFileService] Operations count: ${operations.length}`);
+			operations.forEach((op, idx) => {
+				this.logService.info(`[RAGFileService] Operation ${idx + 1}:`, JSON.stringify(op));
+			});
 
 			// Read existing DOCX file
 			const filepath = this.getFilePath(uri);
+			this.logService.info(`[RAGFileService] Reading file from: ${filepath}`);
 			const buffer = readFileSync(filepath);
+			this.logService.info(`[RAGFileService] File buffer size: ${buffer.length} bytes`);
 
 			// Extract text content using mammoth
-			this.logService.info('[RAGFileService] Extracting text from DOCX...');
+			this.logService.info('[RAGFileService] Extracting text from DOCX using mammoth...');
 			const { value: extractedText } = await mammoth.extractRawText({ buffer });
 			this.logService.info(`[RAGFileService] Extracted ${extractedText.length} characters`);
+			this.logService.info(`[RAGFileService] Extracted text preview: "${extractedText.substring(0, 100)}"`);
 
 			let modifiedText = extractedText;
+			this.logService.info(`[RAGFileService] Initial modifiedText: "${modifiedText.substring(0, 100)}" (${modifiedText.length} chars)`);
 
 			// Apply operations sequentially
-			for (const op of operations) {
+			for (let i = 0; i < operations.length; i++) {
+				const op = operations[i];
+				this.logService.info(`[RAGFileService] Applying operation ${i + 1}/${operations.length}: ${op.type}`);
+
 				switch (op.type) {
 					case 'insert_text':
 						if (typeof op.position === 'number' && op.text) {
 							const pos = Math.min(op.position, modifiedText.length);
+							const beforeLength = modifiedText.length;
 							modifiedText = modifiedText.slice(0, pos) + op.text + modifiedText.slice(pos);
-							this.logService.info(`[RAGFileService] Inserted text at position ${pos}`);
+							this.logService.info(`[RAGFileService] Inserted "${op.text}" at position ${pos}`);
+							this.logService.info(`[RAGFileService] Text length: ${beforeLength} -> ${modifiedText.length}`);
+							this.logService.info(`[RAGFileService] Modified text after insert: "${modifiedText.substring(0, 100)}"`);
+						} else {
+							this.logService.warn(`[RAGFileService] Invalid insert_text operation: position=${op.position}, text=${op.text}`);
 						}
 						break;
 
 					case 'replace_text':
 						if (op.search && typeof op.replace === 'string') {
+							const beforeLength = modifiedText.length;
 							if (op.all) {
 								const count = (modifiedText.match(new RegExp(op.search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g')) || []).length;
 								modifiedText = modifiedText.split(op.search).join(op.replace);
@@ -436,18 +454,42 @@ export class RAGFileService {
 								modifiedText = modifiedText.replace(op.search, op.replace);
 								this.logService.info(`[RAGFileService] Replaced first occurrence: "${op.search}" -> "${op.replace}"`);
 							}
+							this.logService.info(`[RAGFileService] Text length: ${beforeLength} -> ${modifiedText.length}`);
+							this.logService.info(`[RAGFileService] Modified text after replace: "${modifiedText.substring(0, 100)}"`);
+						} else {
+							this.logService.warn(`[RAGFileService] Invalid replace_text operation: search=${op.search}, replace=${op.replace}`);
 						}
 						break;
 				}
 			}
 
+			this.logService.info(`[RAGFileService] Final modifiedText after all operations: "${modifiedText.substring(0, 100)}" (${modifiedText.length} chars)`);
+
 			// Create new document with modified content
-			this.logService.info('[RAGFileService] Creating new document with modified text...');
-			const paragraphs = modifiedText.split('\n').map(line =>
-				new Paragraph({
-					children: [new TextRun(line || ' ')]
-				})
-			);
+			this.logService.info(`[RAGFileService] Creating new document with modified text (length: ${modifiedText.length})...`);
+			this.logService.info(`[RAGFileService] Modified text preview: "${modifiedText.substring(0, 100)}"`);
+
+			// Handle empty text case - ensure at least one paragraph exists
+			let paragraphs: any[];
+			if (modifiedText.trim().length === 0) {
+				this.logService.warn('[RAGFileService] Modified text is empty or whitespace only, creating empty paragraph');
+				paragraphs = [new Paragraph({ children: [new TextRun(' ')] })];
+			} else {
+				// Split by newlines and create paragraphs
+				const lines = modifiedText.split('\n');
+				this.logService.info(`[RAGFileService] Split into ${lines.length} line(s)`);
+				paragraphs = lines.map((line, index) => {
+					const trimmedLine = line.trim();
+					// Use non-breaking space if line is empty to ensure paragraph exists
+					const text = trimmedLine.length > 0 ? trimmedLine : ' ';
+					this.logService.info(`[RAGFileService] Paragraph ${index + 1}: "${text.substring(0, 50)}"`);
+					return new Paragraph({
+						children: [new TextRun(text)]
+					});
+				});
+			}
+
+			this.logService.info(`[RAGFileService] Created ${paragraphs.length} paragraph(s)`);
 
 			const doc = new Document({
 				creator: 'Safe Appeals Navigator',
@@ -460,17 +502,42 @@ export class RAGFileService {
 			});
 
 			// Generate and save
+			this.logService.info('[RAGFileService] Packing document to buffer...');
 			const newBuffer = await Packer.toBuffer(doc);
+			this.logService.info(`[RAGFileService] Generated buffer: ${newBuffer.length} bytes`);
+
 			writeFileSync(filepath, newBuffer);
+			this.logService.info(`[RAGFileService] ✅ File written to disk: ${filepath}`);
+
+			// Verify we can read it back immediately
+			try {
+				const verifyBuffer = readFileSync(filepath);
+				this.logService.info(`[RAGFileService] ✅ Verified file exists on disk: ${verifyBuffer.length} bytes`);
+
+				// Try to extract text to verify it's readable
+				const { value: verifyText } = await mammoth.extractRawText({ buffer: verifyBuffer });
+				this.logService.info(`[RAGFileService] ✅ Verified document can be read: "${verifyText.substring(0, 100)}" (${verifyText.length} chars)`);
+				if (verifyText.trim() !== modifiedText.trim()) {
+					this.logService.warn(`[RAGFileService] ⚠️ WARNING: Read text differs from written text! Written: "${modifiedText.substring(0, 50)}", Read: "${verifyText.substring(0, 50)}"`);
+				}
+			} catch (verifyError) {
+				this.logService.error(`[RAGFileService] ❌ Failed to verify written document:`, verifyError);
+			}
 
 			this.logService.info(`[RAGFileService] ✅ Successfully saved edited DOCX: ${filepath} (${newBuffer.length} bytes)`);
 
+			this.logService.info(`[RAGFileService] ========== editDOCX SUCCESS ==========`);
 			return {
 				success: true,
-				message: `Successfully edited DOCX file: ${operations.length} operation(s) applied`
+				message: `Applied ${operations.length} edit operation(s) to ${uri.fsPath}`
 			};
 		} catch (error) {
+			this.logService.error('[RAGFileService] ========== editDOCX ERROR ==========');
 			this.logService.error('[RAGFileService] Failed to edit DOCX:', error);
+			if (error instanceof Error) {
+				this.logService.error('[RAGFileService] Error message:', error.message);
+				this.logService.error('[RAGFileService] Error stack:', error.stack);
+			}
 			throw error;
 		}
 	}

@@ -18,7 +18,8 @@ export const ORGANIZATION_TEMPLATES: OrganizationTemplate[] = [
 					{ field: 'name', operator: 'contains', value: 'medical' }
 				],
 				action: {
-					tags: ['medical', 'case-document']
+					tags: ['medical', 'case-document'],
+					targetPath: 'Medical'
 				}
 			},
 			{
@@ -27,7 +28,8 @@ export const ORGANIZATION_TEMPLATES: OrganizationTemplate[] = [
 					{ field: 'name', operator: 'contains', value: 'doctor' }
 				],
 				action: {
-					tags: ['medical', 'physician', 'case-document']
+					tags: ['medical', 'physician', 'case-document'],
+					targetPath: 'Medical'
 				}
 			},
 			{
@@ -36,7 +38,8 @@ export const ORGANIZATION_TEMPLATES: OrganizationTemplate[] = [
 					{ field: 'name', operator: 'contains', value: 'legal' }
 				],
 				action: {
-					tags: ['legal', 'case-document']
+					tags: ['legal', 'case-document'],
+					targetPath: 'Legal'
 				}
 			},
 			{
@@ -45,7 +48,8 @@ export const ORGANIZATION_TEMPLATES: OrganizationTemplate[] = [
 					{ field: 'name', operator: 'contains', value: 'court' }
 				],
 				action: {
-					tags: ['legal', 'court', 'case-document']
+					tags: ['legal', 'court', 'case-document'],
+					targetPath: 'Legal'
 				}
 			},
 			{
@@ -54,7 +58,8 @@ export const ORGANIZATION_TEMPLATES: OrganizationTemplate[] = [
 					{ field: 'name', operator: 'contains', value: 'decision' }
 				],
 				action: {
-					tags: ['decision', 'ruling', 'case-document']
+					tags: ['decision', 'ruling', 'case-document'],
+					targetPath: 'Decisions'
 				}
 			},
 			{
@@ -63,7 +68,8 @@ export const ORGANIZATION_TEMPLATES: OrganizationTemplate[] = [
 					{ field: 'name', operator: 'contains', value: 'correspondence' }
 				],
 				action: {
-					tags: ['correspondence', 'communication']
+					tags: ['correspondence', 'communication'],
+					targetPath: 'Correspondence'
 				}
 			},
 			{
@@ -72,15 +78,16 @@ export const ORGANIZATION_TEMPLATES: OrganizationTemplate[] = [
 					{ field: 'name', operator: 'contains', value: 'evidence' }
 				],
 				action: {
-					tags: ['evidence', 'case-document']
+					tags: ['evidence', 'case-document'],
+					targetPath: 'Evidence'
 				}
 			},
 			{
 				type: 'rename',
-				pattern: '{Category}_{Date}_{Description}',
+				pattern: '{Description}',
 				conditions: [],
 				action: {
-					nameFormat: '{Category}_{Date}_{Description}'
+					nameFormat: '{Description}'
 				}
 			}
 		]
@@ -138,10 +145,10 @@ export const ORGANIZATION_TEMPLATES: OrganizationTemplate[] = [
 			},
 			{
 				type: 'rename',
-				pattern: 'MED_{Date}_{Provider}_{Type}',
+				pattern: '{Description}',
 				conditions: [],
 				action: {
-					nameFormat: 'MED_{Date}_{Provider}_{Type}'
+					nameFormat: '{Description}'
 				}
 			}
 		]
@@ -199,10 +206,10 @@ export const ORGANIZATION_TEMPLATES: OrganizationTemplate[] = [
 			},
 			{
 				type: 'rename',
-				pattern: 'LEGAL_{Date}_{DocumentType}',
+				pattern: '{Description}',
 				conditions: [],
 				action: {
-					nameFormat: 'LEGAL_{Date}_{DocumentType}'
+					nameFormat: '{Description}'
 				}
 			}
 		]
@@ -251,10 +258,10 @@ export const ORGANIZATION_TEMPLATES: OrganizationTemplate[] = [
 			},
 			{
 				type: 'rename',
-				pattern: '{Sender}_{Date}_{Subject}',
+				pattern: '{Description}',
 				conditions: [],
 				action: {
-					nameFormat: '{Sender}_{Date}_{Subject}'
+					nameFormat: '{Description}'
 				}
 			}
 		]
@@ -271,7 +278,8 @@ export const ORGANIZATION_TEMPLATES: OrganizationTemplate[] = [
 					{ field: 'name', operator: 'contains', value: 'your' }
 				],
 				action: {
-					tags: ['your-side', 'claimant']
+					tags: ['your-side', 'claimant'],
+					targetPath: 'YourSide'
 				}
 			},
 			{
@@ -280,7 +288,8 @@ export const ORGANIZATION_TEMPLATES: OrganizationTemplate[] = [
 					{ field: 'name', operator: 'contains', value: 'my' }
 				],
 				action: {
-					tags: ['your-side', 'claimant']
+					tags: ['your-side', 'claimant'],
+					targetPath: 'YourSide'
 				}
 			},
 			{
@@ -289,7 +298,8 @@ export const ORGANIZATION_TEMPLATES: OrganizationTemplate[] = [
 					{ field: 'name', operator: 'contains', value: 'personal' }
 				],
 				action: {
-					tags: ['your-side', 'claimant', 'personal']
+					tags: ['your-side', 'claimant', 'personal'],
+					targetPath: 'YourSide'
 				}
 			},
 			{
@@ -298,7 +308,8 @@ export const ORGANIZATION_TEMPLATES: OrganizationTemplate[] = [
 					{ field: 'name', operator: 'contains', value: 'employer' }
 				],
 				action: {
-					tags: ['their-side', 'employer']
+					tags: ['their-side', 'employer'],
+					targetPath: 'TheirSide'
 				}
 			},
 			{
@@ -307,7 +318,8 @@ export const ORGANIZATION_TEMPLATES: OrganizationTemplate[] = [
 					{ field: 'name', operator: 'contains', value: 'wcb' }
 				],
 				action: {
-					tags: ['their-side', 'wcb', 'government']
+					tags: ['their-side', 'wcb', 'government'],
+					targetPath: 'TheirSide'
 				}
 			},
 			{
@@ -316,7 +328,8 @@ export const ORGANIZATION_TEMPLATES: OrganizationTemplate[] = [
 					{ field: 'name', operator: 'contains', value: 'ime' }
 				],
 				action: {
-					tags: ['their-side', 'ime', 'independent-medical-exam']
+					tags: ['their-side', 'ime', 'independent-medical-exam'],
+					targetPath: 'TheirSide'
 				}
 			},
 			{
@@ -325,7 +338,8 @@ export const ORGANIZATION_TEMPLATES: OrganizationTemplate[] = [
 					{ field: 'name', operator: 'contains', value: 'defense' }
 				],
 				action: {
-					tags: ['their-side', 'defense']
+					tags: ['their-side', 'defense'],
+					targetPath: 'TheirSide'
 				}
 			},
 			{
@@ -334,7 +348,8 @@ export const ORGANIZATION_TEMPLATES: OrganizationTemplate[] = [
 					{ field: 'name', operator: 'contains', value: 'review officer' }
 				],
 				action: {
-					tags: ['their-side', 'review-officer', 'wcb']
+					tags: ['their-side', 'review-officer', 'wcb'],
+					targetPath: 'TheirSide'
 				}
 			},
 			{
@@ -343,7 +358,8 @@ export const ORGANIZATION_TEMPLATES: OrganizationTemplate[] = [
 					{ field: 'name', operator: 'contains', value: 'treating' }
 				],
 				action: {
-					tags: ['your-side', 'treating-physician']
+					tags: ['your-side', 'treating-physician'],
+					targetPath: 'YourSide'
 				}
 			},
 			{
@@ -352,15 +368,16 @@ export const ORGANIZATION_TEMPLATES: OrganizationTemplate[] = [
 					{ field: 'name', operator: 'contains', value: 'claimant' }
 				],
 				action: {
-					tags: ['your-side', 'claimant']
+					tags: ['your-side', 'claimant'],
+					targetPath: 'YourSide'
 				}
 			},
 			{
 				type: 'rename',
-				pattern: '{Side}_{Category}_{Date}_{Description}',
+				pattern: '{Description}',
 				conditions: [],
 				action: {
-					nameFormat: '{Side}_{Category}_{Date}_{Description}'
+					nameFormat: '{Description}'
 				}
 			}
 		]
@@ -373,10 +390,10 @@ export const ORGANIZATION_TEMPLATES: OrganizationTemplate[] = [
 		rules: [
 			{
 				type: 'rename',
-				pattern: '{YYYY-MM-DD}_{Category}_{Description}',
+				pattern: '{Description}',
 				conditions: [],
 				action: {
-					nameFormat: '{YYYY-MM-DD}_{Category}_{Description}'
+					nameFormat: '{Description}'
 				}
 			},
 			{
@@ -403,10 +420,10 @@ export const ORGANIZATION_TEMPLATES: OrganizationTemplate[] = [
 			},
 			{
 				type: 'rename',
-				pattern: '{AICategory}_{Date}_{AIDescription}',
+				pattern: '{Description}',
 				conditions: [],
 				action: {
-					nameFormat: '{AICategory}_{Date}_{AIDescription}'
+					nameFormat: '{Description}'
 				}
 			}
 		]

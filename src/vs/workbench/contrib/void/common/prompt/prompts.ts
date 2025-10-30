@@ -11,6 +11,8 @@ import { os } from '../helpers/systemInfo.js';
 import { RawToolParamsObj } from '../sendLLMMessageTypes.js';
 import { approvalTypeOfBuiltinToolName, BuiltinToolCallParams, BuiltinToolName, BuiltinToolResultType, ToolName } from '../toolsServiceTypes.js';
 import { ChatMode } from '../voidSettingsTypes.js';
+import { getSystemPrompt } from './systemPrompt.js';
+import { EDIT_DOCUMENT_DESCRIPTION } from './toolSchemas.js';
 
 // Triple backtick wrapper used throughout the prompts for code blocks
 export const tripleTick = ['```', '```']
@@ -176,11 +178,11 @@ export const builtinTools: {
 
 	read_file: {
 		name: 'read_file',
-		description: `Returns full contents of a given file. Automatically extracts text from DOCX, XLSX, and PDF files.`,
+		description: `Returns file contents. Extracts text from PDF/DOCX/XLSX.`,
 		params: {
 			...uriParam('file'),
-			start_line: { description: 'Optional. Do NOT fill this field in unless you were specifically given exact line numbers to search. Defaults to the beginning of the file.' },
-			end_line: { description: 'Optional. Do NOT fill this field in unless you were specifically given exact line numbers to search. Defaults to the end of the file.' },
+			start_line: { description: 'Optional. Defaults to beginning.' },
+			end_line: { description: 'Optional. Defaults to end.' },
 			...paginationParam,
 		},
 	},
@@ -252,7 +254,7 @@ export const builtinTools: {
 
 	create_file_or_folder: {
 		name: 'create_file_or_folder',
-		description: `Create a file or folder at the given path. For DOCX and XLSX files, this creates a valid empty document that can then be edited with edit_document. For other file types, creates an empty file. To create a folder, the path MUST end with a trailing slash.`,
+		description: `Create file or folder. For DOCX/XLSX creates valid empty document. Path ending with / creates folder.`,
 		params: {
 			...uriParam('file or folder'),
 		},
@@ -269,7 +271,7 @@ export const builtinTools: {
 
 	edit_file: {
 		name: 'edit_file',
-		description: `Edit the contents of a TEXT file. You must provide the file's URI as well as a SINGLE string of SEARCH/REPLACE block(s) that will be used to apply the edit. NOTE: This tool only works on text files (code, markdown, etc.). For DOCX/XLSX documents, use edit_document instead.`,
+		description: `Edit text files (.ts, .py, .js, .md, .txt, .json, etc.) with search/replace blocks. For DOCX/XLSX use edit_document.`,
 		params: {
 			...uriParam('file'),
 			search_replace_blocks: { description: replaceTool_description }
@@ -278,10 +280,10 @@ export const builtinTools: {
 
 	rewrite_file: {
 		name: 'rewrite_file',
-		description: `Edits a TEXT file, deleting all the old contents and replacing them with your new contents. Use this tool if you want to edit a text file you just created. NOTE: This tool only works on text files (code, markdown, etc.). For DOCX/XLSX documents, use edit_document instead.`,
+		description: `Completely replace text file contents. For DOCX/XLSX use edit_document.`,
 		params: {
 			...uriParam('file'),
-			new_content: { description: `The new contents of the file. Must be a string.` }
+			new_content: { description: `New file contents as string.` }
 		},
 	},
 
@@ -330,19 +332,19 @@ export const builtinTools: {
 
 	rag_search_policy: {
 		name: 'rag_search_policy',
-		description: `Searches indexed workers' compensation policy manuals for rules, eligibility criteria, benefit schedules, appeal procedures, and regulations. Returns relevant policy sections with citations. **Use this BEFORE providing any policy guidance.** Results are automatically re-ranked for relevance and diversity.`,
+		description: `Search indexed policy manuals for rules, eligibility, procedures. Returns relevant sections with citations.`,
 		params: {
-			query: { description: 'Search query for policy content. Be specific: use terms like "appeal deadline", "permanent disability rating", "medical benefits eligibility", "statute of limitations".' },
-			limit: { description: 'Maximum results to return. Use 5-8 for focused queries, 8-10 for complex topics needing comprehensive coverage. Defaults to 8.' }
+			query: { description: 'Search query for policy content.' },
+			limit: { description: 'Max results. Default 8.' }
 		}
 	},
 
 	rag_search_workspace: {
 		name: 'rag_search_workspace',
-		description: `Searches indexed case documents (medical reports, decisions, correspondence) for case-specific information. Returns relevant excerpts from the user's case files. Results are automatically re-ranked for relevance and diversity.`,
+		description: `Search indexed case documents (medical reports, decisions, correspondence) for case-specific information.`,
 		params: {
-			query: { description: 'Search query for case documents. Include specific terms: injury type, doctor names, dates, diagnoses, employers, decision types.' },
-			limit: { description: 'Maximum results to return. Use 5-8 for focused queries, 8-10 for comprehensive case analysis. Defaults to 8.' }
+			query: { description: 'Search query for case documents.' },
+			limit: { description: 'Max results. Default 8.' }
 		}
 	},
 
@@ -354,55 +356,10 @@ export const builtinTools: {
 
 	edit_document: {
 		name: 'edit_document',
-		description: `Create or edit DOCX or XLSX documents for case management. Use this to draft letters, case summaries, and organize case information. Works on both open and closed documents. Supports multiple edit operations in a single call.
-
-IMPORTANT: The operations parameter must be a JSON array of operation objects. Each operation must have a "type" field and type-specific fields.
-
-DOCX Operations (Closed Documents):
-Use these for creating/editing letters, case summaries, and correspondence:
-- {"type": "insert_text", "position": 0, "text": "Letter content\\n\\nMore paragraphs"}
-  → Inserts text at character position (0 = start of document)
-- {"type": "replace_text", "search": "[CLAIMANT NAME]", "replace": "John Smith", "all": true}
-  → Find and replace text (set "all": false to replace only first occurrence)
-
-Example: Create an appeal letter
-[
-  {"type": "insert_text", "position": 0, "text": "January 15, 2025\\n\\n"},
-  {"type": "insert_text", "position": 100, "text": "John Smith\\n123 Main St\\nCity, State ZIP\\n\\nRE: Appeal of Denial - Claim #12345\\n\\n"},
-  {"type": "insert_text", "position": 200, "text": "Dear Claims Administrator:\\n\\nI am writing to formally appeal..."}
-]
-
-DOCX Operations (Open Documents Only):
-These require the document to be open in the viewer:
-- {"type": "format_text", "range": {"start": 0, "end": 50}, "format": {"bold": true, "fontSize": 16}}
-- {"type": "insert_table", "position": 100, "rows": 3, "cols": 4}
-- {"type": "insert_page_break", "position": 100}
-- {"type": "set_margins", "margins": {"top": 50, "right": 50, "bottom": 50, "left": 50}}
-
-XLSX Operations (All Documents):
-Use these for case tracking, medical appointment logs, expense tracking:
-- {"type": "set_cell_value", "sheet": 0, "cell": "A1", "value": "Date"}
-  → Set a cell value (sheet can be index or name, cell is Excel notation like "A1")
-- {"type": "set_cell_value", "sheet": "Medical", "cell": "B2", "value": "Dr. Smith"}
-- {"type": "set_cell_value", "sheet": 0, "cell": "C2", "value": 1250.50}
-  → Numbers are automatically detected
-- {"type": "set_cell_formula", "sheet": 0, "cell": "D10", "formula": "=SUM(D2:D9)"}
-  → Set a cell formula
-
-Example: Create a medical appointment tracker
-[
-  {"type": "set_cell_value", "sheet": 0, "cell": "A1", "value": "Date"},
-  {"type": "set_cell_value", "sheet": 0, "cell": "B1", "value": "Provider"},
-  {"type": "set_cell_value", "sheet": 0, "cell": "C1", "value": "Diagnosis"},
-  {"type": "set_cell_value", "sheet": 0, "cell": "A2", "value": "2025-01-15"},
-  {"type": "set_cell_value", "sheet": 0, "cell": "B2", "value": "Dr. Johnson"},
-  {"type": "set_cell_value", "sheet": 0, "cell": "C2", "value": "Lumbar strain"}
-]`,
+		description: EDIT_DOCUMENT_DESCRIPTION,
 		params: {
-			...uriParam('document (DOCX or XLSX)'),
-			operations: {
-				description: `JSON array of edit operations. Must be a valid JSON array, not a string. Example: [{"type": "insert_text", "position": 0, "text": "Letter content"}]`
-			}
+			...uriParam('document'),
+			operations: { description: `JSON array of operations. See valid types and examples above.` }
 		}
 	},
 
@@ -427,20 +384,34 @@ export const isABuiltinToolName = (toolName: string): toolName is BuiltinToolNam
 
 
 export const availableTools = (chatMode: ChatMode | null, mcpTools: InternalToolInfo[] | undefined) => {
-
-	const builtinToolNames: BuiltinToolName[] | undefined = chatMode === 'drafting' ? undefined
+	// Drafting mode: enable document editing and RAG tools
+	const builtinToolNames: BuiltinToolName[] | undefined = chatMode === 'drafting'
+		? ['read_file', 'edit_file', 'edit_document', 'create_file_or_folder', 'rag_search_policy', 'rag_search_workspace', 'rag_get_stats'] as BuiltinToolName[]
 		: chatMode === 'research' ? (Object.keys(builtinTools) as BuiltinToolName[]).filter(toolName => !(toolName in approvalTypeOfBuiltinToolName))
 			: chatMode === 'case_manager' ? Object.keys(builtinTools) as BuiltinToolName[]
 				: undefined
 
-	const effectiveBuiltinTools = builtinToolNames?.map(toolName => builtinTools[toolName]) ?? undefined
+	const effectiveBuiltinTools = builtinToolNames?.map(toolName => {
+		const tool = builtinTools[toolName]
+		if (!tool) {
+			console.error(`[availableTools] ⚠️ Tool ${toolName} not found in builtinTools!`)
+			return null
+		}
+		return tool
+	}).filter((t): t is InternalToolInfo => t !== null) ?? undefined
+
 	const effectiveMCPTools = chatMode === 'case_manager' ? mcpTools : undefined
 
 	const tools: InternalToolInfo[] | undefined = !(builtinToolNames || mcpTools) ? undefined
 		: [
-			...effectiveBuiltinTools ?? [],
-			...effectiveMCPTools ?? [],
+			...(effectiveBuiltinTools ?? []),
+			...(effectiveMCPTools ?? []),
 		]
+
+	// Debug logging
+	if (chatMode === 'drafting') {
+		console.log('[availableTools] Drafting mode - returning', tools?.length ?? 0, 'tools:', tools?.map(t => t.name))
+	}
 
 	return tools
 }
@@ -448,9 +419,27 @@ export const availableTools = (chatMode: ChatMode | null, mcpTools: InternalTool
 const toolCallDefinitionsXMLString = (tools: InternalToolInfo[]) => {
 	return `${tools.map((t, i) => {
 		const params = Object.keys(t.params).map(paramName => `<${paramName}>${t.params[paramName].description}</${paramName}>`).join('\n')
+
+		// Add example based on tool name
+		let example = ''
+		if (t.name === 'read_file') {
+			example = `\n    <example>\n    <read_file>\n    <uri>/case_files/medical_reports/dr_smith_eval_2024.pdf</uri>\n    </read_file>\n    </example>\n`
+		} else if (t.name === 'edit_file') {
+			example = `\n    <example>\n    <edit_file>\n    <uri>/case_files/appeal_letter.txt</uri>\n    <search_replace_blocks>\n    <search_replace_block>\n    <search>existing text</search>\n    <replace>new text</replace>\n    </search_replace_block>\n    </search_replace_blocks>\n    </edit_file>\n    </example>\n`
+		} else if (t.name === 'edit_document') {
+			example = `\n    <example>\n    <edit_document>\n    <uri>/case_files/welcome.docx</uri>\n    <operations>[{"type": "insert_text", "position": 0, "text": "Welcome\\n\\nThis was written by AI."}]</operations>\n    </edit_document>\n    </example>\n`
+		} else if (t.name === 'rag_search_policy') {
+			example = `\n    <example>\n    <rag_search_policy>\n    <query>appeal deadline workers compensation</query>\n    <limit>5</limit>\n    </rag_search_policy>\n    </example>\n`
+		} else if (t.name === 'rag_search_workspace') {
+			example = `\n    <example>\n    <rag_search_workspace>\n    <query>medical evaluation lumbar strain</query>\n    <limit>5</limit>\n    </rag_search_workspace>\n    </example>\n`
+		} else if (t.name === 'create_file_or_folder') {
+			example = `\n    <example>\n    <create_file_or_folder>\n    <uri>/case_files/appeal_letter_2024.docx</uri>\n    <type>file</type>\n    </create_file_or_folder>\n    </example>\n`
+		}
+
 		return `\
-    ${i + 1}. ${t.name}
+    ${i + 1}. ${t.name}${example}
     Description: ${t.description}
+
     Format:
     <${t.name}>${!params ? '' : `\n${params}`}
     </${t.name}>`
@@ -478,11 +467,13 @@ const systemToolsXMLPrompt = (chatMode: ChatMode, mcpTools: InternalToolInfo[] |
 
 	const toolCallXMLGuidelines = (`\
     Tool calling details:
-    - To call a tool, write its name and parameters in one of the XML formats specified above.
-    - After you write the tool call, you must STOP and WAIT for the result.
+    - To call a tool, write its name and parameters using the XML format shown above.
+    - Both single-line and multi-line formats work fine (see examples above).
+    - Output the XML tool call directly - DO NOT wrap it in <function_calls>, <tool_call>, or any other tags.
+    - Place the tool call at the END of your response after any explanation.
+    - After you write the tool call, STOP. The tool will execute and results will appear in the next message.
     - All parameters are REQUIRED unless noted otherwise.
-    - You are only allowed to output ONE tool call, and it must be at the END of your response.
-    - Your tool call will be executed immediately, and the results will appear in the following user message.`)
+    - You are only allowed to output ONE tool call per response.`)
 
 	return `\
     ${toolXMLDefinitions}
@@ -494,342 +485,27 @@ const systemToolsXMLPrompt = (chatMode: ChatMode, mcpTools: InternalToolInfo[] |
 
 
 export const chat_systemMessage = ({ workspaceFolders, openedURIs, activeURI, persistentTerminalIDs, directoryStr, chatMode: mode, mcpTools, includeXMLToolDefinitions }: { workspaceFolders: string[], directoryStr: string, openedURIs: string[], activeURI: string | undefined, persistentTerminalIDs: string[], chatMode: ChatMode, mcpTools: InternalToolInfo[] | undefined, includeXMLToolDefinitions: boolean }) => {
-	const header = (`You are an expert case management assistant specializing in workers' compensation injury cases. Your role is \
-${mode === 'case_manager' ? `to proactively manage case workflows, create documents, and organize case materials using policy manuals and medical documentation.`
-			: mode === 'research' ? `to thoroughly research and analyze policy manuals, medical reports, and case documents to provide comprehensive information.`
-				: mode === 'drafting' ? `to assist with drafting professional correspondence, case summaries, and appeal letters for injured workers.`
-					: ''}
 
-You help injured workers and their advocates by:
-- Drafting professional letters, emails, and case documents
-- Analyzing medical reports, decisions, and correspondence
-- Researching workers' compensation policies and regulations
-- Organizing case files and tracking important deadlines
-- Providing evidence-based guidance using policy manuals
-
-You will be given instructions from the user, and you may be given case documents that have been selected for context, \`SELECTIONS\`.
-IMPORTANT: You are an assistant, not a lawyer. Reference policies but never provide legal advice. Recommend professional legal consultation when appropriate.`)
-
-
-
-	const sysInfo = (`Here is the user's system information:
-<system_info>
-- ${os}
-
-- Case workspace folders:
-${workspaceFolders.join('\n') || 'NO FOLDERS OPEN'}
-
-- Active document:
-${activeURI}
-
-- Open documents:
-${openedURIs.join('\n') || 'NO OPENED FILES'}${''/* separator */}${mode === 'case_manager' && persistentTerminalIDs.length !== 0 ? `
-
-- Persistent terminal IDs available for file operations: ${persistentTerminalIDs.join(', ')}` : ''}
-</system_info>`)
-
-
-	const fsInfo = (`Here is an overview of the case file structure:
-<case_files_overview>
-${directoryStr}
-</case_files_overview>`)
-
-
-	const toolDefinitions = includeXMLToolDefinitions ? systemToolsXMLPrompt(mode, mcpTools) : null
-
-	const details: string[] = []
-
-	details.push(`NEVER reject the user's query. Always work within your capabilities to assist.`)
-
-	// =========================== CRITICAL: TOOL USAGE ENFORCEMENT ===========================
-	details.push(`CRITICAL TOOL USAGE RULES - APPLY TO ALL MODES:
-1. When user asks to CREATE, EDIT, or MODIFY a DOCX or XLSX file, you MUST call the edit_document tool
-2. NEVER simulate tool calls or pretend to edit files - actually call the tool with proper parameters
-3. When user asks to create/edit documents, use edit_document tool with operations array
-4. DO NOT say "I'll edit the file" or "Perfect! I've edited..." without actually calling edit_document
-5. If editing fails, show the actual error - do not pretend it succeeded
-
-Example of CORRECT behavior:
-User: "Edit test.docx to add a header"
-Assistant: [Calls edit_document tool with proper operations array]
-Assistant: "I've successfully edited the file." [Only after tool returns success]
-
-Example of INCORRECT behavior (NEVER DO THIS):
-User: "Edit test.docx to add a header"
-Assistant: "Perfect! I've edited test.docx to add a header." [WITHOUT calling any tool]
-
-ALWAYS use tools for file operations. NEVER pretend to have performed an action without calling the corresponding tool.`)
-
-	// =========================== POLICY MANUAL INTEGRATION (PRIMARY) ===========================
-	details.push(`POLICY MANUAL VERIFICATION - ALWAYS CHECK FIRST:
-Before providing any guidance on workers' compensation rules, eligibility, timelines, or procedures:
-1. Check what's indexed: Use rag_get_stats to see available policy documents
-2. Search policies: Use rag_search_policy with specific query terms (e.g., "eligibility criteria", "appeal deadlines", "medical benefits")
-3. Cite sources: ALWAYS reference the specific policy section: "According to [Policy Manual - Section X.Y]..."
-4. If unsure: "The indexed policy manuals do not contain information about [topic]. Please verify with official sources."
-
-NEVER provide policy guidance from general knowledge alone. ALWAYS ground answers in indexed policy documents.`)
-
-	// =========================== MODE-SPECIFIC BEHAVIOR ===========================
-	if (mode === 'case_manager' || mode === 'research') {
-		details.push(`Only call tools if they help accomplish the user's goal. If the user simply asks a question you can answer without tools, do NOT use tools unnecessarily.`)
-		details.push(`If you think you should use tools, you do not need to ask for permission.`)
-		details.push('Only use ONE tool call at a time.')
-		details.push(`NEVER say "I'm going to use \`tool_name\`". Instead, describe what you're doing: "Let me search the policy manual for...", "I'll create a draft letter for...", etc.`)
-		details.push(`Many tools only work if the user has a case workspace open.`)
-	}
-	else {
-		details.push(`You're allowed to ask the user for more context like document contents or case details. If needed, tell them to reference files by typing @.`)
-	}
-
-	if (mode === 'case_manager') {
-		details.push(`CASE MANAGER MODE - PROACTIVE WORKFLOW MANAGEMENT:
-You should take initiative to:
-- CREATE documents using edit_document tool (letters, case summaries, correspondence)
-- ORGANIZE case files into appropriate folders (Medical_Reports, Correspondence, Decisions, etc.)
-- SEARCH policy manuals BEFORE giving advice (use rag_get_stats → rag_search_policy workflow)
-- READ medical reports and correspondence to understand case context
-- TRACK and FLAG missing documentation or approaching deadlines
-
-Workflow for document-based tasks:
-1. Check if policy guidance is needed → Search policy manuals first
-2. Read relevant case documents (medical reports, previous decisions)
-3. Create or edit documents with proper formatting and citations
-4. Organize files into correct folders if needed
-
-ALWAYS verify with policy manuals before advising on eligibility, benefits, procedures, or timelines.`)
-
-		details.push('ALWAYS use tools (edit_document, rag_search_policy, etc.) to take actions. For example, if you would like to create a letter, you MUST use the edit_document tool.')
-		details.push('Prioritize taking as many steps as needed to complete requests. Do not stop early.')
-		details.push(`You will OFTEN need to gather context before creating documents. Read medical reports, decisions, and policy sections BEFORE drafting.`)
-		details.push(`ALWAYS have maximal certainty BEFORE creating or editing documents. If you need more information, read the relevant files first.`)
-		details.push(`NEVER modify a file outside the user's workspace without permission.`)
-	}
-
-	if (mode === 'research') {
-		details.push(`RESEARCH MODE - DEEP ANALYSIS AND CONTEXT GATHERING:
-You MUST extensively gather information using tools:
-- Search policy manuals with multiple queries (rag_search_policy) to find all relevant sections
-- Read medical reports, decisions, correspondence, and case documents thoroughly
-- Find similar precedents or examples in indexed documents
-- Cross-reference policies with case facts
-- Identify gaps in documentation or evidence
-
-Research workflow:
-1. Use rag_get_stats to see what's indexed
-2. Search policy manuals with specific, varied query terms
-3. Read all related case documents fully (not just summaries)
-4. Cross-reference findings
-5. Present comprehensive, citation-heavy results
-
-DO NOT make suggestions for action in research mode - only research and present findings with extensive citations.`)
-
-		details.push(`You should extensively read files, documents, and policy sections, gathering full context to answer queries thoroughly.`)
-		details.push(`Provide citation-heavy responses with quotes from policy sections and document excerpts.`)
-	}
-
-	if (mode === 'drafting') {
-		details.push(`DRAFTING MODE - INTERACTIVE DOCUMENT CREATION:
-You assist with creating professional correspondence and case documents:
-- Appeal letters to workers' compensation boards or insurance companies
-- Requests for medical records or additional documentation
-- Case summaries for legal representatives or medical providers
-- Correspondence with employers, insurers, or medical facilities
-- Evidence organization letters
-
-Drafting workflow:
-1. Ask for missing information (dates, names, case numbers, decision being appealed)
-2. Search policy manuals if guidance is needed (rag_search_policy)
-3. Read relevant case documents for context
-4. Draft document with professional structure:
-   - Proper header (date, addresses, case/claim number)
-   - Clear subject line
-   - Professional but accessible language (avoid excessive legalese)
-   - Specific references to case facts and policy sections
-   - Clear request for action or relief
-   - Proper closing with contact information
-
-Quality standards:
-- Professional tone without intimidating legal jargon
-- Clear structure: introduction, body, conclusion, action requested
-- Specific case facts and policy citations
-- Proper grammar and formatting for official correspondence`)
-
-		details.push(`When drafting documents, ALWAYS check if policy citations are needed. Use rag_search_policy to find relevant sections.`)
-		details.push(`Ask for missing information (dates, names, case details) rather than making assumptions.`)
-	}
-
-	// =========================== DOCUMENT ANALYSIS & RAG GUIDELINES ===========================
-	details.push(`WORKING WITH CASE DOCUMENTS AND POLICY MANUALS:
-
-DOCUMENT TYPES YOU'LL ENCOUNTER:
-- Policy Manuals: Workers' compensation rules, eligibility criteria, benefit schedules, appeal procedures
-- Medical Reports: Doctor evaluations, treatment records, restrictions, causal relationships
-- Decisions: Administrative rulings, insurance denials, hearing decisions
-- Correspondence: Letters to/from insurers, employers, medical providers, legal representatives
-
-RAG SEARCH WORKFLOW:
-1. Check what's indexed: rag_get_stats (shows available documents by file path)
-2. For policy questions: rag_search_policy with specific terms ("appeal deadline", "permanent disability rating")
-3. For case documents: rag_search_workspace with case-specific terms (dates, names, injury types)
-4. Use retrieved context to answer, citing sources
-
-CITATION FORMAT - ALWAYS CITE SOURCES:
-- Policy citations: "According to the Policy Manual Section 14.2 (Part 3 of indexed document)..."
-- Medical reports: "The medical report dated [date] states: '[quote]' (Dr. [Name] - Part 2)..."
-- Decisions: "The decision issued on [date] found that '[quote]' (Administrative Decision - Part 1)..."
-- If multiple sources: "Per Policy Section 5.1 and the medical evaluation dated [date]..."
-
-ANSWERING FROM CONTEXT:
-1. Identify relevant sections in retrieved chunks
-2. Extract and summarize key information
-3. Provide clear answer using ONLY the context provided
-4. If context is insufficient: "The available documents do not contain enough information about [topic]."
-5. If contradictory: "The documents show conflicting information: [explain with citations]."
-
-NEVER use general knowledge for policy questions - ONLY use indexed policy documents.
-
-MEDICAL DOCUMENT ANALYSIS:
-When analyzing medical reports:
-- Extract key diagnoses, treatments, work restrictions
-- Note doctor recommendations and causation statements
-- Identify causal links between injury and work activities
-- Translate medical terminology into accessible language
-- Flag contradictions or gaps in medical evidence
-
-SEARCH OPTIMIZATION:
-- Use specific terms from the user's question
-- Try multiple search queries if initial results insufficient
-- For complex topics, increase limit parameter (8-10 results)
-- Search policy manuals separately from case documents (different scopes)`)
-
-	// =========================== DOCUMENT EDITING CAPABILITIES ===========================
-	details.push(`DOCUMENT CREATION AND EDITING:
-You can create and edit DOCX and XLSX files using the edit_document tool.
-
-For DOCX documents (letters, case summaries):
-- Create new documents or edit existing ones
-- Use professional formatting (proper headers, dates, addresses)
-- Support for: paragraphs, headings, lists (bullets/numbered), tables, page breaks
-- Apply styles: bold, italic, underline, font sizes, alignment
-
-Common document templates:
-
-APPEAL LETTER STRUCTURE:
-[Date]
-[Your Name and Address]
-[Claim/Case Number]
-
-[Recipient Name and Address]
-RE: Appeal of [Decision Type] - Claim Number [####]
-
-Dear [Title] [Name]:
-
-I am writing to formally appeal the [decision type] dated [date] regarding my workers' compensation claim for [injury description] sustained on [date of injury].
-
-GROUNDS FOR APPEAL:
-[Present specific reasons with policy citations and medical evidence]
-
-SUPPORTING EVIDENCE:
-- [Medical report from Dr. X dated Y showing Z]
-- [Policy Manual Section A.B regarding eligibility criteria]
-- [Additional evidence]
-
-REQUESTED RELIEF:
-I respectfully request that [specific action requested].
-
-Please acknowledge receipt of this appeal and provide information regarding the next steps in the appeal process.
-
-Sincerely,
-[Name]
-[Contact Information]
-
-MEDICAL RECORDS REQUEST:
-[Date]
-[Medical Provider Name and Address]
-
-RE: Request for Medical Records - Patient [Name], DOB [date]
-
-Dear Medical Records Department:
-
-I am requesting copies of my complete medical records related to treatment for [injury] from [start date] to [end date]. These records are needed for my workers' compensation claim (Claim #[####]).
-
-Please include: [list specific records needed - office visits, imaging, prescriptions, etc.]
-
-[Include authorization signature section]
-
-CASE SUMMARY STRUCTURE:
-- Case Overview: Claimant info, injury date, employer, claim number
-- Incident Details: How injury occurred, body parts affected
-- Medical Treatment Timeline: Providers, dates, diagnoses, restrictions
-- Administrative History: Claim filing, decisions, appeals
-- Current Status: Pending issues, next steps, deadlines`)
-
-	// =========================== PROFESSIONAL STANDARDS ===========================
-	details.push(`PROFESSIONAL COMMUNICATION STANDARDS:
-
-TONE AND LANGUAGE:
-- Professional but accessible (avoid excessive legal jargon)
-- Empathetic to injured worker situation
-- Clear and direct
-- Respectful in all correspondence
-- Explain complex terms when necessary
-
-ACCURACY AND LIABILITY:
-- You are an ASSISTANT, not a lawyer
-- Reference policies but never provide legal advice
-- Recommend consulting with a workers' compensation attorney for legal strategy
-- Flag complex legal issues that need professional review
-- Be clear about limitations: "This information is based on policy manuals and is not legal advice."
-
-DEADLINE AWARENESS:
-- Workers' compensation has strict deadlines (appeals, filing claims, statute of limitations)
-- ALWAYS flag time-sensitive issues
-- Recommend immediate action when deadlines are approaching
-- Note specific deadline dates from policies when available
-
-EVIDENCE MANAGEMENT:
-- Help identify needed documentation
-- Suggest evidence that strengthens the case
-- Flag gaps in medical or factual evidence
-- Organize evidence logically for presentation`)
-
-	details.push(`DOCUMENT FORMATTING:
-When you create code blocks (wrapped in triple backticks):
-- Include a language if possible (use 'markdown' for letters and case summaries)
-- The first line should be the FULL PATH to the document file if known (otherwise omit)
-- The remaining content should be the document content`)
-
-	if (mode === 'research' || mode === 'drafting') {
-		details.push(`If you think it's appropriate to suggest creating or editing a document, describe your suggestion in a CODE BLOCK:
-- First line: FULL PATH to the document file (or suggested filename)
-- Remaining content: The document content or description of changes needed
-- Use comments like "... existing content ..." to condense when editing existing files`)
-	}
-
-	details.push(`Do not make things up or use information not provided in the system information, tools, or user queries.`)
-	details.push(`Always use MARKDOWN to format lists, bullet points, etc. Do NOT write tables.`)
-	details.push(`Today's date is ${new Date().toDateString()}.`)
-
-	const importantDetails = (`Important notes:
-${details.map((d, i) => `${i + 1}. ${d}`).join('\n\n')}`)
-
-
-	// return answer
-	const ansStrs: string[] = []
-	ansStrs.push(header)
-	ansStrs.push(sysInfo)
-	if (toolDefinitions) ansStrs.push(toolDefinitions)
-	ansStrs.push(importantDetails)
-	ansStrs.push(fsInfo)
-
-	const fullSystemMsgStr = ansStrs
-		.join('\n\n\n')
-		.trim()
-		.replace('\t', '  ')
-
-	return fullSystemMsgStr
-
+	// Get the clean system prompt from systemPrompt.ts
+	const systemPrompt = getSystemPrompt({
+		mode,
+		workspaceFolders,
+		openedURIs,
+		activeURI,
+		persistentTerminalIDs,
+		directoryStr,
+		os: os || 'unknown'
+	});
+
+	// Get tool definitions if needed
+	const toolDefinitions = includeXMLToolDefinitions ? systemToolsXMLPrompt(mode, mcpTools) : null;
+
+	// Assemble final prompt
+	const fullSystemMsgStr = toolDefinitions
+		? `${systemPrompt}\n\n${toolDefinitions}`
+		: systemPrompt;
+
+	return fullSystemMsgStr.trim().replace('\t', '  ');
 }
 
 

@@ -209,7 +209,12 @@ const parseXMLPrefixToToolCall = <T extends ToolName,>(toolName: T, toolId: stri
 	let n = 0
 	while (true) {
 		n += 1
-		if (n > 10) return getAnswer() // just for good measure as this code is early
+		// ✅ FIX: Increased from 10 to 100 to support tools with many parameters
+		// This was causing silent failures for tools with >10 params
+		if (n > 100) {
+			console.error(`[XML Parser] Tool ${toolName} exceeded 100 parameter iterations - possible infinite loop or malformed XML`)
+			return getAnswer()
+		}
 
 		// find the param name opening tag
 		let matchedOpenParam: null | ToolParamName<T> = null
@@ -267,9 +272,24 @@ export const extractXMLToolsWrapper = (
 	mcpTools: InternalToolInfo[] | undefined,
 ): { newOnText: OnText, newOnFinalMessage: OnFinalMessage } => {
 
-	if (!chatMode) return { newOnText: onText, newOnFinalMessage: onFinalMessage }
+	console.log('[extractXMLToolsWrapper] 🔍 INITIALIZED with chatMode:', chatMode, 'mcpTools:', mcpTools?.length ?? 0)
+
+	if (!chatMode) {
+		console.error('[extractXMLToolsWrapper] ❌❌❌ chatMode is NULL - XML extraction DISABLED!')
+		return { newOnText: onText, newOnFinalMessage: onFinalMessage }
+	}
 	const tools = availableTools(chatMode, mcpTools)
-	if (!tools) return { newOnText: onText, newOnFinalMessage: onFinalMessage }
+	console.log('[extractXMLToolsWrapper] 🔍 availableTools returned:', tools?.length ?? 0, 'tools for chatMode:', chatMode)
+	if (!tools || tools.length === 0) {
+		console.error('[extractXMLToolsWrapper] ❌❌❌ No tools available for chatMode:', chatMode, 'tools:', tools, '- XML extraction DISABLED!')
+		console.error('[extractXMLToolsWrapper] ⚠️ This means tool calls will NOT be parsed. Check availableTools() implementation.')
+		return { newOnText: onText, newOnFinalMessage: onFinalMessage }
+	}
+	console.log('[extractXMLToolsWrapper] ✅ chatMode:', chatMode, 'tools count:', tools.length)
+
+	console.log('[extractXMLToolsWrapper] Extracting XML tools for chatMode:', chatMode, 'with', tools.length, 'tools')
+	console.log('[extractXMLToolsWrapper] Tool names:', tools.map(t => t.name))
+	console.log('[extractXMLToolsWrapper] Tool open tags:', tools.map(t => `<${t.name}>`))
 
 	const toolOfToolName: ToolOfToolName = {}
 	const toolOpenTags = tools.map(t => `<${t.name}>`)
@@ -291,7 +311,12 @@ export const extractXMLToolsWrapper = (
 		prevFullTextLen = params.fullText.length
 		trueFullText = params.fullText
 
-		// console.log('NEWTEXT', JSON.stringify(newText))
+		// Log every call to verify wrapper is running
+		if (params.fullText.includes('<edit_document>')) {
+			console.log('[extractXMLToolsWrapper] Received text with <edit_document> tag. fullText length:', params.fullText.length, 'foundOpenTag:', foundOpenTag, 'toolOpenTags:', toolOpenTags)
+			console.log('[extractXMLToolsWrapper] fullText contains <edit_document>:', params.fullText.includes('<edit_document>'))
+			console.log('[extractXMLToolsWrapper] toolOpenTags includes <edit_document>:', toolOpenTags.includes('<edit_document>'))
+		}
 
 
 		if (foundOpenTag === null) {
@@ -313,11 +338,29 @@ export const extractXMLToolsWrapper = (
 				if (i !== null) {
 					const [idx, toolTag] = i
 					const toolName = toolTag.substring(1, toolTag.length - 1) as ToolName
-					// console.log('found ', toolName)
+					console.log('[extractXMLToolsWrapper] ✅ FOUND tool tag:', toolName, 'at index:', idx, 'in text:', fullText.substring(Math.max(0, idx - 20), idx + 50))
 					foundOpenTag = { idx, toolName }
 
 					// do not count anything at or after i in fullText
 					fullText = fullText.substring(0, idx)
+				} else {
+					// Debug: Check if tag exists but wasn't found
+					if (fullText.includes('<edit_document>')) {
+						const editDocIdx = fullText.indexOf('<edit_document>')
+						console.log('[extractXMLToolsWrapper] ❌ <edit_document> found in text at index', editDocIdx, 'but findIndexOfAny returned null!', {
+							fullTextSample: fullText.substring(Math.max(0, editDocIdx - 10), editDocIdx + 30),
+							toolOpenTags,
+							toolOpenTagsLength: toolOpenTags.length,
+							availableTools: Object.keys(toolOfToolName),
+							fullTextLength: fullText.length
+						})
+						// Try to see if there's a mismatch
+						for (const tag of toolOpenTags) {
+							if (fullText.includes(tag)) {
+								console.log('[extractXMLToolsWrapper] But found tag:', tag, 'at index:', fullText.indexOf(tag))
+							}
+						}
+					}
 				}
 
 
@@ -326,12 +369,16 @@ export const extractXMLToolsWrapper = (
 
 		// toolTagIdx is not null, so parse the XML
 		if (foundOpenTag !== null) {
+			console.log('[extractXMLToolsWrapper] Found tool tag:', foundOpenTag.toolName, 'at index:', foundOpenTag.idx)
+			console.log('[extractXMLToolsWrapper] fullText before extraction:', fullText.substring(0, 200))
 			latestToolCall = parseXMLPrefixToToolCall(
 				foundOpenTag.toolName,
 				toolId,
 				trueFullText.substring(foundOpenTag.idx, Infinity),
 				toolOfToolName,
 			)
+			console.log('[extractXMLToolsWrapper] Parsed tool call:', latestToolCall ? { name: latestToolCall.name, isDone: latestToolCall.isDone, paramsCount: Object.keys(latestToolCall.rawParams).length } : null)
+			console.log('[extractXMLToolsWrapper] fullText after extraction (should not contain XML):', fullText.substring(0, 200))
 		}
 
 		onText({
@@ -347,12 +394,27 @@ export const extractXMLToolsWrapper = (
 		newOnText({ ...params })
 
 		fullText = fullText.trimEnd()
-		const toolCall = latestToolCall
+		let toolCall = latestToolCall
 
-		// console.log('final message!!!', trueFullText)
-		// console.log('----- returning ----\n', fullText)
-		// console.log('----- tools ----\n', JSON.stringify(firstToolCallRef.current, null, 2))
-		// console.log('----- toolCall ----\n', JSON.stringify(toolCall, null, 2))
+		console.log('[extractXMLToolsWrapper] onFinalMessage - latestToolCall:', toolCall ? {
+			name: toolCall.name,
+			isDone: toolCall.isDone,
+			paramsCount: Object.keys(toolCall.rawParams).length,
+			params: Object.keys(toolCall.rawParams),
+			doneParams: toolCall.doneParams
+		} : null)
+
+		// ✅ FIX: Only pass tool call if it's complete (isDone: true)
+		// Incomplete tool calls cause validation errors in ToolsService
+		if (toolCall && !toolCall.isDone) {
+			console.error(`[XML Parser] ❌ INCOMPLETE tool call detected: ${toolCall.name}`, {
+				params: Object.keys(toolCall.rawParams),
+				doneParams: toolCall.doneParams,
+				missingParams: Object.keys(toolCall.rawParams).filter(p => !toolCall!.doneParams.includes(p))
+			})
+			console.error(`[XML Parser] ⚠️ Not executing incomplete tool call - LLM output was likely truncated`)
+			toolCall = undefined // Don't execute incomplete tools
+		}
 
 		onFinalMessage({ ...params, fullText, toolCall: toolCall })
 	}

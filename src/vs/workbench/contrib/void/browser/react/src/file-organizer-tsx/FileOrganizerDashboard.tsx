@@ -3,23 +3,31 @@
  *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
  *--------------------------------------------------------------------------------------*/
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import { TemplateSelector } from './TemplateSelector.js';
+import { ClassificationReview } from './ClassificationReview.js';
 import { RuleBuilder } from './RuleBuilder.js';
 import { ReviewChanges } from './ReviewChanges.js';
+import { useAccessor } from '../util/services.js';
 
-interface FileOrganizerDashboardProps {
-	accessor: any;
-}
-
-export const FileOrganizerDashboard: React.FC<FileOrganizerDashboardProps> = ({ accessor }) => {
+export const FileOrganizerDashboard: React.FC = () => {
+	const accessor = useAccessor();
 	const [currentStep, setCurrentStep] = useState(0);
 	const [selectedFiles, setSelectedFiles] = useState<any[]>([]);
 	const [selectedTemplate, setSelectedTemplate] = useState<any | null>(null);
 	const [customRules, setCustomRules] = useState<any[]>([]);
 	const [proposedChanges, setProposedChanges] = useState<any[]>([]);
 
-	const steps = ['Choose Template', 'Configure Rules', 'Review & Process'];
+	const fileOrganizerService = useMemo(() => {
+		try {
+			return accessor.get('IFileOrganizerService');
+		} catch (error) {
+			console.error('[FileOrganizerDashboard] Failed to get FileOrganizerService:', error);
+			return null;
+		}
+	}, [accessor]);
+
+	const steps = ['Choose Template & Files', 'Review Classifications', 'Configure Rules', 'Review & Process'];
 
 	const handleNext = useCallback(() => {
 		if (currentStep < steps.length - 1) {
@@ -39,6 +47,10 @@ export const FileOrganizerDashboard: React.FC<FileOrganizerDashboardProps> = ({ 
 	}, []);
 
 	const handleFilesSelect = useCallback((files: any[]) => {
+		setSelectedFiles(files);
+	}, []);
+
+	const handleFilesUpdate = useCallback((files: any[]) => {
 		setSelectedFiles(files);
 	}, []);
 
@@ -63,9 +75,6 @@ export const FileOrganizerDashboard: React.FC<FileOrganizerDashboardProps> = ({ 
 			<div style={{
 				padding: '16px 24px',
 				borderBottom: '1px solid var(--vscode-panel-border)',
-				display: 'flex',
-				justifyContent: 'space-between',
-				alignItems: 'center',
 			}}>
 				<h2 style={{
 					margin: 0,
@@ -74,23 +83,13 @@ export const FileOrganizerDashboard: React.FC<FileOrganizerDashboardProps> = ({ 
 				}}>
 					File Organizer Dashboard
 				</h2>
-				<div style={{
-					display: 'flex',
-					gap: '8px',
+				<p style={{
+					margin: '4px 0 0 0',
+					fontSize: '12px',
+					color: 'var(--vscode-descriptionForeground)',
 				}}>
-					<button
-						style={{
-							background: 'transparent',
-							border: 'none',
-							color: 'var(--vscode-foreground)',
-							cursor: 'pointer',
-							padding: '4px 8px',
-						}}
-						title="Help"
-					>
-						?
-					</button>
-				</div>
+					💡 Tip: Set up your case info in the <strong>Case Info</strong> sidebar panel first
+				</p>
 			</div>
 
 			{/* Progress Indicator */}
@@ -167,32 +166,35 @@ export const FileOrganizerDashboard: React.FC<FileOrganizerDashboardProps> = ({ 
 				overflow: 'auto',
 				padding: '24px',
 			}}>
-				{currentStep === 0 && (
-					<TemplateSelector
-						accessor={accessor}
-						selectedTemplate={selectedTemplate}
-						selectedFiles={selectedFiles}
-						onTemplateSelect={handleTemplateSelect}
-						onFilesSelect={handleFilesSelect}
-					/>
-				)}
-				{currentStep === 1 && (
-					<RuleBuilder
-						accessor={accessor}
-						rules={customRules}
-						selectedFiles={selectedFiles}
-						onRulesChange={handleRulesChange}
-					/>
-				)}
-				{currentStep === 2 && (
-					<ReviewChanges
-						accessor={accessor}
-						files={selectedFiles}
-						rules={customRules}
-						proposedChanges={proposedChanges}
-						onChangesGenerated={handleChangesGenerated}
-					/>
-				)}
+			{currentStep === 0 && (
+				<TemplateSelector
+					selectedTemplate={selectedTemplate}
+					selectedFiles={selectedFiles}
+					onTemplateSelect={handleTemplateSelect}
+					onFilesSelect={handleFilesSelect}
+				/>
+			)}
+			{currentStep === 1 && (
+				<ClassificationReview
+					files={selectedFiles}
+					onFilesUpdate={handleFilesUpdate}
+				/>
+			)}
+			{currentStep === 2 && (
+				<RuleBuilder
+					rules={customRules}
+					selectedFiles={selectedFiles}
+					onRulesChange={handleRulesChange}
+				/>
+			)}
+			{currentStep === 3 && (
+				<ReviewChanges
+					files={selectedFiles}
+					rules={customRules}
+					proposedChanges={proposedChanges}
+					onChangesGenerated={handleChangesGenerated}
+				/>
+			)}
 			</div>
 
 			{/* Footer Navigation */}

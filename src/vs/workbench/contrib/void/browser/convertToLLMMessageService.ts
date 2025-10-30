@@ -588,7 +588,8 @@ class ConvertToLLMMessageService extends Disposable implements IConvertToLLMMess
 				: `...Directories string cut off, ask user for more if necessary...`
 		})
 
-		const includeXMLToolDefinitions = !specialToolFormat
+		// FORCE XML tool parsing for all chat modes (override specialToolFormat)
+		const includeXMLToolDefinitions = true
 
 		const mcpTools = this.mcpService.getMCPTools()
 
@@ -674,10 +675,12 @@ class ConvertToLLMMessageService extends Disposable implements IConvertToLLMMess
 
 		const { providerName, modelName } = modelSelection
 		const {
-			specialToolFormat,
 			contextWindow,
 			supportsSystemMessage,
 		} = getModelCapabilities(providerName, modelName, overridesOfModel)
+
+		// FORCE XML tool parsing for all chat modes (case_manager, research, drafting)
+		const specialToolFormat = undefined
 
 		const { disableSystemMessage } = this.voidSettingsService.state.globalSettings;
 		const fullSystemMessage = await this._generateChatMessagesSystemMessage(chatMode, specialToolFormat)

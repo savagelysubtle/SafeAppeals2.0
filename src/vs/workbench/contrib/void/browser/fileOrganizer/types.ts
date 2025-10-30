@@ -12,6 +12,8 @@ export interface FileMetadata {
 	size: number;
 	mimeType: string;
 	preview?: string; // For images
+	classification?: 'YourSide' | 'TheirSide' | 'Unknown'; // Manual classification
+	classificationMethod?: 'manual' | 'keyword' | 'folder'; // How it was classified
 }
 
 export interface OrganizationTemplate {

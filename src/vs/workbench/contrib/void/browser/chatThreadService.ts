@@ -610,6 +610,13 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 		opts: { preapproved: true, unvalidatedToolParams: RawToolParamsObj, validatedParams: ToolCallParams<ToolName> } | { preapproved: false, unvalidatedToolParams: RawToolParamsObj },
 	): Promise<{ awaitingUserApproval?: boolean, interrupted?: boolean }> => {
 
+		console.log('[ChatThreadService] _runToolCall called:', {
+			toolName,
+			toolId,
+			unvalidatedParams: opts.unvalidatedToolParams,
+			preapproved: opts.preapproved
+		})
+
 		// compute these below
 		let toolParams: ToolCallParams<ToolName>
 		let toolResult: ToolResult<ToolName>
@@ -617,21 +624,31 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 
 		// Check if it's a built-in tool
 		const isBuiltInTool = isABuiltinToolName(toolName)
+		console.log('[ChatThreadService] _runToolCall - isBuiltInTool:', isBuiltInTool, 'toolName:', toolName)
 
 
 		if (!opts.preapproved) { // skip this if pre-approved
 			// 1. validate tool params
 			try {
+				console.log('[ChatThreadService] Validating tool params for:', toolName)
 				if (isBuiltInTool) {
+					console.log('[ChatThreadService] Calling validateParams for built-in tool:', toolName, 'with params:', opts.unvalidatedToolParams)
 					const params = this._toolsService.validateParams[toolName](opts.unvalidatedToolParams)
 					toolParams = params
+					console.log('[ChatThreadService] ✅ Validation successful, validated params:', toolParams)
 				}
 				else {
 					toolParams = opts.unvalidatedToolParams
+					console.log('[ChatThreadService] MCP tool, using raw params:', toolParams)
 				}
 			}
 			catch (error) {
 				const errorMessage = getErrorMessage(error)
+				console.error('[ChatThreadService] ❌ Tool param validation failed:', {
+					toolName,
+					error: errorMessage,
+					rawParams: opts.unvalidatedToolParams
+				})
 				this._addMessageToThread(threadId, { role: 'tool', type: 'invalid_params', rawParams: opts.unvalidatedToolParams, result: null, name: toolName, content: errorMessage, id: toolId, mcpServerName })
 				return {}
 			}
@@ -675,11 +692,18 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 			this._setStreamState(threadId, { isRunning: 'tool', interrupt: interruptorPromise, toolInfo: { toolName, toolParams, id: toolId, content: 'interrupted...', rawParams: opts.unvalidatedToolParams, mcpServerName } })
 
 			if (isBuiltInTool) {
+				console.log('[ChatThreadService] Calling built-in tool:', toolName, 'with params:', toolParams)
 				const { result, interruptTool } = await this._toolsService.callTool[toolName](toolParams as any)
 				const interruptor = () => { interrupted = true; interruptTool?.() }
 				resolveInterruptor(interruptor)
 
+				console.log('[ChatThreadService] Tool call returned, awaiting result...')
 				toolResult = await result
+				console.log('[ChatThreadService] ✅ Tool result received:', {
+					toolName,
+					resultType: typeof toolResult,
+					resultPreview: typeof toolResult === 'string' ? toolResult.substring(0, 200) : JSON.stringify(toolResult).substring(0, 200)
+				})
 			}
 			else {
 				const mcpTools = this._mcpService.getMCPTools()
@@ -812,9 +836,41 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 					logging: { loggingName: `Chat - ${chatMode}`, loggingExtras: { threadId, nMessagesSent, chatMode } },
 					separateSystemMessage: separateSystemMessage,
 					onText: ({ fullText, fullReasoning, toolCall }) => {
+						const hasEditDocumentTag = fullText.includes('<edit_document>')
+						const hasToolCall = !!toolCall
+
+						// DEBUG: If XML is present but no toolCall, the wrapper might not be working
+						if (hasEditDocumentTag && !hasToolCall) {
+							console.warn('[ChatThreadService] ⚠️ XML FOUND but NO TOOL CALL!', {
+								fullTextPreview: fullText.substring(0, 300),
+								toolCall,
+								chatMode,
+								note: 'This means extractXMLToolsWrapper may not be working. Check main process logs for [extractXMLToolsWrapper] messages.'
+							})
+							// Check if wrapper is disabled - if chatMode is drafting and we enabled tools, this shouldn't happen
+							if (chatMode === 'drafting') {
+								console.error('[ChatThreadService] ❌ DRAFTING MODE: Tools should be enabled but wrapper returned no toolCall. Make sure app was restarted after code changes!')
+							}
+						}
+
+						console.log('[ChatThreadService] onText received:', {
+							fullTextLength: fullText.length,
+							hasToolCall,
+							toolCallName: toolCall?.name,
+							fullTextPreview: fullText.substring(0, 200),
+							hasEditDocumentTag,
+							chatMode
+						})
 						this._setStreamState(threadId, { isRunning: 'LLM', llmInfo: { displayContentSoFar: fullText, reasoningSoFar: fullReasoning, toolCallSoFar: toolCall ?? null }, interrupt: Promise.resolve(() => { if (llmCancelToken) this._llmMessageService.abort(llmCancelToken) }) })
 					},
 					onFinalMessage: async ({ fullText, fullReasoning, toolCall, anthropicReasoning, }) => {
+						console.log('[ChatThreadService] onFinalMessage received:', {
+							hasToolCall: !!toolCall,
+							toolCallName: toolCall?.name,
+							toolCallIsDone: toolCall?.isDone,
+							toolCallParams: toolCall ? Object.keys(toolCall.rawParams) : [],
+							fullTextLength: fullText.length
+						})
 						resMessageIsDonePromise({ type: 'llmDone', toolCall, info: { fullText, fullReasoning, anthropicReasoning } }) // resolve with tool calls
 					},
 					onError: async (error) => {
@@ -877,24 +933,58 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 				// llm res success
 				const { toolCall, info } = llmRes
 
+				console.log('[ChatThreadService] LLM response received:', {
+					hasToolCall: !!toolCall,
+					toolCallName: toolCall?.name,
+					toolCallId: toolCall?.id,
+					fullTextLength: info.fullText.length,
+					fullTextPreview: info.fullText.substring(0, 100)
+				})
+
 				this._addMessageToThread(threadId, { role: 'assistant', displayContent: info.fullText, reasoning: info.fullReasoning, anthropicReasoning: info.anthropicReasoning })
 
 				this._setStreamState(threadId, { isRunning: 'idle', interrupt: 'not_needed' }) // just decorative for clarity
 
 				// call tool if there is one
 				if (toolCall) {
-					const mcpTools = this._mcpService.getMCPTools()
-					const mcpTool = mcpTools?.find(t => t.name === toolCall.name)
+					console.log('[ChatThreadService] ✅ Tool call detected, executing:', {
+						name: toolCall.name,
+						id: toolCall.id,
+						rawParams: toolCall.rawParams,
+						isDone: toolCall.isDone,
+						doneParams: toolCall.doneParams,
+						rawParamsKeys: Object.keys(toolCall.rawParams)
+					})
+					try {
+						const mcpTools = this._mcpService.getMCPTools()
+						const mcpTool = mcpTools?.find(t => t.name === toolCall.name)
 
-					const { awaitingUserApproval, interrupted } = await this._runToolCall(threadId, toolCall.name, toolCall.id, mcpTool?.mcpServerName, { preapproved: false, unvalidatedToolParams: toolCall.rawParams })
-					if (interrupted) {
-						this._setStreamState(threadId, undefined)
-						return
+						console.log('[ChatThreadService] About to call _runToolCall')
+						const { awaitingUserApproval, interrupted } = await this._runToolCall(threadId, toolCall.name, toolCall.id, mcpTool?.mcpServerName, { preapproved: false, unvalidatedToolParams: toolCall.rawParams })
+						console.log('[ChatThreadService] ✅ Tool execution completed:', {
+							name: toolCall.name,
+							awaitingUserApproval,
+							interrupted
+						})
+						if (interrupted) {
+							this._setStreamState(threadId, undefined)
+							return
+						}
+						if (awaitingUserApproval) { isRunningWhenEnd = 'awaiting_user' }
+						else { shouldSendAnotherMessage = true }
+
+						this._setStreamState(threadId, { isRunning: 'idle', interrupt: 'not_needed' }) // just decorative, for clarity
+					} catch (error) {
+						console.error('[ChatThreadService] ❌ ERROR executing tool call:', error)
+						console.error('[ChatThreadService] Error details:', {
+							name: toolCall.name,
+							errorMessage: error instanceof Error ? error.message : String(error),
+							stack: error instanceof Error ? error.stack : undefined
+						})
+						throw error // Re-throw to prevent silent failure
 					}
-					if (awaitingUserApproval) { isRunningWhenEnd = 'awaiting_user' }
-					else { shouldSendAnotherMessage = true }
-
-					this._setStreamState(threadId, { isRunning: 'idle', interrupt: 'not_needed' }) // just decorative, for clarity
+				} else {
+					console.log('[ChatThreadService] No tool call to execute - toolCall is:', toolCall)
 				}
 
 			} // end while (attempts)
