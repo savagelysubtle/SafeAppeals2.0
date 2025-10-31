@@ -12,6 +12,9 @@
 
 	// Get DOM elements
 	const container = document.getElementById('xlsx-container');
+	// Add unified scrollbar class
+	container.classList.add('void-scrollbar');
+
 	const sheetTabsContainer = document.getElementById('sheet-tabs');
 	const zoomInBtn = document.getElementById('zoom-in-btn');
 	const zoomOutBtn = document.getElementById('zoom-out-btn');

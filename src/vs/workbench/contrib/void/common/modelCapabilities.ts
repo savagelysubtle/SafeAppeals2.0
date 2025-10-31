@@ -194,6 +194,10 @@ export type VoidStaticModelInfo = { // not stateful
 		// the only other field related to reasoning is "providerReasoningIOSettings", which varies by provider.
 	};
 
+	// native tool calling options (Phase 3 of Unified Tool Calling Plan)
+	useNativeToolCalling?: boolean; // whether to use native tool calling instead of XML (default: false, must be explicitly enabled)
+	forceXML?: boolean; // whether to force XML even if native tool calling is supported (default: false)
+
 
 	// --- below is just informative, not used in sending / receiving, cannot be customized in settings ---
 	cost: {
@@ -217,7 +221,9 @@ export const modelOverrideKeys = [
 	'specialToolFormat',
 	'supportsFIM',
 	'reasoningCapabilities',
-	'additionalOpenAIPayload'
+	'additionalOpenAIPayload',
+	'useNativeToolCalling',
+	'forceXML'
 ] as const
 
 export type ModelOverrides = Pick<

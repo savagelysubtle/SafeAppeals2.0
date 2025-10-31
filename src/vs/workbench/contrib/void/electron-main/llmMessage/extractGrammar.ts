@@ -9,6 +9,8 @@ import { availableTools, InternalToolInfo } from '../../common/prompt/prompts.js
 import { OnFinalMessage, OnText, RawToolCallObj, RawToolParamsObj } from '../../common/sendLLMMessageTypes.js'
 import { ToolName, ToolParamName } from '../../common/toolsServiceTypes.js'
 import { ChatMode } from '../../common/voidSettingsTypes.js'
+import { getXMLParserTelemetry } from '../../common/xmlParserTelemetry.js'
+import { XMLParserService } from './xmlParserService.js'
 
 
 // =============== reasoning ===============
@@ -164,8 +166,8 @@ const findIndexOfAny = (fullText: string, matches: string[]) => {
 }
 
 
-type ToolOfToolName = { [toolName: string]: InternalToolInfo | undefined }
-const parseXMLPrefixToToolCall = <T extends ToolName,>(toolName: T, toolId: string, str: string, toolOfToolName: ToolOfToolName): RawToolCallObj => {
+export type ToolOfToolName = { [toolName: string]: InternalToolInfo | undefined }
+export const parseXMLPrefixToToolCall = <T extends ToolName,>(toolName: T, toolId: string, str: string, toolOfToolName: ToolOfToolName): RawToolCallObj => {
 	const paramsObj: RawToolParamsObj = {}
 	const doneParams: ToolParamName<T>[] = []
 	let isDone = false
@@ -212,7 +214,11 @@ const parseXMLPrefixToToolCall = <T extends ToolName,>(toolName: T, toolId: stri
 		// ✅ FIX: Increased from 10 to 100 to support tools with many parameters
 		// This was causing silent failures for tools with >10 params
 		if (n > 100) {
-			console.error(`[XML Parser] Tool ${toolName} exceeded 100 parameter iterations - possible infinite loop or malformed XML`)
+			logParsingError(toolName, `Exceeded 100 parameter iterations - possible infinite loop or malformed XML`, {
+				iterations: n,
+				paramsFound: Object.keys(paramsObj),
+				doneParams: doneParams.length
+			})
 			return getAnswer()
 		}
 
@@ -265,6 +271,32 @@ const parseXMLPrefixToToolCall = <T extends ToolName,>(toolName: T, toolId: stri
 	}
 }
 
+// Structured logging helper for XML parsing
+const logParsedToolCall = (toolCall: RawToolCallObj, xmlSnippet?: string) => {
+	if ('name' in toolCall) {
+		// Single tool call
+		console.log(`[XML Parser] ✅ Parsed single tool call: ${toolCall.name}`, {
+			isDone: toolCall.isDone,
+			paramCount: Object.keys(toolCall.rawParams).length,
+			doneParams: toolCall.doneParams.length,
+			params: Object.keys(toolCall.rawParams),
+			doneParamsList: toolCall.doneParams,
+			...(xmlSnippet ? { xmlSnippet: xmlSnippet.substring(0, 200) } : {})
+		})
+	} else {
+		// Multiple tool calls
+		console.log(`[XML Parser] ✅ Parsed multiple tool calls (ANTML):`, {
+			count: toolCall.toolCalls.length,
+			tools: toolCall.toolCalls.map(t => t.name),
+			...(xmlSnippet ? { xmlSnippet: xmlSnippet.substring(0, 200) } : {})
+		})
+	}
+}
+
+const logParsingError = (toolName: string, error: string, context?: Record<string, any>) => {
+	console.error(`[XML Parser] ❌ Parsing error for tool ${toolName}: ${error}`, context || {})
+}
+
 export const extractXMLToolsWrapper = (
 	onText: OnText,
 	onFinalMessage: OnFinalMessage,
@@ -296,6 +328,7 @@ export const extractXMLToolsWrapper = (
 	for (const t of tools) { toolOfToolName[t.name] = t }
 
 	const toolId = generateUuid()
+	const parserService = new XMLParserService() // Create once per wrapper instance
 
 	// detect <availableTools[0]></availableTools[0]>, etc
 	let fullText = '';
@@ -306,10 +339,24 @@ export const extractXMLToolsWrapper = (
 	let openToolTagBuffer = '' // the characters we've seen so far that come after a < with no space afterwards, not yet added to fullText
 
 	let prevFullTextLen = 0
+	let prevFullReasoningLen = 0
 	const newOnText: OnText = (params) => {
-		const newText = params.fullText.substring(prevFullTextLen)
-		prevFullTextLen = params.fullText.length
-		trueFullText = params.fullText
+		// CRITICAL FIX: Check BOTH fullText and fullReasoning for tool calls
+		// When extended thinking is enabled, tool calls may appear in fullReasoning instead of fullText
+		const combinedText = (params.fullText || '') + (params.fullReasoning || '')
+		const newText = combinedText.substring(prevFullTextLen + prevFullReasoningLen)
+
+		prevFullTextLen = params.fullText?.length || 0
+		prevFullReasoningLen = params.fullReasoning?.length || 0
+		trueFullText = combinedText
+
+		// Log when we receive reasoning content
+		if (params.fullReasoning && params.fullReasoning.length > 0) {
+			console.log('[extractXMLToolsWrapper] 🧠 Received REASONING content (length:', params.fullReasoning.length, ') - checking for tool calls')
+			if (params.fullReasoning.includes('<')) {
+				console.log('[extractXMLToolsWrapper] 🔍 Reasoning contains XML tags:', params.fullReasoning.substring(0, 100))
+			}
+		}
 
 		// Log every call to verify wrapper is running
 		if (params.fullText.includes('<edit_document>')) {
@@ -320,65 +367,145 @@ export const extractXMLToolsWrapper = (
 
 
 		if (foundOpenTag === null) {
-			const newFullText = openToolTagBuffer + newText
-			// ensure the code below doesn't run if only half a tag has been written
-			const isPartial = findPartiallyWrittenToolTagAtEnd(newFullText, toolOpenTags)
-			if (isPartial) {
-				// console.log('--- partial!!!')
-				openToolTagBuffer += newText
-			}
-			// if no tooltag is partially written at the end, attempt to get the index
-			else {
-				// we will instantly retroactively remove this if it's a tag match
-				fullText += openToolTagBuffer
-				openToolTagBuffer = ''
-				fullText += newText
+			// NEW: Check for ANTML format first - ONLY in fullText, not reasoning
+			const functionCallsIdx = params.fullText.indexOf('<function_calls>')
 
-				const i = findIndexOfAny(fullText, toolOpenTags)
-				if (i !== null) {
-					const [idx, toolTag] = i
-					const toolName = toolTag.substring(1, toolTag.length - 1) as ToolName
-					console.log('[extractXMLToolsWrapper] ✅ FOUND tool tag:', toolName, 'at index:', idx, 'in text:', fullText.substring(Math.max(0, idx - 20), idx + 50))
-					foundOpenTag = { idx, toolName }
+			if (functionCallsIdx !== -1) {
+				// Found ANTML format - extract text before it
+				const textBeforeTools = params.fullText.substring(0, functionCallsIdx)
+				fullText = textBeforeTools
 
-					// do not count anything at or after i in fullText
-					fullText = fullText.substring(0, idx)
+				// Parse ANTML format (from fullText only, not combined)
+				const xmlSubstring = params.fullText.substring(functionCallsIdx)
+				const parseStartTime = performance.now()
+
+				console.log('[extractXMLToolsWrapper] ✅ FOUND <function_calls> tag at index:', functionCallsIdx)
+
+				const parseResult = parserService.parseToolCall(
+					undefined,  // no toolName - it's in the XML
+					toolId,
+					xmlSubstring,
+					toolOfToolName
+				)
+
+				const parseDuration = performance.now() - parseStartTime
+
+				// Record telemetry
+				const telemetry = getXMLParserTelemetry()
+				telemetry.recordParse(
+					'function_calls' as ToolName,  // Special marker for ANTML
+					parseResult.strategy,
+					parseResult.toolCall !== null,
+					parseDuration,
+					parseResult.recoveryActions,
+					parseResult.error
+				)
+
+				if (parseResult.toolCall) {
+					latestToolCall = parseResult.toolCall
+					console.log('[extractXMLToolsWrapper] ✅ Parsed ANTML format successfully')
+					if (parseResult.recoveryActions && parseResult.recoveryActions.length > 0) {
+						console.log(`[XML Parser] Recovery actions:`, parseResult.recoveryActions)
+					}
 				} else {
-					// Debug: Check if tag exists but wasn't found
-					if (fullText.includes('<edit_document>')) {
-						const editDocIdx = fullText.indexOf('<edit_document>')
-						console.log('[extractXMLToolsWrapper] ❌ <edit_document> found in text at index', editDocIdx, 'but findIndexOfAny returned null!', {
-							fullTextSample: fullText.substring(Math.max(0, editDocIdx - 10), editDocIdx + 30),
-							toolOpenTags,
-							toolOpenTagsLength: toolOpenTags.length,
-							availableTools: Object.keys(toolOfToolName),
-							fullTextLength: fullText.length
-						})
-						// Try to see if there's a mismatch
-						for (const tag of toolOpenTags) {
-							if (fullText.includes(tag)) {
-								console.log('[extractXMLToolsWrapper] But found tag:', tag, 'at index:', fullText.indexOf(tag))
+					console.error(`[XML Parser] Failed to parse ANTML format:`, parseResult.error)
+				}
+
+				// Mark as found to avoid further parsing
+				foundOpenTag = { idx: functionCallsIdx, toolName: 'function_calls' as ToolName }
+			}
+			// OLD: Legacy format detection (fallback)
+			else {
+				const newFullText = openToolTagBuffer + newText
+				// ensure the code below doesn't run if only half a tag has been written
+				const isPartial = findPartiallyWrittenToolTagAtEnd(newFullText, toolOpenTags)
+				if (isPartial) {
+					// console.log('--- partial!!!')
+					openToolTagBuffer += newText
+				}
+				// if no tooltag is partially written at the end, attempt to get the index
+				else {
+					// we will instantly retroactively remove this if it's a tag match
+					fullText += openToolTagBuffer
+					openToolTagBuffer = ''
+					fullText += newText
+
+					const i = findIndexOfAny(fullText, toolOpenTags)
+					if (i !== null) {
+						const [idx, toolTag] = i
+						const toolName = toolTag.substring(1, toolTag.length - 1) as ToolName
+						console.log('[extractXMLToolsWrapper] ✅ FOUND legacy tool tag:', toolName, 'at index:', idx, 'in text:', fullText.substring(Math.max(0, idx - 20), idx + 50))
+						foundOpenTag = { idx, toolName }
+
+						// do not count anything at or after i in fullText
+						fullText = fullText.substring(0, idx)
+					} else {
+						// Debug: Check if tag exists but wasn't found
+						if (fullText.includes('<edit_document>')) {
+							const editDocIdx = fullText.indexOf('<edit_document>')
+							console.log('[extractXMLToolsWrapper] ❌ <edit_document> found in text at index', editDocIdx, 'but findIndexOfAny returned null!', {
+								fullTextSample: fullText.substring(Math.max(0, editDocIdx - 10), editDocIdx + 30),
+								toolOpenTags,
+								toolOpenTagsLength: toolOpenTags.length,
+								availableTools: Object.keys(toolOfToolName),
+								fullTextLength: fullText.length
+							})
+							// Try to see if there's a mismatch
+							for (const tag of toolOpenTags) {
+								if (fullText.includes(tag)) {
+									console.log('[extractXMLToolsWrapper] But found tag:', tag, 'at index:', fullText.indexOf(tag))
+								}
 							}
 						}
 					}
 				}
-
-
 			}
 		}
 
-		// toolTagIdx is not null, so parse the XML
-		if (foundOpenTag !== null) {
-			console.log('[extractXMLToolsWrapper] Found tool tag:', foundOpenTag.toolName, 'at index:', foundOpenTag.idx)
-			console.log('[extractXMLToolsWrapper] fullText before extraction:', fullText.substring(0, 200))
-			latestToolCall = parseXMLPrefixToToolCall(
+		// toolTagIdx is not null, so parse the XML (legacy format only)
+		if (foundOpenTag !== null && foundOpenTag.toolName !== 'function_calls') {
+			const xmlSubstring = trueFullText.substring(foundOpenTag.idx, Infinity)
+			const parseStartTime = performance.now()
+
+			// Use parser service with fallback support
+			const parseResult = parserService.parseToolCall(
 				foundOpenTag.toolName,
 				toolId,
-				trueFullText.substring(foundOpenTag.idx, Infinity),
+				xmlSubstring,
 				toolOfToolName,
 			)
-			console.log('[extractXMLToolsWrapper] Parsed tool call:', latestToolCall ? { name: latestToolCall.name, isDone: latestToolCall.isDone, paramsCount: Object.keys(latestToolCall.rawParams).length } : null)
-			console.log('[extractXMLToolsWrapper] fullText after extraction (should not contain XML):', fullText.substring(0, 200))
+
+			const parseDuration = performance.now() - parseStartTime
+
+			// Record telemetry
+			const telemetry = getXMLParserTelemetry()
+			telemetry.recordParse(
+				foundOpenTag.toolName,
+				parseResult.strategy,
+				parseResult.toolCall !== null,
+				parseDuration,
+				parseResult.recoveryActions,
+				parseResult.error
+			)
+
+			if (parseResult.toolCall) {
+				latestToolCall = parseResult.toolCall
+				logParsedToolCall(latestToolCall, xmlSubstring)
+				// Log which strategy succeeded for monitoring
+				if (parseResult.strategy !== 'custom') {
+					console.log(`[XML Parser] Used ${parseResult.strategy} parser for tool ${foundOpenTag.toolName}`)
+				}
+				// Log recovery actions if any were taken
+				if (parseResult.recoveryActions && parseResult.recoveryActions.length > 0) {
+					console.log(`[XML Parser] Recovery actions for ${foundOpenTag.toolName}:`, parseResult.recoveryActions)
+				}
+			} else {
+				// All parsers failed
+				console.error(`[XML Parser] Failed to parse tool call for ${foundOpenTag.toolName}:`, parseResult.error)
+				if (parseResult.recoveryActions && parseResult.recoveryActions.length > 0) {
+					console.log(`[XML Parser] Recovery attempts made:`, parseResult.recoveryActions)
+				}
+			}
 		}
 
 		onText({
@@ -396,23 +523,15 @@ export const extractXMLToolsWrapper = (
 		fullText = fullText.trimEnd()
 		let toolCall = latestToolCall
 
-		console.log('[extractXMLToolsWrapper] onFinalMessage - latestToolCall:', toolCall ? {
-			name: toolCall.name,
-			isDone: toolCall.isDone,
-			paramsCount: Object.keys(toolCall.rawParams).length,
-			params: Object.keys(toolCall.rawParams),
-			doneParams: toolCall.doneParams
-		} : null)
-
 		// ✅ FIX: Only pass tool call if it's complete (isDone: true)
 		// Incomplete tool calls cause validation errors in ToolsService
-		if (toolCall && !toolCall.isDone) {
-			console.error(`[XML Parser] ❌ INCOMPLETE tool call detected: ${toolCall.name}`, {
-				params: Object.keys(toolCall.rawParams),
-				doneParams: toolCall.doneParams,
-				missingParams: Object.keys(toolCall.rawParams).filter(p => !toolCall!.doneParams.includes(p))
+		if (toolCall && 'name' in toolCall && !toolCall.isDone) {
+			const singleToolCall = toolCall // Type narrowed here
+			logParsingError(singleToolCall.name, 'INCOMPLETE tool call detected - LLM output was likely truncated', {
+				params: Object.keys(singleToolCall.rawParams),
+				doneParams: singleToolCall.doneParams,
+				missingParams: Object.keys(singleToolCall.rawParams).filter(p => !singleToolCall.doneParams.includes(p as ToolParamName<ToolName>))
 			})
-			console.error(`[XML Parser] ⚠️ Not executing incomplete tool call - LLM output was likely truncated`)
 			toolCall = undefined // Don't execute incomplete tools
 		}
 

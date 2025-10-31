@@ -4,41 +4,41 @@
  *--------------------------------------------------------------------------------------*/
 
 import { Disposable } from '../../../../base/common/lifecycle.js';
-import { registerSingleton, InstantiationType } from '../../../../platform/instantiation/common/extensions.js';
+import { InstantiationType, registerSingleton } from '../../../../platform/instantiation/common/extensions.js';
 import { createDecorator } from '../../../../platform/instantiation/common/instantiation.js';
 import { IStorageService, StorageScope, StorageTarget } from '../../../../platform/storage/common/storage.js';
 
-import { URI } from '../../../../base/common/uri.js';
-import { Emitter, Event } from '../../../../base/common/event.js';
-import { ILLMMessageService } from '../common/sendLLMMessageService.js';
-import { chat_userMessageContent, isABuiltinToolName } from '../common/prompt/prompts.js';
-import { AnthropicReasoning, getErrorMessage, RawToolCallObj, RawToolParamsObj } from '../common/sendLLMMessageTypes.js';
-import { generateUuid } from '../../../../base/common/uuid.js';
-import { FeatureName, ModelSelection, ModelSelectionOptions } from '../common/voidSettingsTypes.js';
-import { IVoidSettingsService } from '../common/voidSettingsService.js';
-import { approvalTypeOfBuiltinToolName, BuiltinToolCallParams, ToolCallParams, ToolName, ToolResult } from '../common/toolsServiceTypes.js';
-import { IToolsService } from './toolsService.js';
-import { CancellationToken } from '../../../../base/common/cancellation.js';
-import { ILanguageFeaturesService } from '../../../../editor/common/services/languageFeatures.js';
-import { ChatMessage, CheckpointEntry, CodespanLocationLink, StagingSelectionItem, ToolMessage } from '../common/chatThreadServiceTypes.js';
-import { Position } from '../../../../editor/common/core/position.js';
-import { IMetricsService } from '../common/metricsService.js';
-import { shorten } from '../../../../base/common/labels.js';
-import { IVoidModelService } from '../common/voidModelService.js';
 import { findLast, findLastIdx } from '../../../../base/common/arraysFind.js';
-import { IEditCodeService } from './editCodeServiceInterface.js';
-import { VoidFileSnapshot } from '../common/editCodeServiceTypes.js';
-import { INotificationService, Severity } from '../../../../platform/notification/common/notification.js';
-import { truncate } from '../../../../base/common/strings.js';
-import { THREAD_STORAGE_KEY } from '../common/storageKeys.js';
-import { IConvertToLLMMessageService } from './convertToLLMMessageService.js';
 import { timeout } from '../../../../base/common/async.js';
+import { CancellationToken } from '../../../../base/common/cancellation.js';
+import { Emitter, Event } from '../../../../base/common/event.js';
+import { shorten } from '../../../../base/common/labels.js';
 import { deepClone } from '../../../../base/common/objects.js';
-import { IWorkspaceContextService } from '../../../../platform/workspace/common/workspace.js';
-import { IDirectoryStrService } from '../common/directoryStrService.js';
+import { truncate } from '../../../../base/common/strings.js';
+import { URI } from '../../../../base/common/uri.js';
+import { generateUuid } from '../../../../base/common/uuid.js';
+import { Position } from '../../../../editor/common/core/position.js';
+import { ILanguageFeaturesService } from '../../../../editor/common/services/languageFeatures.js';
 import { IFileService } from '../../../../platform/files/common/files.js';
+import { INotificationService, Severity } from '../../../../platform/notification/common/notification.js';
+import { IWorkspaceContextService } from '../../../../platform/workspace/common/workspace.js';
+import { ChatMessage, CheckpointEntry, CodespanLocationLink, StagingSelectionItem, ToolMessage } from '../common/chatThreadServiceTypes.js';
+import { IDirectoryStrService } from '../common/directoryStrService.js';
+import { VoidFileSnapshot } from '../common/editCodeServiceTypes.js';
 import { IMCPService } from '../common/mcpService.js';
 import { RawMCPToolCall } from '../common/mcpServiceTypes.js';
+import { IMetricsService } from '../common/metricsService.js';
+import { chat_userMessageContent, isABuiltinToolName } from '../common/prompt/prompts.js';
+import { ILLMMessageService } from '../common/sendLLMMessageService.js';
+import { AnthropicReasoning, getErrorMessage, RawToolCallObj, RawToolParamsObj } from '../common/sendLLMMessageTypes.js';
+import { THREAD_STORAGE_KEY } from '../common/storageKeys.js';
+import { approvalTypeOfBuiltinToolName, BuiltinToolCallParams, ToolCallParams, ToolName, ToolResult } from '../common/toolsServiceTypes.js';
+import { IVoidModelService } from '../common/voidModelService.js';
+import { IVoidSettingsService } from '../common/voidSettingsService.js';
+import { FeatureName, ModelSelection, ModelSelectionOptions } from '../common/voidSettingsTypes.js';
+import { IConvertToLLMMessageService } from './convertToLLMMessageService.js';
+import { IEditCodeService } from './editCodeServiceInterface.js';
+import { IToolsService } from './toolsService.js';
 
 
 // related to retrying when LLM message has error
@@ -562,7 +562,11 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 		if (this.streamState[threadId]?.isRunning === 'LLM') {
 			const { displayContentSoFar, reasoningSoFar, toolCallSoFar } = this.streamState[threadId].llmInfo
 			this._addMessageToThread(threadId, { role: 'assistant', displayContent: displayContentSoFar, reasoning: reasoningSoFar, anthropicReasoning: null })
-			if (toolCallSoFar) this._addMessageToThread(threadId, { role: 'interrupted_streaming_tool', name: toolCallSoFar.name, mcpServerName: this._computeMCPServerOfToolName(toolCallSoFar.name) })
+			if (toolCallSoFar) {
+				// Handle both single and multiple tool calls - just log the first for interruption
+				const firstToolName = 'name' in toolCallSoFar ? toolCallSoFar.name : toolCallSoFar.toolCalls[0].name
+				this._addMessageToThread(threadId, { role: 'interrupted_streaming_tool', name: firstToolName, mcpServerName: this._computeMCPServerOfToolName(firstToolName) })
+			}
 		}
 		// add tool that's running
 		else if (this.streamState[threadId]?.isRunning === 'tool') {
@@ -839,40 +843,43 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 						const hasEditDocumentTag = fullText.includes('<edit_document>')
 						const hasToolCall = !!toolCall
 
+						// DEBUG: Check for ANY tool call XML tags
+						const hasAnyToolTag = fullText.includes('<rag_') || fullText.includes('<read_file') || fullText.includes('<edit_') || fullText.includes('<create_file')
+
 						// DEBUG: If XML is present but no toolCall, the wrapper might not be working
-						if (hasEditDocumentTag && !hasToolCall) {
-							console.warn('[ChatThreadService] ⚠️ XML FOUND but NO TOOL CALL!', {
+						if ((hasEditDocumentTag || hasAnyToolTag) && !hasToolCall) {
+							console.error('[ChatThreadService] ❌ TOOL CALL XML FOUND but NOT PARSED!', {
+								fullTextLength: fullText.length,
 								fullTextPreview: fullText.substring(0, 300),
 								toolCall,
 								chatMode,
-								note: 'This means extractXMLToolsWrapper may not be working. Check main process logs for [extractXMLToolsWrapper] messages.'
+								hasEditDocumentTag,
+								hasAnyToolTag,
+								note: 'extractXMLToolsWrapper is NOT working! Check if it is being called in main process (sendLLMMessage.impl.ts)',
+								likelyIssue: 'specialToolFormat may be set when it should be undefined'
 							})
-							// Check if wrapper is disabled - if chatMode is drafting and we enabled tools, this shouldn't happen
-							if (chatMode === 'drafting') {
-								console.error('[ChatThreadService] ❌ DRAFTING MODE: Tools should be enabled but wrapper returned no toolCall. Make sure app was restarted after code changes!')
-							}
 						}
 
-						console.log('[ChatThreadService] onText received:', {
-							fullTextLength: fullText.length,
-							hasToolCall,
-							toolCallName: toolCall?.name,
-							fullTextPreview: fullText.substring(0, 200),
-							hasEditDocumentTag,
-							chatMode
-						})
-						this._setStreamState(threadId, { isRunning: 'LLM', llmInfo: { displayContentSoFar: fullText, reasoningSoFar: fullReasoning, toolCallSoFar: toolCall ?? null }, interrupt: Promise.resolve(() => { if (llmCancelToken) this._llmMessageService.abort(llmCancelToken) }) })
-					},
-					onFinalMessage: async ({ fullText, fullReasoning, toolCall, anthropicReasoning, }) => {
-						console.log('[ChatThreadService] onFinalMessage received:', {
-							hasToolCall: !!toolCall,
-							toolCallName: toolCall?.name,
-							toolCallIsDone: toolCall?.isDone,
-							toolCallParams: toolCall ? Object.keys(toolCall.rawParams) : [],
-							fullTextLength: fullText.length
-						})
-						resMessageIsDonePromise({ type: 'llmDone', toolCall, info: { fullText, fullReasoning, anthropicReasoning } }) // resolve with tool calls
-					},
+					console.log('[ChatThreadService] onText received:', {
+						fullTextLength: fullText.length,
+						hasToolCall,
+						toolCallInfo: toolCall ? ('name' in toolCall ? `single: ${toolCall.name}` : `multiple: ${toolCall.toolCalls.length} tools`) : 'none',
+						fullTextPreview: fullText.substring(0, 200),
+						hasEditDocumentTag,
+						hasAnyToolTag,
+						chatMode
+					})
+					this._setStreamState(threadId, { isRunning: 'LLM', llmInfo: { displayContentSoFar: fullText, reasoningSoFar: fullReasoning, toolCallSoFar: toolCall ?? null }, interrupt: Promise.resolve(() => { if (llmCancelToken) this._llmMessageService.abort(llmCancelToken) }) })
+				},
+				onFinalMessage: async ({ fullText, fullReasoning, toolCall, anthropicReasoning, }) => {
+					console.log('[ChatThreadService] onFinalMessage received:', {
+						hasToolCall: !!toolCall,
+						toolCallInfo: toolCall ? ('name' in toolCall ? `single: ${toolCall.name}, isDone: ${toolCall.isDone}` : `multiple: ${toolCall.toolCalls.length} tools`) : 'none',
+						toolCallParams: toolCall ? ('name' in toolCall ? Object.keys(toolCall.rawParams) : toolCall.toolCalls.map(t => Object.keys(t.rawParams))) : [],
+						fullTextLength: fullText.length
+					})
+					resMessageIsDonePromise({ type: 'llmDone', toolCall, info: { fullText, fullReasoning, anthropicReasoning } }) // resolve with tool calls
+				},
 					onError: async (error) => {
 						resMessageIsDonePromise({ type: 'llmError', error: error })
 					},
@@ -917,29 +924,31 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 						else
 							continue // retry
 					}
-					// error, but too many attempts
-					else {
-						const { error } = llmRes
-						const { displayContentSoFar, reasoningSoFar, toolCallSoFar } = this.streamState[threadId].llmInfo
-						this._addMessageToThread(threadId, { role: 'assistant', displayContent: displayContentSoFar, reasoning: reasoningSoFar, anthropicReasoning: null })
-						if (toolCallSoFar) this._addMessageToThread(threadId, { role: 'interrupted_streaming_tool', name: toolCallSoFar.name, mcpServerName: this._computeMCPServerOfToolName(toolCallSoFar.name) })
-
-						this._setStreamState(threadId, { isRunning: undefined, error })
-						this._addUserCheckpoint({ threadId })
-						return
+				// error, but too many attempts
+				else {
+					const { error } = llmRes
+					const { displayContentSoFar, reasoningSoFar, toolCallSoFar } = this.streamState[threadId].llmInfo
+					this._addMessageToThread(threadId, { role: 'assistant', displayContent: displayContentSoFar, reasoning: reasoningSoFar, anthropicReasoning: null })
+					if (toolCallSoFar) {
+						const firstToolName = 'name' in toolCallSoFar ? toolCallSoFar.name : toolCallSoFar.toolCalls[0].name
+						this._addMessageToThread(threadId, { role: 'interrupted_streaming_tool', name: firstToolName, mcpServerName: this._computeMCPServerOfToolName(firstToolName) })
 					}
+
+					this._setStreamState(threadId, { isRunning: undefined, error })
+					this._addUserCheckpoint({ threadId })
+					return
 				}
+			}
 
-				// llm res success
-				const { toolCall, info } = llmRes
+			// llm res success
+			const { toolCall, info } = llmRes
 
-				console.log('[ChatThreadService] LLM response received:', {
-					hasToolCall: !!toolCall,
-					toolCallName: toolCall?.name,
-					toolCallId: toolCall?.id,
-					fullTextLength: info.fullText.length,
-					fullTextPreview: info.fullText.substring(0, 100)
-				})
+			console.log('[ChatThreadService] LLM response received:', {
+				hasToolCall: !!toolCall,
+				toolCallInfo: toolCall ? ('name' in toolCall ? `single: ${toolCall.name} (id: ${toolCall.id})` : `multiple: ${toolCall.toolCalls.length} tools`) : 'none',
+				fullTextLength: info.fullText.length,
+				fullTextPreview: info.fullText.substring(0, 100)
+			})
 
 				this._addMessageToThread(threadId, { role: 'assistant', displayContent: info.fullText, reasoning: info.fullReasoning, anthropicReasoning: info.anthropicReasoning })
 
@@ -947,41 +956,98 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 
 				// call tool if there is one
 				if (toolCall) {
-					console.log('[ChatThreadService] ✅ Tool call detected, executing:', {
-						name: toolCall.name,
-						id: toolCall.id,
-						rawParams: toolCall.rawParams,
-						isDone: toolCall.isDone,
-						doneParams: toolCall.doneParams,
-						rawParamsKeys: Object.keys(toolCall.rawParams)
-					})
-					try {
-						const mcpTools = this._mcpService.getMCPTools()
-						const mcpTool = mcpTools?.find(t => t.name === toolCall.name)
+					console.log('[ChatThreadService] ✅ Tool call(s) detected')
 
-						console.log('[ChatThreadService] About to call _runToolCall')
-						const { awaitingUserApproval, interrupted } = await this._runToolCall(threadId, toolCall.name, toolCall.id, mcpTool?.mcpServerName, { preapproved: false, unvalidatedToolParams: toolCall.rawParams })
-						console.log('[ChatThreadService] ✅ Tool execution completed:', {
-							name: toolCall.name,
-							awaitingUserApproval,
-							interrupted
-						})
-						if (interrupted) {
-							this._setStreamState(threadId, undefined)
-							return
+					// NEW: Check if multiple tool calls (ANTML format)
+					if ('toolCalls' in toolCall && toolCall.format === 'antml') {
+						console.log(`[ChatThreadService] 🔄 Parallel execution: ${toolCall.toolCalls.length} tools`)
+
+						try {
+							// Execute all tools in parallel
+							const toolPromises = toolCall.toolCalls.map(async (singleCall) => {
+								const mcpTools = this._mcpService.getMCPTools()
+								const mcpTool = mcpTools?.find(t => t.name === singleCall.name)
+
+								console.log(`[ChatThreadService] Executing tool: ${singleCall.name}`)
+
+								return await this._runToolCall(
+									threadId,
+									singleCall.name,
+									singleCall.id,
+									mcpTool?.mcpServerName,
+									{ preapproved: false, unvalidatedToolParams: singleCall.rawParams }
+								)
+							})
+
+							// Wait for all to complete
+							const results = await Promise.all(toolPromises)
+
+							console.log('[ChatThreadService] ✅ All parallel tools completed:', {
+								count: results.length,
+								results: results.map(r => ({ awaitingUserApproval: r.awaitingUserApproval, interrupted: r.interrupted }))
+							})
+
+							// Check if any interrupted or need approval
+							const interrupted = results.some(r => r.interrupted)
+							const awaitingApproval = results.some(r => r.awaitingUserApproval)
+
+							if (interrupted) {
+								this._setStreamState(threadId, undefined)
+								return
+							}
+							if (awaitingApproval) { isRunningWhenEnd = 'awaiting_user' }
+							else { shouldSendAnotherMessage = true }
+
+							this._setStreamState(threadId, { isRunning: 'idle', interrupt: 'not_needed' })
+						} catch (error) {
+							console.error('[ChatThreadService] ❌ ERROR executing parallel tool calls:', error)
+							console.error('[ChatThreadService] Error details:', {
+								errorMessage: error instanceof Error ? error.message : String(error),
+								stack: error instanceof Error ? error.stack : undefined
+							})
+							throw error
 						}
-						if (awaitingUserApproval) { isRunningWhenEnd = 'awaiting_user' }
-						else { shouldSendAnotherMessage = true }
-
-						this._setStreamState(threadId, { isRunning: 'idle', interrupt: 'not_needed' }) // just decorative, for clarity
-					} catch (error) {
-						console.error('[ChatThreadService] ❌ ERROR executing tool call:', error)
-						console.error('[ChatThreadService] Error details:', {
+					}
+					// OLD: Single tool call (legacy format or single ANTML call)
+					else if ('name' in toolCall) {
+						console.log('[ChatThreadService] Executing single tool:', {
 							name: toolCall.name,
-							errorMessage: error instanceof Error ? error.message : String(error),
-							stack: error instanceof Error ? error.stack : undefined
+							id: toolCall.id,
+							rawParams: toolCall.rawParams,
+							isDone: toolCall.isDone,
+							doneParams: toolCall.doneParams,
+							rawParamsKeys: Object.keys(toolCall.rawParams)
 						})
-						throw error // Re-throw to prevent silent failure
+						try {
+							const mcpTools = this._mcpService.getMCPTools()
+							const mcpTool = mcpTools?.find(t => t.name === toolCall.name)
+
+							console.log('[ChatThreadService] About to call _runToolCall')
+							const { awaitingUserApproval, interrupted } = await this._runToolCall(threadId, toolCall.name, toolCall.id, mcpTool?.mcpServerName, { preapproved: false, unvalidatedToolParams: toolCall.rawParams })
+							console.log('[ChatThreadService] ✅ Tool execution completed:', {
+								name: toolCall.name,
+								awaitingUserApproval,
+								interrupted
+							})
+							if (interrupted) {
+								this._setStreamState(threadId, undefined)
+								return
+							}
+							if (awaitingUserApproval) { isRunningWhenEnd = 'awaiting_user' }
+							else { shouldSendAnotherMessage = true }
+
+							this._setStreamState(threadId, { isRunning: 'idle', interrupt: 'not_needed' }) // just decorative, for clarity
+						} catch (error) {
+							console.error('[ChatThreadService] ❌ ERROR executing tool call:', error)
+							console.error('[ChatThreadService] Error details:', {
+								name: toolCall.name,
+								errorMessage: error instanceof Error ? error.message : String(error),
+								stack: error instanceof Error ? error.stack : undefined
+							})
+							throw error // Re-throw to prevent silent failure
+						}
+					} else {
+						console.warn('[ChatThreadService] ⚠️ Unknown tool call format:', toolCall)
 					}
 				} else {
 					console.log('[ChatThreadService] No tool call to execute - toolCall is:', toolCall)

@@ -284,23 +284,9 @@ body {
 	color: var(--vscode-editor-selectionForeground);
 }
 
-/* Scrollbar styling */
-#docx-container::-webkit-scrollbar {
-	width: 14px;
-	height: 14px;
-}
-
-#docx-container::-webkit-scrollbar-thumb {
-	background-color: var(--vscode-scrollbarSlider-background);
-	border-radius: 7px;
-}
-
-#docx-container::-webkit-scrollbar-thumb:hover {
-	background-color: var(--vscode-scrollbarSlider-hoverBackground);
-}
-
-#docx-container::-webkit-scrollbar-track {
-	background-color: var(--vscode-editor-background);
+/* Scrollbar styling - uses unified void-scrollbar class from void.css */
+#docx-container {
+	/* Scrollbar styles inherited from .void-scrollbar class applied to element */
 }
 
 /* Page break styling */

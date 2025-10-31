@@ -638,6 +638,13 @@ export class AutocompleteService extends Disposable implements IAutocompleteServ
 		const isEnabled = this._settingsService.state.globalSettings.enableAutocomplete
 		if (!isEnabled) return []
 
+		// Skip autocomplete for document files (DOCX, XLSX, PDF, etc.)
+		const uri = model.uri;
+		const path = uri.path.toLowerCase();
+		if (path.endsWith('.docx') || path.endsWith('.xlsx') || path.endsWith('.xls') || path.endsWith('.pdf')) {
+			return []
+		}
+
 		const testMode = false
 
 		const docUriStr = model.uri.fsPath;

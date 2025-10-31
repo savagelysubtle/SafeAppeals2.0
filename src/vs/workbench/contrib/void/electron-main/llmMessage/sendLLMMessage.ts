@@ -3,8 +3,8 @@
  *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
  *--------------------------------------------------------------------------------------*/
 
-import { SendLLMMessageParams, OnText, OnFinalMessage, OnError } from '../../common/sendLLMMessageTypes.js';
 import { IMetricsService } from '../../common/metricsService.js';
+import { OnError, OnFinalMessage, OnText, SendLLMMessageParams } from '../../common/sendLLMMessageTypes.js';
 import { displayInfoOfProviderName } from '../../common/voidSettingsTypes.js';
 import { sendLLMMessageToProviderImplementation } from './sendLLMMessage.impl.js';
 
@@ -68,7 +68,15 @@ export const sendLLMMessage = async ({
 	const onFinalMessage: OnFinalMessage = (params) => {
 		const { fullText, fullReasoning, toolCall } = params
 		if (_didAbort) return
-		captureLLMEvent(`${loggingName} - Received Full Message`, { messageLength: fullText.length, reasoningLength: fullReasoning?.length, duration: new Date().getMilliseconds() - submit_time.getMilliseconds(), toolCallName: toolCall?.name })
+		const toolCallInfo = toolCall
+			? ('name' in toolCall ? toolCall.name : `${toolCall.toolCalls.length} tools`)
+			: undefined
+		captureLLMEvent(`${loggingName} - Received Full Message`, {
+			messageLength: fullText.length,
+			reasoningLength: fullReasoning?.length,
+			duration: new Date().getMilliseconds() - submit_time.getMilliseconds(),
+			toolCallName: toolCallInfo
+		})
 		onFinalMessage_(params)
 	}
 

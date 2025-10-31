@@ -178,11 +178,77 @@ export const builtinTools: {
 
 	read_file: {
 		name: 'read_file',
-		description: `Returns file contents. Extracts text from PDF/DOCX/XLSX.`,
+		description: `Reads and extracts text content from files. Supports text files (.txt, .md, .json, .csv, .log) and documents (.pdf, .docx, .xlsx).
+
+**INTELLIGENT FILE READING:**
+
+Before reading large or unfamiliar files, use smart strategies:
+
+**Strategy 1: Check File Size First**
+Unknown file size? Call read_file WITHOUT start_line/end_line to see file length in response.
+
+**Strategy 2: Targeted Section Reading** (saves tokens)
+- Small file (<100 lines): Read entire file
+- Medium file (100-1,000 lines): Read specific sections using start_line/end_line
+- Large file (1,000+ lines): Use search_in_file first to locate relevant sections, THEN read those line ranges
+
+**TOKEN COST ESTIMATION:**
+- Small file (<100 lines): ~500 tokens
+- Medium file (100-1,000 lines): ~5,000 tokens
+- Large file (1,000+ lines): 10,000-50,000 tokens
+- Policy manual (full): 20,000-100,000 tokens
+
+**DOCUMENT TYPE HANDLING:**
+
+**PDF Files:**
+- Extracts text with page markers
+- Look for "===== Page X =====" headers
+- Use page_number parameter if you know specific page needed
+
+**Word Documents (.docx):**
+- Extracts formatted text
+- Preserves structure (headings, lists)
+- Images are skipped (text only)
+
+**Excel Files (.xlsx):**
+- Returns worksheet data as formatted tables
+- Use sheet_name parameter to specify worksheet
+
+**BEST PRACTICES:**
+
+✅ GOOD: Efficient token usage
+\`\`\`
+Step 1: read_file(policy_manual.pdf) [no line params] → See it's 5,000 lines
+Step 2: search_in_file("appeal deadline") → Find lines 234-289 relevant
+Step 3: read_file(policy_manual.pdf, start_line=234, end_line=289) → ~2,000 tokens
+\`\`\`
+
+❌ BAD: Wasteful token usage
+\`\`\`
+read_file(policy_manual.pdf) [entire file] → 25,000 tokens consumed unnecessarily
+\`\`\`
+
+**PARALLEL READING:**
+Reading multiple files for comparison? Execute reads in parallel:
+\`\`\`
+[Parallel execution]
+read_file(medical_report_1.pdf)
+read_file(medical_report_2.pdf)
+read_file(denial_letter.pdf)
+\`\`\`
+
+**PAGINATION:**
+For extremely large files, use page_number and page_size parameters to read incrementally.
+
+**TOKEN BUDGET AWARENESS:**
+Your context window is limited. Before reading, consider:
+- Do I need the ENTIRE file or just specific sections?
+- Can I use search_in_file or rag_search first to narrow down?
+- Is this file critical to the current task?`,
 		params: {
 			...uriParam('file'),
-			start_line: { description: 'Optional. Defaults to beginning.' },
-			end_line: { description: 'Optional. Defaults to end.' },
+			start_line: { description: 'Optional. Start reading from this line number (1-indexed). Omit to read from beginning.' },
+			end_line: { description: 'Optional. Stop reading at this line number (inclusive). Omit to read to end.' },
 			...paginationParam,
 		},
 	},
@@ -332,19 +398,89 @@ export const builtinTools: {
 
 	rag_search_policy: {
 		name: 'rag_search_policy',
-		description: `Search indexed policy manuals for rules, eligibility, procedures. Returns relevant sections with citations.`,
+		description: `Search indexed policy manuals for workers' compensation rules, eligibility criteria, procedural requirements, benefit calculations, and appeal processes.
+
+**PURPOSE:** Retrieve authoritative policy guidance to ground responses in verified regulatory standards. This is your PRIMARY source for WC legal/procedural questions.
+
+**WHEN TO USE:**
+- Before answering ANY question about WC rules, procedures, benefits, or requirements
+- When drafting correspondence that requires policy citations
+- When researching appeal procedures, disability ratings, or eligibility
+- To verify facts before including them in documents
+
+**BEST PRACTICES:**
+- Execute 2-3 searches with VARIED queries for comprehensive coverage
+  Example: Query 1 (broad): "appeal procedures"
+           Query 2 (specific): "appeal deadline requirements medical evidence"
+           Query 3 (edge case): "appeal late filing exceptions good cause"
+- Use limit=8 for most searches (balances comprehensiveness vs. token cost)
+- Increase limit to 12-15 for complex topics requiring extensive context
+
+**OUTPUT FORMAT:**
+Returns chunks with:
+- Document name (e.g., "CA_Workers_Comp_Manual_2024.pdf")
+- Page numbers for citation
+- Relevant text excerpts
+- Similarity scores (higher = more relevant)
+
+**CITATION REQUIREMENT:**
+When using results in responses, cite as:
+"According to [Document Name], Section [X], page [Y]: '[Verbatim Quote]'"
+
+**COST:** ~2,000 tokens per search (including results). Budget accordingly.`,
 		params: {
-			query: { description: 'Search query for policy content.' },
-			limit: { description: 'Max results. Default 8.' }
+			query: { description: 'Natural language search query. Be specific (good: "permanent disability rating calculation methodology") rather than vague (bad: "disability").' },
+			limit: { description: 'Maximum results to return. Default 8. Use 12-15 for complex topics, 5-6 for quick fact-checking. Each result ~250 tokens.' }
 		}
 	},
 
 	rag_search_workspace: {
 		name: 'rag_search_workspace',
-		description: `Search indexed case documents (medical reports, decisions, correspondence) for case-specific information.`,
+		description: `Search indexed case-specific documents (medical reports, IME evaluations, appeals board decisions, claim correspondence, treatment records) for information relevant to a particular injured worker's case.
+
+**PURPOSE:** Retrieve case-specific facts, medical findings, procedural history, and claim details. This is your PRIMARY source for case-specific information (NOT policy/regulatory guidance - use rag_search_policy for that).
+
+**WHEN TO USE:**
+- Finding medical opinions, diagnoses, treatment recommendations, work restrictions
+- Locating specific claim events, dates, or procedural history
+- Extracting information from IME reports, QME evaluations, or treatment records
+- Searching appeals board decisions or adjuster correspondence
+- Building chronologies of medical treatment or claim adjudication
+
+**DOCUMENT TYPES SEARCHABLE:**
+- Medical Reports: Treatment notes, diagnostic studies, FCE results
+- IME/QME Evaluations: Independent medical examinations
+- Legal Documents: Appeals board decisions, settlement agreements
+- Correspondence: Adjuster letters, status updates, denials
+- Administrative: Claim forms, DWC forms, notices
+
+**BEST PRACTICES:**
+- Use specific medical/legal terminology when available
+  Good: "lumbar radiculopathy L5-S1 MRI findings"
+  Bad: "back pain test results"
+- For comprehensive case review, execute 3-4 searches with different aspects:
+  Query 1: Medical diagnoses and findings
+  Query 2: Work restrictions and limitations
+  Query 3: Treatment recommendations
+  Query 4: Causation opinions
+- Use limit=8-10 for detailed medical report analysis
+- Use limit=5-6 for quick fact extraction
+
+**OUTPUT FORMAT:**
+Returns chunks with:
+- Document name (e.g., "IME_Report_Dr_Smith_2024_03_15.pdf")
+- Page numbers
+- Text excerpts containing search terms
+- Similarity scores
+
+**CITATION FORMAT FOR MEDICAL EVIDENCE:**
+"The IME evaluation by Dr. [Name] dated [Date] states: '[Verbatim Quote]'
+(Source: [Filename], Page [X])"
+
+**COST:** ~2,000 tokens per search. Budget carefully when reviewing extensive medical records.`,
 		params: {
-			query: { description: 'Search query for case documents.' },
-			limit: { description: 'Max results. Default 8.' }
+			query: { description: 'Natural language search query targeting case-specific information. Use medical terminology and specific details when possible.' },
+			limit: { description: 'Maximum results to return. Default 8. Each result ~250 tokens.' }
 		}
 	},
 
@@ -400,7 +536,9 @@ export const availableTools = (chatMode: ChatMode | null, mcpTools: InternalTool
 		return tool
 	}).filter((t): t is InternalToolInfo => t !== null) ?? undefined
 
-	const effectiveMCPTools = chatMode === 'case_manager' ? mcpTools : undefined
+	// Enable MCP tools in ALL modes (drafting, research, case_manager)
+	// This is important because drafting may need extended thinking, and native MCP tools work with extended thinking
+	const effectiveMCPTools = (chatMode === 'case_manager' || chatMode === 'research' || chatMode === 'drafting') ? mcpTools : undefined
 
 	const tools: InternalToolInfo[] | undefined = !(builtinToolNames || mcpTools) ? undefined
 		: [
@@ -418,31 +556,32 @@ export const availableTools = (chatMode: ChatMode | null, mcpTools: InternalTool
 
 const toolCallDefinitionsXMLString = (tools: InternalToolInfo[]) => {
 	return `${tools.map((t, i) => {
-		const params = Object.keys(t.params).map(paramName => `<${paramName}>${t.params[paramName].description}</${paramName}>`).join('\n')
+		const params = Object.keys(t.params).map(paramName =>
+			`<parameter name="${paramName}">${t.params[paramName].description}</parameter>`
+		).join('\n    ')
 
-		// Add example based on tool name
+		// Add example based on tool name - NOW IN ANTML FORMAT
 		let example = ''
 		if (t.name === 'read_file') {
-			example = `\n    <example>\n    <read_file>\n    <uri>/case_files/medical_reports/dr_smith_eval_2024.pdf</uri>\n    </read_file>\n    </example>\n`
+			example = `\n    <example>\n    <function_calls>\n    <invoke name="read_file">\n    <parameter name="uri">/case_files/medical_reports/dr_smith_eval_2024.pdf</parameter>\n    </invoke>\n    </function_calls>\n    </example>\n`
 		} else if (t.name === 'edit_file') {
-			example = `\n    <example>\n    <edit_file>\n    <uri>/case_files/appeal_letter.txt</uri>\n    <search_replace_blocks>\n    <search_replace_block>\n    <search>existing text</search>\n    <replace>new text</replace>\n    </search_replace_block>\n    </search_replace_blocks>\n    </edit_file>\n    </example>\n`
+			example = `\n    <example>\n    <function_calls>\n    <invoke name="edit_file">\n    <parameter name="uri">/case_files/appeal_letter.txt</parameter>\n    <parameter name="search_replace_blocks">\n    <search_replace_block>\n    <search>existing text</search>\n    <replace>new text</replace>\n    </search_replace_block>\n    </parameter>\n    </invoke>\n    </function_calls>\n    </example>\n`
 		} else if (t.name === 'edit_document') {
-			example = `\n    <example>\n    <edit_document>\n    <uri>/case_files/welcome.docx</uri>\n    <operations>[{"type": "insert_text", "position": 0, "text": "Welcome\\n\\nThis was written by AI."}]</operations>\n    </edit_document>\n    </example>\n`
+			example = `\n    <example>\n    <function_calls>\n    <invoke name="edit_document">\n    <parameter name="uri">/case_files/welcome.docx</parameter>\n    <parameter name="operations">[{"type": "insert_text", "position": 0, "text": "Welcome\\n\\nThis was written by AI."}]</parameter>\n    </invoke>\n    </function_calls>\n    </example>\n`
 		} else if (t.name === 'rag_search_policy') {
-			example = `\n    <example>\n    <rag_search_policy>\n    <query>appeal deadline workers compensation</query>\n    <limit>5</limit>\n    </rag_search_policy>\n    </example>\n`
+			example = `\n    <example>\n    <function_calls>\n    <invoke name="rag_search_policy">\n    <parameter name="query">appeal deadline workers compensation</parameter>\n    <parameter name="limit">5</parameter>\n    </invoke>\n    </function_calls>\n    </example>\n`
 		} else if (t.name === 'rag_search_workspace') {
-			example = `\n    <example>\n    <rag_search_workspace>\n    <query>medical evaluation lumbar strain</query>\n    <limit>5</limit>\n    </rag_search_workspace>\n    </example>\n`
+			example = `\n    <example>\n    <function_calls>\n    <invoke name="rag_search_workspace">\n    <parameter name="query">medical evaluation lumbar strain</parameter>\n    <parameter name="limit">5</parameter>\n    </invoke>\n    </function_calls>\n    </example>\n`
 		} else if (t.name === 'create_file_or_folder') {
-			example = `\n    <example>\n    <create_file_or_folder>\n    <uri>/case_files/appeal_letter_2024.docx</uri>\n    <type>file</type>\n    </create_file_or_folder>\n    </example>\n`
+			example = `\n    <example>\n    <function_calls>\n    <invoke name="create_file_or_folder">\n    <parameter name="uri">/case_files/appeal_letter_2024.docx</parameter>\n    <parameter name="type">file</parameter>\n    </invoke>\n    </function_calls>\n    </example>\n`
 		}
 
 		return `\
     ${i + 1}. ${t.name}${example}
     Description: ${t.description}
 
-    Format:
-    <${t.name}>${!params ? '' : `\n${params}`}
-    </${t.name}>`
+    Parameters:
+    ${params}`
 	}).join('\n\n')}`
 }
 
@@ -458,7 +597,21 @@ export const reParsedToolXMLString = (toolName: ToolName, toolParams: RawToolPar
 // - You are allowed to call multiple tools by specifying them consecutively. However, there should be NO text or writing between tool calls or after them.
 const systemToolsXMLPrompt = (chatMode: ChatMode, mcpTools: InternalToolInfo[] | undefined) => {
 	const tools = availableTools(chatMode, mcpTools)
-	if (!tools || tools.length === 0) return null
+
+	// DEBUG LOGGING
+	console.log('[systemToolsXMLPrompt] chatMode:', chatMode)
+	console.log('[systemToolsXMLPrompt] mcpTools count:', mcpTools?.length ?? 0)
+	console.log('[systemToolsXMLPrompt] tools returned:', tools?.length ?? 0)
+	if (tools) {
+		console.log('[systemToolsXMLPrompt] Tool names:', tools.map(t => t.name))
+		const ragTools = tools.filter(t => t.name.startsWith('rag_'))
+		console.log('[systemToolsXMLPrompt] RAG tools:', ragTools.map(t => t.name))
+	}
+
+	if (!tools || tools.length === 0) {
+		console.error('[systemToolsXMLPrompt] ❌ NO TOOLS AVAILABLE! Returning null.')
+		return null
+	}
 
 	const toolXMLDefinitions = (`\
     Available tools:
@@ -467,13 +620,12 @@ const systemToolsXMLPrompt = (chatMode: ChatMode, mcpTools: InternalToolInfo[] |
 
 	const toolCallXMLGuidelines = (`\
     Tool calling details:
-    - To call a tool, write its name and parameters using the XML format shown above.
-    - Both single-line and multi-line formats work fine (see examples above).
-    - Output the XML tool call directly - DO NOT wrap it in <function_calls>, <tool_call>, or any other tags.
-    - Place the tool call at the END of your response after any explanation.
-    - After you write the tool call, STOP. The tool will execute and results will appear in the next message.
-    - All parameters are REQUIRED unless noted otherwise.
-    - You are only allowed to output ONE tool call per response.`)
+    - Wrap tool calls in <function_calls> tags
+    - Each tool is an <invoke name="tool_name"> block
+    - Parameters use <parameter name="param_name">value</parameter>
+    - You CAN add explanatory text before/after <function_calls>
+    - Multiple <invoke> blocks in one <function_calls> execute in parallel
+    - All parameters are REQUIRED unless noted otherwise`)
 
 	return `\
     ${toolXMLDefinitions}

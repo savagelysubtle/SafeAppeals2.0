@@ -177,23 +177,9 @@ body {
 	text-align: center;
 }
 
-/* Scrollbar styling */
-#xlsx-container::-webkit-scrollbar {
-	width: 14px;
-	height: 14px;
-}
-
-#xlsx-container::-webkit-scrollbar-thumb {
-	background-color: var(--vscode-scrollbarSlider-background);
-	border-radius: 7px;
-}
-
-#xlsx-container::-webkit-scrollbar-thumb:hover {
-	background-color: var(--vscode-scrollbarSlider-hoverBackground);
-}
-
-#xlsx-container::-webkit-scrollbar-track {
-	background-color: var(--vscode-editor-background);
+/* Scrollbar styling - uses unified void-scrollbar class from void.css */
+#xlsx-container {
+	/* Scrollbar styles inherited from .void-scrollbar class applied to element */
 }
 
 /* Loading state */

@@ -94,113 +94,111 @@
 	opacity: 80%;
 }
 
-/* styles for all containers used by void */
-.void-scope {
-	--scrollbar-vertical-width: 8px;
-	--scrollbar-horizontal-height: 6px;
+/* =============================================================================
+   UNIFIED SCROLLBAR SYSTEM
+   Single reusable scrollbar style for all Void components
+   Uses VSCode theme variables for automatic theme support
+   ============================================================================= */
+
+/* Scrollbar dimensions */
+.void-scrollbar {
+	--scrollbar-width: 14px;
+	--scrollbar-height: 14px;
 }
 
-/* Target both void-scope and all its descendants with scrollbars */
+/* Firefox scrollbar styling */
+.void-scrollbar,
+.void-scrollbar * {
+	scrollbar-width: thin !important;
+	scrollbar-color: var(--vscode-scrollbarSlider-background) var(--vscode-editor-background) !important;
+}
+
+/* WebKit scrollbar track */
+.void-scrollbar::-webkit-scrollbar,
+.void-scrollbar *::-webkit-scrollbar {
+	width: var(--scrollbar-width) !important;
+	height: var(--scrollbar-height) !important;
+	background-color: var(--vscode-editor-background) !important;
+}
+
+/* WebKit scrollbar thumb (the draggable part) */
+.void-scrollbar::-webkit-scrollbar-thumb,
+.void-scrollbar *::-webkit-scrollbar-thumb {
+	background-color: var(--vscode-scrollbarSlider-background) !important;
+	border-radius: 7px !important;
+	border: none !important;
+}
+
+/* WebKit scrollbar thumb hover state */
+.void-scrollbar::-webkit-scrollbar-thumb:hover,
+.void-scrollbar *::-webkit-scrollbar-thumb:hover {
+	background-color: var(--vscode-scrollbarSlider-hoverBackground) !important;
+}
+
+/* WebKit scrollbar thumb active state */
+.void-scrollbar::-webkit-scrollbar-thumb:active,
+.void-scrollbar *::-webkit-scrollbar-thumb:active {
+	background-color: var(--vscode-scrollbarSlider-activeBackground) !important;
+}
+
+/* WebKit scrollbar track background */
+.void-scrollbar::-webkit-scrollbar-track,
+.void-scrollbar *::-webkit-scrollbar-track {
+	background-color: var(--vscode-editor-background) !important;
+	border: none !important;
+}
+
+/* WebKit scrollbar corner (where vertical and horizontal meet) */
+.void-scrollbar::-webkit-scrollbar-corner,
+.void-scrollbar *::-webkit-scrollbar-corner {
+	background-color: var(--vscode-editor-background) !important;
+}
+
+/* Apply to void-scope for backwards compatibility */
+.void-scope {
+	--scrollbar-width: 14px;
+	--scrollbar-height: 14px;
+}
+
 .void-scope,
 .void-scope * {
 	scrollbar-width: thin !important;
-	scrollbar-color: var(--void-bg-1) var(--void-bg-3) !important;
-	/* For Firefox */
+	scrollbar-color: var(--vscode-scrollbarSlider-background) var(--vscode-editor-background) !important;
 }
 
 .void-scope::-webkit-scrollbar,
 .void-scope *::-webkit-scrollbar {
-	width: var(--scrollbar-vertical-width) !important;
-	height: var(--scrollbar-horizontal-height) !important;
-	background-color: var(--void-bg-3) !important;
+	width: var(--scrollbar-width) !important;
+	height: var(--scrollbar-height) !important;
+	background-color: var(--vscode-editor-background) !important;
 }
 
 .void-scope::-webkit-scrollbar-thumb,
 .void-scope *::-webkit-scrollbar-thumb {
-	background-color: var(--void-bg-1) !important;
-	border-radius: 4px !important;
+	background-color: var(--vscode-scrollbarSlider-background) !important;
+	border-radius: 7px !important;
 	border: none !important;
-	-webkit-box-shadow: none !important;
-	box-shadow: none !important;
 }
 
 .void-scope::-webkit-scrollbar-thumb:hover,
 .void-scope *::-webkit-scrollbar-thumb:hover {
-	background-color: var(--void-bg-1) !important;
-	filter: brightness(1.1) !important;
+	background-color: var(--vscode-scrollbarSlider-hoverBackground) !important;
 }
 
 .void-scope::-webkit-scrollbar-thumb:active,
 .void-scope *::-webkit-scrollbar-thumb:active {
-	background-color: var(--void-bg-1) !important;
-	filter: brightness(1.2) !important;
+	background-color: var(--vscode-scrollbarSlider-activeBackground) !important;
 }
 
 .void-scope::-webkit-scrollbar-track,
 .void-scope *::-webkit-scrollbar-track {
-	background-color: var(--void-bg-3) !important;
+	background-color: var(--vscode-editor-background) !important;
 	border: none !important;
 }
 
 .void-scope::-webkit-scrollbar-corner,
 .void-scope *::-webkit-scrollbar-corner {
-	background-color: var(--void-bg-3) !important;
-}
-
-/* Add void-scrollable-element styles to match */
-.void-scrollable-element {
-	background-color: var(--vscode-editor-background);
-	--scrollbar-vertical-width: 14px;
-	--scrollbar-horizontal-height: 6px;
-	overflow: auto;
-	/* Ensure scrollbars are shown when needed */
-}
-
-.void-scrollable-element,
-.void-scrollable-element * {
-	scrollbar-width: thin !important;
-	/* For Firefox */
-	scrollbar-color: var(--void-bg-1) var(--void-bg-3) !important;
-	/* For Firefox */
-}
-
-.void-scrollable-element::-webkit-scrollbar,
-.void-scrollable-element *::-webkit-scrollbar {
-	width: var(--scrollbar-vertical-width) !important;
-	height: var(--scrollbar-horizontal-height) !important;
-	background-color: var(--void-bg-3) !important;
-}
-
-.void-scrollable-element::-webkit-scrollbar-thumb,
-.void-scrollable-element *::-webkit-scrollbar-thumb {
-	background-color: var(--void-bg-1) !important;
-	border-radius: 4px !important;
-	border: none !important;
-	-webkit-box-shadow: none !important;
-	box-shadow: none !important;
-}
-
-.void-scrollable-element::-webkit-scrollbar-thumb:hover,
-.void-scrollable-element *::-webkit-scrollbar-thumb:hover {
-	background-color: var(--void-bg-1) !important;
-	filter: brightness(1.1) !important;
-}
-
-.void-scrollable-element::-webkit-scrollbar-thumb:active,
-.void-scrollable-element *::-webkit-scrollbar-thumb:active {
-	background-color: var(--void-bg-1) !important;
-	filter: brightness(1.2) !important;
-}
-
-.void-scrollable-element::-webkit-scrollbar-track,
-.void-scrollable-element *::-webkit-scrollbar-track {
-	background-color: var(--void-bg-3) !important;
-	border: none !important;
-}
-
-.void-scrollable-element::-webkit-scrollbar-corner,
-.void-scrollable-element *::-webkit-scrollbar-corner {
-	background-color: var(--void-bg-3) !important;
+	background-color: var(--vscode-editor-background) !important;
 }
 
 /* Void Chat Panel Container Layout */
@@ -210,6 +208,11 @@
 	flex-direction: column !important;
 	height: 100% !important;
 	width: 100% !important;
+}
+
+/* Ensure Case Info pane body is scrollable */
+.pane-body[id*="workbench.view.extension.case-info"] {
+	overflow: auto !important;
 }
 
 .void-sidebar > div,

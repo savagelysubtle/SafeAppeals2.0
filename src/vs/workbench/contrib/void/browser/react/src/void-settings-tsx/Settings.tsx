@@ -440,15 +440,15 @@ const SimpleModelSettingsDialog = ({
 				mouseDownInsideModal.current = false;
 			}}
 		>
-			{/* MODAL */}
-			<div
-				className="bg-void-bg-1 rounded-md p-4 max-w-xl w-full shadow-xl overflow-y-auto max-h-[90vh]"
-				onClick={(e) => e.stopPropagation()} // Keep stopping propagation for normal clicks inside
-				onMouseDown={(e) => {
-					mouseDownInsideModal.current = true;
-					e.stopPropagation();
-				}}
-			>
+		{/* MODAL */}
+		<div
+			className="void-scrollbar bg-void-bg-1 rounded-md p-4 max-w-xl w-full shadow-xl overflow-y-auto max-h-[90vh]"
+			onClick={(e) => e.stopPropagation()} // Keep stopping propagation for normal clicks inside
+			onMouseDown={(e) => {
+				mouseDownInsideModal.current = true;
+				e.stopPropagation();
+			}}
+		>
 				<div className="flex justify-between items-center mb-4">
 					<h3 className="text-lg font-medium">
 						Change Defaults for {modelName} (
@@ -1343,7 +1343,7 @@ const MCPServerComponent = ({
 			{/* Tools section */}
 			{isOn && (
 				<div className="mt-3">
-					<div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto">
+					<div className="void-scrollbar flex flex-wrap gap-2 max-h-32 overflow-y-auto">
 						{(server.tools ?? []).length > 0 ? (
 							(server.tools ?? []).map(
 								(tool: { name: string; description?: string }) => (
