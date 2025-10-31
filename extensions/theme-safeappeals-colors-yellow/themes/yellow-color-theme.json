@@ -9,20 +9,20 @@
 		"activityBar.border": "#1C1C1C",
 		"activityBarBadge.background": "#F7DC6F",
 		"activityBarBadge.foreground": "#ffffff",
-		
+
 		"statusBar.background": "#D4AC0D",
 		"statusBar.foreground": "#ffffff",
 		"statusBar.border": "#1C1C1C",
 		"statusBar.noFolderBackground": "#D4AC0D",
 		"statusBar.debuggingBackground": "#FF6B6B",
 		"statusBar.debuggingForeground": "#ffffff",
-		
+
 		"titleBar.activeBackground": "#121212",
 		"titleBar.activeForeground": "#CCCCCC",
 		"titleBar.inactiveBackground": "#0B0B0B",
 		"titleBar.inactiveForeground": "#999999",
 		"titleBar.border": "#1C1C1C",
-		
+
 		"editor.background": "#1E1E1E",
 		"editor.foreground": "#D4D4D4",
 		"editor.lineHighlightBackground": "#2A2A2A",
@@ -33,7 +33,7 @@
 		"editorIndentGuide.background": "#404040",
 		"editorIndentGuide.activeBackground": "#F7DC6F",
 		"editorWhitespace.foreground": "#404040",
-		
+
 		"tab.activeBackground": "#161616",
 		"tab.inactiveBackground": "#101010",
 		"tab.activeForeground": "#ffffff",
@@ -44,7 +44,7 @@
 		"tab.unfocusedActiveBorderTop": "#D4AC0D",
 		"editorGroupHeader.tabsBackground": "#101010",
 		"editorGroupHeader.tabsBorder": "#101010",
-		
+
 		"sideBar.background": "#1A1A1A",
 		"sideBar.foreground": "#CCCCCC",
 		"sideBar.border": "#1C1C1C",
@@ -52,20 +52,20 @@
 		"sideBarSectionHeader.background": "#202020",
 		"sideBarSectionHeader.foreground": "#ffffff",
 		"sideBarSectionHeader.border": "#1C1C1C",
-		
+
 		"panel.background": "#1A1A1A",
 		"panel.border": "#1C1C1C",
 		"panelTitle.activeBorder": "#F7DC6F",
 		"panelTitle.activeForeground": "#ffffff",
 		"panelTitle.inactiveForeground": "#808080",
-		
+
 		"button.background": "#F7DC6F",
 		"button.foreground": "#ffffff",
 		"button.hoverBackground": "#D4AC0D",
 		"button.secondaryBackground": "#3A3D41",
 		"button.secondaryForeground": "#ffffff",
 		"button.secondaryHoverBackground": "#45494E",
-		
+
 		"input.background": "#202020",
 		"input.border": "#303030",
 		"input.foreground": "#CCCCCC",
@@ -75,11 +75,11 @@
 		"inputValidation.errorBorder": "#E74C3C",
 		"inputValidation.warningBorder": "#F39C12",
 		"inputValidation.infoBorder": "#F7DC6F",
-		
+
 		"dropdown.background": "#202020",
 		"dropdown.border": "#303030",
 		"dropdown.foreground": "#CCCCCC",
-		
+
 		"list.activeSelectionBackground": "#D4AC0D66",
 		"list.activeSelectionForeground": "#ffffff",
 		"list.hoverBackground": "#2A2A2A",
@@ -87,23 +87,23 @@
 		"list.focusOutline": "#F7DC6F",
 		"list.highlightForeground": "#F7DC6F",
 		"list.focusBackground": "#2A2A2A",
-		
-		"scrollbarSlider.background": "#79797933",
-		"scrollbarSlider.hoverBackground": "#646464b3",
-		"scrollbarSlider.activeBackground": "#bfbfbf66",
-		
+
+		"scrollbarSlider.background": "#F7DC6F33",
+		"scrollbarSlider.hoverBackground": "#F7DC6F80",
+		"scrollbarSlider.activeBackground": "#F7DC6Fb3",
+
 		"badge.background": "#F7DC6F",
 		"badge.foreground": "#ffffff",
-		
+
 		"progressBar.background": "#F7DC6F",
-		
+
 		"notificationCenter.border": "#F7DC6F",
 		"notificationCenterHeader.background": "#1A1A1A",
 		"notifications.background": "#1A1A1A",
 		"notifications.border": "#F7DC6F",
 		"notifications.foreground": "#CCCCCC",
 		"notificationLink.foreground": "#F7DC6F",
-		
+
 		"terminal.background": "#1A1A1A",
 		"terminal.foreground": "#CCCCCC",
 		"terminal.ansiBlack": "#000000",
@@ -122,29 +122,29 @@
 		"terminal.ansiBrightMagenta": "#9B59B6",
 		"terminal.ansiBrightCyan": "#1ABC9C",
 		"terminal.ansiBrightWhite": "#FFFFFF",
-		
+
 		"textLink.foreground": "#F7DC6F",
 		"textLink.activeForeground": "#D4AC0D",
 		"textPreformat.foreground": "#D4D4D4",
 		"textBlockQuote.background": "#1A1A1A",
 		"textCodeBlock.background": "#1A1A1A",
-		
+
 		"widget.shadow": "#00000080",
 		"editorWidget.background": "#202020",
 		"editorWidget.foreground": "#CCCCCC",
 		"editorWidget.border": "#303030",
-		
+
 		"pickerGroup.border": "#F7DC6F",
 		"pickerGroup.foreground": "#F7DC6F",
-		
+
 		"debugToolBar.background": "#202020",
 		"debugToolBar.border": "#303030",
-		
+
 		"welcomePage.tileBackground": "#151515",
 		"welcomePage.tileBorder": "#1C1C1C",
 		"welcomePage.buttonBackground": "#F7DC6F",
 		"welcomePage.buttonHoverBackground": "#D4AC0D",
-		
+
 		"gitDecoration.modifiedResourceForeground": "#E2C08D",
 		"gitDecoration.deletedResourceForeground": "#E74C3C",
 		"gitDecoration.untrackedResourceForeground": "#F7DC6F",

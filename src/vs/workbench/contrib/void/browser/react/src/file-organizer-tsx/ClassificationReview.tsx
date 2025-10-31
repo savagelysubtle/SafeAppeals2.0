@@ -190,12 +190,15 @@ export const ClassificationReview: React.FC<ClassificationReviewProps> = ({
 					Review Classifications
 				</h3>
 
-				<div style={{
+			<div
+				className="void-scrollbar"
+				style={{
 					maxHeight: '400px',
 					overflowY: 'auto',
 					border: '1px solid var(--vscode-panel-border)',
 					borderRadius: '6px'
 				}}>
+
 					{files.length === 0 ? (
 						<div style={{
 							padding: '32px',

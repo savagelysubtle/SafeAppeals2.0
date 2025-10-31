@@ -28,10 +28,11 @@ export const approvalTypeOfBuiltinToolName: Partial<{ [T in BuiltinToolName]?: '
 	'run_persistent_command': 'terminal',
 	'open_persistent_terminal': 'terminal',
 	'kill_persistent_terminal': 'terminal',
-	'rag_index_document': 'RAG tools',
-	'rag_search_policy': 'RAG tools',
-	'rag_search_workspace': 'RAG tools',
-	'rag_get_stats': 'RAG tools',
+	// RAG tools removed from approval requirement - they are read-only information gathering tools
+	// 'rag_index_document': 'RAG tools',  // Commented out - no approval needed
+	// 'rag_search_policy': 'RAG tools',   // Commented out - no approval needed
+	// 'rag_search_workspace': 'RAG tools', // Commented out - no approval needed
+	// 'rag_get_stats': 'RAG tools',       // Commented out - no approval needed
 }
 
 

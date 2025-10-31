@@ -30,6 +30,8 @@ import { PDFViewerInput } from './documentViewers/pdfViewer/pdfViewerInput.js';
 import { IRAGService } from '../common/ragService.js';
 import { RAGContextService } from '../common/ragContextService.js';
 import { INotificationService } from '../../../../platform/notification/common/notification.js';
+import { DOCXViewerInput } from './documentViewers/docxViewer/docxViewerInput.js';
+import { XLSXViewerInput } from './documentViewers/xlsxViewer/xlsxViewerInput.js';
 
 // ---------- Register commands and keybindings ----------
 
@@ -55,6 +57,51 @@ export const roundRangeToLines = (range: IRange | null | undefined, options: { e
 		endColumn: Number.MAX_SAFE_INTEGER
 	}
 	return newRange
+}
+
+/**
+ * Detects paragraph boundaries around the current cursor position.
+ * A paragraph is defined as a block of non-empty lines surrounded by empty lines or document boundaries.
+ *
+ * @param model The text model
+ * @param currentLine The current line number (1-indexed)
+ * @returns The paragraph range or null if at an empty line
+ */
+export const detectParagraphRange = (model: any, currentLine: number): IRange | null => {
+	const totalLines = model.getLineCount()
+
+	// Check if current line is empty or only whitespace
+	const currentLineContent = model.getLineContent(currentLine).trim()
+	if (!currentLineContent) {
+		return null // Don't select empty lines
+	}
+
+	// Find paragraph start (search upward for empty line or start of document)
+	let startLine = currentLine
+	while (startLine > 1) {
+		const prevLineContent = model.getLineContent(startLine - 1).trim()
+		if (!prevLineContent) {
+			break // Found empty line, stop here
+		}
+		startLine--
+	}
+
+	// Find paragraph end (search downward for empty line or end of document)
+	let endLine = currentLine
+	while (endLine < totalLines) {
+		const nextLineContent = model.getLineContent(endLine + 1).trim()
+		if (!nextLineContent) {
+			break // Found empty line, stop here
+		}
+		endLine++
+	}
+
+	return {
+		startLineNumber: startLine,
+		startColumn: 1,
+		endLineNumber: endLine,
+		endColumn: Number.MAX_SAFE_INTEGER
+	}
 }
 
 // const getContentInRange = (model: ITextModel, range: IRange | null) => {
@@ -195,12 +242,89 @@ registerAction2(class extends Action2 {
 			return
 		}
 
+		// Check for DOCX viewer
+		if (activePane?.input instanceof DOCXViewerInput) {
+			const docxInput = activePane.input as DOCXViewerInput;
+			const notificationService = accessor.get(INotificationService);
+
+			try {
+				// Open panel
+				const wasAlreadyOpen = viewsService.isViewContainerVisible(VOID_VIEW_CONTAINER_ID);
+				if (!wasAlreadyOpen) {
+					await commandService.executeCommand(VOID_OPEN_SIDEBAR_ACTION_ID);
+				}
+
+				// Add DOCX file reference
+				chatThreadService.addNewStagingSelection({
+					type: 'File',
+					uri: docxInput.resource,
+					language: 'docx',
+					state: {
+						wasAddedAsCurrentFile: false
+					}
+				});
+
+				metricsService.capture('Add DOCX to Chat', {
+					hasSelection: false
+				});
+
+			} catch (error) {
+				console.error('[Add DOCX to Chat] Error:', error);
+				notificationService.error('Failed to add DOCX: ' + (error as Error).message);
+			}
+			return
+		}
+
+		// Check for XLSX viewer
+		if (activePane?.input instanceof XLSXViewerInput) {
+			const xlsxInput = activePane.input as XLSXViewerInput;
+			const notificationService = accessor.get(INotificationService);
+
+			try {
+				// Open panel
+				const wasAlreadyOpen = viewsService.isViewContainerVisible(VOID_VIEW_CONTAINER_ID);
+				if (!wasAlreadyOpen) {
+					await commandService.executeCommand(VOID_OPEN_SIDEBAR_ACTION_ID);
+				}
+
+				// Add XLSX file reference
+				chatThreadService.addNewStagingSelection({
+					type: 'File',
+					uri: xlsxInput.resource,
+					language: 'xlsx',
+					state: {
+						wasAddedAsCurrentFile: false
+					}
+				});
+
+				metricsService.capture('Add XLSX to Chat', {
+					hasSelection: false
+				});
+
+			} catch (error) {
+				console.error('[Add XLSX to Chat] Error:', error);
+				notificationService.error('Failed to add XLSX: ' + (error as Error).message);
+			}
+			return
+		}
+
 		// capture selection and model before opening the chat panel
 		const editor = codeEditorService.getActiveCodeEditor()
 		const model = editor?.getModel()
 		if (!model) return
 
-		const selectionRange = roundRangeToLines(editor?.getSelection(), { emptySelectionBehavior: 'null' })
+		let selectionRange = roundRangeToLines(editor?.getSelection(), { emptySelectionBehavior: 'null' })
+
+		// If no selection exists, try to detect and select the current paragraph (like Cursor IDE)
+		if (!selectionRange && editor) {
+			const position = editor.getPosition()
+			if (position) {
+				const paragraphRange = detectParagraphRange(model, position.lineNumber)
+				if (paragraphRange) {
+					selectionRange = paragraphRange
+				}
+			}
+		}
 
 		// open panel
 		const wasAlreadyOpen = viewsService.isViewContainerVisible(VOID_VIEW_CONTAINER_ID)

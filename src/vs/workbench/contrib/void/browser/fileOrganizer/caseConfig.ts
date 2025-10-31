@@ -12,6 +12,10 @@ export interface CaseParty {
 	name: string;
 	lawyers?: string[];
 	doctors?: string[];
+	advocate?: string[];
+	caseManager?: string[];
+	reviewOfficer?: string[];
+	employerRepresentative?: string[];
 }
 
 export interface WCBInfo {
@@ -117,6 +121,9 @@ export function generateAIContextString(config: FileOrgConfig): string {
 			if (caseInfo.parties.claimant.doctors?.length) {
 				context += `- Treating Physicians: ${caseInfo.parties.claimant.doctors.join(', ')}\n`;
 			}
+			if (caseInfo.parties.claimant.advocate?.length) {
+				context += `- Advocate: ${caseInfo.parties.claimant.advocate.join(', ')}\n`;
+			}
 		}
 
 		if (caseInfo.parties.employer) {
@@ -127,6 +134,15 @@ export function generateAIContextString(config: FileOrgConfig): string {
 			}
 			if (caseInfo.parties.employer.doctors?.length) {
 				context += `- IME Doctors: ${caseInfo.parties.employer.doctors.join(', ')}\n`;
+			}
+			if (caseInfo.parties.employer.caseManager?.length) {
+				context += `- Case Manager: ${caseInfo.parties.employer.caseManager.join(', ')}\n`;
+			}
+			if (caseInfo.parties.employer.reviewOfficer?.length) {
+				context += `- Review Officer: ${caseInfo.parties.employer.reviewOfficer.join(', ')}\n`;
+			}
+			if (caseInfo.parties.employer.employerRepresentative?.length) {
+				context += `- Employer Representative: ${caseInfo.parties.employer.employerRepresentative.join(', ')}\n`;
 			}
 		}
 

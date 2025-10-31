@@ -409,11 +409,25 @@ export class RAGFileService {
 				this.logService.info(`[RAGFileService] Operation ${idx + 1}:`, JSON.stringify(op));
 			});
 
-			// Read existing DOCX file
-			const filepath = this.getFilePath(uri);
-			this.logService.info(`[RAGFileService] Reading file from: ${filepath}`);
-			const buffer = readFileSync(filepath);
+		// Read existing DOCX file (create empty file if it doesn't exist)
+		const filepath = this.getFilePath(uri);
+		this.logService.info(`[RAGFileService] Reading file from: ${filepath}`);
+
+		let buffer: Buffer;
+		try {
+			buffer = readFileSync(filepath);
 			this.logService.info(`[RAGFileService] File buffer size: ${buffer.length} bytes`);
+		} catch (error: any) {
+			// If file doesn't exist, create an empty DOCX file first
+			if (error.code === 'ENOENT') {
+				this.logService.info(`[RAGFileService] File does not exist, creating empty DOCX file first...`);
+				await this.createEmptyDOCX(uri);
+				buffer = readFileSync(filepath);
+				this.logService.info(`[RAGFileService] Created empty DOCX file, buffer size: ${buffer.length} bytes`);
+			} else {
+				throw error;
+			}
+		}
 
 			// Extract text content using mammoth
 			this.logService.info('[RAGFileService] Extracting text from DOCX using mammoth...');
@@ -506,6 +520,20 @@ export class RAGFileService {
 			const newBuffer = await Packer.toBuffer(doc);
 			this.logService.info(`[RAGFileService] Generated buffer: ${newBuffer.length} bytes`);
 
+			// Ensure parent directory exists before writing
+			const { dirname } = await import('path');
+			const { mkdirSync } = await import('fs');
+			const parentDir = dirname(filepath);
+			try {
+				mkdirSync(parentDir, { recursive: true });
+				this.logService.info(`[RAGFileService] Ensured parent directory exists: ${parentDir}`);
+			} catch (mkdirError: any) {
+				// Ignore error if directory already exists
+				if (mkdirError.code !== 'EEXIST') {
+					this.logService.warn(`[RAGFileService] Warning: Could not create parent directory: ${mkdirError.message}`);
+				}
+			}
+
 			writeFileSync(filepath, newBuffer);
 			this.logService.info(`[RAGFileService] ✅ File written to disk: ${filepath}`);
 
@@ -558,9 +586,22 @@ export class RAGFileService {
 
 			this.logService.info(`[RAGFileService] Editing XLSX: ${uri.fsPath}`);
 
-			// Read and parse workbook
+			// Read and parse workbook (create empty file if it doesn't exist)
 			const filepath = this.getFilePath(uri);
-			const buffer = readFileSync(filepath);
+			let buffer: Buffer;
+			try {
+				buffer = readFileSync(filepath);
+			} catch (error: any) {
+				// If file doesn't exist, create an empty XLSX file first
+				if (error.code === 'ENOENT') {
+					this.logService.info(`[RAGFileService] File does not exist, creating empty XLSX file first...`);
+					await this.createEmptyXLSX(uri);
+					buffer = readFileSync(filepath);
+					this.logService.info(`[RAGFileService] Created empty XLSX file, buffer size: ${buffer.length} bytes`);
+				} else {
+					throw error;
+				}
+			}
 			const workbook = XLSX.read(buffer, { type: 'buffer' });
 
 			this.logService.info(`[RAGFileService] Loaded workbook with ${workbook.SheetNames.length} sheets`);
@@ -608,6 +649,21 @@ export class RAGFileService {
 
 			// Write back to file
 			const newBuffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+
+			// Ensure parent directory exists before writing
+			const { dirname } = await import('path');
+			const { mkdirSync } = await import('fs');
+			const parentDir = dirname(filepath);
+			try {
+				mkdirSync(parentDir, { recursive: true });
+				this.logService.info(`[RAGFileService] Ensured parent directory exists: ${parentDir}`);
+			} catch (mkdirError: any) {
+				// Ignore error if directory already exists
+				if (mkdirError.code !== 'EEXIST') {
+					this.logService.warn(`[RAGFileService] Warning: Could not create parent directory: ${mkdirError.message}`);
+				}
+			}
+
 			writeFileSync(filepath, newBuffer);
 
 			this.logService.info(`[RAGFileService] ✅ Successfully saved edited XLSX: ${filepath} (${newBuffer.length} bytes)`);
@@ -628,7 +684,8 @@ export class RAGFileService {
 	async createEmptyDOCX(uri: URI): Promise<void> {
 		try {
 			const { Document, Packer, Paragraph, TextRun } = await import('docx');
-			const { writeFileSync } = await import('fs');
+			const { writeFileSync, mkdirSync } = await import('fs');
+			const { dirname } = await import('path');
 
 			// Create a minimal valid DOCX document following docx.js v9.5.1 official patterns
 			// Based on official documentation: https://docx.js.org/index
@@ -685,6 +742,19 @@ export class RAGFileService {
 
 			// Write to disk
 			const filepath = this.getFilePath(uri);
+			const parentDir = dirname(filepath);
+
+			// Ensure parent directory exists
+			try {
+				mkdirSync(parentDir, { recursive: true });
+				this.logService.info(`[createEmptyDOCX] Ensured parent directory exists: ${parentDir}`);
+			} catch (mkdirError: any) {
+				// Ignore error if directory already exists
+				if (mkdirError.code !== 'EEXIST') {
+					this.logService.warn(`[createEmptyDOCX] Warning: Could not create parent directory: ${mkdirError.message}`);
+				}
+			}
+
 			this.logService.info(`[createEmptyDOCX] Writing ${buffer.length} bytes to: ${filepath}`);
 			writeFileSync(filepath, buffer);
 
@@ -714,7 +784,8 @@ export class RAGFileService {
 	async createEmptyXLSX(uri: URI): Promise<void> {
 		try {
 			const XLSX = await import('xlsx');
-			const { writeFileSync } = await import('fs');
+			const { writeFileSync, mkdirSync } = await import('fs');
+			const { dirname } = await import('path');
 
 			// Create a minimal valid XLSX workbook
 			const workbook = XLSX.utils.book_new();
@@ -723,6 +794,19 @@ export class RAGFileService {
 
 			// Write the XLSX
 			const filepath = this.getFilePath(uri);
+			const parentDir = dirname(filepath);
+
+			// Ensure parent directory exists
+			try {
+				mkdirSync(parentDir, { recursive: true });
+				this.logService.info(`[createEmptyXLSX] Ensured parent directory exists: ${parentDir}`);
+			} catch (mkdirError: any) {
+				// Ignore error if directory already exists
+				if (mkdirError.code !== 'EEXIST') {
+					this.logService.warn(`[createEmptyXLSX] Warning: Could not create parent directory: ${mkdirError.message}`);
+				}
+			}
+
 			const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
 			writeFileSync(filepath, buffer);
 

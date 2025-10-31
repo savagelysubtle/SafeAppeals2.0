@@ -12,6 +12,9 @@
 
 	// Get DOM elements
 	const container = document.getElementById('docx-container');
+	// Add unified scrollbar class
+	container.classList.add('void-scrollbar');
+
 	const saveBtn = document.getElementById('save-btn');
 	const statusText = document.getElementById('status-text');
 

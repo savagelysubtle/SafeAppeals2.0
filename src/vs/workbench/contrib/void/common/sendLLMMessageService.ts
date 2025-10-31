@@ -73,6 +73,31 @@ export class LLMMessageService extends Disposable implements ILLMMessageService 
 		// .listen sets up an IPC channel and takes a few ms, so we set up listeners immediately and add hooks to them instead
 		// llm
 		this._register((this.channel.listen('onText_sendLLMMessage') satisfies Event<EventLLMMessageOnTextParams>)(e => {
+			// DEBUG: Log what we're receiving from main process
+			if (e.toolCall) {
+				// Handle both single and multiple tool calls
+				if ('name' in e.toolCall) {
+					// Single tool call
+					console.log('[LLMMessageService] ✅ Received single toolCall from main process:', {
+						name: e.toolCall.name,
+						isDone: e.toolCall.isDone,
+						params: Object.keys(e.toolCall.rawParams)
+					})
+				} else if ('toolCalls' in e.toolCall) {
+					// Multiple tool calls
+					console.log('[LLMMessageService] ✅ Received multiple toolCalls from main process:', {
+						count: e.toolCall.toolCalls.length,
+						tools: e.toolCall.toolCalls.map(t => t.name)
+					})
+				}
+			} else if (e.fullText && (e.fullText.includes('<rag_') || e.fullText.includes('<read_file') || e.fullText.includes('<edit_') || e.fullText.includes('<create_file'))) {
+				console.error('[LLMMessageService] ❌ Received XML but NO toolCall from main process!', {
+					fullTextLength: e.fullText.length,
+					fullTextPreview: e.fullText.substring(0, 200),
+					hasToolCall: !!e.toolCall,
+					note: 'extractXMLToolsWrapper in main process is not working!'
+				})
+			}
 			this.llmMessageHooks.onText[e.requestId]?.(e)
 		}))
 		this._register((this.channel.listen('onFinalMessage_sendLLMMessage') satisfies Event<EventLLMMessageOnFinalMessageParams>)(e => {
@@ -126,6 +151,17 @@ export class LLMMessageService extends Disposable implements ILLMMessageService 
 		this.llmMessageHooks.onFinalMessage[requestId] = onFinalMessage
 		this.llmMessageHooks.onError[requestId] = onError
 		this.llmMessageHooks.onAbort[requestId] = onAbort // used internally only
+
+		// DEBUG: Log what we're sending to main process
+		if (params.messagesType === 'chatMessages') {
+			console.log('[LLMMessageService] Sending to main process:', {
+				chatMode: params.chatMode,
+				provider: modelSelection.providerName,
+				model: modelSelection.modelName,
+				hasTools: !!mcpTools && mcpTools.length > 0,
+				toolCount: mcpTools?.length ?? 0
+			})
+		}
 
 		// params will be stripped of all its functions over the IPC channel
 		this.channel.call('sendLLMMessage', {

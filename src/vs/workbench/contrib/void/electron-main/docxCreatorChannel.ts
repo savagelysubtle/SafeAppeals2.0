@@ -83,56 +83,78 @@ export class DOCXCreatorChannel implements IServerChannel {
 
 				return this.service.createEmptyXLSX(revivedURI);
 			}
-			case 'editDOCX': {
-				console.log('[DOCXCreatorChannel] Received editDOCX request:', {
-					rawArg: arg,
-					argType: typeof arg,
-					isArray: Array.isArray(arg)
-				});
+		case 'editDOCX': {
+			console.log('[DOCXCreatorChannel] Received editDOCX request:', {
+				rawArg: arg,
+				argType: typeof arg,
+				isArray: Array.isArray(arg)
+			});
 
-				// arg should be { uri: URI, operations: Array }
-				const { uri: uriArg, operations } = arg;
+			// Handle both array format [uri, operations] and object format { uri, operations }
+			let uriArg: any;
+			let operations: any;
 
-				// Revive URI
-				let revivedURI: URI;
-				if (URI.isUri(uriArg)) {
-					revivedURI = uriArg;
-				} else {
-					revivedURI = URI.revive(uriArg);
-				}
-
-				if (!revivedURI || !URI.isUri(revivedURI)) {
-					throw new Error(`Invalid URI received for editDOCX. Received: ${JSON.stringify(uriArg)}`);
-				}
-
-				console.log('[DOCXCreatorChannel] Calling editDOCX with URI:', revivedURI.fsPath);
-				return this.service.editDOCX(revivedURI, operations);
+			if (Array.isArray(arg)) {
+				// ProxyChannel sends [uri, operations]
+				[uriArg, operations] = arg;
+				console.log('[DOCXCreatorChannel] Unwrapped from array format:', { uriArg, operations });
+			} else {
+				// Direct object format { uri, operations }
+				({ uri: uriArg, operations } = arg);
+				console.log('[DOCXCreatorChannel] Unwrapped from object format:', { uriArg, operations });
 			}
-			case 'editXLSX': {
-				console.log('[DOCXCreatorChannel] Received editXLSX request:', {
-					rawArg: arg,
-					argType: typeof arg,
-					isArray: Array.isArray(arg)
-				});
 
-				// arg should be { uri: URI, operations: Array }
-				const { uri: uriArg, operations } = arg;
-
-				// Revive URI
-				let revivedURI: URI;
-				if (URI.isUri(uriArg)) {
-					revivedURI = uriArg;
-				} else {
-					revivedURI = URI.revive(uriArg);
-				}
-
-				if (!revivedURI || !URI.isUri(revivedURI)) {
-					throw new Error(`Invalid URI received for editXLSX. Received: ${JSON.stringify(uriArg)}`);
-				}
-
-				console.log('[DOCXCreatorChannel] Calling editXLSX with URI:', revivedURI.fsPath);
-				return this.service.editXLSX(revivedURI, operations);
+			// Revive URI
+			let revivedURI: URI;
+			if (URI.isUri(uriArg)) {
+				revivedURI = uriArg;
+			} else {
+				revivedURI = URI.revive(uriArg);
 			}
+
+			if (!revivedURI || !URI.isUri(revivedURI)) {
+				throw new Error(`Invalid URI received for editDOCX. Received: ${JSON.stringify(uriArg)}`);
+			}
+
+			console.log('[DOCXCreatorChannel] Calling editDOCX with URI:', revivedURI.fsPath);
+			return this.service.editDOCX(revivedURI, operations);
+		}
+		case 'editXLSX': {
+			console.log('[DOCXCreatorChannel] Received editXLSX request:', {
+				rawArg: arg,
+				argType: typeof arg,
+				isArray: Array.isArray(arg)
+			});
+
+			// Handle both array format [uri, operations] and object format { uri, operations }
+			let uriArg: any;
+			let operations: any;
+
+			if (Array.isArray(arg)) {
+				// ProxyChannel sends [uri, operations]
+				[uriArg, operations] = arg;
+				console.log('[DOCXCreatorChannel] Unwrapped from array format:', { uriArg, operations });
+			} else {
+				// Direct object format { uri, operations }
+				({ uri: uriArg, operations } = arg);
+				console.log('[DOCXCreatorChannel] Unwrapped from object format:', { uriArg, operations });
+			}
+
+			// Revive URI
+			let revivedURI: URI;
+			if (URI.isUri(uriArg)) {
+				revivedURI = uriArg;
+			} else {
+				revivedURI = URI.revive(uriArg);
+			}
+
+			if (!revivedURI || !URI.isUri(revivedURI)) {
+				throw new Error(`Invalid URI received for editXLSX. Received: ${JSON.stringify(uriArg)}`);
+			}
+
+			console.log('[DOCXCreatorChannel] Calling editXLSX with URI:', revivedURI.fsPath);
+			return this.service.editXLSX(revivedURI, operations);
+		}
 		}
 		throw new Error(`Call not found: ${command}`);
 	}

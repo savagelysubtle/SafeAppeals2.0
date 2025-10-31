@@ -1073,13 +1073,14 @@ export const VoidChatArea: React.FC<VoidChatAreaProps> = ({
                 flex flex-col p-2 relative input text-left shrink-0
                 rounded-md
                 bg-void-bg-1
-				transition-all duration-200
-				border ${
-					isDragging
-						? "border-void-button-primary border-2 bg-void-button-primary/10"
-						: "border-void-border-3 focus-within:border-void-border-1 hover:border-void-border-1"
-				}
-				max-h-[80vh] overflow-y-auto
+			transition-all duration-200
+			border ${
+				isDragging
+					? "border-void-button-primary border-2 bg-void-button-primary/10"
+					: "border-void-border-3 focus-within:border-void-border-1 hover:border-void-border-1"
+			}
+			max-h-[80vh] overflow-y-auto
+			void-scrollbar
                 ${className}
             `}
 			onClick={(e) => {
@@ -4500,7 +4501,7 @@ const CommandBarInChat = () => {
 
 	// !select-text cursor-auto
 	const fileDetailsContent = (
-		<div className="px-2 gap-1 w-full overflow-y-auto">
+		<div className="void-scrollbar px-2 gap-1 w-full overflow-y-auto">
 			{sortedCommandBarURIs.map((uri, i) => {
 				const basename = getBasename(uri.fsPath);
 
@@ -4883,16 +4884,17 @@ export const SidebarChat = () => {
 
 	const messagesHTML = (
 		<ScrollToBottomContainer
-			key={"messages" + chatThreadsState.currentThreadId} // force rerender on all children if id changes
-			scrollContainerRef={scrollContainerRef}
-			className={`
-			flex flex-col
-			px-4 py-4 space-y-4
-			w-full flex-1 min-h-0
-			overflow-x-hidden
-			overflow-y-auto
-			${previousMessagesHTML.length === 0 && !displayContentSoFar ? "hidden" : ""}
-		`}
+		key={"messages" + chatThreadsState.currentThreadId} // force rerender on all children if id changes
+		scrollContainerRef={scrollContainerRef}
+		className={`
+		flex flex-col
+		px-4 py-4 space-y-4
+		w-full flex-1 min-h-0
+		overflow-x-hidden
+		overflow-y-auto
+		void-scrollbar
+		${previousMessagesHTML.length === 0 && !displayContentSoFar ? "hidden" : ""}
+	`}
 		>
 			{/* previous messages */}
 			{previousMessagesHTML}

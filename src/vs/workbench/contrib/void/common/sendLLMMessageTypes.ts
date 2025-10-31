@@ -81,13 +81,33 @@ export type LLMFIMMessage = {
 export type RawToolParamsObj = {
 	[paramName in ToolParamName<ToolName>]?: string;
 }
-export type RawToolCallObj = {
+
+// Single tool call structure (used for both legacy and ANTML formats)
+export type SingleToolCall = {
 	name: ToolName;
 	rawParams: RawToolParamsObj;
 	doneParams: ToolParamName<ToolName>[];
 	id: string;
 	isDone: boolean;
 };
+
+// Multiple tool calls structure (ANTML format)
+export type MultipleToolCalls = {
+	toolCalls: SingleToolCall[];  // Array for parallel execution
+	format: 'antml';
+};
+
+// RawToolCallObj can be either a single tool call or multiple tool calls (ANTML format)
+export type RawToolCallObj = SingleToolCall | MultipleToolCalls;
+
+// Type guard helpers
+export function isSingleToolCall(toolCall: RawToolCallObj): toolCall is SingleToolCall {
+	return 'name' in toolCall;
+}
+
+export function isMultipleToolCalls(toolCall: RawToolCallObj): toolCall is MultipleToolCalls {
+	return 'toolCalls' in toolCall && 'format' in toolCall;
+}
 
 export type AnthropicReasoning = ({ type: 'thinking'; thinking: any; signature: string; } | { type: 'redacted_thinking', data: any })
 

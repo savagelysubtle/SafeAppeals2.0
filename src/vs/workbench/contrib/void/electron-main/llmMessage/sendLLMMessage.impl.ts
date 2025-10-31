@@ -6,20 +6,21 @@
 // disable foreign import complaints
 /* eslint-disable */
 import Anthropic from '@anthropic-ai/sdk';
-import { Ollama } from 'ollama';
-import OpenAI, { ClientOptions, AzureOpenAI } from 'openai';
+import { FunctionDeclaration, Tool as GeminiTool, GoogleGenAI, Schema, ThinkingConfig, Type } from '@google/genai';
 import { MistralCore } from '@mistralai/mistralai/core.js';
 import { fimComplete } from '@mistralai/mistralai/funcs/fimComplete.js';
-import { Tool as GeminiTool, FunctionDeclaration, GoogleGenAI, ThinkingConfig, Schema, Type } from '@google/genai';
-import { GoogleAuth } from 'google-auth-library'
+import { GoogleAuth } from 'google-auth-library';
+import { Ollama } from 'ollama';
+import OpenAI, { AzureOpenAI, ClientOptions } from 'openai';
 /* eslint-enable */
 
+import { generateUuid } from '../../../../../base/common/uuid.js';
+import { defaultProviderSettings, getModelCapabilities, getProviderCapabilities, getReservedOutputTokenSpace, getSendableReasoningInfo } from '../../common/modelCapabilities.js';
+import { availableTools, InternalToolInfo } from '../../common/prompt/prompts.js';
 import { AnthropicLLMChatMessage, GeminiLLMChatMessage, LLMChatMessage, LLMFIMMessage, ModelListParams, OllamaModelResponse, OnError, OnFinalMessage, OnText, RawToolCallObj, RawToolParamsObj } from '../../common/sendLLMMessageTypes.js';
 import { ChatMode, displayInfoOfProviderName, ModelSelectionOptions, OverridesOfModel, ProviderName, SettingsOfProvider } from '../../common/voidSettingsTypes.js';
-import { getSendableReasoningInfo, getModelCapabilities, getProviderCapabilities, defaultProviderSettings, getReservedOutputTokenSpace } from '../../common/modelCapabilities.js';
 import { extractReasoningWrapper, extractXMLToolsWrapper } from './extractGrammar.js';
-import { availableTools, InternalToolInfo } from '../../common/prompt/prompts.js';
-import { generateUuid } from '../../../../../base/common/uuid.js';
+import { getToolFormatFromRoute, routeToolCalling } from './toolRouter.js';
 
 const getGoogleApiKey = async () => {
 	// module‑level singleton
@@ -278,8 +279,21 @@ const _sendOpenAICompatibleChat = async ({ messages, onText, onFinalMessage, onE
 		additionalOpenAIPayload,
 	} = getModelCapabilities(providerName, modelName_, overridesOfModel)
 
-	// FORCE XML tool parsing for all chat modes
-	const specialToolFormat = undefined
+	// Route tool calling: native vs XML fallback
+	const availableToolsForRouting = availableTools(chatMode, mcpTools)
+	const route = routeToolCalling(providerName, modelName_, overridesOfModel, availableToolsForRouting)
+
+	// Use the route decision for tool format
+	let specialToolFormat: 'anthropic-style' | 'openai-style' | undefined = getToolFormatFromRoute(route)
+
+	const potentialTools = openAITools(chatMode, mcpTools)
+
+	console.log('[_sendOpenAICompatibleChat] Tool calling decision:', {
+		chatMode,
+		route,
+		specialToolFormat,
+		toolsAvailable: availableToolsForRouting?.length ?? 0
+	})
 
 	const { providerReasoningIOSettings } = getProviderCapabilities(providerName)
 
@@ -292,8 +306,7 @@ const _sendOpenAICompatibleChat = async ({ messages, onText, onFinalMessage, onE
 		...additionalOpenAIPayload
 	}
 
-	// tools
-	const potentialTools = openAITools(chatMode, mcpTools)
+	// tools (potentialTools already computed above for routing)
 	const nativeToolsObj = potentialTools && specialToolFormat === 'openai-style' ?
 		{ tools: potentialTools } as const
 		: {}
@@ -464,21 +477,33 @@ const sendAnthropicChat = async ({ messages, providerName, onText, onFinalMessag
 		specialToolFormat: _unused_specialToolFormat,
 	} = getModelCapabilities(providerName, modelName_, overridesOfModel)
 
-	// FORCE XML tool parsing for all chat modes
-	const specialToolFormat = undefined
+	// Route tool calling: native vs XML fallback
+	const availableToolsForRouting = availableTools(chatMode, mcpTools)
+	const route = routeToolCalling(providerName, modelName_, overridesOfModel, availableToolsForRouting)
+
+	// Use the route decision for tool format
+	let specialToolFormat: 'anthropic-style' | 'openai-style' | undefined = getToolFormatFromRoute(route)
+
+	const potentialTools = anthropicTools(chatMode, mcpTools)
+
+	console.log('[sendAnthropicChat] Tool calling decision:', {
+		chatMode,
+		route,
+		specialToolFormat,
+		toolsAvailable: availableToolsForRouting?.length ?? 0
+	})
 
 	const thisConfig = settingsOfProvider.anthropic
 	const { providerReasoningIOSettings } = getProviderCapabilities(providerName)
 
 	// reasoning
-	const reasoningInfo = getSendableReasoningInfo('Chat', providerName, modelName_, modelSelectionOptions, overridesOfModel) // user's modelName_ here
+	const reasoningInfo = getSendableReasoningInfo('Chat', providerName, modelName_, modelSelectionOptions, overridesOfModel)
 	const includeInPayload = providerReasoningIOSettings?.input?.includeInPayload?.(reasoningInfo) || {}
 
 	// anthropic-specific - max tokens
 	const maxTokens = getReservedOutputTokenSpace(providerName, modelName_, { isReasoningEnabled: !!reasoningInfo?.isReasoningEnabled, overridesOfModel })
 
-	// tools
-	const potentialTools = anthropicTools(chatMode, mcpTools)
+	// tools (potentialTools already computed above for routing)
 	const nativeToolsObj = potentialTools && specialToolFormat === 'anthropic-style' ?
 		{ tools: potentialTools, tool_choice: { type: 'auto' } } as const
 		: {}
@@ -750,8 +775,12 @@ const sendGeminiChat = async ({
 		// reasoningCapabilities,
 	} = getModelCapabilities(providerName, modelName_, overridesOfModel)
 
-	// FORCE XML tool parsing for all chat modes
-	const specialToolFormat = undefined
+	// Route tool calling: native vs XML fallback
+	const availableToolsForRouting = availableTools(chatMode, mcpTools)
+	const route = routeToolCalling(providerName, modelName_, overridesOfModel, availableToolsForRouting)
+
+	// Use the route decision for tool format (Gemini native tools not yet supported, will use XML)
+	const specialToolFormat: 'gemini-style' | undefined = getToolFormatFromRoute(route) as any
 
 	// const { providerReasoningIOSettings } = getProviderCapabilities(providerName)
 
