@@ -400,8 +400,9 @@ export function configureFlushOnWrite(enabled: boolean): void {
 //
 // See https://github.com/nodejs/node/blob/v5.10.0/lib/fs.js#L1194
 function doWriteFileAndFlush(path: string, data: string | Buffer | Uint8Array, options: IEnsuredWriteFileOptions, callback: (error: Error | null) => void): void {
+	const writeData = typeof data === 'string' ? data : data as Uint8Array<ArrayBuffer>;
 	if (!canFlush) {
-		return fs.writeFile(path, data, { mode: options.mode, flag: options.flag }, callback);
+		return fs.writeFile(path, writeData, { mode: options.mode, flag: options.flag }, callback);
 	}
 
 	// Open the file with same flags and mode as fs.writeFile()
@@ -411,7 +412,7 @@ function doWriteFileAndFlush(path: string, data: string | Buffer | Uint8Array, o
 		}
 
 		// It is valid to pass a fd handle to fs.writeFile() and this will keep the handle open!
-		fs.writeFile(fd, data, writeError => {
+		fs.writeFile(fd, writeData, writeError => {
 			if (writeError) {
 				return fs.close(fd, () => callback(writeError)); // still need to close the handle on error!
 			}
@@ -442,7 +443,7 @@ export function writeFileSync(path: string, data: string | Buffer, options?: IWr
 	const ensuredOptions = ensureWriteOptions(options);
 
 	if (!canFlush) {
-		return fs.writeFileSync(path, data, { mode: ensuredOptions.mode, flag: ensuredOptions.flag });
+		return fs.writeFileSync(path, typeof data === 'string' ? data : data as Uint8Array<ArrayBuffer>, { mode: ensuredOptions.mode, flag: ensuredOptions.flag });
 	}
 
 	// Open the file with same flags and mode as fs.writeFile()
@@ -451,7 +452,7 @@ export function writeFileSync(path: string, data: string | Buffer, options?: IWr
 	try {
 
 		// It is valid to pass a fd handle to fs.writeFile() and this will keep the handle open!
-		fs.writeFileSync(fd, data);
+		fs.writeFileSync(fd, typeof data === 'string' ? data : data as Uint8Array<ArrayBuffer>);
 
 		// Flush contents (not metadata) of the file to disk
 		try {
