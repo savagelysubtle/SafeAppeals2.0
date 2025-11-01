@@ -8,7 +8,7 @@ const path = require('path');
 const os = require('os');
 const cp = require('child_process');
 const { dirs } = require('./dirs');
-const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm';
+const npm = process.platform === 'win32' ? 'bun' : 'bun';
 const root = path.dirname(path.dirname(__dirname));
 
 function log(dir, message) {
@@ -98,19 +98,23 @@ function setNpmrcConfig(dir, env) {
 }
 
 function removeParcelWatcherPrebuild(dir) {
-	const parcelModuleFolder = path.join(root, dir, 'node_modules', '@parcel');
-	if (!fs.existsSync(parcelModuleFolder)) {
-		return;
-	}
+	// Disabled: Removing parcel watcher breaks watch functionality on Windows
+	// The prebuilt modules work correctly and should not be removed
+	return;
 
-	const parcelModules = fs.readdirSync(parcelModuleFolder);
-	for (const moduleName of parcelModules) {
-		if (moduleName.startsWith('watcher-')) {
-			const modulePath = path.join(parcelModuleFolder, moduleName);
-			fs.rmSync(modulePath, { recursive: true, force: true });
-			log(dir, `Removed @parcel/watcher prebuilt module ${modulePath}`);
-		}
-	}
+	// const parcelModuleFolder = path.join(root, dir, 'node_modules', '@parcel');
+	// if (!fs.existsSync(parcelModuleFolder)) {
+	// 	return;
+	// }
+
+	// const parcelModules = fs.readdirSync(parcelModuleFolder);
+	// for (const moduleName of parcelModules) {
+	// 	if (moduleName.startsWith('watcher-')) {
+	// 		const modulePath = path.join(parcelModuleFolder, moduleName);
+	// 		fs.rmSync(modulePath, { recursive: true, force: true });
+	// 		log(dir, `Removed @parcel/watcher prebuilt module ${modulePath}`);
+	// 	}
+	// }
 }
 
 for (let dir of dirs) {

@@ -42,14 +42,14 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.CancellationToken = void 0;
 exports.createTypeScriptBuilder = createTypeScriptBuilder;
+const colors = __importStar(require("ansi-colors"));
+const crypto_1 = __importDefault(require("crypto"));
 const fs_1 = __importDefault(require("fs"));
 const path_1 = __importDefault(require("path"));
-const crypto_1 = __importDefault(require("crypto"));
-const utils = __importStar(require("./utils"));
-const ansi_colors_1 = __importDefault(require("ansi-colors"));
-const typescript_1 = __importDefault(require("typescript"));
-const vinyl_1 = __importDefault(require("vinyl"));
 const source_map_1 = require("source-map");
+const ts = __importStar(require("typescript"));
+const vinyl_1 = __importDefault(require("vinyl"));
+const utils = __importStar(require("./utils"));
 var CancellationToken;
 (function (CancellationToken) {
     CancellationToken.None = {
@@ -64,14 +64,14 @@ function createTypeScriptBuilder(config, projectFile, cmd) {
     const host = new LanguageServiceHost(cmd, projectFile, _log);
     const outHost = new LanguageServiceHost({ ...cmd, options: { ...cmd.options, sourceRoot: cmd.options.outDir } }, cmd.options.outDir ?? '', _log);
     let lastCycleCheckVersion;
-    const service = typescript_1.default.createLanguageService(host, typescript_1.default.createDocumentRegistry());
+    const service = ts.createLanguageService(host, ts.createDocumentRegistry());
     const lastBuildVersion = Object.create(null);
     const lastDtsHash = Object.create(null);
     const userWantsDeclarations = cmd.options.declaration;
     let oldErrors = Object.create(null);
     let headUsed = process.memoryUsage().heapUsed;
     let emitSourceMapsInStream = true;
-    // always emit declaraction files
+    // always emit declaration files
     host.getCompilationSettings().declaration = true;
     function file(file) {
         // support gulp-sourcemaps
@@ -396,7 +396,7 @@ function createTypeScriptBuilder(config, projectFile, cmd) {
             delete oldErrors[projectFile];
             if (oneCycle) {
                 const cycleError = {
-                    category: typescript_1.default.DiagnosticCategory.Error,
+                    category: ts.DiagnosticCategory.Error,
                     code: 1,
                     file: undefined,
                     start: undefined,
@@ -420,7 +420,7 @@ function createTypeScriptBuilder(config, projectFile, cmd) {
             // print stats
             const headNow = process.memoryUsage().heapUsed;
             const MB = 1024 * 1024;
-            _log('[tsb]', `time:  ${ansi_colors_1.default.yellow((Date.now() - t1) + 'ms')} + \nmem:  ${ansi_colors_1.default.cyan(Math.ceil(headNow / MB) + 'MB')} ${ansi_colors_1.default.bgcyan('delta: ' + Math.ceil((headNow - headUsed) / MB))}`);
+            _log('[tsb]', `time:  ${colors.yellow((Date.now() - t1) + 'ms')} + \nmem:  ${colors.cyan(Math.ceil(headNow / MB) + 'MB')} ${colors.bgCyan('delta: ' + Math.ceil((headNow - headUsed) / MB))}`);
             headUsed = headNow;
         });
     }
@@ -431,8 +431,6 @@ function createTypeScriptBuilder(config, projectFile, cmd) {
     };
 }
 class ScriptSnapshot {
-    _text;
-    _mtime;
     constructor(text, mtime) {
         this._text = text;
         this._mtime = mtime;
@@ -451,8 +449,6 @@ class ScriptSnapshot {
     }
 }
 class VinylScriptSnapshot extends ScriptSnapshot {
-    _base;
-    sourceMap;
     constructor(file) {
         super(file.contents.toString(), file.stat.mtime);
         this._base = file.base;
@@ -463,20 +459,15 @@ class VinylScriptSnapshot extends ScriptSnapshot {
     }
 }
 class LanguageServiceHost {
-    _cmdLine;
-    _projectPath;
-    _log;
-    _snapshots;
-    _filesInProject;
-    _filesAdded;
-    _dependencies;
-    _dependenciesRecomputeList;
-    _fileNameToDeclaredModule;
-    _projectVersion;
     constructor(_cmdLine, _projectPath, _log) {
         this._cmdLine = _cmdLine;
         this._projectPath = _projectPath;
         this._log = _log;
+        this.directoryExists = ts.sys.directoryExists;
+        this.getDirectories = ts.sys.getDirectories;
+        this.fileExists = ts.sys.fileExists;
+        this.readFile = ts.sys.readFile;
+        this.readDirectory = ts.sys.readDirectory;
         this._snapshots = Object.create(null);
         this._filesInProject = new Set(_cmdLine.fileNames);
         this._filesAdded = new Set();
@@ -531,7 +522,6 @@ class LanguageServiceHost {
         }
         return result;
     }
-    static _declareModule = /declare\s+module\s+('|")(.+)\1/g;
     addScriptSnapshot(filename, snapshot) {
         this._projectVersion++;
         filename = normalize(filename);
@@ -569,13 +559,8 @@ class LanguageServiceHost {
         return path_1.default.dirname(this._projectPath);
     }
     getDefaultLibFileName(options) {
-        return typescript_1.default.getDefaultLibFilePath(options);
+        return ts.getDefaultLibFilePath(options);
     }
-    directoryExists = typescript_1.default.sys.directoryExists;
-    getDirectories = typescript_1.default.sys.getDirectories;
-    fileExists = typescript_1.default.sys.fileExists;
-    readFile = typescript_1.default.sys.readFile;
-    readDirectory = typescript_1.default.sys.readDirectory;
     // ---- dependency management
     collectDependents(filename, target) {
         while (this._dependenciesRecomputeList.length) {
@@ -607,7 +592,7 @@ class LanguageServiceHost {
             this._log('processFile', `Missing snapshot for: ${filename}`);
             return;
         }
-        const info = typescript_1.default.preProcessFile(snapshot.getText(0, snapshot.getLength()), true);
+        const info = ts.preProcessFile(snapshot.getText(0, snapshot.getLength()), true);
         // (0) clear out old dependencies
         this._dependencies.resetNode(filename);
         // (1) ///-references
@@ -655,4 +640,4 @@ class LanguageServiceHost {
         });
     }
 }
-//# sourceMappingURL=builder.js.map
+LanguageServiceHost._declareModule = /declare\s+module\s+('|")(.+)\1/g;
