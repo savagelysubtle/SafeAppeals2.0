@@ -1,0 +1,55 @@
+/*---------------------------------------------------------------------------------------------
+ *  Copyright 2025 Glass Devtools, Inc. All rights reserved.
+ *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
+ *--------------------------------------------------------------------------------------*/
+
+const path = require('path');
+
+module.exports = {
+	mode: 'production',
+	entry: {
+		'tiptapDocxBundle': './src/vs/workbench/contrib/void/browser/documentViewers/docxViewer/media/tiptapBundleEntry.js'
+	},
+	output: {
+		globalObject: 'self',
+		filename: '[name].js',
+		path: path.resolve(__dirname, 'src/vs/workbench/contrib/void/browser/documentViewers/docxViewer/media'),
+		library: {
+			name: 'TiptapDocx',
+			type: 'window'
+		}
+	},
+	resolve: {
+		extensions: ['.ts', '.js'],
+		fallback: {
+			"buffer": false,
+			"stream": false,
+			"path": false,
+			"fs": false
+		}
+	},
+	module: {
+		rules: [
+			{
+				test: /\.ts$/,
+				use: 'ts-loader',
+				exclude: /node_modules/
+			}
+		]
+	},
+	externals: {
+		// These are loaded via CDN
+		'@tiptap/core': 'root Tiptap',
+		'@tiptap/starter-kit': 'root TiptapStarterKit'
+	},
+	optimization: {
+		minimize: true
+	},
+	stats: {
+		all: false,
+		errors: true,
+		warnings: true,
+		errorDetails: true
+	}
+};
+
