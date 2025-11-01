@@ -15,6 +15,7 @@ import { AutoFetcher } from './autofetch';
 import { GitBranchProtectionProvider, IBranchProtectionProviderRegistry } from './branchProtection';
 import { debounce, memoize, throttle } from './decorators';
 import { Repository as BaseRepository, BlameInformation, Commit, GitError, LogFileOptions, LsTreeElement, PullOptions, RefQuery, Stash, Submodule } from './git';
+import { ISourceControlHistoryItemDetailsProviderRegistry } from './historyItemDetailsProvider';
 import { GitHistoryProvider } from './historyProvider';
 import { Operation, OperationKind, OperationManager, OperationResult } from './operation';
 import { CommitCommandsCenter, IPostCommitCommandsProviderRegistry } from './postCommitCommands';
@@ -24,7 +25,6 @@ import { StatusBarCommands } from './statusbar';
 import { toGitUri } from './uri';
 import { anyEvent, combinedDisposable, debounceEvent, dispose, EmptyDisposable, eventToPromise, filterEvent, find, getCommitShortHash, IDisposable, isDescendant, isLinuxSnap, isRemote, Limiter, onceEvent, pathEquals, relativePath } from './util';
 import { IFileWatcher, watch } from './watch';
-import { ISourceControlHistoryItemDetailsProviderRegistry } from './historyItemDetailsProvider';
 
 const timeout = (millis: number) => new Promise(c => setTimeout(c, millis));
 
@@ -1974,12 +1974,12 @@ export class Repository implements Disposable {
 		return await this.run(Operation.Show, async () => {
 			try {
 				const content = await this.repository.buffer(ref, filePath);
-				return await workspace.decode(content, Uri.file(filePath));
+				return await workspace.decode(content as Uint8Array<ArrayBuffer>, Uri.file(filePath));
 			} catch (err) {
 				if (err.gitErrorCode === GitErrorCodes.WrongCase) {
 					const gitFilePath = await this.repository.getGitFilePath(ref, filePath);
 					const content = await this.repository.buffer(ref, gitFilePath);
-					return await workspace.decode(content, Uri.file(filePath));
+					return await workspace.decode(content as Uint8Array<ArrayBuffer>, Uri.file(filePath));
 				}
 
 				throw err;

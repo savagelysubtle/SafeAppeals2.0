@@ -1,0 +1,95 @@
+{
+  "lockfileVersion": 1,
+  "workspaces": {
+    "": {
+      "name": "git",
+      "dependencies": {
+        "@joaomoreno/unique-names-generator": "^5.2.0",
+        "@vscode/extension-telemetry": "^0.9.8",
+        "byline": "^5.0.0",
+        "file-type": "16.5.4",
+        "picomatch": "2.3.1",
+        "vscode-uri": "^2.0.0",
+        "which": "4.0.0",
+      },
+      "devDependencies": {
+        "@types/byline": "4.2.31",
+        "@types/mocha": "^9.1.1",
+        "@types/node": "20.x",
+        "@types/picomatch": "2.3.0",
+        "@types/which": "3.0.0",
+      },
+    },
+  },
+  "packages": {
+    "@joaomoreno/unique-names-generator": ["@joaomoreno/unique-names-generator@5.2.0", "", {}, "sha512-JEh3qZ85Z6syFvQlhRGRyTPI1M5VticiiP8Xl8EV0XfyfI4Mwzd6Zw28BBrEgUJCYv/cpKCQClVj3J8Tn0KFiA=="],
+
+    "@microsoft/1ds-core-js": ["@microsoft/1ds-core-js@4.3.4", "", { "dependencies": { "@microsoft/applicationinsights-core-js": "3.3.4", "@microsoft/applicationinsights-shims": "3.0.1", "@microsoft/dynamicproto-js": "^2.0.3", "@nevware21/ts-async": ">= 0.5.2 < 2.x", "@nevware21/ts-utils": ">= 0.11.3 < 2.x" } }, "sha512-3gbDUQgAO8EoyQTNcAEkxpuPnioC0May13P1l1l0NKZ128L9Ts/sj8QsfwCRTjHz0HThlA+4FptcAJXNYUy3rg=="],
+
+    "@microsoft/1ds-post-js": ["@microsoft/1ds-post-js@4.3.4", "", { "dependencies": { "@microsoft/1ds-core-js": "4.3.4", "@microsoft/applicationinsights-shims": "3.0.1", "@microsoft/dynamicproto-js": "^2.0.3", "@nevware21/ts-async": ">= 0.5.2 < 2.x", "@nevware21/ts-utils": ">= 0.11.3 < 2.x" } }, "sha512-nlKjWricDj0Tn68Dt0P8lX9a+X7LYrqJ6/iSfQwMfDhRIGLqW+wxx8gxS+iGWC/oc8zMQAeiZaemUpCwQcwpRQ=="],
+
+    "@microsoft/applicationinsights-channel-js": ["@microsoft/applicationinsights-channel-js@3.3.4", "", { "dependencies": { "@microsoft/applicationinsights-common": "3.3.4", "@microsoft/applicationinsights-core-js": "3.3.4", "@microsoft/applicationinsights-shims": "3.0.1", "@microsoft/dynamicproto-js": "^2.0.3", "@nevware21/ts-async": ">= 0.5.2 < 2.x", "@nevware21/ts-utils": ">= 0.11.3 < 2.x" } }, "sha512-Z4nrxYwGKP9iyrYtm7iPQXVOFy4FsEsX0nDKkAi96Qpgw+vEh6NH4ORxMMuES0EollBQ3faJyvYCwckuCVIj0g=="],
+
+    "@microsoft/applicationinsights-common": ["@microsoft/applicationinsights-common@3.3.4", "", { "dependencies": { "@microsoft/applicationinsights-core-js": "3.3.4", "@microsoft/applicationinsights-shims": "3.0.1", "@microsoft/dynamicproto-js": "^2.0.3", "@nevware21/ts-utils": ">= 0.11.3 < 2.x" } }, "sha512-4ms16MlIvcP4WiUPqopifNxcWCcrXQJ2ADAK/75uok2mNQe6ZNRsqb/P+pvhUxc8A5HRlvoXPP1ptDSN5Girgw=="],
+
+    "@microsoft/applicationinsights-core-js": ["@microsoft/applicationinsights-core-js@3.3.4", "", { "dependencies": { "@microsoft/applicationinsights-shims": "3.0.1", "@microsoft/dynamicproto-js": "^2.0.3", "@nevware21/ts-async": ">= 0.5.2 < 2.x", "@nevware21/ts-utils": ">= 0.11.3 < 2.x" } }, "sha512-MummANF0mgKIkdvVvfmHQTBliK114IZLRhTL0X0Ep+zjDwWMHqYZgew0nlFKAl6ggu42abPZFK5afpE7qjtYJA=="],
+
+    "@microsoft/applicationinsights-shims": ["@microsoft/applicationinsights-shims@3.0.1", "", { "dependencies": { "@nevware21/ts-utils": ">= 0.9.4 < 2.x" } }, "sha512-DKwboF47H1nb33rSUfjqI6ryX29v+2QWcTrRvcQDA32AZr5Ilkr7whOOSsD1aBzwqX0RJEIP1Z81jfE3NBm/Lg=="],
+
+    "@microsoft/applicationinsights-web-basic": ["@microsoft/applicationinsights-web-basic@3.3.4", "", { "dependencies": { "@microsoft/applicationinsights-channel-js": "3.3.4", "@microsoft/applicationinsights-common": "3.3.4", "@microsoft/applicationinsights-core-js": "3.3.4", "@microsoft/applicationinsights-shims": "3.0.1", "@microsoft/dynamicproto-js": "^2.0.3", "@nevware21/ts-async": ">= 0.5.2 < 2.x", "@nevware21/ts-utils": ">= 0.11.3 < 2.x" } }, "sha512-OpEPXr8vU/t/M8T9jvWJzJx/pCyygIiR1nGM/2PTde0wn7anl71Gxl5fWol7K/WwFEORNjkL3CEyWOyDc+28AA=="],
+
+    "@microsoft/dynamicproto-js": ["@microsoft/dynamicproto-js@2.0.3", "", { "dependencies": { "@nevware21/ts-utils": ">= 0.10.4 < 2.x" } }, "sha512-JTWTU80rMy3mdxOjjpaiDQsTLZ6YSGGqsjURsY6AUQtIj0udlF/jYmhdLZu8693ZIC0T1IwYnFa0+QeiMnziBA=="],
+
+    "@nevware21/ts-async": ["@nevware21/ts-async@0.5.4", "", { "dependencies": { "@nevware21/ts-utils": ">= 0.11.6 < 2.x" } }, "sha512-IBTyj29GwGlxfzXw2NPnzty+w0Adx61Eze1/lknH/XIVdxtF9UnOpk76tnrHXWa6j84a1RR9hsOcHQPFv9qJjA=="],
+
+    "@nevware21/ts-utils": ["@nevware21/ts-utils@0.11.6", "", {}, "sha512-OUUJTh3fnaUSzg9DEHgv3d7jC+DnPL65mIO7RaR+jWve7+MmcgIvF79gY97DPQ4frH+IpNR78YAYd/dW4gK3kg=="],
+
+    "@tokenizer/token": ["@tokenizer/token@0.3.0", "", {}, "sha512-OvjF+z51L3ov0OyAU0duzsYuvO01PH7x4t6DJx+guahgTnBHkhJdG7soQeTSFLWN3efnHyibZ4Z8l2EuWwJN3A=="],
+
+    "@types/byline": ["@types/byline@4.2.31", "", { "dependencies": { "@types/node": "*" } }, ""],
+
+    "@types/mocha": ["@types/mocha@9.1.1", "", {}, "sha512-Z61JK7DKDtdKTWwLeElSEBcWGRLY8g95ic5FoQqI9CMx0ns/Ghep3B4DfcEimiKMvtamNVULVNKEsiwV3aQmXw=="],
+
+    "@types/node": ["@types/node@20.11.24", "", { "dependencies": { "undici-types": "~5.26.4" } }, "sha512-Kza43ewS3xoLgCEpQrsT+xRo/EJej1y0kVYGiLFE1NEODXGzTfwiC6tXTLMQskn1X4/Rjlh0MQUvx9W+L9long=="],
+
+    "@types/picomatch": ["@types/picomatch@2.3.0", "", {}, "sha512-O397rnSS9iQI4OirieAtsDqvCj4+3eY1J+EPdNTKuHuRWIfUoGyzX294o8C4KJYaLqgSrd2o60c5EqCU8Zv02g=="],
+
+    "@types/which": ["@types/which@3.0.0", "", {}, "sha512-ASCxdbsrwNfSMXALlC3Decif9rwDMu+80KGp5zI2RLRotfMsTv7fHL8W8VDp24wymzDyIFudhUeSCugrgRFfHQ=="],
+
+    "@vscode/extension-telemetry": ["@vscode/extension-telemetry@0.9.8", "", { "dependencies": { "@microsoft/1ds-core-js": "^4.3.4", "@microsoft/1ds-post-js": "^4.3.4", "@microsoft/applicationinsights-web-basic": "^3.3.4" } }, "sha512-7YcKoUvmHlIB8QYCE4FNzt3ErHi9gQPhdCM3ZWtpw1bxPT0I+lMdx52KHlzTNoJzQ2NvMX7HyzyDwBEiMgTrWQ=="],
+
+    "byline": ["byline@5.0.0", "", {}, ""],
+
+    "file-type": ["file-type@16.5.4", "", { "dependencies": { "readable-web-to-node-stream": "^3.0.0", "strtok3": "^6.2.4", "token-types": "^4.1.1" } }, "sha512-/yFHK0aGjFEgDJjEKP0pWCplsPFPhwyfwevf/pVxiN0tmE4L9LmwWxWukdJSHdoCli4VgQLehjJtwQBnqmsKcw=="],
+
+    "ieee754": ["ieee754@1.2.1", "", {}, "sha512-dcyqhDvX1C46lXZcVqCpK+FtMRQVdIMN6/Df5js2zouUsqG7I6sFxitIC+7KYK29KdXOLHdu9zL4sFnoVQnqaA=="],
+
+    "inherits": ["inherits@2.0.4", "", {}, "sha512-k/vGaX4/Yla3WzyMCvTQOXYeIHvqOKtnqBduzTHpzpQZzAskKMhZ2K+EnBiSM9zGSoIFeMpXKxa4dYeZIQqewQ=="],
+
+    "isexe": ["isexe@3.1.1", "", {}, "sha512-LpB/54B+/2J5hqQ7imZHfdU31OlgQqx7ZicVlkm9kzg9/w8GKLEcFfJl/t7DCEDueOyBAD6zCCwTO6Fzs0NoEQ=="],
+
+    "peek-readable": ["peek-readable@4.1.0", "", {}, "sha512-ZI3LnwUv5nOGbQzD9c2iDG6toheuXSZP5esSHBjopsXH4dg19soufvpUGA3uohi5anFtGb2lhAVdHzH6R/Evvg=="],
+
+    "picomatch": ["picomatch@2.3.1", "", {}, "sha512-JU3teHTNjmE2VCGFzuY8EXzCDVwEqB2a8fsIvwaStHhAWJEeVd1o1QD80CU6+ZdEXXSLbSsuLwJjkCBWqRQUVA=="],
+
+    "readable-stream": ["readable-stream@3.6.0", "", { "dependencies": { "inherits": "^2.0.3", "string_decoder": "^1.1.1", "util-deprecate": "^1.0.1" } }, "sha512-BViHy7LKeTz4oNnkcLJ+lVSL6vpiFeX6/d3oSH8zCW7UxP2onchk+vTGB143xuFjHS3deTgkKoXXymXqymiIdA=="],
+
+    "readable-web-to-node-stream": ["readable-web-to-node-stream@3.0.2", "", { "dependencies": { "readable-stream": "^3.6.0" } }, "sha512-ePeK6cc1EcKLEhJFt/AebMCLL+GgSKhuygrZ/GLaKZYEecIgIECf4UaUuaByiGtzckwR4ain9VzUh95T1exYGw=="],
+
+    "safe-buffer": ["safe-buffer@5.2.1", "", {}, "sha512-rp3So07KcdmmKbGvgaNxQSJr7bGVSVk5S9Eq1F+ppbRo70+YeaDxkw5Dd8NPN+GD6bjnYm2VuPuCXmpuYvmCXQ=="],
+
+    "string_decoder": ["string_decoder@1.3.0", "", { "dependencies": { "safe-buffer": "~5.2.0" } }, "sha512-hkRX8U1WjJFd8LsDJ2yQ/wWWxaopEsABU1XfkM8A+j0+85JAGppt16cr1Whg6KIbb4okU6Mql6BOj+uup/wKeA=="],
+
+    "strtok3": ["strtok3@6.3.0", "", { "dependencies": { "@tokenizer/token": "^0.3.0", "peek-readable": "^4.1.0" } }, "sha512-fZtbhtvI9I48xDSywd/somNqgUHl2L2cstmXCCif0itOf96jeW18MBSyrLuNicYQVkvpOxkZtkzujiTJ9LW5Jw=="],
+
+    "token-types": ["token-types@4.2.0", "", { "dependencies": { "@tokenizer/token": "^0.3.0", "ieee754": "^1.2.1" } }, "sha512-P0rrp4wUpefLncNamWIef62J0v0kQR/GfDVji9WKY7GDCWy5YbVSrKUTam07iWPZQGy0zWNOfstYTykMmPNR7w=="],
+
+    "undici-types": ["undici-types@5.26.5", "", {}, "sha512-JlCMO+ehdEIKqlFxk6IfVoAUVmgz7cU7zD/h9XZ0qzeosSHmUJVOzSQvvYSYWXkFXC+IfLKSIffhv0sVZup6pA=="],
+
+    "util-deprecate": ["util-deprecate@1.0.2", "", {}, "sha512-EPD5q1uXyFxJpCrLnCc1nHnq3gOa6DZBocAIiI2TaSCA7VCJ1UJDMagCzIkXNsUYfD1daK//LTEQ8xiIbrHtcw=="],
+
+    "vscode-uri": ["vscode-uri@2.0.0", "", {}, "sha512-lWXWofDSYD8r/TIyu64MdwB4FaSirQ608PP/TzUyslyOeHGwQ0eTHUZeJrK1ILOmwUHaJtV693m2JoUYroUDpw=="],
+
+    "which": ["which@4.0.0", "", { "dependencies": { "isexe": "^3.1.1" }, "bin": { "node-which": "bin/which.js" } }, "sha512-GlaYyEb07DPxYCKhKzplCWBJtvxZcZMrL+4UkrTSJHHPyZU4mYYTv3qaOe77H7EODLSSopAUFAc6W8U4yqvscg=="],
+  }
+}

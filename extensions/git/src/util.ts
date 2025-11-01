@@ -3,11 +3,11 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { Event, Disposable, EventEmitter, SourceControlHistoryItemRef, l10n, workspace, Uri, DiagnosticSeverity, env } from 'vscode';
-import { dirname, sep, relative } from 'path';
-import { Readable } from 'stream';
-import { promises as fs, createReadStream } from 'fs';
 import byline from 'byline';
+import { createReadStream, promises as fs } from 'fs';
+import { dirname, relative, sep } from 'path';
+import { Readable } from 'stream';
+import { DiagnosticSeverity, Disposable, Event, EventEmitter, SourceControlHistoryItemRef, Uri, env, l10n, workspace } from 'vscode';
 
 export const isMacintosh = process.platform === 'darwin';
 export const isWindows = process.platform === 'win32';
@@ -232,7 +232,7 @@ export function readBytes(stream: Readable, bytes: number): Promise<Buffer> {
 
 		stream.on('data', (data: Buffer) => {
 			const bytesToRead = Math.min(bytes - bytesRead, data.length);
-			data.copy(buffer, bytesRead, 0, bytesToRead);
+			data.copy(buffer as Uint8Array<ArrayBuffer>, bytesRead, 0, bytesToRead);
 			bytesRead += bytesToRead;
 
 			if (bytesRead === bytes) {

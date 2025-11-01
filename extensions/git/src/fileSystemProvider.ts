@@ -3,12 +3,12 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { workspace, Uri, Disposable, Event, EventEmitter, window, FileSystemProvider, FileChangeEvent, FileStat, FileType, FileChangeType, FileSystemError, LogOutputChannel } from 'vscode';
+import { Disposable, Event, EventEmitter, FileChangeEvent, FileChangeType, FileStat, FileSystemError, FileSystemProvider, FileType, LogOutputChannel, Uri, window, workspace } from 'vscode';
 import { debounce, throttle } from './decorators';
-import { fromGitUri, toGitUri } from './uri';
 import { Model, ModelChangeEvent, OriginalResourceChangeEvent } from './model';
-import { filterEvent, eventToPromise, isDescendant, pathEquals, EmptyDisposable } from './util';
 import { Repository } from './repository';
+import { fromGitUri, toGitUri } from './uri';
+import { EmptyDisposable, eventToPromise, filterEvent, isDescendant, pathEquals } from './util';
 
 interface CacheRow {
 	uri: Uri;
@@ -203,7 +203,8 @@ export class GitFileSystemProvider implements FileSystemProvider {
 		this.cache.set(uri.toString(), cacheValue);
 
 		try {
-			return await repository.buffer(sanitizeRef(ref, path, submoduleOf, repository), path);
+			const buffer = await repository.buffer(sanitizeRef(ref, path, submoduleOf, repository), path);
+			return Uint8Array.from(buffer);
 		} catch {
 			// Empty tree
 			if (ref === await repository.getEmptyTree()) {

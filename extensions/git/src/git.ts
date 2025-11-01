@@ -3,19 +3,19 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { promises as fs, exists, realpath } from 'fs';
-import * as path from 'path';
-import * as os from 'os';
+import * as byline from 'byline';
 import * as cp from 'child_process';
-import { fileURLToPath } from 'url';
-import which from 'which';
 import { EventEmitter } from 'events';
 import * as filetype from 'file-type';
-import { assign, groupBy, IDisposable, toDisposable, dispose, mkdirp, readBytes, detectUnicodeEncoding, Encoding, onceEvent, splitInChunks, Limiter, Versions, isWindows, pathEquals, isMacintosh, isDescendant, relativePath } from './util';
-import { CancellationError, CancellationToken, ConfigurationChangeEvent, LogOutputChannel, Progress, Uri, workspace } from 'vscode';
-import { Commit as ApiCommit, Ref, RefType, Branch, Remote, ForcePushMode, GitErrorCodes, LogOptions, Change, Status, CommitOptions, RefQuery as ApiRefQuery, InitOptions } from './api/git';
-import * as byline from 'byline';
+import { exists, promises as fs, realpath } from 'fs';
+import * as os from 'os';
+import * as path from 'path';
 import { StringDecoder } from 'string_decoder';
+import { fileURLToPath } from 'url';
+import { CancellationError, CancellationToken, ConfigurationChangeEvent, LogOutputChannel, Progress, Uri, workspace } from 'vscode';
+import which from 'which';
+import { Commit as ApiCommit, RefQuery as ApiRefQuery, Branch, Change, CommitOptions, ForcePushMode, GitErrorCodes, InitOptions, LogOptions, Ref, RefType, Remote, Status } from './api/git';
+import { assign, detectUnicodeEncoding, dispose, Encoding, groupBy, IDisposable, isDescendant, isMacintosh, isWindows, Limiter, mkdirp, onceEvent, pathEquals, readBytes, relativePath, splitInChunks, toDisposable, Versions } from './util';
 
 // https://github.com/microsoft/vscode/issues/65693
 const MAX_CLI_LENGTH = 30000;
@@ -77,7 +77,7 @@ function findSpecificGit(path: string, onValidate: (path: string) => boolean): P
 		const child = cp.spawn(path, ['--version']);
 		child.stdout.on('data', (b: Buffer) => buffers.push(b));
 		child.on('error', cpErrorHandler(e));
-		child.on('close', code => code ? e(new Error(`Not found. Code: ${code}`)) : c({ path, version: parseVersion(Buffer.concat(buffers).toString('utf8').trim()) }));
+		child.on('close', code => code ? e(new Error(`Not found. Code: ${code}`)) : c({ path, version: parseVersion(Buffer.concat(buffers as Uint8Array<ArrayBuffer>[]).toString('utf8').trim()) }));
 	});
 }
 
@@ -226,12 +226,12 @@ async function exec(child: cp.ChildProcess, cancellationToken?: CancellationToke
 		new Promise<Buffer>(c => {
 			const buffers: Buffer[] = [];
 			on(child.stdout!, 'data', (b: Buffer) => buffers.push(b));
-			once(child.stdout!, 'close', () => c(Buffer.concat(buffers)));
+			once(child.stdout!, 'close', () => c(Buffer.concat(buffers as Uint8Array<ArrayBuffer>[])));
 		}),
 		new Promise<string>(c => {
 			const buffers: Buffer[] = [];
 			on(child.stderr!, 'data', (b: Buffer) => buffers.push(b));
-			once(child.stderr!, 'close', () => c(Buffer.concat(buffers).toString('utf8')));
+			once(child.stderr!, 'close', () => c(Buffer.concat(buffers as Uint8Array<ArrayBuffer>[]).toString('utf8')));
 		})
 	]) as Promise<[number, Buffer, string]>;
 
