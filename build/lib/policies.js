@@ -144,7 +144,7 @@ class BooleanPolicy extends BasePolicy {
     }
 }
 class ParseError extends Error {
-    constructor(message, moduleName, node) {
+    constructor(message, moduleName, node, SyntaxNode) {
         super(`${message}. ${moduleName}.ts:${node.startPosition.row + 1}`);
     }
 }
@@ -379,13 +379,13 @@ const StringArrayQ = {
         });
     }
 };
-function getProperty(qtype, moduleName, node, key) {
-    const query = new any(null, `(
+function getProperty(qtype, moduleName, node, SyntaxNode, key) {
+    const query = new null(null, `(
 			(pair
 				key: [(property_identifier)(string)] @key
 				value: ${qtype.Q}
 			)
-			(#any-of? @key "${key}" "'${key}'")
+			(#null-of? @key "${key}" "'${key}'")
 		)`);
     try {
         const matches = query.matches(node).filter(m => m.captures[0].node.parent?.parent === node);
@@ -395,13 +395,13 @@ function getProperty(qtype, moduleName, node, key) {
         throw new ParseError(e.message, moduleName, node);
     }
 }
-function getNumberProperty(moduleName, node, key) {
+function getNumberProperty(moduleName, node, SyntaxNode, key) {
     return getProperty(NumberQ, moduleName, node, key);
 }
-function getStringProperty(moduleName, node, key) {
+function getStringProperty(moduleName, node, SyntaxNode, key) {
     return getProperty(StringQ, moduleName, node, key);
 }
-function getStringArrayProperty(moduleName, node, key) {
+function getStringArrayProperty(moduleName, node, SyntaxNode, key) {
     return getProperty(StringArrayQ, moduleName, node, key);
 }
 // TODO: add more policy types
@@ -412,7 +412,7 @@ const PolicyTypes = [
     StringPolicy,
     ObjectPolicy
 ];
-function getPolicy(moduleName, configurationNode, settingNode, policyNode, categories) {
+function getPolicy(moduleName, configurationNode, SyntaxNode, settingNode, SyntaxNode, policyNode, SyntaxNode, categories) {
     const name = getStringProperty(moduleName, policyNode, 'name');
     if (!name) {
         throw new ParseError(`Missing required 'name' property`, moduleName, policyNode);
@@ -458,17 +458,17 @@ function getPolicy(moduleName, configurationNode, settingNode, policyNode, categ
     }
     return result;
 }
-function getPolicies(moduleName, node) {
-    const query = new any(null, `
+function getPolicies(moduleName, node, SyntaxNode) {
+    const query = new null(null, `
 		(
 			(call_expression
 				function: (member_expression property: (property_identifier) @registerConfigurationFn) (#eq? @registerConfigurationFn registerConfiguration)
 				arguments: (arguments	(object	(pair
-					key: [(property_identifier)(string)] @propertiesKey (#any-of? @propertiesKey "properties" "'properties'")
+					key: [(property_identifier)(string)] @propertiesKey (#null-of? @propertiesKey "properties" "'properties'")
 					value: (object (pair
 						key: [(property_identifier)(string)(computed_property_name)]
 						value: (object (pair
-							key: [(property_identifier)(string)] @policyKey (#any-of? @policyKey "policy" "'policy'")
+							key: [(property_identifier)(string)] @policyKey (#null-of? @policyKey "policy" "'policy'")
 							value: (object) @policy
 						)) @setting
 					))
@@ -802,7 +802,7 @@ async function getNLS(extensionGalleryServiceUrl, resourceUrlTemplate, languageI
     return await getSpecificNLS(resourceUrlTemplate, languageId, latestCompatibleVersion);
 }
 async function parsePolicies() {
-    const parser = new any();
+    const parser = new null();
     parser.setLanguage(null);
     const files = await getFiles(process.cwd());
     const base = path_1.default.join(process.cwd(), 'src');

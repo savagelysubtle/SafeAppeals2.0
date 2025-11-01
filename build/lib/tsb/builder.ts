@@ -3,14 +3,14 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import * as colors from 'ansi-colors';
+import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
-import crypto from 'crypto';
-import * as utils from './utils';
-import colors from 'ansi-colors';
-import ts from 'typescript';
-import Vinyl from 'vinyl';
 import { RawSourceMap, SourceMapConsumer, SourceMapGenerator } from 'source-map';
+import * as ts from 'typescript';
+import Vinyl from 'vinyl';
+import * as utils from './utils';
 
 export interface IConfiguration {
 	logFn: (topic: string, message: string) => void;
@@ -54,7 +54,7 @@ export function createTypeScriptBuilder(config: IConfiguration, projectFile: str
 	let headUsed = process.memoryUsage().heapUsed;
 	let emitSourceMapsInStream = true;
 
-	// always emit declaraction files
+	// always emit declaration files
 	host.getCompilationSettings().declaration = true;
 
 	function file(file: Vinyl): void {
@@ -464,7 +464,7 @@ export function createTypeScriptBuilder(config: IConfiguration, projectFile: str
 			const MB = 1024 * 1024;
 			_log(
 				'[tsb]',
-				`time:  ${colors.yellow((Date.now() - t1) + 'ms')} + \nmem:  ${colors.cyan(Math.ceil(headNow / MB) + 'MB')} ${colors.bgcyan('delta: ' + Math.ceil((headNow - headUsed) / MB))}`
+				`time:  ${colors.yellow((Date.now() - t1) + 'ms')} + \nmem:  ${colors.cyan(Math.ceil(headNow / MB) + 'MB')} ${colors.bgCyan('delta: ' + Math.ceil((headNow - headUsed) / MB))}`
 			);
 			headUsed = headNow;
 		});
