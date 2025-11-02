@@ -52,104 +52,125 @@
 			return dimensions[pageSize] || dimensions.letter;
 		}
 
-		initialize() {
-			console.log('[TiptapDocxEditor] Initializing');
+	initialize() {
+		console.log('[TiptapDocxEditor] Initializing');
+		console.log('[TiptapDocxEditor] Available globals:', Object.keys(window).filter(k =>
+			k.toLowerCase().includes('tiptap') || k === 'Editor' || k === 'StarterKit'
+		));
 
-			// Try different global names for Tiptap
-			const Editor = window.Editor || window.TiptapCore?.Editor;
-			if (!Editor) {
-				throw new Error('Tiptap Editor class not found');
-			}
+		// Get Editor from our bundled global
+		const Editor = window.TiptapEditor || window.Tiptap?.Editor || window.Editor;
+		if (!Editor) {
+			console.error('[TiptapDocxEditor] Could not find Tiptap Editor class');
+			console.error('[TiptapDocxEditor] window.TiptapEditor:', window.TiptapEditor);
+			console.error('[TiptapDocxEditor] window.Tiptap:', window.Tiptap);
+			throw new Error('Tiptap Editor class not found');
+		}
 
-			try {
-				this.editor = new Editor({
-					element: this.container,
-					extensions: this.getExtensions(),
-					content: '<p>Loading...</p>',
-					editorProps: {
-						attributes: {
-							class: 'tiptap-editor prose focus:outline-none',
-							spellcheck: 'true',
-						},
+		console.log('[TiptapDocxEditor] Found Editor at:', Editor);
+
+		try {
+			this.editor = new Editor({
+				element: this.container,
+				extensions: this.getExtensions(),
+				content: '<p>Loading...</p>',
+				editable: true, // Explicitly enable editing
+				editorProps: {
+					attributes: {
+						class: 'tiptap-editor prose focus:outline-none',
+						spellcheck: 'true',
+						contenteditable: 'true', // Ensure contenteditable is set
 					},
-					onUpdate: () => {
-						this.options.onContentChange();
+				},
+				onUpdate: () => {
+					this.options.onContentChange();
+				},
+			});
+
+			console.log('[TiptapDocxEditor] Initialized successfully');
+			console.log('[TiptapDocxEditor] Editor is editable:', this.editor.isEditable);
+		} catch (error) {
+			console.error('[TiptapDocxEditor] Failed to initialize:', error);
+			throw error;
+		}
+		}
+
+	getExtensions() {
+		// Use Tiptap extensions - try different global names
+		const extensions = [];
+
+	// Try to get StarterKit from bundled global
+	const StarterKit = window.TiptapStarterKit || window.Tiptap?.StarterKit || window.StarterKit;
+
+	if (StarterKit) {
+		console.log('[TiptapDocxEditor] Adding StarterKit extension');
+		// Don't disable document since pagination extension handles it
+		extensions.push(StarterKit.configure());
+	} else {
+		console.warn('[TiptapDocxEditor] StarterKit not found, editor may have limited functionality');
+		console.warn('[TiptapDocxEditor] window.TiptapStarterKit:', window.TiptapStarterKit);
+	}
+
+		// Add Underline mark (not in StarterKit by default)
+		try {
+			const Mark = window.Tiptap?.Mark || window.TiptapCore?.Mark;
+			if (Mark) {
+				const Underline = Mark.create({
+					name: 'underline',
+					parseHTML() {
+						return [
+							{ tag: 'u' },
+							{ style: 'text-decoration=underline' }
+						];
 					},
+					renderHTML() {
+						return ['u', 0];
+					},
+					addCommands() {
+						return {
+							toggleUnderline: () => ({ commands }) => {
+								return commands.toggleMark('underline');
+							}
+						};
+					}
 				});
-
-				console.log('[TiptapDocxEditor] Initialized successfully');
-			} catch (error) {
-				console.error('[TiptapDocxEditor] Failed to initialize:', error);
-				throw error;
+				extensions.push(Underline);
+				console.log('[TiptapDocxEditor] ✅ Underline mark added');
 			}
+		} catch (error) {
+			console.warn('[TiptapDocxEditor] ⚠️ Could not add Underline mark:', error);
 		}
 
-		getExtensions() {
-			// Use Tiptap extensions - try different global names
-			const extensions = [];
+		// Add Pagination extension - CRITICAL FOR PAGE BREAKS
+		const Pagination = window.TiptapPagination;
+		if (Pagination) {
+			console.log('[TiptapDocxEditor] ✅ Adding Pagination extension with config:', {
+				pageHeight: this.pageDimensions.height,
+				pageWidth: this.pageDimensions.width,
+				enableAutoPageBreaks: this.options.enableAutoPageBreaks
+			});
 
-			// Try to get StarterKit from different possible locations
-			const StarterKit = window.StarterKit || window.TiptapStarterKit?.StarterKit || window.TiptapStarterKit;
-
-			if (StarterKit) {
-				console.log('[TiptapDocxEditor] Adding StarterKit extension');
-				// Don't disable document since we're not using pagination extension
-				extensions.push(StarterKit.configure());
-			} else {
-				console.warn('[TiptapDocxEditor] StarterKit not found, editor may have limited functionality');
-			}
-
-			// Add Underline mark (not in StarterKit by default)
 			try {
-				const Mark = window.Tiptap?.Mark || window.TiptapCore?.Mark;
-				if (Mark) {
-					const Underline = Mark.create({
-						name: 'underline',
-						parseHTML() {
-							return [
-								{ tag: 'u' },
-								{ style: 'text-decoration=underline' }
-							];
-						},
-						renderHTML() {
-							return ['u', 0];
-						},
-						addCommands() {
-							return {
-								toggleUnderline: () => ({ commands }) => {
-									return commands.toggleMark('underline');
-								}
-							};
-						}
-					});
-					extensions.push(Underline);
-					console.log('[TiptapDocxEditor] ✅ Underline mark added');
-				}
+				extensions.push(Pagination.configure({
+					pageHeight: this.pageDimensions.height,  // e.g., 1056 for letter
+					pageWidth: this.pageDimensions.width,    // e.g., 816 for letter
+					enableAutoPageBreaks: this.options.enableAutoPageBreaks,
+					pageGap: 20, // Space between pages
+				}));
+				console.log('[TiptapDocxEditor] ✅ Pagination extension configured successfully');
 			} catch (error) {
-				console.warn('[TiptapDocxEditor] ⚠️ Could not add Underline mark:', error);
+				console.error('[TiptapDocxEditor] ❌ Failed to configure pagination:', error);
 			}
-
-			// Pagination extension is optional - we'll implement basic pagination with CSS
-			if (window.TiptapPaginationBreaks) {
-				console.log('[TiptapDocxEditor] Adding pagination extension');
-				try {
-					extensions.push(window.TiptapPaginationBreaks.configure({
-						pageHeight: this.pageDimensions.height,
-						pageWidth: this.pageDimensions.width,
-						margin: this.options.margin,
-						autoBreak: this.options.enableAutoPageBreaks,
-						pageSpacing: 20,
-					}));
-				} catch (error) {
-					console.warn('[TiptapDocxEditor] Failed to configure pagination:', error);
-				}
-			} else {
-				console.log('[TiptapDocxEditor] Pagination extension not available, using CSS-based layout');
-			}
-
-			console.log('[TiptapDocxEditor] Loaded', extensions.length, 'extensions');
-			return extensions;
+		} else {
+			console.error('[TiptapDocxEditor] ❌ Pagination extension not available!');
+			console.error('[TiptapDocxEditor] Available globals:', Object.keys(window).filter(k =>
+				k.includes('Tiptap') || k.includes('Pagination')
+			));
 		}
+
+		console.log('[TiptapDocxEditor] Loaded', extensions.length, 'extensions');
+		return extensions;
+	}
 
 		async loadFromDocx(arrayBuffer) {
 			console.log('[TiptapDocxEditor] Loading DOCX');
