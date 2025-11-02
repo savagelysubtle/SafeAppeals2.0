@@ -47,18 +47,23 @@
 			const dimensions = getPageDimensions(pageSizeSelect.value);
 			const margin = getMarginPixels(marginPresetSelect.value);
 
-			// Create Tiptap editor with pagination
-			tiptapEditor = new window.TiptapDocxEditor(container, {
-				pageSize: pageSizeSelect.value,
-				margin: margin,
-				enableAutoPageBreaks: true,
-				onContentChange: () => {
-					trackModification();
-				},
-			});
+		// Create Tiptap editor with pagination
+		tiptapEditor = new window.TiptapDocxEditor(container, {
+			pageSize: pageSizeSelect.value,
+			margin: margin,
+			enableAutoPageBreaks: true,
+			onContentChange: () => {
+				trackModification();
+			},
+		});
 
-			console.log('[DOCX Webview] Tiptap editor initialized');
-			updateStatus('Ready');
+		// Ensure editor is editable immediately after creation
+		if (tiptapEditor && tiptapEditor.editor) {
+			tiptapEditor.editor.setEditable(true);
+			console.log('[DOCX Webview] Tiptap editor initialized and set to editable:', tiptapEditor.editor.isEditable);
+		}
+
+		updateStatus('Ready');
 
 		} catch (error) {
 			console.error('[DOCX Webview] Failed to initialize Tiptap:', error);
@@ -101,13 +106,19 @@
 				bytes[i] = binaryString.charCodeAt(i);
 			}
 
-			// Load into Tiptap
-			await tiptapEditor.loadFromDocx(bytes.buffer);
+		// Load into Tiptap
+		await tiptapEditor.loadFromDocx(bytes.buffer);
 
-			docxUri = message.docxUri;
-			contentModified = false;
-			updateStatus('Document loaded');
-			console.log('[DOCX Webview] DOCX loaded successfully');
+		// Ensure editor is editable after loading content
+		if (tiptapEditor && tiptapEditor.editor) {
+			tiptapEditor.editor.setEditable(true);
+			console.log('[DOCX Webview] Editor confirmed editable after load:', tiptapEditor.editor.isEditable);
+		}
+
+		docxUri = message.docxUri;
+		contentModified = false;
+		updateStatus('Document loaded');
+		console.log('[DOCX Webview] DOCX loaded successfully');
 
 		} catch (error) {
 			console.error('[DOCX Webview] Failed to load DOCX:', error);
@@ -204,10 +215,22 @@
 	}
 
 	// Formatting buttons
+	const undoBtn = document.getElementById('undo-btn');
+	const redoBtn = document.getElementById('redo-btn');
+	const strikethroughBtn = document.getElementById('strikethrough-btn');
+	const bulletListBtn = document.getElementById('bullet-list-btn');
+	const orderedListBtn = document.getElementById('ordered-list-btn');
+	const alignLeftBtn = document.getElementById('align-left-btn');
+	const alignCenterBtn = document.getElementById('align-center-btn');
+	const alignRightBtn = document.getElementById('align-right-btn');
+	const textStyleSelect = document.getElementById('text-style-select');
+
+	// Existing buttons
 	if (boldBtn) {
 		boldBtn.addEventListener('click', () => {
 			if (tiptapEditor && tiptapEditor.editor) {
 				tiptapEditor.editor.chain().focus().toggleBold().run();
+				trackModification();
 			}
 		});
 	}
@@ -216,6 +239,7 @@
 		italicBtn.addEventListener('click', () => {
 			if (tiptapEditor && tiptapEditor.editor) {
 				tiptapEditor.editor.chain().focus().toggleItalic().run();
+				trackModification();
 			}
 		});
 	}
@@ -224,14 +248,114 @@
 		underlineBtn.addEventListener('click', () => {
 			if (tiptapEditor && tiptapEditor.editor) {
 				tiptapEditor.editor.chain().focus().toggleUnderline().run();
+				trackModification();
 			}
 		});
 	}
 
+	// New buttons
+	if (undoBtn) {
+		undoBtn.addEventListener('click', () => {
+			if (tiptapEditor && tiptapEditor.editor) {
+				tiptapEditor.editor.chain().focus().undo().run();
+			}
+		});
+	}
+
+	if (redoBtn) {
+		redoBtn.addEventListener('click', () => {
+			if (tiptapEditor && tiptapEditor.editor) {
+				tiptapEditor.editor.chain().focus().redo().run();
+			}
+		});
+	}
+
+	if (strikethroughBtn) {
+		strikethroughBtn.addEventListener('click', () => {
+			if (tiptapEditor && tiptapEditor.editor) {
+				tiptapEditor.editor.chain().focus().toggleStrike().run();
+				trackModification();
+			}
+		});
+	}
+
+	if (bulletListBtn) {
+		bulletListBtn.addEventListener('click', () => {
+			if (tiptapEditor && tiptapEditor.editor) {
+				tiptapEditor.editor.chain().focus().toggleBulletList().run();
+				trackModification();
+			}
+		});
+	}
+
+	if (orderedListBtn) {
+		orderedListBtn.addEventListener('click', () => {
+			if (tiptapEditor && tiptapEditor.editor) {
+				tiptapEditor.editor.chain().focus().toggleOrderedList().run();
+				trackModification();
+			}
+		});
+	}
+
+	if (alignLeftBtn) {
+		alignLeftBtn.addEventListener('click', () => {
+			if (tiptapEditor && tiptapEditor.editor) {
+				tiptapEditor.editor.chain().focus().setTextAlign('left').run();
+				trackModification();
+			}
+		});
+	}
+
+	if (alignCenterBtn) {
+		alignCenterBtn.addEventListener('click', () => {
+			if (tiptapEditor && tiptapEditor.editor) {
+				tiptapEditor.editor.chain().focus().setTextAlign('center').run();
+				trackModification();
+			}
+		});
+	}
+
+	if (alignRightBtn) {
+		alignRightBtn.addEventListener('click', () => {
+			if (tiptapEditor && tiptapEditor.editor) {
+				tiptapEditor.editor.chain().focus().setTextAlign('right').run();
+				trackModification();
+			}
+		});
+	}
+
+	if (textStyleSelect) {
+		textStyleSelect.addEventListener('change', () => {
+			if (tiptapEditor && tiptapEditor.editor) {
+				const value = textStyleSelect.value;
+				switch (value) {
+					case 'paragraph':
+						tiptapEditor.editor.chain().focus().setParagraph().run();
+						break;
+					case 'heading1':
+						tiptapEditor.editor.chain().focus().toggleHeading({ level: 1 }).run();
+						break;
+					case 'heading2':
+						tiptapEditor.editor.chain().focus().toggleHeading({ level: 2 }).run();
+						break;
+					case 'heading3':
+						tiptapEditor.editor.chain().focus().toggleHeading({ level: 3 }).run();
+						break;
+					case 'heading4':
+						tiptapEditor.editor.chain().focus().toggleHeading({ level: 4 }).run();
+						break;
+				}
+				trackModification();
+			}
+		});
+	}
+
+	// Remove old heading buttons
 	if (heading1Btn) {
 		heading1Btn.addEventListener('click', () => {
 			if (tiptapEditor && tiptapEditor.editor) {
 				tiptapEditor.editor.chain().focus().toggleHeading({ level: 1 }).run();
+				trackModification();
 			}
 		});
 	}
@@ -240,6 +364,7 @@
 		heading2Btn.addEventListener('click', () => {
 			if (tiptapEditor && tiptapEditor.editor) {
 				tiptapEditor.editor.chain().focus().toggleHeading({ level: 2 }).run();
+				trackModification();
 			}
 		});
 	}
@@ -248,6 +373,7 @@
 		pageBreakBtn.addEventListener('click', () => {
 			if (tiptapEditor && tiptapEditor.editor) {
 				tiptapEditor.editor.chain().focus().setHardBreak().run();
+				trackModification();
 			}
 		});
 	}
@@ -258,6 +384,23 @@
 		if ((e.ctrlKey || e.metaKey) && e.key === 's') {
 			e.preventDefault();
 			handleSaveRequest();
+		}
+
+		// Ctrl+Z - Undo
+		if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
+			e.preventDefault();
+			if (tiptapEditor && tiptapEditor.editor) {
+				tiptapEditor.editor.chain().focus().undo().run();
+			}
+		}
+
+		// Ctrl+Y / Ctrl+Shift+Z - Redo
+		if (((e.ctrlKey || e.metaKey) && e.key === 'y') ||
+		    ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'z')) {
+			e.preventDefault();
+			if (tiptapEditor && tiptapEditor.editor) {
+				tiptapEditor.editor.chain().focus().redo().run();
+			}
 		}
 
 		// Ctrl+B - Bold
@@ -314,18 +457,21 @@
 	function waitForTiptap() {
 		waitAttempts++;
 
-		// Check if all required globals are loaded
+		// Check if all required globals are loaded from our bundle
 		const hasDocx = typeof window.docx !== 'undefined';
 		const hasTiptapEditor = typeof window.TiptapDocxEditor !== 'undefined';
-		const hasEditor = typeof window.Editor !== 'undefined' || typeof window.TiptapCore !== 'undefined';
+		const hasEditor = typeof window.TiptapEditor !== 'undefined';
+		const hasStarterKit = typeof window.TiptapStarterKit !== 'undefined';
 
 		console.log('[DOCX Webview] Checking dependencies (attempt', waitAttempts + '):', {
 			docx: hasDocx,
 			TiptapDocxEditor: hasTiptapEditor,
-			Editor: hasEditor
+			TiptapEditor: hasEditor,
+			TiptapStarterKit: hasStarterKit,
+			'Available Tiptap globals': Object.keys(window).filter(k => k.toLowerCase().includes('tiptap') || k === 'Editor' || k === 'StarterKit')
 		});
 
-		if (hasTiptapEditor && hasDocx) {
+		if (hasTiptapEditor && hasDocx && hasEditor && hasStarterKit) {
 			console.log('[DOCX Webview] All dependencies loaded, initializing');
 			initializeTiptapEditor();
 			// Notify host that webview is ready
@@ -334,7 +480,12 @@
 			setTimeout(waitForTiptap, 100);
 		} else {
 			console.error('[DOCX Webview] Timeout waiting for dependencies after', waitAttempts, 'attempts');
-			console.error('[DOCX Webview] Available globals:', Object.keys(window).filter(k => k.toLowerCase().includes('tiptap') || k === 'Editor' || k === 'docx'));
+			console.error('[DOCX Webview] Missing:', {
+				'TiptapEditor': !hasEditor,
+				'TiptapStarterKit': !hasStarterKit,
+				'TiptapDocxEditor': !hasTiptapEditor,
+				'docx': !hasDocx
+			});
 			updateStatus('Error: Failed to load editor dependencies');
 			// Still notify ready so user can see the error
 			vscode.postMessage({ type: 'ready' });

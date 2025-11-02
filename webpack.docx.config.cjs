@@ -38,9 +38,7 @@ module.exports = {
 		]
 	},
 	externals: {
-		// These are loaded via CDN
-		'@tiptap/core': 'root Tiptap',
-		'@tiptap/starter-kit': 'root TiptapStarterKit'
+		// Nothing external - bundle everything
 	},
 	optimization: {
 		minimize: true

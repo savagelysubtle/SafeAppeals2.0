@@ -375,43 +375,74 @@ export class DOCXViewerEditor extends EditorPane {
 		const scriptUri = asWebviewUri(URI.joinPath(mediaUri, 'docxViewerTiptap.js'));
 		const styleUri = asWebviewUri(URI.joinPath(mediaUri, 'docxViewer.css'));
 
-		// CDN dependencies
+		// CDN dependencies (only JSZip for docx-preview)
 		const jszipCdnUri = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js';
-		const tiptapCdnUri = 'https://cdn.jsdelivr.net/npm/@tiptap/core@2.10.5/dist/tiptap-core.umd.min.js';
-		const tiptapStarterKitUri = 'https://cdn.jsdelivr.net/npm/@tiptap/starter-kit@2.10.5/dist/tiptap-starter-kit.umd.min.js';
-		// Note: docx library is now bundled in tiptapDocxBundle.js
+		// Note: Tiptap and docx library are now bundled in tiptapDocxBundle.js
 
 		return `<!DOCTYPE html>
 <html lang="en">
 <head>
 	<meta charset="UTF-8">
-	<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src https: data: blob: vscode-resource:; script-src 'nonce-${nonce}' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net vscode-resource:; style-src 'unsafe-inline' vscode-resource:; font-src data: vscode-resource:;">
+	<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src https: data: blob: vscode-resource:; script-src 'nonce-${nonce}' https://cdnjs.cloudflare.com vscode-resource:; style-src 'unsafe-inline' vscode-resource:; font-src data: vscode-resource:;">
 	<meta name="viewport" content="width=device-width, initial-scale=1.0">
 	<title>DOCX Viewer</title>
 	<link rel="stylesheet" href="${styleUri}">
 </head>
 <body>
 	<div id="docx-toolbar">
+		<!-- File Operations -->
 		<button id="save-btn" title="Save (Ctrl+S)">💾 Save</button>
+		<span class="toolbar-separator">|</span>
+
+		<!-- Edit Operations -->
+		<button id="undo-btn" title="Undo (Ctrl+Z)">↶ Undo</button>
+		<button id="redo-btn" title="Redo (Ctrl+Y)">↷ Redo</button>
+		<span class="toolbar-separator">|</span>
+
+		<!-- Text Formatting -->
 		<button id="bold-btn" title="Bold (Ctrl+B)"><strong>B</strong></button>
 		<button id="italic-btn" title="Italic (Ctrl+I)"><em>I</em></button>
 		<button id="underline-btn" title="Underline (Ctrl+U)"><u>U</u></button>
-		<button id="heading1-btn" title="Heading 1">H1</button>
-		<button id="heading2-btn" title="Heading 2">H2</button>
-		<button id="page-break-btn" title="Page Break">📄</button>
+		<button id="strikethrough-btn" title="Strikethrough"><s>S</s></button>
+		<span class="toolbar-separator">|</span>
+
+		<!-- Headings & Paragraphs -->
+		<select id="text-style-select" title="Text Style">
+			<option value="paragraph" selected>Normal Text</option>
+			<option value="heading1">Heading 1</option>
+			<option value="heading2">Heading 2</option>
+			<option value="heading3">Heading 3</option>
+			<option value="heading4">Heading 4</option>
+		</select>
+		<span class="toolbar-separator">|</span>
+
+		<!-- Lists -->
+		<button id="bullet-list-btn" title="Bullet List">• List</button>
+		<button id="ordered-list-btn" title="Numbered List">1. List</button>
+		<span class="toolbar-separator">|</span>
+
+		<!-- Alignment -->
+		<button id="align-left-btn" title="Align Left">⬅</button>
+		<button id="align-center-btn" title="Align Center">⬌</button>
+		<button id="align-right-btn" title="Align Right">➡</button>
+		<span class="toolbar-separator">|</span>
+
+		<!-- Page Settings -->
+		<button id="page-break-btn" title="Page Break">📄 Break</button>
 		<select id="page-size-select" title="Page Size">
-			<option value="letter" selected>Letter (8.5" × 11")</option>
-			<option value="legal">Legal (8.5" × 14")</option>
-			<option value="tabloid">Tabloid (11" × 17")</option>
-			<option value="a4">A4 (210mm × 297mm)</option>
-			<option value="a3">A3 (297mm × 420mm)</option>
+			<option value="letter" selected>Letter</option>
+			<option value="legal">Legal</option>
+			<option value="tabloid">Tabloid</option>
+			<option value="a4">A4</option>
+			<option value="a3">A3</option>
 		</select>
-		<select id="margin-preset-select" title="Margin Preset">
-			<option value="normal" selected>Normal Margins (1")</option>
-			<option value="narrow">Narrow (0.5")</option>
-			<option value="moderate">Moderate (0.75")</option>
-			<option value="wide">Wide (2")</option>
+		<select id="margin-preset-select" title="Margins">
+			<option value="normal" selected>Normal</option>
+			<option value="narrow">Narrow</option>
+			<option value="moderate">Moderate</option>
+			<option value="wide">Wide</option>
 		</select>
+
 		<div id="status-text">Loading...</div>
 	</div>
 	<div id="docx-container"></div>
@@ -419,8 +450,6 @@ export class DOCXViewerEditor extends EditorPane {
 	<!-- Load dependencies in order -->
 	<script nonce="${nonce}" src="${jszipCdnUri}"></script>
 	<script nonce="${nonce}" src="${docxLibUri}"></script>
-	<script nonce="${nonce}" src="${tiptapCdnUri}"></script>
-	<script nonce="${nonce}" src="${tiptapStarterKitUri}"></script>
 	<script nonce="${nonce}" src="${tiptapDocxBundleUri}"></script>
 	<script nonce="${nonce}" src="${tiptapBundleUri}"></script>
 	<script nonce="${nonce}" src="${scriptUri}"></script>

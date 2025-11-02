@@ -3,12 +3,45 @@
  *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
  *--------------------------------------------------------------------------------------*/
 
-import { Editor } from '@tiptap/core';
-import StarterKit from '@tiptap/starter-kit';
-// @ts-ignore - Community extension may not have types
-import PaginationBreaks from 'tiptap-pagination-breaks';
-import { Document as DocxDocument, Packer, Paragraph as DocxParagraph, TextRun, HeadingLevel, AlignmentType } from 'docx';
-import * as docxPreview from 'docx-preview';
+// Note: This file uses globals provided by bundled scripts (tiptapDocxBundle.js, tiptapBundle.js)
+// The actual runtime implementation is in tiptapBundle.js which loads in the webview
+// Direct npm package imports are not allowed in VSCode browser code - must use globals instead
+
+// Type declarations for globals
+declare global {
+	interface Window {
+		TiptapEditor: any; // Editor class from @tiptap/core
+		TiptapStarterKit: any; // StarterKit from @tiptap/starter-kit
+		PaginationBreaks?: any; // Optional community extension
+		DocxLib: {
+			Document: any;
+			Packer: any;
+			Paragraph: any;
+			TextRun: any;
+			HeadingLevel: any;
+			AlignmentType: any;
+		};
+		docx: any; // docx-preview library
+	}
+}
+
+// Use globals instead of direct imports to avoid VSCode import restrictions
+// Access globals at runtime (using any to avoid window warnings in this context)
+const getGlobals = () => {
+	const win = globalThis as any;
+	return {
+		Editor: win.TiptapEditor,
+		StarterKit: win.TiptapStarterKit,
+		PaginationBreaks: win.PaginationBreaks,
+		DocxLib: win.DocxLib,
+		docx: win.docx,
+	};
+};
+
+// Type aliases for types used in the code
+type EditorType = any; // Editor instance type
+type DocxParagraphType = any; // DocxParagraph instance type
+type TextRunType = any; // TextRun instance type
 
 export interface TiptapEditorOptions {
 	pageSize?: 'letter' | 'legal' | 'a4' | 'tabloid' | 'a3';
@@ -23,7 +56,7 @@ interface PageDimensions {
 }
 
 export class TiptapDocxEditor {
-	private editor: Editor | null = null;
+	private editor: EditorType | null = null;
 	private container: HTMLElement;
 	private options: Required<TiptapEditorOptions>;
 	private pageDimensions: PageDimensions;
@@ -36,7 +69,7 @@ export class TiptapDocxEditor {
 			pageSize: options.pageSize ?? 'letter',
 			margin: options.margin ?? 96, // Default 1 inch
 			enableAutoPageBreaks: options.enableAutoPageBreaks ?? true,
-			onContentChange: options.onContentChange ?? (() => {}),
+			onContentChange: options.onContentChange ?? (() => { }),
 		};
 
 		this.pageDimensions = this.getPageDimensions(this.options.pageSize);
@@ -58,21 +91,32 @@ export class TiptapDocxEditor {
 	private initialize(): void {
 		console.log('[TiptapDocxEditor] Initializing editor');
 
+		const globals = getGlobals();
+		if (!globals.Editor || !globals.StarterKit) {
+			throw new Error('Tiptap libraries not loaded. Ensure tiptapDocxBundle.js is loaded.');
+		}
+
+		const extensions: any[] = [
+			globals.StarterKit.configure({
+				document: false, // We'll use pagination extension's document
+			}),
+		];
+
+		// Add pagination breaks if available
+		if (globals.PaginationBreaks) {
+			extensions.push(globals.PaginationBreaks.configure({
+				pageHeight: this.pageDimensions.height,
+				pageWidth: this.pageDimensions.width,
+				margin: this.options.margin,
+				autoBreak: this.options.enableAutoPageBreaks,
+				pageSpacing: 20, // Space between pages
+			}));
+		}
+
 		// Create editor with pagination
-		this.editor = new Editor({
+		this.editor = new globals.Editor({
 			element: this.container,
-			extensions: [
-				StarterKit.configure({
-					document: false, // We'll use pagination extension's document
-				}),
-				PaginationBreaks.configure({
-					pageHeight: this.pageDimensions.height,
-					pageWidth: this.pageDimensions.width,
-					margin: this.options.margin,
-					autoBreak: this.options.enableAutoPageBreaks,
-					pageSpacing: 20, // Space between pages
-				}),
-			],
+			extensions,
 			content: '<p>Start typing...</p>',
 			editorProps: {
 				attributes: {
@@ -80,7 +124,7 @@ export class TiptapDocxEditor {
 					spellcheck: 'true',
 				},
 			},
-			onUpdate: ({ editor }) => {
+			onUpdate: ({ editor }: { editor: EditorType }) => {
 				this.options.onContentChange({
 					html: editor.getHTML(),
 					json: editor.getJSON(),
@@ -103,9 +147,14 @@ export class TiptapDocxEditor {
 		console.log('[TiptapDocxEditor] Loading DOCX file');
 
 		try {
+			const globals = getGlobals();
+			if (!globals.docx) {
+				throw new Error('docx-preview library not loaded');
+			}
+
 			// Step 1: Use docx-preview to convert DOCX to HTML
 			const tempDiv = document.createElement('div');
-			await docxPreview.renderAsync(arrayBuffer, tempDiv, undefined, {
+			await globals.docx.renderAsync(arrayBuffer, tempDiv, undefined, {
 				className: 'docx',
 				inWrapper: true,
 				ignoreWidth: false,
@@ -182,11 +231,16 @@ export class TiptapDocxEditor {
 		console.log('[TiptapDocxEditor] Converting content to DOCX');
 
 		try {
+			const globals = getGlobals();
+			if (!globals.DocxLib) {
+				throw new Error('docx library not loaded. Ensure tiptapDocxBundle.js is loaded.');
+			}
+
 			const json = this.editor.getJSON();
 			const docxContent = this.convertTiptapToDocx(json);
 
 			// Create DOCX document
-			const doc = new DocxDocument({
+			const doc = new globals.DocxLib.Document({
 				sections: [{
 					properties: {
 						page: {
@@ -207,7 +261,7 @@ export class TiptapDocxEditor {
 			});
 
 			// Generate blob
-			const blob = await Packer.toBlob(doc);
+			const blob = await globals.DocxLib.Packer.toBlob(doc);
 			console.log('[TiptapDocxEditor] DOCX generated successfully, size:', blob.size);
 			return blob;
 
@@ -220,8 +274,8 @@ export class TiptapDocxEditor {
 	/**
 	 * Convert Tiptap JSON to DOCX paragraphs
 	 */
-	private convertTiptapToDocx(json: any): DocxParagraph[] {
-		const paragraphs: DocxParagraph[] = [];
+	private convertTiptapToDocx(json: any): DocxParagraphType[] {
+		const paragraphs: DocxParagraphType[] = [];
 
 		if (!json.content) {
 			return paragraphs;
@@ -240,13 +294,14 @@ export class TiptapDocxEditor {
 	/**
 	 * Convert a single Tiptap node to DOCX
 	 */
-	private convertNodeToDocx(node: any): DocxParagraph[] | null {
-		const paragraphs: DocxParagraph[] = [];
+	private convertNodeToDocx(node: any): DocxParagraphType[] | null {
+		const globals = getGlobals();
+		const paragraphs: DocxParagraphType[] = [];
 
 		switch (node.type) {
 			case 'paragraph': {
 				const runs = this.extractTextRuns(node);
-				paragraphs.push(new DocxParagraph({
+				paragraphs.push(new globals.DocxLib.Paragraph({
 					children: runs,
 					alignment: this.getAlignment(node),
 				}));
@@ -256,7 +311,7 @@ export class TiptapDocxEditor {
 			case 'heading': {
 				const runs = this.extractTextRuns(node);
 				const level = node.attrs?.level || 1;
-				paragraphs.push(new DocxParagraph({
+				paragraphs.push(new globals.DocxLib.Paragraph({
 					children: runs,
 					heading: this.getHeadingLevel(level),
 				}));
@@ -283,8 +338,8 @@ export class TiptapDocxEditor {
 
 			case 'codeBlock': {
 				const text = this.extractPlainText(node);
-				paragraphs.push(new DocxParagraph({
-					children: [new TextRun({ text, font: 'Courier New' })],
+				paragraphs.push(new globals.DocxLib.Paragraph({
+					children: [new globals.DocxLib.TextRun({ text, font: 'Courier New' })],
 				}));
 				break;
 			}
@@ -307,11 +362,12 @@ export class TiptapDocxEditor {
 	/**
 	 * Extract text runs with formatting from a node
 	 */
-	private extractTextRuns(node: any): TextRun[] {
-		const runs: TextRun[] = [];
+	private extractTextRuns(node: any): TextRunType[] {
+		const globals = getGlobals();
+		const runs: TextRunType[] = [];
 
 		if (!node.content) {
-			return [new TextRun({ text: '' })];
+			return [new globals.DocxLib.TextRun({ text: '' })];
 		}
 
 		for (const inline of node.content) {
@@ -322,7 +378,7 @@ export class TiptapDocxEditor {
 				const isUnderline = marks.some((m: any) => m.type === 'underline');
 				const isStrike = marks.some((m: any) => m.type === 'strike');
 
-				runs.push(new TextRun({
+				runs.push(new globals.DocxLib.TextRun({
 					text: inline.text || '',
 					bold: isBold,
 					italics: isItalic,
@@ -332,7 +388,7 @@ export class TiptapDocxEditor {
 			}
 		}
 
-		return runs.length > 0 ? runs : [new TextRun({ text: '' })];
+		return runs.length > 0 ? runs : [new globals.DocxLib.TextRun({ text: '' })];
 	}
 
 	/**
@@ -353,8 +409,12 @@ export class TiptapDocxEditor {
 	/**
 	 * Get alignment from node attributes
 	 */
-	private getAlignment(node: any): typeof AlignmentType[keyof typeof AlignmentType] | undefined {
+	private getAlignment(node: any): any {
+		const globals = getGlobals();
 		const align = node.attrs?.textAlign;
+		const AlignmentType = globals.DocxLib?.AlignmentType;
+		if (!AlignmentType) return undefined;
+
 		switch (align) {
 			case 'left': return AlignmentType.LEFT;
 			case 'center': return AlignmentType.CENTER;
@@ -367,8 +427,12 @@ export class TiptapDocxEditor {
 	/**
 	 * Convert heading level number to DOCX HeadingLevel
 	 */
-	private getHeadingLevel(level: number): typeof HeadingLevel[keyof typeof HeadingLevel] {
-		const levels: Record<number, typeof HeadingLevel[keyof typeof HeadingLevel]> = {
+	private getHeadingLevel(level: number): any {
+		const globals = getGlobals();
+		const HeadingLevel = globals.DocxLib?.HeadingLevel;
+		if (!HeadingLevel) return undefined;
+
+		const levels: Record<number, any> = {
 			1: HeadingLevel.HEADING_1,
 			2: HeadingLevel.HEADING_2,
 			3: HeadingLevel.HEADING_3,
