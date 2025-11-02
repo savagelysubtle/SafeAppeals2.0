@@ -54,6 +54,8 @@
 			enableAutoPageBreaks: true,
 			onContentChange: () => {
 				trackModification();
+				// Notify VS Code of content changes for auto-save
+				vscode.postMessage({ type: 'contentChanged' });
 			},
 		});
 
@@ -435,6 +437,11 @@
 		switch (message.type) {
 			case 'loadDOCX':
 				await handleLoadDOCX(message);
+				break;
+			case 'saveRequest':
+				// Auto-save or manual save request from VS Code
+				console.log('[DOCX Webview] Save request received, reason:', message.reason);
+				handleSaveRequest();
 				break;
 			case 'saveComplete':
 				handleSaveComplete(message);

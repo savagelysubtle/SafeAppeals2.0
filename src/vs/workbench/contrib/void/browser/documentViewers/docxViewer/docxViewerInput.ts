@@ -21,6 +21,7 @@ export class DOCXViewerInput extends EditorInput {
 	static readonly EDITOR_ID = 'void.docxViewer';
 
 	selection: DOCXSelection | null = null;
+	private _workingCopy?: { isDirty(): boolean };
 
 	constructor(
 		public readonly resource: URI,
@@ -28,6 +29,17 @@ export class DOCXViewerInput extends EditorInput {
 		@ILabelService private readonly labelService: ILabelService
 	) {
 		super();
+	}
+
+	/**
+	 * Set the working copy for this input to delegate dirty state
+	 */
+	setWorkingCopy(workingCopy: { isDirty(): boolean }): void {
+		this._workingCopy = workingCopy;
+	}
+
+	override isDirty(): boolean {
+		return this._workingCopy?.isDirty() ?? false;
 	}
 
 	override get typeId(): string {
