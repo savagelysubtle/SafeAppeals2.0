@@ -409,25 +409,25 @@ export class RAGFileService {
 				this.logService.info(`[RAGFileService] Operation ${idx + 1}:`, JSON.stringify(op));
 			});
 
-		// Read existing DOCX file (create empty file if it doesn't exist)
-		const filepath = this.getFilePath(uri);
-		this.logService.info(`[RAGFileService] Reading file from: ${filepath}`);
+			// Read existing DOCX file (create empty file if it doesn't exist)
+			const filepath = this.getFilePath(uri);
+			this.logService.info(`[RAGFileService] Reading file from: ${filepath}`);
 
-		let buffer: Buffer;
-		try {
-			buffer = readFileSync(filepath);
-			this.logService.info(`[RAGFileService] File buffer size: ${buffer.length} bytes`);
-		} catch (error: any) {
-			// If file doesn't exist, create an empty DOCX file first
-			if (error.code === 'ENOENT') {
-				this.logService.info(`[RAGFileService] File does not exist, creating empty DOCX file first...`);
-				await this.createEmptyDOCX(uri);
+			let buffer: Buffer;
+			try {
 				buffer = readFileSync(filepath);
-				this.logService.info(`[RAGFileService] Created empty DOCX file, buffer size: ${buffer.length} bytes`);
-			} else {
-				throw error;
+				this.logService.info(`[RAGFileService] File buffer size: ${buffer.length} bytes`);
+			} catch (error: any) {
+				// If file doesn't exist, create an empty DOCX file first
+				if (error.code === 'ENOENT') {
+					this.logService.info(`[RAGFileService] File does not exist, creating empty DOCX file first...`);
+					await this.createEmptyDOCX(uri);
+					buffer = readFileSync(filepath);
+					this.logService.info(`[RAGFileService] Created empty DOCX file, buffer size: ${buffer.length} bytes`);
+				} else {
+					throw error;
+				}
 			}
-		}
 
 			// Extract text content using mammoth
 			this.logService.info('[RAGFileService] Extracting text from DOCX using mammoth...');
@@ -534,7 +534,8 @@ export class RAGFileService {
 				}
 			}
 
-			writeFileSync(filepath, newBuffer);
+			// Write buffer to disk
+			writeFileSync(filepath, newBuffer as Uint8Array<ArrayBuffer>);
 			this.logService.info(`[RAGFileService] ✅ File written to disk: ${filepath}`);
 
 			// Verify we can read it back immediately
@@ -664,7 +665,8 @@ export class RAGFileService {
 				}
 			}
 
-			writeFileSync(filepath, newBuffer);
+			// Write buffer to disk
+			writeFileSync(filepath, newBuffer as Uint8Array<ArrayBuffer>);
 
 			this.logService.info(`[RAGFileService] ✅ Successfully saved edited XLSX: ${filepath} (${newBuffer.length} bytes)`);
 
@@ -756,7 +758,8 @@ export class RAGFileService {
 			}
 
 			this.logService.info(`[createEmptyDOCX] Writing ${buffer.length} bytes to: ${filepath}`);
-			writeFileSync(filepath, buffer);
+			// Write buffer to disk
+			writeFileSync(filepath, buffer as Uint8Array<ArrayBuffer>);
 
 			// Verify file was written correctly
 			const { statSync } = await import('fs');

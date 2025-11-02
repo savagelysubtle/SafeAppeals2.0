@@ -170,10 +170,11 @@ export class ExtensionHostConnection extends Disposable {
 		disposables.add(Event.fromNodeEventEmitter<void>(extHostSocket, 'close')(stopAndCleanup));
 		disposables.add(Event.fromNodeEventEmitter<void>(extHostSocket, 'error')(stopAndCleanup));
 
-		disposables.add(connectionData.socket.onData((e) => extHostSocket.write(e.buffer)));
-		disposables.add(Event.fromNodeEventEmitter<Buffer>(extHostSocket, 'data')((e) => {
-			connectionData.socket.write(VSBuffer.wrap(e));
-		}));
+	disposables.add(connectionData.socket.onData((e) => extHostSocket.write(e.buffer)));
+	disposables.add(Event.fromNodeEventEmitter<Buffer>(extHostSocket, 'data')((e) => {
+		const buffer = e as Uint8Array;
+		connectionData.socket.write(VSBuffer.wrap(buffer));
+	}));
 
 		if (connectionData.initialDataChunk.byteLength > 0) {
 			extHostSocket.write(connectionData.initialDataChunk.buffer);

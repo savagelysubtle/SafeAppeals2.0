@@ -3,9 +3,9 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import * as performance from './vs/base/common/performance.js';
-import { removeGlobalNodeJsModuleLookupPaths, devInjectNodeModuleLookupPath } from './bootstrap-node.js';
 import { bootstrapESM } from './bootstrap-esm.js';
+import { devInjectNodeModuleLookupPath, removeGlobalNodeJsModuleLookupPaths } from './bootstrap-node.js';
+import * as performance from './vs/base/common/performance.js';
 
 performance.mark('code/fork/start');
 
@@ -131,7 +131,7 @@ function pipeLoggingToParent(): void {
 					buf = buf.slice(eol + 1);
 				}
 
-				original.call(stream, chunk, encoding, callback);
+				original.call(stream, chunk as string | Uint8Array, encoding, callback);
 			},
 		});
 	}

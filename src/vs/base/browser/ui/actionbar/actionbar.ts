@@ -3,17 +3,17 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import * as DOM from '../../dom.js';
-import { StandardKeyboardEvent } from '../../keyboardEvent.js';
-import { ActionViewItem, BaseActionViewItem, IActionViewItemOptions } from './actionViewItems.js';
-import { createInstantHoverDelegate } from '../hover/hoverDelegateFactory.js';
-import { IHoverDelegate } from '../hover/hoverDelegate.js';
 import { ActionRunner, IAction, IActionRunner, IRunEvent, Separator } from '../../../common/actions.js';
 import { Emitter } from '../../../common/event.js';
 import { KeyCode, KeyMod } from '../../../common/keyCodes.js';
 import { Disposable, DisposableMap, DisposableStore, dispose, IDisposable } from '../../../common/lifecycle.js';
 import * as types from '../../../common/types.js';
+import * as DOM from '../../dom.js';
+import { StandardKeyboardEvent } from '../../keyboardEvent.js';
+import { IHoverDelegate } from '../hover/hoverDelegate.js';
+import { createInstantHoverDelegate } from '../hover/hoverDelegateFactory.js';
 import './actionbar.css';
+import { ActionViewItem, BaseActionViewItem, IActionViewItemOptions } from './actionViewItems.js';
 
 export interface IActionViewItem extends IDisposable {
 	action: IAction;

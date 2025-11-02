@@ -3,22 +3,22 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import * as browser from './browser.js';
-import { BrowserFeatures } from './canIUse.js';
-import { IKeyboardEvent, StandardKeyboardEvent } from './keyboardEvent.js';
-import { IMouseEvent, StandardMouseEvent } from './mouseEvent.js';
-import { AbstractIdleValue, IntervalTimer, TimeoutTimer, _runWhenIdle, IdleDeadline } from '../common/async.js';
+import { _runWhenIdle, AbstractIdleValue, IdleDeadline, IntervalTimer, TimeoutTimer } from '../common/async.js';
 import { onUnexpectedError } from '../common/errors.js';
 import * as event from '../common/event.js';
-import dompurify from './dompurify/dompurify.js';
+import { hash } from '../common/hash.js';
 import { KeyCode } from '../common/keyCodes.js';
 import { Disposable, DisposableStore, IDisposable, toDisposable } from '../common/lifecycle.js';
 import { RemoteAuthorities, Schemas } from '../common/network.js';
+import { isPointWithinTriangle } from '../common/numbers.js';
 import * as platform from '../common/platform.js';
 import { URI } from '../common/uri.js';
-import { hash } from '../common/hash.js';
+import * as browser from './browser.js';
+import { BrowserFeatures } from './canIUse.js';
+import dompurify from './dompurify/dompurify.js';
+import { IKeyboardEvent, StandardKeyboardEvent } from './keyboardEvent.js';
+import { IMouseEvent, StandardMouseEvent } from './mouseEvent.js';
 import { CodeWindow, ensureCodeWindow, mainWindow } from './window.js';
-import { isPointWithinTriangle } from '../common/numbers.js';
 export * from './domImpl/domObservable.js';
 export * from './domImpl/n.js';
 
@@ -1530,7 +1530,7 @@ export function triggerDownload(dataOrUri: Uint8Array | URI, name: string): void
 	if (URI.isUri(dataOrUri)) {
 		url = dataOrUri.toString(true);
 	} else {
-		const blob = new Blob([dataOrUri]);
+		const blob = new Blob([dataOrUri as Uint8Array<ArrayBuffer>]);
 		url = URL.createObjectURL(blob);
 
 		// Ensure to free the data from DOM eventually

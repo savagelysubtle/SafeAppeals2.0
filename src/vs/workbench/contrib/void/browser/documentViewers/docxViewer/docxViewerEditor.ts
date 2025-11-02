@@ -257,8 +257,8 @@ export class DOCXViewerEditor extends EditorPane {
 				break;
 
 			case 'saveRequested':
-				if (this._currentInput && data.text) {
-					this.saveDOCX(this._currentInput.resource, data.text, data.html, data.margins);
+				if (this._currentInput && (data.text || data.docxData)) {
+					this.saveDOCX(this._currentInput.resource, data.text, data.html, data.docxData);
 				}
 				break;
 
@@ -274,11 +274,25 @@ export class DOCXViewerEditor extends EditorPane {
 		}
 	}
 
-	private async saveDOCX(uri: URI, text: string, html?: string, margins?: any): Promise<void> {
+	private async saveDOCX(uri: URI, text: string, html?: string, docxData?: string): Promise<void> {
 		try {
-			// For now, save as plain text
-			// TODO: Implement HTML to DOCX conversion to preserve formatting
-			const bytes = VSBuffer.fromString(text);
+			let bytes: VSBuffer;
+
+			if (docxData) {
+				// Convert base64 DOCX data to bytes
+				console.log('[DOCX Viewer] Saving as DOCX format, size:', docxData.length);
+				const binaryString = atob(docxData);
+				const uint8Array = new Uint8Array(binaryString.length);
+				for (let i = 0; i < binaryString.length; i++) {
+					uint8Array[i] = binaryString.charCodeAt(i);
+				}
+				bytes = VSBuffer.wrap(uint8Array);
+			} else {
+				// Fallback to plain text
+				console.warn('[DOCX Viewer] No DOCX data provided, saving as plain text');
+				bytes = VSBuffer.fromString(text);
+			}
+
 			await this.fileService.writeFile(uri, bytes);
 			console.log('[DOCX Viewer] Document saved successfully');
 
@@ -354,18 +368,24 @@ export class DOCXViewerEditor extends EditorPane {
 		const nonce = generateUuid();
 		const mediaUri = this.getMediaUri();
 
+		// Tiptap and dependencies
+		const tiptapDocxBundleUri = asWebviewUri(URI.joinPath(mediaUri, 'tiptapDocxBundle.js'));
+		const tiptapBundleUri = asWebviewUri(URI.joinPath(mediaUri, 'tiptapBundle.js'));
 		const docxLibUri = asWebviewUri(URI.joinPath(mediaUri, 'lib', 'docx-preview.min.js'));
-		const scriptUri = asWebviewUri(URI.joinPath(mediaUri, 'docxViewer.js'));
+		const scriptUri = asWebviewUri(URI.joinPath(mediaUri, 'docxViewerTiptap.js'));
 		const styleUri = asWebviewUri(URI.joinPath(mediaUri, 'docxViewer.css'));
 
-		// JSZip is required by docx-preview
+		// CDN dependencies
 		const jszipCdnUri = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js';
+		const tiptapCdnUri = 'https://cdn.jsdelivr.net/npm/@tiptap/core@2.10.5/dist/tiptap-core.umd.min.js';
+		const tiptapStarterKitUri = 'https://cdn.jsdelivr.net/npm/@tiptap/starter-kit@2.10.5/dist/tiptap-starter-kit.umd.min.js';
+		// Note: docx library is now bundled in tiptapDocxBundle.js
 
 		return `<!DOCTYPE html>
 <html lang="en">
 <head>
 	<meta charset="UTF-8">
-	<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src https: data: blob: vscode-resource:; script-src 'nonce-${nonce}' https://cdnjs.cloudflare.com vscode-resource:; style-src 'unsafe-inline' vscode-resource:; font-src data: vscode-resource:;">
+	<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src https: data: blob: vscode-resource:; script-src 'nonce-${nonce}' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net vscode-resource:; style-src 'unsafe-inline' vscode-resource:; font-src data: vscode-resource:;">
 	<meta name="viewport" content="width=device-width, initial-scale=1.0">
 	<title>DOCX Viewer</title>
 	<link rel="stylesheet" href="${styleUri}">
@@ -373,89 +393,36 @@ export class DOCXViewerEditor extends EditorPane {
 <body>
 	<div id="docx-toolbar">
 		<button id="save-btn" title="Save (Ctrl+S)">💾 Save</button>
-		<div id="status-text"></div>
-	</div>
-	<div id="docx-ribbon">
-		<!-- Text Formatting Section -->
-		<div class="ribbon-group">
-			<label>Font</label>
-			<select id="font-family">
-				<option value="Arial">Arial</option>
-				<option value="Times New Roman">Times New Roman</option>
-				<option value="Calibri" selected>Calibri</option>
-				<option value="Courier New">Courier New</option>
-				<option value="Georgia">Georgia</option>
-				<option value="Verdana">Verdana</option>
-			</select>
-			<select id="font-size">
-				<option value="8">8</option>
-				<option value="10">10</option>
-				<option value="12">12</option>
-				<option value="14" selected>14</option>
-				<option value="16">16</option>
-				<option value="18">18</option>
-				<option value="20">20</option>
-				<option value="24">24</option>
-				<option value="28">28</option>
-				<option value="32">32</option>
-			</select>
-		</div>
-
-		<!-- Basic Formatting Buttons -->
-		<div class="ribbon-group">
-			<label>Style</label>
-			<button id="bold-btn" class="format-btn" title="Bold (Ctrl+B)"><strong>B</strong></button>
-			<button id="italic-btn" class="format-btn" title="Italic (Ctrl+I)"><em>I</em></button>
-			<button id="underline-btn" class="format-btn" title="Underline (Ctrl+U)"><u>U</u></button>
-			<button id="strikethrough-btn" class="format-btn" title="Strikethrough"><s>S</s></button>
-			<input type="color" id="text-color" title="Text Color" value="#000000">
-			<input type="color" id="highlight-color" title="Highlight" value="#ffff00">
-		</div>
-
-		<!-- Paragraph Formatting -->
-		<div class="ribbon-group">
-			<label>Paragraph</label>
-			<button id="align-left-btn" class="format-btn" title="Align Left">⬅</button>
-			<button id="align-center-btn" class="format-btn" title="Align Center">↔</button>
-			<button id="align-right-btn" class="format-btn" title="Align Right">➡</button>
-			<button id="justify-btn" class="format-btn" title="Justify">≡</button>
-			<button id="bullets-btn" class="format-btn" title="Bullets">•</button>
-			<button id="numbering-btn" class="format-btn" title="Numbering">1.</button>
-			<button id="indent-btn" class="format-btn" title="Increase Indent">→|</button>
-			<button id="outdent-btn" class="format-btn" title="Decrease Indent">|←</button>
-		</div>
-
-		<!-- Styles -->
-		<div class="ribbon-group">
-			<label>Styles</label>
-			<select id="heading-style">
-				<option value="">Normal</option>
-				<option value="h1">Heading 1</option>
-				<option value="h2">Heading 2</option>
-				<option value="h3">Heading 3</option>
-				<option value="h4">Heading 4</option>
-				<option value="h5">Heading 5</option>
-				<option value="h6">Heading 6</option>
-			</select>
-		</div>
-
-		<!-- Insert -->
-		<div class="ribbon-group">
-			<label>Insert</label>
-			<button id="insert-table-btn" class="format-btn" title="Insert Table">⊞</button>
-			<button id="insert-image-btn" class="format-btn" title="Insert Image">🖼</button>
-			<button id="page-break-btn" class="format-btn" title="Insert Page Break">📄</button>
-		</div>
-
-		<!-- Page Setup -->
-		<div class="ribbon-group">
-			<label>Page</label>
-			<button id="margins-btn" class="format-btn" title="Adjust Margins">📏</button>
-		</div>
+		<button id="bold-btn" title="Bold (Ctrl+B)"><strong>B</strong></button>
+		<button id="italic-btn" title="Italic (Ctrl+I)"><em>I</em></button>
+		<button id="underline-btn" title="Underline (Ctrl+U)"><u>U</u></button>
+		<button id="heading1-btn" title="Heading 1">H1</button>
+		<button id="heading2-btn" title="Heading 2">H2</button>
+		<button id="page-break-btn" title="Page Break">📄</button>
+		<select id="page-size-select" title="Page Size">
+			<option value="letter" selected>Letter (8.5" × 11")</option>
+			<option value="legal">Legal (8.5" × 14")</option>
+			<option value="tabloid">Tabloid (11" × 17")</option>
+			<option value="a4">A4 (210mm × 297mm)</option>
+			<option value="a3">A3 (297mm × 420mm)</option>
+		</select>
+		<select id="margin-preset-select" title="Margin Preset">
+			<option value="normal" selected>Normal Margins (1")</option>
+			<option value="narrow">Narrow (0.5")</option>
+			<option value="moderate">Moderate (0.75")</option>
+			<option value="wide">Wide (2")</option>
+		</select>
+		<div id="status-text">Loading...</div>
 	</div>
 	<div id="docx-container"></div>
+
+	<!-- Load dependencies in order -->
 	<script nonce="${nonce}" src="${jszipCdnUri}"></script>
 	<script nonce="${nonce}" src="${docxLibUri}"></script>
+	<script nonce="${nonce}" src="${tiptapCdnUri}"></script>
+	<script nonce="${nonce}" src="${tiptapStarterKitUri}"></script>
+	<script nonce="${nonce}" src="${tiptapDocxBundleUri}"></script>
+	<script nonce="${nonce}" src="${tiptapBundleUri}"></script>
 	<script nonce="${nonce}" src="${scriptUri}"></script>
 </body>
 </html>`;

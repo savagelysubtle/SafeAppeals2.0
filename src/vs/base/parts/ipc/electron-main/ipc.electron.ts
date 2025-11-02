@@ -5,7 +5,7 @@
 
 import { WebContents } from 'electron';
 import { validatedIpcMain } from './ipcMain.js';
-import { VSBuffer } from '../../../common/buffer.js';
+import { VSBuffer, toUint8ArrayWithArrayBuffer } from '../../../common/buffer.js';
 import { Emitter, Event } from '../../../common/event.js';
 import { IDisposable, toDisposable } from '../../../common/lifecycle.js';
 import { ClientConnectionEvent, IPCServer } from '../common/ipc.js';
@@ -20,7 +20,7 @@ function createScopedOnMessageEvent(senderId: number, eventName: string): Event<
 	const onMessage = Event.fromNodeEventEmitter<IIPCEvent>(validatedIpcMain, eventName, (event, message) => ({ event, message }));
 	const onMessageFromSender = Event.filter(onMessage, ({ event }) => event.sender.id === senderId);
 
-	return Event.map(onMessageFromSender, ({ message }) => message ? VSBuffer.wrap(message) : message);
+	return Event.map(onMessageFromSender, ({ message }) => message ? VSBuffer.wrap(toUint8ArrayWithArrayBuffer(message)) : message);
 }
 
 /**

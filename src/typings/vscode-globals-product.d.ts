@@ -27,6 +27,20 @@ declare global {
 	 */
 	var _VSCODE_PACKAGE_JSON: Record<string, any>;
 
+	// Extend globalThis to allow index access
+	interface Window {
+		_VSCODE_FILE_ROOT?: string;
+		_VSCODE_CSS_LOAD?: (module: string) => void;
+		_VSCODE_PRODUCT_JSON?: Record<string, any>;
+		_VSCODE_PACKAGE_JSON?: Record<string, any>;
+		_VSCODE_NLS_MESSAGES?: string[];
+		_VSCODE_NLS_LANGUAGE?: string | undefined;
+		_VSCODE_WEB_PACKAGE_TTP?: any;
+		workerttPolicy?: TrustedTypePolicy;
+		MonacoBootstrapWindow?: any;
+		require?: any;
+	}
+
 }
 
 // fake export to make global work

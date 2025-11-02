@@ -175,14 +175,16 @@ async function doResolveUnixShellEnv(logService: ILogService, token: Cancellatio
 		const stderr: Buffer[] = [];
 		child.stderr.on('data', b => stderr.push(b));
 
-		child.on('close', (code, signal) => {
-			const raw = Buffer.concat(buffers).toString('utf8');
-			logService.trace('getUnixShellEnvironment#raw', raw);
+	child.on('close', (code, signal) => {
+		const buffersArray = buffers as Uint8Array<ArrayBuffer>[];
+		const raw = Buffer.concat(buffersArray).toString('utf8');
+		logService.trace('getUnixShellEnvironment#raw', raw);
 
-			const stderrStr = Buffer.concat(stderr).toString('utf8');
-			if (stderrStr.trim()) {
-				logService.trace('getUnixShellEnvironment#stderr', stderrStr);
-			}
+		const stderrArray = stderr as Uint8Array<ArrayBuffer>[];
+		const stderrStr = Buffer.concat(stderrArray).toString('utf8');
+		if (stderrStr.trim()) {
+			logService.trace('getUnixShellEnvironment#stderr', stderrStr);
+		}
 
 			if (code || signal) {
 				return reject(new Error(localize('resolveShellEnvExitError', "Unexpected exit code from spawned shell (code {0}, signal {1})", code, signal)));

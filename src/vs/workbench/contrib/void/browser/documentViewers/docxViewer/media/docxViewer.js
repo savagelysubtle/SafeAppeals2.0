@@ -18,6 +18,22 @@
 	const saveBtn = document.getElementById('save-btn');
 	const statusText = document.getElementById('status-text');
 
+	// Page navigation elements
+	const prevPageBtn = document.getElementById('prev-page-btn');
+	const nextPageBtn = document.getElementById('next-page-btn');
+	const pageInfo = document.getElementById('page-info');
+	const pageSizeSelect = document.getElementById('page-size-select');
+	const marginPresetSelect = document.getElementById('margin-preset-select');
+	const wordWrapBtn = document.getElementById('word-wrap-btn');
+	const showMarginsBtn = document.getElementById('show-margins-btn');
+	let currentPage = 1;
+	let totalPages = 1;
+	let wordWrapEnabled = true;
+	let currentPageSize = 'letter';
+	let currentMarginPreset = 'normal';
+	let showMarginGuides = false;
+	let isCheckingOverflow = false;
+
 	// Ribbon buttons
 	const boldBtn = document.getElementById('bold-btn');
 	const italicBtn = document.getElementById('italic-btn');
@@ -45,6 +61,7 @@
 	const pageBreakBtn = document.getElementById('page-break-btn');
 
 	const marginsBtn = document.getElementById('margins-btn');
+	const keepWithNextBtn = document.getElementById('keep-with-next-btn');
 
 	// Track modification state
 	function trackModification() {
@@ -118,6 +135,12 @@
 			// Clear container
 			container.innerHTML = '';
 
+			// Create a temporary container for initial rendering
+			const tempContainer = document.createElement('div');
+			tempContainer.style.position = 'absolute';
+			tempContainer.style.visibility = 'hidden';
+			document.body.appendChild(tempContainer);
+
 			// Render using docx-preview library
 			const options = {
 				className: 'docx',
@@ -126,7 +149,7 @@
 				ignoreHeight: false,
 				ignoreFonts: false,
 				breakPages: true,
-				ignoreLastRenderedPageBreak: true,
+				ignoreLastRenderedPageBreak: false,
 				experimental: true,
 				trimXmlDeclaration: true,
 				renderHeaders: true,
@@ -136,37 +159,13 @@
 				debug: false
 			};
 
-			await docx.renderAsync(blob, container, null, options);
+			await docx.renderAsync(blob, tempContainer, null, options);
 
-			// Make the entire document editable
-			// docx-preview creates: .docx-wrapper > section.docx > article
-			const docxWrapper = container.querySelector('.docx-wrapper');
-			if (docxWrapper) {
-				// Make the wrapper contentEditable for easier editing
-				docxWrapper.contentEditable = 'true';
-				docxWrapper.style.outline = 'none'; // Remove the focus outline
-				docxWrapper.classList.add('docx-editable');
+			// Create paginated layout
+			createPaginatedView(tempContainer);
 
-				// Track any changes in the document
-				docxWrapper.addEventListener('input', () => {
-					if (!contentModified) {
-						contentModified = true;
-						updateStatus('Modified');
-						vscode.postMessage({ type: 'contentChanged' });
-					}
-				});
-
-				// Prevent editing of the wrapper background by focusing on content
-				docxWrapper.addEventListener('click', (e) => {
-					// If clicking on wrapper itself, focus on first editable content
-					if (e.target === docxWrapper) {
-						const firstParagraph = docxWrapper.querySelector('p, h1, h2, h3, h4, h5, h6');
-						if (firstParagraph) {
-							firstParagraph.focus();
-						}
-					}
-				});
-			}
+			// Remove temporary container
+			document.body.removeChild(tempContainer);
 
 			docxRendered = true;
 			contentModified = false;
@@ -181,6 +180,574 @@
 			</div>`;
 		}
 	}
+
+	/**
+	 * Create paginated view from rendered content
+	 */
+	function createPaginatedView(sourceContainer) {
+		const docxWrapper = sourceContainer.querySelector('.docx-wrapper');
+		if (!docxWrapper) {
+			console.warn('[DOCX Webview] No docx-wrapper found');
+			return;
+		}
+
+		// Create pages container
+		const pagesContainer = document.createElement('div');
+		pagesContainer.className = 'pages-container';
+
+		// Get all content from the rendered docx
+		const content = docxWrapper.cloneNode(true);
+
+		// Check if docx-preview already created pages
+		const existingPages = content.querySelectorAll('section');
+
+		if (existingPages.length > 1) {
+			// docx-preview already broke content into pages
+			console.log(`[DOCX Webview] Found ${existingPages.length} pre-rendered pages`);
+
+			existingPages.forEach((section, index) => {
+				const page = document.createElement('div');
+				page.className = `docx-page word-wrap-enabled size-${currentPageSize} margin-${currentMarginPreset}`;
+				page.contentEditable = 'true';
+				page.setAttribute('data-page-number', index + 1);
+
+				// Move section content into page
+				while (section.firstChild) {
+					page.appendChild(section.firstChild);
+				}
+
+				// Add page number
+				const pageNumber = document.createElement('div');
+				pageNumber.className = 'page-number';
+				pageNumber.textContent = `Page ${index + 1}`;
+				page.appendChild(pageNumber);
+
+				// Track modifications
+				page.addEventListener('input', () => {
+					trackModification();
+					checkPageOverflow(page);
+				});
+
+				// Handle backspace to delete empty pages
+				page.addEventListener('keydown', (e) => {
+					if (e.key === 'Backspace') {
+						handleBackspaceForPageDeletion(page);
+					} else if (e.key === 'Enter') {
+						// Debounce Enter key - don't check overflow immediately
+						// The input event will handle it
+					}
+				});
+
+				pagesContainer.appendChild(page);
+			});
+		} else {
+			// Create single page if no pre-rendered pages
+			console.log('[DOCX Webview] Creating single page view');
+
+			const page = document.createElement('div');
+			page.className = `docx-page word-wrap-enabled size-${currentPageSize} margin-${currentMarginPreset}`;
+			page.contentEditable = 'true';
+			page.setAttribute('data-page-number', '1');
+
+			// Move all content to page
+			while (content.firstChild) {
+				page.appendChild(content.firstChild);
+			}
+
+			// Add page number
+			const pageNumber = document.createElement('div');
+			pageNumber.className = 'page-number';
+			pageNumber.textContent = 'Page 1';
+			page.appendChild(pageNumber);
+
+			// Track modifications
+			page.addEventListener('input', () => {
+				trackModification();
+				checkPageOverflow(page);
+			});
+
+			// Handle backspace to delete empty pages
+			page.addEventListener('keydown', (e) => {
+				if (e.key === 'Backspace') {
+					handleBackspaceForPageDeletion(page);
+				} else if (e.key === 'Enter') {
+					// Debounce Enter key - don't check overflow immediately
+					// The input event will handle it
+				}
+			});
+
+			pagesContainer.appendChild(page);
+		}
+
+		// Add to container
+		container.appendChild(pagesContainer);
+
+		totalPages = pagesContainer.children.length;
+		currentPage = 1;
+		updatePageNavigation();
+
+		console.log(`[DOCX Webview] Created ${totalPages} page(s)`);
+	}
+
+	/**
+	 * Check if page content exceeds page height and create new page if needed
+	 */
+	function checkPageOverflow(page) {
+		if (isCheckingOverflow) {
+			console.log('[DOCX Webview] ⚠️ Already checking overflow, skipping');
+			return;
+		}
+
+		// Use setTimeout instead of requestAnimationFrame for better reliability
+		setTimeout(() => {
+			if (isCheckingOverflow) {
+				console.log('[DOCX Webview] ⚠️ Already checking overflow in timeout, skipping');
+				return;
+			}
+
+			isCheckingOverflow = true;
+
+			try {
+				const pageNumber = page.querySelector('.page-number');
+
+				// Calculate available content height (page height minus padding minus page number space)
+				const pageHeight = page.offsetHeight;
+				const computedStyle = window.getComputedStyle(page);
+				const paddingTop = parseFloat(computedStyle.paddingTop);
+				const paddingBottom = parseFloat(computedStyle.paddingBottom);
+				const pageNumberHeight = pageNumber ? pageNumber.offsetHeight + 20 : 30; // Add buffer
+
+				const maxContentHeight = pageHeight - paddingTop - paddingBottom - pageNumberHeight;
+
+				// Get all content elements (excluding page number)
+				let contentElements = Array.from(page.children).filter(child =>
+					!child.classList.contains('page-number')
+				);
+
+				// If there's only one element and it's a section/article/div wrapper, look inside it
+				if (contentElements.length === 1) {
+					const wrapper = contentElements[0];
+					const wrapperTag = wrapper.tagName.toLowerCase();
+					if (wrapperTag === 'section' || wrapperTag === 'article' || wrapperTag === 'div') {
+						// Use the children of the wrapper instead
+						const innerElements = Array.from(wrapper.children);
+						if (innerElements.length > 0) {
+							console.log(`[DOCX Webview] Found ${wrapperTag} wrapper with ${innerElements.length} children, using children as content elements`);
+							contentElements = innerElements;
+						}
+					}
+				}
+
+				console.log(`[DOCX Webview] Page ${page.getAttribute('data-page-number')} check:`);
+				console.log(`  - Page height: ${pageHeight}px`);
+				console.log(`  - Max content height: ${maxContentHeight}px`);
+				console.log(`  - Content elements: ${contentElements.length}`);
+
+				// If no content elements, don't check overflow
+				if (contentElements.length === 0) {
+					console.log('  - No content elements, skipping overflow check');
+					return;
+				}
+
+				// Calculate total content height using scrollHeight for accuracy
+				let totalContentHeight = 0;
+				contentElements.forEach((element, idx) => {
+					const elementHeight = Math.max(element.offsetHeight, element.scrollHeight);
+					const marginTop = parseFloat(window.getComputedStyle(element).marginTop);
+					const marginBottom = parseFloat(window.getComputedStyle(element).marginBottom);
+					const totalElementHeight = elementHeight + marginTop + marginBottom;
+					totalContentHeight += totalElementHeight;
+
+					if (idx < 5) { // Only log first 5 to avoid spam
+						console.log(`  - Element ${idx}: ${element.tagName}, height=${totalElementHeight.toFixed(2)}px, accumulated=${totalContentHeight.toFixed(2)}px`);
+					}
+				});
+
+				console.log(`  - Total content height: ${totalContentHeight.toFixed(2)}px`);
+				console.log(`  - Overflow: ${totalContentHeight > maxContentHeight ? 'YES' : 'NO'} (${(totalContentHeight - maxContentHeight).toFixed(2)}px)`);
+
+				// If content exceeds available height, create new page
+				if (totalContentHeight > maxContentHeight) {
+					console.log(`[DOCX Webview] ⚠️ Page overflow detected: ${totalContentHeight}px > ${maxContentHeight}px`);
+					createNewPageFromOverflow(page, contentElements, maxContentHeight);
+				}
+			} finally {
+				isCheckingOverflow = false;
+			}
+		}, 150); // Slightly longer delay to avoid double-calls
+	}
+
+	/**
+	 * Create a new page and move overflow content to it
+	 */
+	function createNewPageFromOverflow(currentPage, contentElements, maxHeight) {
+		const pagesContainer = container.querySelector('.pages-container');
+		if (!pagesContainer) return;
+
+		const currentPageNum = parseInt(currentPage.getAttribute('data-page-number'));
+		const pageNumber = currentPage.querySelector('.page-number');
+
+		console.log(`[DOCX Webview] 📄 Creating overflow page from page ${currentPageNum}`);
+		console.log(`  - Total elements on current page: ${contentElements.length}`);
+		console.log(`  - Max content height allowed: ${maxHeight.toFixed(2)}px`);
+
+		// Find where to split content
+		let accumulatedHeight = 0;
+		let splitIndex = contentElements.length; // Start at end (move nothing by default)
+
+		for (let i = 0; i < contentElements.length; i++) {
+			const element = contentElements[i];
+			// Use scrollHeight for better overflow detection
+			const elementHeight = Math.max(element.offsetHeight, element.scrollHeight);
+			const marginTop = parseFloat(window.getComputedStyle(element).marginTop);
+			const marginBottom = parseFloat(window.getComputedStyle(element).marginBottom);
+			const totalElementHeight = elementHeight + marginTop + marginBottom;
+
+			console.log(`  - Element ${i} (${element.tagName}): ${totalElementHeight.toFixed(2)}px, accumulated: ${accumulatedHeight.toFixed(2)}px`);
+
+			// Check if adding this element would exceed the limit
+			if (accumulatedHeight + totalElementHeight > maxHeight) {
+				splitIndex = i; // This is the FIRST element that overflows
+				console.log(`  ⚠️ Element ${i} would overflow! Split index set to ${i}`);
+				break;
+			}
+
+			accumulatedHeight += totalElementHeight;
+		}
+
+		console.log(`  - Final split index: ${splitIndex}`);
+		console.log(`  - Elements to move: ${contentElements.length - splitIndex}`);
+
+		// If nothing overflows or nothing to move, don't create a page
+		if (splitIndex >= contentElements.length) {
+			console.warn('[DOCX Webview] ⚠️ No content overflows, not creating new page');
+			return;
+		}
+
+		// If splitIndex is 0, DON'T create a page - this means all content fits
+		// This happens when Enter creates a new paragraph that causes slight overflow
+		if (splitIndex === 0) {
+			console.warn('[DOCX Webview] ⚠️ Split index is 0 - refusing to move all content. Page may need manual break.');
+			return;
+		}
+
+		// Create new page
+		const newPage = document.createElement('div');
+		const wrapClass = wordWrapEnabled ? 'word-wrap-enabled' : 'word-wrap-disabled';
+		newPage.className = `docx-page ${wrapClass} size-${currentPageSize} margin-${currentMarginPreset}`;
+		newPage.contentEditable = 'true';
+
+		// Create a wrapper section for the new page to match structure
+		const newWrapper = document.createElement('section');
+		newWrapper.className = 'docx';
+
+		// Move ONLY overflow content to new page (elements from splitIndex onwards)
+		const elementsToMove = [];
+		for (let i = splitIndex; i < contentElements.length; i++) {
+			elementsToMove.push(contentElements[i]);
+			console.log(`  - Queuing element ${i} (${contentElements[i].tagName}) for move`);
+		}
+
+		console.log(`  - Moving ${elementsToMove.length} elements to new page`);
+
+		// Now append them to the new wrapper
+		elementsToMove.forEach((el, idx) => {
+			newWrapper.appendChild(el);
+			console.log(`  - Moved element ${idx}: ${el.tagName}`);
+		});
+
+		// Add wrapper to new page
+		newPage.appendChild(newWrapper);
+
+		// Add page number to new page (will be updated during renumbering)
+		const newPageNumber = document.createElement('div');
+		newPageNumber.className = 'page-number';
+		newPageNumber.textContent = `Page ${currentPageNum + 1}`;
+		newPage.appendChild(newPageNumber);
+
+		// Track modifications on new page
+		newPage.addEventListener('input', () => {
+			trackModification();
+			checkPageOverflow(newPage);
+		});
+
+		// Handle backspace to delete empty pages
+		newPage.addEventListener('keydown', (e) => {
+			if (e.key === 'Backspace') {
+				handleBackspaceForPageDeletion(newPage);
+			} else if (e.key === 'Enter') {
+				// Debounce Enter key
+			}
+		});
+
+		// Insert new page AFTER current page in DOM order
+		console.log(`  - Attempting to insert new page after current page ${currentPageNum}`);
+
+		// Use nextSibling to insert right after currentPage
+		if (currentPage.nextSibling) {
+			pagesContainer.insertBefore(newPage, currentPage.nextSibling);
+			console.log(`  ✓ Inserted new page right after current page (before its next sibling)`);
+		} else {
+			// currentPage is the last child, append to end
+			pagesContainer.appendChild(newPage);
+			console.log(`  ✓ Appended new page to end (current page was last)`);
+		}
+
+		// Renumber ALL pages in DOM order to maintain sequential numbering
+		const allPages = Array.from(pagesContainer.querySelectorAll('.docx-page'));
+		console.log(`  - Renumbering ${allPages.length} total pages in DOM order`);
+
+		allPages.forEach((p, index) => {
+			const oldNum = p.getAttribute('data-page-number');
+			const newNum = index + 1;
+			p.setAttribute('data-page-number', newNum);
+			const pNum = p.querySelector('.page-number');
+			if (pNum) {
+				pNum.textContent = `Page ${newNum}`;
+			}
+			console.log(`    - Page at DOM index ${index}: ${oldNum || 'new'} → Page ${newNum}`);
+		});
+
+		// Update total pages
+		totalPages = allPages.length;
+		updatePageNavigation();
+
+		console.log(`[DOCX Webview] ✅ Created new page. Total pages now: ${totalPages}`);
+
+		// Focus the new page so cursor moves there
+		setTimeout(() => {
+			newPage.focus();
+			// Move cursor to start of new page content
+			const selection = window.getSelection();
+			const range = document.createRange();
+			const firstContentElement = newWrapper.firstChild;
+			if (firstContentElement) {
+				range.setStart(firstContentElement, 0);
+				range.collapse(true);
+				selection.removeAllRanges();
+				selection.addRange(range);
+				console.log(`  ✓ Moved cursor to new page`);
+			}
+		}, 50);
+	}
+
+	/**
+	 * Handle backspace key to delete empty pages
+	 */
+	function handleBackspaceForPageDeletion(page) {
+		const pagesContainer = container.querySelector('.pages-container');
+		if (!pagesContainer) return;
+
+		const allPages = Array.from(pagesContainer.querySelectorAll('.docx-page'));
+		if (allPages.length <= 1) return; // Don't delete if it's the only page
+
+		// Check if page is empty (only has page number or wrapper with no content)
+		const pageNumber = page.querySelector('.page-number');
+		const contentElements = Array.from(page.children).filter(child =>
+			!child.classList.contains('page-number')
+		);
+
+		let isEmpty = false;
+		if (contentElements.length === 0) {
+			isEmpty = true;
+		} else if (contentElements.length === 1) {
+			const wrapper = contentElements[0];
+			const innerContent = wrapper.textContent.trim();
+			if (innerContent === '') {
+				isEmpty = true;
+			}
+		}
+
+		if (isEmpty && window.getSelection().toString() === '') {
+			console.log(`[DOCX Webview] Deleting empty page ${page.getAttribute('data-page-number')}`);
+
+			// Focus previous page before deletion
+			const currentIndex = allPages.indexOf(page);
+			if (currentIndex > 0) {
+				const prevPage = allPages[currentIndex - 1];
+				prevPage.focus();
+
+				// Move cursor to end of previous page
+				const selection = window.getSelection();
+				const range = document.createRange();
+				const lastChild = prevPage.lastChild;
+				if (lastChild && !lastChild.classList.contains('page-number')) {
+					range.selectNodeContents(lastChild);
+					range.collapse(false);
+					selection.removeAllRanges();
+					selection.addRange(range);
+				}
+			}
+
+			// Remove the empty page
+			page.remove();
+
+			// Renumber remaining pages
+			const remainingPages = pagesContainer.querySelectorAll('.docx-page');
+			remainingPages.forEach((p, index) => {
+				p.setAttribute('data-page-number', index + 1);
+				const pNum = p.querySelector('.page-number');
+				if (pNum) {
+					pNum.textContent = `Page ${index + 1}`;
+				}
+			});
+
+			totalPages = remainingPages.length;
+			updatePageNavigation();
+			trackModification();
+		}
+	}
+
+	/**
+	 * Update page navigation state
+	 */
+	function updatePageNavigation() {
+		pageInfo.textContent = `Page ${currentPage} of ${totalPages}`;
+		prevPageBtn.disabled = currentPage <= 1;
+		nextPageBtn.disabled = currentPage >= totalPages;
+	}
+
+	/**
+	 * Navigate to a specific page
+	 */
+	function navigateToPage(pageNumber) {
+		const pages = container.querySelectorAll('.docx-page');
+		if (pageNumber < 1 || pageNumber > pages.length) {
+			return;
+		}
+
+		currentPage = pageNumber;
+		const targetPage = pages[pageNumber - 1];
+
+		// Scroll to page with smooth animation
+		targetPage.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+		updatePageNavigation();
+	}
+
+	// Page navigation event listeners
+	prevPageBtn.addEventListener('click', () => {
+		if (currentPage > 1) {
+			navigateToPage(currentPage - 1);
+		}
+	});
+
+	nextPageBtn.addEventListener('click', () => {
+		if (currentPage < totalPages) {
+			navigateToPage(currentPage + 1);
+		}
+	});
+
+	// Update current page on scroll
+	let scrollTimeout;
+	container.addEventListener('scroll', () => {
+		clearTimeout(scrollTimeout);
+		scrollTimeout = setTimeout(() => {
+			const pages = container.querySelectorAll('.docx-page');
+			const containerRect = container.getBoundingClientRect();
+			const containerTop = containerRect.top;
+
+			// Find which page is most visible
+			let closestPage = 1;
+			let smallestDistance = Infinity;
+
+			pages.forEach((page, index) => {
+				const pageRect = page.getBoundingClientRect();
+				const pageTop = pageRect.top;
+				const distance = Math.abs(pageTop - containerTop);
+
+				if (distance < smallestDistance) {
+					smallestDistance = distance;
+					closestPage = index + 1;
+				}
+			});
+
+			if (closestPage !== currentPage) {
+				currentPage = closestPage;
+				updatePageNavigation();
+			}
+		}, 100);
+	});
+
+	// Page size selector
+	pageSizeSelect.addEventListener('change', (e) => {
+		const newSize = e.target.value;
+		const pages = container.querySelectorAll('.docx-page');
+
+		// Update all pages with new size
+		pages.forEach(page => {
+			// Remove old size class
+			page.classList.remove('size-letter', 'size-legal', 'size-tabloid', 'size-a4', 'size-a3');
+			// Add new size class
+			page.classList.add(`size-${newSize}`);
+		});
+
+		currentPageSize = newSize;
+		console.log(`[DOCX Webview] Page size changed to: ${newSize}`);
+		trackModification();
+	});
+
+	// Margin preset selector
+	marginPresetSelect.addEventListener('change', (e) => {
+		const newMargin = e.target.value;
+
+		if (newMargin === 'custom') {
+			// Open custom margins dialog
+			showMarginsDialog();
+			return;
+		}
+
+		const pages = container.querySelectorAll('.docx-page');
+
+		// Update all pages with new margin
+		pages.forEach(page => {
+			// Remove old margin classes
+			page.classList.remove('margin-normal', 'margin-narrow', 'margin-moderate', 'margin-wide');
+			// Add new margin class
+			page.classList.add(`margin-${newMargin}`);
+		});
+
+		currentMarginPreset = newMargin;
+		console.log(`[DOCX Webview] Margin preset changed to: ${newMargin}`);
+		trackModification();
+	});
+
+	// Show margin guides toggle
+	showMarginsBtn.addEventListener('click', () => {
+		showMarginGuides = !showMarginGuides;
+		const pagesContainer = container.querySelector('.pages-container');
+
+		if (showMarginGuides) {
+			pagesContainer.classList.add('show-margin-guides');
+			showMarginsBtn.classList.add('active');
+		} else {
+			pagesContainer.classList.remove('show-margin-guides');
+			showMarginsBtn.classList.remove('active');
+		}
+
+		console.log(`[DOCX Webview] Margin guides ${showMarginGuides ? 'shown' : 'hidden'}`);
+	});
+
+	// Word wrap toggle
+	wordWrapBtn.addEventListener('click', () => {
+		wordWrapEnabled = !wordWrapEnabled;
+		const pages = container.querySelectorAll('.docx-page');
+
+		pages.forEach(page => {
+			if (wordWrapEnabled) {
+				page.classList.remove('word-wrap-disabled');
+				page.classList.add('word-wrap-enabled');
+			} else {
+				page.classList.remove('word-wrap-enabled');
+				page.classList.add('word-wrap-disabled');
+			}
+		});
+
+		// Update button state
+		wordWrapBtn.classList.toggle('active', wordWrapEnabled);
+
+		console.log(`[DOCX Webview] Word wrap ${wordWrapEnabled ? 'enabled' : 'disabled'}`);
+	});
 
 	// ===== FORMATTING TOOLBAR EVENT HANDLERS =====
 
@@ -301,26 +868,106 @@
 	// Margins dialog
 	marginsBtn.addEventListener('click', showMarginsDialog);
 
+	// Keep with next toggle
+	keepWithNextBtn.addEventListener('click', toggleKeepWithNext);
+
 	// ===== FORMATTING FUNCTIONS =====
+
+	function toggleKeepWithNext() {
+		const selection = window.getSelection();
+		if (!selection.rangeCount) return;
+
+		// Find the paragraph or heading element
+		let element = selection.anchorNode;
+		while (element && element !== container) {
+			if (element.tagName && (
+				element.tagName.toLowerCase() === 'p' ||
+				element.tagName.toLowerCase().match(/^h[1-6]$/)
+			)) {
+				break;
+			}
+			element = element.parentElement;
+		}
+
+		if (!element || !element.tagName) {
+			console.warn('[DOCX Webview] No paragraph or heading selected');
+			return;
+		}
+
+		// Toggle keep-with-next class
+		element.classList.toggle('keep-with-next');
+
+		const isEnabled = element.classList.contains('keep-with-next');
+		console.log(`[DOCX Webview] Keep with next ${isEnabled ? 'enabled' : 'disabled'} for element`);
+
+		trackModification();
+		updateActiveStates();
+	}
 
 	function insertPageBreak() {
 		const selection = window.getSelection();
 		if (!selection.rangeCount) return;
 
 		const range = selection.getRangeAt(0);
-		const breakDiv = document.createElement('div');
-		breakDiv.className = 'page-break';
-		breakDiv.contentEditable = 'false';
-		breakDiv.innerHTML = '<hr><span>Page Break</span>';
 
-		range.deleteContents();
-		range.insertNode(breakDiv);
+		// Find which page we're in
+		let currentPageEl = range.startContainer;
+		while (currentPageEl && !currentPageEl.classList?.contains('docx-page')) {
+			currentPageEl = currentPageEl.parentElement;
+		}
 
-		// Move cursor after page break
-		range.setStartAfter(breakDiv);
-		range.collapse(true);
-		selection.removeAllRanges();
-		selection.addRange(range);
+		if (!currentPageEl) return;
+
+		// Create a new page
+		const pagesContainer = container.querySelector('.pages-container');
+		if (!pagesContainer) return;
+
+		const currentPageNum = parseInt(currentPageEl.getAttribute('data-page-number'));
+
+		// Get content after cursor
+		const afterContent = range.extractContents();
+
+		// Create new page
+		const newPage = document.createElement('div');
+		const wrapClass = wordWrapEnabled ? 'word-wrap-enabled' : 'word-wrap-disabled';
+		newPage.className = `docx-page ${wrapClass} size-${currentPageSize} margin-${currentMarginPreset}`;
+		newPage.contentEditable = 'true';
+		newPage.setAttribute('data-page-number', currentPageNum + 1);
+		newPage.appendChild(afterContent);
+
+		// Add page number
+		const pageNumber = document.createElement('div');
+		pageNumber.className = 'page-number';
+		pageNumber.textContent = `Page ${currentPageNum + 1}`;
+		newPage.appendChild(pageNumber);
+
+		// Track modifications
+		newPage.addEventListener('input', () => trackModification());
+
+		// Insert new page after current
+		const nextPage = currentPageEl.nextElementSibling;
+		if (nextPage) {
+			pagesContainer.insertBefore(newPage, nextPage);
+		} else {
+			pagesContainer.appendChild(newPage);
+		}
+
+		// Renumber all subsequent pages
+		const allPages = pagesContainer.querySelectorAll('.docx-page');
+		allPages.forEach((page, index) => {
+			page.setAttribute('data-page-number', index + 1);
+			const pageNum = page.querySelector('.page-number');
+			if (pageNum) {
+				pageNum.textContent = `Page ${index + 1}`;
+			}
+		});
+
+		// Update total pages
+		totalPages = allPages.length;
+		updatePageNavigation();
+
+		// Focus on new page
+		newPage.focus();
 
 		trackModification();
 	}
@@ -453,6 +1100,19 @@
 					if (matchingOption) {
 						fontFamilySelect.value = matchingOption.value;
 					}
+
+					// Check for keep-with-next on current paragraph
+					let parent = element;
+					while (parent && parent !== container) {
+						if (parent.tagName && (
+							parent.tagName.toLowerCase() === 'p' ||
+							parent.tagName.toLowerCase().match(/^h[1-6]$/)
+						)) {
+							keepWithNextBtn.classList.toggle('active', parent.classList.contains('keep-with-next'));
+							break;
+						}
+						parent = parent.parentElement;
+					}
 				}
 			}
 
@@ -550,6 +1210,22 @@
 			insertPageBreak();
 		}
 
+		// Page Up - navigate to previous page
+		if (e.key === 'PageUp' && !e.ctrlKey && !e.shiftKey && !e.altKey) {
+			if (currentPage > 1) {
+				e.preventDefault();
+				navigateToPage(currentPage - 1);
+			}
+		}
+
+		// Page Down - navigate to next page
+		if (e.key === 'PageDown' && !e.ctrlKey && !e.shiftKey && !e.altKey) {
+			if (currentPage < totalPages) {
+				e.preventDefault();
+				navigateToPage(currentPage + 1);
+			}
+		}
+
 		// Ctrl+Z or Cmd+Z for undo (browser default)
 		if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
 			// Browser will handle undo
@@ -575,33 +1251,31 @@
 		updateStatus('Saving...');
 		saveBtn.disabled = true;
 
-		// Get the edited HTML content
-		const docxWrapper = container.querySelector('.docx-wrapper');
-		const html = docxWrapper ? docxWrapper.innerHTML : '';
+		// Get all pages
+		const pages = container.querySelectorAll('.docx-page');
+		let html = '';
+		let text = '';
 
-		// Extract plain text for fallback
-		const text = docxWrapper ? docxWrapper.innerText : '';
-
-		// Get margins for preservation
-		let margins = { top: 40, right: 40, bottom: 40, left: 40 };
-		if (docxWrapper) {
-			const style = window.getComputedStyle(docxWrapper);
-			const padding = style.padding.split(' ');
-			if (padding.length >= 4) {
-				margins = {
-					top: parseInt(padding[0]),
-					right: parseInt(padding[1]),
-					bottom: parseInt(padding[2]),
-					left: parseInt(padding[3])
-				};
+		pages.forEach(page => {
+			// Clone page content without page number
+			const pageClone = page.cloneNode(true);
+			const pageNum = pageClone.querySelector('.page-number');
+			if (pageNum) {
+				pageNum.remove();
 			}
-		}
+
+			html += pageClone.innerHTML + '\n<div class="page-break"></div>\n';
+			text += page.innerText.replace(/Page \d+/g, '').trim() + '\n\n';
+		});
+
+		// Get margins from first page (assuming all pages have same margins)
+		let margins = { top: 96, right: 96, bottom: 96, left: 96 }; // Default 1 inch = 96px
 
 		// Send to host for saving
 		vscode.postMessage({
 			type: 'saveRequested',
 			html: html,
-			text: text,
+			text: text.trim(),
 			margins: margins
 		});
 	}

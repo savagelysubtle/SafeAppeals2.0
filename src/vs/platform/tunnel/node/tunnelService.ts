@@ -160,7 +160,10 @@ export class NodeRemoteTunnel extends Disposable implements RemoteTunnel {
 		remoteSocket.onClose(() => localSocket.destroy());
 		remoteSocket.onEnd(() => localSocket.end());
 		remoteSocket.onData(d => localSocket.write(d.buffer));
-		localSocket.on('data', d => remoteSocket.write(VSBuffer.wrap(d)));
+		localSocket.on('data', d => {
+			const buffer = d as Uint8Array<ArrayBufferLike>;
+			remoteSocket.write(VSBuffer.wrap(buffer));
+		});
 		localSocket.resume();
 	}
 

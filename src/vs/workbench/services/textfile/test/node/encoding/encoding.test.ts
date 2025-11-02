@@ -7,7 +7,7 @@ import assert from 'assert';
 import * as fs from 'fs';
 import * as encoding from '../../../common/encoding.js';
 import * as streams from '../../../../../../base/common/stream.js';
-import { newWriteableBufferStream, VSBuffer, VSBufferReadableStream, streamToBufferReadableStream } from '../../../../../../base/common/buffer.js';
+import { newWriteableBufferStream, VSBuffer, VSBufferReadableStream, streamToBufferReadableStream, toUint8ArrayWithArrayBuffer } from '../../../../../../base/common/buffer.js';
 import { splitLines } from '../../../../../../base/common/strings.js';
 import { FileAccess } from '../../../../../../base/common/network.js';
 import { importAMDNodeModule } from '../../../../../../amdX.js';
@@ -45,7 +45,7 @@ function readExactlyByFile(file: string, totalBytes: number): Promise<ReadResult
 						return reject(err); // we want to bubble this error up (file is actually a folder)
 					}
 
-					return resolve({ buffer: resultBuffer ? VSBuffer.wrap(resultBuffer) : null, bytesRead });
+					return resolve({ buffer: resultBuffer ? VSBuffer.wrap(toUint8ArrayWithArrayBuffer(resultBuffer)) : null, bytesRead });
 				});
 			}
 
@@ -53,7 +53,7 @@ function readExactlyByFile(file: string, totalBytes: number): Promise<ReadResult
 			let offset = 0;
 
 			function readChunk(): void {
-				fs.read(fd, buffer, offset, totalBytes - offset, null, (err, bytesRead) => {
+				fs.read(fd, buffer as any as Uint8Array, offset, totalBytes - offset, null, (err, bytesRead) => {
 					if (err) {
 						return end(err, null, 0);
 					}
@@ -222,7 +222,7 @@ suite('Encoding', () => {
 				if (err) {
 					reject(err);
 				} else {
-					resolve(importAMDNodeModule<typeof import('@vscode/iconv-lite-umd')>('@vscode/iconv-lite-umd', 'lib/iconv-lite-umd.js').then(iconv => iconv.decode(data, encoding.toNodeEncoding(fileEncoding))));
+					resolve(importAMDNodeModule<typeof import('@vscode/iconv-lite-umd')>('@vscode/iconv-lite-umd', 'lib/iconv-lite-umd.js').then(iconv => iconv.decode(toUint8ArrayWithArrayBuffer(data), encoding.toNodeEncoding(fileEncoding))));
 				}
 			});
 		});
@@ -231,7 +231,7 @@ suite('Encoding', () => {
 	function newTestReadableStream(buffers: Buffer[]): VSBufferReadableStream {
 		const stream = newWriteableBufferStream();
 		buffers
-			.map(VSBuffer.wrap)
+			.map(b => VSBuffer.wrap(toUint8ArrayWithArrayBuffer(b)))
 			.forEach(buffer => {
 				setTimeout(() => {
 					stream.write(buffer);
@@ -445,7 +445,7 @@ suite('Encoding', () => {
 
 			const encodedReadable = encoding.toEncodeReadable(source, utfEncoding, { addBOM: true });
 
-			const expected = VSBuffer.wrap(Buffer.from(relatedBom)).toString();
+			const expected = VSBuffer.wrap(toUint8ArrayWithArrayBuffer(Buffer.from(relatedBom))).toString();
 			const actual = streams.consumeReadable(await encodedReadable, VSBuffer.concat).toString();
 
 			assert.strictEqual(actual, expected);

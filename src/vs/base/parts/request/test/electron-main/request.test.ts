@@ -33,7 +33,7 @@ suite('Request', () => {
 					res.end(JSON.stringify({
 						method: req.method,
 						url: req.url,
-						data: Buffer.concat(data).toString()
+						data: Buffer.concat(data as any).toString()
 					}));
 				});
 			}).listen(0, '127.0.0.1', () => {

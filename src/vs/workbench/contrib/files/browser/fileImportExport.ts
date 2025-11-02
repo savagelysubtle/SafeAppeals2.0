@@ -718,7 +718,10 @@ export class FileDownload {
 
 			listenStream(sourceStream, {
 				onData: data => {
-					target.write(data.buffer);
+					// VSBuffer.buffer is Uint8Array, but TypeScript infers it as Uint8Array<ArrayBufferLike>
+					// Create a new Uint8Array copy to ensure it has ArrayBuffer backing, not ArrayBufferLike
+					const buffer = new Uint8Array(data.buffer.slice());
+					target.write(buffer);
 					this.reportProgress(contents.name, contents.size, data.byteLength, operation);
 				},
 				onError: error => {
@@ -736,7 +739,10 @@ export class FileDownload {
 	private async downloadFileUnbufferedBrowser(resource: URI, target: FileSystemWritableFileStream, operation: IDownloadOperation, token: CancellationToken): Promise<void> {
 		const contents = await this.fileService.readFile(resource, undefined, token);
 		if (!token.isCancellationRequested) {
-			target.write(contents.value.buffer);
+			// contents.value.buffer is Uint8Array, but TypeScript infers it as Uint8Array<ArrayBufferLike>
+			// Create a new Uint8Array copy to ensure it has ArrayBuffer backing, not ArrayBufferLike
+			const buffer = new Uint8Array(contents.value.buffer.slice());
+			target.write(buffer);
 			this.reportProgress(contents.name, contents.size, contents.value.byteLength, operation);
 		}
 

@@ -7,7 +7,7 @@ import { createHash } from 'crypto';
 import { Server as NetServer, Socket, createServer, createConnection } from 'net';
 import { tmpdir } from 'os';
 import { createDeflateRaw, ZlibOptions, InflateRaw, DeflateRaw, createInflateRaw } from 'zlib';
-import { VSBuffer } from '../../../common/buffer.js';
+import { VSBuffer, toUint8ArrayWithArrayBuffer } from '../../../common/buffer.js';
 import { onUnexpectedError } from '../../../common/errors.js';
 import { Emitter, Event } from '../../../common/event.js';
 import { Disposable, IDisposable } from '../../../common/lifecycle.js';
@@ -88,7 +88,7 @@ export class NodeSocket implements ISocket {
 	public onData(_listener: (e: VSBuffer) => void): IDisposable {
 		const listener = (buff: Buffer) => {
 			this.traceSocketEvent(SocketDiagnosticsEventType.Read, buff);
-			_listener(VSBuffer.wrap(buff));
+			_listener(VSBuffer.wrap(toUint8ArrayWithArrayBuffer(buff)));
 		};
 		this.socket.on('data', listener);
 		return {
@@ -667,7 +667,7 @@ class ZlibInflateStream extends Disposable {
 		});
 		this._zlibInflate.on('data', (data: Buffer) => {
 			this._tracer.traceSocketEvent(SocketDiagnosticsEventType.zlibInflateData, data);
-			this._pendingInflateData.push(VSBuffer.wrap(data));
+			this._pendingInflateData.push(VSBuffer.wrap(toUint8ArrayWithArrayBuffer(data)));
 		});
 		if (inflateBytes) {
 			this._tracer.traceSocketEvent(SocketDiagnosticsEventType.zlibInflateInitialWrite, inflateBytes.buffer);
@@ -720,7 +720,7 @@ class ZlibDeflateStream extends Disposable {
 		});
 		this._zlibDeflate.on('data', (data: Buffer) => {
 			this._tracer.traceSocketEvent(SocketDiagnosticsEventType.zlibDeflateData, data);
-			this._pendingDeflateData.push(VSBuffer.wrap(data));
+			this._pendingDeflateData.push(VSBuffer.wrap(toUint8ArrayWithArrayBuffer(data)));
 		});
 	}
 

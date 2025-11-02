@@ -1,4 +1,4 @@
-/* DOCX Viewer CSS */
+/* DOCX Viewer CSS - Tiptap Edition */
 
 body {
 	margin: 0;
@@ -12,6 +12,105 @@ body {
 	font-family: var(--vscode-font-family);
 }
 
+/* Tiptap Editor Styles */
+.tiptap-editor {
+	outline: none;
+	min-height: 100%;
+}
+
+.tiptap-editor p {
+	margin: 0 0 12px 0;
+}
+
+.tiptap-editor h1,
+.tiptap-editor h2,
+.tiptap-editor h3,
+.tiptap-editor h4,
+.tiptap-editor h5,
+.tiptap-editor h6 {
+	margin: 16px 0 8px 0;
+	font-weight: 600;
+}
+
+.tiptap-editor ul,
+.tiptap-editor ol {
+	margin: 12px 0;
+	padding-left: 30px;
+}
+
+.tiptap-editor li {
+	margin: 4px 0;
+}
+
+.tiptap-editor table {
+	border-collapse: collapse;
+	width: 100%;
+	margin: 12px 0;
+}
+
+.tiptap-editor table td,
+.tiptap-editor table th {
+	border: 1px solid var(--vscode-panel-border);
+	padding: 8px;
+	text-align: left;
+}
+
+.tiptap-editor blockquote {
+	border-left: 3px solid var(--vscode-panel-border);
+	padding-left: 16px;
+	margin: 12px 0;
+	font-style: italic;
+}
+
+.tiptap-editor code {
+	background-color: var(--vscode-textCodeBlock-background);
+	padding: 2px 4px;
+	border-radius: 3px;
+	font-family: var(--vscode-editor-font-family);
+	font-size: 0.9em;
+}
+
+.tiptap-editor pre {
+	background-color: var(--vscode-textCodeBlock-background);
+	padding: 12px;
+	border-radius: 4px;
+	overflow-x: auto;
+	margin: 12px 0;
+}
+
+.tiptap-editor pre code {
+	background: none;
+	padding: 0;
+}
+
+/* Tiptap Pagination Styles */
+.tiptap-page {
+	background: white;
+	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+	margin: 20px auto;
+	position: relative;
+	page-break-after: always;
+	break-after: page;
+}
+
+.tiptap-page-break {
+	border-top: 2px dashed var(--vscode-panel-border);
+	margin: 20px 0;
+	position: relative;
+}
+
+.tiptap-page-break::after {
+	content: 'Page Break';
+	position: absolute;
+	top: -10px;
+	left: 50%;
+	transform: translateX(-50%);
+	background-color: var(--vscode-editor-background);
+	padding: 0 8px;
+	font-size: 10px;
+	color: var(--vscode-descriptionForeground);
+}
+
 #docx-toolbar {
 	display: flex;
 	align-items: center;
@@ -20,6 +119,79 @@ body {
 	background-color: var(--vscode-editorGroupHeader-tabsBackground);
 	border-bottom: 1px solid var(--vscode-panel-border);
 	flex-shrink: 0;
+}
+
+#page-nav {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin-left: 16px;
+	padding: 0 12px;
+	border-left: 1px solid var(--vscode-panel-border);
+}
+
+#page-size-select {
+	padding: 4px 8px;
+	background-color: var(--vscode-dropdown-background);
+	color: var(--vscode-dropdown-foreground);
+	border: 1px solid var(--vscode-dropdown-border);
+	border-radius: 4px;
+	cursor: pointer;
+	font-size: 12px;
+	font-family: var(--vscode-font-family);
+	margin-left: 8px;
+}
+
+#page-size-select:hover,
+#margin-preset-select:hover {
+	background-color: var(--vscode-list-activeSelectionBackground);
+	color: var(--vscode-list-activeSelectionForeground);
+}
+
+#page-size-select:focus,
+#margin-preset-select:focus {
+	outline: 1px solid var(--vscode-focusBorder);
+	outline-offset: -1px;
+}
+
+#margin-preset-select {
+	padding: 4px 8px;
+	background-color: var(--vscode-dropdown-background);
+	color: var(--vscode-dropdown-foreground);
+	border: 1px solid var(--vscode-dropdown-border);
+	border-radius: 4px;
+	cursor: pointer;
+	font-size: 12px;
+	font-family: var(--vscode-font-family);
+	margin-left: 8px;
+}
+
+#page-nav button {
+	padding: 4px 12px;
+	background-color: var(--vscode-button-secondaryBackground);
+	color: var(--vscode-button-secondaryForeground);
+	border: none;
+	border-radius: 4px;
+	cursor: pointer;
+	font-size: 14px;
+	font-family: var(--vscode-font-family);
+	transition: background-color 0.1s;
+}
+
+#page-nav button:hover:not(:disabled) {
+	background-color: var(--vscode-button-secondaryHoverBackground);
+}
+
+#page-nav button:disabled {
+	opacity: 0.4;
+	cursor: not-allowed;
+}
+
+#page-info {
+	font-size: 12px;
+	color: var(--vscode-descriptionForeground);
+	min-width: 80px;
+	text-align: center;
 }
 
 #docx-toolbar button {
@@ -38,8 +210,10 @@ body {
 	background-color: var(--vscode-button-secondaryHoverBackground);
 }
 
-#docx-toolbar button:active {
+#docx-toolbar button:active,
+#docx-toolbar button.active {
 	background-color: var(--vscode-button-background);
+	color: var(--vscode-button-foreground);
 }
 
 #docx-toolbar button:disabled {
@@ -189,19 +363,201 @@ body {
 #docx-container {
 	flex: 1;
 	overflow: auto;
+	background-color: #525252; /* Gray background like MS Word */
+	display: flex;
+	justify-content: center;
+	align-items: flex-start;
+}
+
+/* Page container - holds all pages */
+.pages-container {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 20px;
 	padding: 20px;
-	background-color: var(--vscode-editor-background);
+	width: 100%;
+	max-width: fit-content;
+	margin: 0 auto;
+}
+
+/* Individual page styling - mimics MS Word page appearance */
+.docx-page {
+	background: white;
+	color: black;
+	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+	padding: 1in; /* Standard 1-inch margins */
+	box-sizing: border-box;
+	position: relative;
+	page-break-after: always;
+	break-after: page; /* Modern CSS */
+	cursor: text;
+	transition: width 0.2s, padding 0.2s;
+	display: block; /* Block display for proper content flow */
+	overflow: visible; /* Allow content to flow naturally */
+	min-height: 11in; /* Minimum height but allow growth */
+	max-height: 11in; /* But cap at page height */
+}
+
+/* Margin guide overlay */
+.docx-page::before {
+	content: '';
+	position: absolute;
+	top: 1in;
+	left: 1in;
+	right: 1in;
+	bottom: 1in;
+	border: 1px dashed transparent;
+	pointer-events: none;
+	z-index: 0;
+	transition: border-color 0.2s;
+}
+
+/* Show margin guides when enabled */
+.show-margin-guides .docx-page::before {
+	border-color: rgba(0, 120, 215, 0.3);
+}
+
+.docx-page > *:not(.page-number) {
+	width: 100%;
+	max-width: 100%;
+	margin-left: 0;
+	margin-right: 0;
+	position: relative;
+	z-index: 1;
+}
+
+/* Page size variants */
+.docx-page.size-letter {
+	width: 8.5in;
+	height: 11in; /* Fixed height, not min-height */
+}
+
+.docx-page.size-legal {
+	width: 8.5in;
+	height: 14in;
+}
+
+.docx-page.size-tabloid {
+	width: 11in;
+	height: 17in;
+}
+
+.docx-page.size-a4 {
+	width: 210mm;
+	height: 297mm;
+}
+
+.docx-page.size-a3 {
+	width: 297mm;
+	height: 420mm;
+}
+
+/* Margin presets */
+.docx-page.margin-normal {
+	padding: 1in;
+}
+
+.docx-page.margin-normal::before {
+	top: 1in;
+	left: 1in;
+	right: 1in;
+	bottom: 1in;
+}
+
+.docx-page.margin-narrow {
+	padding: 0.5in;
+}
+
+.docx-page.margin-narrow::before {
+	top: 0.5in;
+	left: 0.5in;
+	right: 0.5in;
+	bottom: 0.5in;
+}
+
+.docx-page.margin-moderate {
+	padding: 1in 0.75in;
+}
+
+.docx-page.margin-moderate::before {
+	top: 1in;
+	left: 0.75in;
+	right: 0.75in;
+	bottom: 1in;
+}
+
+.docx-page.margin-wide {
+	padding: 1in 2in;
+}
+
+.docx-page.margin-wide::before {
+	top: 1in;
+	left: 2in;
+	right: 2in;
+	bottom: 1in;
+}
+
+/* Word wrap enabled (default) */
+.docx-page.word-wrap-enabled {
+	overflow-wrap: break-word;
+	word-wrap: break-word;
+	word-break: break-word;
+	hyphens: auto;
+}
+
+.docx-page.word-wrap-enabled * {
+	overflow-wrap: break-word;
+	word-wrap: break-word;
+}
+
+/* Word wrap disabled */
+.docx-page.word-wrap-disabled {
+	overflow-x: auto;
+	white-space: nowrap;
+}
+
+.docx-page.word-wrap-disabled * {
+	white-space: pre-wrap;
+}
+
+/* Page number indicator */
+.page-number {
+	position: absolute;
+	bottom: 0.5in;
+	right: 1in;
+	font-size: 10pt;
+	color: #666;
+	user-select: none;
 }
 
 /* DOCX content styling */
 .docx-wrapper {
-	max-width: 800px;
-	margin: 0 auto;
-	background: var(--vscode-editor-background);
-	padding: 40px;
-	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-	min-height: calc(100vh - 100px);
+	background: transparent;
+	padding: 0 !important;
+	margin: 0 !important;
+	box-shadow: none;
+	min-height: auto;
 	cursor: text;
+	overflow-wrap: break-word;
+	word-wrap: break-word;
+	white-space: normal;
+	text-align: left;
+	width: 100% !important;
+	max-width: 100% !important;
+}
+
+.docx-wrapper * {
+	box-sizing: border-box;
+}
+
+/* Override docx-preview library defaults */
+.docx-wrapper section,
+.docx-wrapper article {
+	margin: 0 !important;
+	padding: 0 !important;
+	width: 100% !important;
+	max-width: 100% !important;
 }
 
 /* Show cursor when hovering over editable content */
@@ -217,28 +573,103 @@ body {
 .docx {
 	line-height: 1.6;
 	font-size: 14px;
+	overflow-wrap: break-word;
+	word-wrap: break-word;
+	word-break: break-word;
+	text-align: left;
+	margin: 0 !important;
+	padding: 0 !important;
+	width: 100% !important;
+	max-width: 100% !important;
+}
+
+.docx * {
+	box-sizing: border-box;
+	margin-left: 0 !important;
+	margin-right: 0 !important;
 }
 
 .docx p {
-	margin: 0 0 12px 0;
+	margin: 0 0 12px 0 !important;
+	overflow-wrap: break-word;
+	word-wrap: break-word;
+	white-space: normal;
+	text-align: left;
+	width: 100% !important;
+	max-width: 100% !important;
+	padding-left: 0 !important;
+	padding-right: 0 !important;
+}
+
+/* Keep with next paragraph - prevent page break after */
+.docx p.keep-with-next,
+.docx h1.keep-with-next,
+.docx h2.keep-with-next,
+.docx h3.keep-with-next,
+.docx h4.keep-with-next,
+.docx h5.keep-with-next,
+.docx h6.keep-with-next {
+	page-break-after: avoid !important;
+	break-after: avoid !important;
+	position: relative;
+}
+
+.docx p.keep-with-next::after,
+.docx h1.keep-with-next::after,
+.docx h2.keep-with-next::after,
+.docx h3.keep-with-next::after {
+	content: '🔗';
+	position: absolute;
+	right: -20px;
+	top: 0;
+	font-size: 10px;
+	opacity: 0.4;
+}
+
+.docx p[style*="text-align: center"],
+.docx p[align="center"] {
+	text-align: center !important;
+}
+
+.docx p[style*="text-align: right"],
+.docx p[align="right"] {
+	text-align: right !important;
+}
+
+.docx p[style*="text-align: justify"],
+.docx p[align="justify"] {
+	text-align: justify !important;
+}
+
+.docx h1,
+.docx h2,
+.docx h3,
+.docx h4,
+.docx h5,
+.docx h6 {
+	overflow-wrap: break-word;
+	word-wrap: break-word;
+	text-align: left;
+	width: 100% !important;
+	max-width: 100% !important;
+	padding-left: 0 !important;
+	padding-right: 0 !important;
+	font-weight: bold;
 }
 
 .docx h1 {
 	font-size: 2em;
-	margin: 0.67em 0;
-	font-weight: bold;
+	margin: 0.67em 0 !important;
 }
 
 .docx h2 {
 	font-size: 1.5em;
-	margin: 0.75em 0;
-	font-weight: bold;
+	margin: 0.75em 0 !important;
 }
 
 .docx h3 {
 	font-size: 1.17em;
-	margin: 0.83em 0;
-	font-weight: bold;
+	margin: 0.83em 0 !important;
 }
 
 .docx-editable {
@@ -252,14 +683,21 @@ body {
 /* Table styling */
 .docx table {
 	border-collapse: collapse;
-	width: 100%;
-	margin: 12px 0;
+	width: 100% !important;
+	max-width: 100% !important;
+	margin: 12px 0 !important;
+	table-layout: fixed;
+	word-wrap: break-word;
 }
 
 .docx table td,
 .docx table th {
 	border: 1px solid var(--vscode-panel-border);
 	padding: 8px;
+	overflow-wrap: break-word;
+	word-wrap: break-word;
+	word-break: break-word;
+	text-align: left;
 }
 
 .docx table th {
@@ -270,12 +708,20 @@ body {
 /* List styling */
 .docx ul,
 .docx ol {
-	margin: 12px 0;
-	padding-left: 30px;
+	margin: 12px 0 !important;
+	padding-left: 30px !important;
+	padding-right: 0 !important;
+	width: 100% !important;
+	max-width: 100% !important;
+	overflow-wrap: break-word;
+	word-wrap: break-word;
 }
 
 .docx li {
-	margin: 4px 0;
+	margin: 4px 0 !important;
+	overflow-wrap: break-word;
+	word-wrap: break-word;
+	text-align: left;
 }
 
 /* Selection styling */

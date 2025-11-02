@@ -187,7 +187,7 @@ export class WebWorkerExtensionHost extends Disposable implements IExtensionHost
 					type: event.data.type,
 					data: {
 						workerUrl: FileAccess.asBrowserUri('vs/workbench/api/worker/extensionHostWorkerMain.js').toString(true),
-						fileRoot: globalThis._VSCODE_FILE_ROOT,
+						fileRoot: (globalThis as any)._VSCODE_FILE_ROOT,
 						nls: {
 							messages: getNLSMessages(),
 							language: getNLSLanguage()

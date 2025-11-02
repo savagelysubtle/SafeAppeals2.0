@@ -421,7 +421,7 @@ private async checkColumnExists(tableName: string, columnName: string): Promise<
 	private calculateChecksum(uri: URI): string {
 		try {
 			const content = readFileSync(uri.fsPath);
-			return createHash('sha256').update(content).digest('hex');
+			return createHash('sha256').update(Uint8Array.from(content)).digest('hex');
 		} catch (error) {
 			this.logService.warn(`Could not calculate checksum for ${uri.fsPath}:`, error);
 			return '';

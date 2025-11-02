@@ -76,10 +76,12 @@ export class ElectronExtensionHostDebugBroadcastChannel<TContext> extends Extens
 
 			debug.addListener('message', onMessage);
 
-			let buf = Buffer.alloc(0);
-			listener.on('data', data => {
-				buf = Buffer.concat([buf, data]);
-				for (let delimiter = buf.indexOf(0); delimiter !== -1; delimiter = buf.indexOf(0)) {
+	let buf = Buffer.alloc(0);
+	listener.on('data', data => {
+		const bufArray = buf as Uint8Array<ArrayBuffer>;
+		const dataArray = data as Uint8Array<ArrayBuffer>;
+		buf = Buffer.concat([bufArray, dataArray]);
+			for (let delimiter = buf.indexOf(0); delimiter !== -1; delimiter = buf.indexOf(0)) {
 					let data: { id: number; sessionId: string; params: {} };
 					try {
 						const contents = buf.slice(0, delimiter).toString('utf8');

@@ -5,7 +5,7 @@
 
 import { ChildProcess, fork, ForkOptions } from 'child_process';
 import { createCancelablePromise, Delayer } from '../../../common/async.js';
-import { VSBuffer } from '../../../common/buffer.js';
+import { VSBuffer, toUint8ArrayWithArrayBuffer } from '../../../common/buffer.js';
 import { CancellationToken } from '../../../common/cancellation.js';
 import { isRemoteConsoleLog, log } from '../../../common/console.js';
 import * as errors from '../../../common/errors.js';
@@ -29,7 +29,7 @@ export class Server<TContext extends string> extends IPCServer<TContext> {
 					process.send?.((<Buffer>r.buffer).toString('base64'));
 				} catch (e) { /* not much to do */ }
 			},
-			onMessage: Event.fromNodeEventEmitter(process, 'message', msg => VSBuffer.wrap(Buffer.from(msg, 'base64')))
+			onMessage: Event.fromNodeEventEmitter(process, 'message', msg => VSBuffer.wrap(toUint8ArrayWithArrayBuffer(Buffer.from(msg, 'base64'))))
 		}, ctx);
 
 		process.once('disconnect', () => this.dispose());
@@ -217,7 +217,7 @@ export class Client implements IChannelClient, IDisposable {
 				}
 
 				// Anything else goes to the outside
-				onMessageEmitter.fire(VSBuffer.wrap(Buffer.from(msg, 'base64')));
+				onMessageEmitter.fire(VSBuffer.wrap(toUint8ArrayWithArrayBuffer(Buffer.from(msg, 'base64'))));
 			});
 
 			const sender = this.options.useQueue ? createQueuedSender(this.child) : this.child;

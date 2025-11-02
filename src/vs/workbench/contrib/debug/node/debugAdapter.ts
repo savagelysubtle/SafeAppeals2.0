@@ -52,7 +52,7 @@ export abstract class StreamDebugAdapter extends AbstractDebugAdapter {
 
 	private handleData(data: Buffer): void {
 
-		this.rawData = Buffer.concat([this.rawData, data]);
+		this.rawData = Buffer.concat([this.rawData as any, data as any]) as any;
 
 		while (true) {
 			if (this.contentLength >= 0) {
