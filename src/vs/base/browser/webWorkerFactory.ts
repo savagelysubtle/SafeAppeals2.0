@@ -86,7 +86,7 @@ function getWorkerBootstrapUrl(label: string, workerScriptUrl: string): string {
 		`/*${label}*/`,
 		`globalThis._VSCODE_NLS_MESSAGES = ${JSON.stringify(getNLSMessages())};`,
 		`globalThis._VSCODE_NLS_LANGUAGE = ${JSON.stringify(getNLSLanguage())};`,
-		`globalThis._VSCODE_FILE_ROOT = ${JSON.stringify(globalThis._VSCODE_FILE_ROOT)};`,
+		`globalThis._VSCODE_FILE_ROOT = ${JSON.stringify((globalThis as any)._VSCODE_FILE_ROOT)};`,
 		`const ttPolicy = globalThis.trustedTypes?.createPolicy('defaultWorkerFactory', { createScriptURL: value => value });`,
 		`globalThis.workerttPolicy = ttPolicy;`,
 		`await import(ttPolicy?.createScriptURL(${JSON.stringify(workerScriptUrl)}) ?? ${JSON.stringify(workerScriptUrl)});`,

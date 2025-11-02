@@ -1107,7 +1107,8 @@ export class CodeWindow extends BaseWindow implements ICodeWindow {
 
 		// Update window related properties
 		try {
-			configuration.handle = VSBuffer.wrap(this._win.getNativeWindowHandle());
+			const handle = this._win.getNativeWindowHandle();
+			configuration.handle = VSBuffer.wrap(handle as Uint8Array<ArrayBufferLike>);
 		} catch (error) {
 			this.logService.error(`Error getting native window handle: ${error}`);
 		}

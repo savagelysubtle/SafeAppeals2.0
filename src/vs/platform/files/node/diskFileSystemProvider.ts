@@ -201,10 +201,10 @@ export class DiskFileSystemProvider extends AbstractDiskFileSystemProvider imple
 				lock = await this.createResourceLock(resource);
 			}
 
-			const filePath = this.toFilePath(resource);
-
-			return await promises.readFile(filePath);
-		} catch (error) {
+	const filePath = this.toFilePath(resource);
+	const buffer = await promises.readFile(filePath);
+	return buffer as Uint8Array<ArrayBuffer>;
+	} catch (error) {
 			throw this.toFileSystemProviderError(error);
 		} finally {
 			lock?.dispose();

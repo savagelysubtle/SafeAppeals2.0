@@ -459,10 +459,11 @@ export class WebClientServer {
 		while (match = regex.exec(content)) {
 			const hasher = crypto.createHash('sha256');
 			// This only works on Windows if we strip `\r` from `\r\n`.
-			const script = match[1].replace(/\r\n/g, '\n');
-			const hash = hasher
-				.update(Buffer.from(script))
-				.digest().toString('base64');
+		const script = match[1].replace(/\r\n/g, '\n');
+		const scriptBuffer = Buffer.from(script) as Uint8Array<ArrayBuffer>;
+		const hash = hasher
+			.update(scriptBuffer)
+			.digest().toString('base64');
 
 			result.push(`'sha256-${hash}'`);
 		}

@@ -216,7 +216,7 @@ export class NativeHostMainService extends Disposable implements INativeHostMain
 	async getNativeWindowHandle(fallbackWindowId: number | undefined, windowId: number): Promise<VSBuffer | undefined> {
 		const window = this.windowById(windowId, fallbackWindowId);
 		if (window?.win) {
-			return VSBuffer.wrap(window.win.getNativeWindowHandle());
+			return VSBuffer.wrap(window.win.getNativeWindowHandle() as Uint8Array<ArrayBuffer>);
 		}
 		return undefined;
 	}
@@ -724,7 +724,7 @@ export class NativeHostMainService extends Disposable implements INativeHostMain
 		const window = this.windowById(options?.targetWindowId, windowId);
 		const captured = await window?.win?.webContents.capturePage();
 
-		return captured?.toJPEG(95);
+		return captured?.toJPEG(95) as ArrayBufferLike | undefined;
 	}
 
 	//#endregion
@@ -751,7 +751,8 @@ export class NativeHostMainService extends Disposable implements INativeHostMain
 	}
 
 	async readImage(): Promise<Uint8Array> {
-		return clipboard.readImage().toPNG();
+		const png = clipboard.readImage().toPNG();
+		return png as Uint8Array<ArrayBuffer>;
 	}
 
 	async writeClipboardText(windowId: number | undefined, text: string, type?: 'selection' | 'clipboard'): Promise<void> {
@@ -771,7 +772,8 @@ export class NativeHostMainService extends Disposable implements INativeHostMain
 	}
 
 	async readClipboardBuffer(windowId: number | undefined, format: string): Promise<VSBuffer> {
-		return VSBuffer.wrap(clipboard.readBuffer(format));
+		const buffer = clipboard.readBuffer(format);
+		return VSBuffer.wrap(buffer as Uint8Array);
 	}
 
 	async hasClipboard(windowId: number | undefined, format: string, type?: 'selection' | 'clipboard'): Promise<boolean> {

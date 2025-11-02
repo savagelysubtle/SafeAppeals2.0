@@ -247,7 +247,10 @@ export function buffer(zipPath: string, filePath: string): Promise<Buffer> {
 			const buffers: Buffer[] = [];
 			stream.once('error', e);
 			stream.on('data', (b: Buffer) => buffers.push(b));
-			stream.on('end', () => c(Buffer.concat(buffers)));
+			stream.on('end', () => {
+				const buffersArray = buffers as Uint8Array<ArrayBuffer>[];
+				c(Buffer.concat(buffersArray));
+			});
 		});
 	});
 }

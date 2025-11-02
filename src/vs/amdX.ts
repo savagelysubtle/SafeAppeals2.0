@@ -201,7 +201,7 @@ const cache = new Map<string, Promise<any>>();
  */
 export async function importAMDNodeModule<T>(nodeModuleName: string, pathInsideNodeModule: string, isBuilt?: boolean): Promise<T> {
 	if (isBuilt === undefined) {
-		const product = globalThis._VSCODE_PRODUCT_JSON as unknown as IProductConfiguration;
+		const product = (globalThis as any)._VSCODE_PRODUCT_JSON as unknown as IProductConfiguration;
 		isBuilt = Boolean((product ?? (globalThis as any).vscode?.context?.configuration()?.product)?.commit);
 	}
 
@@ -226,7 +226,7 @@ export async function importAMDNodeModule<T>(nodeModuleName: string, pathInsideN
 }
 
 export function resolveAmdNodeModulePath(nodeModuleName: string, pathInsideNodeModule: string): string {
-	const product = globalThis._VSCODE_PRODUCT_JSON as unknown as IProductConfiguration;
+	const product = (globalThis as any)._VSCODE_PRODUCT_JSON as unknown as IProductConfiguration;
 	const isBuilt = Boolean((product ?? (globalThis as any).vscode?.context?.configuration()?.product)?.commit);
 	const useASAR = (canASAR && isBuilt && !platform.isWeb);
 

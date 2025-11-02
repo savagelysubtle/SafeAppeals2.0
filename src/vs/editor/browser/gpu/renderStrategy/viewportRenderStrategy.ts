@@ -157,7 +157,7 @@ export class ViewportRenderStrategy extends BaseRenderStrategy {
 		const dpr = getActiveWindow().devicePixelRatio;
 		this._scrollOffsetValueBuffer[0] = (e?.scrollLeft ?? this._context.viewLayout.getCurrentScrollLeft()) * dpr;
 		this._scrollOffsetValueBuffer[1] = (e?.scrollTop ?? this._context.viewLayout.getCurrentScrollTop()) * dpr;
-		this._device.queue.writeBuffer(this._scrollOffsetBindBuffer, 0, this._scrollOffsetValueBuffer);
+		this._device.queue.writeBuffer(this._scrollOffsetBindBuffer, 0, new Float32Array(this._scrollOffsetValueBuffer.slice()).buffer);
 		return true;
 	}
 
@@ -180,7 +180,8 @@ export class ViewportRenderStrategy extends BaseRenderStrategy {
 			// Zero out buffer and upload to GPU to prevent stale rows from rendering
 			const buffer = new Float32Array(this._cellValueBuffers[bufferIndex]);
 			buffer.fill(0, 0, buffer.length);
-			this._device.queue.writeBuffer(this._cellBindBuffer, 0, buffer.buffer, 0, buffer.byteLength);
+			const newBuffer = new Float32Array(buffer.slice());
+			this._device.queue.writeBuffer(this._cellBindBuffer, 0, newBuffer.buffer, 0, buffer.byteLength);
 		}
 	}
 
@@ -383,10 +384,11 @@ export class ViewportRenderStrategy extends BaseRenderStrategy {
 		const visibleObjectCount = (viewportData.endLineNumber - viewportData.startLineNumber + 1) * lineIndexCount;
 
 		// This render strategy always uploads the whole viewport
+		const newCellBuffer = new Float32Array(cellBuffer.slice());
 		this._device.queue.writeBuffer(
 			this._cellBindBuffer,
 			0,
-			cellBuffer.buffer,
+			newCellBuffer.buffer,
 			0,
 			(viewportData.endLineNumber - viewportData.startLineNumber) * lineIndexCount * Float32Array.BYTES_PER_ELEMENT
 		);

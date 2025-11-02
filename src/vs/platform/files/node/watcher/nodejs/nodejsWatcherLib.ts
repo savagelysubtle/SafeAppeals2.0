@@ -595,12 +595,13 @@ export async function watchFileContents(path: string, onData: (chunk: Uint8Array
 						// Consume the new contents of the file until finished
 						// everytime there is a change event signalling a change
 						while (!cts.token.isCancellationRequested) {
-							const { bytesRead } = await Promises.read(handle, buffer, 0, bufferSize, null);
+							const uint8Buffer = new Uint8Array(buffer.buffer, buffer.byteOffset, bufferSize);
+							const { bytesRead } = await Promises.read(handle, uint8Buffer, 0, bufferSize, null);
 							if (!bytesRead || cts.token.isCancellationRequested) {
 								break;
 							}
 
-							onData(buffer.slice(0, bytesRead));
+							onData(new Uint8Array(uint8Buffer.slice(0, bytesRead)));
 						}
 					} catch (err) {
 						error = new Error(err);

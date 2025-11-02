@@ -84,13 +84,37 @@ export const hashAsync = (input: string | ArrayBufferView | VSBuffer) => {
 		return Promise.resolve(sha.digest());
 	}
 
-	let buff: ArrayBufferView;
+	let buff: BufferSource;
 	if (typeof input === 'string') {
 		buff = new TextEncoder().encode(input);
 	} else if (input instanceof VSBuffer) {
-		buff = input.buffer;
+		// Convert VSBuffer.buffer (Uint8Array<ArrayBufferLike>) to BufferSource
+		const arr = new Uint8Array(input.buffer.length);
+		for (let i = 0; i < input.buffer.length; i++) {
+			arr[i] = input.buffer[i]!;
+		}
+		buff = arr.buffer as ArrayBuffer;
 	} else {
-		buff = input;
+		// Convert ArrayBufferView<ArrayBufferLike> to BufferSource
+		// Handle different ArrayBufferView types by checking for specific typed arrays first
+		if (input instanceof Uint8Array || input instanceof Uint16Array || input instanceof Uint32Array ||
+			input instanceof Int8Array || input instanceof Int16Array || input instanceof Int32Array ||
+			input instanceof Float32Array || input instanceof Float64Array) {
+			const arr = new Uint8Array(input.length);
+			for (let i = 0; i < input.length; i++) {
+				arr[i] = input[i]!;
+			}
+			buff = arr.buffer as ArrayBuffer;
+		} else {
+			// For other ArrayBufferView types, access via byteLength and create Uint8Array view
+			const view = input as { byteLength: number; buffer: ArrayBufferLike; byteOffset: number };
+			const uint8View = new Uint8Array(view.buffer as ArrayBuffer, view.byteOffset, view.byteLength);
+			const arr = new Uint8Array(uint8View.length);
+			for (let i = 0; i < uint8View.length; i++) {
+				arr[i] = uint8View[i]!;
+			}
+			buff = arr.buffer as ArrayBuffer;
+		}
 	}
 
 	return crypto.subtle.digest('sha-1', buff).then(toHexString);

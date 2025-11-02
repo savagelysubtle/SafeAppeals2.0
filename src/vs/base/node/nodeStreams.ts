@@ -32,14 +32,14 @@ export class StreamSplitter extends Transform {
 		if (!this.buffer) {
 			this.buffer = chunk;
 		} else {
-			this.buffer = Buffer.concat([this.buffer, chunk]);
+			this.buffer = Buffer.concat([this.buffer as Uint8Array<ArrayBuffer>, chunk as Uint8Array<ArrayBuffer>]);
 		}
 
 		let offset = 0;
 		while (offset < this.buffer.length) {
 			const index = typeof this.splitter === 'number'
 				? this.buffer.indexOf(this.splitter, offset)
-				: binaryIndexOf(this.buffer, this.splitter, offset);
+				: binaryIndexOf(this.buffer as Uint8Array<ArrayBuffer>, this.splitter as Uint8Array<ArrayBuffer>, offset);
 			if (index === -1) {
 				break;
 			}

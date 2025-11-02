@@ -115,7 +115,7 @@ class Ether {
 	private _deliver(): void {
 
 		if (this._ab.length > 0) {
-			const data = Buffer.concat(this._ab);
+			const data = Buffer.concat(this._ab as any);
 			this._ab.length = 0;
 			this._b.emit('data', data);
 			setTimeout(() => this._deliver(), 0);
@@ -123,7 +123,7 @@ class Ether {
 		}
 
 		if (this._ba.length > 0) {
-			const data = Buffer.concat(this._ba);
+			const data = Buffer.concat(this._ba as any);
 			this._ba.length = 0;
 			this._a.emit('data', data);
 			setTimeout(() => this._deliver(), 0);

@@ -177,12 +177,14 @@ function _createExtHostProtocol(): Promise<IMessagePassingProtocol> {
 					// but nodejs doesn't document if this option is transferred with the socket
 					handle.setNoDelay(true);
 
-					const initialDataChunk = VSBuffer.wrap(Buffer.from(msg.initialDataChunk, 'base64'));
+					const initialDataChunkBuffer = Buffer.from(msg.initialDataChunk, 'base64');
+					const initialDataChunk = VSBuffer.wrap(initialDataChunkBuffer as Uint8Array<ArrayBufferLike>);
 					let socket: NodeSocket | WebSocketNodeSocket;
 					if (msg.skipWebSocketFrames) {
 						socket = new NodeSocket(handle, 'extHost-socket');
 					} else {
-						const inflateBytes = VSBuffer.wrap(Buffer.from(msg.inflateBytes, 'base64'));
+						const inflateBytesBuffer = Buffer.from(msg.inflateBytes, 'base64');
+						const inflateBytes = VSBuffer.wrap(inflateBytesBuffer as Uint8Array<ArrayBufferLike>);
 						socket = new WebSocketNodeSocket(new NodeSocket(handle, 'extHost-socket'), msg.permessageDeflate, inflateBytes, false);
 					}
 					if (protocol) {

@@ -69,11 +69,11 @@
 	if (!baseUrl.endsWith('/')) {
 		baseUrl = baseUrl + '/';
 	}
-	globalThis._VSCODE_FILE_ROOT = baseUrl;
+	(globalThis as any)._VSCODE_FILE_ROOT = baseUrl;
 
 	const trustedTypesPolicy: Pick<TrustedTypePolicy<{ createScriptURL(value: string): string }>, 'name' | 'createScriptURL'> | undefined = require.getConfig().trustedTypesPolicy;
 	if (trustedTypesPolicy) {
-		globalThis._VSCODE_WEB_PACKAGE_TTP = trustedTypesPolicy;
+		(globalThis as any)._VSCODE_WEB_PACKAGE_TTP = trustedTypesPolicy;
 	}
 
 	const promise = new Promise(resolve => {

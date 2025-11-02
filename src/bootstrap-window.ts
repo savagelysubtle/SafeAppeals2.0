@@ -29,7 +29,7 @@
 
 		// Compute base URL and set as global
 		const baseUrl = new URL(`${fileUriFromPath(configuration.appRoot, { isWindows: safeProcess.platform === 'win32', scheme: 'vscode-file', fallbackAuthority: 'vscode-app' })}/out/`);
-		globalThis._VSCODE_FILE_ROOT = baseUrl.toString();
+		(globalThis as any)._VSCODE_FILE_ROOT = baseUrl.toString();
 
 		// Dev only: CSS import map tricks
 		setupCSSImportMaps<T>(configuration, baseUrl);
@@ -129,8 +129,8 @@
 	}
 
 	function setupNLS<T extends ISandboxConfiguration>(configuration: T): void {
-		globalThis._VSCODE_NLS_MESSAGES = configuration.nls.messages;
-		globalThis._VSCODE_NLS_LANGUAGE = configuration.nls.language;
+		(globalThis as any)._VSCODE_NLS_MESSAGES = configuration.nls.messages;
+		(globalThis as any)._VSCODE_NLS_LANGUAGE = configuration.nls.language;
 
 		let language = configuration.nls.language || 'en';
 		if (language === 'zh-tw') {
@@ -199,7 +199,7 @@
 			style.id = 'vscode-css-loading';
 			document.head.appendChild(style);
 
-			globalThis._VSCODE_CSS_LOAD = function (url) {
+			(globalThis as any)._VSCODE_CSS_LOAD = function (url: string) {
 				style.textContent += `@import url(${url});\n`;
 			};
 

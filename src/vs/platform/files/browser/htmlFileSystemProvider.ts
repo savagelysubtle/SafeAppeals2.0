@@ -219,11 +219,12 @@ export class HTMLFileSystemProvider extends Disposable implements IFileSystemPro
 				}
 			}
 
-			// Write to target overwriting any existing contents
-			const writable = await handle.createWritable();
-			await writable.write(content);
-			await writable.close();
-		} catch (error) {
+	// Write to target overwriting any existing contents
+	const writable = await handle.createWritable();
+	const writeData = content as Uint8Array<ArrayBuffer>;
+	await writable.write(writeData);
+		await writable.close();
+	} catch (error) {
 			throw this.toFileSystemProviderError(error);
 		}
 	}
