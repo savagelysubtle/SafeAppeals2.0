@@ -8,6 +8,7 @@ import { Dimension } from '../../../../../../base/browser/dom.js';
 import { CodeWindow } from '../../../../../../base/browser/window.js';
 import { VSBuffer } from '../../../../../../base/common/buffer.js';
 import { CancellationToken } from '../../../../../../base/common/cancellation.js';
+import { IDisposable } from '../../../../../../base/common/lifecycle.js';
 import { FileAccess } from '../../../../../../base/common/network.js';
 import { URI } from '../../../../../../base/common/uri.js';
 import { generateUuid } from '../../../../../../base/common/uuid.js';
@@ -20,9 +21,11 @@ import { EditorPane } from '../../../../../browser/parts/editor/editorPane.js';
 import { IEditorOpenContext } from '../../../../../common/editor.js';
 import { EditorInput } from '../../../../../common/editor/editorInput.js';
 import { IEditorGroup } from '../../../../../services/editor/common/editorGroupsService.js';
+import { IWorkingCopyService } from '../../../../../services/workingCopy/common/workingCopyService.js';
 import { IOverlayWebview, IWebviewService } from '../../../../webview/browser/webview.js';
 import { asWebviewUri } from '../../../../webview/common/webview.js';
 import { DOCXSelection, DOCXViewerInput } from './docxViewerInput.js';
+import { DOCXWorkingCopy } from './docxWorkingCopy.js';
 
 export class DOCXViewerEditor extends EditorPane {
 	static readonly ID = 'void.docxViewer';
@@ -35,6 +38,10 @@ export class DOCXViewerEditor extends EditorPane {
 	private _pendingInput?: DOCXViewerInput;
 	private _docxDataCache?: { uri: string; data: string };
 	private _isLoading: boolean = false;
+	private _workingCopy?: DOCXWorkingCopy;
+	private _workingCopyDisposable?: IDisposable;
+	private _saveCompleteResolver?: (success: boolean) => void;
+	private _pendingSaveTimeout?: NodeJS.Timeout;
 
 	constructor(
 		group: IEditorGroup,
@@ -42,7 +49,8 @@ export class DOCXViewerEditor extends EditorPane {
 		@IThemeService themeService: IThemeService,
 		@IStorageService storageService: IStorageService,
 		@IWebviewService private readonly webviewService: IWebviewService,
-		@IFileService private readonly fileService: IFileService
+		@IFileService private readonly fileService: IFileService,
+		@IWorkingCopyService private readonly workingCopyService: IWorkingCopyService
 	) {
 		super(DOCXViewerEditor.ID, group, telemetryService, themeService, storageService);
 	}
@@ -63,6 +71,9 @@ export class DOCXViewerEditor extends EditorPane {
 
 		this._currentInput = input;
 		console.log('[DOCX Viewer] setInput called for:', input.resource.toString());
+
+		// Create or get working copy for this document
+		this.ensureWorkingCopy(input.resource, input.getName());
 
 		// Create webview if it doesn't exist
 		if (!this.webview && this._element) {
@@ -243,6 +254,14 @@ export class DOCXViewerEditor extends EditorPane {
 				}
 				break;
 
+			case 'contentChanged':
+				// Mark working copy as dirty when content changes
+				if (this._workingCopy) {
+					console.log('[DOCX Viewer] Content changed, marking working copy dirty');
+					this._workingCopy.markDirty();
+				}
+				break;
+
 			case 'textSelected':
 				// Store selection for Ctrl+K
 				if (this._currentInput) {
@@ -259,6 +278,16 @@ export class DOCXViewerEditor extends EditorPane {
 			case 'saveRequested':
 				if (this._currentInput && (data.text || data.docxData)) {
 					this.saveDOCX(this._currentInput.resource, data.text, data.html, data.docxData);
+
+					// Resolve save complete promise if waiting
+					if (this._saveCompleteResolver) {
+						this._saveCompleteResolver(true);
+					}
+				} else {
+					// Resolve with false if no data
+					if (this._saveCompleteResolver) {
+						this._saveCompleteResolver(false);
+					}
 				}
 				break;
 
@@ -296,6 +325,11 @@ export class DOCXViewerEditor extends EditorPane {
 			await this.fileService.writeFile(uri, bytes);
 			console.log('[DOCX Viewer] Document saved successfully');
 
+			// Mark working copy as saved
+			if (this._workingCopy) {
+				this._workingCopy.markSaved();
+			}
+
 			// Notify webview
 			if (this.webview) {
 				this.webview.postMessage({ type: 'saveComplete', success: true });
@@ -314,6 +348,95 @@ export class DOCXViewerEditor extends EditorPane {
 		}
 	}
 
+	/**
+	 * Ensure a working copy exists for the given resource
+	 */
+	private ensureWorkingCopy(resource: URI, name: string): void {
+		// Clean up old working copy if it exists
+		if (this._workingCopy) {
+			this._workingCopyDisposable?.dispose();
+			this._workingCopy.dispose();
+			this._workingCopy = undefined;
+			this._workingCopyDisposable = undefined;
+		}
+
+		// Create new working copy
+		this._workingCopy = new DOCXWorkingCopy(resource, name);
+
+		// Connect working copy to input for dirty state reporting
+		if (this._currentInput) {
+			this._currentInput.setWorkingCopy(this._workingCopy);
+		}
+
+		// Set up save handler
+		this._workingCopy.setSaveHandler(async (reason) => {
+			console.log('[DOCX Viewer] Working copy save triggered, reason:', reason, 'webviewReady:', this._webviewReady);
+
+			// If webview isn't ready, return false to skip this save attempt
+			if (!this.webview || !this._webviewReady) {
+				console.warn('[DOCX Viewer] Webview not ready for save, will retry later');
+				return false;
+			}
+
+			try {
+				// Request save from webview
+				this.webview.postMessage({ type: 'saveRequest', reason });
+
+				// Wait for save response (with timeout)
+				const success = await this.waitForSaveComplete();
+				console.log('[DOCX Viewer] Save result:', success);
+				return success;
+			} catch (error) {
+				console.error('[DOCX Viewer] Save handler error:', error);
+				return false;
+			}
+		});
+
+		// Register with working copy service
+		this._workingCopyDisposable = this.workingCopyService.registerWorkingCopy(this._workingCopy);
+		console.log('[DOCX Viewer] Working copy registered for:', resource.toString());
+	}
+
+	/**
+	 * Wait for save complete message from webview
+	 */
+	private waitForSaveComplete(): Promise<boolean> {
+		return new Promise((resolve) => {
+			// Clear any existing timeout
+			if (this._pendingSaveTimeout) {
+				clearTimeout(this._pendingSaveTimeout);
+			}
+
+			// Set new timeout (5 seconds for active saves)
+			this._pendingSaveTimeout = setTimeout(() => {
+				console.warn('[DOCX Viewer] Save timeout after 5 seconds');
+				this._saveCompleteResolver = undefined;
+				this._pendingSaveTimeout = undefined;
+				resolve(false);
+			}, 5000);
+
+			// Store the resolve function to be called when save completes
+			this._saveCompleteResolver = (success: boolean) => {
+				if (this._pendingSaveTimeout) {
+					clearTimeout(this._pendingSaveTimeout);
+					this._pendingSaveTimeout = undefined;
+				}
+				this._saveCompleteResolver = undefined;
+				resolve(success);
+			};
+		});
+	}
+
+	/**
+	 * Trigger save programmatically (e.g., Ctrl+S)
+	 */
+	async triggerSave(): Promise<boolean> {
+		if (this._workingCopy) {
+			return await this._workingCopy.save();
+		}
+		return false;
+	}
+
 	public getInput(): DOCXViewerInput | undefined {
 		return this._currentInput;
 	}
@@ -329,7 +452,18 @@ export class DOCXViewerEditor extends EditorPane {
 		}
 	}
 
-	override setEditorVisible(visible: boolean): void {
+	override async setEditorVisible(visible: boolean): Promise<void> {
+		// If becoming invisible and working copy is dirty, save synchronously
+		if (!visible && this._workingCopy && this._workingCopy.isDirty()) {
+			console.log('[DOCX Viewer] Editor becoming invisible with dirty content, saving synchronously');
+			try {
+				await this._workingCopy.save();
+				console.log('[DOCX Viewer] Save completed before hiding');
+			} catch (err) {
+				console.error('[DOCX Viewer] Failed to save on visibility change:', err);
+			}
+		}
+
 		if (this.webview && this._element) {
 			const targetWindow = DOM.getWindow(this._element);
 			if (visible) {
@@ -345,11 +479,40 @@ export class DOCXViewerEditor extends EditorPane {
 		if (this.webview) {
 			this.webview.postMessage({ type: 'clearDOCX' });
 		}
+
+		// Unregister working copy
+		if (this._workingCopy) {
+			this._workingCopyDisposable?.dispose();
+			this._workingCopy.dispose();
+			this._workingCopy = undefined;
+			this._workingCopyDisposable = undefined;
+		}
+
 		this._currentInput = undefined;
 		super.clearInput();
 	}
 
 	override dispose(): void {
+		// Clean up pending save timeout
+		if (this._pendingSaveTimeout) {
+			clearTimeout(this._pendingSaveTimeout);
+			this._pendingSaveTimeout = undefined;
+		}
+
+		// Reject any pending save promises
+		if (this._saveCompleteResolver) {
+			this._saveCompleteResolver(false);
+			this._saveCompleteResolver = undefined;
+		}
+
+		// Clean up working copy
+		if (this._workingCopy) {
+			this._workingCopyDisposable?.dispose();
+			this._workingCopy.dispose();
+			this._workingCopy = undefined;
+			this._workingCopyDisposable = undefined;
+		}
+
 		if (this.webview) {
 			this.webview.release(this);
 		}
