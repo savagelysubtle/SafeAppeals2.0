@@ -60,6 +60,50 @@ export interface ProcessResult {
 	error?: string;
 }
 
+export interface CaseParty {
+	name: string;
+	lawyers: string[];
+	doctors: string[];
+}
+
+export interface WCBInfo {
+	adjudicators: string[];
+	references: string[];
+}
+
+export interface CaseInfo {
+	caseNumber?: string;
+	claimantName?: string;
+	injuryDate?: string;
+	caseType: string;
+	description?: string;
+	parties: {
+		claimant: CaseParty;
+		employer?: CaseParty;
+		wcb?: WCBInfo;
+	};
+	keywords: {
+		yourSide: string[];
+		theirSide: string[];
+		medical: string[];
+		legal: string[];
+		evidence: string[];
+	};
+}
+
+export interface FileOrgConfig {
+	version: string;
+	caseInfo: CaseInfo;
+	organizationSettings: {
+		selectedTemplate: string;
+		preserveOriginalNames: boolean;
+		createBackup: boolean;
+		targetFolder: string;
+	};
+	createdAt: string;
+	updatedAt: string;
+}
+
 export interface WizardState {
 	currentStep: number;
 	selectedFiles: URI[];

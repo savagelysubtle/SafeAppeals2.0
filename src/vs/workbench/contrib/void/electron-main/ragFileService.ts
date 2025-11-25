@@ -10,6 +10,9 @@ import { ILogService } from '../../../../platform/log/common/log.js';
 import { ExtractedContent } from '../common/ragServiceTypes.js';
 
 export class RAGFileService {
+	public useDoclingForPdf = true; // Use Docling by default for enhanced PDF extraction
+	public useHybridPdfExtraction = true; // Use hybrid extraction (PDF.js metadata + Docling content)
+
 	constructor(@ILogService private readonly logService: ILogService) { }
 
 	async extractContent(uri: URI): Promise<ExtractedContent> {
@@ -21,7 +24,16 @@ export class RAGFileService {
 		try {
 			switch (fileExt) {
 				case 'pdf':
-					return await this.extractPDF(uri);
+					if (this.useDoclingForPdf && this.useHybridPdfExtraction) {
+						this.logService.info('[PDF Extraction] Using hybrid extraction (PDF.js metadata + Docling content)');
+						return await this.extractPdfHybrid(uri);
+					} else if (this.useDoclingForPdf) {
+						this.logService.info('[PDF Extraction] Using Docling SDK for enhanced extraction');
+						return await this.extractPdfWithDocling(uri);
+					} else {
+						this.logService.info('[PDF Extraction] Using standard pdfjs-dist extraction');
+						return await this.extractPDF(uri);
+					}
 				case 'docx':
 					return await this.extractDOCX(uri);
 				case 'xlsx':
@@ -117,12 +129,18 @@ export class RAGFileService {
 		let pdf: any = null;
 		let loadingTask: any = null;
 
+		// Start timing
+		const startTime = Date.now();
+
 		try {
 			// Dynamic import for pdfjs-dist (works in Node.js ESM environment)
 			// @ts-ignore - pdfjs-dist mjs build doesn't have type definitions
 			const pdfjsLib = await import('pdfjs-dist/build/pdf.mjs');
 
 			const filepath = this.getFilePath(uri);
+
+			this.logService.info(`[PDF.js] ========== STANDARD EXTRACTION START ==========`);
+			this.logService.info(`[PDF.js] File: ${filepath}`);
 
 			// Memory optimization: Use file path instead of loading entire file into memory
 			loadingTask = pdfjsLib.getDocument({
@@ -141,7 +159,7 @@ export class RAGFileService {
 			const firstPage = Math.max(1, startPage || 1);
 			const lastPage = Math.min(totalPages, endPage || totalPages);
 
-			this.logService.info(`PDF has ${totalPages} pages. Extracting pages ${firstPage} to ${lastPage}...`);
+			this.logService.info(`[PDF.js] PDF has ${totalPages} pages. Extracting pages ${firstPage} to ${lastPage}...`);
 
 			const metadata: ExtractedContent['metadata'] = {
 				title: '',
@@ -204,12 +222,23 @@ export class RAGFileService {
 
 			// Join all text parts
 			const fullText = textParts.join('\n\n');
+			const charCount = fullText.length;
 
 			// Calculate word count and detect language
 			metadata.wordCount = this.countWords(fullText);
 			metadata.language = this.detectLanguage(fullText);
 
-			this.logService.info(`PDF extraction complete: ${fullText.length} characters, ${metadata.wordCount} words`);
+			// Calculate total extraction time
+			const totalTime = Date.now() - startTime;
+
+			// Log extraction summary
+			this.logService.info(`[PDF.js] ========== EXTRACTION SUMMARY ==========`);
+			this.logService.info(`[PDF.js] Total extraction time: ${totalTime.toLocaleString()}ms`);
+			this.logService.info(`[PDF.js] Characters extracted: ${charCount.toLocaleString()}`);
+			this.logService.info(`[PDF.js] Words extracted: ${metadata.wordCount.toLocaleString()}`);
+			this.logService.info(`[PDF.js] Pages processed: ${metadata.pageCount}`);
+			this.logService.info(`[PDF.js] Characters per second: ${Math.round(charCount / (totalTime / 1000)).toLocaleString()}`);
+			this.logService.info(`[PDF.js] ========== STANDARD EXTRACTION COMPLETE ==========`);
 
 			return {
 				text: fullText.trim(),
@@ -217,7 +246,10 @@ export class RAGFileService {
 			};
 		} catch (error) {
 			const errorMsg = error instanceof Error ? error.message : String(error);
-			this.logService.error('Failed to extract PDF:', error);
+			const totalTime = Date.now() - startTime;
+			this.logService.error(`[PDF.js] ========== EXTRACTION FAILED ==========`);
+			this.logService.error(`[PDF.js] Failed after ${totalTime}ms`);
+			this.logService.error('[PDF.js] Error details:', error);
 			throw new Error(`Failed to extract PDF content: ${errorMsg}`);
 		} finally {
 			// Cleanup PDF resources
@@ -238,6 +270,324 @@ export class RAGFileService {
 
 			if (global.gc) {
 				global.gc();
+			}
+		}
+	}
+
+	/**
+	 * Hybrid PDF extraction: combines PDF.js metadata with Docling content
+	 * - Uses PDF.js for fast metadata extraction (title, author, dates, page count)
+	 * - Uses Docling for ML-powered content extraction (tables, multi-column, layout)
+	 * - Falls back to PDF.js-only extraction if Docling fails
+	 */
+	async extractPdfHybrid(uri: URI): Promise<ExtractedContent> {
+		const startTime = Date.now();
+
+		this.logService.info(`[Hybrid PDF] ========== HYBRID EXTRACTION START ==========`);
+		this.logService.info(`[Hybrid PDF] Strategy: PDF.js metadata + Docling content`);
+
+		try {
+			// Step 1: Extract metadata with PDF.js (fast, reliable)
+			this.logService.info('[Hybrid PDF] Step 1/2: Extracting metadata with PDF.js...');
+			const metadataStartTime = Date.now();
+
+			// @ts-ignore - pdfjs-dist mjs build doesn't have type definitions
+			const pdfjsLib = await import('pdfjs-dist/build/pdf.mjs');
+			const filepath = this.getFilePath(uri);
+
+			const loadingTask = pdfjsLib.getDocument({
+				url: filepath,
+				useSystemFonts: true,
+				verbosity: 0,
+				maxImageSize: 1024 * 1024,
+				disableFontFace: true,
+				cMapPacked: true
+			});
+
+			const pdf = await loadingTask.promise;
+			const pdfMetadata = await pdf.getMetadata().catch(() => ({ info: {}, metadata: null }));
+
+			// Extract rich metadata from PDF.js
+			const metadata: ExtractedContent['metadata'] = {
+				title: pdfMetadata.info?.Title || '',
+				author: pdfMetadata.info?.Author || '',
+				pageCount: pdf.numPages,
+				wordCount: 0, // Will be updated from Docling content
+				language: 'en' // Will be detected from Docling content
+			};
+
+			// Store additional PDF.js metadata for logging (not in interface)
+			const pdfJsExtendedMetadata = {
+				subject: pdfMetadata.info?.Subject || '',
+				keywords: pdfMetadata.info?.Keywords || '',
+				creator: pdfMetadata.info?.Creator || '',
+				producer: pdfMetadata.info?.Producer || '',
+				creationDate: pdfMetadata.info?.CreationDate || '',
+				modificationDate: pdfMetadata.info?.ModDate || ''
+			};
+
+			// Clean up PDF.js resources
+			await pdf.cleanup();
+			await pdf.destroy();
+
+			const metadataTime = Date.now() - metadataStartTime;
+			this.logService.info(`[Hybrid PDF] ✓ Metadata extracted in ${metadataTime}ms`);
+			this.logService.info(`[Hybrid PDF]   - Title: ${metadata.title || '(none)'}`);
+			this.logService.info(`[Hybrid PDF]   - Author: ${metadata.author || '(none)'}`);
+			this.logService.info(`[Hybrid PDF]   - Pages: ${metadata.pageCount}`);
+
+			// Step 2: Extract content with Docling (slow, high-quality)
+			this.logService.info('[Hybrid PDF] Step 2/2: Extracting content with Docling...');
+			const contentStartTime = Date.now();
+
+			const { Docling } = await import('docling-sdk');
+			const client = new Docling({
+				api: {
+					baseUrl: 'http://localhost:5001',
+					timeout: 60000
+				}
+			});
+
+			const fs = await import('fs');
+			const fileBuffer = await fs.promises.readFile(filepath);
+
+			const result = await client.convertFile({
+				files: fileBuffer,
+				filename: filepath.split(/[\\/]/).pop() || 'document.pdf',
+				to_formats: ['md']
+			});
+
+			const text = result.document.md_content || result.document.text_content || '';
+			const doclingDoc = result.document.json_content;
+
+			const contentTime = Date.now() - contentStartTime;
+			this.logService.info(`[Hybrid PDF] ✓ Content extracted in ${contentTime}ms`);
+			this.logService.info(`[Hybrid PDF]   - Characters: ${text.length.toLocaleString()}`);
+
+			// Detect tables
+			let tableCount = 0;
+			if (doclingDoc?.tables && Array.isArray(doclingDoc.tables)) {
+				tableCount = doclingDoc.tables.length;
+			} else {
+				const markdownTableRegex = /\|[^\n]+\|[\n\r]+\|[-:\s|]+\|/g;
+				const tableMatches = text.match(markdownTableRegex);
+				tableCount = tableMatches ? tableMatches.length : 0;
+			}
+
+			// Update metadata with content-derived values
+			metadata.wordCount = this.countWords(text);
+			metadata.language = this.detectLanguage(text);
+
+			const totalTime = Date.now() - startTime;
+
+			this.logService.info(`[Hybrid PDF] ========== HYBRID EXTRACTION SUMMARY ==========`);
+			this.logService.info(`[Hybrid PDF] Total time: ${totalTime}ms (metadata: ${metadataTime}ms, content: ${contentTime}ms)`);
+			this.logService.info(`[Hybrid PDF] Metadata source: PDF.js`);
+			this.logService.info(`[Hybrid PDF]   - Title: ${metadata.title || '(empty)'}`);
+			this.logService.info(`[Hybrid PDF]   - Author: ${metadata.author || '(empty)'}`);
+			this.logService.info(`[Hybrid PDF]   - Creator: ${pdfJsExtendedMetadata.creator || '(empty)'}`);
+			this.logService.info(`[Hybrid PDF]   - Creation date: ${pdfJsExtendedMetadata.creationDate || '(empty)'}`);
+			this.logService.info(`[Hybrid PDF] Content source: Docling ML`);
+			this.logService.info(`[Hybrid PDF]   - Words: ${metadata.wordCount?.toLocaleString()}`);
+			this.logService.info(`[Hybrid PDF]   - Tables: ${tableCount}`);
+			this.logService.info(`[Hybrid PDF]   - Language: ${metadata.language}`);
+			this.logService.info(`[Hybrid PDF] ========== HYBRID EXTRACTION COMPLETE ==========`);
+
+			return {
+				text: text.trim(),
+				metadata
+			};
+
+		} catch (error) {
+			// Fallback: use PDF.js-only extraction if Docling fails
+			const errorMsg = error instanceof Error ? error.message : String(error);
+			this.logService.warn(`[Hybrid PDF] Docling extraction failed: ${errorMsg}`);
+			this.logService.warn(`[Hybrid PDF] Falling back to PDF.js-only extraction`);
+
+			return await this.extractPDFPages(uri);
+		}
+	}
+
+	/**
+	 * Extract PDF content using Docling SDK for better document structure extraction
+	 * This method provides enhanced layout analysis and better handling of tables, figures, and complex layouts
+	 * @param uri The URI of the PDF file
+	 */
+	async extractPdfWithDocling(uri: URI): Promise<ExtractedContent> {
+		// Start timing
+		const startTime = Date.now();
+
+		try {
+			// Dynamic import for docling-sdk
+			const { Docling } = await import('docling-sdk');
+
+			const filepath = this.getFilePath(uri);
+			this.logService.info(`[Docling] ========== DOCLING EXTRACTION START ==========`);
+			this.logService.info(`[Docling] File: ${filepath}`);
+			this.logService.info(`[Docling] Timestamp: ${new Date().toISOString()}`);
+
+			// Initialize Docling client in API mode
+			// Connects to docling-serve running on localhost:5001
+			const converterStartTime = Date.now();
+
+			const client = new Docling({
+				api: {
+					baseUrl: 'http://localhost:5001',
+					timeout: 60000 // 60 second timeout for large PDFs
+				}
+			});
+			const converterInitTime = Date.now() - converterStartTime;
+			this.logService.info(`[Docling] Docling API client initialized in ${converterInitTime}ms`);
+			this.logService.info(`[Docling] Connecting to Docling Serve at http://localhost:5001`);
+
+			// Convert PDF to markdown using Docling API
+			this.logService.info('[Docling] Starting document conversion...');
+			const conversionStartTime = Date.now();
+
+			// Read the file as a buffer
+			const fs = await import('fs');
+			const fileBuffer = await fs.promises.readFile(filepath);
+
+			// Convert using Docling API - sends to docling-serve
+			const result = await client.convertFile({
+				files: fileBuffer,
+				filename: filepath.split(/[\\/]/).pop() || 'document.pdf',
+				to_formats: ['md']
+			});
+
+			const conversionTime = Date.now() - conversionStartTime;
+			this.logService.info(`[Docling] Document conversion completed in ${conversionTime}ms`);
+
+			// DEBUG: Log the entire result structure
+			this.logService.info(`[Docling] DEBUG: Result keys: ${Object.keys(result).join(', ')}`);
+			this.logService.info(`[Docling] DEBUG: result.document keys: ${result.document ? Object.keys(result.document).join(', ') : 'null'}`);
+			this.logService.info(`[Docling] DEBUG: md_content length: ${result.document.md_content?.length || 0}`);
+			this.logService.info(`[Docling] DEBUG: text_content length: ${result.document.text_content?.length || 0}`);
+			this.logService.info(`[Docling] DEBUG: json_content exists: ${!!result.document.json_content}`);
+
+			// Extract the converted text from the response
+			const text = result.document.md_content || result.document.text_content || '';
+			const charCount = text.length;
+
+			// Get the JSON document for metadata
+			const doclingDoc = result.document.json_content;
+
+			// Analyze document structure features
+			this.logService.info(`[Docling] ========== DOCUMENT ANALYSIS ==========`);
+
+			// 1. Character count
+			this.logService.info(`[Docling] Total characters: ${charCount.toLocaleString()}`);
+
+			// 2. Detect tables (look for markdown table syntax or result metadata)
+			let tableCount = 0;
+			let hasMultiColumnLayout = false;
+
+			// Check if result object contains table information in json_content
+			if (doclingDoc?.tables && Array.isArray(doclingDoc.tables)) {
+				tableCount = doclingDoc.tables.length;
+				this.logService.info(`[Docling] ✓ Tables detected: ${tableCount} table${tableCount !== 1 ? 's' : ''}`);
+				if (tableCount > 0) {
+					this.logService.info(`[Docling]   Table details:`, JSON.stringify(doclingDoc.tables.slice(0, 3).map((t: any) => ({
+						rows: t.num_rows || t.data?.num_rows || '?',
+						cols: t.num_cols || t.data?.num_cols || '?'
+					}))));
+				}
+			} else {
+				// Fallback: detect markdown tables in text
+				const markdownTableRegex = /\|[^\n]+\|[\n\r]+\|[-:\s|]+\|/g;
+				const tableMatches = text.match(markdownTableRegex);
+				tableCount = tableMatches ? tableMatches.length : 0;
+				if (tableCount > 0) {
+					this.logService.info(`[Docling] ✓ Markdown tables detected: ${tableCount} (detected from text format)`);
+				} else {
+					this.logService.info(`[Docling] ✗ No tables detected`);
+				}
+			}
+
+			// 3. Detect multi-column layout
+			// For now, use heuristic detection since layout info is not directly available in the response
+			// We'll detect based on page structure or content patterns
+			const lines = text.split('\n');
+			let suspectedMultiColumn = false;
+
+			// Check for multiple consecutive lines with unusual spacing patterns
+			let consecutiveWideSpacing = 0;
+			for (const line of lines) {
+				// Look for lines with multiple wide gaps (potential column separation)
+				const wideGaps = (line.match(/\s{10,}/g) || []).length;
+				if (wideGaps >= 2) {
+					consecutiveWideSpacing++;
+					if (consecutiveWideSpacing > 3) {
+						suspectedMultiColumn = true;
+						break;
+					}
+				} else {
+					consecutiveWideSpacing = 0;
+				}
+			}
+
+			hasMultiColumnLayout = suspectedMultiColumn;
+			if (suspectedMultiColumn) {
+				this.logService.info(`[Docling] ⚠️ Possible multi-column layout detected (heuristic)`);
+			} else {
+				this.logService.info(`[Docling] ✗ No multi-column layout detected`);
+			}
+
+			// Extract metadata from the document
+			// Try to get metadata from origin or calculate from content
+			const metadata: ExtractedContent['metadata'] = {
+				title: doclingDoc?.name || doclingDoc?.origin?.filename || '',
+				author: '', // Not available in DoclingDocument structure
+				pageCount: doclingDoc?.page_dimensions?.length || 0,
+				wordCount: this.countWords(text),
+				language: this.detectLanguage(text)
+			};
+
+			// Dates are not available in the DoclingDocument structure
+			// We could potentially read them from file system if needed
+
+			// Calculate total extraction time
+			const totalTime = Date.now() - startTime;
+
+			// Final summary
+			this.logService.info(`[Docling] ========== EXTRACTION SUMMARY ==========`);
+			this.logService.info(`[Docling] Total extraction time: ${totalTime.toLocaleString()}ms`);
+			this.logService.info(`[Docling] Characters extracted: ${charCount.toLocaleString()}`);
+			this.logService.info(`[Docling] Words extracted: ${(metadata.wordCount || 0).toLocaleString()}`);
+			this.logService.info(`[Docling] Pages processed: ${metadata.pageCount}`);
+			this.logService.info(`[Docling] Tables found: ${tableCount}`);
+			this.logService.info(`[Docling] Multi-column layout: ${hasMultiColumnLayout ? 'Yes' : 'No'}`);
+			this.logService.info(`[Docling] Language detected: ${metadata.language}`);
+
+			// Performance metrics
+			this.logService.info(`[Docling] Performance metrics:`);
+			this.logService.info(`[Docling]   - Init time: ${converterInitTime}ms`);
+			this.logService.info(`[Docling]   - Conversion time: ${conversionTime}ms`);
+			this.logService.info(`[Docling]   - Processing overhead: ${totalTime - conversionTime - converterInitTime}ms`);
+			this.logService.info(`[Docling]   - Characters per second: ${Math.round(charCount / (totalTime / 1000)).toLocaleString()}`);
+
+			this.logService.info(`[Docling] ========== DOCLING EXTRACTION COMPLETE ==========`);
+
+			return {
+				text: text.trim(),
+				metadata
+			};
+
+		} catch (error) {
+			const errorMsg = error instanceof Error ? error.message : String(error);
+			const totalTime = Date.now() - startTime;
+
+			this.logService.error(`[Docling] ========== EXTRACTION FAILED ==========`);
+			this.logService.error(`[Docling] Failed after ${totalTime}ms`);
+			this.logService.error('[Docling] Error details:', error);
+
+			// Provide helpful error context
+			if (errorMsg.includes('Python') || errorMsg.includes('python')) {
+				throw new Error(`Docling extraction failed: Python environment required. ${errorMsg}`);
+			} else if (errorMsg.includes('command not found') || errorMsg.includes('spawn')) {
+				throw new Error(`Docling extraction failed: Docling CLI not found or not properly installed. ${errorMsg}`);
+			} else {
+				throw new Error(`Docling extraction failed: ${errorMsg}`);
 			}
 		}
 	}

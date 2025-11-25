@@ -440,15 +440,15 @@ const SimpleModelSettingsDialog = ({
 				mouseDownInsideModal.current = false;
 			}}
 		>
-		{/* MODAL */}
-		<div
-			className="void-scrollbar bg-void-bg-1 rounded-md p-4 max-w-xl w-full shadow-xl overflow-y-auto max-h-[90vh]"
-			onClick={(e) => e.stopPropagation()} // Keep stopping propagation for normal clicks inside
-			onMouseDown={(e) => {
-				mouseDownInsideModal.current = true;
-				e.stopPropagation();
-			}}
-		>
+			{/* MODAL */}
+			<div
+				className="void-scrollbar bg-void-bg-1 rounded-md p-4 max-w-xl w-full shadow-xl overflow-y-auto max-h-[90vh]"
+				onClick={(e) => e.stopPropagation()} // Keep stopping propagation for normal clicks inside
+				onMouseDown={(e) => {
+					mouseDownInsideModal.current = true;
+					e.stopPropagation();
+				}}
+			>
 				<div className="flex justify-between items-center mb-4">
 					<h3 className="text-lg font-medium">
 						Change Defaults for {modelName} (
@@ -1172,14 +1172,14 @@ const RedoOnboardingButton = ({ className }: { className?: string }) => {
 	const accessor = useAccessor();
 	const voidSettingsService = accessor.get("IVoidSettingsService");
 	return (
-		<div
-			className={`text-void-fg-4 flex flex-nowrap text-nowrap items-center hover:brightness-110 cursor-pointer ${className}`}
+		<VoidButtonBgDarken
+			className={`px-4 py-2 rounded-sm ${className}`}
 			onClick={() => {
 				voidSettingsService.setGlobalSetting("isOnboardingComplete", false);
 			}}
 		>
-			See onboarding screen?
-		</div>
+			Reset Onboarding
+		</VoidButtonBgDarken>
 	);
 };
 

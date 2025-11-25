@@ -3,22 +3,26 @@
  *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
  *--------------------------------------------------------------------------------------*/
 
-import { registerAction2, Action2, MenuId } from '../../../../platform/actions/common/actions.js';
+import { URI } from '../../../../base/common/uri.js';
+import { ITextModelService } from '../../../../editor/common/services/resolverService.js';
+import { Action2, MenuId, registerAction2 } from '../../../../platform/actions/common/actions.js';
+import { ContextKeyExpr } from '../../../../platform/contextkey/common/contextkey.js';
+import { IFileDialogService } from '../../../../platform/dialogs/common/dialogs.js';
+import { IFileService } from '../../../../platform/files/common/files.js';
 import { ServicesAccessor } from '../../../../platform/instantiation/common/instantiation.js';
 import { INotificationService } from '../../../../platform/notification/common/notification.js';
 import { IProgressService, ProgressLocation } from '../../../../platform/progress/common/progress.js';
-import { URI } from '../../../../base/common/uri.js';
-import { IRAGService } from '../common/ragService.js';
-import { ContextKeyExpr } from '../../../../platform/contextkey/common/contextkey.js';
 import { IWorkspaceContextService } from '../../../../platform/workspace/common/workspace.js';
-import { IFileService } from '../../../../platform/files/common/files.js';
-import { IVoidSettingsService } from '../common/voidSettingsService.js';
 import { IExplorerService } from '../../../contrib/files/browser/files.js';
+import { IEditorService } from '../../../services/editor/common/editorService.js';
+import { IRAGService } from '../common/ragService.js';
+import { IVoidSettingsService } from '../common/voidSettingsService.js';
 import {
+	VOID_RAG_GET_STATS_ACTION_ID,
 	VOID_RAG_INDEX_DOCUMENT_ACTION_ID,
 	VOID_RAG_SEARCH_POLICY_ACTION_ID,
 	VOID_RAG_SEARCH_WORKSPACE_ACTION_ID,
-	VOID_RAG_GET_STATS_ACTION_ID
+	VOID_RAG_TEST_DOCLING_ACTION_ID
 } from './actionIDs.js';
 
 class RAGIndexDocumentAction extends Action2 {
@@ -321,6 +325,207 @@ class ClearAllEmbeddingsAction extends Action2 {
 	}
 }
 
+// Test Docling PDF Extraction command
+class TestDoclingExtractionAction extends Action2 {
+	constructor() {
+		super({
+			id: VOID_RAG_TEST_DOCLING_ACTION_ID,
+			title: { value: 'Test PDF Extraction Methods', original: 'Test PDF Extraction Methods' },
+			category: { value: 'RAG', original: 'RAG' },
+			f1: true
+		});
+	}
+
+	async run(accessor: ServicesAccessor): Promise<void> {
+		const fileDialogService = accessor.get(IFileDialogService);
+		const notificationService = accessor.get(INotificationService);
+		const progressService = accessor.get(IProgressService);
+		const editorService = accessor.get(IEditorService);
+		const textModelService = accessor.get(ITextModelService);
+		const ragService = accessor.get(IRAGService);
+
+		try {
+			// Step 1: Ask user to select a PDF file
+			const result = await fileDialogService.showOpenDialog({
+				canSelectFiles: true,
+				canSelectFolders: false,
+				canSelectMany: false,
+				filters: [
+					{ name: 'PDF Files', extensions: ['pdf'] }
+				],
+				title: 'Select PDF to test extraction methods'
+			});
+
+			if (!result || result.length === 0) {
+				notificationService.info('No file selected');
+				return;
+			}
+
+			const pdfUri = result[0];
+			const filename = pdfUri.path.split('/').pop() || 'document.pdf';
+
+			notificationService.info(`Testing all extraction methods on: ${filename}`);
+
+			// Step 2: Run extraction with all methods using progress indicator
+			const extractionResults = await progressService.withProgress(
+				{
+					location: ProgressLocation.Notification,
+					title: `Comparing extraction methods for ${filename}`,
+					cancellable: false
+				},
+				async (progress) => {
+					progress.report({ message: 'Extracting with all methods...' });
+
+					// Call the IPC method which runs in the main process
+					const result = await ragService.testDoclingExtraction(pdfUri);
+
+					return result;
+				}
+			);
+
+			// Step 3: Create comparison text for all three methods
+			const { standard, docling, doclingError } = extractionResults;
+
+			const standardText = `===========================================
+STANDARD EXTRACTION (PDF.js)
+===========================================
+⚡ Speed: ~150ms
+✅ Reliability: Always works
+✅ Metadata: Excellent (title, author, dates)
+⚠️  Content: Basic text only
+❌ Tables: Poor structure
+❌ Multi-column: Poor handling
+
+METADATA:
+-----------
+Pages: ${standard.metadata.pageCount || 'N/A'}
+Words: ${standard.metadata.wordCount || 'N/A'}
+Language: ${standard.metadata.language || 'N/A'}
+Title: ${standard.metadata.title || '(empty)'}
+Author: ${standard.metadata.author || '(empty)'}
+
+TEXT CONTENT:
+-------------------------------------------
+${standard.text}
+-------------------------------------------`;
+
+			const doclingText = `===========================================
+DOCLING EXTRACTION (ML-Powered)
+===========================================
+${doclingError ? `⚠️ ERROR: ${doclingError.message}\n\n` : ''}⚠️  Speed: ~15 seconds
+✅ Reliability: Requires server
+❌ Metadata: Missing title/author
+✅ Content: Excellent (ML-powered)
+✅ Tables: Full structure detection
+✅ Multi-column: Excellent handling
+
+METADATA:
+-----------
+Pages: ${docling.metadata.pageCount || 'N/A'}
+Words: ${docling.metadata.wordCount || 'N/A'}
+Language: ${docling.metadata.language || 'N/A'}
+Title: ${docling.metadata.title || '(empty)'}
+Author: ${docling.metadata.author || '(empty)'}
+
+TEXT CONTENT:
+-------------------------------------------
+${docling.text}
+-------------------------------------------`;
+
+			const hybridText = `===========================================
+HYBRID EXTRACTION ✨ (Best of Both)
+===========================================
+⚠️  Speed: ~15 seconds (Docling bottleneck)
+✅ Reliability: Falls back to PDF.js
+✅ Metadata: PDF.js (title, author, dates)
+✅ Content: Docling ML (tables, layout)
+✅ Tables: Full structure detection
+✅ Multi-column: Excellent handling
+
+STRATEGY:
+-----------
+1. PDF.js extracts metadata (~50ms) ⚡
+   - Title, Author, Creator
+   - Creation/Modification dates
+   - Page count
+
+2. Docling extracts content (~15s) 🧠
+   - ML-powered text extraction
+   - Table structure detection
+   - Multi-column layout handling
+   - Word count, language detection
+
+3. Merge results = Best of both worlds!
+
+HYBRID RESULT:
+-----------
+Pages: ${standard.metadata.pageCount || 'N/A'} (from PDF.js)
+Words: ${docling.metadata.wordCount || 'N/A'} (from Docling)
+Language: ${docling.metadata.language || 'N/A'} (from Docling)
+Title: ${standard.metadata.title || '(empty)'} (from PDF.js)
+Author: ${standard.metadata.author || '(empty)'} (from PDF.js)
+
+TEXT CONTENT (from Docling):
+-------------------------------------------
+${docling.text}
+-------------------------------------------`;
+
+			// Step 4: Create untitled documents and open side-by-side comparison
+			const standardUri = URI.from({
+				scheme: 'untitled',
+				path: `1-Standard-${filename}.txt`
+			});
+
+			const doclingUri = URI.from({
+				scheme: 'untitled',
+				path: `2-Docling-${filename}.txt`
+			});
+
+			const hybridUri = URI.from({
+				scheme: 'untitled',
+				path: `3-Hybrid-${filename}.txt`
+			});
+
+			// Create model references with content
+			const standardRef = await textModelService.createModelReference(standardUri);
+			standardRef.object.textEditorModel?.setValue(standardText);
+
+			const doclingRef = await textModelService.createModelReference(doclingUri);
+			doclingRef.object.textEditorModel?.setValue(doclingText);
+
+			const hybridRef = await textModelService.createModelReference(hybridUri);
+			hybridRef.object.textEditorModel?.setValue(hybridText);
+
+			// Open all three documents side by side
+			// First, open standard (left)
+			await editorService.openEditor({
+				resource: standardUri,
+				options: { pinned: true }
+			});
+
+			// Then open hybrid on the right (viewColumn 1 = second column)
+			await editorService.openEditor({
+				resource: hybridUri,
+				options: { pinned: true }
+			}, 1);
+
+			// Show summary notification
+			const summary = doclingError
+				? `⚠️ Docling extraction failed. Check comparison for details.`
+				: `✓ Comparison complete:\n` +
+				`Standard (PDF.js): ${standard.metadata.wordCount} words, ${standard.metadata.pageCount} pages\n` +
+				`Docling (ML): ${docling.metadata.wordCount} words, ${docling.metadata.pageCount} pages\n` +
+				`Hybrid: Best of both! 🎉`;
+
+			notificationService.info(summary);
+
+		} catch (error) {
+			const errorMsg = error instanceof Error ? error.message : String(error);
+			notificationService.error(`Failed to test extraction: ${errorMsg}`);
+		}
+	}
+}
+
 registerAction2(RAGIndexDocumentAction);
 registerAction2(RAGSearchPolicyAction);
 registerAction2(RAGSearchWorkspaceAction);
@@ -329,3 +534,4 @@ registerAction2(IndexAsWorkspaceDocAction);  // ← New action for case document
 registerAction2(IndexAsPolicyManualAction);
 registerAction2(CreatePolicyFolderAction);
 registerAction2(ClearAllEmbeddingsAction);
+registerAction2(TestDoclingExtractionAction);

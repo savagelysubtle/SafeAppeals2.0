@@ -3,6 +3,9 @@
  *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
  *--------------------------------------------------------------------------------------*/
 
+import { ChildProcess, spawn } from 'child_process';
+import * as fs from 'fs';
+import * as path from 'path';
 import { URI } from '../../../../base/common/uri.js';
 import { ILogService } from '../../../../platform/log/common/log.js';
 import { HybridRetriever } from '../common/ragHybridRetriever.js';
@@ -22,6 +25,8 @@ export class RAGMainService implements IRAGMainService {
 	private hybridRetriever!: HybridRetriever;
 	private reranker!: LocalCrossEncoderReranker;
 	private initialized = false;
+	private doclingProcess?: ChildProcess;
+	private doclingServerReady = false;
 
 	constructor(
 		@ILogService private readonly logService: ILogService,
@@ -35,6 +40,9 @@ export class RAGMainService implements IRAGMainService {
 		if (this.initialized) return;
 
 		try {
+			// Start Docling Serve in the background
+			await this.startDoclingServe();
+
 			// Ignore openAIApiKey parameter - we use local embeddings now
 			if (openAIApiKey) {
 				this.logService.info('RAG: Using local embeddings (OpenAI API key no longer required)');
@@ -47,8 +55,8 @@ export class RAGMainService implements IRAGMainService {
 			const chromaPath = this.pathService.getGlobalChromaDir();
 
 			const config: PersistentVectorAdapterConfig = {
-			persistPath: chromaPath,
-			useReranking: true // Enable reranking by default
+				persistPath: chromaPath,
+				useReranking: true // Enable reranking by default
 			};
 
 			this.vectorAdapter = new ChromaPersistentAdapter(config, this.logService);
@@ -61,17 +69,17 @@ export class RAGMainService implements IRAGMainService {
 			// Initialize index service
 			await this.indexService.initialize();
 
-		// Initialize hybrid retriever
-		this.hybridRetriever = new HybridRetriever(
-			this.vectorAdapter,
-			this.indexService,
-			this.logService
-		);
+			// Initialize hybrid retriever
+			this.hybridRetriever = new HybridRetriever(
+				this.vectorAdapter,
+				this.indexService,
+				this.logService
+			);
 
-		// Initialize reranker
-		const modelCachePath = chromaPath + '/models';
-		this.reranker = new LocalCrossEncoderReranker(this.logService);
-		await this.reranker.initialize(modelCachePath);
+			// Initialize reranker
+			const modelCachePath = chromaPath + '/models';
+			this.reranker = new LocalCrossEncoderReranker(this.logService);
+			await this.reranker.initialize(modelCachePath);
 
 			// Ensure collections exist
 			await this.vectorAdapter.ensureCollections('both');
@@ -448,6 +456,39 @@ export class RAGMainService implements IRAGMainService {
 		}
 	}
 
+	async testDoclingExtraction(uri: URI): Promise<{ standard: any; docling: any; doclingError?: any }> {
+		this.logService.info(`[Test Docling] Testing extraction methods for: ${uri.fsPath}`);
+
+		// Extract with standard method (using public extractPDFPages)
+		this.logService.info('[Test Docling] Extracting with standard pdfjs-dist...');
+		const standardResult = await this.fileService.extractPDFPages(uri);
+
+		// Extract with Docling method
+		this.logService.info('[Test Docling] Extracting with Docling SDK...');
+		let doclingResult;
+		let doclingError;
+		try {
+			// Temporarily enable Docling
+			this.fileService.useDoclingForPdf = true;
+			doclingResult = await this.fileService.extractPdfWithDocling(uri);
+		} catch (error) {
+			doclingError = error;
+			doclingResult = {
+				text: `[Error extracting with Docling: ${error instanceof Error ? error.message : String(error)}]`,
+				metadata: { wordCount: 0 }
+			};
+		} finally {
+			// Always reset the flag
+			this.fileService.useDoclingForPdf = false;
+		}
+
+		return {
+			standard: standardResult,
+			docling: doclingResult,
+			doclingError
+		};
+	}
+
 	/**
 	 * Reload embeddings from database into vector store
 	 * This is necessary because the in-memory vector store loses data on restart
@@ -516,5 +557,165 @@ export class RAGMainService implements IRAGMainService {
 		formula?: string;
 	}>): Promise<{ success: boolean; message: string }> {
 		return this.fileService.editXLSX(uri, operations);
+	}
+
+	/**
+	 * Start Docling Serve in the background
+	 * This enables advanced PDF extraction with ML models
+	 */
+	private async startDoclingServe(): Promise<void> {
+		// Check if already running
+		if (this.doclingProcess) {
+			this.logService.info('[Docling Serve] Already running');
+			return;
+		}
+
+		try {
+			// Get workspace root (go up 2 levels from .build/electron in dev mode)
+			const workspaceRoot = path.resolve(process.cwd(), '..', '..');
+			const venvPython = path.join(workspaceRoot, '.venv', 'Scripts', 'python.exe');
+
+			// Check if .venv exists
+			if (!fs.existsSync(venvPython)) {
+				this.logService.warn('[Docling Serve] Python virtual environment not found at:', venvPython);
+				this.logService.warn('[Docling Serve] Please run: uv venv && uv pip install docling-serve');
+				this.logService.warn('[Docling Serve] Advanced PDF extraction will not be available');
+				return;
+			}
+
+			this.logService.info('[Docling Serve] Starting Docling Serve...');
+			this.logService.info('[Docling Serve] Python path:', venvPython);
+
+			// Prepare environment for Docling Serve
+			const env = { ...process.env };
+
+			// Try to load HF_TOKEN from .env file if not in environment
+			const envFilePath = path.join(workspaceRoot, '.env');
+			if (fs.existsSync(envFilePath)) {
+				this.logService.info('[Docling Serve] Loading .env file:', envFilePath);
+				try {
+					const envContent = fs.readFileSync(envFilePath, 'utf-8');
+					const lines = envContent.split('\n');
+					for (const line of lines) {
+						const trimmed = line.trim();
+						if (trimmed && !trimmed.startsWith('#')) {
+							const match = trimmed.match(/^([^=]+)=(.*)$/);
+							if (match) {
+								const key = match[1].trim();
+								const value = match[2].trim().replace(/^["']|["']$/g, ''); // Remove quotes
+								if (key === 'HF_TOKEN' || key === 'HUGGING_FACE_HUB_TOKEN') {
+									env[key] = value;
+									this.logService.info(`[Docling Serve] ✓ Loaded ${key} from .env`);
+								}
+							}
+						}
+					}
+				} catch (error) {
+					this.logService.warn('[Docling Serve] Failed to read .env file:', error);
+				}
+			}
+
+			// Set HuggingFace token if available (required for gated models even if cached)
+			if (env.HF_TOKEN || env.HUGGING_FACE_HUB_TOKEN) {
+				env.HF_TOKEN = env.HF_TOKEN || env.HUGGING_FACE_HUB_TOKEN;
+				this.logService.info('[Docling Serve] ✓ HuggingFace token available');
+			} else {
+				this.logService.warn('[Docling Serve] ⚠️ No HF_TOKEN found in environment or .env file');
+				this.logService.warn('[Docling Serve] docling-serve requires HF_TOKEN for gated models');
+				this.logService.warn('[Docling Serve] Add HF_TOKEN=hf_... to .env file in project root');
+			}
+
+			// Start docling-serve as a subprocess with 'run' command
+			this.doclingProcess = spawn(venvPython, ['-m', 'docling_serve', 'run'], {
+				stdio: ['ignore', 'pipe', 'pipe'], // Capture stdout and stderr
+				cwd: workspaceRoot,
+				detached: false, // Keep attached so it dies with the parent
+				windowsHide: true, // Hide console window on Windows
+				env // Pass environment with HF_TOKEN
+			});
+
+			// Log output
+			this.doclingProcess.stdout?.on('data', (data) => {
+				const output = data.toString().trim();
+				this.logService.info(`[Docling Serve] ${output}`);
+
+				// Check if server is ready
+				if (output.includes('Uvicorn running') || output.includes('Application startup complete')) {
+					this.doclingServerReady = true;
+					this.logService.info('[Docling Serve] ✓ Server ready on http://localhost:5001');
+				}
+			});
+
+			this.doclingProcess.stderr?.on('data', (data) => {
+				const output = data.toString().trim();
+				// Filter out noise
+				if (!output.includes('UserWarning') && !output.includes('FutureWarning')) {
+					this.logService.warn(`[Docling Serve] ${output}`);
+				}
+			});
+
+			this.doclingProcess.on('error', (error) => {
+				this.logService.error('[Docling Serve] Failed to start:', error);
+				this.doclingProcess = undefined;
+			});
+
+			this.doclingProcess.on('exit', (code, signal) => {
+				this.logService.info(`[Docling Serve] Process exited with code ${code}, signal ${signal}`);
+				this.doclingProcess = undefined;
+				this.doclingServerReady = false;
+			});
+
+			// Wait for server to be ready (max 15 seconds)
+			const startTime = Date.now();
+			while (!this.doclingServerReady && Date.now() - startTime < 15000) {
+				await new Promise(resolve => setTimeout(resolve, 500));
+			}
+
+			if (this.doclingServerReady) {
+				this.logService.info('[Docling Serve] ✓ Started successfully in', Date.now() - startTime, 'ms');
+			} else {
+				this.logService.warn('[Docling Serve] Server did not respond within 15 seconds');
+				this.logService.warn('[Docling Serve] It may still be starting up (first run downloads ML models)');
+			}
+		} catch (error) {
+			this.logService.error('[Docling Serve] Failed to start:', error);
+			this.doclingProcess = undefined;
+		}
+	}
+
+	/**
+	 * Stop Docling Serve process
+	 * Called automatically when RAG service is disposed
+	 */
+	private stopDoclingServe(): void {
+		if (this.doclingProcess) {
+			this.logService.info('[Docling Serve] Stopping server...');
+
+			try {
+				// Try graceful shutdown first
+				this.doclingProcess.kill('SIGTERM');
+
+				// Force kill after 5 seconds if still running
+				setTimeout(() => {
+					if (this.doclingProcess && !this.doclingProcess.killed) {
+						this.logService.warn('[Docling Serve] Forcing shutdown...');
+						this.doclingProcess.kill('SIGKILL');
+					}
+				}, 5000);
+			} catch (error) {
+				this.logService.error('[Docling Serve] Error stopping server:', error);
+			}
+
+			this.doclingProcess = undefined;
+			this.doclingServerReady = false;
+		}
+	}
+
+	/**
+	 * Dispose of the RAG service and clean up resources
+	 */
+	dispose(): void {
+		this.stopDoclingServe();
+		this.logService.info('RAG service disposed');
 	}
 }

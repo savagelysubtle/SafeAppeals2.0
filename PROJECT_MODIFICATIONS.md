@@ -30,7 +30,32 @@ SafeAppeals 2.0 is a fork of [Void IDE](https://github.com/voideditor/void) that
   - Custom PDF viewer UI (`media/pdfViewer.css`, `media/pdfViewer.js`)
 - **Use Case**: View and analyze legal documents, case files, and precedents
 
-### 4. **Chroma Vector Database Integration**
+### 4. **Advanced PDF Extraction with Docling**
+
+- **Location**: `src/vs/workbench/contrib/void/electron-main/ragFileService.ts`
+- **Technology Stack**:
+  - **TypeScript Client**: `docling-sdk` (npm package) - Bridge to Python backend
+  - **Python Engine**: `docling` (Python package) - ML-powered PDF processing
+  - **Architecture**: TypeScript SDK spawns Python CLI subprocess for processing
+- **Features**:
+  - **Dual Extraction Methods**:
+    - Standard: `pdfjs-dist` for reliable baseline extraction
+    - Enhanced: Docling for ML-powered extraction with table detection and layout analysis
+  - **ML Capabilities**:
+    - Vision Language Model (VLM) pipeline for image analysis
+    - Table structure recognition and preservation
+    - Multi-column layout detection
+    - Enhanced metadata extraction
+  - **Comparison Tool**: VS Code command "RAG: Test Docling PDF Extraction" for side-by-side comparison
+  - **Project-Local Python**: Uses `uv` for isolated `.venv` environment (no global installs)
+- **Dependencies**:
+  - PyTorch for ML models (~260MB)
+  - Transformers for NLP processing
+  - Docling core libraries for PDF analysis
+- **Integration**: Automatically adds `.venv/Scripts` to PATH for subprocess execution
+- **Use Case**: Enhanced extraction quality for complex legal documents with tables, multi-column layouts, and embedded images
+
+### 5. **Chroma Vector Database Integration**
 
 - **Purpose**: Local vector storage for legal document embeddings
 - **Technology**: ChromaDB
@@ -144,8 +169,13 @@ src/vs/workbench/contrib/void/
 ## Technologies Added
 
 - **ChromaDB** - Vector database for document embeddings
-- **PDF.js** (or equivalent) - PDF rendering and parsing
-- **Transformers.js** (or similar) - Local embedding generation
+- **PDF.js** - Standard PDF rendering and parsing
+- **Docling SDK (TypeScript)** - Bridge to Python-based ML PDF processing
+- **Docling (Python)** - ML-powered PDF extraction with VLM and table detection
+- **PyTorch** - Deep learning framework for PDF analysis models
+- **Transformers.js** - Local embedding generation for privacy
+- **Python 3.8+** - Backend for advanced PDF processing with Docling
+- **uv** - Fast Python package installer for project-local dependencies
 - **Vector Search** - Similarity search for legal precedents
 
 ---
@@ -175,7 +205,53 @@ src/vs/workbench/contrib/void/
 - Most custom code in `src/vs/workbench/contrib/void/`
 - React components for UI built separately (`npm run buildreact`)
 - Electron-based desktop application
-- TypeScript primary language (94.7% of codebase)
+- **TypeScript** primary language (94.7% of codebase)
+- **Python** for ML-powered PDF extraction (Docling)
+- **Hybrid Architecture**: TypeScript main process with Python subprocess for document processing
+- **Project-Local Python**: Uses `uv` and `.venv` for isolated dependencies
+- **Dual Extraction**: Standard (pdfjs-dist) + Enhanced (Docling ML)
+
+---
+
+## Python Setup
+
+### Dependencies Management
+
+- **Python Version**: 3.8+
+- **Package Manager**: `uv` (fast, modern Python package installer)
+- **Environment**: Project-local `.venv` (no global installs)
+- **Dependency File**: `pyproject.toml`
+
+### Installation
+
+```bash
+# Create virtual environment
+uv venv
+
+# Install Python dependencies
+uv pip install docling
+
+# Or install from pyproject.toml
+uv sync
+```
+
+### Dependencies Installed (~260MB)
+
+- **docling**: Core PDF processing library
+- **torch**: PyTorch for ML models
+- **transformers**: NLP and vision transformers
+- **pillow**: Image processing
+- **opencv-python**: Computer vision
+- **pandas**: Data manipulation
+- **scipy/numpy**: Scientific computing
+
+### Integration with TypeScript
+
+The TypeScript `docling-sdk` client automatically:
+1. Detects `.venv/Scripts` directory
+2. Adds it to subprocess PATH
+3. Spawns Python CLI for processing
+4. Returns results to TypeScript layer
 
 ---
 
@@ -187,6 +263,7 @@ src/vs/workbench/contrib/void/
 
 ---
 
-**Last Updated**: October 22, 2025
+**Last Updated**: November 6, 2025
 **Version**: 2.0
 **Branch**: feat-pdf-docx-viewer
+**Python Support**: Added Docling ML PDF extraction

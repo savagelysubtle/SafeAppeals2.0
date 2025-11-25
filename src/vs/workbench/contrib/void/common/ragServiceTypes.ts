@@ -141,6 +141,7 @@ export interface IRAGMainService {
 	getDocumentsByType(isPolicyManual: boolean): Promise<any[]>;
 	initialize(openAIApiKey?: string): Promise<void>;
 	clearAllEmbeddings(): Promise<{ success: boolean; message: string }>;
+	testDoclingExtraction(uri: URI): Promise<{ standard: any; docling: any; doclingError?: any }>;
 
 	// Document creation methods (delegated to fileService)
 	createEmptyDOCX(uri: URI): Promise<void>;

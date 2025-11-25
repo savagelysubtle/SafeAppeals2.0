@@ -1,48 +1,54 @@
-// XLSX Viewer Webview Script
+// XLSX Viewer Webview Script using x-data-spreadsheet
 (function () {
 	// Communication with host
 	const vscode = acquireVsCodeApi();
 
-	// Get previous state if it exists
-	const previousState = vscode.getState() || {};
-
+	// Initialize x-spreadsheet
+	// @ts-ignore
+	const x_spreadsheet = window.x_spreadsheet;
+	let grid = null;
 	let workbook = null;
-	let currentSheetIndex = 0;
-	let zoomLevel = 100;
 
-	// Get DOM elements
-	const container = document.getElementById('xlsx-container');
-	// Add unified scrollbar class
-	container.classList.add('void-scrollbar');
-
-	const sheetTabsContainer = document.getElementById('sheet-tabs');
-	const zoomInBtn = document.getElementById('zoom-in-btn');
-	const zoomOutBtn = document.getElementById('zoom-out-btn');
-	const zoomLevelSpan = document.getElementById('zoom-level');
-	const cellRefSpan = document.getElementById('cell-ref');
-	const sheetInfoSpan = document.getElementById('sheet-info');
+	// Define colors for palette
+	const COLORS = [
+		'#000000', '#434343', '#666666', '#999999', '#b7b7b7', '#cccccc', '#d9d9d9', '#efefef', '#f3f3f3', '#ffffff',
+		'#980000', '#ff0000', '#ff9900', '#ffff00', '#00ff00', '#00ffff', '#4a86e8', '#0000ff', '#9900ff', '#ff00ff',
+		'#e6b8af', '#f4cccc', '#fce5cd', '#fff2cc', '#d9ead3', '#d0e0e3', '#c9daf8', '#cfe2f3', '#d9d2e9', '#ead1dc',
+		'#dd7e6b', '#ea9999', '#f9cb9c', '#ffe599', '#b6d7a8', '#a2c4c9', '#a4c2f4', '#9fc5e8', '#b4a7d6', '#d5a6bd',
+		'#cc4125', '#e06666', '#f6b26b', '#ffd966', '#93c47d', '#76a5af', '#6d9eeb', '#6fa8dc', '#8e7cc3', '#c27ba0',
+		'#a61c00', '#cc0000', '#e69138', '#f1c232', '#6aa84f', '#45818e', '#3c78d8', '#3d85c6', '#674ea7', '#a64d79',
+		'#85200c', '#990000', '#b45f06', '#bf9000', '#38761d', '#134f5c', '#1155cc', '#0b5394', '#351c75', '#741b47',
+		'#5b0f00', '#660000', '#783f04', '#7f6000', '#274e13', '#0c343d', '#1c4587', '#073763', '#20124d', '#4c1130'
+	];
 
 	// Notify host that webview is ready
-	vscode.postMessage({ type: 'ready' });
+	vscode.postMessage({ type: "ready" });
 
 	// Listen for messages from host
-	window.addEventListener('message', async (event) => {
+	window.addEventListener("message", async (event) => {
 		const message = event.data;
 
 		switch (message.type) {
-			case 'loadXLSX':
+			case "loadXLSX":
 				await handleLoadXLSX(message);
 				break;
-			case 'executeOperations':
-				executeDocumentOperations(message.operations);
+			case "clearXLSX":
+				if (grid) {
+					grid.loadData({});
+				}
+				break;
+			case "saveRequest":
+				saveSpreadsheet();
+				break;
+			case "executeOperations":
+				console.warn("Agent operations not yet implemented for x-spreadsheet");
 				break;
 		}
 	});
 
 	async function handleLoadXLSX(message) {
 		try {
-			console.log('[XLSX Webview] Loading XLSX...');
-			container.innerHTML = '<div class="loading">Loading spreadsheet...</div>';
+			console.log("[XLSX Webview] Loading XLSX...");
 
 			// Convert base64 to ArrayBuffer
 			const binaryString = atob(message.data);
@@ -52,432 +58,520 @@
 			}
 
 			// Parse workbook using SheetJS
-			workbook = XLSX.read(bytes, { type: 'array' });
+			// @ts-ignore
+			workbook = XLSX.read(bytes, { type: "array" });
 
-			// Set initial sheet
-			currentSheetIndex = message.startSheet || 0;
-			if (currentSheetIndex >= workbook.SheetNames.length) {
-				currentSheetIndex = 0;
+			// Convert to x-spreadsheet data
+			const data = stox(workbook);
+
+			// Initialize grid if not already done
+			if (!grid) {
+				const options = {
+					mode: "edit",
+					showToolbar: false, // Hide default toolbar
+					showGrid: true,
+					showContextmenu: true,
+					view: {
+						height: () => document.documentElement.clientHeight - 130, // Adjust for ribbon + formula bar
+						width: () => document.documentElement.clientWidth,
+					},
+					row: {
+						len: 100,
+						height: 25,
+					},
+					col: {
+						len: 26,
+						width: 100,
+						indexWidth: 60,
+						minWidth: 60,
+					},
+					style: {
+						bgcolor: "#ffffff",
+						align: "left",
+						valign: "middle",
+						textwrap: false,
+						strike: false,
+						underline: false,
+						color: "#0a0a0a",
+						font: {
+							name: "Helvetica",
+							size: 10,
+							bold: false,
+							italic: false,
+						},
+					},
+				};
+				grid = new x_spreadsheet("#x-spreadsheet-demo", options);
+
+				// Initialize Ribbon Controller
+				initRibbonController(grid);
+
+				// Handle change events
+				grid.change((cdata) => {
+					// Notify host that content changed
+					vscode.postMessage({ type: "contentChanged" });
+				});
 			}
 
-			// Render sheet tabs
-			renderSheetTabs();
-
-			// Render current sheet
-			renderSheet(currentSheetIndex);
-
-			console.log('[XLSX Webview] XLSX loaded successfully');
+			// Load data into grid
+			grid.loadData(data);
+			console.log("[XLSX Webview] XLSX loaded successfully");
 
 		} catch (error) {
-			console.error('[XLSX Webview] Failed to load XLSX:', error);
-			container.innerHTML = `<div style="padding: 20px; color: var(--vscode-errorForeground);">
+			console.error("[XLSX Webview] Failed to load XLSX:", error);
+			document.getElementById("x-spreadsheet-demo").innerHTML = `<div style="padding: 20px; color: var(--vscode-errorForeground);">
 				Error loading spreadsheet: ${error.message}
 			</div>`;
 		}
 	}
 
-	function renderSheetTabs() {
-		sheetTabsContainer.innerHTML = '';
+	// ==========================================
+	// Ribbon Controller
+	// ==========================================
+	function initRibbonController(gridInstance) {
+		// --- Tab Switching ---
+		const tabs = document.querySelectorAll(".ribbon-tab");
+		tabs.forEach(tab => {
+			tab.addEventListener("click", () => {
+				document.querySelectorAll(".ribbon-tab").forEach(t => t.classList.remove("active"));
+				document.querySelectorAll(".ribbon-panel").forEach(p => p.classList.remove("active"));
 
-		workbook.SheetNames.forEach((sheetName, index) => {
-			const tab = document.createElement('button');
-			tab.className = 'sheet-tab';
-			tab.textContent = sheetName;
-			if (index === currentSheetIndex) {
-				tab.classList.add('active');
+				tab.classList.add("active");
+				const tabId = tab.getAttribute("data-tab");
+				document.getElementById(`tab-${tabId}`).classList.add("active");
+			});
+		});
+
+		// --- File Operations ---
+		document.getElementById("btn-save").addEventListener("click", saveSpreadsheet);
+
+		// --- Font Styling ---
+		bindToggleButton("btn-bold", "bold");
+		bindToggleButton("btn-italic", "italic");
+		bindToggleButton("btn-underline", "underline");
+		bindToggleButton("btn-strike", "strike");
+
+		// --- Alignment ---
+		bindActionButton("btn-align-left", () => setStyle("align", "left"));
+		bindActionButton("btn-align-center", () => setStyle("align", "center"));
+		bindActionButton("btn-align-right", () => setStyle("align", "right"));
+
+		// --- Font Family & Size ---
+		document.getElementById("font-family").addEventListener("change", (e) => {
+			// @ts-ignore
+			setStyle("font", { name: e.target.value });
+		});
+		document.getElementById("font-size").addEventListener("change", (e) => {
+			// @ts-ignore
+			setStyle("font", { size: parseInt(e.target.value) });
+		});
+
+		// --- Color Pickers ---
+		initColorPicker("text-color-picker", "btn-text-color", "text-color-indicator", (color) => {
+			setStyle("color", color);
+		});
+		initColorPicker("fill-color-picker", "btn-fill-color", "fill-color-indicator", (color) => {
+			setStyle("bgcolor", color);
+		});
+
+		// --- Formulas ---
+		document.getElementById("btn-sum").addEventListener("click", () => insertFormula("SUM"));
+		document.getElementById("btn-average").addEventListener("click", () => insertFormula("AVERAGE"));
+		document.getElementById("btn-count").addEventListener("click", () => insertFormula("COUNT"));
+		document.getElementById("btn-min").addEventListener("click", () => insertFormula("MIN"));
+		document.getElementById("btn-max").addEventListener("click", () => insertFormula("MAX"));
+
+		// --- Merge ---
+		document.getElementById("btn-merge").addEventListener("click", () => {
+			// x-spreadsheet doesn't expose a clean merge API from outside easily
+			// We can try to simulate it or use internal methods if available
+			// For now, just log
+			console.log("Merge clicked - requires internal API access");
+		});
+
+		// --- View Options ---
+		document.getElementById("chk-gridlines").addEventListener("change", (e) => {
+			// @ts-ignore
+			// Not easily toggleable in x-spreadsheet after init without re-render
+			console.log("Gridlines toggle - requires re-render");
+		});
+
+		// --- Formula Bar & State Sync ---
+		const formulaInput = document.getElementById("formula-input");
+		const cellName = document.getElementById("cell-name");
+
+		// Sync UI on selection change
+		// We hook into the canvas click/keydown or use a timer/observer because x-spreadsheet
+		// doesn't emit a 'selection-change' event.
+		// A hacky way is to listen to click on the container
+		document.getElementById("x-spreadsheet-demo").addEventListener("click", () => {
+			setTimeout(updateRibbonState, 50);
+		});
+		document.getElementById("x-spreadsheet-demo").addEventListener("keyup", () => {
+			setTimeout(updateRibbonState, 50);
+		});
+
+		// Formula Bar Input
+		formulaInput.addEventListener("input", (e) => {
+			// @ts-ignore
+			const text = e.target.value;
+			const { ri, ci } = gridInstance.sheet.selector;
+			if (ri !== -1 && ci !== -1) {
+				gridInstance.sheet.data.setCellText(ri, ci, text, "finished");
+				gridInstance.reRender();
+				// Notify host of change
+				vscode.postMessage({ type: "contentChanged" });
 			}
-
-			tab.addEventListener('click', () => {
-				switchSheet(index);
-			});
-
-			sheetTabsContainer.appendChild(tab);
-		});
-	}
-
-	function switchSheet(index) {
-		if (index === currentSheetIndex) {
-			return;
-		}
-
-		currentSheetIndex = index;
-		renderSheetTabs();
-		renderSheet(index);
-
-		// Notify host about sheet change
-		vscode.postMessage({
-			type: 'sheetChanged',
-			sheetIndex: index,
-			sheetName: workbook.SheetNames[index]
-		});
-	}
-
-	function renderSheet(sheetIndex) {
-		const sheetName = workbook.SheetNames[sheetIndex];
-		const worksheet = workbook.Sheets[sheetName];
-
-		// Convert sheet to HTML
-		const html = XLSX.utils.sheet_to_html(worksheet, {
-			id: 'xlsx-sheet-table',
-			editable: false
 		});
 
-		container.innerHTML = html;
+		function updateRibbonState() {
+			const { ri, ci } = gridInstance.sheet.selector;
+			if (ri === -1 || ci === -1) return;
 
-		// Apply custom styling class
-		const table = container.querySelector('table');
-		if (table) {
-			table.className = 'xlsx-table';
+			// Update Cell Name (A1, B2, etc.)
+			// @ts-ignore
+			const cellRef = XLSX.utils.encode_cell({ r: ri, c: ci });
+			cellName.textContent = cellRef;
 
-			// Apply zoom
-			table.style.transform = `scale(${zoomLevel / 100})`;
-			table.style.transformOrigin = 'top left';
+			// Get Cell Data
+			const cell = gridInstance.sheet.data.getCell(ri, ci);
+			const style = gridInstance.sheet.data.getCellStyle(ri, ci); // Merged style
 
-			// Make cells editable
-			const cells = table.querySelectorAll('td');
-			cells.forEach((cell, index) => {
-				// Make cell contentEditable
-				cell.contentEditable = 'true';
-				cell.spellcheck = false;
+			// Update Formula Bar
+			// @ts-ignore
+			formulaInput.value = cell ? (cell.text || "") : "";
 
-				// Get cell address
-				const rowIndex = Math.floor(index / (cells.length / table.rows.length));
-				const colIndex = index % (cells.length / table.rows.length);
-				const cellAddress = XLSX.utils.encode_cell({ r: rowIndex, c: colIndex });
-				cell.dataset.cellAddress = cellAddress;
+			// Update Buttons
+			updateToggleButton("btn-bold", style.font && style.font.bold);
+			updateToggleButton("btn-italic", style.font && style.font.italic);
+			updateToggleButton("btn-underline", style.underline);
+			updateToggleButton("btn-strike", style.strike);
 
-				// Track changes
-				cell.addEventListener('input', (e) => {
-					handleCellEdit(cell, cellAddress);
-				});
+			// Update Alignment
+			updateAlignButtons(style.align);
 
-				// Cell selection on click
-				cell.addEventListener('click', (e) => {
-					handleCellClick(e.target, e);
-				});
-
-				// Handle Enter key to move to next cell
-				cell.addEventListener('keydown', (e) => {
-					if (e.key === 'Enter' && !e.shiftKey) {
-						e.preventDefault();
-						const nextCell = cells[index + 1];
-						if (nextCell) {
-							nextCell.focus();
-						}
-					} else if (e.key === 'Tab') {
-						e.preventDefault();
-						const nextCell = e.shiftKey ? cells[index - 1] : cells[index + 1];
-						if (nextCell) {
-							nextCell.focus();
-						}
-					}
-				});
-			});
-
-			// Update sheet info
-			const range = XLSX.utils.decode_range(worksheet['!ref'] || 'A1');
-			const rows = range.e.r - range.s.r + 1;
-			const cols = range.e.c - range.s.c + 1;
-			sheetInfoSpan.textContent = `${rows} rows × ${cols} columns - Click any cell to edit`;
+			// Update Font Dropdowns
+			if (style.font) {
+				// @ts-ignore
+				document.getElementById("font-family").value = style.font.name || "Helvetica";
+				// @ts-ignore
+				document.getElementById("font-size").value = style.font.size || 10;
+			}
 		}
 	}
 
-	let isModified = false;
+	// --- Helper Functions ---
 
-	function handleCellEdit(cell, cellAddress) {
-		const sheetName = workbook.SheetNames[currentSheetIndex];
-		const worksheet = workbook.Sheets[sheetName];
+	function bindToggleButton(id, styleProp) {
+		document.getElementById(id).addEventListener("click", () => {
+			// We need to toggle. First get current state.
+			const { ri, ci } = grid.sheet.selector;
+			if (ri === -1) return;
 
-		// Update the workbook data
-		const newValue = cell.textContent.trim();
+			const style = grid.sheet.data.getCellStyle(ri, ci);
+			let currentVal = false;
 
-		if (newValue === '') {
-			// Delete the cell if empty
-			delete worksheet[cellAddress];
-		} else {
-			// Try to parse as number
-			const numValue = parseFloat(newValue);
-			if (!isNaN(numValue) && newValue === numValue.toString()) {
-				worksheet[cellAddress] = { t: 'n', v: numValue };
+			if (styleProp === "bold" || styleProp === "italic") {
+				currentVal = style.font && style.font[styleProp];
+				// Apply
+				setStyle("font", { [styleProp]: !currentVal });
 			} else {
-				worksheet[cellAddress] = { t: 's', v: newValue };
+				currentVal = style[styleProp];
+				setStyle(styleProp, !currentVal);
 			}
-		}
 
-		if (!isModified) {
-			isModified = true;
-			sheetInfoSpan.textContent += ' - Modified (Ctrl+S to save)';
-		}
-
-		console.log(`[XLSX Webview] Cell ${cellAddress} updated to: ${newValue}`);
+			// Update UI immediately
+			updateToggleButton(id, !currentVal);
+		});
 	}
 
-	function handleCellClick(cell, event) {
-		// Remove previous selection
-		const previousSelected = container.querySelector('td.selected');
-		if (previousSelected) {
-			previousSelected.classList.remove('selected');
-		}
+	function bindActionButton(id, action) {
+		document.getElementById(id).addEventListener("click", action);
+	}
 
-		// Add selection to clicked cell
-		cell.classList.add('selected');
+	function updateToggleButton(id, isActive) {
+		const btn = document.getElementById(id);
+		if (isActive) btn.classList.add("active");
+		else btn.classList.remove("active");
+	}
 
-		// Get cell reference (A1 notation)
-		const table = cell.closest('table');
-		const rowIndex = Array.from(table.rows).indexOf(cell.parentElement);
-		const colIndex = Array.from(cell.parentElement.cells).indexOf(cell);
+	function updateAlignButtons(align) {
+		document.getElementById("btn-align-left").classList.remove("active");
+		document.getElementById("btn-align-center").classList.remove("active");
+		document.getElementById("btn-align-right").classList.remove("active");
 
-		// Convert to A1 notation
-		const cellRef = XLSX.utils.encode_cell({ r: rowIndex - 1, c: colIndex });
-		cellRefSpan.textContent = cellRef;
+		if (align === "center") document.getElementById("btn-align-center").classList.add("active");
+		else if (align === "right") document.getElementById("btn-align-right").classList.add("active");
+		else document.getElementById("btn-align-left").classList.add("active"); // Default
+	}
 
-		// Get cell content
-		const cellText = cell.textContent.trim();
+	function setStyle(key, value) {
+		const { ri, ci } = grid.sheet.selector;
+		// Apply to selected range
+		// x-spreadsheet internal API: sheet.data.setStyle(ri, ci, key, value)
+		// But we want to apply to range.
+		const { sri, sci, eri, eci } = grid.sheet.selector.range;
 
-		// Notify host about selection
-		if (cellText) {
-			vscode.postMessage({
-				type: 'cellSelected',
-				selection: {
-					sheet: workbook.SheetNames[currentSheetIndex],
-					sheetIndex: currentSheetIndex,
-					range: cellRef,
-					text: cellText
+		for (let r = sri; r <= eri; r++) {
+			for (let c = sci; c <= eci; c++) {
+				// Special handling for font object merging
+				if (key === "font") {
+					const currentStyle = grid.sheet.data.getCellStyle(r, c);
+					const currentFont = currentStyle.font || {};
+					const newFont = { ...currentFont, ...value };
+					grid.sheet.data.setStyle(r, c, "font", newFont);
+				} else {
+					grid.sheet.data.setStyle(r, c, key, value);
 				}
-			});
-		}
-	}
-
-	// Zoom controls
-	zoomInBtn.addEventListener('click', () => {
-		if (zoomLevel < 200) {
-			zoomLevel += 10;
-			updateZoom();
-		}
-	});
-
-	zoomOutBtn.addEventListener('click', () => {
-		if (zoomLevel > 50) {
-			zoomLevel -= 10;
-			updateZoom();
-		}
-	});
-
-	function updateZoom() {
-		zoomLevelSpan.textContent = `${zoomLevel}%`;
-		const table = container.querySelector('table');
-		if (table) {
-			table.style.transform = `scale(${zoomLevel / 100})`;
-		}
-	}
-
-	// Selection change handler (for range selections in future)
-	document.addEventListener('selectionchange', () => {
-		const selection = window.getSelection();
-		if (selection && !selection.isCollapsed) {
-			const selectedText = selection.toString().trim();
-			if (selectedText) {
-				// Could implement range selection here
 			}
-		} else {
-			vscode.postMessage({ type: 'clearSelection' });
 		}
-	});
+		grid.reRender();
+		// Notify host of change
+		vscode.postMessage({ type: "contentChanged" });
+	}
+
+	function initColorPicker(pickerId, btnId, indicatorId, onSelect) {
+		const picker = document.getElementById(pickerId);
+		const btn = document.getElementById(btnId);
+		const indicator = document.getElementById(indicatorId);
+
+		// Populate colors
+		COLORS.forEach(color => {
+			const swatch = document.createElement("div");
+			swatch.className = "color-swatch";
+			swatch.style.backgroundColor = color;
+			swatch.addEventListener("click", (e) => {
+				e.stopPropagation();
+				onSelect(color);
+				indicator.style.backgroundColor = color;
+				picker.classList.remove("show");
+			});
+			picker.appendChild(swatch);
+		});
+
+		// Toggle popup
+		btn.addEventListener("click", (e) => {
+			e.stopPropagation();
+			// Close others
+			document.querySelectorAll(".color-picker-popup").forEach(p => {
+				if (p.id !== pickerId) p.classList.remove("show");
+			});
+			picker.classList.toggle("show");
+		});
+
+		// Close on click outside
+		document.addEventListener("click", () => {
+			picker.classList.remove("show");
+		});
+	}
 
 	// Save shortcut (Ctrl+S or Cmd+S)
-	document.addEventListener('keydown', (e) => {
-		if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+	document.addEventListener("keydown", (e) => {
+		if ((e.ctrlKey || e.metaKey) && e.key === "s") {
 			e.preventDefault();
 			saveSpreadsheet();
 		}
 	});
 
 	function saveSpreadsheet() {
-		if (!workbook || !isModified) {
+		if (!grid) {
 			return;
 		}
 
 		try {
-			// Convert workbook to binary
-			const wbout = XLSX.write(workbook, {
-				bookType: 'xlsx',
-				type: 'array'
+			// Get data from x-spreadsheet
+			const data = grid.getData();
+
+			// Convert back to SheetJS workbook
+			const newWorkbook = xtos(data);
+
+			// Write to binary
+			// @ts-ignore
+			const wbout = XLSX.write(newWorkbook, {
+				bookType: "xlsx",
+				type: "array"
 			});
 
 			// Convert to base64
 			const base64 = btoa(
-				new Uint8Array(wbout).reduce((data, byte) => data + String.fromCharCode(byte), '')
+				new Uint8Array(wbout).reduce((data, byte) => data + String.fromCharCode(byte), "")
 			);
 
 			// Send to host
 			vscode.postMessage({
-				type: 'saveRequested',
+				type: "saveRequested",
 				data: base64
 			});
 
-			isModified = false;
-			const range = XLSX.utils.decode_range(workbook.Sheets[workbook.SheetNames[currentSheetIndex]]['!ref'] || 'A1');
-			const rows = range.e.r - range.s.r + 1;
-			const cols = range.e.c - range.s.c + 1;
-			sheetInfoSpan.textContent = `${rows} rows × ${cols} columns - Saved!`;
-
-			setTimeout(() => {
-				if (!isModified) {
-					sheetInfoSpan.textContent = `${rows} rows × ${cols} columns - Click any cell to edit`;
-				}
-			}, 2000);
+			console.log("[XLSX Webview] Save request sent");
 
 		} catch (error) {
-			console.error('[XLSX Webview] Failed to save:', error);
-			sheetInfoSpan.textContent = 'Save failed: ' + error.message;
+			console.error("[XLSX Webview] Failed to save:", error);
 		}
 	}
 
-	// ===== AGENT EDIT OPERATIONS =====
-
 	/**
-	 * Execute document operations from agent tool calls
+	 * Insert a formula into the selected cell
 	 */
-	function executeDocumentOperations(operations) {
-		if (!workbook || !Array.isArray(operations)) {
-			console.warn('[XLSX Webview] Cannot execute operations: workbook not loaded or invalid operations');
-			return;
+	function insertFormula(formulaName) {
+		if (!grid) return;
+
+		const { ri, ci } = grid.sheet.selector;
+		if (ri === -1 || ci === -1) return;
+
+		// Get the selected range
+		const { sri, sci, eri, eci } = grid.sheet.selector.range;
+
+		// Build the range reference for the formula
+		// @ts-ignore
+		const startCell = XLSX.utils.encode_cell({ r: sri, c: sci });
+		// @ts-ignore
+		const endCell = XLSX.utils.encode_cell({ r: eri, c: eci });
+		const rangeRef = sri === eri && sci === eci ? startCell : `${startCell}:${endCell}`;
+
+		// Create the formula
+		const formula = `=${formulaName}(${rangeRef})`;
+
+		// Insert into the currently selected cell
+		grid.sheet.data.setCellText(ri, ci, formula, "finished");
+		grid.reRender();
+
+		// Update formula bar
+		const formulaInput = document.getElementById("formula-input");
+		if (formulaInput) {
+			// @ts-ignore
+			formulaInput.value = formula;
 		}
 
-		console.log(`[XLSX Webview] Executing ${operations.length} operation(s)`);
+		// Notify host of change
+		vscode.postMessage({ type: "contentChanged" });
 
-		operations.forEach(op => {
-			try {
-				switch (op.type) {
-					case 'set_cell_value':
-						setCellValue(op.sheet, op.cell, op.value);
-						break;
-					case 'set_cell_formula':
-						setCellFormula(op.sheet, op.cell, op.formula);
-						break;
-					case 'format_cell':
-						formatCell(op.sheet, op.cell, op.format);
-						break;
-					case 'insert_row':
-						insertRow(op.sheet, op.rowIndex);
-						break;
-					case 'insert_column':
-						insertColumn(op.sheet, op.colIndex);
-						break;
-					case 'delete_row':
-						deleteRow(op.sheet, op.rowIndex);
-						break;
-					case 'delete_column':
-						deleteColumn(op.sheet, op.colIndex);
-						break;
-					default:
-						console.warn(`[XLSX Webview] Unknown operation type: ${op.type}`);
+		console.log(`[XLSX Webview] Inserted formula: ${formula} at cell ${XLSX.utils.encode_cell({ r: ri, c: ci })}`);
+	}
+
+	// ==========================================
+	// Data Conversion Functions (SheetJS <-> x-spreadsheet)
+	// ==========================================
+
+	/**
+	 * SheetJS to x-spreadsheet
+	 */
+	function stox(wb) {
+		const out = [];
+		wb.SheetNames.forEach(function (name) {
+			const o = { name: name, rows: {} };
+			const ws = wb.Sheets[name];
+			// @ts-ignore
+			const range = XLSX.utils.decode_range(ws["!ref"] || "A1:A1");
+
+			// Iterate through every cell in the range
+			for (let R = range.s.r; R <= range.e.r; ++R) {
+				for (let C = range.s.c; C <= range.e.c; ++C) {
+					// @ts-ignore
+					const cell_address = XLSX.utils.encode_cell({ r: R, c: C });
+					const cell = ws[cell_address];
+
+					if (!cell) continue;
+
+					o.rows[R] = o.rows[R] || { cells: {} };
+					o.rows[R].cells[C] = o.rows[R].cells[C] || {};
+
+					// Value
+					o.rows[R].cells[C].text = (cell.w || cell.v || "").toString();
+
+					// Merges
+					if (ws["!merges"]) {
+						ws["!merges"].forEach(merge => {
+							if (merge.s.r === R && merge.s.c === C) {
+								o.rows[R].cells[C].merge = [
+									merge.e.r - merge.s.r,
+									merge.e.c - merge.s.c
+								];
+							}
+						});
+					}
+
+					// Style (Basic import)
+					// SheetJS free version doesn't give much style info, but we can try
+					// if (cell.s) { ... }
 				}
-			} catch (error) {
-				console.error(`[XLSX Webview] Error executing operation ${op.type}:`, error);
 			}
+
+			// Handle column widths
+			if (ws["!cols"]) {
+				o.cols = {};
+				ws["!cols"].forEach((col, index) => {
+					if (col) {
+						o.cols[index] = { width: (col.wpx || 60) }; // Convert width
+					}
+				});
+			}
+
+			out.push(o);
 		});
-
-		// Mark as modified
-		isModified = true;
-
-		// Re-render the current sheet
-		renderSheet(currentSheetIndex);
-
-		sheetInfoSpan.textContent += ` - Modified (${operations.length} operation(s) applied)`;
+		return out;
 	}
 
 	/**
-	 * Set a cell value
+	 * x-spreadsheet to SheetJS
 	 */
-	function setCellValue(sheet, cell, value) {
-		const sheetIndex = typeof sheet === 'number' ? sheet : workbook.SheetNames.indexOf(sheet);
-		if (sheetIndex === -1) {
-			console.warn(`[XLSX Webview] Sheet not found: ${sheet}`);
-			return;
-		}
+	function xtos(sdata) {
+		// @ts-ignore
+		const out = XLSX.utils.book_new();
+		sdata.forEach(function (xws) {
+			const ws = {};
+			const range = { s: { c: 10000000, r: 10000000 }, e: { c: 0, r: 0 } };
 
-		const worksheet = workbook.Sheets[workbook.SheetNames[sheetIndex]];
+			for (let ri = 0; ri < xws.rows.len; ++ri) {
+				const row = xws.rows[ri];
+				if (!row || !row.cells) continue;
 
-		// Parse value type
-		const numValue = parseFloat(value);
-		if (!isNaN(numValue) && value === numValue.toString()) {
-			worksheet[cell] = { t: 'n', v: numValue };
-		} else {
-			worksheet[cell] = { t: 's', v: value };
-		}
+				Object.keys(row.cells).forEach(function (k) {
+					const idx = parseInt(k);
+					const cell = row.cells[k];
+					if (cell.text === undefined) return;
 
-		console.log(`[XLSX Webview] Set cell ${cell} to: ${value}`);
-	}
+					range.s.r = Math.min(range.s.r, ri);
+					range.s.c = Math.min(range.s.c, idx);
+					range.e.r = Math.max(range.e.r, ri);
+					range.e.c = Math.max(range.e.c, idx);
 
-	/**
-	 * Set a cell formula
-	 */
-	function setCellFormula(sheet, cell, formula) {
-		const sheetIndex = typeof sheet === 'number' ? sheet : workbook.SheetNames.indexOf(sheet);
-		if (sheetIndex === -1) {
-			console.warn(`[XLSX Webview] Sheet not found: ${sheet}`);
-			return;
-		}
+					// @ts-ignore
+					const cell_ref = XLSX.utils.encode_cell({ c: idx, r: ri });
 
-		const worksheet = workbook.Sheets[workbook.SheetNames[sheetIndex]];
-		worksheet[cell] = { t: 'n', f: formula };
+					// Determine type
+					let type = "s";
+					let val = cell.text;
 
-		console.log(`[XLSX Webview] Set cell ${cell} formula to: ${formula}`);
-	}
+					if (!isNaN(parseFloat(val)) && isFinite(val)) {
+						type = "n";
+						val = parseFloat(val);
+					}
 
-	/**
-	 * Format a cell
-	 */
-	function formatCell(sheet, cell, format) {
-		// Note: SheetJS has limited formatting support
-		// This is a placeholder for future implementation
-		console.log(`[XLSX Webview] Format cell ${cell} (limited support):`, format);
-	}
+					ws[cell_ref] = { v: val, t: type };
 
-	/**
-	 * Insert a row
-	 */
-	function insertRow(sheet, rowIndex) {
-		const sheetIndex = typeof sheet === 'number' ? sheet : workbook.SheetNames.indexOf(sheet);
-		if (sheetIndex === -1) {
-			console.warn(`[XLSX Webview] Sheet not found: ${sheet}`);
-			return;
-		}
+					// Handle merges
+					if (cell.merge) {
+						if (!ws["!merges"]) ws["!merges"] = [];
+						ws["!merges"].push({
+							s: { r: ri, c: idx },
+							e: { r: ri + cell.merge[0], c: idx + cell.merge[1] }
+						});
+					}
+				});
+			}
 
-		// Note: Row insertion requires shifting all cells below
-		// This is a simplified placeholder
-		console.log(`[XLSX Webview] Insert row at index ${rowIndex} (simplified)`);
-	}
+			if (range.s.c < 10000000) {
+				// @ts-ignore
+				ws["!ref"] = XLSX.utils.encode_range(range);
+			} else {
+				ws["!ref"] = "A1:A1";
+			}
 
-	/**
-	 * Insert a column
-	 */
-	function insertColumn(sheet, colIndex) {
-		const sheetIndex = typeof sheet === 'number' ? sheet : workbook.SheetNames.indexOf(sheet);
-		if (sheetIndex === -1) {
-			console.warn(`[XLSX Webview] Sheet not found: ${sheet}`);
-			return;
-		}
-
-		// Note: Column insertion requires shifting all cells to the right
-		// This is a simplified placeholder
-		console.log(`[XLSX Webview] Insert column at index ${colIndex} (simplified)`);
-	}
-
-	/**
-	 * Delete a row
-	 */
-	function deleteRow(sheet, rowIndex) {
-		console.log(`[XLSX Webview] Delete row at index ${rowIndex} (simplified)`);
-	}
-
-	/**
-	 * Delete a column
-	 */
-	function deleteColumn(sheet, colIndex) {
-		console.log(`[XLSX Webview] Delete column at index ${colIndex} (simplified)`);
+			// @ts-ignore
+			XLSX.utils.book_append_sheet(out, ws, xws.name);
+		});
+		return out;
 	}
 
 })();
-
