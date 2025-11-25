@@ -30,3 +30,5 @@ export const VOID_RAG_INDEX_DOCUMENT_ACTION_ID = 'void.rag.indexDocument'
 export const VOID_RAG_SEARCH_POLICY_ACTION_ID = 'void.rag.searchPolicy'
 export const VOID_RAG_SEARCH_WORKSPACE_ACTION_ID = 'void.rag.searchWorkspace'
 export const VOID_RAG_GET_STATS_ACTION_ID = 'void.rag.getStats'
+export const VOID_RAG_TEST_DOCLING_ACTION_ID = 'void.rag.testDoclingExtraction'
+

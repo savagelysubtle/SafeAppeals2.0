@@ -4,11 +4,11 @@
  *--------------------------------------------------------------------------------------*/
 
 import { URI } from '../../../../base/common/uri.js';
-import { createDecorator } from '../../../../platform/instantiation/common/instantiation.js';
-import { registerSingleton, InstantiationType } from '../../../../platform/instantiation/common/extensions.js';
 import { IChannel } from '../../../../base/parts/ipc/common/ipc.js';
+import { InstantiationType, registerSingleton } from '../../../../platform/instantiation/common/extensions.js';
+import { createDecorator } from '../../../../platform/instantiation/common/instantiation.js';
 import { IMainProcessService } from '../../../../platform/ipc/common/mainProcessService.js';
-import { RAGIndexParams, RAGSearchParams, RAGStats, ContextPack } from './ragServiceTypes.js';
+import { ContextPack, RAGIndexParams, RAGSearchParams, RAGStats } from './ragServiceTypes.js';
 import { IVoidSettingsService } from './voidSettingsService.js';
 
 export interface IRAGService {
@@ -22,6 +22,7 @@ export interface IRAGService {
 	getDocumentsByType(isPolicyManual: boolean): Promise<any[]>;
 	initialize(): Promise<void>;
 	clearAllEmbeddings(): Promise<{ success: boolean; message: string }>;
+	testDoclingExtraction(uri: URI): Promise<{ standard: any; docling: any; doclingError?: any }>;
 }
 
 export const IRAGService = createDecorator<IRAGService>('ragService');
@@ -79,6 +80,10 @@ export class RAGService implements IRAGService {
 
 	async clearAllEmbeddings(): Promise<{ success: boolean; message: string }> {
 		return this.channel.call('clearAllEmbeddings');
+	}
+
+	async testDoclingExtraction(uri: URI): Promise<{ standard: any; docling: any; doclingError?: any }> {
+		return this.channel.call('testDoclingExtraction', { uri: uri.toJSON() });
 	}
 }
 

@@ -3,10 +3,10 @@
  *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
  *--------------------------------------------------------------------------------------*/
 
-import { IServerChannel, IChannel } from '../../../../base/parts/ipc/common/ipc.js';
 import { Event } from '../../../../base/common/event.js';
-import { IRAGMainService, RAGIndexParams, RAGSearchParams, ContextPack, RAGStats } from '../common/ragServiceTypes.js';
 import { URI, UriComponents } from '../../../../base/common/uri.js';
+import { IChannel, IServerChannel } from '../../../../base/parts/ipc/common/ipc.js';
+import { ContextPack, IRAGMainService, RAGIndexParams, RAGSearchParams, RAGStats } from '../common/ragServiceTypes.js';
 
 export class RAGMainChannel implements IServerChannel {
 	constructor(private service: IRAGMainService) { }
@@ -41,6 +41,12 @@ export class RAGMainChannel implements IServerChannel {
 				return this.service.initialize(args?.openAIApiKey);
 			case 'clearAllEmbeddings':
 				return this.service.clearAllEmbeddings();
+			case 'testDoclingExtraction':
+				// Revive URI from serialized form
+				if (args && args.uri) {
+					args.uri = URI.revive(args.uri as UriComponents);
+				}
+				return this.service.testDoclingExtraction(args.uri);
 			default:
 				throw new Error(`Call not found: ${command}`);
 		}

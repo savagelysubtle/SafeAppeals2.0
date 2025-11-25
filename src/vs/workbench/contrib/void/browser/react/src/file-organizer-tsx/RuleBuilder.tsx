@@ -8,13 +8,19 @@ import React, { useCallback, useState } from "react";
 interface RuleBuilderProps {
 	rules: any[];
 	selectedFiles: any[];
+	caseInfo?: any;
+	manualRenames?: Record<string, string>;
 	onRulesChange: (rules: any[]) => void;
+	onManualRename?: (fileUri: string, newName: string) => void;
 }
 
 export const RuleBuilder: React.FC<RuleBuilderProps> = ({
 	rules,
 	selectedFiles,
+	caseInfo,
+	manualRenames = {},
 	onRulesChange,
+	onManualRename,
 }) => {
 	const [namingPattern, setNamingPattern] = useState("{Description}");
 
@@ -57,9 +63,11 @@ export const RuleBuilder: React.FC<RuleBuilderProps> = ({
 			let fileType = "File";
 			if (file.name.toLowerCase().includes("wireframe")) fileType = "Wireframe";
 			else if (file.name.toLowerCase().includes("mockup")) fileType = "Mockup";
-			else if (file.name.toLowerCase().includes("medical")) fileType = "Medical";
+			else if (file.name.toLowerCase().includes("medical"))
+				fileType = "Medical";
 			else if (file.name.toLowerCase().includes("legal")) fileType = "Legal";
-			else if (file.name.toLowerCase().includes("correspondence")) fileType = "Correspondence";
+			else if (file.name.toLowerCase().includes("correspondence"))
+				fileType = "Correspondence";
 			else fileType = file.extension.toUpperCase();
 
 			const versionMatch = file.name.match(/v?(\d+)/i);
@@ -71,12 +79,46 @@ export const RuleBuilder: React.FC<RuleBuilderProps> = ({
 				side = file.classification;
 			} else {
 				const lowerName = file.name.toLowerCase();
-				if (lowerName.includes("your") || lowerName.includes("my") || lowerName.includes("personal") ||
-				    lowerName.includes("claimant") || lowerName.includes("treating")) {
-					side = "YourSide";
-				} else if (lowerName.includes("employer") || lowerName.includes("wcb") || lowerName.includes("ime") ||
-				           lowerName.includes("defense") || lowerName.includes("review officer")) {
-					side = "TheirSide";
+
+				// Use case info keywords if available
+				if (caseInfo?.keywords) {
+					const yourSideKeywords = caseInfo.keywords.yourSide || [];
+					const theirSideKeywords = caseInfo.keywords.theirSide || [];
+
+					if (
+						yourSideKeywords.some((k: string) =>
+							lowerName.includes(k.toLowerCase())
+						)
+					) {
+						side = "YourSide";
+					} else if (
+						theirSideKeywords.some((k: string) =>
+							lowerName.includes(k.toLowerCase())
+						)
+					) {
+						side = "TheirSide";
+					}
+				}
+
+				// Fallback to hardcoded keywords if side is still Unknown
+				if (side === "Unknown") {
+					if (
+						lowerName.includes("your") ||
+						lowerName.includes("my") ||
+						lowerName.includes("personal") ||
+						lowerName.includes("claimant") ||
+						lowerName.includes("treating")
+					) {
+						side = "YourSide";
+					} else if (
+						lowerName.includes("employer") ||
+						lowerName.includes("wcb") ||
+						lowerName.includes("ime") ||
+						lowerName.includes("defense") ||
+						lowerName.includes("review officer")
+					) {
+						side = "TheirSide";
+					}
 				}
 			}
 
@@ -100,7 +142,7 @@ export const RuleBuilder: React.FC<RuleBuilderProps> = ({
 
 			return result;
 		},
-		[namingPattern]
+		[namingPattern, caseInfo]
 	);
 
 	return (
@@ -143,16 +185,7 @@ export const RuleBuilder: React.FC<RuleBuilderProps> = ({
 						type="text"
 						value={namingPattern}
 						onChange={handlePatternChange}
-						style={{
-							width: "100%",
-							padding: "8px",
-							backgroundColor: "var(--vscode-input-background)",
-							color: "var(--vscode-input-foreground)",
-							border: "1px solid var(--vscode-input-border)",
-							borderRadius: "2px",
-							fontSize: "14px",
-							fontFamily: "var(--vscode-editor-font-family)",
-						}}
+						className="form-input"
 						placeholder="{Description}"
 					/>
 					<div
@@ -263,36 +296,77 @@ export const RuleBuilder: React.FC<RuleBuilderProps> = ({
 								</tr>
 							</thead>
 							<tbody>
-								{selectedFiles.map((file, index) => (
-									<tr
-										key={index}
-										style={{
-											borderBottom:
-												index < selectedFiles.length - 1
-													? "1px solid var(--vscode-panel-border)"
-													: "none",
-										}}
-									>
-										<td
+								{selectedFiles.map((file, index) => {
+									const generatedName = getPreviewName(file);
+									const manualName = manualRenames[file.uri.toString()];
+									const displayName =
+										manualName !== undefined ? manualName : generatedName;
+									const isModified = manualName !== undefined;
+
+									return (
+										<tr
+											key={index}
 											style={{
-												padding: "8px",
-												color: "var(--vscode-descriptionForeground)",
+												borderBottom:
+													index < selectedFiles.length - 1
+														? "1px solid var(--vscode-panel-border)"
+														: "none",
 											}}
 										>
-											{file.name}
-										</td>
-										<td style={{ padding: "8px" }}>→</td>
-										<td
-											style={{
-												padding: "8px",
-												color: "var(--vscode-foreground)",
-												fontWeight: 500,
-											}}
-										>
-											{getPreviewName(file)}
-										</td>
-									</tr>
-								))}
+											<td
+												style={{
+													padding: "8px",
+													color: "var(--vscode-descriptionForeground)",
+													width: "40%",
+												}}
+											>
+												{file.name}
+											</td>
+											<td style={{ padding: "8px", width: "20px" }}>→</td>
+											<td
+												style={{
+													padding: "8px",
+												}}
+											>
+												<input
+													type="text"
+													value={displayName}
+													onChange={(e) => {
+														console.log(
+															"[RuleBuilder] Manual rename:",
+															file.uri.toString(),
+															e.target.value
+														);
+														if (onManualRename) {
+															onManualRename(
+																file.uri.toString(),
+																e.target.value
+															);
+														}
+													}}
+													className="form-input"
+													style={{
+														width: "100%",
+														borderColor: isModified
+															? "var(--vscode-inputValidation-infoBorder)"
+															: undefined,
+													}}
+												/>
+												{isModified && (
+													<div
+														style={{
+															fontSize: "10px",
+															color: "var(--vscode-textLink-foreground)",
+															marginTop: "2px",
+														}}
+													>
+														Manually modified
+													</div>
+												)}
+											</td>
+										</tr>
+									);
+								})}
 							</tbody>
 						</table>
 					)}

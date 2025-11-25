@@ -207,3 +207,70 @@ class XLSXResolverContribution extends Disposable {
 Registry.as<IWorkbenchContributionsRegistry>(WorkbenchExtensions.Workbench)
 	.registerWorkbenchContribution(XLSXResolverContribution, LifecyclePhase.Restored);
 
+// --- Image Viewer Registration ---
+import { ImageViewerEditor } from './imageViewer/imageViewerEditor.js';
+import { ImageViewerInput } from './imageViewer/imageViewerInput.js';
+import { ImageViewerInputSerializer } from './imageViewer/imageViewerInputSerializer.js';
+
+// Register Image Viewer Editor Pane
+Registry.as<IEditorPaneRegistry>(EditorExtensions.EditorPane)
+	.registerEditorPane(
+		EditorPaneDescriptor.create(
+			ImageViewerEditor,
+			ImageViewerEditor.ID,
+			'Image Viewer'
+		),
+		[new SyncDescriptor(ImageViewerInput)]
+	);
+
+// Register Image Viewer Input Serializer
+Registry.as<IEditorFactoryRegistry>(EditorFactoryExtensions.EditorFactory)
+	.registerEditorSerializer(
+		ImageViewerInputSerializer.ID,
+		ImageViewerInputSerializer
+	);
+
+// Register Image editor resolver
+class ImageResolverContribution extends Disposable {
+	constructor(
+		@IEditorResolverService editorResolverService: IEditorResolverService,
+		@IInstantiationService instantiationService: IInstantiationService
+	) {
+		super();
+
+		// Register Image editor as exclusive
+		this._register(editorResolverService.registerEditor(
+			`**/*.{jpg,jpeg,png,gif,webp,svg}`,
+			{
+				id: ImageViewerEditor.ID,
+				label: 'Image Viewer',
+				priority: RegisteredEditorPriority.exclusive
+			},
+			{
+				singlePerResource: false,
+				canSupportResource: resource => {
+					if (resource.scheme !== Schemas.file) {
+						return false;
+					}
+					const lowerPath = resource.path.toLowerCase();
+					return lowerPath.endsWith('.jpg') ||
+						lowerPath.endsWith('.jpeg') ||
+						lowerPath.endsWith('.png') ||
+						lowerPath.endsWith('.gif') ||
+						lowerPath.endsWith('.webp') ||
+						lowerPath.endsWith('.svg');
+				}
+			},
+			{
+				createEditorInput: ({ resource }) => {
+					const editor = instantiationService.createInstance(ImageViewerInput, resource);
+					return { editor };
+				}
+			}
+		));
+	}
+}
+
+Registry.as<IWorkbenchContributionsRegistry>(WorkbenchExtensions.Workbench)
+	.registerWorkbenchContribution(ImageResolverContribution, LifecyclePhase.Restored);
+

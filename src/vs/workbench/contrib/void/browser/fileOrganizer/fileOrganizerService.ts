@@ -7,10 +7,12 @@ import { VSBuffer } from '../../../../../base/common/buffer.js';
 import { basename, extname } from '../../../../../base/common/path.js';
 import { URI } from '../../../../../base/common/uri.js';
 import { IFileDialogService } from '../../../../../platform/dialogs/common/dialogs.js';
+import { IWorkspaceContextService } from '../../../../../platform/workspace/common/workspace.js';
+
 import { IFileService } from '../../../../../platform/files/common/files.js';
 import { createDecorator } from '../../../../../platform/instantiation/common/instantiation.js';
-import { FileChange, FileMetadata, ProcessResult, Rule } from './types.js';
 import { FileOrgConfig } from './caseConfig.js';
+import { FileChange, FileMetadata, ProcessResult, Rule } from './types.js';
 
 export const IFileOrganizerService = createDecorator<IFileOrganizerService>('fileOrganizerService');
 
@@ -51,6 +53,11 @@ export interface IFileOrganizerService {
 	 * Check if .fileorg.json exists in workspace
 	 */
 	caseConfigExists(workspaceFolder: URI): Promise<boolean>;
+
+	/**
+	 * Load case info from .caseinfo
+	 */
+	loadCaseInfo(workspaceFolder: URI): Promise<any | null>;
 }
 
 export class FileOrganizerService implements IFileOrganizerService {
@@ -58,7 +65,8 @@ export class FileOrganizerService implements IFileOrganizerService {
 
 	constructor(
 		@IFileService private readonly fileService: IFileService,
-		@IFileDialogService private readonly fileDialogService: IFileDialogService
+		@IFileDialogService private readonly fileDialogService: IFileDialogService,
+		@IWorkspaceContextService private readonly contextService: IWorkspaceContextService
 	) { }
 
 	async selectFiles(): Promise<URI[]> {
@@ -86,10 +94,16 @@ export class FileOrganizerService implements IFileOrganizerService {
 
 	async analyzeFiles(files: URI[]): Promise<FileMetadata[]> {
 		const metadata: FileMetadata[] = [];
+		const errors: string[] = [];
 
 		for (const uri of files) {
 			try {
 				const stat = await this.fileService.stat(uri);
+				if (stat.isDirectory) {
+					console.warn(`[FileOrganizer] Skipping directory: ${uri.toString()}`);
+					continue;
+				}
+
 				const name = basename(uri.path);
 				const extension = extname(uri.path).slice(1); // Remove leading dot
 
@@ -102,8 +116,14 @@ export class FileOrganizerService implements IFileOrganizerService {
 					preview: undefined // TODO: Generate preview for images
 				});
 			} catch (error) {
-				console.error(`Failed to analyze file ${uri.toString()}:`, error);
+				const errorMessage = `Failed to analyze file ${uri.toString()}: ${error instanceof Error ? error.message : String(error)}`;
+				console.error(errorMessage);
+				errors.push(errorMessage);
 			}
+		}
+
+		if (errors.length > 0) {
+			console.warn(`[FileOrganizer] Encountered ${errors.length} errors during file analysis.`);
 		}
 
 		return metadata;
@@ -234,14 +254,20 @@ export class FileOrganizerService implements IFileOrganizerService {
 		// Determine the target location
 		let targetLocation = file.uri;
 		if (targetFolder) {
-			// Get the parent directory of the file
-			const parentDir = URI.from({
-				...file.uri,
-				path: file.uri.path.substring(0, file.uri.path.lastIndexOf('/'))
-			});
+			// Try to get the workspace folder for the file
+			const workspaceFolder = this.contextService.getWorkspaceFolder(file.uri);
 
-			// Create target path in parent directory
-			targetLocation = URI.joinPath(parentDir, targetFolder);
+			if (workspaceFolder) {
+				// Use workspace root
+				targetLocation = URI.joinPath(workspaceFolder.uri, targetFolder);
+			} else {
+				// Fallback to parent directory if not in a workspace
+				const parentDir = URI.from({
+					...file.uri,
+					path: file.uri.path.substring(0, file.uri.path.lastIndexOf('/'))
+				});
+				targetLocation = URI.joinPath(parentDir, targetFolder);
+			}
 		}
 
 		return {
@@ -317,10 +343,10 @@ export class FileOrganizerService implements IFileOrganizerService {
 			// Fallback to keyword detection for backwards compatibility
 			const lowerName = file.name.toLowerCase();
 			if (lowerName.includes('your') || lowerName.includes('my') || lowerName.includes('personal') ||
-			    lowerName.includes('claimant') || lowerName.includes('treating')) {
+				lowerName.includes('claimant') || lowerName.includes('treating')) {
 				side = 'YourSide';
 			} else if (lowerName.includes('employer') || lowerName.includes('wcb') || lowerName.includes('ime') ||
-			           lowerName.includes('defense') || lowerName.includes('review officer')) {
+				lowerName.includes('defense') || lowerName.includes('review officer')) {
 				side = 'TheirSide';
 			}
 		}
@@ -405,6 +431,29 @@ export class FileOrganizerService implements IFileOrganizerService {
 		};
 
 		return mimeTypes[extension.toLowerCase()] || 'application/octet-stream';
+	}
+
+	async loadCaseInfo(workspaceFolder: URI): Promise<any | null> {
+		try {
+			// Try to read .caseinfo from workspace root
+			const caseInfoUri = URI.joinPath(workspaceFolder, '.caseinfo');
+			const exists = await this.fileService.exists(caseInfoUri);
+
+			if (!exists) {
+				console.log('[FileOrganizerService] .caseinfo not found at:', caseInfoUri.toString());
+				return null;
+			}
+
+			const content = await this.fileService.readFile(caseInfoUri);
+			const parsed = JSON.parse(content.value.toString());
+			console.log('[FileOrganizerService] Loaded .caseinfo:', parsed);
+
+			// Return the caseInfo property if it exists (structure from CaseInfoPane), otherwise return the whole object
+			return parsed.caseInfo || parsed;
+		} catch (error) {
+			console.error('[FileOrganizerService] Error loading .caseinfo:', error);
+			return null;
+		}
 	}
 
 	private async storeMetadata(uri: URI, tags: string[]): Promise<void> {

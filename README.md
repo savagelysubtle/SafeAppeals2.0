@@ -1,10 +1,11 @@
 # ⚖️ SafeAppealNavigator
 
-*Support this project: [paypal.me/safeappealnavigator](https://paypal.me/safeappealnavigator)*
+_Support this project: [paypal.me/safeappealnavigator](https://paypal.me/safeappealnavigator)_
 
 [![GitHub stars](https://img.shields.io/github/stars/savagelysubtle/SafeAppeals2.0?style=social)](https://github.com/savagelysubtle/SafeAppeals2.0/stargazers)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![TypeScript](https://img.shields.io/badge/TypeScript-94.7%25-blue.svg)](https://www.typescriptlang.org/)
+[![Python](https://img.shields.io/badge/Python-3.8%2B-blue.svg)](https://www.python.org/)
 [![Node.js](https://img.shields.io/badge/Node.js-18%2B-green.svg)](https://nodejs.org/)
 
 <div align="center">
@@ -24,7 +25,7 @@ SafeAppealNavigator is a next-generation IDE and research platform built on VSCo
 
 ## 🎯 SafeAppealNavigator
 
-*Support this project: [paypal.me/safeappealnavigator](https://paypal.me/safeappealnavigator)*
+_Support this project: [paypal.me/safeappealnavigator](https://paypal.me/safeappealnavigator)_
 
 ### ⚖️ **Legal Research & Case Management**
 
@@ -44,7 +45,7 @@ SafeAppealNavigator is a next-generation IDE and research platform built on VSCo
 
 ## ✨ Key Features
 
-*Support this project: [paypal.me/safeappealnavigator](https://paypal.me/safeappealnavigator)*
+_Support this project: [paypal.me/safeappealnavigator](https://paypal.me/safeappealnavigator)_
 
 ### 📁 Smart Case Organization
 
@@ -85,11 +86,12 @@ SafeAppealNavigator is a next-generation IDE and research platform built on VSCo
 
 ## 🚀 Installation & Setup
 
-*Support this project: [paypal.me/safeappealnavigator](https://paypal.me/safeappealnavigator)*
+_Support this project: [paypal.me/safeappealnavigator](https://paypal.me/safeappealnavigator)_
 
 ### Prerequisites
 
 - **Node.js 20** (see `.nvmrc` file)
+- **Python 3.8+** (for advanced PDF extraction)
 - **Git**
 - **Windows, macOS, or Linux**
 
@@ -102,21 +104,56 @@ SafeAppealNavigator is a next-generation IDE and research platform built on VSCo
    cd SafeAppeals2.0
    ```
 
-2. **Install Dependencies**
+2. **Install Python Environment (One-Time Setup)**
+
+   Set up the Python virtual environment for Docling:
+
+   ```bash
+   # Create virtual environment
+   uv venv
+
+   # Install Python dependencies
+   uv pip install -r pyproject.toml
+   ```
+
+3. **Download Docling ML Models (One-Time Setup)**
+
+   Download ML models locally (~260MB, takes 5-10 minutes):
+
+   ```bash
+   # Your .env file should already have HF_TOKEN
+   # Get token at: https://huggingface.co/settings/tokens
+   # Accept terms at: https://huggingface.co/ds4sd/docling-layout-heron
+
+   # Verify .env has your token:
+   # HF_TOKEN=hf_your_token_here
+
+   # Download models (uses Python from .venv)
+   .venv\Scripts\python.exe scripts\download-docling-models.py
+   ```
+
+   **After this one-time setup:**
+
+   - ✅ Models stored in `.docling_models/` (~260MB)
+   - ✅ No HF token needed at runtime
+   - ✅ Works offline
+   - ✅ Can optionally commit models to git (see `.gitignore`)
+
+4. **Install Node.js Dependencies**
 
    ```bash
    # Install all Node.js dependencies
    npm install
    ```
 
-3. **Fetch Prelaunch Dependencies**
+5. **Fetch Prelaunch Dependencies**
 
    ```bash
    # Download Electron and required prebuilts
    node build/lib/preLaunch.js
    ```
 
-4. **Build the Editor**
+6. **Build the Editor**
 
    ```bash
    # Start watch mode builds (TypeScript core, React components, extensions)
@@ -125,7 +162,7 @@ SafeAppealNavigator is a next-generation IDE and research platform built on VSCo
 
    Or run the default build task in VS Code: **Ctrl/Cmd+Shift+B** → "VS Code - Build"
 
-5. **Launch SafeAppealNavigator**
+7. **Launch SafeAppealNavigator**
 
    **From Terminal:**
 
@@ -138,10 +175,11 @@ SafeAppealNavigator is a next-generation IDE and research platform built on VSCo
    ```
 
    **From VS Code:**
+
    - Press **F5** or use the "Launch VS Code Internal" debug configuration
    - This sets `VSCODE_DEV=1` for proper CSS import support
 
-6. **Configure AI API Keys** (Optional)
+8. **Configure AI API Keys** (Optional)
 
    For enhanced AI features, you can configure your API keys in the editor settings or through environment variables:
 
@@ -151,7 +189,7 @@ SafeAppealNavigator is a next-generation IDE and research platform built on VSCo
    GOOGLE_API_KEY="your-google-key"
    ```
 
-7. **Optional: Configure MCP Tools**
+9. **Optional: Configure MCP Tools**
 
    SafeAppealNavigator supports extensible tool integration through MCP (Model Context Protocol). Configure additional research databases, document processing services, or legal research tools through the Void settings panel. The system comes pre-configured with essential file management and vector database tools.
 
@@ -168,7 +206,7 @@ For detailed development instructions, see [`.vscode/README.md`](./.vscode/READM
 
 ## 📖 How to Use
 
-*Support this project: [paypal.me/safeappealnavigator](https://paypal.me/safeappealnavigator)*
+_Support this project: [paypal.me/safeappealnavigator](https://paypal.me/safeappealnavigator)_
 
 ### 🏥 Legal Case Management
 
@@ -189,7 +227,7 @@ For detailed development instructions, see [`.vscode/README.md`](./.vscode/READM
 
 ## 📊 Real-World Success Stories (Coming Soon)
 
-*Support this project: [paypal.me/safeappealnavigator](https://paypal.me/safeappealnavigator)*
+_Support this project: [paypal.me/safeappealnavigator](https://paypal.me/safeappealnavigator)_
 
 ### 🏗️ Construction Worker - Denied Surgery Coverage
 
@@ -271,14 +309,14 @@ SafeAppealNavigator is a fork of the [vscode](https://github.com/microsoft/vscod
 
 **Created and maintained by [SavagelySubtle](https://github.com/savagelysubtle)**
 
-*Empowering injured workers to navigate the legal system with confidence while providing developers with cutting-edge AI-assisted coding tools* ⚖️💻
+_Empowering injured workers to navigate the legal system with confidence while providing developers with cutting-edge AI-assisted coding tools_ ⚖️💻
 
 ---
 
 ## Note
 
-*Support this project: [paypal.me/safeappealnavigator](https://paypal.me/safeappealnavigator)*
+_Support this project: [paypal.me/safeappealnavigator](https://paypal.me/safeappealnavigator)_
 
 SafeAppealNavigator is actively maintained and developed. Stay updated with new releases by watching the repository!
 
-*Support this project: [paypal.me/safeappealnavigator](https://paypal.me/safeappealnavigator)*
+_Support this project: [paypal.me/safeappealnavigator](https://paypal.me/safeappealnavigator)_
