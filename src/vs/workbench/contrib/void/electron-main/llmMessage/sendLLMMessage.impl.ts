@@ -790,7 +790,7 @@ const sendGeminiChat = async ({
 	// const includeInPayload = providerReasoningIOSettings?.input?.includeInPayload?.(reasoningInfo) || {}
 
 	const thinkingConfig: ThinkingConfig | undefined = !reasoningInfo?.isReasoningEnabled ? undefined
-		: reasoningInfo.type === 'budget_slider_value' ?
+		: reasoningInfo.type === 'budget' ?
 			{ thinkingBudget: reasoningInfo.reasoningBudget }
 			: undefined
 

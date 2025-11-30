@@ -558,9 +558,7 @@ export const globalSettingNames = Object.keys(defaultGlobalSettings) as GlobalSe
 
 
 export type ModelSelectionOptions = {
-	reasoningEnabled?: boolean;
-	reasoningBudget?: number;
-	reasoningEffort?: string;
+	// Note: reasoningEnabled, reasoningBudget, reasoningEffort removed - reasoning is always on at max for supported models
 }
 
 export type OptionsOfModelSelection = {
