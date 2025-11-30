@@ -6,6 +6,10 @@
 	let contentModified = false;
 	let docxUri = null;
 
+	// Debounce timer for content change notifications
+	let contentChangeDebounceTimer = null;
+	const CONTENT_CHANGE_DEBOUNCE_MS = 300;
+
 	// Get DOM elements
 	const container = document.getElementById('docx-container');
 	container.classList.add('void-scrollbar');
@@ -23,13 +27,25 @@
 	const heading2Btn = document.getElementById('heading2-btn');
 	const pageBreakBtn = document.getElementById('page-break-btn');
 
-	// Track modification state
+	// Debounced content change notification
+	function notifyContentChanged() {
+		if (contentChangeDebounceTimer) {
+			clearTimeout(contentChangeDebounceTimer);
+		}
+		contentChangeDebounceTimer = setTimeout(() => {
+			vscode.postMessage({ type: 'contentChanged' });
+			contentChangeDebounceTimer = null;
+		}, CONTENT_CHANGE_DEBOUNCE_MS);
+	}
+
+	// Track modification state (with debouncing)
 	function trackModification() {
 		if (!contentModified) {
 			contentModified = true;
 			updateStatus('Modified');
-			vscode.postMessage({ type: 'contentChanged' });
 		}
+		// Always debounce the notification to host
+		notifyContentChanged();
 	}
 
 	function updateStatus(text) {
@@ -53,9 +69,8 @@
 			margin: margin,
 			enableAutoPageBreaks: true,
 			onContentChange: () => {
+				// Use debounced trackModification to avoid excessive IPC calls
 				trackModification();
-				// Notify VS Code of content changes for auto-save
-				vscode.postMessage({ type: 'contentChanged' });
 			},
 		});
 
