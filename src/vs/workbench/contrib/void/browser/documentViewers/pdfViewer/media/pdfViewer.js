@@ -479,7 +479,7 @@
 		});
 	}
 
-	// Generate thumbnails for all pages
+	// Generate thumbnails for all pages (non-blocking batched rendering)
 	async function generateThumbnails() {
 		if (!pdfDoc || !thumbnailsContainer) {
 			console.log('Skipping thumbnail generation - PDF not loaded or container missing');
@@ -495,14 +495,17 @@
 			return;
 		}
 
-		// Generate thumbnails in batches to avoid blocking
-		const batchSize = 10;
+		// Generate thumbnails in smaller batches with yielding to keep UI responsive
+		const batchSize = 5;
 		for (let i = 1; i <= pdfDoc.numPages; i += batchSize) {
 			const batch = [];
 			for (let j = i; j < Math.min(i + batchSize, pdfDoc.numPages + 1); j++) {
 				batch.push(generateThumbnail(j));
 			}
 			await Promise.all(batch);
+
+			// Yield to browser to keep UI responsive
+			await new Promise(resolve => setTimeout(resolve, 0));
 		}
 
 		console.log('Thumbnails generated');
@@ -547,8 +550,8 @@
 
 			thumbnailsContainer.appendChild(thumbItem);
 
-			// Mark first page as active
-			if (pageNum === 1) {
+			// Mark current page as active
+			if (pageNum === currentPage) {
 				thumbItem.classList.add('active');
 			}
 		} catch (error) {

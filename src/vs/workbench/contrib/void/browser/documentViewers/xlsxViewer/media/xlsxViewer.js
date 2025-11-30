@@ -9,6 +9,34 @@
 	let grid = null;
 	let workbook = null;
 
+	// Debounce timers for performance
+	let contentChangeDebounceTimer = null;
+	let ribbonStateDebounceTimer = null;
+	const CONTENT_CHANGE_DEBOUNCE_MS = 300;
+	const RIBBON_STATE_DEBOUNCE_MS = 50;
+
+	// Debounced content change notification
+	function notifyContentChanged() {
+		if (contentChangeDebounceTimer) {
+			clearTimeout(contentChangeDebounceTimer);
+		}
+		contentChangeDebounceTimer = setTimeout(() => {
+			vscode.postMessage({ type: "contentChanged" });
+			contentChangeDebounceTimer = null;
+		}, CONTENT_CHANGE_DEBOUNCE_MS);
+	}
+
+	// Debounced ribbon state update
+	function scheduleRibbonStateUpdate(callback) {
+		if (ribbonStateDebounceTimer) {
+			clearTimeout(ribbonStateDebounceTimer);
+		}
+		ribbonStateDebounceTimer = setTimeout(() => {
+			callback();
+			ribbonStateDebounceTimer = null;
+		}, RIBBON_STATE_DEBOUNCE_MS);
+	}
+
 	// Define colors for palette
 	const COLORS = [
 		'#000000', '#434343', '#666666', '#999999', '#b7b7b7', '#cccccc', '#d9d9d9', '#efefef', '#f3f3f3', '#ffffff',
@@ -106,10 +134,10 @@
 				// Initialize Ribbon Controller
 				initRibbonController(grid);
 
-				// Handle change events
+				// Handle change events (debounced)
 				grid.change((cdata) => {
-					// Notify host that content changed
-					vscode.postMessage({ type: "contentChanged" });
+					// Notify host that content changed (debounced)
+					notifyContentChanged();
 				});
 			}
 
@@ -200,18 +228,17 @@
 		const formulaInput = document.getElementById("formula-input");
 		const cellName = document.getElementById("cell-name");
 
-		// Sync UI on selection change
+		// Sync UI on selection change (debounced)
 		// We hook into the canvas click/keydown or use a timer/observer because x-spreadsheet
 		// doesn't emit a 'selection-change' event.
-		// A hacky way is to listen to click on the container
 		document.getElementById("x-spreadsheet-demo").addEventListener("click", () => {
-			setTimeout(updateRibbonState, 50);
+			scheduleRibbonStateUpdate(updateRibbonState);
 		});
 		document.getElementById("x-spreadsheet-demo").addEventListener("keyup", () => {
-			setTimeout(updateRibbonState, 50);
+			scheduleRibbonStateUpdate(updateRibbonState);
 		});
 
-		// Formula Bar Input
+		// Formula Bar Input (debounced)
 		formulaInput.addEventListener("input", (e) => {
 			// @ts-ignore
 			const text = e.target.value;
@@ -219,8 +246,8 @@
 			if (ri !== -1 && ci !== -1) {
 				gridInstance.sheet.data.setCellText(ri, ci, text, "finished");
 				gridInstance.reRender();
-				// Notify host of change
-				vscode.postMessage({ type: "contentChanged" });
+				// Notify host of change (debounced)
+				notifyContentChanged();
 			}
 		});
 
@@ -326,8 +353,8 @@
 			}
 		}
 		grid.reRender();
-		// Notify host of change
-		vscode.postMessage({ type: "contentChanged" });
+		// Notify host of change (debounced)
+		notifyContentChanged();
 	}
 
 	function initColorPicker(pickerId, btnId, indicatorId, onSelect) {
@@ -443,8 +470,8 @@
 			formulaInput.value = formula;
 		}
 
-		// Notify host of change
-		vscode.postMessage({ type: "contentChanged" });
+		// Notify host of change (debounced)
+		notifyContentChanged();
 
 		console.log(`[XLSX Webview] Inserted formula: ${formula} at cell ${XLSX.utils.encode_cell({ r: ri, c: ci })}`);
 	}
