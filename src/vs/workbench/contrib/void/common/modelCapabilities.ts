@@ -177,16 +177,15 @@ export type VoidStaticModelInfo = { // not stateful
 
 	additionalOpenAIPayload?: { [key: string]: string } // additional payload in the message body for requests that are openai-compatible (ollama, vllm, openai, openrouter, etc)
 
-	// reasoning options
+	// reasoning options - thinking is always enabled at max for models that support it
 	reasoningCapabilities: false | {
 		readonly supportsReasoning: true; // for clarity, this must be true if anything below is specified
-		readonly canTurnOffReasoning: boolean; // whether or not the user can disable reasoning mode (false if the model only supports reasoning)
 		readonly canIOReasoning: boolean; // whether or not the model actually outputs reasoning (eg o1 lets us control reasoning but not output it)
 		readonly reasoningReservedOutputTokenSpace?: number; // overrides normal reservedOutputTokenSpace
-		readonly reasoningSlider?:
-		| undefined
-		| { type: 'budget_slider'; min: number; max: number; default: number } // anthropic supports this (reasoning budget)
-		| { type: 'effort_slider'; values: string[]; default: string } // openai-compatible supports this (reasoning effort)
+
+		// Provider-specific reasoning settings (used internally, not user-configurable)
+		readonly maxReasoningBudget?: number; // for budget-based providers like Anthropic, Gemini (omit for effort-based providers like OpenAI)
+		readonly maxReasoningEffort?: string; // for effort-based providers like OpenAI (typically 'high')
 
 		// if it's open source and specifically outputs think tags, put the think tags here and we'll parse them out (e.g. ollama)
 		readonly openSourceThinkTags?: [string, string];
@@ -269,7 +268,7 @@ const openSourceModelOptions_assumingOAICompat = {
 	'deepseekR1': {
 		supportsFIM: false,
 		supportsSystemMessage: false,
-		reasoningCapabilities: { supportsReasoning: true, canTurnOffReasoning: false, canIOReasoning: true, openSourceThinkTags: ['<think>', '</think>'] },
+		reasoningCapabilities: { supportsReasoning: true, canIOReasoning: true, openSourceThinkTags: ['<think>', '</think>'] },
 		contextWindow: 32_000, reservedOutputTokenSpace: 4_096,
 	},
 	'deepseekCoderV3': {
@@ -307,7 +306,7 @@ const openSourceModelOptions_assumingOAICompat = {
 	'phi4': {
 		supportsFIM: false,
 		supportsSystemMessage: 'system-role',
-		reasoningCapabilities: { supportsReasoning: true, canTurnOffReasoning: true, canIOReasoning: true, openSourceThinkTags: ['<think>', '</think>'] },
+		reasoningCapabilities: { supportsReasoning: true, canIOReasoning: true, openSourceThinkTags: ['<think>', '</think>'] },
 		contextWindow: 16_000, reservedOutputTokenSpace: 4_096,
 	},
 
@@ -366,13 +365,13 @@ const openSourceModelOptions_assumingOAICompat = {
 	'qwq': {
 		supportsFIM: false, // no FIM, yes reasoning
 		supportsSystemMessage: 'system-role',
-		reasoningCapabilities: { supportsReasoning: true, canTurnOffReasoning: false, canIOReasoning: true, openSourceThinkTags: ['<think>', '</think>'] },
+		reasoningCapabilities: { supportsReasoning: true, canIOReasoning: true, openSourceThinkTags: ['<think>', '</think>'] },
 		contextWindow: 128_000, reservedOutputTokenSpace: 8_192,
 	},
 	'qwen3': {
 		supportsFIM: false, // replaces QwQ
 		supportsSystemMessage: 'system-role',
-		reasoningCapabilities: { supportsReasoning: true, canTurnOffReasoning: true, canIOReasoning: true, openSourceThinkTags: ['<think>', '</think>'] },
+		reasoningCapabilities: { supportsReasoning: true, canIOReasoning: true, openSourceThinkTags: ['<think>', '</think>'] },
 		contextWindow: 32_768, reservedOutputTokenSpace: 8_192,
 	},
 	// FIM only
@@ -494,6 +493,38 @@ const extensiveModelOptionsFallback: VoidStaticProviderInfo['modelOptionsFallbac
 
 // ---------------- ANTHROPIC ----------------
 const anthropicModelOptions = {
+	// Claude 4.1 Series (November 2025) - Enhanced agentic capabilities
+	'claude-opus-4.1': {
+		contextWindow: 200_000,
+		reservedOutputTokenSpace: 16_384,
+		cost: { input: 15.00, cache_read: 1.50, cache_write: 18.75, output: 75.00 },
+		downloadable: false,
+		supportsFIM: false,
+		specialToolFormat: 'anthropic-style',
+		supportsSystemMessage: 'separated',
+		reasoningCapabilities: {
+			supportsReasoning: true,
+			canIOReasoning: true,
+			reasoningReservedOutputTokenSpace: 16384,
+			maxReasoningBudget: 16384, // Higher budget for 4.1 series
+		},
+	},
+	'claude-sonnet-4.1': {
+		contextWindow: 200_000,
+		reservedOutputTokenSpace: 16_384,
+		cost: { input: 3.00, cache_read: 0.30, cache_write: 3.75, output: 15.00 },
+		downloadable: false,
+		supportsFIM: false,
+		specialToolFormat: 'anthropic-style',
+		supportsSystemMessage: 'separated',
+		reasoningCapabilities: {
+			supportsReasoning: true,
+			canIOReasoning: true,
+			reasoningReservedOutputTokenSpace: 16384,
+			maxReasoningBudget: 16384, // Higher budget for 4.1 series
+		},
+	},
+	// Claude 4.5 Series
 	'claude-sonnet-4-5': { // https://docs.anthropic.com/en/docs/about-claude/models/all-models#model-comparison-table
 		contextWindow: 200_000,
 		reservedOutputTokenSpace: 8_192,
@@ -504,10 +535,9 @@ const anthropicModelOptions = {
 		supportsSystemMessage: 'separated',
 		reasoningCapabilities: {
 			supportsReasoning: true,
-			canTurnOffReasoning: true,
 			canIOReasoning: true,
 			reasoningReservedOutputTokenSpace: 8192,
-			reasoningSlider: { type: 'budget_slider', min: 1024, max: 8192, default: 1024 },
+			maxReasoningBudget: 8192,
 		},
 	},
 	'claude-haiku-4-5': {
@@ -530,12 +560,10 @@ const anthropicModelOptions = {
 		supportsSystemMessage: 'separated',
 		reasoningCapabilities: {
 			supportsReasoning: true,
-			canTurnOffReasoning: true,
 			canIOReasoning: true,
-			reasoningReservedOutputTokenSpace: 8192, // can bump it to 128_000 with beta mode output-128k-2025-02-19
-			reasoningSlider: { type: 'budget_slider', min: 1024, max: 8192, default: 1024 }, // they recommend batching if max > 32_000. we cap at 8192 because above is typically not necessary (often even buggy)
+			reasoningReservedOutputTokenSpace: 8192,
+			maxReasoningBudget: 8192,
 		},
-
 	},
 	'claude-sonnet-4-20250514': {
 		contextWindow: 200_000,
@@ -547,12 +575,10 @@ const anthropicModelOptions = {
 		supportsSystemMessage: 'separated',
 		reasoningCapabilities: {
 			supportsReasoning: true,
-			canTurnOffReasoning: true,
 			canIOReasoning: true,
-			reasoningReservedOutputTokenSpace: 8192, // can bump it to 128_000 with beta mode output-128k-2025-02-19
-			reasoningSlider: { type: 'budget_slider', min: 1024, max: 8192, default: 1024 }, // they recommend batching if max > 32_000. we cap at 8192 because above is typically not necessary (often even buggy)
+			reasoningReservedOutputTokenSpace: 8192,
+			maxReasoningBudget: 8192,
 		},
-
 	},
 	'claude-3-7-sonnet-20250219': { // https://docs.anthropic.com/en/docs/about-claude/models/all-models#model-comparison-table
 		contextWindow: 200_000,
@@ -564,12 +590,10 @@ const anthropicModelOptions = {
 		supportsSystemMessage: 'separated',
 		reasoningCapabilities: {
 			supportsReasoning: true,
-			canTurnOffReasoning: true,
 			canIOReasoning: true,
-			reasoningReservedOutputTokenSpace: 8192, // can bump it to 128_000 with beta mode output-128k-2025-02-19
-			reasoningSlider: { type: 'budget_slider', min: 1024, max: 8192, default: 1024 }, // they recommend batching if max > 32_000. we cap at 8192 because above is typically not necessary (often even buggy)
+			reasoningReservedOutputTokenSpace: 8192,
+			maxReasoningBudget: 8192,
 		},
-
 	},
 	'claude-3-5-sonnet-20241022': {
 		contextWindow: 200_000,
@@ -618,7 +642,7 @@ const anthropicSettings: VoidStaticProviderInfo = {
 			includeInPayload: (reasoningInfo) => {
 				if (!reasoningInfo?.isReasoningEnabled) return null
 
-				if (reasoningInfo.type === 'budget_slider_value') {
+				if (reasoningInfo.type === 'budget') {
 					return { thinking: { type: 'enabled', budget_tokens: reasoningInfo.reasoningBudget } }
 				}
 				return null
@@ -629,11 +653,16 @@ const anthropicSettings: VoidStaticProviderInfo = {
 	modelOptionsFallback: (modelName) => {
 		const lower = modelName.toLowerCase()
 		let fallbackName: keyof typeof anthropicModelOptions | null = null
+		// Claude 4.1 series (latest)
+		if (lower.includes('claude-opus-4.1') || lower.includes('claude-4.1') && lower.includes('opus')) fallbackName = 'claude-opus-4.1'
+		if (lower.includes('claude-sonnet-4.1') || lower.includes('claude-4.1') && lower.includes('sonnet')) fallbackName = 'claude-sonnet-4.1'
+		// Claude 4.5 series
 		if (lower.includes('claude-4-5') || lower.includes('claude-sonnet-4-5') || lower.includes('claude-4.5')) fallbackName = 'claude-sonnet-4-5'
 		if (lower.includes('claude-haiku-4-5') || lower.includes('claude-haiku-4.5')) fallbackName = 'claude-haiku-4-5'
-		if (lower.includes('claude-4') && lower.includes('opus')) fallbackName = 'claude-opus-4-20250514'
+		// Claude 4 series
+		if (lower.includes('claude-4') && lower.includes('opus') && !fallbackName) fallbackName = 'claude-opus-4-20250514'
 		if (lower.includes('claude-4') && lower.includes('sonnet') && !fallbackName) fallbackName = 'claude-sonnet-4-20250514'
-
+		// Claude 3.x series
 		if (lower.includes('claude-3-7-sonnet')) fallbackName = 'claude-3-7-sonnet-20250219'
 		if (lower.includes('claude-3-5-sonnet')) fallbackName = 'claude-3-5-sonnet-20241022'
 		if (lower.includes('claude-3-5-haiku')) fallbackName = 'claude-3-5-haiku-20241022'
@@ -647,6 +676,7 @@ const anthropicSettings: VoidStaticProviderInfo = {
 
 // ---------------- OPENAI ----------------
 const openAIModelOptions = { // https://platform.openai.com/docs/pricing
+	// GPT-5 Series (November 2025) - Adaptive reasoning router
 	'gpt-5': {
 		contextWindow: 1_047_576,
 		reservedOutputTokenSpace: 32_768,
@@ -657,6 +687,17 @@ const openAIModelOptions = { // https://platform.openai.com/docs/pricing
 		supportsSystemMessage: 'developer-role',
 		reasoningCapabilities: false,
 	},
+	'gpt-5-pro': { // Pro variant with enhanced reasoning for complex tasks
+		contextWindow: 1_047_576,
+		reservedOutputTokenSpace: 65_536,
+		cost: { input: 10.00, output: 40.00, cache_read: 2.50 },
+		downloadable: false,
+		supportsFIM: false,
+		specialToolFormat: 'openai-style',
+		supportsSystemMessage: 'developer-role',
+		reasoningCapabilities: { supportsReasoning: true, canIOReasoning: false, maxReasoningEffort: 'high' },
+	},
+	// o-series reasoning models
 	'o3': {
 		contextWindow: 1_047_576,
 		reservedOutputTokenSpace: 32_768,
@@ -665,7 +706,7 @@ const openAIModelOptions = { // https://platform.openai.com/docs/pricing
 		supportsFIM: false,
 		specialToolFormat: 'openai-style',
 		supportsSystemMessage: 'developer-role',
-		reasoningCapabilities: { supportsReasoning: true, canTurnOffReasoning: false, canIOReasoning: false, reasoningSlider: { type: 'effort_slider', values: ['low', 'medium', 'high'], default: 'low' } },
+		reasoningCapabilities: { supportsReasoning: true, canIOReasoning: false, maxReasoningEffort: 'high' },
 	},
 	'o4-mini': {
 		contextWindow: 1_047_576,
@@ -675,7 +716,7 @@ const openAIModelOptions = { // https://platform.openai.com/docs/pricing
 		supportsFIM: false,
 		specialToolFormat: 'openai-style',
 		supportsSystemMessage: 'developer-role',
-		reasoningCapabilities: { supportsReasoning: true, canTurnOffReasoning: false, canIOReasoning: false, reasoningSlider: { type: 'effort_slider', values: ['low', 'medium', 'high'], default: 'low' } },
+		reasoningCapabilities: { supportsReasoning: true, canIOReasoning: false, maxReasoningEffort: 'high' },
 	},
 	'gpt-4.1': {
 		contextWindow: 1_047_576,
@@ -714,7 +755,7 @@ const openAIModelOptions = { // https://platform.openai.com/docs/pricing
 		downloadable: false,
 		supportsFIM: false,
 		supportsSystemMessage: 'developer-role',
-		reasoningCapabilities: { supportsReasoning: true, canTurnOffReasoning: false, canIOReasoning: false, reasoningSlider: { type: 'effort_slider', values: ['low', 'medium', 'high'], default: 'low' } },
+		reasoningCapabilities: { supportsReasoning: true, canIOReasoning: false, maxReasoningEffort: 'high' },
 	},
 	'o3-mini': {
 		contextWindow: 200_000,
@@ -723,7 +764,7 @@ const openAIModelOptions = { // https://platform.openai.com/docs/pricing
 		downloadable: false,
 		supportsFIM: false,
 		supportsSystemMessage: 'developer-role',
-		reasoningCapabilities: { supportsReasoning: true, canTurnOffReasoning: false, canIOReasoning: false, reasoningSlider: { type: 'effort_slider', values: ['low', 'medium', 'high'], default: 'low' } },
+		reasoningCapabilities: { supportsReasoning: true, canIOReasoning: false, maxReasoningEffort: 'high' },
 	},
 	'gpt-4o': {
 		contextWindow: 128_000,
@@ -742,7 +783,7 @@ const openAIModelOptions = { // https://platform.openai.com/docs/pricing
 		downloadable: false,
 		supportsFIM: false,
 		supportsSystemMessage: false, // does not support any system
-		reasoningCapabilities: { supportsReasoning: true, canTurnOffReasoning: false, canIOReasoning: false, reasoningSlider: { type: 'effort_slider', values: ['low', 'medium', 'high'], default: 'low' } },
+		reasoningCapabilities: { supportsReasoning: true, canIOReasoning: false, maxReasoningEffort: 'high' },
 	},
 	'gpt-4o-mini': {
 		contextWindow: 128_000,
@@ -760,7 +801,7 @@ const openAIModelOptions = { // https://platform.openai.com/docs/pricing
 // https://platform.openai.com/docs/guides/reasoning?api-mode=chat
 const openAICompatIncludeInPayloadReasoning = (reasoningInfo: SendableReasoningInfo) => {
 	if (!reasoningInfo?.isReasoningEnabled) return null
-	if (reasoningInfo.type === 'effort_slider_value') {
+	if (reasoningInfo.type === 'effort') {
 		return { reasoning_effort: reasoningInfo.reasoningEffort }
 	}
 	return null
@@ -772,9 +813,14 @@ const openAISettings: VoidStaticProviderInfo = {
 	modelOptionsFallback: (modelName) => {
 		const lower = modelName.toLowerCase()
 		let fallbackName: keyof typeof openAIModelOptions | null = null
-		if (lower.includes('gpt-5')) { fallbackName = 'gpt-5' }
-		if (lower.includes('o1')) { fallbackName = 'o1' }
+		// GPT-5 variants
+		if (lower.includes('gpt-5-pro') || lower.includes('gpt-5') && lower.includes('pro')) { fallbackName = 'gpt-5-pro' }
+		else if (lower.includes('gpt-5')) { fallbackName = 'gpt-5' }
+		// o-series
+		if (lower.includes('o4-mini')) { fallbackName = 'o4-mini' }
 		if (lower.includes('o3-mini')) { fallbackName = 'o3-mini' }
+		if (lower.includes('o3') && !fallbackName) { fallbackName = 'o3' }
+		if (lower.includes('o1')) { fallbackName = 'o1' }
 		if (lower.includes('gpt-4o')) { fallbackName = 'gpt-4o' }
 		if (fallbackName) return { modelName: fallbackName, recognizedModelName: fallbackName, ...openAIModelOptions[fallbackName] }
 		return null
@@ -827,7 +873,7 @@ const xAIModelOptions = {
 		supportsFIM: false,
 		supportsSystemMessage: 'system-role',
 		specialToolFormat: 'openai-style',
-		reasoningCapabilities: { supportsReasoning: true, canTurnOffReasoning: false, canIOReasoning: false, reasoningSlider: { type: 'effort_slider', values: ['low', 'high'], default: 'low' } },
+		reasoningCapabilities: { supportsReasoning: true, canIOReasoning: false, maxReasoningEffort: 'high' },
 	},
 	'grok-3-mini-fast': {
 		contextWindow: 131_072,
@@ -837,7 +883,7 @@ const xAIModelOptions = {
 		supportsFIM: false,
 		supportsSystemMessage: 'system-role',
 		specialToolFormat: 'openai-style',
-		reasoningCapabilities: { supportsReasoning: true, canTurnOffReasoning: false, canIOReasoning: false, reasoningSlider: { type: 'effort_slider', values: ['low', 'high'], default: 'low' } },
+		reasoningCapabilities: { supportsReasoning: true, canIOReasoning: false, maxReasoningEffort: 'high' },
 	},
 } as const satisfies { [s: string]: VoidStaticModelInfo }
 
@@ -862,6 +908,53 @@ const xAISettings: VoidStaticProviderInfo = {
 // ---------------- GEMINI ----------------
 const geminiModelOptions = { // https://ai.google.dev/gemini-api/docs/pricing
 	// https://ai.google.dev/gemini-api/docs/thinking#set-budget
+	// Gemini 3 Series (November 2025) - Advanced multimodal reasoning
+	'gemini-3-pro': {
+		contextWindow: 2_097_152, // 2M tokens
+		reservedOutputTokenSpace: 16_384,
+		cost: { input: 1.25, output: 5.00 },
+		downloadable: false,
+		supportsFIM: false,
+		supportsSystemMessage: 'separated',
+		specialToolFormat: 'gemini-style',
+		reasoningCapabilities: {
+			supportsReasoning: true,
+			canIOReasoning: true, // Gemini 3 outputs thinking
+			maxReasoningBudget: 32768, // Higher budget for Gemini 3
+			reasoningReservedOutputTokenSpace: 16384,
+		},
+	},
+	'gemini-3-deep-think': { // Premium deep reasoning variant
+		contextWindow: 2_097_152, // 2M tokens
+		reservedOutputTokenSpace: 32_768,
+		cost: { input: 3.00, output: 12.00 },
+		downloadable: false,
+		supportsFIM: false,
+		supportsSystemMessage: 'separated',
+		specialToolFormat: 'gemini-style',
+		reasoningCapabilities: {
+			supportsReasoning: true,
+			canIOReasoning: true,
+			maxReasoningBudget: 65536, // Maximum thinking for complex problems
+			reasoningReservedOutputTokenSpace: 32768,
+		},
+	},
+	'gemini-3-flash': { // Fast variant
+		contextWindow: 1_048_576,
+		reservedOutputTokenSpace: 8_192,
+		cost: { input: 0.15, output: 0.60 },
+		downloadable: false,
+		supportsFIM: false,
+		supportsSystemMessage: 'separated',
+		specialToolFormat: 'gemini-style',
+		reasoningCapabilities: {
+			supportsReasoning: true,
+			canIOReasoning: true,
+			maxReasoningBudget: 24576,
+			reasoningReservedOutputTokenSpace: 8192,
+		},
+	},
+	// Gemini 2.5 Series
 	'gemini-2.5-pro-preview-05-06': {
 		contextWindow: 1_048_576,
 		reservedOutputTokenSpace: 8_192,
@@ -872,9 +965,8 @@ const geminiModelOptions = { // https://ai.google.dev/gemini-api/docs/pricing
 		specialToolFormat: 'gemini-style',
 		reasoningCapabilities: {
 			supportsReasoning: true,
-			canTurnOffReasoning: true,
 			canIOReasoning: false,
-			reasoningSlider: { type: 'budget_slider', min: 1024, max: 8192, default: 1024 }, // max is really 24576
+			maxReasoningBudget: 24576, // Gemini supports up to 24576
 			reasoningReservedOutputTokenSpace: 8192,
 		},
 	},
@@ -898,9 +990,8 @@ const geminiModelOptions = { // https://ai.google.dev/gemini-api/docs/pricing
 		specialToolFormat: 'gemini-style',
 		reasoningCapabilities: {
 			supportsReasoning: true,
-			canTurnOffReasoning: true,
 			canIOReasoning: false,
-			reasoningSlider: { type: 'budget_slider', min: 1024, max: 8192, default: 1024 }, // max is really 24576
+			maxReasoningBudget: 24576, // Gemini supports up to 24576
 			reasoningReservedOutputTokenSpace: 8192,
 		},
 	},
@@ -914,9 +1005,8 @@ const geminiModelOptions = { // https://ai.google.dev/gemini-api/docs/pricing
 		specialToolFormat: 'gemini-style',
 		reasoningCapabilities: {
 			supportsReasoning: true,
-			canTurnOffReasoning: true,
 			canIOReasoning: false,
-			reasoningSlider: { type: 'budget_slider', min: 1024, max: 8192, default: 1024 }, // max is really 24576
+			maxReasoningBudget: 24576, // Gemini supports up to 24576
 			reasoningReservedOutputTokenSpace: 8192,
 		},
 	},
@@ -974,7 +1064,25 @@ const geminiModelOptions = { // https://ai.google.dev/gemini-api/docs/pricing
 
 const geminiSettings: VoidStaticProviderInfo = {
 	modelOptions: geminiModelOptions,
-	modelOptionsFallback: (modelName) => { return null },
+	modelOptionsFallback: (modelName) => {
+		const lower = modelName.toLowerCase()
+		let fallbackName: keyof typeof geminiModelOptions | null = null
+		// Gemini 3 series (latest)
+		if (lower.includes('gemini-3') && lower.includes('deep-think')) fallbackName = 'gemini-3-deep-think'
+		else if (lower.includes('gemini-3') && lower.includes('flash')) fallbackName = 'gemini-3-flash'
+		else if (lower.includes('gemini-3') && lower.includes('pro')) fallbackName = 'gemini-3-pro'
+		else if (lower.includes('gemini-3')) fallbackName = 'gemini-3-pro'
+		// Gemini 2.5 series
+		else if (lower.includes('gemini-2.5') && lower.includes('flash')) fallbackName = 'gemini-2.5-flash-preview-04-17'
+		else if (lower.includes('gemini-2.5') && lower.includes('pro')) fallbackName = 'gemini-2.5-pro-preview-05-06'
+		// Gemini 2.0 series
+		else if (lower.includes('gemini-2') && lower.includes('flash')) fallbackName = 'gemini-2.0-flash'
+		// Gemini 1.5 series
+		else if (lower.includes('gemini-1.5') && lower.includes('flash')) fallbackName = 'gemini-1.5-flash'
+		else if (lower.includes('gemini-1.5') && lower.includes('pro')) fallbackName = 'gemini-1.5-pro'
+		if (fallbackName) return { modelName: fallbackName, recognizedModelName: fallbackName, ...geminiModelOptions[fallbackName] }
+		return null
+	},
 }
 
 
@@ -1047,7 +1155,7 @@ const mistralModelOptions = { // https://mistral.ai/products/la-plateforme#prici
 		supportsFIM: true,
 		downloadable: { sizeGb: 13 },
 		supportsSystemMessage: 'system-role',
-		reasoningCapabilities: { supportsReasoning: true, canIOReasoning: true, canTurnOffReasoning: false, openSourceThinkTags: ['<think>', '</think>'] },
+		reasoningCapabilities: { supportsReasoning: true, canIOReasoning: true, openSourceThinkTags: ['<think>', '</think>'] },
 	},
 	'magistral-small-latest': {
 		contextWindow: 40_000,
@@ -1056,7 +1164,7 @@ const mistralModelOptions = { // https://mistral.ai/products/la-plateforme#prici
 		supportsFIM: true,
 		downloadable: { sizeGb: 13 },
 		supportsSystemMessage: 'system-role',
-		reasoningCapabilities: { supportsReasoning: true, canIOReasoning: true, canTurnOffReasoning: false, openSourceThinkTags: ['<think>', '</think>'] },
+		reasoningCapabilities: { supportsReasoning: true, canIOReasoning: true, openSourceThinkTags: ['<think>', '</think>'] },
 	},
 	'devstral-small-latest': { //https://openrouter.ai/mistralai/devstral-small:free
 		contextWindow: 131_000,
@@ -1132,7 +1240,7 @@ const groqModelOptions = { // https://console.groq.com/docs/models, https://groq
 		downloadable: false,
 		supportsFIM: false,
 		supportsSystemMessage: 'system-role',
-		reasoningCapabilities: { supportsReasoning: true, canIOReasoning: true, canTurnOffReasoning: false, openSourceThinkTags: ['<think>', '</think>'] }, // we're using reasoning_format:parsed so really don't need to know openSourceThinkTags
+		reasoningCapabilities: { supportsReasoning: true, canIOReasoning: true, openSourceThinkTags: ['<think>', '</think>'] }, // we're using reasoning_format:parsed so really don't need to know openSourceThinkTags
 	},
 } as const satisfies { [s: string]: VoidStaticModelInfo }
 const groqSettings: VoidStaticProviderInfo = {
@@ -1143,7 +1251,7 @@ const groqSettings: VoidStaticProviderInfo = {
 		input: {
 			includeInPayload: (reasoningInfo) => {
 				if (!reasoningInfo?.isReasoningEnabled) return null
-				if (reasoningInfo.type === 'budget_slider_value') {
+				if (reasoningInfo.type === 'budget') {
 					return { reasoning_format: 'parsed' }
 				}
 				return null
@@ -1243,7 +1351,7 @@ const ollamaModelOptions = {
 		downloadable: { sizeGb: 20 },
 		supportsFIM: false,
 		supportsSystemMessage: 'system-role',
-		reasoningCapabilities: { supportsReasoning: true, canIOReasoning: false, canTurnOffReasoning: false, openSourceThinkTags: ['<think>', '</think>'] },
+		reasoningCapabilities: { supportsReasoning: true, canIOReasoning: false, openSourceThinkTags: ['<think>', '</think>'] },
 	},
 	'deepseek-r1': {
 		contextWindow: 128_000,
@@ -1252,7 +1360,7 @@ const ollamaModelOptions = {
 		downloadable: { sizeGb: 4.7 },
 		supportsFIM: false,
 		supportsSystemMessage: 'system-role',
-		reasoningCapabilities: { supportsReasoning: true, canIOReasoning: false, canTurnOffReasoning: false, openSourceThinkTags: ['<think>', '</think>'] },
+		reasoningCapabilities: { supportsReasoning: true, canIOReasoning: false, openSourceThinkTags: ['<think>', '</think>'] },
 	},
 	'devstral:latest': {
 		contextWindow: 131_000,
@@ -1327,7 +1435,7 @@ const openRouterModelOptions_assumingOpenAICompat = {
 		downloadable: false,
 		supportsFIM: false,
 		supportsSystemMessage: 'system-role',
-		reasoningCapabilities: { supportsReasoning: true, canIOReasoning: true, canTurnOffReasoning: false },
+		reasoningCapabilities: { supportsReasoning: true, canIOReasoning: true },
 	},
 	'microsoft/phi-4-reasoning-plus:free': { // a 14B model...
 		contextWindow: 32_768,
@@ -1336,7 +1444,7 @@ const openRouterModelOptions_assumingOpenAICompat = {
 		downloadable: false,
 		supportsFIM: false,
 		supportsSystemMessage: 'system-role',
-		reasoningCapabilities: { supportsReasoning: true, canIOReasoning: true, canTurnOffReasoning: false },
+		reasoningCapabilities: { supportsReasoning: true, canIOReasoning: true },
 	},
 	'mistralai/mistral-small-3.1-24b-instruct:free': {
 		contextWindow: 128_000,
@@ -1408,10 +1516,9 @@ const openRouterModelOptions_assumingOpenAICompat = {
 		supportsSystemMessage: 'system-role',
 		reasoningCapabilities: { // same as anthropic, see above
 			supportsReasoning: true,
-			canTurnOffReasoning: false,
 			canIOReasoning: true,
 			reasoningReservedOutputTokenSpace: 8192,
-			reasoningSlider: { type: 'budget_slider', min: 1024, max: 8192, default: 1024 }, // they recommend batching if max > 32_000.
+			maxReasoningBudget: 8192,
 		},
 	},
 	'anthropic/claude-3.7-sonnet': {
@@ -1481,14 +1588,14 @@ const openRouterSettings: VoidStaticProviderInfo = {
 			includeInPayload: (reasoningInfo) => {
 				if (!reasoningInfo?.isReasoningEnabled) return null
 
-				if (reasoningInfo.type === 'budget_slider_value') {
+				if (reasoningInfo.type === 'budget') {
 					return {
 						reasoning: {
 							max_tokens: reasoningInfo.reasoningBudget
 						}
 					}
 				}
-				if (reasoningInfo.type === 'effort_slider_value')
+				if (reasoningInfo.type === 'effort')
 					return {
 						reasoning: {
 							effort: reasoningInfo.reasoningEffort
@@ -1574,33 +1681,28 @@ export const getProviderCapabilities = (providerName: ProviderName) => {
 }
 
 
+// Reasoning is always enabled at max for models that support it (no user-configurable slider)
 export type SendableReasoningInfo = {
-	type: 'budget_slider_value',
+	type: 'budget',
 	isReasoningEnabled: true,
 	reasoningBudget: number,
 } | {
-	type: 'effort_slider_value',
+	type: 'effort',
 	isReasoningEnabled: true,
 	reasoningEffort: string,
 } | null
 
 
-
+// Reasoning is always enabled for models that support it
 export const getIsReasoningEnabledState = (
-	featureName: FeatureName,
+	_featureName: FeatureName,
 	providerName: ProviderName,
 	modelName: string,
-	modelSelectionOptions: ModelSelectionOptions | undefined,
+	_modelSelectionOptions: ModelSelectionOptions | undefined,
 	overridesOfModel: OverridesOfModel | undefined,
 ) => {
-	const { supportsReasoning, canTurnOffReasoning } = getModelCapabilities(providerName, modelName, overridesOfModel).reasoningCapabilities || {}
-	if (!supportsReasoning) return false
-
-	// default to enabled if can't turn off, or if the featureName is Chat.
-	const defaultEnabledVal = featureName === 'Chat' || !canTurnOffReasoning
-
-	const isReasoningEnabled = modelSelectionOptions?.reasoningEnabled ?? defaultEnabledVal
-	return isReasoningEnabled
+	const { supportsReasoning } = getModelCapabilities(providerName, modelName, overridesOfModel).reasoningCapabilities || {}
+	return !!supportsReasoning // Always enabled if the model supports it
 }
 
 
@@ -1612,29 +1714,29 @@ export const getReservedOutputTokenSpace = (providerName: ProviderName, modelNam
 	return opts.isReasoningEnabled && reasoningCapabilities ? reasoningCapabilities.reasoningReservedOutputTokenSpace : reservedOutputTokenSpace
 }
 
-// used to force reasoning state (complex) into something simple we can just read from when sending a message
+// Reasoning is always enabled at max budget/effort for models that support it
 export const getSendableReasoningInfo = (
-	featureName: FeatureName,
+	_featureName: FeatureName,
 	providerName: ProviderName,
 	modelName: string,
-	modelSelectionOptions: ModelSelectionOptions | undefined,
+	_modelSelectionOptions: ModelSelectionOptions | undefined,
 	overridesOfModel: OverridesOfModel | undefined,
 ): SendableReasoningInfo => {
 
-	const { reasoningSlider: reasoningBudgetSlider } = getModelCapabilities(providerName, modelName, overridesOfModel).reasoningCapabilities || {}
-	const isReasoningEnabled = getIsReasoningEnabledState(featureName, providerName, modelName, modelSelectionOptions, overridesOfModel)
-	if (!isReasoningEnabled) return null
+	const reasoningCapabilities = getModelCapabilities(providerName, modelName, overridesOfModel).reasoningCapabilities
+	if (!reasoningCapabilities) return null
 
-	// check for reasoning budget
-	const reasoningBudget = reasoningBudgetSlider?.type === 'budget_slider' ? modelSelectionOptions?.reasoningBudget ?? reasoningBudgetSlider?.default : undefined
-	if (reasoningBudget) {
-		return { type: 'budget_slider_value', isReasoningEnabled: isReasoningEnabled, reasoningBudget: reasoningBudget }
+	const { supportsReasoning, maxReasoningBudget, maxReasoningEffort } = reasoningCapabilities
+	if (!supportsReasoning) return null
+
+	// Use max budget for budget-based providers (Anthropic, Gemini, OpenRouter)
+	if (maxReasoningBudget) {
+		return { type: 'budget', isReasoningEnabled: true, reasoningBudget: maxReasoningBudget }
 	}
 
-	// check for reasoning effort
-	const reasoningEffort = reasoningBudgetSlider?.type === 'effort_slider' ? modelSelectionOptions?.reasoningEffort ?? reasoningBudgetSlider?.default : undefined
-	if (reasoningEffort) {
-		return { type: 'effort_slider_value', isReasoningEnabled: isReasoningEnabled, reasoningEffort: reasoningEffort }
+	// Use max effort for effort-based providers (OpenAI, xAI)
+	if (maxReasoningEffort) {
+		return { type: 'effort', isReasoningEnabled: true, reasoningEffort: maxReasoningEffort }
 	}
 
 	return null
