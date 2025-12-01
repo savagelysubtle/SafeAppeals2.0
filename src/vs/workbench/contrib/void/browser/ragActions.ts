@@ -171,7 +171,7 @@ class IndexAsPolicyManualAction extends Action2 {
 		super({
 			id: 'void.rag.indexFromExplorer',
 			title: 'Index as Policy Manual',
-			category: 'Void',
+			category: 'SafeAppeals',
 			f1: false,
 			menu: {
 				id: MenuId.ExplorerContext,

@@ -8,6 +8,7 @@ import { defaultModelsOfProvider, defaultProviderSettings, ModelOverrides } from
 import { RAGOpenAIModel, RAGStorageScope, RAGVectorBackend } from './ragServiceTypes.js';
 import { ToolApprovalType } from './toolsServiceTypes.js';
 import { VoidSettingsState } from './voidSettingsService.js';
+import { CloudModeOfProvider, defaultCloudModeOfProvider } from './voidCloudTypes.js';
 
 
 type UnionOfKeys<T> = T extends T ? keyof T : never;
@@ -489,6 +490,10 @@ export type GlobalSettings = {
 	caseOrganizerTosortFolderName: string;
 	// PDF Viewer settings
 	pdfPreloadStrategy: 'on-demand' | 'adjacent' | 'all';
+	// SafeAppeals Cloud settings
+	voidCloudEnabled: boolean;                    // Master toggle for SafeAppeals Cloud
+	voidCloudApiUrl: string;                      // API URL (for self-hosting)
+	voidCloudModeOfProvider: CloudModeOfProvider; // Per-provider cloud mode toggle
 }
 
 export const defaultGlobalSettings: GlobalSettings = {
@@ -541,6 +546,10 @@ export const defaultGlobalSettings: GlobalSettings = {
 	caseOrganizerTosortFolderName: 'tosort',
 	// PDF Viewer defaults
 	pdfPreloadStrategy: 'all',
+	// SafeAppeals Cloud defaults
+	voidCloudEnabled: false,                      // Disabled by default, user must opt-in
+	voidCloudApiUrl: 'https://void-cloud-production.up.railway.app', // Default API URL
+	voidCloudModeOfProvider: defaultCloudModeOfProvider,
 }
 
 export type GlobalSettingName = keyof GlobalSettings

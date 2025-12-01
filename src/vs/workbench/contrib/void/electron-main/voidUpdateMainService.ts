@@ -112,11 +112,11 @@ export class VoidMainUpdateService extends Disposable implements IVoidUpdateServ
 			if (explicit) {
 				if (response.ok) {
 					if (!isUpToDate) {
-						message = 'A new version of Void is available! Please reinstall (auto-updates are disabled on this OS) - it only takes a second!'
+						message = 'A new version of SafeAppeals is available! Please reinstall (auto-updates are disabled on this OS) - it only takes a second!'
 						action = 'reinstall'
 					}
 					else {
-						message = 'Void is up-to-date!'
+						message = 'SafeAppeals is up-to-date!'
 					}
 				}
 				else {
@@ -127,7 +127,7 @@ export class VoidMainUpdateService extends Disposable implements IVoidUpdateServ
 			// not explicit
 			else {
 				if (response.ok && !isUpToDate) {
-					message = 'A new version of Void is available! Please reinstall (auto-updates are disabled on this OS) - it only takes a second!'
+					message = 'A new version of SafeAppeals is available! Please reinstall (auto-updates are disabled on this OS) - it only takes a second!'
 					action = 'reinstall'
 				}
 				else {
