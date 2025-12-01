@@ -65,7 +65,7 @@ class OpenFileOrganizerDashboardAction extends Action2 {
 			id: OpenFileOrganizerDashboardAction.ID,
 			title: nls.localize2('openFileOrganizerDashboard', 'Open File Organizer Dashboard'),
 			icon: Codicon.folder,
-			category: nls.localize2('void', 'Void'),
+			category: nls.localize2('void', 'SafeAppeals'),
 			f1: true, // Show in command palette
 			keybinding: {
 				primary: KeyMod.CtrlCmd | KeyMod.Shift | KeyCode.KeyO,

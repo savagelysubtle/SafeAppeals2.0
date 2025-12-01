@@ -127,6 +127,10 @@ import './documentViewers/documentViewer.contribution.js';
 import './documentCreatorService.js';
 import './documentFileCreation.contribution.js';
 
+// Void Cloud service and URL handler
+import './voidCloudService.js';
+import { VoidCloudUrlHandler } from './voidCloudUrlHandler.js';
+
 // Ensure RAG workspace service starts
 import { IWorkbenchContributionsRegistry, Extensions as WorkbenchExtensions } from '../../../common/contributions.js';
 import { LifecyclePhase } from '../../../services/lifecycle/common/lifecycle.js';
@@ -141,3 +145,7 @@ class RAGWorkspaceContribution {
 
 Registry.as<IWorkbenchContributionsRegistry>(WorkbenchExtensions.Workbench)
 	.registerWorkbenchContribution(RAGWorkspaceContribution, LifecyclePhase.Restored);
+
+// Register Void Cloud URL handler for OAuth callback
+Registry.as<IWorkbenchContributionsRegistry>(WorkbenchExtensions.Workbench)
+	.registerWorkbenchContribution(VoidCloudUrlHandler, LifecyclePhase.Restored);

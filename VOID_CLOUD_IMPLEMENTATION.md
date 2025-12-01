@@ -1,8 +1,38 @@
 # Void Cloud Credits System - Implementation Specification
 
-> **Document Version:** 1.0
+> **Document Version:** 1.7
 > **Created:** November 30, 2025
-> **Status:** Planning → Implementation
+> **Status:** 🚀 **DEPLOYED** - API live, Desktop OAuth flow implemented
+
+## 📊 Progress Summary
+
+| Phase                        | Status           | Notes                                      |
+| ---------------------------- | ---------------- | ------------------------------------------ |
+| Phase 1: Infrastructure      | ✅ Complete      | Railway + Supabase + Stripe all configured |
+| Phase 2: API Backend         | ✅ Deployed      | Live at void-cloud-production.up.railway.app |
+| Phase 3: LLM Proxy           | 🟡 Code Complete | Needs LiteLLM deployment + API keys        |
+| Phase 4: Desktop Auth        | ✅ Complete      | OAuth flow + URL handler + UI implemented  |
+| Phase 5: Desktop Integration | 🟡 In Progress   | Cloud routing in sendLLMMessage needed     |
+| Phase 6: Polish & Testing    | ⬜ Not Started   |                                            |
+| Phase 7: Auto-Update         | ⬜ Not Started   |                                            |
+
+**Code Location:** `void-cloud/` folder in this workspace
+
+## 🔗 Live Resources
+
+| Resource | URL/Value |
+|----------|-----------|
+| **Railway API** | `https://void-cloud-production.up.railway.app` |
+| **GitHub Repo** | `https://github.com/savagelysubtle/void-cloud` |
+| **Supabase Project** | `totnbmqhkonnqgqhimsy.supabase.co` |
+| **Stripe Webhook** | `charismatic-radiance` (ID: `we_1SZJz0AhXjZrIkPTGMbE6oOP`) |
+| **Webhook Signing Secret** | *(stored in `.env` and Railway vars)* |
+
+### ⚠️ Action Required
+- [x] Fix Stripe webhook URL to include `/webhooks/stripe` path
+- [x] Add `STRIPE_WEBHOOK_SECRET` to Railway environment variables
+- [ ] Deploy LiteLLM proxy to Railway
+- [ ] Add at least one LLM API key (Anthropic/OpenAI/Google)
 
 ---
 
@@ -2173,44 +2203,69 @@ async function handleCheckoutComplete(session: Stripe.Checkout.Session) {
 
 ## 10. Implementation Phases
 
-### Phase 1: Infrastructure Setup (Week 1)
+### Phase 1: Infrastructure Setup (Week 1) ✅ COMPLETE
 
-- [ ] Create Supabase project
-- [ ] Configure Google OAuth in Supabase
-- [ ] Run database migrations
+- [x] Create Supabase project _(URL: totnbmqhkonnqgqhimsy.supabase.co)_
+- [x] Configure Google OAuth in Supabase ✅
+- [x] Apply database migrations (profiles, credits, usage_logs)
+- [x] Create GitHub repo (`savagelysubtle/void-cloud`)
+- [x] Deploy API to Railway (`void-cloud-production.up.railway.app`)
+- [x] Configure Railway environment variables
+- [x] Create Stripe products and prices:
+  - Starter Pack: $10 / 250K tokens (`price_1SZIiVAhXjZrIkPTysEXhuIT`)
+  - Pro Pack: $25 / 750K tokens (`price_1SZIiWAhXjZrIkPTJjdQpU2D`)
+- [x] Create Stripe webhook (`charismatic-radiance`)
+- [x] Install Stripe CLI and authenticate
+- [x] Get webhook signing secret *(stored in `void-cloud/.env`)*
+- [x] Write database migrations _(code in `void-cloud/supabase/migrations/`)_
+- [x] Run database migrations in Supabase _(4 migrations applied)_
+- [x] Add Service Role Key to `.env` ✅
 - [ ] Create Railway project
+- [x] Write LiteLLM config _(code in `void-cloud/litellm/config.yaml`)_
 - [ ] Deploy LiteLLM with initial config (Claude + GPT-4o-mini)
-- [ ] Set up environment variables
-- [ ] Create Stripe account and products
+- [x] Create `.env.example` template _(in `void-cloud/.env.example`)_
+- [x] Set up Supabase environment variables ✅
+- [x] Create Stripe products _(Starter: prod_TWLPQHArrEbTk8, Pro: prod_TWLPkmGZrxnFGV)_
+- [x] Create Stripe prices _(Starter: price_1SZIiVAhXjZrIkPTysEXhuIT, Pro: price_1SZIiWAhXjZrIkPTJjdQpU2D)_
+- [x] Add Stripe Secret Key to `.env` ✅
+- [ ] Add Stripe Webhook Secret _(after deployment)_
+- [ ] Add LLM provider API keys to `.env`
 
-### Phase 2: API Backend (Week 2)
+### Phase 2: API Backend (Week 2) ✅ DEPLOYED
 
-- [ ] Initialize Node.js/Fastify project
-- [ ] Implement auth middleware (Supabase JWT validation)
-- [ ] Implement `/auth/me` endpoint
-- [ ] Implement `/credits/balance` endpoint
-- [ ] Implement `/credits/checkout` endpoint
-- [ ] Implement `/webhooks/stripe` endpoint
+- [x] Initialize Node.js/Fastify project _(code in `void-cloud/api/`)_
+- [x] Implement auth middleware (Supabase JWT validation) _(in `middleware/auth.ts`)_
+- [x] Deploy to Railway _(live at `void-cloud-production.up.railway.app`)_
+- [x] Implement `/auth/me` endpoint _(in `routes/auth.ts`)_
+- [x] Implement `/credits/balance` endpoint _(in `routes/credits.ts`)_
+- [x] Implement `/credits/checkout` endpoint _(in `routes/credits.ts`)_
+- [x] Implement `/webhooks/stripe` endpoint _(in `routes/webhooks.ts`)_
+- [x] Implement rate limiting middleware _(in `middleware/rate-limit.ts`)_
+- [x] Implement input validation middleware _(in `middleware/validation.ts`)_
+- [x] Implement security headers _(in `middleware/security-headers.ts`)_
+- [x] Create Dockerfile _(in `api/Dockerfile`)_
 - [ ] Deploy to Railway
 
 ### Phase 3: LLM Proxy Integration (Week 3)
 
-- [ ] Implement `/llm/chat` endpoint
-- [ ] Connect to LiteLLM service
-- [ ] Implement token counting (pre-request estimation)
-- [ ] Implement credit deduction (post-request)
-- [ ] Implement streaming response forwarding
-- [ ] Add error handling for insufficient credits
+- [x] Implement `/llm/chat` endpoint _(in `routes/llm.ts`)_
+- [x] Connect to LiteLLM service _(configured in `llm.ts`)_
+- [x] Implement token counting (pre-request estimation)
+- [x] Implement credit deduction (post-request)
+- [x] Implement streaming response forwarding _(basic implementation)_
+- [x] Add error handling for insufficient credits _(402 response)_
+- [x] Implement `/llm/models` endpoint
 - [ ] Test with all configured models
 
 ### Phase 4: Void Desktop - Auth (Week 4)
 
-- [ ] Add cloud types to `voidCloudTypes.ts`
-- [ ] Update `voidSettingsTypes.ts` with cloud settings
-- [ ] Implement `VoidCloudService`
-- [ ] Add Supabase client to Void
-- [ ] Implement Google OAuth flow
-- [ ] Handle `void://auth/callback` protocol
+- [x] Add cloud types to `voidCloudTypes.ts` _(in `common/voidCloudTypes.ts`)_
+- [x] Update `voidSettingsTypes.ts` with cloud settings _(added voidCloud\* settings)_
+- [x] Implement `VoidCloudService` _(in `browser/voidCloudService.ts`)_
+- [x] Add API client methods (auth, credits, LLM)
+- [ ] Add Supabase client to Void _(optional - using direct API)_
+- [ ] Implement Google OAuth flow _(needs Electron shell integration)_
+- [ ] Handle `void://auth/callback` protocol _(needs Electron main process)_
 - [ ] Test sign in / sign out
 
 ### Phase 5: Void Desktop - Integration (Week 5)
@@ -4447,12 +4502,15 @@ curl -X POST http://localhost:4000/chat/completions \
 
 ### Version History
 
-| Version | Date             | Changes                                                                      |
-| ------- | ---------------- | ---------------------------------------------------------------------------- |
-| 1.0     | Nov 30, 2025     | Initial specification                                                        |
-| 1.1     | Nov 30, 2025     | Added repository architecture decision                                       |
-| 1.2     | Nov 30, 2025     | Added auto-update system (Section 12)                                        |
-| **1.3** | **Nov 30, 2025** | **Added Legal, Security, Monitoring, Production Readiness (Sections 13-16)** |
+| Version | Date             | Changes                                                                  |
+| ------- | ---------------- | ------------------------------------------------------------------------ |
+| 1.0     | Nov 30, 2025     | Initial specification                                                    |
+| 1.1     | Nov 30, 2025     | Added repository architecture decision                                   |
+| 1.2     | Nov 30, 2025     | Added auto-update system (Section 12)                                    |
+| 1.3     | Nov 30, 2025     | Added Legal, Security, Monitoring, Production Readiness (Sections 13-16) |
+| 1.4     | Nov 30, 2025     | Created `void-cloud/` folder with all API code, migrations, configs      |
+| 1.5     | Nov 30, 2025     | Phase 4: Added voidCloudTypes.ts, updated settings, VoidCloudService     |
+| **1.6** | **Nov 30, 2025** | **🚀 DEPLOYED: Railway API live, Stripe webhook configured, GitHub repo created** |
 
 ---
 

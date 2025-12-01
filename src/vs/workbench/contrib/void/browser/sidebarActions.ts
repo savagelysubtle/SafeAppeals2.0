@@ -119,7 +119,7 @@ export const detectParagraphRange = (model: any, currentLine: number): IRange | 
 const VOID_OPEN_SIDEBAR_ACTION_ID = 'void.sidebar.open'
 registerAction2(class extends Action2 {
 	constructor() {
-		super({ id: VOID_OPEN_SIDEBAR_ACTION_ID, title: localize2('voidOpenSidebar', 'Void: Open Sidebar'), f1: true });
+		super({ id: VOID_OPEN_SIDEBAR_ACTION_ID, title: localize2('voidOpenSidebar', 'SafeAppeals: Open Sidebar'), f1: true });
 	}
 	async run(accessor: ServicesAccessor): Promise<void> {
 		const viewsService = accessor.get(IViewsService)
@@ -136,7 +136,7 @@ registerAction2(class extends Action2 {
 		super({
 			id: VOID_CTRL_L_ACTION_ID,
 			f1: true,
-			title: localize2('voidCmdL', 'Void: Add Selection to Chat'),
+			title: localize2('voidCmdL', 'SafeAppeals: Add Selection to Chat'),
 			keybinding: {
 				primary: KeyMod.CtrlCmd | KeyCode.KeyL,
 				weight: KeybindingWeight.VoidExtension
@@ -461,7 +461,7 @@ registerAction2(class extends Action2 {
 	constructor() {
 		super({
 			id: 'void.settingsAction',
-			title: `Void's Settings`,
+			title: `SafeAppeals Settings`,
 			icon: { id: 'settings-gear' },
 			menu: [{ id: MenuId.ViewTitle, group: 'navigation', when: ContextKeyExpr.equals('view', VOID_VIEW_ID), }]
 		});
@@ -479,7 +479,7 @@ registerAction2(class extends Action2 {
 	constructor() {
 		super({
 			id: VOID_ORGANIZER_INIT_ACTION_ID,
-			title: localize2('voidOrganizerInit', 'Void: Initialize Case Organizer'),
+			title: localize2('voidOrganizerInit', 'SafeAppeals: Initialize Case Organizer'),
 			f1: true,
 		});
 	}
