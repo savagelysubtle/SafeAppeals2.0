@@ -1,8 +1,8 @@
 # Void Cloud Credits System - Implementation Specification
 
-> **Document Version:** 1.7
+> **Document Version:** 1.8
 > **Created:** November 30, 2025
-> **Status:** 🚀 **DEPLOYED** - API live, Desktop OAuth flow implemented
+> **Status:** 🚀 **DEPLOYED** - Full cloud integration complete (needs Anthropic credits)
 
 ## 📊 Progress Summary
 
@@ -10,9 +10,9 @@
 | ---------------------------- | ---------------- | ------------------------------------------ |
 | Phase 1: Infrastructure      | ✅ Complete      | Railway + Supabase + Stripe all configured |
 | Phase 2: API Backend         | ✅ Deployed      | Live at void-cloud-production.up.railway.app |
-| Phase 3: LLM Proxy           | 🟡 Code Complete | Needs LiteLLM deployment + API keys        |
+| Phase 3: LLM Proxy           | ✅ Deployed      | LiteLLM at void-cloudlitellm-production.up.railway.app |
 | Phase 4: Desktop Auth        | ✅ Complete      | OAuth flow + URL handler + UI implemented  |
-| Phase 5: Desktop Integration | 🟡 In Progress   | Cloud routing in sendLLMMessage needed     |
+| Phase 5: Desktop Integration | ✅ Complete      | CloudLLMRouterService + per-provider toggle |
 | Phase 6: Polish & Testing    | ⬜ Not Started   |                                            |
 | Phase 7: Auto-Update         | ⬜ Not Started   |                                            |
 
@@ -23,6 +23,7 @@
 | Resource | URL/Value |
 |----------|-----------|
 | **Railway API** | `https://void-cloud-production.up.railway.app` |
+| **Railway LiteLLM** | `https://void-cloudlitellm-production.up.railway.app` |
 | **GitHub Repo** | `https://github.com/savagelysubtle/void-cloud` |
 | **Supabase Project** | `totnbmqhkonnqgqhimsy.supabase.co` |
 | **Stripe Webhook** | `charismatic-radiance` (ID: `we_1SZJz0AhXjZrIkPTGMbE6oOP`) |
@@ -31,8 +32,9 @@
 ### ⚠️ Action Required
 - [x] Fix Stripe webhook URL to include `/webhooks/stripe` path
 - [x] Add `STRIPE_WEBHOOK_SECRET` to Railway environment variables
-- [ ] Deploy LiteLLM proxy to Railway
-- [ ] Add at least one LLM API key (Anthropic/OpenAI/Google)
+- [x] Deploy LiteLLM proxy to Railway
+- [x] Add Anthropic API key to LiteLLM service
+- [ ] Add credits to Anthropic account (your API key has $0 balance)
 
 ---
 

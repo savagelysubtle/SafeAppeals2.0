@@ -943,6 +943,9 @@ const ProviderSetting = ({
 // 	</div >
 // }
 
+// Providers that support cloud mode (have models in our LiteLLM proxy)
+const cloudSupportedProviders: ProviderName[] = ['anthropic', 'openAI', 'gemini'];
+
 export const SettingsForProvider = ({
 	providerName,
 	showProviderTitle,
@@ -953,17 +956,28 @@ export const SettingsForProvider = ({
 	showProviderSuggestions: boolean;
 }) => {
 	const voidSettingsState = useSettingsState();
+	const accessor = useAccessor();
+	const voidSettingsService = accessor.get('IVoidSettingsService');
 
 	const needsModel =
 		isProviderNameDisabled(providerName, voidSettingsState) === "addModel";
 
-	// const accessor = useAccessor()
-	// const voidSettingsService = accessor.get('IVoidSettingsService')
-
-	// const { enabled } = voidSettingsState.settingsOfProvider[providerName]
 	const settingNames = customSettingNamesOfProvider(providerName);
-
 	const { title: providerTitle } = displayInfoOfProviderName(providerName);
+
+	// Cloud mode state
+	const cloudEnabled = voidSettingsState.globalSettings.voidCloudEnabled;
+	const cloudModeForProvider = voidSettingsState.globalSettings.voidCloudModeOfProvider[providerName] ?? false;
+	const supportsCloud = cloudSupportedProviders.includes(providerName);
+
+	// Toggle cloud mode for this provider
+	const handleCloudModeToggle = useCallback(() => {
+		const newCloudMode = {
+			...voidSettingsState.globalSettings.voidCloudModeOfProvider,
+			[providerName]: !cloudModeForProvider,
+		};
+		voidSettingsService.setGlobalSetting('voidCloudModeOfProvider', newCloudMode);
+	}, [voidSettingsService, voidSettingsState.globalSettings.voidCloudModeOfProvider, providerName, cloudModeForProvider]);
 
 	return (
 		<div>
@@ -972,21 +986,38 @@ export const SettingsForProvider = ({
 					<h3 className="text-xl truncate">{providerTitle}</h3>
 				)}
 
-				{/* enable provider switch */}
-				{/* <VoidSwitch
-				value={!!enabled}
-				onChange={
-					useCallback(() => {
-						const enabledRef = voidSettingsService.state.settingsOfProvider[providerName].enabled
-						voidSettingsService.setSettingOfProvider(providerName, 'enabled', !enabledRef)
-					}, [voidSettingsService, providerName])}
-				size='sm+'
-			/> */}
+				{/* Cloud mode badge */}
+				{cloudEnabled && supportsCloud && cloudModeForProvider && (
+					<span className="text-xs bg-blue-600 text-white px-2 py-0.5 rounded">
+						☁️ Cloud
+					</span>
+				)}
 			</div>
 
 			<div className="px-0">
-				{/* settings besides models (e.g. api key) */}
-				{settingNames.map((settingName, i) => {
+				{/* Cloud mode toggle - only show if cloud is globally enabled and provider supports it */}
+				{cloudEnabled && supportsCloud && (
+					<div className="flex items-center gap-3 my-2 p-2 bg-void-bg-2 rounded">
+						<VoidSwitch
+							value={cloudModeForProvider}
+							onChange={handleCloudModeToggle}
+							size="sm"
+						/>
+						<div className="flex flex-col">
+							<span className="text-sm text-void-fg-2">
+								Use SafeAppeals Cloud
+							</span>
+							<span className="text-xs text-void-fg-3">
+								{cloudModeForProvider
+									? "Using cloud credits instead of your API key"
+									: "Using your own API key"}
+							</span>
+						</div>
+					</div>
+				)}
+
+				{/* settings besides models (e.g. api key) - hide if cloud mode is active */}
+				{(!cloudModeForProvider || !cloudEnabled) && settingNames.map((settingName, i) => {
 					return (
 						<ProviderSetting
 							key={settingName}
@@ -1004,7 +1035,7 @@ export const SettingsForProvider = ({
 					);
 				})}
 
-				{showProviderSuggestions && needsModel ? (
+				{showProviderSuggestions && needsModel && !cloudModeForProvider ? (
 					providerName === "ollama" ? (
 						<WarningBox
 							className="pl-2 mb-4"

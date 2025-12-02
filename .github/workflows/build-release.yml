@@ -1,0 +1,204 @@
+name: Build SafeAppeals Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version tag (e.g., v1.0.0)'
+        required: true
+        default: 'v1.0.0'
+  release:
+    types: [created]
+
+env:
+  NODE_VERSION: '20'
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v1
+        with:
+          bun-version: latest
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Install dependencies
+        run: bun install
+        env:
+          ELECTRON_SKIP_BINARY_DOWNLOAD: 1
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: 1
+
+      - name: Build React components
+        run: bun run buildreact
+
+      - name: Compile source
+        run: bun run compile-build
+
+      - name: Build Windows x64
+        run: bun run gulp vscode-win32-x64-min-ci
+
+      - name: Add Inno Updater
+        run: bun run gulp vscode-win32-x64-inno-updater
+
+      - name: Upload Windows Build
+        uses: actions/upload-artifact@v4
+        with:
+          name: SafeAppeals-Windows-x64
+          path: ../VSCode-win32-x64/
+          retention-days: 30
+
+  build-macos:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v1
+        with:
+          bun-version: latest
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Install dependencies
+        run: bun install
+        env:
+          ELECTRON_SKIP_BINARY_DOWNLOAD: 1
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: 1
+
+      - name: Build React components
+        run: bun run buildreact
+
+      - name: Compile source
+        run: bun run compile-build
+
+      - name: Build macOS x64
+        run: bun run gulp vscode-darwin-x64-min-ci
+
+      - name: Upload macOS Build
+        uses: actions/upload-artifact@v4
+        with:
+          name: SafeAppeals-macOS-x64
+          path: ../VSCode-darwin-x64/
+          retention-days: 30
+
+  build-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v1
+        with:
+          bun-version: latest
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libxkbfile-dev pkg-config libsecret-1-dev libkrb5-dev
+
+      - name: Install dependencies
+        run: bun install
+        env:
+          ELECTRON_SKIP_BINARY_DOWNLOAD: 1
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: 1
+
+      - name: Build React components
+        run: bun run buildreact
+
+      - name: Compile source
+        run: bun run compile-build
+
+      - name: Build Linux x64
+        run: bun run gulp vscode-linux-x64-min-ci
+
+      - name: Upload Linux Build
+        uses: actions/upload-artifact@v4
+        with:
+          name: SafeAppeals-Linux-x64
+          path: ../VSCode-linux-x64/
+          retention-days: 30
+
+  create-release:
+    needs: [build-windows, build-macos, build-linux]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'release' || github.event_name == 'workflow_dispatch'
+    steps:
+      - name: Download Windows artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: SafeAppeals-Windows-x64
+          path: ./SafeAppeals-Windows-x64
+
+      - name: Download macOS artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: SafeAppeals-macOS-x64
+          path: ./SafeAppeals-macOS-x64
+
+      - name: Download Linux artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: SafeAppeals-Linux-x64
+          path: ./SafeAppeals-Linux-x64
+
+      - name: Create ZIP archives
+        run: |
+          zip -r SafeAppeals-Windows-x64.zip SafeAppeals-Windows-x64
+          zip -r SafeAppeals-macOS-x64.zip SafeAppeals-macOS-x64
+          tar -czvf SafeAppeals-Linux-x64.tar.gz SafeAppeals-Linux-x64
+
+      - name: Upload Release Assets
+        uses: softprops/action-gh-release@v1
+        if: github.event_name == 'release'
+        with:
+          files: |
+            SafeAppeals-Windows-x64.zip
+            SafeAppeals-macOS-x64.zip
+            SafeAppeals-Linux-x64.tar.gz
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload artifacts for manual dispatch
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v4
+        with:
+          name: SafeAppeals-All-Platforms-${{ github.event.inputs.version }}
+          path: |
+            SafeAppeals-Windows-x64.zip
+            SafeAppeals-macOS-x64.zip
+            SafeAppeals-Linux-x64.tar.gz
+          retention-days: 90
+

@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------*/
 
 import React, { useCallback, useEffect, useState } from "react";
-import { Cloud, CreditCard, LogIn, LogOut, RefreshCw, User } from "lucide-react";
+import { Cloud, LogIn, LogOut, RefreshCw, User } from "lucide-react";
 import { VoidButtonBgDarken } from "../util/inputs.js";
 import { useAccessor } from "../util/services.js";
 import ErrorBoundary from "../sidebar-tsx/ErrorBoundary.js";
@@ -31,6 +31,17 @@ export const VoidCloudSection = () => {
 		error: null,
 	});
 
+	// Get the auth URL
+	const getAuthUrl = useCallback(() => {
+		const settingsService = accessor.get("IVoidSettingsService");
+		const apiUrl =
+			settingsService.state.globalSettings.voidCloudApiUrl ||
+			"https://void-cloud-production.up.railway.app";
+		return `${apiUrl}/auth/google?redirect_uri=${encodeURIComponent(
+			"safe-appeals-navigator://auth/callback"
+		)}`;
+	}, [accessor]);
+
 	// These will be connected to the actual service
 	const handleSignIn = useCallback(async () => {
 		try {
@@ -42,13 +53,7 @@ export const VoidCloudSection = () => {
 				await (cloudService as any).signInWithGoogle();
 			} else {
 				// Fallback: open the auth URL manually
-				const settingsService = accessor.get("IVoidSettingsService");
-				const apiUrl =
-					settingsService.state.globalSettings.voidCloudApiUrl ||
-					"https://void-cloud-production.up.railway.app";
-				const authUrl = `${apiUrl}/auth/google?redirect_uri=${encodeURIComponent(
-					"safe-appeals-navigator://auth/callback"
-				)}`;
+				const authUrl = getAuthUrl();
 
 				// Open in browser
 				const nativeHostService = accessor.get("INativeHostService");
@@ -62,7 +67,7 @@ export const VoidCloudSection = () => {
 				error: message,
 			}));
 		}
-	}, [accessor]);
+	}, [accessor, getAuthUrl]);
 
 	const handleSignOut = useCallback(async () => {
 		try {
@@ -173,9 +178,14 @@ export const VoidCloudSection = () => {
 					)}
 
 					{cloudState.status === "signing_in" && (
-						<div className="flex items-center gap-2 text-void-fg-3">
-							<RefreshCw className="size-4 animate-spin" />
-							<span>Signing in...</span>
+						<div className="flex flex-col gap-3">
+							<div className="flex items-center gap-2 text-void-fg-3">
+								<RefreshCw className="size-4 animate-spin" />
+								<span>Signing in... Check your browser</span>
+							</div>
+							<p className="text-void-fg-3 text-xs">
+								A browser window should open. Complete the sign-in there.
+							</p>
 						</div>
 					)}
 
@@ -266,4 +276,3 @@ export const VoidCloudSection = () => {
 };
 
 export default VoidCloudSection;
-
