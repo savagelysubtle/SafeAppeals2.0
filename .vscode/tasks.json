@@ -317,6 +317,20 @@
 				}
 			},
 			"dependsOn": ["Core - Build"]
+		},
+		{
+			"label": "run dashboard",
+			"type": "shell",
+			"command": "bun run dev",
+			"options": {
+				"cwd": "${workspaceFolder}/void-cloud/dashboard"
+			},
+			"isBackground": true,
+			"problemMatcher": [],
+			"presentation": {
+				"reveal": "always",
+				"panel": "dedicated"
+			}
 		}
 	]
 }

@@ -15,7 +15,8 @@
 import { Disposable } from '../../../../base/common/lifecycle.js';
 import { createDecorator } from '../../../../platform/instantiation/common/instantiation.js';
 import { registerSingleton, InstantiationType } from '../../../../platform/instantiation/common/extensions.js';
-import { ILLMMessageService, ServiceSendLLMMessageParams } from '../common/sendLLMMessageService.js';
+import { ILLMMessageService } from '../common/sendLLMMessageService.js';
+import { ServiceSendLLMMessageParams } from '../common/sendLLMMessageTypes.js';
 import { IVoidSettingsService } from '../common/voidSettingsService.js';
 import { IVoidCloudService } from './voidCloudService.js';
 import { ProviderName } from '../common/voidSettingsTypes.js';
@@ -86,7 +87,7 @@ class CloudLLMRouterService extends Disposable implements ICloudLLMRouterService
 	// ============================================
 
 	sendLLMMessage(params: ServiceSendLLMMessageParams): string | null {
-		const { modelSelection, onText, onFinalMessage, onError, onAbort } = params;
+		const { modelSelection } = params;
 
 		// Check if we should route through cloud
 		if (modelSelection && this.shouldUseCloud(modelSelection.providerName)) {
@@ -128,7 +129,7 @@ class CloudLLMRouterService extends Disposable implements ICloudLLMRouterService
 	}
 
 	private _sendViaCloud(params: ServiceSendLLMMessageParams): string | null {
-		const { modelSelection, messages, onText, onFinalMessage, onError, onAbort, messagesType } = params;
+		const { modelSelection, messages, onText, onFinalMessage, onError, messagesType } = params;
 
 		if (!modelSelection) {
 			onError({ message: 'No model selected', fullError: null });
@@ -162,13 +163,13 @@ class CloudLLMRouterService extends Disposable implements ICloudLLMRouterService
 			model: cloudModel,
 			messages: cloudMessages,
 			stream: false, // TODO: Implement streaming
-			onText: onText ? (text) => onText({ requestId, fullText: text, delta: text }) : undefined,
+			onText: onText ? (text) => onText({ fullText: text, fullReasoning: '' }) : undefined,
 		}).then((response) => {
 			// Call final message callback
 			onFinalMessage({
-				requestId,
 				fullText: response.content,
-				toolCallResponses: undefined, // Cloud doesn't support tool calls yet
+				fullReasoning: '',
+				anthropicReasoning: null,
 			});
 
 			console.log('[CloudLLMRouter] Cloud request completed:', {
