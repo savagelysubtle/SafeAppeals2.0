@@ -63,6 +63,7 @@
     "stylelint": "bun build/stylelint",
     "playwright-install": "bunx playwright install",
     "compile-build": "node --max-old-space-size=8192 ./node_modules/gulp/bin/gulp.js compile-build-with-mangling",
+    "compile-build-ci": "node --max-old-space-size=8192 ./node_modules/gulp/bin/gulp.js compile-build-without-mangling",
     "compile-extensions-build": "node --max-old-space-size=8192 ./node_modules/gulp/bin/gulp.js compile-extensions-build",
     "minify-vscode": "node --max-old-space-size=8192 ./node_modules/gulp/bin/gulp.js minify-vscode",
     "minify-vscode-reh": "node --max-old-space-size=8192 ./node_modules/gulp/bin/gulp.js minify-vscode-reh",
