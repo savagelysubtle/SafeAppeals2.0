@@ -303,7 +303,7 @@ export class PDFViewerEditor extends EditorPane {
 		}
 	}
 
-	override setEditorVisible(visible: boolean): void {
+	protected override setEditorVisible(visible: boolean): void {
 		if (this.webview && this._element) {
 			const targetWindow = DOM.getWindow(this._element);
 			if (visible) {

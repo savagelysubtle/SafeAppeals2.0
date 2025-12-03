@@ -358,16 +358,14 @@ export class XLSXViewerEditor extends EditorPane {
 		return false;
 	}
 
-	override async setEditorVisible(visible: boolean): Promise<void> {
-		// If becoming invisible and working copy is dirty, save synchronously
+	protected override setEditorVisible(visible: boolean): void {
+		// If becoming invisible and working copy is dirty, save in background
 		if (!visible && this._workingCopy && this._workingCopy.isDirty()) {
-			console.log('[XLSX Viewer] Editor becoming invisible with dirty content, saving synchronously');
-			try {
-				await this._workingCopy.save();
-				console.log('[XLSX Viewer] Save completed before hiding');
-			} catch (err) {
-				console.error('[XLSX Viewer] Failed to save on visibility change:', err);
-			}
+			console.log('[XLSX Viewer] Editor becoming invisible with dirty content, saving');
+			this._workingCopy.save().then(
+				() => console.log('[XLSX Viewer] Save completed'),
+				(err) => console.error('[XLSX Viewer] Failed to save on visibility change:', err)
+			);
 		}
 
 		if (this.webview && this._element) {
