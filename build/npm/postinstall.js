@@ -8,7 +8,7 @@ const path = require('path');
 const os = require('os');
 const cp = require('child_process');
 const { dirs } = require('./dirs');
-const npm = process.platform === 'win32' ? 'bun' : 'bun';
+const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm';
 const root = path.dirname(path.dirname(__dirname));
 
 function log(dir, message) {
