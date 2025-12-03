@@ -65,11 +65,6 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v1
-        with:
-          bun-version: latest
-
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
@@ -81,19 +76,19 @@ jobs:
           python-version: '3.x'
 
       - name: Install dependencies
-        run: bun install
+        run: npm install --no-audit --no-fund
         env:
           ELECTRON_SKIP_BINARY_DOWNLOAD: 1
           PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: 1
 
       - name: Build React components
-        run: bun run buildreact
+        run: npm run buildreact
 
       - name: Compile source
-        run: bun run compile-build
+        run: npm run compile-build
 
       - name: Build macOS x64
-        run: bun run gulp vscode-darwin-x64-min-ci
+        run: npm run gulp vscode-darwin-x64-min-ci
 
       - name: Upload macOS Build
         uses: actions/upload-artifact@v4
@@ -107,11 +102,6 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v1
-        with:
-          bun-version: latest
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -129,19 +119,19 @@ jobs:
           sudo apt-get install -y libxkbfile-dev pkg-config libsecret-1-dev libkrb5-dev
 
       - name: Install dependencies
-        run: bun install
+        run: npm install --no-audit --no-fund
         env:
           ELECTRON_SKIP_BINARY_DOWNLOAD: 1
           PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: 1
 
       - name: Build React components
-        run: bun run buildreact
+        run: npm run buildreact
 
       - name: Compile source
-        run: bun run compile-build
+        run: npm run compile-build
 
       - name: Build Linux x64
-        run: bun run gulp vscode-linux-x64-min-ci
+        run: npm run gulp vscode-linux-x64-min-ci
 
       - name: Upload Linux Build
         uses: actions/upload-artifact@v4
