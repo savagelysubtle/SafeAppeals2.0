@@ -30,15 +30,21 @@ bun compile
 ### Quick Builds
 
 ```bash
-# TypeScript only (fastest)
+# TypeScript only (fastest - type checking only)
 cd src && bunx tsc --skipLibCheck
 
-# Full compilation
-bun compile
+# Full compilation (includes --max-old-space-size=8192)
+bun run compile
 
 # React components
-bun buildreact
+bun run buildreact
+
+# Run any gulp command with proper Node.js flags
+bun run gulp <task>
 ```
+
+> ⚠️ **Important**: Use `bun run gulp <task>` instead of raw `node ./node_modules/gulp/bin/gulp.js`  
+> Package scripts include required flags: `--max-old-space-size=8192 --disable-warning=DEP0180`
 
 ### Watch Mode
 
@@ -89,7 +95,11 @@ bun buildreact
 ### TypeScript errors
 
 ```bash
+# Quick type check
 cd src && bunx tsc --skipLibCheck
+
+# Full compile with proper memory
+bun run compile
 ```
 
 ### Watch processes stuck
@@ -102,18 +112,18 @@ bun restart-watchd
 ## 📋 Most Used Commands
 
 ```bash
-bun buildreact    # Build React components
-bun compile       # Compile VS Code
-bun watchd        # Watch mode (background)
+bun run buildreact    # Build React components
+bun run compile       # Compile VS Code
+bun run watchd        # Watch mode (background)
 ./scripts/code.sh # Launch VS Code
 ```
 
 ## 📦 Package Management
 
 ```bash
-bun install       # Install dependencies (10x faster than npm!)
-bun add <pkg>     # Add a package
-bun remove <pkg>  # Remove a package
+bun run install       # Install dependencies (10x faster than npm!)
+bun run add <pkg>     # Add a package
+bun run remove <pkg>  # Remove a package
 ```
 
 ---

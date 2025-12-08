@@ -17,25 +17,31 @@ bun run watchreact
 ### VS Code Core
 
 ```bash
-# TypeScript only (fastest)
-cd src && npx tsc --skipLibCheck
+# TypeScript only (fastest - for quick type checking)
+cd src && bunx tsc --skipLibCheck
 
-# Full compilation
+# Full compilation (uses --max-old-space-size=8192)
 bun run compile
 
 # Compile with mangling (production)
 bun run compile-build
+
+# Compile without mangling (CI/faster)
+bun run compile-build-ci
 ```
 
 ### Extensions
 
 ```bash
-# Compile all extensions
-node ./node_modules/gulp/bin/gulp.js compile-extensions
-
-# Compile extensions build
+# Compile extensions build (recommended - includes Node.js flags)
 bun run compile-extensions-build
+
+# Run any gulp command with proper flags
+bun run gulp compile-extensions
 ```
+
+> ⚠️ **Note**: Always use `bun run gulp <task>` instead of raw `node ./node_modules/gulp/bin/gulp.js`
+> The package.json scripts include `--max-old-space-size=8192 --disable-warning=DEP0180` which are essential for stability.
 
 ## 🔄 Watch Mode
 
@@ -82,7 +88,11 @@ bun run buildreact
 ### TypeScript compilation errors
 
 ```bash
+# Quick type check (no build)
 cd src && bunx tsc --skipLibCheck
+
+# Full compile with proper memory allocation
+bun run compile
 ```
 
 ## ✅ Success Indicators
