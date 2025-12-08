@@ -71,47 +71,44 @@ export const defaultProviderSettings = {
 
 // ============================================================================
 // DEFAULT MODELS OF PROVIDER
+// Synced with LiteLLM config - December 2024
+// Using shorthand names (matching LiteLLM model_name for routing)
 // ============================================================================
 
 export const defaultModelsOfProvider = {
-	openAI: [ // https://platform.openai.com/docs/models/gp
+	// OpenAI - synced with LiteLLM config
+	openAI: [
 		'gpt-5',
-		'gpt-4.1',
-		'gpt-4.1-mini',
-		'gpt-4.1-nano',
-		'o3',
-		'o4-mini',
-		// 'o1',
-		// 'o1-mini',
-		// 'gpt-4o',
-		// 'gpt-4o-mini',
+		'gpt-5-mini',
+		'gpt-5-nano',
+		'gpt-4o',
+		'gpt-4o-mini',
 	],
-	anthropic: [ // https://docs.anthropic.com/en/docs/about-claude/models
-		'claude-sonnet-4-5',
-		'claude-haiku-4-5',
-		'claude-opus-4-20250514',
-		'claude-sonnet-4-20250514',
-		'claude-3-7-sonnet-20250219',
-		'claude-3-5-sonnet-20241022',
-		'claude-3-5-haiku-20241022',
-		'claude-3-opus-20240229',
-		'claude-3-sonnet-20240229',
-		'claude-3-haiku-20240307',
+	// Anthropic - synced with LiteLLM config (shorthand names)
+	anthropic: [
+		'claude-opus-4.5',     // Claude Opus 4.5 (Premium)
+		'claude-sonnet-4.5',   // Claude Sonnet 4.5 (Best balance)
+		'claude-opus-4.1',     // Claude Opus 4.1 (Agentic)
+		'claude-sonnet-4',     // Claude Sonnet 4 (Stable)
+		'claude-haiku-4.5',    // Claude Haiku 4.5 (Fast)
 	],
-	xAI: [ // https://docs.x.ai/docs/models?cluster=us-east-1
+	// xAI - not in LiteLLM config, keeping for direct xAI API usage
+	xAI: [
 		'grok-2',
 		'grok-3',
 		'grok-3-mini',
 		'grok-3-fast',
 		'grok-3-mini-fast'
 	],
-	gemini: [ // https://ai.google.dev/gemini-api/docs/models/gemini (updated Dec 2025)
-		'gemini-3-pro-preview',
+	// Google Gemini - synced with LiteLLM config
+	gemini: [
+		'gemini-3-pro',
 		'gemini-2.5-pro',
 		'gemini-2.5-flash',
-		'gemini-2.5-flash-lite',
+
 	],
-	deepseek: [ // https://api-docs.deepseek.com/quick_start/pricing
+	// DeepSeek - not in LiteLLM config, keeping for direct DeepSeek API usage
+	deepseek: [
 		'deepseek-chat',
 		'deepseek-reasoner',
 	],
@@ -122,7 +119,6 @@ export const defaultModelsOfProvider = {
 	lmStudio: [], // autodetected
 
 	openRouter: [ // https://openrouter.ai/models
-		// 'anthropic/claude-3.7-sonnet:thinking',
 		'anthropic/claude-opus-4',
 		'anthropic/claude-sonnet-4',
 		'qwen/qwen3-235b-a22b',
@@ -131,20 +127,11 @@ export const defaultModelsOfProvider = {
 		'deepseek/deepseek-r1',
 		'deepseek/deepseek-r1-zero:free',
 		'mistralai/devstral-small:free'
-		// 'openrouter/quasar-alpha',
-		// 'google/gemini-2.5-pro-preview-03-25',
-		// 'mistralai/codestral-2501',
-		// 'qwen/qwen-2.5-coder-32b-instruct',
-		// 'mistralai/mistral-small-3.1-24b-instruct:free',
-		// 'google/gemini-2.0-flash-lite-preview-02-05:free',
-		// 'google/gemini-2.0-pro-exp-02-05:free',
-		// 'google/gemini-2.0-flash-exp:free',
 	],
 	groq: [ // https://console.groq.com/docs/models
 		'qwen-qwq-32b',
 		'llama-3.3-70b-versatile',
 		'llama-3.1-8b-instant',
-		// 'qwen-2.5-coder-32b', // preview mode (experimental)
 	],
 	mistral: [ // https://docs.mistral.ai/getting-started/models/models_overview/
 		'codestral-latest',
@@ -162,4 +149,3 @@ export const defaultModelsOfProvider = {
 
 
 } as const satisfies Record<ProviderName, string[]>
-

@@ -8,6 +8,7 @@ import type { VoidStaticModelInfo, VoidStaticProviderInfo, SendableReasoningInfo
 // ============================================================================
 // OPENAI GPT MODELS
 // https://platform.openai.com/docs/pricing
+// Synced with LiteLLM config - December 2024
 // ============================================================================
 
 // Helper for reasoning payload
@@ -20,119 +21,52 @@ const openAICompatIncludeInPayloadReasoning = (reasoningInfo: SendableReasoningI
 }
 
 export const openAIModelOptions = {
-	// GPT-5 Series (November 2025) - Adaptive reasoning router
+	// GPT-5 Series - Flagship models
 	'gpt-5': {
 		contextWindow: 1_047_576,
 		reservedOutputTokenSpace: 32_768,
-		cost: { input: 3.00, output: 12.00, cache_read: 0.75 },
+		cost: { input: 1.25, output: 10.00, cache_read: 0.31 },
 		downloadable: false,
 		supportsFIM: false,
 		specialToolFormat: 'openai-style',
 		supportsSystemMessage: 'developer-role',
 		reasoningCapabilities: false,
 	},
-	'gpt-5-pro': {
-		contextWindow: 1_047_576,
-		reservedOutputTokenSpace: 65_536,
-		cost: { input: 10.00, output: 40.00, cache_read: 2.50 },
-		downloadable: false,
-		supportsFIM: false,
-		specialToolFormat: 'openai-style',
-		supportsSystemMessage: 'developer-role',
-		reasoningCapabilities: { supportsReasoning: true, canIOReasoning: false, maxReasoningEffort: 'high' },
-	},
-	// o-series reasoning models
-	'o3': {
+	'gpt-5-mini': {
 		contextWindow: 1_047_576,
 		reservedOutputTokenSpace: 32_768,
-		cost: { input: 10.00, output: 40.00, cache_read: 2.50 },
-		downloadable: false,
-		supportsFIM: false,
-		specialToolFormat: 'openai-style',
-		supportsSystemMessage: 'developer-role',
-		reasoningCapabilities: { supportsReasoning: true, canIOReasoning: false, maxReasoningEffort: 'high' },
-	},
-	'o4-mini': {
-		contextWindow: 1_047_576,
-		reservedOutputTokenSpace: 32_768,
-		cost: { input: 1.10, output: 4.40, cache_read: 0.275 },
-		downloadable: false,
-		supportsFIM: false,
-		specialToolFormat: 'openai-style',
-		supportsSystemMessage: 'developer-role',
-		reasoningCapabilities: { supportsReasoning: true, canIOReasoning: false, maxReasoningEffort: 'high' },
-	},
-	'gpt-4.1': {
-		contextWindow: 1_047_576,
-		reservedOutputTokenSpace: 32_768,
-		cost: { input: 2.00, output: 8.00, cache_read: 0.50 },
+		cost: { input: 0.25, output: 2.00, cache_read: 0.06 },
 		downloadable: false,
 		supportsFIM: false,
 		specialToolFormat: 'openai-style',
 		supportsSystemMessage: 'developer-role',
 		reasoningCapabilities: false,
 	},
-	'gpt-4.1-mini': {
+	'gpt-5-nano': {
 		contextWindow: 1_047_576,
-		reservedOutputTokenSpace: 32_768,
-		cost: { input: 0.40, output: 1.60, cache_read: 0.10 },
+		reservedOutputTokenSpace: 16_384,
+		cost: { input: 0.05, output: 0.40, cache_read: 0.01 },
 		downloadable: false,
 		supportsFIM: false,
 		specialToolFormat: 'openai-style',
 		supportsSystemMessage: 'developer-role',
 		reasoningCapabilities: false,
 	},
-	'gpt-4.1-nano': {
-		contextWindow: 1_047_576,
-		reservedOutputTokenSpace: 32_768,
-		cost: { input: 0.10, output: 0.40, cache_read: 0.03 },
-		downloadable: false,
-		supportsFIM: false,
-		specialToolFormat: 'openai-style',
-		supportsSystemMessage: 'developer-role',
-		reasoningCapabilities: false,
-	},
-	'o1': {
-		contextWindow: 128_000,
-		reservedOutputTokenSpace: 100_000,
-		cost: { input: 15.00, cache_read: 7.50, output: 60.00, },
-		downloadable: false,
-		supportsFIM: false,
-		supportsSystemMessage: 'developer-role',
-		reasoningCapabilities: { supportsReasoning: true, canIOReasoning: false, maxReasoningEffort: 'high' },
-	},
-	'o3-mini': {
-		contextWindow: 200_000,
-		reservedOutputTokenSpace: 100_000,
-		cost: { input: 1.10, cache_read: 0.55, output: 4.40, },
-		downloadable: false,
-		supportsFIM: false,
-		supportsSystemMessage: 'developer-role',
-		reasoningCapabilities: { supportsReasoning: true, canIOReasoning: false, maxReasoningEffort: 'high' },
-	},
+	// GPT-4o Series - Multimodal models
 	'gpt-4o': {
 		contextWindow: 128_000,
 		reservedOutputTokenSpace: 16_384,
-		cost: { input: 2.50, cache_read: 1.25, output: 10.00, },
+		cost: { input: 2.50, cache_read: 1.25, output: 10.00 },
 		downloadable: false,
 		supportsFIM: false,
 		specialToolFormat: 'openai-style',
 		supportsSystemMessage: 'system-role',
 		reasoningCapabilities: false,
 	},
-	'o1-mini': {
-		contextWindow: 128_000,
-		reservedOutputTokenSpace: 65_536,
-		cost: { input: 1.10, cache_read: 0.55, output: 4.40, },
-		downloadable: false,
-		supportsFIM: false,
-		supportsSystemMessage: false,
-		reasoningCapabilities: { supportsReasoning: true, canIOReasoning: false, maxReasoningEffort: 'high' },
-	},
 	'gpt-4o-mini': {
 		contextWindow: 128_000,
 		reservedOutputTokenSpace: 16_384,
-		cost: { input: 0.15, cache_read: 0.075, output: 0.60, },
+		cost: { input: 0.15, cache_read: 0.075, output: 0.60 },
 		downloadable: false,
 		supportsFIM: false,
 		specialToolFormat: 'openai-style',
@@ -141,20 +75,36 @@ export const openAIModelOptions = {
 	},
 } as const satisfies { [s: string]: VoidStaticModelInfo }
 
+// Display name mapping for UI (shorthand → API name)
+export const openAIDisplayNames: { [displayName: string]: keyof typeof openAIModelOptions } = {
+	'GPT-5': 'gpt-5',
+	'GPT-5 Mini': 'gpt-5-mini',
+	'GPT-5 Nano': 'gpt-5-nano',
+	'GPT-4o': 'gpt-4o',
+	'GPT-4o Mini': 'gpt-4o-mini',
+}
+
 export const openAISettings: VoidStaticProviderInfo = {
 	modelOptions: openAIModelOptions,
 	modelOptionsFallback: (modelName) => {
 		const lower = modelName.toLowerCase()
 		let fallbackName: keyof typeof openAIModelOptions | null = null
-		// GPT-5 variants
-		if (lower.includes('gpt-5-pro') || lower.includes('gpt-5') && lower.includes('pro')) { fallbackName = 'gpt-5-pro' }
-		else if (lower.includes('gpt-5')) { fallbackName = 'gpt-5' }
-		// o-series
-		if (lower.includes('o4-mini')) { fallbackName = 'o4-mini' }
-		if (lower.includes('o3-mini')) { fallbackName = 'o3-mini' }
-		if (lower.includes('o3') && !fallbackName) { fallbackName = 'o3' }
-		if (lower.includes('o1')) { fallbackName = 'o1' }
-		if (lower.includes('gpt-4o')) { fallbackName = 'gpt-4o' }
+
+		// GPT-5 variants (check specific first)
+		if (lower.includes('gpt-5-nano') || lower.includes('gpt-5 nano')) {
+			fallbackName = 'gpt-5-nano'
+		} else if (lower.includes('gpt-5-mini') || lower.includes('gpt-5 mini')) {
+			fallbackName = 'gpt-5-mini'
+		} else if (lower.includes('gpt-5')) {
+			fallbackName = 'gpt-5'
+		}
+		// GPT-4o variants
+		else if (lower.includes('gpt-4o-mini') || lower.includes('gpt-4o mini')) {
+			fallbackName = 'gpt-4o-mini'
+		} else if (lower.includes('gpt-4o')) {
+			fallbackName = 'gpt-4o'
+		}
+
 		if (fallbackName) return { modelName: fallbackName, recognizedModelName: fallbackName, ...openAIModelOptions[fallbackName] }
 		return null
 	},
@@ -162,4 +112,3 @@ export const openAISettings: VoidStaticProviderInfo = {
 		input: { includeInPayload: openAICompatIncludeInPayloadReasoning },
 	},
 }
-

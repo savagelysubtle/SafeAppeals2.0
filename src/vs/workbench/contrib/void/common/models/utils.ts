@@ -151,6 +151,8 @@ export const openAICompatIncludeInPayloadReasoning = (reasoningState: SendableRe
 
 // ============================================================================
 // EXTENSIVE MODEL OPTIONS FALLBACK (for unrecognized models)
+// Synced with LiteLLM config - December 2024
+// Using shorthand model names
 // ============================================================================
 
 export type ExtensiveModelOptionsFallback = (
@@ -184,30 +186,38 @@ export const createExtensiveModelOptionsFallback = (providerModelOptions: Record
 
 		const { anthropic, gemini, xai, openai } = providerModelOptions
 
+		// Gemini fallbacks - synced with LiteLLM (shorthand names)
+		if (lower.includes('gemini-3') || lower.includes('gemini 3')) return toFallback(gemini, 'gemini-3-pro' as any)
 		if (lower.includes('gemini') && (lower.includes('2.5') || lower.includes('2-5'))) return toFallback(gemini, 'gemini-2.5-pro' as any)
+		if (lower.includes('gemini') && (lower.includes('1.5') || lower.includes('1-5'))) return toFallback(gemini, 'gemini-1.5-pro' as any)
 
-		if (lower.includes('claude-4') && lower.includes('opus')) return toFallback(anthropic, 'claude-opus-4-20250514' as any)
-		if (lower.includes('claude-4') && lower.includes('haiku')) return toFallback(anthropic, 'claude-haiku-4-5' as any)
-		if (lower.includes('claude-4-5') || lower.includes('claude-sonnet-4-5') || (lower.includes('claude-4') && lower.includes('sonnet'))) return toFallback(anthropic, 'claude-sonnet-4-5' as any)
-		if (lower.includes('claude-3-7') || lower.includes('claude-3.7')) return toFallback(anthropic, 'claude-3-7-sonnet-20250219' as any)
-		if (lower.includes('claude-3-5') || lower.includes('claude-3.5')) return toFallback(anthropic, 'claude-3-5-sonnet-20241022' as any)
-		if (lower.includes('claude')) return toFallback(anthropic, 'claude-3-7-sonnet-20250219' as any)
+		// Anthropic fallbacks - synced with LiteLLM (shorthand names)
+		if (lower.includes('opus-4-5') || lower.includes('opus-4.5') || lower.includes('opus 4.5')) return toFallback(anthropic, 'claude-opus-4.5' as any)
+		if (lower.includes('sonnet-4-5') || lower.includes('sonnet-4.5') || lower.includes('sonnet 4.5')) return toFallback(anthropic, 'claude-sonnet-4.5' as any)
+		if (lower.includes('opus-4-1') || lower.includes('opus-4.1') || lower.includes('opus 4.1')) return toFallback(anthropic, 'claude-opus-4.1' as any)
+		if (lower.includes('haiku-4-5') || lower.includes('haiku-4.5') || lower.includes('haiku 4.5')) return toFallback(anthropic, 'claude-haiku-4.5' as any)
+		if (lower.includes('claude') && lower.includes('sonnet') && lower.includes('4')) return toFallback(anthropic, 'claude-sonnet-4' as any)
+		if (lower.includes('claude')) return toFallback(anthropic, 'claude-sonnet-4.5' as any) // default to Sonnet 4.5
 
-		if (lower.includes('grok2') || lower.includes('grok2')) return toFallback(xai, 'grok-2' as any)
+		// xAI fallbacks
+		if (lower.includes('grok2') || lower.includes('grok-2')) return toFallback(xai, 'grok-2' as any)
 		if (lower.includes('grok')) return toFallback(xai, 'grok-3' as any)
 
+		// DeepSeek fallbacks
 		if (lower.includes('deepseek-r1') || lower.includes('deepseek-reasoner')) return toFallback(openSourceModelOptions_assumingOAICompat, 'deepseekR1')
 		if (lower.includes('deepseek') && lower.includes('v2')) return toFallback(openSourceModelOptions_assumingOAICompat, 'deepseekCoderV2')
 		if (lower.includes('deepseek')) return toFallback(openSourceModelOptions_assumingOAICompat, 'deepseekCoderV3')
 
-		if (lower.includes('llama3')) return toFallback(openSourceModelOptions_assumingOAICompat, 'llama3')
-		if (lower.includes('llama3.1')) return toFallback(openSourceModelOptions_assumingOAICompat, 'llama3.1')
-		if (lower.includes('llama3.2')) return toFallback(openSourceModelOptions_assumingOAICompat, 'llama3.2')
+		// Llama fallbacks
 		if (lower.includes('llama3.3')) return toFallback(openSourceModelOptions_assumingOAICompat, 'llama3.3')
-		if (lower.includes('llama') || lower.includes('scout')) return toFallback(openSourceModelOptions_assumingOAICompat, 'llama4-scout')
-		if (lower.includes('llama') || lower.includes('maverick')) return toFallback(openSourceModelOptions_assumingOAICompat, 'llama4-scout')
+		if (lower.includes('llama3.2')) return toFallback(openSourceModelOptions_assumingOAICompat, 'llama3.2')
+		if (lower.includes('llama3.1')) return toFallback(openSourceModelOptions_assumingOAICompat, 'llama3.1')
+		if (lower.includes('llama3')) return toFallback(openSourceModelOptions_assumingOAICompat, 'llama3')
+		if (lower.includes('llama') && lower.includes('scout')) return toFallback(openSourceModelOptions_assumingOAICompat, 'llama4-scout')
+		if (lower.includes('llama') && lower.includes('maverick')) return toFallback(openSourceModelOptions_assumingOAICompat, 'llama4-maverick')
 		if (lower.includes('llama')) return toFallback(openSourceModelOptions_assumingOAICompat, 'llama4-scout')
 
+		// Qwen fallbacks
 		if (lower.includes('qwen') && lower.includes('2.5') && lower.includes('coder')) return toFallback(openSourceModelOptions_assumingOAICompat, 'qwen2.5coder')
 		if (lower.includes('qwen') && lower.includes('3')) return toFallback(openSourceModelOptions_assumingOAICompat, 'qwen3')
 		if (lower.includes('qwen')) return toFallback(openSourceModelOptions_assumingOAICompat, 'qwen3')
@@ -224,20 +234,13 @@ export const createExtensiveModelOptionsFallback = (providerModelOptions: Record
 
 		if (lower.includes('quasar') || lower.includes('quaser')) return toFallback(openSourceModelOptions_assumingOAICompat, 'quasar')
 
-		if (lower.includes('gpt') && lower.includes('mini') && (lower.includes('4.1') || lower.includes('4-1'))) return toFallback(openai, 'gpt-4.1-mini' as any)
-		if (lower.includes('gpt') && lower.includes('nano') && (lower.includes('4.1') || lower.includes('4-1'))) return toFallback(openai, 'gpt-4.1-nano' as any)
-		if (lower.includes('gpt') && (lower.includes('4.1') || lower.includes('4-1'))) return toFallback(openai, 'gpt-4.1' as any)
-
-		if (lower.includes('gpt') && lower.includes('5')) return toFallback(openai, 'gpt-5' as any)
+		// OpenAI fallbacks - synced with LiteLLM (shorthand names)
+		if (lower.includes('gpt-5-nano') || lower.includes('gpt-5 nano')) return toFallback(openai, 'gpt-5-nano' as any)
+		if (lower.includes('gpt-5-mini') || lower.includes('gpt-5 mini')) return toFallback(openai, 'gpt-5-mini' as any)
+		if (lower.includes('gpt-5') || lower.includes('gpt5')) return toFallback(openai, 'gpt-5' as any)
 
 		if (lower.includes('4o') && lower.includes('mini')) return toFallback(openai, 'gpt-4o-mini' as any)
 		if (lower.includes('4o')) return toFallback(openai, 'gpt-4o' as any)
-
-		if (lower.includes('o1') && lower.includes('mini')) return toFallback(openai, 'o1-mini' as any)
-		if (lower.includes('o1')) return toFallback(openai, 'o1' as any)
-		if (lower.includes('o3') && lower.includes('mini')) return toFallback(openai, 'o3-mini' as any)
-		if (lower.includes('o3')) return toFallback(openai, 'o3' as any)
-		if (lower.includes('o4') && lower.includes('mini')) return toFallback(openai, 'o4-mini' as any)
 
 		if (Object.keys(openSourceModelOptions_assumingOAICompat).map(k => k.toLowerCase()).includes(lower))
 			return toFallback(openSourceModelOptions_assumingOAICompat, lower as keyof typeof openSourceModelOptions_assumingOAICompat)
@@ -245,6 +248,3 @@ export const createExtensiveModelOptionsFallback = (providerModelOptions: Record
 		return null
 	}
 }
-
-
-
