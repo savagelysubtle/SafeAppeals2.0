@@ -59,27 +59,7 @@ export const geminiModelOptions = {
 			reasoningReservedOutputTokenSpace: 8192,
 		},
 	},
-	// Gemini 1.5 Series - Stable legacy
-	'gemini-1.5-pro': {
-		contextWindow: 1_048_576,
-		reservedOutputTokenSpace: 65_536,
-		cost: { input: 1.25, output: 5.00 },
-		downloadable: false,
-		supportsFIM: false,
-		supportsSystemMessage: 'separated',
-		specialToolFormat: 'gemini-style',
-		reasoningCapabilities: false,
-	},
-	'gemini-1.5-flash': {
-		contextWindow: 1_048_576,
-		reservedOutputTokenSpace: 65_536,
-		cost: { input: 0.075, output: 0.30 },
-		downloadable: false,
-		supportsFIM: false,
-		supportsSystemMessage: 'separated',
-		specialToolFormat: 'gemini-style',
-		reasoningCapabilities: false,
-	},
+
 } as const satisfies { [s: string]: VoidStaticModelInfo }
 
 // Display name mapping for UI (shorthand → API name)
@@ -87,8 +67,7 @@ export const geminiDisplayNames: { [displayName: string]: keyof typeof geminiMod
 	'Gemini 3 Pro': 'gemini-3-pro',
 	'Gemini 2.5 Pro': 'gemini-2.5-pro',
 	'Gemini 2.5 Flash': 'gemini-2.5-flash',
-	'Gemini 1.5 Pro': 'gemini-1.5-pro',
-	'Gemini 1.5 Flash': 'gemini-1.5-flash',
+
 }
 
 export const geminiSettings: VoidStaticProviderInfo = {
@@ -106,12 +85,6 @@ export const geminiSettings: VoidStaticProviderInfo = {
 			fallbackName = 'gemini-2.5-flash'
 		} else if (lower.includes('2.5') && lower.includes('pro')) {
 			fallbackName = 'gemini-2.5-pro'
-		}
-		// Gemini 1.5 series
-		else if (lower.includes('1.5') && lower.includes('pro')) {
-			fallbackName = 'gemini-1.5-pro'
-		} else if (lower.includes('1.5') && lower.includes('flash')) {
-			fallbackName = 'gemini-1.5-flash'
 		}
 
 		if (fallbackName) return { modelName: fallbackName, recognizedModelName: fallbackName, ...geminiModelOptions[fallbackName] }
