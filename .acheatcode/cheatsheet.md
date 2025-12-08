@@ -43,7 +43,7 @@ bun run buildreact
 bun run gulp <task>
 ```
 
-> ⚠️ **Important**: Use `bun run gulp <task>` instead of raw `node ./node_modules/gulp/bin/gulp.js`  
+> ⚠️ **Important**: Use `bun run gulp <task>` instead of raw `node ./node_modules/gulp/bin/gulp.js`
 > Package scripts include required flags: `--max-old-space-size=8192 --disable-warning=DEP0180`
 
 ### Watch Mode

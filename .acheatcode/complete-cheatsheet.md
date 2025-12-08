@@ -41,7 +41,7 @@ bun run compile-build-ci
 bun run gulp <task>
 ```
 
-> ⚠️ **Important**: Always use `bun run gulp <task>` or `bun run <script>` instead of raw gulp commands.  
+> ⚠️ **Important**: Always use `bun run gulp <task>` or `bun run <script>` instead of raw gulp commands.
 > Package scripts include required flags: `--max-old-space-size=8192 --disable-warning=DEP0180`
 
 ### React Components (Void Features)
