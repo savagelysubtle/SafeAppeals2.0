@@ -21,6 +21,7 @@ export class DOCXViewerInput extends EditorInput {
 	static readonly EDITOR_ID = 'void.docxViewer';
 
 	selection: DOCXSelection | null = null;
+	private _content?: string; // Base64 encoded content
 	private _workingCopy?: { isDirty(): boolean };
 
 	constructor(
@@ -31,11 +32,30 @@ export class DOCXViewerInput extends EditorInput {
 		super();
 	}
 
+	setContent(content: string): void {
+		this._content = content;
+	}
+
+	getContent(): string | undefined {
+		return this._content;
+	}
+
+	hasContent(): boolean {
+		return !!this._content;
+	}
+
 	/**
 	 * Set the working copy for this input to delegate dirty state
 	 */
 	setWorkingCopy(workingCopy: { isDirty(): boolean }): void {
 		this._workingCopy = workingCopy;
+	}
+
+	/**
+	 * Clear the working copy reference to prevent stale dirty state checks
+	 */
+	clearWorkingCopy(): void {
+		this._workingCopy = undefined;
 	}
 
 	override isDirty(): boolean {

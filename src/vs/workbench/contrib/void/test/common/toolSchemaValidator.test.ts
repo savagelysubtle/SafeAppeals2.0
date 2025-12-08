@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------*/
 
 import * as assert from 'assert'
-import { ToolSchemaValidator, ToolSchema } from '../../common/toolSchemaValidator.js'
+import { ToolSchemaValidator, ToolSchema } from '../../common/tools/toolSchemaValidator.js'
 
 suite('Tool Schema Validator', () => {
 	let validator: ToolSchemaValidator

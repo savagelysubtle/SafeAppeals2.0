@@ -12,11 +12,11 @@ import { AnthropicLLMChatMessage, AnthropicReasoning, GeminiLLMChatMessage, LLMC
 import { IVoidSettingsService } from '../common/voidSettingsService.js';
 import { ChatMode, FeatureName, ModelSelection, ProviderName } from '../common/voidSettingsTypes.js';
 import { IDirectoryStrService } from '../common/directoryStrService.js';
-import { ITerminalToolService } from './terminalToolService.js';
+import { ITerminalToolService } from './tools/terminalToolService.js';
 import { IVoidModelService } from '../common/voidModelService.js';
 import { URI } from '../../../../base/common/uri.js';
 import { EndOfLinePreference } from '../../../../editor/common/model.js';
-import { ToolName } from '../common/toolsServiceTypes.js';
+import { ToolName } from '../common/tools/toolsServiceTypes.js';
 import { IMCPService } from '../common/mcpService.js';
 
 export const EMPTY_MESSAGE = '(empty message)'

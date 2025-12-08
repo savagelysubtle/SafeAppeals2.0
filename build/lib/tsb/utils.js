@@ -18,17 +18,16 @@ var strings;
 var graph;
 (function (graph) {
     class Node {
+        data;
+        incoming = new Map();
+        outgoing = new Map();
         constructor(data) {
             this.data = data;
-            this.incoming = new Map();
-            this.outgoing = new Map();
         }
     }
     graph.Node = Node;
     class Graph {
-        constructor() {
-            this._nodes = new Map();
-        }
+        _nodes = new Map();
         inertEdge(from, to) {
             const fromNode = this.lookupOrInsertNode(from);
             const toNode = this.lookupOrInsertNode(to);
@@ -99,3 +98,4 @@ var graph;
     }
     graph.Graph = Graph;
 })(graph || (exports.graph = graph = {}));
+//# sourceMappingURL=utils.js.map

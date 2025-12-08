@@ -6,7 +6,7 @@
 import { generateUuid } from '../../../../../base/common/uuid.js'
 import { InternalToolInfo } from '../../common/prompt/prompts.js'
 import { MultipleToolCalls, RawToolCallObj, RawToolParamsObj, SingleToolCall } from '../../common/sendLLMMessageTypes.js'
-import { ToolName, ToolParamName } from '../../common/toolsServiceTypes.js'
+import { ToolName, ToolParamName } from '../../common/tools/toolsServiceTypes.js'
 import { parseXMLPrefixToToolCall } from './extractGrammar.js'
 
 // Try to import partial-xml-stream-parser, but handle if it's not available

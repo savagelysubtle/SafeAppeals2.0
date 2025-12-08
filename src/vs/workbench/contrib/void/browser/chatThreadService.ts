@@ -32,13 +32,13 @@ import { chat_userMessageContent, isABuiltinToolName } from '../common/prompt/pr
 import { ILLMMessageService } from '../common/sendLLMMessageService.js';
 import { AnthropicReasoning, getErrorMessage, RawToolCallObj, RawToolParamsObj } from '../common/sendLLMMessageTypes.js';
 import { THREAD_STORAGE_KEY } from '../common/storageKeys.js';
-import { approvalTypeOfBuiltinToolName, BuiltinToolCallParams, ToolCallParams, ToolName, ToolResult } from '../common/toolsServiceTypes.js';
+import { approvalTypeOfBuiltinToolName, BuiltinToolCallParams, ToolCallParams, ToolName, ToolResult } from '../common/tools/toolsServiceTypes.js';
 import { IVoidModelService } from '../common/voidModelService.js';
 import { IVoidSettingsService } from '../common/voidSettingsService.js';
 import { FeatureName, ModelSelection, ModelSelectionOptions } from '../common/voidSettingsTypes.js';
 import { IConvertToLLMMessageService } from './convertToLLMMessageService.js';
 import { IEditCodeService } from './editCodeServiceInterface.js';
-import { IToolsService } from './toolsService.js';
+import { IToolsService } from './tools/toolsService.js';
 
 
 // related to retrying when LLM message has error

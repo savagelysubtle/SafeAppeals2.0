@@ -1043,51 +1043,40 @@ export const VoidSimpleInputBox = ({
 	compact?: boolean;
 	passwordBlur?: boolean;
 } & React.InputHTMLAttributes<HTMLInputElement>) => {
-	// Create a ref for the input element to maintain the same DOM node between renders
+	// Use local state to manage the input value to prevent cursor jumping
+	const [localValue, setLocalValue] = useState(value);
 	const inputRef = useRef<HTMLInputElement>(null);
 
-	// Track if we need to restore selection
-	const selectionRef = useRef<{ start: number | null; end: number | null }>({
-		start: null,
-		end: null,
-	});
-
-	// Handle value changes without recreating the input
+	// Sync local value when external value changes (e.g., initial load or reset)
 	useEffect(() => {
-		const input = inputRef.current;
-		if (input && input.value !== value) {
-			// Store current selection positions
-			selectionRef.current.start = input.selectionStart;
-			selectionRef.current.end = input.selectionEnd;
-
-			// Update the value
-			input.value = value;
-
-			// Restore selection if we had it before
-			if (
-				selectionRef.current.start !== null &&
-				selectionRef.current.end !== null
-			) {
-				input.setSelectionRange(
-					selectionRef.current.start,
-					selectionRef.current.end
-				);
-			}
+		// Only sync if the input is not focused (to avoid overwriting user input)
+		if (document.activeElement !== inputRef.current) {
+			setLocalValue(value);
 		}
 	}, [value]);
 
 	const handleChange = useCallback(
 		(e: React.ChangeEvent<HTMLInputElement>) => {
-			onChangeValue(e.target.value);
+			const newValue = e.target.value;
+			setLocalValue(newValue);
+			onChangeValue(newValue);
 		},
 		[onChangeValue]
 	);
 
+	// Sync when input loses focus in case there were updates
+	const handleBlur = useCallback(() => {
+		if (localValue !== value) {
+			setLocalValue(value);
+		}
+	}, [localValue, value]);
+
 	return (
 		<input
 			ref={inputRef}
-			defaultValue={value} // Use defaultValue instead of value to avoid recreation
+			value={localValue}
 			onChange={handleChange}
+			onBlur={handleBlur}
 			placeholder={placeholder}
 			disabled={disabled}
 			className={`w-full resize-none bg-void-bg-1 text-void-fg-1 placeholder:text-void-fg-3 border border-void-border-2 focus:border-void-border-1

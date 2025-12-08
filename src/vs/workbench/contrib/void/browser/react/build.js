@@ -87,8 +87,8 @@ if (isWatch) {
 		try {
 			console.log('🔨 Running initial scope-tailwind build to create src2 folder...');
 			execSync(
-				'npx scope-tailwind ./src -o src2/ -s void-scope -c styles.css -p "void-"',
-				{ stdio: 'inherit' }
+				'bunx scope-tailwind ./src -o src2/ -s void-scope -c styles.css -p "void-"',
+				{ stdio: 'inherit', shell: true }
 			);
 			console.log('✅ src2/ created successfully.');
 		} catch (err) {
@@ -97,19 +97,25 @@ if (isWatch) {
 		}
 	}
 
+	// Determine the right shell command separator for the platform
+	const isWindows = process.platform === 'win32';
+	const scopeTailwindCmd = isWindows
+		? 'bunx scope-tailwind ./src -o src2/ -s void-scope -c styles.css -p "void-" & bunx tailwindcss -i ./src/styles.css -o ./src2/styles.css --content "./src2/**/*.{tsx,jsx}"'
+		: 'bunx scope-tailwind ./src -o src2/ -s void-scope -c styles.css -p "void-" && bunx tailwindcss -i ./src/styles.css -o ./src2/styles.css --content "./src2/**/*.{tsx,jsx}"';
+
 	// Watch mode
-	const scopeTailwindWatcher = spawn('npx', [
+	const scopeTailwindWatcher = spawn('bunx', [
 		'nodemon',
 		'--watch', 'src',
 		'--ext', 'ts,tsx,css',
 		'--exec',
-		'npx scope-tailwind ./src -o src2/ -s void-scope -c styles.css -p "void-" && npx tailwindcss -i ./src/styles.css -o ./src2/styles.css --content "./src2/**/*.{tsx,jsx}"'
-	]);
+		scopeTailwindCmd
+	], { shell: true });
 
-	const tsupWatcher = spawn('npx', [
+	const tsupWatcher = spawn('bunx', [
 		'tsup',
 		'--watch'
-	]);
+	], { shell: true });
 
 	scopeTailwindWatcher.stdout.on('data', (data) => {
 		console.log(`[scope-tailwind] ${data}`);
@@ -146,7 +152,7 @@ if (isWatch) {
 
 	// Run scope-tailwind once - suppress stderr to avoid Tailwind debug output corruption
 	try {
-		execSync('npx scope-tailwind ./src -o src2/ -s void-scope -c styles.css -p "void-" 2>nul', { stdio: ['inherit', 'inherit', 'pipe'] });
+		execSync('bunx scope-tailwind ./src -o src2/ -s void-scope -c styles.css -p "void-" 2>nul', { stdio: ['inherit', 'inherit', 'pipe'], shell: true });
 	} catch (err) {
 		console.warn('⚠️  scope-tailwind had issues, but src2/ may still be usable. Continuing...');
 	}
@@ -155,7 +161,7 @@ if (isWatch) {
 	console.log('🎨 Compiling Tailwind CSS...');
 	try {
 		// Don't minify to preserve CSS variables - tsup will minify the final bundle
-		execSync('npx tailwindcss -i ./src/styles.css -o ./src2/styles-tailwind.css --content "./src2/**/*.{tsx,jsx}"', { stdio: 'inherit' });
+		execSync('bunx tailwindcss -i ./src/styles.css -o ./src2/styles-tailwind.css --content "./src2/**/*.{tsx,jsx}"', { stdio: 'inherit', shell: true });
 		console.log('✅ Tailwind CSS compiled successfully!');
 
 		// Append custom CSS variables to the Tailwind output
@@ -198,7 +204,7 @@ if (isWatch) {
 	}
 
 	// Run tsup once
-	execSync('npx tsup', { stdio: 'inherit' });
+	execSync('bunx tsup', { stdio: 'inherit', shell: true });
 
 	console.log('✅ Build complete!');
 }

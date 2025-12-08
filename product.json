@@ -8,8 +8,8 @@
 	"dataFolderName": ".safe-appeals-navigator",
 	"win32MutexName": "safeappealsnavigator",
 	"licenseName": "MIT",
-	"licenseUrl": "https://github.com/voideditor/void/blob/main/LICENSE.txt",
-	"serverLicenseUrl": "https://github.com/voideditor/void/blob/main/LICENSE.txt",
+	"licenseUrl": "https://github.com/savagelysubtle/SafeAppeals2.0/blob/main/LICENSE.txt",
+	"serverLicenseUrl": "https://github.com/savagelysubtle/SafeAppeals2.0/blob/main/LICENSE.txt",
 	"serverGreeting": [],
 	"serverLicense": [],
 	"serverLicensePrompt": "",
@@ -37,10 +37,10 @@
 		"serviceUrl": "https://marketplace.visualstudio.com/_apis/public/gallery",
 		"itemUrl": "https://marketplace.visualstudio.com/items"
 	},
-	"builtInExtensions": [
-	],
+	"builtInExtensions": [],
 	"disableExtensionInstalls": true,
 	"settings.experimentalDefaults": {
+		"workbench.colorTheme": "Safe Appeals Dark Optimized",
 		"workbench.iconTheme": "safeappeals-icons",
 		"files.associations": {
 			"*.md": "markdown",

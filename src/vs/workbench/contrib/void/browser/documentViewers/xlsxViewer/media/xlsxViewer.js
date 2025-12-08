@@ -8,6 +8,7 @@
 	const x_spreadsheet = window.x_spreadsheet;
 	let grid = null;
 	let workbook = null;
+	let contentModified = false;
 
 	// Debounce timers for performance
 	let contentChangeDebounceTimer = null;
@@ -17,14 +18,46 @@
 
 	// Debounced content change notification
 	function notifyContentChanged() {
+		contentModified = true;
 		if (contentChangeDebounceTimer) {
 			clearTimeout(contentChangeDebounceTimer);
 		}
 		contentChangeDebounceTimer = setTimeout(() => {
-			vscode.postMessage({ type: "contentChanged" });
+			sendContentUpdate();
 			contentChangeDebounceTimer = null;
 		}, CONTENT_CHANGE_DEBOUNCE_MS);
 	}
+
+	function sendContentUpdate() {
+		if (!grid) return;
+		try {
+			const data = grid.getData();
+			const newWorkbook = xtos(data);
+			// @ts-ignore
+			const wbout = XLSX.write(newWorkbook, {
+				bookType: "xlsx",
+				type: "array"
+			});
+			const base64 = btoa(
+				new Uint8Array(wbout).reduce((data, byte) => data + String.fromCharCode(byte), "")
+			);
+			vscode.postMessage({ type: "contentChanged", data: base64 });
+		} catch (e) {
+			console.error("[XLSX Webview] Failed to serialize content for update:", e);
+		}
+	}
+
+	// Flush updates on visibility change or blur
+	document.addEventListener("visibilitychange", () => {
+		if (document.hidden && contentModified) {
+			sendContentUpdate();
+		}
+	});
+	window.addEventListener("blur", () => {
+		if (contentModified) {
+			sendContentUpdate();
+		}
+	});
 
 	// Debounced ribbon state update
 	function scheduleRibbonStateUpdate(callback) {
@@ -59,20 +92,39 @@
 		switch (message.type) {
 			case "loadXLSX":
 				await handleLoadXLSX(message);
+				contentModified = false;
 				break;
 			case "clearXLSX":
 				if (grid) {
 					grid.loadData({});
 				}
+				contentModified = false;
 				break;
 			case "saveRequest":
 				saveSpreadsheet();
+				break;
+			case "saveComplete":
+				handleSaveComplete(message);
 				break;
 			case "executeOperations":
 				console.warn("Agent operations not yet implemented for x-spreadsheet");
 				break;
 		}
 	});
+
+	/**
+	 * Handle save completion message from host
+	 */
+	function handleSaveComplete(message) {
+		if (message.success) {
+			contentModified = false;
+			console.log("[XLSX Webview] Save successful");
+			// Could show a brief toast/notification here if needed
+		} else {
+			console.error("[XLSX Webview] Save failed:", message.error);
+			// Could show error notification to user
+		}
+	}
 
 	async function handleLoadXLSX(message) {
 		try {

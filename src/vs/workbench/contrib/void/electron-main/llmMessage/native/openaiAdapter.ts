@@ -6,7 +6,7 @@
 import OpenAI from 'openai'
 import { InternalToolInfo } from '../../../common/prompt/prompts.js'
 import { RawToolCallObj, RawToolParamsObj, SingleToolCall } from '../../../common/sendLLMMessageTypes.js'
-import { ToolName, ToolParamName } from '../../../common/toolsServiceTypes.js'
+import { ToolName, ToolParamName } from '../../../common/tools/toolsServiceTypes.js'
 import { BaseToolAdapter } from './toolAdapter.js'
 
 /**

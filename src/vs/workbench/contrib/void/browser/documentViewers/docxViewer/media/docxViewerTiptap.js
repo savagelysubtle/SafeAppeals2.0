@@ -33,10 +33,41 @@
 			clearTimeout(contentChangeDebounceTimer);
 		}
 		contentChangeDebounceTimer = setTimeout(() => {
-			vscode.postMessage({ type: 'contentChanged' });
+			sendContentUpdate();
 			contentChangeDebounceTimer = null;
 		}, CONTENT_CHANGE_DEBOUNCE_MS);
 	}
+
+	async function sendContentUpdate() {
+		if (!tiptapEditor) return;
+		try {
+			const blob = await tiptapEditor.saveToDocx();
+			const arrayBuffer = await blob.arrayBuffer();
+			const uint8Array = new Uint8Array(arrayBuffer);
+			let binaryString = '';
+			for (let i = 0; i < uint8Array.length; i++) {
+				binaryString += String.fromCharCode(uint8Array[i]);
+			}
+			const base64 = btoa(binaryString);
+			vscode.postMessage({
+				type: 'contentChanged',
+				docxData: base64,
+				data: base64 // support both
+			});
+		} catch (e) {
+			console.error("[DOCX Webview] Failed to serialize content for update:", e);
+		}
+	}
+
+	// Flush updates on visibility change or blur
+	document.addEventListener("visibilitychange", () => {
+		if (document.hidden) {
+			sendContentUpdate();
+		}
+	});
+	window.addEventListener("blur", () => {
+		sendContentUpdate();
+	});
 
 	// Track modification state (with debouncing)
 	function trackModification() {

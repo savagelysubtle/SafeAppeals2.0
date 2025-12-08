@@ -18,6 +18,11 @@
 	let pageCache = new Map();
 	let preloadStrategy = 'all'; // Default strategy
 
+	// Annotation state
+	let annotations = [];
+	let selectedAnnotationId = null;
+	let currentHighlightColor = 'yellow';
+
 	// Get DOM elements
 	const canvas = document.getElementById('pdf-canvas');
 	const ctx = canvas?.getContext('2d');
@@ -37,6 +42,13 @@
 	const outlineContainer = document.getElementById('outline-container');
 	const thumbnailsView = document.getElementById('thumbnails-view');
 	const outlineView = document.getElementById('outline-view');
+	const bookmarksView = document.getElementById('bookmarks-view');
+	const bookmarksContainer = document.getElementById('bookmarks-container');
+	const addBookmarkButton = document.getElementById('add-bookmark');
+
+	// Annotation toolbar elements
+	const highlightButtons = document.querySelectorAll('.highlight-btn');
+	const deleteHighlightButton = document.getElementById('delete-highlight');
 
 	// Sidebar toggle
 	if (toggleSidebarButton) {
@@ -55,15 +67,64 @@
 			tab.classList.add('active');
 
 			// Update visible content
+			thumbnailsView.classList.remove('active');
+			outlineView.classList.remove('active');
+			bookmarksView.classList.remove('active');
+
 			if (tabName === 'thumbnails') {
 				thumbnailsView.classList.add('active');
-				outlineView.classList.remove('active');
 			} else if (tabName === 'outline') {
-				thumbnailsView.classList.remove('active');
 				outlineView.classList.add('active');
+			} else if (tabName === 'bookmarks') {
+				bookmarksView.classList.add('active');
 			}
 		});
 	});
+
+	// Annotation toolbar handlers
+	highlightButtons.forEach(btn => {
+		btn.addEventListener('click', () => {
+			currentHighlightColor = btn.dataset.color;
+			// Update active state
+			highlightButtons.forEach(b => b.classList.remove('active'));
+			btn.classList.add('active');
+			// Create highlight from current selection
+			createHighlightFromSelection();
+		});
+	});
+
+	if (deleteHighlightButton) {
+		deleteHighlightButton.addEventListener('click', () => {
+			if (selectedAnnotationId) {
+				vscode.postMessage({
+					type: 'deleteAnnotation',
+					annotationId: selectedAnnotationId
+				});
+				selectedAnnotationId = null;
+			}
+		});
+	}
+
+	// Bookmark button handler
+	if (addBookmarkButton) {
+		addBookmarkButton.addEventListener('click', () => {
+			if (pdfDoc && loadedPdfUri) {
+				const bookmarkName = prompt('Bookmark name:', `Page ${currentPage}`);
+				if (bookmarkName) {
+					vscode.postMessage({
+						type: 'addAnnotation',
+						annotation: {
+							pdfUri: loadedPdfUri,
+							page: currentPage,
+							text: bookmarkName,
+							color: 'bookmark',
+							boundingBoxes: []
+						}
+					});
+				}
+			}
+		});
+	}
 
 	// Check if scripts are in the DOM
 	console.log('DOM Scripts:', Array.from(document.scripts).map(s => ({ src: s.src, loaded: s.hasAttribute('data-loaded') })));
@@ -187,6 +248,13 @@
 					});
 				}
 				break;
+			case 'loadAnnotations':
+				// Load annotations from host
+				annotations = message.annotations || [];
+				console.log('[PDF Viewer] Loaded annotations:', annotations.length);
+				renderAnnotations();
+				renderBookmarks();
+				break;
 		}
 	});
 
@@ -260,6 +328,9 @@
 				}
 			}
 			// 'on-demand' doesn't preload anything
+
+			// Notify host that PDF is loaded so it can send annotations
+			vscode.postMessage({ type: 'pdfLoaded' });
 
 		} catch (error) {
 			console.error('Error loading PDF:', error);
@@ -356,7 +427,7 @@
 				await page.render(renderContext).promise;
 			}
 
-			// Create/update SVG highlight layer if it doesn't exist
+			// Create/update highlight layer if it doesn't exist
 			let highlightLayer = document.getElementById('pdf-highlight-layer');
 			if (!highlightLayer) {
 				highlightLayer = document.createElement('div');
@@ -366,13 +437,14 @@
 				highlightLayer.style.top = '0';
 				highlightLayer.style.width = viewport.width + 'px';
 				highlightLayer.style.height = viewport.height + 'px';
+				// Layer itself has pointer-events: none, but individual highlights have pointer-events: auto
 				highlightLayer.style.pointerEvents = 'none';
-				highlightLayer.style.zIndex = '2'; // Between canvas and text layer
+				highlightLayer.style.zIndex = '3'; // Above text layer
 
-				// Insert between render container and text layer
+				// Insert after text layer so highlights are on top
 				const renderContainer = document.getElementById('pdf-render-container');
 				if (renderContainer && textLayer) {
-					renderContainer.insertBefore(highlightLayer, textLayer);
+					renderContainer.appendChild(highlightLayer);
 				}
 			} else {
 				highlightLayer.style.width = viewport.width + 'px';
@@ -446,6 +518,9 @@
 			if (preloadStrategy === 'adjacent') {
 				preloadAdjacentPages(pageNum);
 			}
+
+			// Render annotations for this page
+			renderAnnotations();
 
 		} catch (error) {
 			console.error('Error rendering page:', error);
@@ -734,6 +809,241 @@
 			if (pdfDoc && currentPage < pdfDoc.numPages) {
 				renderPage(currentPage + 1);
 			}
+		}
+	});
+
+	// ==================== ANNOTATION FUNCTIONS ====================
+
+	// Create a highlight annotation from the current text selection
+	function createHighlightFromSelection() {
+		const selection = window.getSelection();
+		if (!selection || selection.isCollapsed || !loadedPdfUri) {
+			return;
+		}
+
+		const selectedText = selection.toString().trim();
+		if (!selectedText) {
+			return;
+		}
+
+		// Get bounding boxes for all selected ranges
+		const boundingBoxes = [];
+		for (let i = 0; i < selection.rangeCount; i++) {
+			const range = selection.getRangeAt(i);
+			const rects = range.getClientRects();
+
+			// Get the render container position for offset calculation
+			const renderContainer = document.getElementById('pdf-render-container');
+			const containerRect = renderContainer ? renderContainer.getBoundingClientRect() : { left: 0, top: 0 };
+
+			for (let j = 0; j < rects.length; j++) {
+				const rect = rects[j];
+				// Convert to coordinates relative to the PDF canvas
+				boundingBoxes.push({
+					page: currentPage,
+					x: (rect.left - containerRect.left) / scale,
+					y: (rect.top - containerRect.top) / scale,
+					width: rect.width / scale,
+					height: rect.height / scale
+				});
+			}
+		}
+
+		if (boundingBoxes.length === 0) {
+			return;
+		}
+
+		// Send annotation to host
+		vscode.postMessage({
+			type: 'addAnnotation',
+			annotation: {
+				pdfUri: loadedPdfUri,
+				page: currentPage,
+				text: selectedText,
+				color: currentHighlightColor,
+				boundingBoxes: boundingBoxes
+			}
+		});
+
+		// Clear selection after highlighting
+		selection.removeAllRanges();
+	}
+
+	// Render all annotations for the current page
+	function renderAnnotations() {
+		// Get or create the highlight layer
+		let highlightLayer = document.getElementById('pdf-highlight-layer');
+		if (!highlightLayer) {
+			highlightLayer = document.createElement('div');
+			highlightLayer.id = 'pdf-highlight-layer';
+			highlightLayer.style.position = 'absolute';
+			highlightLayer.style.left = '0';
+			highlightLayer.style.top = '0';
+			// Layer has pointer-events: none so clicks pass through to text layer
+			// Individual highlights have pointer-events: auto so they're clickable
+			highlightLayer.style.pointerEvents = 'none';
+			highlightLayer.style.zIndex = '3'; // Above text layer
+
+			const renderContainer = document.getElementById('pdf-render-container');
+			if (renderContainer && canvas) {
+				highlightLayer.style.width = canvas.width + 'px';
+				highlightLayer.style.height = canvas.height + 'px';
+				renderContainer.appendChild(highlightLayer);
+			}
+		}
+
+		// Ensure layer is on top and positioned correctly
+		highlightLayer.style.zIndex = '3';
+
+		// Update size
+		if (canvas) {
+			highlightLayer.style.width = canvas.width + 'px';
+			highlightLayer.style.height = canvas.height + 'px';
+		}
+
+		// Clear existing highlights
+		highlightLayer.innerHTML = '';
+
+		// Filter annotations for current page (excluding bookmarks)
+		const pageAnnotations = annotations.filter(a =>
+			a.page === currentPage && a.color !== 'bookmark'
+		);
+
+		// Render each annotation
+		pageAnnotations.forEach(annotation => {
+			annotation.boundingBoxes.forEach(box => {
+				if (box.page === currentPage) {
+					const highlight = document.createElement('div');
+					highlight.className = 'pdf-highlight';
+					highlight.dataset.annotationId = annotation.id;
+
+					// Position and size (scale to current zoom level)
+					highlight.style.position = 'absolute';
+					highlight.style.left = (box.x * scale) + 'px';
+					highlight.style.top = (box.y * scale) + 'px';
+					highlight.style.width = (box.width * scale) + 'px';
+					highlight.style.height = (box.height * scale) + 'px';
+
+					// Color
+					const colorMap = {
+						yellow: 'rgba(255, 235, 59, 0.4)',
+						green: 'rgba(76, 175, 80, 0.4)',
+						blue: 'rgba(33, 150, 243, 0.4)',
+						pink: 'rgba(233, 30, 99, 0.4)'
+					};
+					highlight.style.backgroundColor = colorMap[annotation.color] || colorMap.yellow;
+					highlight.style.mixBlendMode = 'multiply';
+					highlight.style.cursor = 'pointer';
+					highlight.style.borderRadius = '2px';
+					// CRITICAL: Enable pointer events on individual highlights
+					// (parent layer has pointer-events: none for text selection to work)
+					highlight.style.pointerEvents = 'auto';
+
+					// Click to select
+					highlight.addEventListener('click', (e) => {
+						e.stopPropagation();
+						selectAnnotation(annotation.id);
+					});
+
+					// Show note on hover if present
+					if (annotation.note) {
+						highlight.title = annotation.note;
+					}
+
+					highlightLayer.appendChild(highlight);
+				}
+			});
+		});
+	}
+
+	// Select an annotation (for editing/deletion)
+	function selectAnnotation(annotationId) {
+		// Deselect previous
+		document.querySelectorAll('.pdf-highlight.selected').forEach(el => {
+			el.classList.remove('selected');
+			el.style.outline = 'none';
+		});
+
+		selectedAnnotationId = annotationId;
+
+		// Highlight selected annotation
+		document.querySelectorAll(`.pdf-highlight[data-annotation-id="${annotationId}"]`).forEach(el => {
+			el.classList.add('selected');
+			el.style.outline = '2px solid var(--vscode-focusBorder, #007acc)';
+		});
+	}
+
+	// Render bookmarks in the sidebar
+	function renderBookmarks() {
+		if (!bookmarksContainer) {
+			return;
+		}
+
+		// Clear existing bookmarks
+		bookmarksContainer.innerHTML = '';
+
+		// Filter bookmark annotations
+		const bookmarks = annotations.filter(a => a.color === 'bookmark');
+
+		if (bookmarks.length === 0) {
+			bookmarksContainer.innerHTML = '<div class="bookmarks-empty">No bookmarks yet</div>';
+			return;
+		}
+
+		// Sort by page number
+		bookmarks.sort((a, b) => a.page - b.page);
+
+		// Render each bookmark
+		bookmarks.forEach(bookmark => {
+			const item = document.createElement('div');
+			item.className = 'bookmark-item';
+			item.dataset.annotationId = bookmark.id;
+
+			const label = document.createElement('span');
+			label.className = 'bookmark-label';
+			label.textContent = bookmark.text || `Page ${bookmark.page}`;
+
+			const pageNum = document.createElement('span');
+			pageNum.className = 'bookmark-page';
+			pageNum.textContent = `p.${bookmark.page}`;
+
+			const deleteBtn = document.createElement('button');
+			deleteBtn.className = 'bookmark-delete';
+			deleteBtn.textContent = '×';
+			deleteBtn.title = 'Delete bookmark';
+			deleteBtn.addEventListener('click', (e) => {
+				e.stopPropagation();
+				vscode.postMessage({
+					type: 'deleteAnnotation',
+					annotationId: bookmark.id
+				});
+			});
+
+			item.appendChild(label);
+			item.appendChild(pageNum);
+			item.appendChild(deleteBtn);
+
+			// Click to navigate
+			item.addEventListener('click', () => {
+				renderPage(bookmark.page);
+			});
+
+			bookmarksContainer.appendChild(item);
+		});
+	}
+
+	// Click anywhere to deselect (except on highlights or annotation toolbar)
+	document.addEventListener('click', (e) => {
+		// Don't deselect if clicking on a highlight, the delete button, or highlight buttons
+		if (!e.target.closest('.pdf-highlight') &&
+			!e.target.closest('#delete-highlight') &&
+			!e.target.closest('.highlight-btn') &&
+			!e.target.closest('#annotation-toolbar')) {
+			selectedAnnotationId = null;
+			document.querySelectorAll('.pdf-highlight.selected').forEach(el => {
+				el.classList.remove('selected');
+				el.style.outline = 'none';
+			});
 		}
 	});
 })();

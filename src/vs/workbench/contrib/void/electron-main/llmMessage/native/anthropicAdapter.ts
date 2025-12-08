@@ -7,7 +7,7 @@ import Anthropic from '@anthropic-ai/sdk'
 import { BaseToolAdapter } from './toolAdapter.js'
 import { InternalToolInfo } from '../../../common/prompt/prompts.js'
 import { RawToolCallObj, RawToolParamsObj } from '../../../common/sendLLMMessageTypes.js'
-import { ToolName, ToolParamName } from '../../../common/toolsServiceTypes.js'
+import { ToolName, ToolParamName } from '../../../common/tools/toolsServiceTypes.js'
 
 /**
  * Anthropic Native Tool Adapter

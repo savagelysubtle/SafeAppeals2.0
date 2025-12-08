@@ -20,7 +20,7 @@ import { availableTools, InternalToolInfo } from '../../common/prompt/prompts.js
 import { AnthropicLLMChatMessage, GeminiLLMChatMessage, LLMChatMessage, LLMFIMMessage, ModelListParams, OllamaModelResponse, OnError, OnFinalMessage, OnText, RawToolCallObj, RawToolParamsObj } from '../../common/sendLLMMessageTypes.js';
 import { ChatMode, displayInfoOfProviderName, ModelSelectionOptions, OverridesOfModel, ProviderName, SettingsOfProvider } from '../../common/voidSettingsTypes.js';
 import { extractReasoningWrapper, extractXMLToolsWrapper } from './extractGrammar.js';
-import { getToolFormatFromRoute, routeToolCalling } from './toolRouter.js';
+import { routeToolCalling } from './toolRouter.js';
 
 const getGoogleApiKey = async () => {
 	// module‑level singleton
@@ -28,6 +28,45 @@ const getGoogleApiKey = async () => {
 	const key = await auth.getAccessToken()
 	if (!key) throw new Error(`Google API failed to generate a key.`)
 	return key
+}
+
+// API Key validation helpers - prevents SDK errors from invalid key formats
+const validateApiKey = (providerName: ProviderName, apiKey: string | undefined): { valid: boolean; error?: string } => {
+	if (!apiKey || apiKey.trim() === '') {
+		return { valid: false, error: `No API key provided for ${providerName}. Please add your API key in settings.` }
+	}
+
+	// Minimum length check (most API keys are 30+ characters)
+	if (apiKey.length < 20) {
+		return { valid: false, error: `API key for ${providerName} appears too short. Please check your API key.` }
+	}
+
+	// Provider-specific format validation
+	switch (providerName) {
+		case 'anthropic':
+			// Anthropic keys typically start with 'sk-ant-' and are 90+ characters
+			if (!apiKey.startsWith('sk-ant-') && !apiKey.startsWith('sk-')) {
+				return { valid: false, error: `Anthropic API key should start with 'sk-ant-'. Please check your API key.` }
+			}
+			break
+		case 'openAI':
+			// OpenAI keys start with 'sk-' and are 40+ characters
+			if (!apiKey.startsWith('sk-')) {
+				return { valid: false, error: `OpenAI API key should start with 'sk-'. Please check your API key.` }
+			}
+			break
+		case 'gemini':
+			// Google AI Studio keys are typically 39 characters
+			if (apiKey.length < 30) {
+				return { valid: false, error: `Gemini API key appears too short. Please check your API key.` }
+			}
+			break
+		// Other providers: just basic length check
+		default:
+			break
+	}
+
+	return { valid: true }
 }
 
 
@@ -272,6 +311,17 @@ const rawToolCallObjOfAnthropicParams = (toolBlock: Anthropic.Messages.ToolUseBl
 
 
 const _sendOpenAICompatibleChat = async ({ messages, onText, onFinalMessage, onError, settingsOfProvider, modelSelectionOptions, modelName: modelName_, _setAborter, providerName, chatMode, separateSystemMessage, overridesOfModel, mcpTools }: SendChatParams_Internal) => {
+	// Validate API key for providers that require one
+	const providersRequiringApiKey: ProviderName[] = ['openAI', 'openRouter', 'deepseek', 'groq', 'xAI', 'mistral', 'openAICompatible']
+	if (providersRequiringApiKey.includes(providerName)) {
+		const apiKey = settingsOfProvider[providerName]?.apiKey
+		const keyValidation = validateApiKey(providerName, apiKey)
+		if (!keyValidation.valid) {
+			onError({ message: keyValidation.error!, fullError: null })
+			return
+		}
+	}
+
 	const {
 		modelName,
 		specialToolFormat: _unused_specialToolFormat,
@@ -283,8 +333,10 @@ const _sendOpenAICompatibleChat = async ({ messages, onText, onFinalMessage, onE
 	const availableToolsForRouting = availableTools(chatMode, mcpTools)
 	const route = routeToolCalling(providerName, modelName_, overridesOfModel, availableToolsForRouting)
 
-	// Use the route decision for tool format
-	let specialToolFormat: 'anthropic-style' | 'openai-style' | undefined = getToolFormatFromRoute(route)
+	// FORCE XML parsing: System prompt uses XML tool definitions (includeXMLToolDefinitions=true)
+	// so we must ALWAYS parse XML regardless of provider capabilities.
+	// Native tools disabled until we sync prompt format with parser expectations.
+	let specialToolFormat: 'anthropic-style' | 'openai-style' | undefined = undefined // getToolFormatFromRoute(route)
 
 	const potentialTools = openAITools(chatMode, mcpTools)
 
@@ -472,6 +524,14 @@ const anthropicTools = (chatMode: ChatMode | null, mcpTools: InternalToolInfo[] 
 
 // ------------ ANTHROPIC ------------
 const sendAnthropicChat = async ({ messages, providerName, onText, onFinalMessage, onError, settingsOfProvider, modelSelectionOptions, overridesOfModel, modelName: modelName_, _setAborter, separateSystemMessage, chatMode, mcpTools }: SendChatParams_Internal) => {
+	// Validate API key before making request
+	const thisConfig = settingsOfProvider.anthropic
+	const keyValidation = validateApiKey('anthropic', thisConfig.apiKey)
+	if (!keyValidation.valid) {
+		onError({ message: keyValidation.error!, fullError: null })
+		return
+	}
+
 	const {
 		modelName,
 		specialToolFormat: _unused_specialToolFormat,
@@ -481,8 +541,10 @@ const sendAnthropicChat = async ({ messages, providerName, onText, onFinalMessag
 	const availableToolsForRouting = availableTools(chatMode, mcpTools)
 	const route = routeToolCalling(providerName, modelName_, overridesOfModel, availableToolsForRouting)
 
-	// Use the route decision for tool format
-	let specialToolFormat: 'anthropic-style' | 'openai-style' | undefined = getToolFormatFromRoute(route)
+	// FORCE XML parsing: System prompt uses XML tool definitions (includeXMLToolDefinitions=true)
+	// so we must ALWAYS parse XML regardless of provider capabilities.
+	// Native tools disabled until we sync prompt format with parser expectations.
+	let specialToolFormat: 'anthropic-style' | 'openai-style' | undefined = undefined // getToolFormatFromRoute(route)
 
 	const potentialTools = anthropicTools(chatMode, mcpTools)
 
@@ -493,7 +555,6 @@ const sendAnthropicChat = async ({ messages, providerName, onText, onFinalMessag
 		toolsAvailable: availableToolsForRouting?.length ?? 0
 	})
 
-	const thisConfig = settingsOfProvider.anthropic
 	const { providerReasoningIOSettings } = getProviderCapabilities(providerName)
 
 	// reasoning
@@ -769,6 +830,13 @@ const sendGeminiChat = async ({
 
 	const thisConfig = settingsOfProvider[providerName]
 
+	// Validate API key before making request
+	const keyValidation = validateApiKey('gemini', thisConfig.apiKey)
+	if (!keyValidation.valid) {
+		onError({ message: keyValidation.error!, fullError: null })
+		return
+	}
+
 	const {
 		modelName,
 		specialToolFormat: _unused_specialToolFormat,
@@ -776,11 +844,13 @@ const sendGeminiChat = async ({
 	} = getModelCapabilities(providerName, modelName_, overridesOfModel)
 
 	// Route tool calling: native vs XML fallback
-	const availableToolsForRouting = availableTools(chatMode, mcpTools)
-	const route = routeToolCalling(providerName, modelName_, overridesOfModel, availableToolsForRouting)
+	// const availableToolsForRouting = availableTools(chatMode, mcpTools)
+	// const route = routeToolCalling(providerName, modelName_, overridesOfModel, availableToolsForRouting)
 
-	// Use the route decision for tool format (Gemini native tools not yet supported, will use XML)
-	const specialToolFormat: 'gemini-style' | undefined = getToolFormatFromRoute(route) as any
+	// FORCE XML parsing: System prompt uses XML tool definitions (includeXMLToolDefinitions=true)
+	// so we must ALWAYS parse XML regardless of provider capabilities.
+	// Native tools disabled until we sync prompt format with parser expectations.
+	const specialToolFormat: 'gemini-style' | undefined = undefined // getToolFormatFromRoute(route) as any
 
 	// const { providerReasoningIOSettings } = getProviderCapabilities(providerName)
 

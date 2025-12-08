@@ -3,9 +3,9 @@
  *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
  *--------------------------------------------------------------------------------------*/
 
-import { RawToolParamsObj } from './sendLLMMessageTypes.js'
+import { RawToolParamsObj } from '../sendLLMMessageTypes.js'
 import { BuiltinToolName, ToolParamName } from './toolsServiceTypes.js'
-import { InternalToolInfo } from './prompt/prompts.js'
+import { InternalToolInfo } from '../prompt/prompts.js'
 
 /**
  * Validation error with field name and message
@@ -325,4 +325,6 @@ export function createSchemaFromToolInfo(toolInfo: InternalToolInfo): ToolSchema
 
 	return schema
 }
+
+
 

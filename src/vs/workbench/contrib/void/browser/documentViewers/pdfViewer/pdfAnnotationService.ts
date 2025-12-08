@@ -6,6 +6,7 @@
 import { Disposable } from '../../../../../../base/common/lifecycle.js';
 import { IStorageService, StorageScope, StorageTarget } from '../../../../../../platform/storage/common/storage.js';
 import { createDecorator } from '../../../../../../platform/instantiation/common/instantiation.js';
+import { InstantiationType, registerSingleton } from '../../../../../../platform/instantiation/common/extensions.js';
 import { Emitter, Event } from '../../../../../../base/common/event.js';
 import { URI } from '../../../../../../base/common/uri.js';
 import { generateUuid } from '../../../../../../base/common/uuid.js';
@@ -149,4 +150,7 @@ export class PDFAnnotationService extends Disposable implements IPDFAnnotationSe
 		this._saveAnnotations();
 	}
 }
+
+// Register as singleton
+registerSingleton(IPDFAnnotationService, PDFAnnotationService, InstantiationType.Delayed);
 

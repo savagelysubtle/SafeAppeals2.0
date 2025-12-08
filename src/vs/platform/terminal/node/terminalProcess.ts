@@ -22,6 +22,11 @@ import { WindowsShellHelper } from './windowsShellHelper.js';
 import { IPty, IPtyForkOptions, IWindowsPtyForkOptions, spawn } from 'node-pty';
 import { chunkInput } from '../common/terminalProcess.js';
 
+// Extended interface to include useConptyDll which may be used by node-pty internally
+interface IWindowsPtyForkOptionsExtended extends IWindowsPtyForkOptions {
+	useConptyDll?: boolean;
+}
+
 const enum ShutdownConstants {
 	/**
 	 * The amount of ms that must pass between data events after exit is queued before the actual
@@ -115,7 +120,7 @@ export class TerminalProcess extends Disposable implements ITerminalChildProcess
 	private _writeTimeout: NodeJS.Timeout | undefined;
 	private _delayedResizer: DelayedResizer | undefined;
 	private readonly _initialCwd: string;
-	private readonly _ptyOptions: IPtyForkOptions | IWindowsPtyForkOptions;
+	private readonly _ptyOptions: IPtyForkOptions | IWindowsPtyForkOptionsExtended;
 
 	private _isPtyPaused: boolean = false;
 	private _unacknowledgedCharCount: number = 0;

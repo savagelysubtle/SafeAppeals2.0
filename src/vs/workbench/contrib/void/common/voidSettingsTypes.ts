@@ -6,7 +6,7 @@
 
 import { defaultModelsOfProvider, defaultProviderSettings, ModelOverrides } from './modelCapabilities.js';
 import { RAGOpenAIModel, RAGStorageScope, RAGVectorBackend } from './ragServiceTypes.js';
-import { ToolApprovalType } from './toolsServiceTypes.js';
+import { ToolApprovalType } from './tools/toolsServiceTypes.js';
 import { VoidSettingsState } from './voidSettingsService.js';
 import { CloudModeOfProvider, defaultCloudModeOfProvider } from './voidCloudTypes.js';
 
@@ -454,6 +454,9 @@ export type GlobalSettings = {
 	isOnboardingComplete: boolean;
 	disableSystemMessage: boolean;
 	autoAcceptLLMChanges: boolean;
+	// Web Search settings
+	braveSearchApiKey: string;
+	webSearchEnabled: boolean;
 	// RAG settings
 	ragEnabled: boolean;
 	ragChunkSize: number;
@@ -467,6 +470,7 @@ export type GlobalSettings = {
 	ragPolicyFolderName: string;
 	ragWatchPolicyFolder: boolean;
 	ragShowIndexedBadge: boolean;
+	ragPollIntervalSeconds: number;  // Polling interval in seconds (0 = disabled, fallback for file copy detection)
 	// RAG Enhancement Settings (Phase 1-6)
 	ragUseHybridSearch: boolean;           // Enable BM25 + vector hybrid search
 	ragRRFConstant: number;                // Reciprocal Rank Fusion k constant (default: 20 for medical/legal)
@@ -510,6 +514,9 @@ export const defaultGlobalSettings: GlobalSettings = {
 	isOnboardingComplete: false,
 	disableSystemMessage: false,
 	autoAcceptLLMChanges: false,
+	// Web Search defaults
+	braveSearchApiKey: '',
+	webSearchEnabled: true,
 	// RAG defaults - IMPROVED for better retrieval quality
 	ragEnabled: true,
 	ragChunkSize: 1200,  // Increased from 1000 for better context
@@ -523,6 +530,7 @@ export const defaultGlobalSettings: GlobalSettings = {
 	ragPolicyFolderName: 'policy-manuals',
 	ragWatchPolicyFolder: true,
 	ragShowIndexedBadge: true,
+	ragPollIntervalSeconds: 30,  // Poll every 30 seconds as fallback for file copy detection
 	// RAG Enhancement Defaults (Research-backed values from docs/RAG_ENHANCEMENT_RESEARCH.md)
 	ragUseHybridSearch: true,              // Enable BM25 + vector hybrid search for better recall
 	ragRRFConstant: 20,                    // k=20 optimized for medical/legal precision (NOT 60!)

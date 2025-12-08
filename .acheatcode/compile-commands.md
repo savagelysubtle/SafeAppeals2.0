@@ -8,10 +8,10 @@
 
 ```bash
 # Build React components
-npm run buildreact
+bun run buildreact
 
 # Watch React components
-npm run watchreact
+bun run watchreact
 ```
 
 ### VS Code Core
@@ -21,10 +21,10 @@ npm run watchreact
 cd src && npx tsc --skipLibCheck
 
 # Full compilation
-npm run compile
+bun run compile
 
 # Compile with mangling (production)
-npm run compile-build
+bun run compile-build
 ```
 
 ### Extensions
@@ -34,20 +34,20 @@ npm run compile-build
 node ./node_modules/gulp/bin/gulp.js compile-extensions
 
 # Compile extensions build
-npm run compile-extensions-build
+bun run compile-extensions-build
 ```
 
 ## 🔄 Watch Mode
 
 ```bash
 # Watch everything (background)
-npm run watchd
+bun run watchd
 
 # Kill watch processes
-npm run kill-watchd
+bun run kill-watchd
 
 # Restart watch processes
-npm run restart-watchd
+bun run restart-watchd
 ```
 
 ## 🧪 After Compilation
@@ -61,7 +61,7 @@ npm run restart-watchd
 ### "Cannot find module './react/out/...'"
 
 ```bash
-npm run buildreact
+bun run buildreact
 ```
 
 ### "Property 'X' does not exist"
@@ -71,7 +71,7 @@ npm run buildreact
 
 ### "Cannot find module"
 
-- Run `npm install` in extension folder
+- Run `bun install` in extension folder
 - Check import paths
 
 ### "Command not found"
@@ -82,7 +82,7 @@ npm run buildreact
 ### TypeScript compilation errors
 
 ```bash
-cd src && npx tsc --skipLibCheck
+cd src && bunx tsc --skipLibCheck
 ```
 
 ## ✅ Success Indicators
@@ -97,16 +97,16 @@ Finished compilation extensions with 0 errors
 ### Most Used Commands
 
 ```bash
-npm run buildreact    # Build React components
-npm run compile       # Compile VS Code
-npm run watchd        # Watch mode (background)
+bun run buildreact    # Build React components
+bun run compile       # Compile VS Code
+bun run watchd        # Watch mode (background)
 ```
 
 ### Emergency Commands
 
 ```bash
-npm run kill-watchd   # Kill all watch processes
-npm run restart-watchd # Restart watch processes
+bun run kill-watchd   # Kill all watch processes
+bun run restart-watchd # Restart watch processes
 ```
 
 ---

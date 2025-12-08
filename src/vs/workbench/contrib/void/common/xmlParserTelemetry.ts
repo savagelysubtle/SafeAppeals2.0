@@ -3,7 +3,7 @@
  *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
  *--------------------------------------------------------------------------------------*/
 
-import { ToolName } from './toolsServiceTypes.js'
+import { ToolName } from './tools/toolsServiceTypes.js'
 import { ParseStrategy } from '../electron-main/llmMessage/xmlParserService.js'
 
 export interface XMLParserMetrics {

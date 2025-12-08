@@ -9,7 +9,7 @@ import { StagingSelectionItem } from '../chatThreadServiceTypes.js';
 import { IDirectoryStrService } from '../directoryStrService.js';
 import { os } from '../helpers/systemInfo.js';
 import { RawToolParamsObj } from '../sendLLMMessageTypes.js';
-import { approvalTypeOfBuiltinToolName, BuiltinToolCallParams, BuiltinToolName, BuiltinToolResultType, ToolName } from '../toolsServiceTypes.js';
+import { approvalTypeOfBuiltinToolName, BuiltinToolCallParams, BuiltinToolName, BuiltinToolResultType, ToolName } from '../tools/toolsServiceTypes.js';
 import { ChatMode } from '../voidSettingsTypes.js';
 import { getSystemPrompt } from './systemPrompt.js';
 import { EDIT_DOCUMENT_DESCRIPTION } from './toolSchemas.js';
@@ -499,6 +499,26 @@ Returns chunks with:
 		}
 	},
 
+	// --- Web Search tools
+	web_search: {
+		name: 'web_search',
+		description: `Performs a web search using Brave Search API. Ideal for general queries, news, articles, and online content. Use this for broad information gathering, recent events, or when you need diverse web sources. Maximum 20 results per request, with offset for pagination.`,
+		params: {
+			query: { description: `Search query (max 400 chars, 50 words). Be specific and include relevant keywords for better results.` },
+			count: { description: `Number of results (1-20, default 10). Optional.` },
+			offset: { description: `Pagination offset (max 9, default 0). Optional.` },
+		}
+	},
+
+	multi_link_search: {
+		name: 'multi_link_search',
+		description: `Performs multiple sequential web searches using Brave Search API. Ideal for batch information gathering across diverse topics. Executes searches sequentially with delays to respect the 1 req/sec rate limit of Brave's free tier. Maximum 10 queries, 20 results per query.`,
+		params: {
+			queries: { description: `Array of search queries (1-10 items, each max 400 chars). Searches are executed sequentially.` },
+			count: { description: `Number of results per query (1-20, default 10). Optional.` },
+		}
+	},
+
 
 	// go_to_definition
 	// go_to_usages
@@ -522,7 +542,7 @@ export const isABuiltinToolName = (toolName: string): toolName is BuiltinToolNam
 export const availableTools = (chatMode: ChatMode | null, mcpTools: InternalToolInfo[] | undefined) => {
 	// Drafting mode: enable document editing and RAG tools
 	const builtinToolNames: BuiltinToolName[] | undefined = chatMode === 'drafting'
-		? ['read_file', 'edit_file', 'edit_document', 'create_file_or_folder', 'rag_search_policy', 'rag_search_workspace', 'rag_get_stats'] as BuiltinToolName[]
+		? ['read_file', 'edit_file', 'edit_document', 'create_file_or_folder', 'rag_search_policy', 'rag_search_workspace', 'rag_get_stats', 'web_search', 'multi_link_search'] as BuiltinToolName[]
 		: chatMode === 'research' ? (Object.keys(builtinTools) as BuiltinToolName[]).filter(toolName => !(toolName in approvalTypeOfBuiltinToolName))
 			: chatMode === 'case_manager' ? Object.keys(builtinTools) as BuiltinToolName[]
 				: undefined

@@ -6,7 +6,7 @@
 import * as assert from 'assert'
 import { generateUuid } from '../../../../../base/common/uuid.js'
 import { InternalToolInfo } from '../../common/prompt/prompts.js'
-import { ToolName } from '../../common/toolsServiceTypes.js'
+import { ToolName } from '../../common/tools/toolsServiceTypes.js'
 import { XMLParserService } from '../../electron-main/llmMessage/xmlParserService.js'
 
 suite('XML Parser Service', () => {

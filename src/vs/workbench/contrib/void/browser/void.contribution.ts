@@ -37,8 +37,8 @@ import './voidUpdateActions.js';
 import './convertToLLMMessageWorkbenchContrib.js';
 
 // tools
-import './terminalToolService.js';
-import './toolsService.js';
+import './tools/terminalToolService.js';
+import './tools/toolsService.js';
 
 // register Thread History
 import './chatThreadService.js';
@@ -117,6 +117,9 @@ import { IRAGWorkspaceService } from './ragWorkspaceService.js';
 // RAG actions
 import './ragActions.js';
 
+// Web Search actions
+import './webSearchActions.js';
+
 // Document viewer service
 import '../common/documentViewerService.js';
 
@@ -127,9 +130,10 @@ import './documentViewers/documentViewer.contribution.js';
 import './documentCreatorService.js';
 import './documentFileCreation.contribution.js';
 
-// Void Cloud service and URL handler
+// Void Cloud service, URL handler, and auth provider
 import './voidCloudService.js';
 import { VoidCloudUrlHandler } from './voidCloudUrlHandler.js';
+import { SafeAppealsCloudAuthProvider } from './voidCloudAuthProvider.js';
 
 // Ensure RAG workspace service starts
 import { IWorkbenchContributionsRegistry, Extensions as WorkbenchExtensions } from '../../../common/contributions.js';
@@ -149,3 +153,7 @@ Registry.as<IWorkbenchContributionsRegistry>(WorkbenchExtensions.Workbench)
 // Register Void Cloud URL handler for OAuth callback
 Registry.as<IWorkbenchContributionsRegistry>(WorkbenchExtensions.Workbench)
 	.registerWorkbenchContribution(VoidCloudUrlHandler, LifecyclePhase.Restored);
+
+// Register SafeAppeals Cloud authentication provider
+Registry.as<IWorkbenchContributionsRegistry>(WorkbenchExtensions.Workbench)
+	.registerWorkbenchContribution(SafeAppealsCloudAuthProvider, LifecyclePhase.Restored);

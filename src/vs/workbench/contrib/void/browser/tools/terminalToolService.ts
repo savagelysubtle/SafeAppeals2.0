@@ -3,18 +3,18 @@
  *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
  *--------------------------------------------------------------------------------------*/
 
-import { Disposable, IDisposable, toDisposable } from '../../../../base/common/lifecycle.js';
-import { removeAnsiEscapeCodes } from '../../../../base/common/strings.js';
-import { ITerminalCapabilityImplMap, TerminalCapability } from '../../../../platform/terminal/common/capabilities/capabilities.js';
-import { URI } from '../../../../base/common/uri.js';
-import { registerSingleton, InstantiationType } from '../../../../platform/instantiation/common/extensions.js';
-import { createDecorator } from '../../../../platform/instantiation/common/instantiation.js';
-import { TerminalLocation } from '../../../../platform/terminal/common/terminal.js';
-import { IWorkspaceContextService } from '../../../../platform/workspace/common/workspace.js';
-import { ITerminalService, ITerminalInstance, ICreateTerminalOptions } from '../../../../workbench/contrib/terminal/browser/terminal.js';
-import { MAX_TERMINAL_BG_COMMAND_TIME, MAX_TERMINAL_CHARS, MAX_TERMINAL_INACTIVE_TIME } from '../common/prompt/prompts.js';
-import { TerminalResolveReason } from '../common/toolsServiceTypes.js';
-import { timeout } from '../../../../base/common/async.js';
+import { Disposable, IDisposable, toDisposable } from '../../../../../base/common/lifecycle.js';
+import { removeAnsiEscapeCodes } from '../../../../../base/common/strings.js';
+import { ITerminalCapabilityImplMap, TerminalCapability } from '../../../../../platform/terminal/common/capabilities/capabilities.js';
+import { URI } from '../../../../../base/common/uri.js';
+import { registerSingleton, InstantiationType } from '../../../../../platform/instantiation/common/extensions.js';
+import { createDecorator } from '../../../../../platform/instantiation/common/instantiation.js';
+import { TerminalLocation } from '../../../../../platform/terminal/common/terminal.js';
+import { IWorkspaceContextService } from '../../../../../platform/workspace/common/workspace.js';
+import { ITerminalService, ITerminalInstance, ICreateTerminalOptions } from '../../../../../workbench/contrib/terminal/browser/terminal.js';
+import { MAX_TERMINAL_BG_COMMAND_TIME, MAX_TERMINAL_CHARS, MAX_TERMINAL_INACTIVE_TIME } from '../../common/prompt/prompts.js';
+import { TerminalResolveReason } from '../../common/tools/toolsServiceTypes.js';
+import { timeout } from '../../../../../base/common/async.js';
 
 
 
@@ -386,3 +386,6 @@ export class TerminalToolService extends Disposable implements ITerminalToolServ
 }
 
 registerSingleton(ITerminalToolService, TerminalToolService, InstantiationType.Delayed);
+
+
+

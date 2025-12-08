@@ -39,14 +39,14 @@ import { IPathService } from '../../../../../../../workbench/services/path/commo
 import { IMetricsService } from '../../../../../../../workbench/contrib/void/common/metricsService.js'
 import { URI } from '../../../../../../../base/common/uri.js'
 import { IChatThreadService, ThreadsState, ThreadStreamState } from '../../../chatThreadService.js'
-import { ITerminalToolService } from '../../../terminalToolService.js'
+import { ITerminalToolService } from '../../../tools/terminalToolService.js'
 import { ILanguageService } from '../../../../../../../editor/common/languages/language.js'
 import { IVoidModelService } from '../../../../common/voidModelService.js'
 import { IWorkspaceContextService } from '../../../../../../../platform/workspace/common/workspace.js'
 import { IVoidCommandBarService } from '../../../voidCommandBarService.js'
 import { INativeHostService } from '../../../../../../../platform/native/common/native.js';
 import { IEditCodeService } from '../../../editCodeServiceInterface.js'
-import { IToolsService } from '../../../toolsService.js'
+import { IToolsService } from '../../../tools/toolsService.js'
 import { IConvertToLLMMessageService } from '../../../convertToLLMMessageService.js'
 import { ITerminalService } from '../../../../../terminal/browser/terminal.js'
 import { ISearchService } from '../../../../../../services/search/common/search.js'
@@ -55,6 +55,7 @@ import { IMCPService } from '../../../../common/mcpService.js';
 import { IStorageService, StorageScope } from '../../../../../../../platform/storage/common/storage.js'
 import { OPT_OUT_KEY } from '../../../../common/storageKeys.js'
 import { IFileOrganizerService } from '../../../fileOrganizer/fileOrganizerService.js';
+import { IVoidCloudService } from '../../../voidCloudService.js';
 
 
 // normally to do this you'd use a useEffect that calls .onDidChangeState(), but useEffect mounts too late and misses initial state changes
@@ -231,6 +232,7 @@ const getReactAccessor = (accessor: ServicesAccessor) => {
 
 		IStorageService: accessor.get(IStorageService),
 		IFileOrganizerService: accessor.get(IFileOrganizerService),
+		IVoidCloudService: accessor.get(IVoidCloudService),
 
 	} as const
 	return reactAccessor
@@ -427,4 +429,51 @@ export const useIsOptedOut = () => {
 	}, [storageService, getVal])
 
 	return s
+}
+
+// Cloud service state hook
+export const useVoidCloudState = () => {
+	const accessor = useAccessor()
+	const cloudService = accessor.get('IVoidCloudService')
+
+	const [authState, setAuthState] = useState(cloudService.authState)
+	const [creditBalance, setCreditBalance] = useState(cloudService.creditBalance)
+	const [isOnline, setIsOnline] = useState(cloudService.isOnline())
+
+	useEffect(() => {
+		// Update to current state
+		setAuthState(cloudService.authState)
+		setCreditBalance(cloudService.creditBalance)
+		setIsOnline(cloudService.isOnline())
+
+		const disposables = new DisposableStore()
+
+		// Listen for auth state changes
+		disposables.add(cloudService.onAuthStateChange((event) => {
+			setAuthState(cloudService.authState)
+		}))
+
+		// Listen for balance changes
+		disposables.add(cloudService.onBalanceChange((event) => {
+			setCreditBalance(event.balance)
+		}))
+
+		// Listen for network changes
+		disposables.add(cloudService.onNetworkChange((event) => {
+			setIsOnline(event.isOnline)
+		}))
+
+		return () => disposables.dispose()
+	}, [cloudService])
+
+	return {
+		authState,
+		creditBalance,
+		isOnline,
+		isSignedIn: cloudService.isSignedIn(),
+		isLowCredits: cloudService.isLowCredits(),
+		signInWithGoogle: () => cloudService.signInWithGoogle(),
+		signOut: () => cloudService.signOut(),
+		createCheckoutSession: (packId: 'starter' | 'pro') => cloudService.createCheckoutSession(packId),
+	}
 }

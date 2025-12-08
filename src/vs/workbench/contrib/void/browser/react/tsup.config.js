@@ -42,5 +42,10 @@ export default defineConfig({
 	treeshake: true,
 	esbuildOptions(options) {
 		options.outbase = 'src2'  // tries copying the folder hierarchy starting at src2
+		// Suppress "X is imported from external module but never used" warnings
+		// These are false positives - the imports ARE used internally by hooks
+		// in services.tsx (e.g., useIsOptedOut uses DisposableStore, StorageScope)
+		// but esbuild doesn't trace through closures to see they're used
+		options.logLevel = 'error'
 	}
 })
