@@ -49,9 +49,12 @@ jobs:
         run: npm install --no-audit --no-fund
         env:
           npm_config_arch: x64
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Fetch Electron and prebuilts
         run: node build/lib/preLaunch.js
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build React components
         run: npm run buildreact
@@ -138,9 +141,13 @@ jobs:
 
       - name: Install dependencies
         run: npm install --no-audit --no-fund
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Fetch Electron and prebuilts
         run: node build/lib/preLaunch.js
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build React components
         run: npm run buildreact
@@ -207,9 +214,13 @@ jobs:
 
       - name: Install dependencies
         run: npm install --no-audit --no-fund
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Fetch Electron and prebuilts
         run: node build/lib/preLaunch.js
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build React components
         run: npm run buildreact
@@ -290,9 +301,13 @@ jobs:
 
       - name: Install dependencies
         run: npm install --no-audit --no-fund
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Fetch Electron and prebuilts
         run: node build/lib/preLaunch.js
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build React components
         run: npm run buildreact
