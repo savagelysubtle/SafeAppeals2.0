@@ -1452,7 +1452,7 @@ export const Settings = () => {
 		{ tab: "general", label: "General" },
 		{ tab: "models", label: "Models" },
 		{ tab: "featureOptions", label: "Features" },
-		{ tab: "mcp", label: "Beta" },
+		{ tab: "mcp", label: "MCP" },
 	];
 	const shouldShowTab = (tab: Tab) => {
 		if (selectedSection === "all") return true;
@@ -1463,7 +1463,6 @@ export const Settings = () => {
 	const commandService = accessor.get("ICommandService");
 	const environmentService = accessor.get("IEnvironmentService");
 	const nativeHostService = accessor.get("INativeHostService");
-	const openerService = accessor.get("IOpenerService");
 	const settingsState = useSettingsState();
 	const voidSettingsService = accessor.get("IVoidSettingsService");
 	const chatThreadsService = accessor.get("IChatThreadService");
@@ -1980,7 +1979,65 @@ export const Settings = () => {
 										<VoidCloudSection />
 									</ErrorBoundary>
 
-									{/* One-Click Switch section */}
+									{/* Web Search section */}
+									<div className="max-w-[600px]">
+										<h2 className={`text-3xl mb-2`}>Web Search</h2>
+										<h4 className={`text-void-fg-3 mb-4`}>
+											Enable web search tools using the Brave Search API. Get your
+											API key at{" "}
+											<a
+												href="https://api-dashboard.search.brave.com/app/keys"
+												className="text-blue-400 hover:text-blue-300 underline"
+												onClick={(e) => {
+													e.preventDefault();
+													nativeHostService.openExternal("https://api-dashboard.search.brave.com/app/keys");
+												}}
+											>
+												Brave Search API Dashboard
+											</a>
+										</h4>
+
+										<ErrorBoundary>
+											<div className="flex flex-col gap-4">
+												{/* Enable Web Search Switch */}
+												<div className="flex items-center gap-x-2">
+													<VoidSwitch
+														size="xs"
+														value={settingsState.globalSettings.webSearchEnabled}
+														onChange={(newVal) => {
+															voidSettingsService.setGlobalSetting(
+																"webSearchEnabled",
+																newVal
+															);
+														}}
+													/>
+													<span>Enable Web Search Tools</span>
+												</div>
+
+												{/* API Key Input */}
+												<div className="flex flex-col gap-1">
+													<label className="text-sm text-void-fg-3">
+														Brave Search API Key
+													</label>
+													<VoidSimpleInputBox
+														placeholder="BSAxxxxxxxxxxxxxxxxxxxxxxxxxx"
+														passwordBlur={true}
+														value={settingsState.globalSettings.braveSearchApiKey ?? ""}
+														onChangeValue={(value) => {
+															voidSettingsService.setGlobalSetting(
+																"braveSearchApiKey",
+																value
+															);
+														}}
+														className="font-mono"
+													/>
+													<span className="text-xs text-void-fg-3">
+														Free tier: 2,000 requests/month, 1 request/second
+													</span>
+												</div>
+											</div>
+										</ErrorBoundary>
+									</div>
 									<div>
 										<ErrorBoundary>
 											<h2 className="text-3xl mb-2">One-Click Switch</h2>
@@ -2078,65 +2135,6 @@ export const Settings = () => {
 										</div>
 									</div>
 
-									{/* Web Search section */}
-									<div className="max-w-[600px]">
-										<h2 className={`text-3xl mb-2`}>Web Search</h2>
-										<h4 className={`text-void-fg-3 mb-4`}>
-											Enable web search tools using the Brave Search API. Get your
-											API key at{" "}
-											<a
-												href="https://brave.com/search/api/"
-												className="text-blue-400 hover:text-blue-300 underline"
-												onClick={(e) => {
-													e.preventDefault();
-													openerService.open("https://brave.com/search/api/");
-												}}
-											>
-												brave.com/search/api
-											</a>
-										</h4>
-
-										<ErrorBoundary>
-											<div className="flex flex-col gap-4">
-												{/* Enable Web Search Switch */}
-												<div className="flex items-center gap-x-2">
-													<VoidSwitch
-														size="xs"
-														value={settingsState.globalSettings.webSearchEnabled}
-														onChange={(newVal) => {
-															voidSettingsService.setGlobalSetting(
-																"webSearchEnabled",
-																newVal
-															);
-														}}
-													/>
-													<span>Enable Web Search Tools</span>
-												</div>
-
-												{/* API Key Input */}
-												<div className="flex flex-col gap-1">
-													<label className="text-sm text-void-fg-3">
-														Brave Search API Key
-													</label>
-													<VoidSimpleInputBox
-														placeholder="BSAxxxxxxxxxxxxxxxxxxxxxxxxxx"
-														passwordBlur={true}
-														value={settingsState.globalSettings.braveSearchApiKey ?? ""}
-														onChangeValue={(value) => {
-															voidSettingsService.setGlobalSetting(
-																"braveSearchApiKey",
-																value
-															);
-														}}
-														className="font-mono"
-													/>
-													<span className="text-xs text-void-fg-3">
-														Free tier: 2,000 requests/month, 1 request/second
-													</span>
-												</div>
-											</div>
-										</ErrorBoundary>
-									</div>
 
 									{/* Built-in Settings section */}
 									<div>

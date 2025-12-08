@@ -96,6 +96,9 @@ import '../common/refreshModelService.js';
 // metrics
 import '../common/metricsService.js';
 
+// context tracking for chat context window management
+import '../common/contextTrackingService.js';
+
 // updates
 import '../common/voidUpdateService.js';
 

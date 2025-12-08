@@ -96,6 +96,7 @@ import { WarningBox } from "../void-settings-tsx/WarningBox.js";
 import ErrorBoundary from "./ErrorBoundary.js";
 import { ErrorDisplay } from "./ErrorDisplay.js";
 import { PastThreadsList } from "./SidebarThreadSelector.js";
+import { ContextWindowIndicator } from "./ContextWindowIndicator.js";
 
 export const IconX = ({
 	size,
@@ -4611,6 +4612,21 @@ export const SidebarChat = () => {
 			// send message to LLM
 			const userMessage = _forceSubmit || textAreaRef.current?.value || "";
 
+			// Handle slash commands
+			const trimmedMessage = userMessage.trim().toLowerCase();
+			if (trimmedMessage === '/summarize' || trimmedMessage === '/compact') {
+				// Summarize the current thread
+				const preserveCount = settingsState.globalSettings.contextWindowPreserveRecentMessages ?? 4;
+				try {
+					await chatThreadsService.summarizeThread(threadId, preserveCount);
+				} catch (e) {
+					console.error("Error while summarizing thread:", e);
+				}
+				textAreaFnsRef.current?.setValue("");
+				textAreaRef.current?.focus();
+				return;
+			}
+
 			try {
 				await chatThreadsService.addUserMessageAndStreamResponse({
 					userMessage,
@@ -4836,6 +4852,21 @@ export const SidebarChat = () => {
 		</div>
 	);
 
+	// Get model selection for context indicator
+	const modelSelection = settingsState.modelSelectionOfFeature?.Chat ?? null;
+	const showContextIndicator = settingsState.globalSettings.contextWindowShowIndicator ?? true;
+
+	// Handle summarize click from Context Window Indicator
+	const handleSummarizeClick = useCallback(async () => {
+		const threadId = chatThreadsService.state.currentThreadId;
+		const preserveCount = settingsState.globalSettings.contextWindowPreserveRecentMessages ?? 4;
+		try {
+			await chatThreadsService.summarizeThread(threadId, preserveCount);
+		} catch (e) {
+			console.error("Error while summarizing thread:", e);
+		}
+	}, [chatThreadsService, settingsState]);
+
 	const threadPageInput = (
 		<div
 			key={"input" + chatThreadsState.currentThreadId}
@@ -4844,6 +4875,18 @@ export const SidebarChat = () => {
 			<div className="px-4">
 				<CommandBarInChat />
 			</div>
+			{/* Context Window Indicator */}
+			{showContextIndicator && previousMessages.length > 0 && (
+				<div className="px-4 py-1">
+					<ContextWindowIndicator
+						messages={previousMessages}
+						providerName={modelSelection?.providerName ?? null}
+						modelName={modelSelection?.modelName ?? null}
+						overridesOfModel={settingsState.overridesOfModel}
+						onSummarizeClick={handleSummarizeClick}
+					/>
+				</div>
+			)}
 			<div className="px-2 pb-2">{inputChatArea}</div>
 		</div>
 	);

@@ -39,14 +39,13 @@ export const VoidCloudSection = () => {
 	const handleBuyCredits = useCallback(
 		async (pack: "starter" | "pro") => {
 			try {
-				const checkoutUrl = await createCheckoutSession(pack);
 				const nativeHostService = accessor.get("INativeHostService");
-				await nativeHostService.openExternal(checkoutUrl);
+				await nativeHostService.openExternal("https://safeappeals-cloud.vercel.app");
 			} catch (error) {
 				console.error("Buy credits failed:", error);
 			}
 		},
-		[accessor, createCheckoutSession]
+		[accessor]
 	);
 
 	const formatCredits = (credits: number) => {
