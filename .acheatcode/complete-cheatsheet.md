@@ -25,20 +25,24 @@ or ctrl + shift + p and run "Run Dev"
 ### Core Compilation
 
 ```bash
-# Full VS Code compilation
+# Full VS Code compilation (includes --max-old-space-size=8192)
 bun run compile
-# Equivalent to: node ./node_modules/gulp/bin/gulp.js compile
 
-# TypeScript only (fastest)
+# TypeScript only (fastest - type checking only)
 cd src && bunx tsc --skipLibCheck
 
 # Compile with mangling (production)
 bun run compile-build
-# Equivalent to: node ./node_modules/gulp/bin/gulp.js compile-build-with-mangling
 
-# Compile without mangling (development)
-bun node ./node_modules/gulp/bin/gulp.js compile-build-without-mangling
+# Compile without mangling (CI/faster)
+bun run compile-build-ci
+
+# Run any gulp task with proper Node.js flags
+bun run gulp <task>
 ```
+
+> ⚠️ **Important**: Always use `bun run gulp <task>` or `bun run <script>` instead of raw gulp commands.  
+> Package scripts include required flags: `--max-old-space-size=8192 --disable-warning=DEP0180`
 
 ### React Components (Void Features)
 
@@ -58,27 +62,24 @@ bun run watchreactd
 ### Extensions
 
 ```bash
-# Compile all extensions
-bun node --max-old-space-size=8192 ./node_modules/gulp/bin/gulp.js compile-extensions
+# Compile all extensions (recommended)
+bun run gulp compile-extensions
 
-# Compile extensions build
+# Compile extensions build (production)
 bun run compile-extensions-build
 
-# Watch extensions
+# Watch extensions (includes proper flags)
 bun run watch-extensions
-# Equivalent to: node --max-old-space-size=8192 ./node_modules/gulp/bin/gulp.js watch-extensions watch-extension-media
 ```
 
 ### Web Builds
 
 ```bash
-# Compile for web
+# Compile for web (includes proper flags)
 bun run compile-web
-# Equivalent to: node ./node_modules/gulp/bin/gulp.js compile-web
 
 # Watch web build
 bun run watch-web
-# Equivalent to: node ./node_modules/gulp/bin/gulp.js watch-web
 
 # Launch web server
 ./scripts/code-web.sh
@@ -90,11 +91,9 @@ bun run watch-web
 ```bash
 # Compile CLI
 bun run compile-cli
-# Equivalent to: gulp compile-cli
 
-# Watch CLI
+# Watch CLI (includes proper flags)
 bun run watch-cli
-# Equivalent to: node ./node_modules/gulp/bin/gulp.js watch-cli
 ```
 
 ## 🔄 Watch Mode Commands
@@ -119,9 +118,8 @@ bun run restart-watchd
 ### Individual Watch Commands
 
 ```bash
-# Watch client only
+# Watch client only (includes proper flags)
 bun run watch-client
-# Equivalent to: node --max-old-space-size=8192 ./node_modules/gulp/bin/gulp.js watch-client
 
 # Watch extensions only
 bun run watch-extensions
@@ -399,21 +397,21 @@ out/                                # Compiled output
 ### Core CI
 
 ```bash
+# Full core CI (includes --max-old-space-size=8192)
 bun run core-ci
-# Equivalent to: node ./node_modules/gulp/bin/gulp.js core-ci
 
+# Core CI for pull requests
 bun run core-ci-pr
-# Equivalent to: node ./node_modules/gulp/bin/gulp.js core-ci-pr
 ```
 
 ### Extensions CI
 
 ```bash
+# Full extensions CI (includes --max-old-space-size=8192)
 bun run extensions-ci
-# Equivalent to: node ./node_modules/gulp/bin/gulp.js extensions-ci
 
+# Extensions CI for pull requests
 bun run extensions-ci-pr
-# Equivalent to: node ./node_modules/gulp/bin/gulp.js extensions-ci-pr
 ```
 
 ## 📋 Quick Reference
