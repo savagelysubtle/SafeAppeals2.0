@@ -7,16 +7,16 @@ import type { VoidStaticModelInfo, VoidStaticProviderInfo } from '../types.js';
 
 // ============================================================================
 // GOOGLE GEMINI MODELS
-// https://ai.google.dev/gemini-api/docs/models/gemini (Dec 2025)
-// All models: Input 1,048,576 tokens, Output 65,536 tokens
+// https://ai.google.dev/gemini-api/docs/models/gemini
+// Synced with LiteLLM config - December 2024
 // ============================================================================
 
 export const geminiModelOptions = {
-	// Gemini 3 Series (Preview)
-	'gemini-3-pro-preview': {
+	// Gemini 3 Series - Latest flagship
+	'gemini-3-pro': {
 		contextWindow: 1_048_576,
 		reservedOutputTokenSpace: 65_536,
-		cost: { input: 1.25, output: 5.00 },
+		cost: { input: 2.00, output: 12.00 },
 		downloadable: false,
 		supportsFIM: false,
 		supportsSystemMessage: 'separated',
@@ -28,11 +28,11 @@ export const geminiModelOptions = {
 			reasoningReservedOutputTokenSpace: 16384,
 		},
 	},
-	// Gemini 2.5 Series
+	// Gemini 2.5 Series - Production ready
 	'gemini-2.5-pro': {
 		contextWindow: 1_048_576,
 		reservedOutputTokenSpace: 65_536,
-		cost: { input: 1.25, output: 5.00 },
+		cost: { input: 1.25, output: 10.00 },
 		downloadable: false,
 		supportsFIM: false,
 		supportsSystemMessage: 'separated',
@@ -59,7 +59,18 @@ export const geminiModelOptions = {
 			reasoningReservedOutputTokenSpace: 8192,
 		},
 	},
-	'gemini-2.5-flash-lite': {
+	// Gemini 1.5 Series - Stable legacy
+	'gemini-1.5-pro': {
+		contextWindow: 1_048_576,
+		reservedOutputTokenSpace: 65_536,
+		cost: { input: 1.25, output: 5.00 },
+		downloadable: false,
+		supportsFIM: false,
+		supportsSystemMessage: 'separated',
+		specialToolFormat: 'gemini-style',
+		reasoningCapabilities: false,
+	},
+	'gemini-1.5-flash': {
 		contextWindow: 1_048_576,
 		reservedOutputTokenSpace: 65_536,
 		cost: { input: 0.075, output: 0.30 },
@@ -67,28 +78,43 @@ export const geminiModelOptions = {
 		supportsFIM: false,
 		supportsSystemMessage: 'separated',
 		specialToolFormat: 'gemini-style',
-		reasoningCapabilities: {
-			supportsReasoning: true,
-			canIOReasoning: false,
-			maxReasoningBudget: 24576,
-			reasoningReservedOutputTokenSpace: 8192,
-		},
+		reasoningCapabilities: false,
 	},
 } as const satisfies { [s: string]: VoidStaticModelInfo }
+
+// Display name mapping for UI (shorthand → API name)
+export const geminiDisplayNames: { [displayName: string]: keyof typeof geminiModelOptions } = {
+	'Gemini 3 Pro': 'gemini-3-pro',
+	'Gemini 2.5 Pro': 'gemini-2.5-pro',
+	'Gemini 2.5 Flash': 'gemini-2.5-flash',
+	'Gemini 1.5 Pro': 'gemini-1.5-pro',
+	'Gemini 1.5 Flash': 'gemini-1.5-flash',
+}
 
 export const geminiSettings: VoidStaticProviderInfo = {
 	modelOptions: geminiModelOptions,
 	modelOptionsFallback: (modelName) => {
 		const lower = modelName.toLowerCase()
 		let fallbackName: keyof typeof geminiModelOptions | null = null
+
 		// Gemini 3 series
-		if (lower.includes('gemini-3')) fallbackName = 'gemini-3-pro-preview'
+		if (lower.includes('gemini-3') || lower.includes('gemini 3')) {
+			fallbackName = 'gemini-3-pro'
+		}
 		// Gemini 2.5 series
-		else if (lower.includes('gemini-2.5') && lower.includes('flash') && lower.includes('lite')) fallbackName = 'gemini-2.5-flash-lite'
-		else if (lower.includes('gemini-2.5') && lower.includes('flash')) fallbackName = 'gemini-2.5-flash'
-		else if (lower.includes('gemini-2.5') && lower.includes('pro')) fallbackName = 'gemini-2.5-pro'
+		else if (lower.includes('2.5') && lower.includes('flash')) {
+			fallbackName = 'gemini-2.5-flash'
+		} else if (lower.includes('2.5') && lower.includes('pro')) {
+			fallbackName = 'gemini-2.5-pro'
+		}
+		// Gemini 1.5 series
+		else if (lower.includes('1.5') && lower.includes('pro')) {
+			fallbackName = 'gemini-1.5-pro'
+		} else if (lower.includes('1.5') && lower.includes('flash')) {
+			fallbackName = 'gemini-1.5-flash'
+		}
+
 		if (fallbackName) return { modelName: fallbackName, recognizedModelName: fallbackName, ...geminiModelOptions[fallbackName] }
 		return null
 	},
 }
-

@@ -49,9 +49,9 @@ import {
 export { ollamaRecommendedModels };
 
 // Import provider-specific exports
-export { anthropicModelOptions, anthropicSettings } from './anthropic/index.js';
-export { geminiModelOptions, geminiSettings } from './google/index.js';
-export { openAIModelOptions, openAISettings } from './openai/index.js';
+export { anthropicModelOptions, anthropicSettings, anthropicDisplayNames } from './anthropic/index.js';
+export { geminiModelOptions, geminiSettings, geminiDisplayNames } from './google/index.js';
+export { openAIModelOptions, openAISettings, openAIDisplayNames } from './openai/index.js';
 export { xAIModelOptions, xAISettings } from './xai/index.js';
 export { deepseekModelOptions, deepseekSettings } from './deepseek/index.js';
 export { mistralModelOptions, mistralSettings } from './mistral/index.js';
