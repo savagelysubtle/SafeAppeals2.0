@@ -24,6 +24,8 @@ export class XLSXViewerInput extends EditorInput {
 
 	currentSheet: number = 0;
 	selection: XLSXSelection | null = null;
+	private _content?: string; // Base64 encoded content
+	private _workingCopy?: { isDirty(): boolean };
 
 	constructor(
 		public readonly resource: URI,
@@ -31,6 +33,36 @@ export class XLSXViewerInput extends EditorInput {
 		@ILabelService private readonly labelService: ILabelService
 	) {
 		super();
+	}
+
+	setContent(content: string): void {
+		this._content = content;
+	}
+
+	getContent(): string | undefined {
+		return this._content;
+	}
+
+	hasContent(): boolean {
+		return !!this._content;
+	}
+
+	/**
+	 * Set the working copy for this input to delegate dirty state
+	 */
+	setWorkingCopy(workingCopy: { isDirty(): boolean }): void {
+		this._workingCopy = workingCopy;
+	}
+
+	/**
+	 * Clear the working copy reference to prevent stale dirty state checks
+	 */
+	clearWorkingCopy(): void {
+		this._workingCopy = undefined;
+	}
+
+	override isDirty(): boolean {
+		return this._workingCopy?.isDirty() ?? false;
 	}
 
 	override get typeId(): string {

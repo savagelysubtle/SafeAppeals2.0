@@ -26,6 +26,9 @@ A comprehensive document viewing and editing system integrated into the VS Code 
 - ✅ Content extraction for RAG indexing
 - ✅ Keyboard shortcuts (Ctrl+K for quick edit actions)
 - ✅ Annotation service integration
+- ✅ Annotation persistence to workspace storage
+- ✅ Highlight toolbar with color options
+- ✅ Bookmarks tab in sidebar
 
 #### Files
 
@@ -33,8 +36,10 @@ A comprehensive document viewing and editing system integrated into the VS Code 
 - `pdfViewerInput.ts` - Editor input handling
 - `pdfContentExtractor.ts` - Text extraction for AI/RAG
 - `pdfQuickEditActions.ts` - Ctrl+K quick actions
-- `pdfAnnotationService.ts` - Annotation management
+- `pdfAnnotationService.ts` - Annotation management with persistence
 - `pdfContextGathering.ts` - Context for AI features
+- `media/pdfViewer.js` - Webview script with annotation rendering
+- `media/pdfViewer.css` - Styles including annotation UI
 
 #### Libraries
 
@@ -129,7 +134,7 @@ A comprehensive document viewing and editing system integrated into the VS Code 
 
 ### 4. **Image Viewer**
 
-**Status**: ✅ Implemented
+**Status**: ✅ Fully Implemented (KAN-17 Complete)
 
 #### Core Features
 
@@ -138,9 +143,32 @@ A comprehensive document viewing and editing system integrated into the VS Code 
 - ✅ **Integrated Editor**: Opens directly within the VS Code editor pane
 - ✅ **Error Handling**: User-friendly error messages for load failures
 
+#### Zoom & Pan Controls (KAN-17)
+
+- ✅ **Zoom Controls**:
+  - Fit to Window button (keyboard: `F`)
+  - Actual Size (100%) button (keyboard: `1`)
+  - Zoom in/out buttons (+/−) (keyboard: `+`/`-`)
+  - Zoom slider (10% - 500% range)
+  - Zoom percentage display with live updates
+- ✅ **Pan/Drag Navigation**:
+  - Click and drag to pan when zoomed
+  - Cursor changes to grab/grabbing during drag
+- ✅ **Mouse Wheel Zoom**:
+  - Zoom at cursor position (smart zoom-at-point)
+  - 10% increment per scroll
+- ✅ **Rotate Controls**:
+  - Rotate left (↺) button (keyboard: `L`)
+  - Rotate right (↻) button (keyboard: `R`)
+- ✅ **Additional Features**:
+  - Reset view button (keyboard: `0`)
+  - Double-click toggles between fit and 100%
+  - Image dimensions info display (e.g., "1920 × 1080 px")
+  - Checkerboard background for transparency support
+
 #### Files
 
-- `imageViewerEditor.ts` - Main editor pane component
+- `imageViewerEditor.ts` - Main editor pane component with toolbar and webview
 - `imageViewerInput.ts` - Editor input handling
 - `imageViewerInputSerializer.ts` - Serialization for restore
 
@@ -718,10 +746,19 @@ Main Process (RAGMainService)
 
 ### Document Viewers
 
-- 🔄 **Planned**: PDF annotation persistence
+- ✅ **Implemented**: PDF annotation persistence (KAN-16)
+  - Highlights with color options (yellow, green, blue, pink)
+  - Bookmarks tab in sidebar
+  - Annotations saved to workspace storage
+  - Notes support on highlights
+- ✅ **Implemented**: Image zoom/pan controls (KAN-17)
+  - Full zoom controls (fit, 100%, slider, +/-)
+  - Pan/drag navigation
+  - Mouse wheel zoom at cursor
+  - Rotate controls
+  - Keyboard shortcuts
 - 🔄 **Planned**: DOCX collaborative editing
 - 🔄 **Planned**: XLSX formula bar improvements
-- 🔄 **Planned**: Image zoom/pan controls
 
 ### File Organizer
 
@@ -732,8 +769,10 @@ Main Process (RAGMainService)
 
 ### RAG System
 
-- ⚠️ **Issue**: Auto-indexing doesn't trigger on file copy (watcher limitation)
-  - **Workaround**: Use right-click "Index as Policy Manual"
+- ✅ **Fixed (KAN-25)**: Auto-indexing file copy detection via polling fallback
+  - **Solution**: Added `ragPollIntervalSeconds` setting (default: 30s)
+  - **Behavior**: Polls `policy-manuals/` folder to catch files missed by file watcher
+  - **Workaround still available**: Right-click "Index as Policy Manual" for immediate indexing
 - 🔄 **Planned**: SQLite-vec backend as Chroma alternative
 - 🔄 **Planned**: File decorations in Explorer for indexed files
 - 🔄 **Planned**: Settings UI panel for RAG configuration
@@ -773,7 +812,7 @@ Main Process (RAGMainService)
 ### Immediate (High Priority)
 
 1. ✅ Fix RAGPathService registration
-2. ⏳ Debug auto-indexing file watcher
+2. ✅ Fix auto-indexing file watcher (KAN-25 - added polling fallback)
 3. ⏳ Add file decorations for indexed documents
 4. ⏳ Test end-to-end indexing + search workflow
 
@@ -800,14 +839,218 @@ Main Process (RAGMainService)
 
 ---
 
+## ☁️ Void Cloud Integration
+
+**Status**: ✅ Implemented (Desktop Client Complete)
+**Date Added**: December 2025
+
+### Overview
+
+Cloud-based LLM access system allowing users to access AI models without managing API keys. Includes authentication, credit management, and per-provider routing.
+
+### Desktop Client Features
+
+#### 1. **Cloud Authentication**
+
+- ✅ Google OAuth via Supabase integration
+- ✅ `VoidCloudService` - Central auth and API client
+- ✅ `VoidCloudAuthProvider` - VS Code authentication provider
+- ✅ `VoidCloudUrlHandler` - Custom URL protocol handler (`void://auth/callback`)
+- ✅ Session persistence in storage service
+- ✅ Token refresh handling
+
+#### 2. **Cloud LLM Routing**
+
+- ✅ `CloudLLMRouterService` - Routes requests to cloud API
+- ✅ Per-provider mode toggle (BYOK vs Cloud)
+- ✅ Credit balance checking before requests
+- ✅ Streaming response support
+- ✅ Error handling for insufficient credits (402)
+
+#### 3. **Cloud Types**
+
+```typescript
+interface CloudAuthState {
+	status: CloudAuthStatus;
+	user: CloudUser | null;
+	session: CloudSession | null;
+}
+
+interface CreditBalance {
+	payg: number;
+	subscription: number;
+	bonus: number;
+	total: number;
+}
+```
+
+### Backend Services (void-cloud/)
+
+#### 1. **API Service** (Node.js/Fastify)
+
+- ✅ Auth routes (`/auth/me`, OAuth callback)
+- ✅ Credits routes (`/credits/balance`, `/credits/checkout`)
+- ✅ LLM routes (`/llm/chat`) - proxies to LiteLLM
+- ✅ Webhook routes (`/webhooks/stripe`)
+- ✅ Health check endpoints
+- ✅ Rate limiting middleware
+- ✅ Security headers middleware
+- ✅ Input validation
+
+**Deployed**: `void-cloud-production.up.railway.app`
+
+#### 2. **LiteLLM Proxy**
+
+- ✅ Unified OpenAI-compatible API
+- ✅ Routes to: Anthropic, OpenAI, Google, DeepSeek
+- ✅ Model cost tracking
+- ✅ Docker configuration
+
+**Deployed**: `void-cloudlitellm-production.up.railway.app`
+
+#### 3. **Web Dashboard** (Next.js)
+
+- ✅ Landing page with pricing
+- ✅ Google OAuth sign-in
+- ✅ User dashboard with balance
+- ✅ Usage statistics
+- ✅ Stripe checkout integration
+- ✅ Tailwind CSS dark theme
+
+**Location**: `void-cloud/dashboard/`
+
+### Files
+
+**Desktop Client**:
+- `browser/voidCloudService.ts` - Main cloud service
+- `browser/voidCloudAuthProvider.ts` - Auth provider integration
+- `browser/voidCloudUrlHandler.ts` - URL handler for OAuth
+- `browser/cloudLLMRouterService.ts` - LLM request routing
+- `common/voidCloudTypes.ts` - Type definitions
+
+**Backend** (void-cloud/):
+- `api/src/` - Fastify API service
+- `litellm/` - LiteLLM proxy configuration
+- `dashboard/` - Next.js web dashboard
+- `supabase/migrations/` - Database schema
+
+---
+
+## 🔄 Auto-Update System
+
+**Status**: ✅ Implemented
+**Date Added**: December 2025
+
+### Overview
+
+Automatic update checking and notification system for the desktop application.
+
+### Features
+
+- ✅ `VoidUpdateService` - Browser-side update service
+- ✅ `VoidUpdateMainService` - Main process update logic
+- ✅ IPC channel for update communication
+- ✅ Version checking against releases
+- ✅ Update notification UI
+- ✅ Manual and automatic update checks
+
+### Files
+
+- `common/voidUpdateService.ts` - Browser service
+- `common/voidUpdateServiceTypes.ts` - Type definitions
+- `electron-main/voidUpdateMainService.ts` - Main process service
+- `browser/voidUpdateActions.ts` - UI actions
+
+---
+
+## 🔀 SCM Integration (Git)
+
+**Status**: ✅ Implemented
+**Date Added**: December 2025
+
+### Overview
+
+Git integration service providing source control context for AI interactions.
+
+### Features
+
+- ✅ `gitStat()` - Get git diff --stat
+- ✅ `gitSampledDiffs()` - Top 10 most changed files
+- ✅ `gitBranch()` - Current branch name
+- ✅ `gitLog()` - Last 5 commits (excluding merges)
+- ✅ IPC channel for main process git operations
+
+### Files
+
+- `common/voidSCMTypes.ts` - Interface definitions
+- `browser/voidSCMService.ts` - Browser service
+- `electron-main/voidSCMMainService.ts` - Main process implementation
+
+---
+
+## 🔍 Advanced RAG Features
+
+**Status**: ✅ Implemented
+**Date Added**: December 2025
+
+### Overview
+
+Enhanced RAG capabilities beyond basic vector search, including hybrid retrieval, query processing, and reranking.
+
+### Features
+
+#### 1. **Hybrid Retriever**
+
+- ✅ Combines BM25 keyword search with vector semantic search
+- ✅ Reciprocal Rank Fusion (RRF) for result merging
+- ✅ Configurable RRF constant (k=20 for medical/legal precision)
+- ✅ Parallel search execution for performance
+
+#### 2. **Query Processor**
+
+- ✅ Query preprocessing and normalization
+- ✅ Query expansion capabilities
+- ✅ Domain-specific query handling
+
+#### 3. **Reranker**
+
+- ✅ Cross-encoder reranking for precision
+- ✅ Score normalization
+- ✅ Configurable reranking depth
+
+### Files
+
+- `common/ragHybridRetriever.ts` - Hybrid search implementation
+- `common/ragQueryProcessor.ts` - Query preprocessing
+- `common/ragReranker.ts` - Result reranking
+
+---
+
+## 📧 Email Dashboard
+
+**Status**: ✅ Implemented
+**Date Added**: December 2025
+
+### Overview
+
+React component for email management integration.
+
+### Files
+
+- `browser/react/src2/email-dashboard-tsx/EmailDashboard.tsx` - Main component
+- `browser/react/src2/email-dashboard-tsx/index.tsx` - Entry point
+
+---
+
 ## 📞 Contacts & Resources
 
 - **GitHub**: <https://github.com/savagelysubtle/SafeAppeals2.0>
 - **Developer**: @savagelysubtle (<simpleflowworks@gmail.com>)
 - **Base Fork**: Void (VSCode fork)
-- **Branch**: `feat-safe-appeals-rag-integration`
+- **Branch**: `main`
+- **Cloud Backend**: <https://github.com/savagelysubtle/void-cloud>
 
 ---
 
-**Last Updated**: November 25, 2025
-**Version**: 1.99.4
+**Last Updated**: December 8, 2025
+**Version**: 1.99.3

@@ -27,7 +27,7 @@ import { OPT_OUT_KEY } from "../../../../common/storageKeys.js";
 import {
 	ToolApprovalType,
 	toolApprovalTypes,
-} from "../../../../common/toolsServiceTypes.js";
+} from "../../../../common/tools/toolsServiceTypes.js";
 import {
 	customSettingNamesOfProvider,
 	displayInfoOfFeatureName,
@@ -466,10 +466,10 @@ const SimpleModelSettingsDialog = ({
 				{/* Display model recognition status */}
 				<div className="text-sm text-void-fg-3 mb-4">
 					{type === "default"
-						? `${modelName} comes packaged with Void, so you shouldn't need to change these settings.`
+						? `${modelName} comes packaged with Safe Appeals, so you shouldn't need to change these settings.`
 						: isUnrecognizedModel
-						? `Model not recognized by Void.`
-						: `Void recognizes ${modelName} ("${recognizedModelName}").`}
+						? `Model not recognized by Safe Appeals.`
+						: `Safe Appeals recognizes ${modelName} ("${recognizedModelName}").`}
 				</div>
 
 				{/* override toggle */}
@@ -1191,7 +1191,7 @@ export const OllamaSetupInstructions = ({
 			{sayWeAutoDetect && (
 				<div className=" pl-6">
 					<ChatMarkdownRender
-						string={`Void automatically detects locally running models and enables them.`}
+						string={`Safe Appeals automatically detects locally running models and enables them.`}
 						chatMessageLocation={undefined}
 					/>
 				</div>
@@ -1445,26 +1445,25 @@ const MCPServersList = () => {
 export const Settings = () => {
 	const isDark = useIsDark();
 	// ─── sidebar nav ──────────────────────────
-	const [selectedSection, setSelectedSection] = useState<Tab>("models");
+	const [selectedSection, setSelectedSection] = useState<Tab>("general");
 	const [searchQuery, setSearchQuery] = useState("");
 
 	const navItems: { tab: Tab; label: string }[] = [
-		{ tab: "models", label: "Models" },
-		{ tab: "localProviders", label: "Local Providers" },
-		{ tab: "providers", label: "Main Providers" },
-		{ tab: "featureOptions", label: "Feature Options" },
 		{ tab: "general", label: "General" },
-		{ tab: "mcp", label: "MCP" },
-		{ tab: "all", label: "All Settings" },
+		{ tab: "models", label: "Models" },
+		{ tab: "featureOptions", label: "Features" },
+		{ tab: "mcp", label: "Beta" },
 	];
 	const shouldShowTab = (tab: Tab) => {
 		if (selectedSection === "all") return true;
+		if (selectedSection === "models" && (tab === "localProviders" || tab === "providers")) return true;
 		return selectedSection === tab;
 	};
 	const accessor = useAccessor();
 	const commandService = accessor.get("ICommandService");
 	const environmentService = accessor.get("IEnvironmentService");
 	const nativeHostService = accessor.get("INativeHostService");
+	const openerService = accessor.get("IOpenerService");
 	const settingsState = useSettingsState();
 	const voidSettingsService = accessor.get("IVoidSettingsService");
 	const chatThreadsService = accessor.get("IChatThreadService");
@@ -1570,11 +1569,11 @@ export const Settings = () => {
 									}
 								}}
 								className={`
-          py-2 px-4 rounded-md text-left transition-all duration-200
+          py-2 px-3 rounded text-left text-sm transition-colors duration-200
           ${
 						selectedSection === tab
-							? "bg-void-button-primary/80 text-void-button-primary-text font-medium shadow-sm"
-							: "bg-void-bg-2 hover:bg-void-bg-2/80 text-void-fg-1"
+							? "bg-void-bg-2 text-void-fg-1 font-medium"
+							: "text-void-fg-3 hover:text-void-fg-1 hover:bg-void-bg-2/50"
 					}
         `}
 							>
@@ -1593,16 +1592,28 @@ export const Settings = () => {
 
 						{/* VSCode Settings Button */}
 						<ErrorBoundary>
-							<VoidButtonBgDarken
-								className="px-4 py-2 my-2 max-w-48"
-								onClick={() => {
-									commandService.executeCommand(
-										"workbench.action.openSettings"
-									);
-								}}
-							>
-								Open VSCode Settings
-							</VoidButtonBgDarken>
+							<div className="flex gap-4">
+								<VoidButtonBgDarken
+									className="px-4 py-2 my-2 max-w-48"
+									onClick={() => {
+										commandService.executeCommand(
+											"workbench.action.openSettings"
+										);
+									}}
+								>
+									Open VSCode Settings
+								</VoidButtonBgDarken>
+								<VoidButtonBgDarken
+									className="px-4 py-2 my-2 max-w-48"
+									onClick={() => {
+										nativeHostService.openExternal(
+											"https://void-cloud.vercel.app/"
+										);
+									}}
+								>
+									Open Cloud Dashboard
+								</VoidButtonBgDarken>
+							</div>
 						</ErrorBoundary>
 
 						{/* Search Bar */}
@@ -1647,7 +1658,7 @@ export const Settings = () => {
 										<h2 className={`text-3xl mb-2`}>Local Providers</h2>
 										<h3
 											className={`text-void-fg-3 mb-2`}
-										>{`Void can access any model that you host locally. We automatically detect your local models by default.`}</h3>
+										>{`Safe Appeals can access any model that you host locally. We automatically detect your local models by default.`}</h3>
 
 										<div className="opacity-80 mb-4">
 											<OllamaSetupInstructions sayWeAutoDetect={true} />
@@ -1665,7 +1676,7 @@ export const Settings = () => {
 										<h2 className={`text-3xl mb-2`}>Main Providers</h2>
 										<h3
 											className={`text-void-fg-3 mb-2`}
-										>{`Void can access models from Anthropic, OpenAI, OpenRouter, and more.`}</h3>
+										>{`Safe Appeals can access models from Anthropic, OpenAI, OpenRouter, and more.`}</h3>
 
 										<VoidProviderSettings
 											providerNames={nonlocalProviderNames}
@@ -1877,7 +1888,7 @@ export const Settings = () => {
 
 											<div className="w-full">
 												<h4 className={`text-base`}>Editor</h4>
-												<div className="text-sm text-void-fg-3 mt-1">{`Settings that control the visibility of Void suggestions in the code editor.`}</div>
+												<div className="text-sm text-void-fg-3 mt-1">{`Settings that control the visibility of Safe Appeals suggestions in the code editor.`}</div>
 
 												<div className="my-2">
 													{/* Auto Accept Switch */}
@@ -1973,7 +1984,7 @@ export const Settings = () => {
 									<div>
 										<ErrorBoundary>
 											<h2 className="text-3xl mb-2">One-Click Switch</h2>
-											<h4 className="text-void-fg-3 mb-4">{`Transfer your editor settings into Void.`}</h4>
+											<h4 className="text-void-fg-3 mb-4">{`Transfer your editor settings into Safe Appeals.`}</h4>
 
 											<div className="flex flex-col gap-2">
 												<OneClickSwitchButton
@@ -2067,6 +2078,66 @@ export const Settings = () => {
 										</div>
 									</div>
 
+									{/* Web Search section */}
+									<div className="max-w-[600px]">
+										<h2 className={`text-3xl mb-2`}>Web Search</h2>
+										<h4 className={`text-void-fg-3 mb-4`}>
+											Enable web search tools using the Brave Search API. Get your
+											API key at{" "}
+											<a
+												href="https://brave.com/search/api/"
+												className="text-blue-400 hover:text-blue-300 underline"
+												onClick={(e) => {
+													e.preventDefault();
+													openerService.open("https://brave.com/search/api/");
+												}}
+											>
+												brave.com/search/api
+											</a>
+										</h4>
+
+										<ErrorBoundary>
+											<div className="flex flex-col gap-4">
+												{/* Enable Web Search Switch */}
+												<div className="flex items-center gap-x-2">
+													<VoidSwitch
+														size="xs"
+														value={settingsState.globalSettings.webSearchEnabled}
+														onChange={(newVal) => {
+															voidSettingsService.setGlobalSetting(
+																"webSearchEnabled",
+																newVal
+															);
+														}}
+													/>
+													<span>Enable Web Search Tools</span>
+												</div>
+
+												{/* API Key Input */}
+												<div className="flex flex-col gap-1">
+													<label className="text-sm text-void-fg-3">
+														Brave Search API Key
+													</label>
+													<VoidSimpleInputBox
+														placeholder="BSAxxxxxxxxxxxxxxxxxxxxxxxxxx"
+														passwordBlur={true}
+														value={settingsState.globalSettings.braveSearchApiKey ?? ""}
+														onChangeValue={(value) => {
+															voidSettingsService.setGlobalSetting(
+																"braveSearchApiKey",
+																value
+															);
+														}}
+														className="font-mono"
+													/>
+													<span className="text-xs text-void-fg-3">
+														Free tier: 2,000 requests/month, 1 request/second
+													</span>
+												</div>
+											</div>
+										</ErrorBoundary>
+									</div>
+
 									{/* Built-in Settings section */}
 									<div>
 										<h2 className={`text-3xl mb-2`}>Built-in Settings</h2>
@@ -2124,9 +2195,9 @@ export const Settings = () => {
 									<div className="max-w-[600px]">
 										<h2 className={`text-3xl mb-2`}>Metrics</h2>
 										<h4 className={`text-void-fg-3 mb-4`}>
-											Very basic anonymous usage tracking helps us keep Void
+											Very basic anonymous usage tracking helps us keep Safe Appeals
 											running smoothly. You may opt out below. Regardless of
-											this setting, Void never sees your code, messages, or API
+											this setting, Safe Appeals never sees your code, messages, or API
 											keys.
 										</h4>
 
@@ -2197,7 +2268,7 @@ Alternatively, place a \`.voidrules\` file in the root of your workspace.
 												</div>
 											</ErrorBoundary>
 											<div className="text-void-fg-3 text-xs mt-1">
-												{`When disabled, Void will not include anything in the system message except for content you specified above.`}
+												{`When disabled, Safe Appeals will not include anything in the system message except for content you specified above.`}
 											</div>
 										</div>
 									</div>

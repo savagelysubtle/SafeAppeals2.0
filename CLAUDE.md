@@ -14,16 +14,16 @@ SafeAppealNavigator is a VSCode fork that combines AI-powered code editing with 
 
 ```bash
 # 1. Install dependencies (first time only)
-npm install
+bun install
 
 # 2. Fetch Electron and prebuilts (first time only)
 node build/lib/preLaunch.js
 
 # 3. Build React components (Void features)
-npm run buildreact
+bun run buildreact
 
 # 4. Start watch mode for automatic rebuilding
-npm run watch-clientd
+bun run watch-clientd
 
 # 5. Launch the application
 ./scripts/code.sh          # macOS/Linux
@@ -34,26 +34,26 @@ npm run watch-clientd
 
 ```bash
 # TypeScript only (fastest for type checking)
-cd src && npx tsc --skipLibCheck
+cd src && bunx tsc --skipLibCheck
 
 # Full VS Code compilation
-npm run compile
+bun run compile
 
 # React components only
-npm run buildreact
+bun run buildreact
 
 # Watch React components
-npm run watchreact
+bun run watchreact
 ```
 
 ### Testing Commands
 
 ```bash
 # Unit tests (Node)
-npm run test-node
+bun run test-node
 
 # Browser tests
-npm run test-browser
+bun run test-browser
 
 # After making changes: Ctrl+Shift+P → "Developer: Reload Window"
 ```
@@ -119,15 +119,18 @@ Services are registered with `registerSingleton` and injected via constructor wi
 ### Apply System
 
 Two modes:
+
 - **Fast Apply**: Uses Search/Replace blocks (`<<<<<<< ORIGINAL` / `=======` / `>>>>>>> UPDATED`)
 - **Slow Apply**: Rewrites entire file
 
 **Key Terminology**:
+
 - **DiffZone**: `{startLine, endLine}` region showing red/green diffs, supports streaming
 - **DiffArea**: Generalized line number tracker
 - Each DiffZone has an `llmCancelToken` for streaming cancellation
 
 **Workflow**:
+
 - Apply button → Creates DiffZone over file → Streams LLM changes → Shows diffs
 - LLM Edit tool → Calls Apply internally
 - Cmd+K → Same as Apply but smaller DiffZone (selection only)
@@ -199,27 +202,30 @@ The application includes specialized legal case management:
 
 After making changes:
 
-1. **If React components changed**: `npm run buildreact`
-2. **If TypeScript changed**: `npm run compile` (or let watch mode handle it)
+1. **If React components changed**: `bun run buildreact`
+2. **If TypeScript changed**: `bun run compile` (or let watch mode handle it)
 3. **Reload window**: `Ctrl+Shift+P` → "Developer: Reload Window"
 4. **Check console**: Look for errors in DevTools (`Help` → `Toggle Developer Tools`)
 
 ## Common Issues
 
 **"Cannot find module './react/out/...'"**
+
 ```bash
-npm run buildreact
+bun run buildreact
 ```
 
 **TypeScript errors**
+
 ```bash
-cd src && npx tsc --skipLibCheck
+cd src && bunx tsc --skipLibCheck
 ```
 
 **Watch processes stuck**
+
 ```bash
-npm run kill-watchd
-npm run restart-watchd
+bun run kill-watchd
+bun run restart-watchd
 ```
 
 ## Key Files to Know
@@ -244,6 +250,7 @@ npm run restart-watchd
 **From VSCode**: Press `F5` or use "Launch VS Code Internal" debug configuration (sets `VSCODE_DEV=1` for CSS imports)
 
 **From Terminal**:
+
 - Desktop: `./scripts/code.sh` (macOS/Linux) or `.\scripts\code.bat` (Windows)
 - Web server: `./scripts/code-server.sh`
 - Static web: `./scripts/code-web.sh`

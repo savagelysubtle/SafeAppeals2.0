@@ -4,14 +4,24 @@
 
 ## 🚀 Essential Commands
 
+### Complete Build (Production Windows)
+
+```bash
+# Using bun (faster) ⚡
+bun buildreact && bun compile-build-ci && bun gulp bundle-vscode && bun gulp vscode-win32-x64-ci && bun gulp vscode-win32-x64-inno-updater && bun gulp vscode-win32-x64-user-setup
+
+# Using npm (legacy)
+npm run buildreact && npm run compile-build-ci && npm run gulp bundle-vscode && npm run gulp vscode-win32-x64-ci && npm run gulp vscode-win32-x64-inno-updater && npm run gulp vscode-win32-x64-user-setup
+```
+
 ### Development Workflow
 
 ```bash
 # 1. Build React components (Void features)
-npm run buildreact
+bun buildreact
 
 # 2. Compile VS Code core
-npm run compile
+bun compile
 
 # 3. Launch VS Code
 ./scripts/code.sh
@@ -21,23 +31,23 @@ npm run compile
 
 ```bash
 # TypeScript only (fastest)
-cd src && npx tsc --skipLibCheck
+cd src && bunx tsc --skipLibCheck
 
 # Full compilation
-npm run compile
+bun compile
 
 # React components
-npm run buildreact
+bun buildreact
 ```
 
 ### Watch Mode
 
 ```bash
 # Watch everything (background)
-npm run watchd
+bun watchd
 
 # Kill watch processes
-npm run kill-watchd
+bun kill-watchd
 ```
 
 ## 🧪 Testing
@@ -46,10 +56,10 @@ npm run kill-watchd
 
 ```bash
 # 1. Build React components (if changed)
-npm run buildreact
+bun buildreact
 
 # 2. Compile VS Code core
-npm run compile
+bun compile
 
 # 3. Reload VS Code
 # Press Ctrl+Shift+P → "Developer: Reload Window"
@@ -59,10 +69,10 @@ npm run compile
 
 ```bash
 # Unit tests
-npm run test-node
+bun test-node
 
 # Browser tests
-npm run test-browser
+bun test-browser
 
 # Integration tests
 ./scripts/test-integration.sh
@@ -73,29 +83,37 @@ npm run test-browser
 ### "Cannot find module './react/out/...'"
 
 ```bash
-npm run buildreact
+bun buildreact
 ```
 
 ### TypeScript errors
 
 ```bash
-cd src && npx tsc --skipLibCheck
+cd src && bunx tsc --skipLibCheck
 ```
 
 ### Watch processes stuck
 
 ```bash
-npm run kill-watchd
-npm run restart-watchd
+bun kill-watchd
+bun restart-watchd
 ```
 
 ## 📋 Most Used Commands
 
 ```bash
-npm run buildreact    # Build React components
-npm run compile       # Compile VS Code
-npm run watchd        # Watch mode (background)
-./scripts/code.sh     # Launch VS Code
+bun buildreact    # Build React components
+bun compile       # Compile VS Code
+bun watchd        # Watch mode (background)
+./scripts/code.sh # Launch VS Code
+```
+
+## 📦 Package Management
+
+```bash
+bun install       # Install dependencies (10x faster than npm!)
+bun add <pkg>     # Add a package
+bun remove <pkg>  # Remove a package
 ```
 
 ---

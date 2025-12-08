@@ -144,6 +144,7 @@ import { LLMMessageChannel } from '../../workbench/contrib/void/electron-main/se
 import { VoidSCMService } from '../../workbench/contrib/void/electron-main/voidSCMMainService.js';
 import { VoidMainUpdateService } from '../../workbench/contrib/void/electron-main/voidUpdateMainService.js';
 import { XLSXExtractorChannel } from '../../workbench/contrib/void/electron-main/xlsxExtractorChannel.js';
+import { BraveSearchChannel } from '../../workbench/contrib/void/electron-main/braveSearchChannel.js';
 /**
  * The main VS Code application. There will only ever be one instance,
  * even if the user starts many instances (e.g. from the command line).
@@ -1287,6 +1288,10 @@ export class CodeApplication extends Disposable {
 		// Void DOCX/XLSX creator service (uses RAGMainService directly)
 		const docxCreatorChannel = new DOCXCreatorChannel(ragMainService);
 		mainProcessElectronServer.registerChannel('void-channel-docx-creator', docxCreatorChannel);
+
+		// Void Brave Search service (for web search tools)
+		const braveSearchChannel = new BraveSearchChannel();
+		mainProcessElectronServer.registerChannel('void-channel-brave-search', braveSearchChannel);
 
 		// Void Email service - TEMPORARILY DISABLED
 		// const ragPathService = accessor.get(IRAGPathService);

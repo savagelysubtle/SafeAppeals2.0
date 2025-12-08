@@ -2,6 +2,7 @@
 
 > **Document Version:** 1.8
 > **Created:** November 30, 2025
+> **Last Updated:** December 5, 2025
 > **Status:** 🚀 **DEPLOYED** - Full cloud integration complete (needs Anthropic credits)
 
 ## 📊 Progress Summary
@@ -13,8 +14,8 @@
 | Phase 3: LLM Proxy           | ✅ Deployed      | LiteLLM at void-cloudlitellm-production.up.railway.app |
 | Phase 4: Desktop Auth        | ✅ Complete      | OAuth flow + URL handler + UI implemented  |
 | Phase 5: Desktop Integration | ✅ Complete      | CloudLLMRouterService + per-provider toggle |
-| Phase 6: Polish & Testing    | ⬜ Not Started   |                                            |
-| Phase 7: Auto-Update         | ⬜ Not Started   |                                            |
+| Phase 6: Polish & Testing    | 🔄 In Progress   | Dashboard deployed, testing ongoing        |
+| Phase 7: Auto-Update         | ✅ Complete      | VoidUpdateService + MainService implemented |
 
 **Code Location:** `void-cloud/` folder in this workspace
 
@@ -2259,26 +2260,26 @@ async function handleCheckoutComplete(session: Stripe.Checkout.Session) {
 - [x] Implement `/llm/models` endpoint
 - [ ] Test with all configured models
 
-### Phase 4: Void Desktop - Auth (Week 4)
+### Phase 4: Void Desktop - Auth (Week 4) ✅ COMPLETE
 
 - [x] Add cloud types to `voidCloudTypes.ts` _(in `common/voidCloudTypes.ts`)_
 - [x] Update `voidSettingsTypes.ts` with cloud settings _(added voidCloud\* settings)_
 - [x] Implement `VoidCloudService` _(in `browser/voidCloudService.ts`)_
 - [x] Add API client methods (auth, credits, LLM)
-- [ ] Add Supabase client to Void _(optional - using direct API)_
-- [ ] Implement Google OAuth flow _(needs Electron shell integration)_
-- [ ] Handle `void://auth/callback` protocol _(needs Electron main process)_
-- [ ] Test sign in / sign out
+- [x] ~~Add Supabase client to Void~~ _(using direct API calls instead)_
+- [x] Implement Google OAuth flow _(VoidCloudAuthProvider.ts)_
+- [x] Handle `void://auth/callback` protocol _(VoidCloudUrlHandler.ts)_
+- [x] Test sign in / sign out
 
-### Phase 5: Void Desktop - Integration (Week 5)
+### Phase 5: Void Desktop - Integration (Week 5) ✅ COMPLETE
 
-- [ ] Modify `sendLLMMessage` for cloud routing
-- [ ] Implement per-provider mode toggle
-- [ ] Add `CloudSettings` component
-- [ ] Add `CreditBalance` widget
-- [ ] Handle 402 insufficient credits error
-- [ ] Add "Buy Credits" button
-- [ ] Test full flow: sign in → send message → credits deducted
+- [x] Modify `sendLLMMessage` for cloud routing _(cloudLLMRouterService.ts)_
+- [x] Implement per-provider mode toggle _(in voidCloudTypes.ts)_
+- [x] Add `CloudSettings` component _(in void-settings-tsx)_
+- [x] Add `CreditBalance` widget _(in sidebar-tsx)_
+- [x] Handle 402 insufficient credits error
+- [x] Add "Buy Credits" button _(creates Stripe checkout)_
+- [x] Test full flow: sign in → send message → credits deducted
 
 ### Phase 6: Polish & Testing (Week 6)
 
@@ -4512,7 +4513,9 @@ curl -X POST http://localhost:4000/chat/completions \
 | 1.3     | Nov 30, 2025     | Added Legal, Security, Monitoring, Production Readiness (Sections 13-16) |
 | 1.4     | Nov 30, 2025     | Created `void-cloud/` folder with all API code, migrations, configs      |
 | 1.5     | Nov 30, 2025     | Phase 4: Added voidCloudTypes.ts, updated settings, VoidCloudService     |
-| **1.6** | **Nov 30, 2025** | **🚀 DEPLOYED: Railway API live, Stripe webhook configured, GitHub repo created** |
+| 1.6     | Nov 30, 2025     | 🚀 DEPLOYED: Railway API live, Stripe webhook configured, GitHub repo created |
+| 1.7     | Dec 2, 2025      | Phase 4-5 Complete: Desktop auth and cloud routing fully implemented     |
+| **1.8** | **Dec 5, 2025**  | **Next.js Dashboard deployed, Phase 7 Auto-Update complete, full sync**  |
 
 ---
 

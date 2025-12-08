@@ -36,7 +36,15 @@ export class VoidCloudUrlHandler extends Disposable implements IWorkbenchContrib
 	}
 
 	async handleURL(uri: URI, options?: IOpenURLOptions): Promise<boolean> {
+		// Log full URI details for debugging
 		this.logService.info('VoidCloudUrlHandler: Received URL', uri.toString());
+		this.logService.info('VoidCloudUrlHandler: URI parts', JSON.stringify({
+			scheme: uri.scheme,
+			authority: uri.authority,
+			path: uri.path,
+			query: uri.query,
+			fragment: uri.fragment,
+		}));
 
 		// Only handle safe-appeals-navigator://auth/callback
 		if (uri.authority !== 'auth' || !uri.path.startsWith('/callback')) {
@@ -46,12 +54,23 @@ export class VoidCloudUrlHandler extends Disposable implements IWorkbenchContrib
 		this.logService.info('VoidCloudUrlHandler: Handling auth callback');
 
 		try {
-			// Parse query parameters
-			const params = new URLSearchParams(uri.query);
+			// Parse query parameters - check both query string AND fragment
+			// Supabase may return data in fragment (#) for implicit flow
+			const queryParams = new URLSearchParams(uri.query);
 
-			// Check for errors from OAuth provider
-			const error = params.get('error');
-			const errorDescription = params.get('error_description');
+			// Fragment may be URL-encoded (e.g., access_token%3Dxxx instead of access_token=xxx)
+			// Decode it before parsing
+			const decodedFragment = uri.fragment ? decodeURIComponent(uri.fragment) : '';
+			const fragmentParams = new URLSearchParams(decodedFragment);
+
+			// Log what we received
+			this.logService.info('VoidCloudUrlHandler: Query params', uri.query || '(empty)');
+			this.logService.info('VoidCloudUrlHandler: Fragment (raw)', uri.fragment || '(empty)');
+			this.logService.info('VoidCloudUrlHandler: Fragment (decoded)', decodedFragment || '(empty)');
+
+			// Check for errors in both query and fragment
+			const error = queryParams.get('error') || fragmentParams.get('error');
+			const errorDescription = queryParams.get('error_description') || fragmentParams.get('error_description');
 			if (error) {
 				const message = errorDescription || error;
 				this.logService.error('VoidCloudUrlHandler: OAuth error', message);
@@ -63,13 +82,37 @@ export class VoidCloudUrlHandler extends Disposable implements IWorkbenchContrib
 				return true;
 			}
 
-			// Get the authorization code
-			const code = params.get('code');
+			// Try to get authorization code from query params (PKCE flow)
+			let code = queryParams.get('code');
+
+			// If no code, check fragment for access_token (implicit flow)
+			// This happens when Supabase uses implicit grant
+			const accessToken = fragmentParams.get('access_token');
+			const refreshToken = fragmentParams.get('refresh_token');
+
+			if (accessToken && refreshToken) {
+				// Handle implicit flow - tokens are already in the URL
+				this.logService.info('VoidCloudUrlHandler: Received tokens via implicit flow');
+				await this.cloudService.handleImplicitFlowTokens(accessToken, refreshToken);
+
+				this.notificationService.notify({
+					severity: Severity.Info,
+					message: 'Successfully signed in to SafeAppeals Cloud!',
+				});
+				return true;
+			}
+
 			if (!code) {
-				this.logService.error('VoidCloudUrlHandler: No code in callback');
+				// Also check if code is in fragment (some OAuth providers do this)
+				code = fragmentParams.get('code');
+			}
+
+			if (!code) {
+				const debugInfo = `Query: ${uri.query || '(empty)'}, Fragment: ${uri.fragment || '(empty)'}`;
+				this.logService.error('VoidCloudUrlHandler: No code or tokens in callback.', debugInfo);
 				this.notificationService.notify({
 					severity: Severity.Error,
-					message: 'Sign in failed: No authorization code received',
+					message: 'Sign in failed: No authorization code received. Check Developer Tools > Output for details.',
 				});
 				this.cloudService.handleAuthError('No authorization code received');
 				return true;

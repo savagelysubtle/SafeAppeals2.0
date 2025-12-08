@@ -114,6 +114,18 @@ export class XLSXViewerEditor extends EditorPane {
 		if (this.webview && this._webviewReady) {
 			const currentUri = input.resource.toString();
 
+			// If input has modified content, use that
+			if (input.hasContent()) {
+				console.log('[XLSX Viewer] Loading from input modified content');
+				this.webview.postMessage({
+					type: 'loadXLSX',
+					data: input.getContent(),
+					encoding: 'base64',
+					xlsxUri: currentUri
+				});
+				return;
+			}
+
 			// If same XLSX is already loaded and cached, resend to webview
 			if (this._xlsxDataCache?.uri === currentUri) {
 				console.log('✅ [XLSX Viewer] Same XLSX cached, resending to webview');
@@ -138,6 +150,18 @@ export class XLSXViewerEditor extends EditorPane {
 
 	private async loadXLSX(input: XLSXViewerInput): Promise<void> {
 		if (this._isLoading || !this.webview) {
+			return;
+		}
+
+		// If input has modified content, use that instead of loading from disk
+		if (input.hasContent()) {
+			console.log('[XLSX Viewer] Loading XLSX from input content');
+			this.webview.postMessage({
+				type: 'loadXLSX',
+				data: input.getContent(),
+				encoding: 'base64',
+				xlsxUri: input.resource.toString()
+			});
 			return;
 		}
 
@@ -204,19 +228,30 @@ export class XLSXViewerEditor extends EditorPane {
 			case 'contentChanged':
 				// Mark working copy as dirty when content changes
 				if (this._workingCopy) {
-					console.log('[XLSX Viewer] Content changed, marking working copy dirty');
+					// console.log('[XLSX Viewer] Content changed, marking working copy dirty'); // noisy
 					this._workingCopy.markDirty();
+				}
+				// Update input content if provided
+				if (this._currentInput && data.data) {
+					this._currentInput.setContent(data.data);
 				}
 				break;
 
 			case 'saveRequested':
 				if (this._currentInput && data.data) {
-					this.saveXLSX(this._currentInput.resource, data.data);
-
-					// Resolve save complete promise if waiting
-					if (this._saveCompleteResolver) {
-						this._saveCompleteResolver(true);
-					}
+					// Await the save and resolve based on actual result
+					this.saveXLSX(this._currentInput.resource, data.data)
+						.then(() => {
+							if (this._saveCompleteResolver) {
+								this._saveCompleteResolver(true);
+							}
+						})
+						.catch((error) => {
+							console.error('[XLSX Viewer] Save failed:', error);
+							if (this._saveCompleteResolver) {
+								this._saveCompleteResolver(false);
+							}
+						});
 				} else {
 					// Resolve with false if no data
 					if (this._saveCompleteResolver) {
@@ -250,6 +285,10 @@ export class XLSXViewerEditor extends EditorPane {
 
 			await this.fileService.writeFile(uri, bytes);
 			console.log('[XLSX Viewer] Document saved successfully');
+
+			// Update the cache with the newly saved data so navigating away and back shows correct content
+			this._xlsxDataCache = { uri: uri.toString(), data: base64Data };
+			console.log('[XLSX Viewer] Cache updated with saved data');
 
 			// Mark working copy as saved
 			if (this._workingCopy) {
@@ -288,6 +327,11 @@ export class XLSXViewerEditor extends EditorPane {
 
 		// Create new working copy
 		this._workingCopy = new XLSXWorkingCopy(resource, name);
+
+		// Connect working copy to input for dirty state reporting
+		if (this._currentInput) {
+			this._currentInput.setWorkingCopy(this._workingCopy);
+		}
 
 		// Set up save handler
 		this._workingCopy.setSaveHandler(async (reason) => {
@@ -359,15 +403,6 @@ export class XLSXViewerEditor extends EditorPane {
 	}
 
 	protected override setEditorVisible(visible: boolean): void {
-		// If becoming invisible and working copy is dirty, save in background
-		if (!visible && this._workingCopy && this._workingCopy.isDirty()) {
-			console.log('[XLSX Viewer] Editor becoming invisible with dirty content, saving');
-			this._workingCopy.save().then(
-				() => console.log('[XLSX Viewer] Save completed'),
-				(err) => console.error('[XLSX Viewer] Failed to save on visibility change:', err)
-			);
-		}
-
 		if (this.webview && this._element) {
 			const targetWindow = DOM.getWindow(this._element);
 			if (visible) {
@@ -384,8 +419,11 @@ export class XLSXViewerEditor extends EditorPane {
 			this.webview.postMessage({ type: 'clearXLSX' });
 		}
 
-		// Unregister working copy
+		// Unregister working copy and clear input's reference to prevent stale dirty state
 		if (this._workingCopy) {
+			if (this._currentInput) {
+				this._currentInput.clearWorkingCopy();
+			}
 			this._workingCopyDisposable?.dispose();
 			this._workingCopy.dispose();
 			this._workingCopy = undefined;

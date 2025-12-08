@@ -32,3 +32,6 @@ export const VOID_RAG_SEARCH_WORKSPACE_ACTION_ID = 'void.rag.searchWorkspace'
 export const VOID_RAG_GET_STATS_ACTION_ID = 'void.rag.getStats'
 export const VOID_RAG_TEST_DOCLING_ACTION_ID = 'void.rag.testDoclingExtraction'
 
+// Web Search commands
+export const VOID_WEBSEARCH_CONFIGURE_API_KEY_ACTION_ID = 'void.webSearch.configureApiKey'
+

@@ -23,6 +23,7 @@ import { IOverlayWebview, IWebviewService } from '../../../../webview/browser/we
 import { asWebviewUri } from '../../../../webview/common/webview.js';
 import { IVoidSettingsService } from '../../../common/voidSettingsService.js';
 import { PDFSelection, PDFViewerInput } from './pdfViewerInput.js';
+import { IPDFAnnotationService, PDFAnnotation } from './pdfAnnotationService.js';
 
 export class PDFViewerEditor extends EditorPane {
 	static readonly ID = 'void.pdfViewer';
@@ -45,9 +46,17 @@ export class PDFViewerEditor extends EditorPane {
 		@IStorageService private readonly storageService: IStorageService,
 		@IWebviewService private readonly webviewService: IWebviewService,
 		@IFileService private readonly fileService: IFileService,
-		@IVoidSettingsService private readonly voidSettingsService: IVoidSettingsService
+		@IVoidSettingsService private readonly voidSettingsService: IVoidSettingsService,
+		@IPDFAnnotationService private readonly pdfAnnotationService: IPDFAnnotationService
 	) {
 		super(PDFViewerEditor.ID, group, telemetryService, themeService, storageService);
+
+		// Listen for annotation changes and notify webview
+		this._register(this.pdfAnnotationService.onDidChangeAnnotations(uri => {
+			if (this._currentInput && this._currentInput.resource.toString() === uri.toString()) {
+				this.sendAnnotationsToWebview();
+			}
+		}));
 	}
 
 	protected override createEditor(parent: HTMLElement): void {
@@ -164,6 +173,17 @@ export class PDFViewerEditor extends EditorPane {
 		this.loadPDF(input, savedPage);
 	}
 
+	private sendAnnotationsToWebview(): void {
+		if (!this.webview || !this._currentInput) {
+			return;
+		}
+		const annotations = this.pdfAnnotationService.getAnnotations(this._currentInput.resource);
+		this.webview.postMessage({
+			type: 'loadAnnotations',
+			annotations: annotations
+		});
+	}
+
 	private async loadPDF(input: PDFViewerInput, startPage: number): Promise<void> {
 		// Prevent concurrent loads
 		if (this._isLoading) {
@@ -270,6 +290,38 @@ export class PDFViewerEditor extends EditorPane {
 					this._selectionRectResolve(data.rect);
 					this._selectionRectResolve = undefined;
 				}
+				break;
+			case 'pdfLoaded':
+				// PDF finished loading - send annotations to webview
+				console.log('[PDF Viewer] PDF loaded, sending annotations');
+				this.sendAnnotationsToWebview();
+				break;
+			case 'addAnnotation': {
+				// Add a new annotation
+				const annotation = data.annotation as Omit<PDFAnnotation, 'id' | 'createdAt'>;
+				const created = this.pdfAnnotationService.addAnnotation(annotation);
+				console.log('[PDF Viewer] Added annotation:', created.id);
+				break;
+			}
+			case 'updateAnnotation': {
+				// Update an existing annotation
+				const { annotationId, updates } = data;
+				this.pdfAnnotationService.updateAnnotation(annotationId, updates);
+				console.log('[PDF Viewer] Updated annotation:', annotationId);
+				break;
+			}
+			case 'deleteAnnotation': {
+				// Delete an annotation
+				console.log('[PDF Viewer] Deleting annotation:', data.annotationId);
+				this.pdfAnnotationService.deleteAnnotation(data.annotationId);
+				// Explicitly send updated annotations (don't rely solely on event)
+				this.sendAnnotationsToWebview();
+				console.log('[PDF Viewer] Deleted annotation and sent update');
+				break;
+			}
+			case 'getAnnotations':
+				// Webview requesting annotations
+				this.sendAnnotationsToWebview();
 				break;
 		}
 	}
@@ -380,6 +432,7 @@ export class PDFViewerEditor extends EditorPane {
 						<div id="sidebar-tabs">
 							<button class="sidebar-tab active" data-tab="thumbnails">Thumbnails</button>
 							<button class="sidebar-tab" data-tab="outline">Outline</button>
+							<button class="sidebar-tab" data-tab="bookmarks">Bookmarks</button>
 						</div>
 					</div>
 					<div id="sidebar-content">
@@ -389,6 +442,12 @@ export class PDFViewerEditor extends EditorPane {
 						<div id="outline-view" class="tab-content">
 							<div id="outline-container"></div>
 						</div>
+						<div id="bookmarks-view" class="tab-content">
+							<div id="bookmarks-header">
+								<button id="add-bookmark" title="Add Bookmark">+ Add Bookmark</button>
+							</div>
+							<div id="bookmarks-container"></div>
+						</div>
 					</div>
 				</div>
 				<div id="pdf-container">
@@ -396,8 +455,17 @@ export class PDFViewerEditor extends EditorPane {
 						<button id="prev-page">Previous</button>
 						<span id="page-info">Page <span id="current-page">1</span> of <span id="total-pages">1</span></span>
 						<button id="next-page">Next</button>
+						<span class="controls-separator"></span>
 						<button id="zoom-in">Zoom In</button>
 						<button id="zoom-out">Zoom Out</button>
+						<span class="controls-separator"></span>
+						<div id="annotation-toolbar">
+							<button class="highlight-btn" data-color="yellow" title="Yellow Highlight" style="background-color: rgba(255, 235, 59, 0.7);">🖍️</button>
+							<button class="highlight-btn" data-color="green" title="Green Highlight" style="background-color: rgba(76, 175, 80, 0.7);">🖍️</button>
+							<button class="highlight-btn" data-color="blue" title="Blue Highlight" style="background-color: rgba(33, 150, 243, 0.7);">🖍️</button>
+							<button class="highlight-btn" data-color="pink" title="Pink Highlight" style="background-color: rgba(233, 30, 99, 0.7);">🖍️</button>
+							<button id="delete-highlight" title="Delete Highlight">🗑️</button>
+						</div>
 					</div>
 					<div id="canvas-wrapper">
 						<div id="pdf-render-container">

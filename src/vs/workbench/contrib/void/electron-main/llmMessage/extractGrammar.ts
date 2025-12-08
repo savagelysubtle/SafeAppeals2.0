@@ -7,7 +7,7 @@ import { generateUuid } from '../../../../../base/common/uuid.js'
 import { endsWithAnyPrefixOf, SurroundingsRemover } from '../../common/helpers/extractCodeFromResult.js'
 import { availableTools, InternalToolInfo } from '../../common/prompt/prompts.js'
 import { OnFinalMessage, OnText, RawToolCallObj, RawToolParamsObj } from '../../common/sendLLMMessageTypes.js'
-import { ToolName, ToolParamName } from '../../common/toolsServiceTypes.js'
+import { ToolName, ToolParamName } from '../../common/tools/toolsServiceTypes.js'
 import { ChatMode } from '../../common/voidSettingsTypes.js'
 import { getXMLParserTelemetry } from '../../common/xmlParserTelemetry.js'
 import { XMLParserService } from './xmlParserService.js'
@@ -462,14 +462,15 @@ export const extractXMLToolsWrapper = (
 			}
 		}
 
-		// toolTagIdx is not null, so parse the XML (legacy format only)
-		if (foundOpenTag !== null && foundOpenTag.toolName !== 'function_calls') {
+		// toolTagIdx is not null, so parse the XML (both legacy and ANTML formats)
+		if (foundOpenTag !== null) {
 			const xmlSubstring = trueFullText.substring(foundOpenTag.idx, Infinity)
 			const parseStartTime = performance.now()
 
 			// Use parser service with fallback support
+			// For ANTML (function_calls), pass undefined as toolName to trigger ANTML parsing
 			const parseResult = parserService.parseToolCall(
-				foundOpenTag.toolName,
+				foundOpenTag.toolName === 'function_calls' ? undefined : foundOpenTag.toolName,
 				toolId,
 				xmlSubstring,
 				toolOfToolName,
@@ -477,10 +478,10 @@ export const extractXMLToolsWrapper = (
 
 			const parseDuration = performance.now() - parseStartTime
 
-			// Record telemetry
+			// Record telemetry - use 'function_calls' marker for ANTML format
 			const telemetry = getXMLParserTelemetry()
 			telemetry.recordParse(
-				foundOpenTag.toolName,
+				(foundOpenTag.toolName === 'function_calls' ? 'function_calls' : foundOpenTag.toolName) as ToolName,
 				parseResult.strategy,
 				parseResult.toolCall !== null,
 				parseDuration,
@@ -492,19 +493,26 @@ export const extractXMLToolsWrapper = (
 				latestToolCall = parseResult.toolCall
 				logParsedToolCall(latestToolCall, xmlSubstring)
 				// Log which strategy succeeded for monitoring
+				const toolNameForLog = foundOpenTag.toolName === 'function_calls' ? 'ANTML' : foundOpenTag.toolName
 				if (parseResult.strategy !== 'custom') {
-					console.log(`[XML Parser] Used ${parseResult.strategy} parser for tool ${foundOpenTag.toolName}`)
+					console.log(`[XML Parser] Used ${parseResult.strategy} parser for tool ${toolNameForLog}`)
 				}
 				// Log recovery actions if any were taken
 				if (parseResult.recoveryActions && parseResult.recoveryActions.length > 0) {
-					console.log(`[XML Parser] Recovery actions for ${foundOpenTag.toolName}:`, parseResult.recoveryActions)
+					console.log(`[XML Parser] Recovery actions for ${toolNameForLog}:`, parseResult.recoveryActions)
 				}
 			} else {
-				// All parsers failed
-				console.error(`[XML Parser] Failed to parse tool call for ${foundOpenTag.toolName}:`, parseResult.error)
-				if (parseResult.recoveryActions && parseResult.recoveryActions.length > 0) {
-					console.log(`[XML Parser] Recovery attempts made:`, parseResult.recoveryActions)
+				// All parsers failed - only log if we have enough content to parse
+				// (streaming may not have delivered the full XML yet)
+				const toolNameForLog = foundOpenTag.toolName === 'function_calls' ? 'ANTML' : foundOpenTag.toolName
+				if (xmlSubstring.includes('</function_calls>') || xmlSubstring.includes(`</${foundOpenTag.toolName}>`)) {
+					// We have a closing tag, so parsing genuinely failed
+					console.error(`[XML Parser] Failed to parse tool call for ${toolNameForLog}:`, parseResult.error)
+					if (parseResult.recoveryActions && parseResult.recoveryActions.length > 0) {
+						console.log(`[XML Parser] Recovery attempts made:`, parseResult.recoveryActions)
+					}
 				}
+				// Otherwise, just waiting for more content - don't spam errors
 			}
 		}
 

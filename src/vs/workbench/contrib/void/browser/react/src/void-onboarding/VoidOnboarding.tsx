@@ -3,7 +3,7 @@
  *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
  *--------------------------------------------------------------------------------------*/
 
-import { Check, ChevronRight, ExternalLink } from "lucide-react";
+import { Check, ChevronRight, Cloud, ExternalLink, LogIn, RefreshCw, User } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { isLinux } from "../../../../../../../base/common/platform.js";
 import { ColorScheme } from "../../../../../../../platform/theme/common/theme.js";
@@ -17,13 +17,14 @@ import {
 } from "../../../../common/voidSettingsTypes.js";
 import ErrorBoundary from "../sidebar-tsx/ErrorBoundary.js";
 import "../styles.css";
-import { useAccessor, useIsDark, useSettingsState } from "../util/services.js";
+import { useAccessor, useIsDark, useSettingsState, useVoidCloudState } from "../util/services.js";
 import {
 	ModelDump,
 	OllamaSetupInstructions,
 	OneClickSwitchButton,
 	SettingsForProvider,
 } from "../void-settings-tsx/Settings.js";
+import { VoidButtonBgDarken } from "../util/inputs.js";
 
 const OVERRIDE_VALUE = false;
 
@@ -178,6 +179,109 @@ const featureNameMap: { display: string; featureName: FeatureName }[] = [
 	{ display: "Source Control", featureName: "SCM" },
 ];
 
+// Providers supported by SafeAppeals Cloud
+const cloudSupportedProviderNames: ProviderName[] = ['anthropic', 'openAI', 'gemini'];
+
+// Cloud Sign-in Section Component for Onboarding
+const CloudSignInSection = () => {
+	const accessor = useAccessor();
+	const voidSettingsService = accessor.get('IVoidSettingsService');
+	const { authState, signInWithGoogle } = useVoidCloudState();
+	const settingsState = useSettingsState();
+	const [isSigningIn, setIsSigningIn] = useState(false);
+
+	// Auto-enable cloud mode for all supported providers when user signs in
+	useEffect(() => {
+		if (authState.status === 'signed_in') {
+			// Enable cloud globally
+			if (!settingsState.globalSettings.voidCloudEnabled) {
+				voidSettingsService.setGlobalSetting('voidCloudEnabled', true);
+			}
+
+			// Enable cloud mode for all supported providers
+			const currentCloudModes = settingsState.globalSettings.voidCloudModeOfProvider;
+			const needsUpdate = cloudSupportedProviderNames.some(pn => !currentCloudModes[pn]);
+
+			if (needsUpdate) {
+				const newCloudModes = { ...currentCloudModes };
+				for (const providerName of cloudSupportedProviderNames) {
+					newCloudModes[providerName] = true;
+				}
+				voidSettingsService.setGlobalSetting('voidCloudModeOfProvider', newCloudModes);
+			}
+		}
+	}, [authState.status, settingsState.globalSettings.voidCloudEnabled, settingsState.globalSettings.voidCloudModeOfProvider, voidSettingsService]);
+
+	const handleSignIn = useCallback(async () => {
+		try {
+			setIsSigningIn(true);
+			await signInWithGoogle();
+		} catch (error) {
+			console.error("Sign in failed:", error);
+		} finally {
+			// Reset after a delay to allow state to update
+			setTimeout(() => setIsSigningIn(false), 2000);
+		}
+	}, [signInWithGoogle]);
+
+	const status = authState.status;
+	const user = authState.session?.user;
+	const showSigningIn = isSigningIn && status !== 'signed_in' && status !== 'error';
+
+	if (status === 'signed_in' && user) {
+		return (
+			<div className="w-full max-w-xl mb-6 bg-gradient-to-r from-blue-600/20 to-purple-600/20 rounded-lg p-4 border border-blue-500/30">
+				<div className="flex items-center gap-3">
+					<Cloud className="size-5 text-blue-400" />
+					<div className="flex-1">
+						<div className="text-sm font-medium text-void-fg-1">Signed in as {user.displayName || user.email}</div>
+						<div className="text-xs text-void-fg-3">Claude, GPT-4, and Gemini models are now unlocked</div>
+					</div>
+					<Check className="size-5 text-emerald-500" />
+				</div>
+			</div>
+		);
+	}
+
+	return (
+		<div className="w-full max-w-xl mb-6 bg-gradient-to-r from-blue-600/20 to-purple-600/20 rounded-lg p-4 border border-blue-500/30">
+			<div className="flex items-center gap-3 mb-3">
+				<Cloud className="size-5 text-blue-400" />
+				<div className="flex-1">
+					<div className="text-sm font-medium text-void-fg-1">Use SafeAppeals Cloud</div>
+					<div className="text-xs text-void-fg-3">Sign in to instantly access Claude, GPT-4, and Gemini models</div>
+				</div>
+			</div>
+
+			{(status === "signing_in" || showSigningIn) ? (
+				<div className="flex items-center gap-2 text-void-fg-3 text-sm">
+					<RefreshCw className="size-4 animate-spin" />
+					<span>Signing in... Check your browser</span>
+				</div>
+			) : status === "error" ? (
+				<div className="flex flex-col gap-2">
+					<div className="text-red-400 text-xs">{authState.error || "Sign in failed"}</div>
+					<VoidButtonBgDarken
+						className="px-4 py-2 flex items-center justify-center gap-2 w-full"
+						onClick={handleSignIn}
+					>
+						<LogIn className="size-4" />
+						Try again
+					</VoidButtonBgDarken>
+				</div>
+			) : (
+				<VoidButtonBgDarken
+					className="px-4 py-2 flex items-center justify-center gap-2 w-full bg-blue-600 hover:bg-blue-700"
+					onClick={handleSignIn}
+				>
+					<LogIn className="size-4" />
+					Sign in with Google
+				</VoidButtonBgDarken>
+			)}
+		</div>
+	);
+};
+
 const AddProvidersPage = ({
 	pageIndex,
 	setPageIndex,
@@ -255,6 +359,17 @@ const AddProvidersPage = ({
 			{/* Right Column */}
 			<div className="flex-1 flex flex-col items-center justify-start p-6 h-full overflow-y-auto">
 				<div className="text-5xl mb-2 text-center w-full">Add a Provider</div>
+
+				{/* Cloud Sign-in Option */}
+				<ErrorBoundary>
+					<CloudSignInSection />
+				</ErrorBoundary>
+
+				<div className="w-full max-w-xl flex items-center gap-4 mb-4">
+					<div className="flex-1 h-px bg-void-border-2"></div>
+					<span className="text-void-fg-3 text-sm">or add API keys manually</span>
+					<div className="flex-1 h-px bg-void-border-2"></div>
+				</div>
 
 				<div className="w-full max-w-xl mt-4 mb-10">
 					<div className="text-4xl font-light my-4 w-full">{currentTab}</div>
@@ -1051,7 +1166,7 @@ const VoidOnboardingContent = () => {
 							: undefined
 					}
 				>
-					Enter the Void
+					Enter Safe Appeals
 				</PrimaryActionButton>
 			</div>
 		</div>
@@ -1110,7 +1225,7 @@ const VoidOnboardingContent = () => {
 				content={
 					<div className="flex flex-col items-center gap-8">
 						<div className="text-5xl font-light text-center">
-							Welcome to Void
+							Welcome to Safe Appeals
 						</div>
 
 						{/* Slice of Void image */}

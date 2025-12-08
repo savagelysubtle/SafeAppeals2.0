@@ -5,7 +5,7 @@
 
 import { InternalToolInfo } from '../../../common/prompt/prompts.js'
 import { RawToolCallObj } from '../../../common/sendLLMMessageTypes.js'
-import { ToolName, ToolParamName } from '../../../common/toolsServiceTypes.js'
+import { ToolName, ToolParamName } from '../../../common/tools/toolsServiceTypes.js'
 
 /**
  * Native Tool Adapter Interface

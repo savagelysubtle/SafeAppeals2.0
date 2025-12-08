@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------*/
 
 import { InternalToolInfo } from './prompt/prompts.js'
-import { ToolName, ToolParamName } from './toolsServiceTypes.js'
+import { ToolName, ToolParamName } from './tools/toolsServiceTypes.js'
 import { ChatMode, ModelSelection, ModelSelectionOptions, OverridesOfModel, ProviderName, RefreshableProviderName, SettingsOfProvider } from './voidSettingsTypes.js'
 
 

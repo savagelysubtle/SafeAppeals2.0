@@ -21,7 +21,7 @@ import { IAction } from '../../../../base/common/actions.js';
 
 
 const notifyUpdate = (res: VoidCheckUpdateRespose & { message: string }, notifService: INotificationService, updateService: IUpdateService): INotificationHandle => {
-	const message = res?.message || 'This is a very old version of SafeAppeals, please download the latest version! [SafeAppeals](https://void-cloud.vercel.app)!'
+	const message = res?.message || 'This is a very old version of Safe Appeals, please download the latest version! [Safe Appeals](https://github.com/savagelysubtle/SafeAppeals2.0/releases)!'
 
 	let actions: INotificationActions | undefined
 
@@ -85,12 +85,12 @@ const notifyUpdate = (res: VoidCheckUpdateRespose & { message: string }, notifSe
 		primary.push({
 			id: 'void.updater.site',
 			enabled: true,
-			label: `SafeAppeals Site`,
+			label: `Safe Appeals Site`,
 			tooltip: '',
 			class: undefined,
 			run: () => {
 				const { window } = dom.getActiveWindow()
-				window.open('https://void-cloud.vercel.app')
+				window.open('https://github.com/savagelysubtle/SafeAppeals2.0/releases')
 			}
 		})
 

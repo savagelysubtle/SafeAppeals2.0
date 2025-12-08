@@ -142,6 +142,12 @@ class CloudLLMRouterService extends Disposable implements ICloudLLMRouterService
 			return this.llmMessageService.sendLLMMessage(params);
 		}
 
+		// Check if cloud is available (online + signed in)
+		if (!this.cloudService.isOnline()) {
+			console.warn('[CloudLLMRouter] Cloud unavailable (offline), attempting fallback to provider');
+			return this._fallbackToProvider(params, 'Network offline. Falling back to direct provider connection.');
+		}
+
 		// Generate request ID
 		const requestId = `cloud-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
@@ -179,10 +185,33 @@ class CloudLLMRouterService extends Disposable implements ICloudLLMRouterService
 			});
 		}).catch((error) => {
 			const message = error instanceof Error ? error.message : 'Cloud request failed';
-			onError({ message, fullError: error });
+
+			// Attempt graceful degradation - try direct provider if user has API key
+			if (this._canFallbackToProvider(modelSelection.providerName)) {
+				console.warn('[CloudLLMRouter] Cloud request failed, falling back to provider:', message);
+				this._fallbackToProvider(params, `Cloud unavailable: ${message}. Using direct API connection.`);
+			} else {
+				onError({ message, fullError: error });
+			}
 		});
 
 		return requestId;
+	}
+
+	// Check if we can fall back to direct provider (user has API key configured)
+	private _canFallbackToProvider(providerName: ProviderName): boolean {
+		const providerSettings = this.settingsService.state.settingsOfProvider[providerName];
+		// Check if the provider has an API key set (not just cloud-enabled)
+		return !!providerSettings?.apiKey;
+	}
+
+	// Fall back to direct provider connection
+	private _fallbackToProvider(params: ServiceSendLLMMessageParams, warningMessage: string): string | null {
+		// Log the fallback
+		console.warn('[CloudLLMRouter] Graceful degradation:', warningMessage);
+
+		// Send via direct provider
+		return this.llmMessageService.sendLLMMessage(params);
 	}
 
 	private _mapToCloudModel(modelName: string): string {

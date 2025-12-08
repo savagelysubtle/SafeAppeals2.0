@@ -67,7 +67,7 @@ import {
 	BuiltinToolName,
 	LintErrorItem,
 	ToolName,
-} from "../../../../common/toolsServiceTypes.js";
+} from "../../../../common/tools/toolsServiceTypes.js";
 import { VOID_CTRL_L_ACTION_ID } from "../../../actionIDs.js";
 import { IsRunningType } from "../../../chatThreadService.js";
 import { VOID_OPEN_SETTINGS_ACTION_ID } from "../../../voidSettingsPane.js";

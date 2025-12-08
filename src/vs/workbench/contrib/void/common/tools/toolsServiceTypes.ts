@@ -1,7 +1,7 @@
-import { URI } from '../../../../base/common/uri.js';
-import { RawMCPToolCall } from './mcpServiceTypes.js';
-import { builtinTools } from './prompt/prompts.js';
-import { RawToolParamsObj } from './sendLLMMessageTypes.js';
+import { URI } from '../../../../../base/common/uri.js';
+import { RawMCPToolCall } from '../mcpServiceTypes.js';
+import { builtinTools } from '../prompt/prompts.js';
+import { RawToolParamsObj } from '../sendLLMMessageTypes.js';
 
 
 
@@ -73,6 +73,24 @@ export type BuiltinToolCallParams = {
 	'rag_search_policy': { query: string, limit: number },
 	'rag_search_workspace': { query: string, limit: number },
 	'rag_get_stats': {},
+	// --- Web Search tools
+	'web_search': { query: string, count: number | null, offset: number | null },
+	'multi_link_search': { queries: string[], count: number | null },
+}
+
+// Web Search result types
+export type WebSearchResult = {
+	title: string;
+	url: string;
+	description: string;
+	age?: string;
+	published?: string;
+}
+
+export type MultiSearchResult = {
+	query: string;
+	results: WebSearchResult[];
+	error?: string;
 }
 
 // RESULT OF TOOL CALL
@@ -100,6 +118,9 @@ export type BuiltinToolResultType = {
 	'rag_search_policy': { contextPack: string },
 	'rag_search_workspace': { contextPack: string },
 	'rag_get_stats': { stats: string },
+	// --- Web Search tools
+	'web_search': { results: WebSearchResult[], totalResults: number },
+	'multi_link_search': { searchResults: MultiSearchResult[] },
 }
 
 
@@ -114,3 +135,6 @@ export type BuiltinToolParamName = { [T in BuiltinToolName]: BuiltinToolParamNam
 
 export type ToolName = BuiltinToolName | (string & {})
 export type ToolParamName<T extends ToolName> = T extends BuiltinToolName ? BuiltinToolParamNameOfTool<T> : string
+
+
+

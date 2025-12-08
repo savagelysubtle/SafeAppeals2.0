@@ -1,4 +1,12 @@
-<!-- 88310e1c-aec9-4daf-9e20-84d1761308b1 d6726410-0e4c-4241-b113-9e1d780c14a4 -->
+---
+name: Internal MCP Server with Pilot Tools Migration
+overview: ""
+todos:
+  - id: 13c0fdd5-1c7d-442e-83d8-22aa900e6d89
+    content: Write MCP README and update ADDED_FEATURES_TRACKER
+    status: pending
+---
+
 # Internal MCP Server with Pilot Tools Migration
 
 ## Phase 1: Setup Infrastructure
@@ -259,17 +267,3 @@ After implementation, test:
 - Results are identical between MCP and direct execution
 - Clean nested folder structure established for future tools
 - Test actions provide easy validation for developers
-
-### To-dos
-
-- [ ] Install @modelcontextprotocol/sdk and zod dependencies
-- [ ] Create nested mcp/ folder structure under browser/
-- [ ] Implement InternalMCPServer with InMemoryTransport
-- [ ] Implement InternalMCPClient wrapper
-- [ ] Create tool wrapper utilities
-- [ ] Convert read_file tool to MCP format
-- [ ] Convert edit_document tool to MCP format
-- [ ] Add useInternalMCPServer feature flag to settings
-- [ ] Create test actions for validation
-- [ ] Register IInternalMCPServer as singleton
-- [ ] Write MCP README and update ADDED_FEATURES_TRACKER

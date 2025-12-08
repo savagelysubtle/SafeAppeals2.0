@@ -1,4 +1,12 @@
-<!-- c64f3e2d-7738-4bac-b17a-58e4bdd15215 bf23b2d3-1115-4617-bd73-68aa031bd33f -->
+---
+name: Email Dashboard with RAG-Powered Drafting & Editor Integration
+overview: ""
+todos:
+  - id: a4f721dd-78d3-44db-ac1c-c73171286c65
+    content: Test with sample .eml files, verify parsing, inbox display, and RAG-powered drafting
+    status: pending
+---
+
 # Email Dashboard with RAG-Powered Drafting & Editor Integration
 
 ## Architecture Overview
@@ -349,20 +357,3 @@ import './emailWorkspaceService.js';
 8. DOCX editor opens with editable draft
 9. User edits draft, saves DOCX
 10. Export/copy final email text
-
-### To-dos
-
-- [ ] Create common/emailService.ts with Email and EmailDraft types, IEmailService interface
-- [ ] Implement electron-main/emailService.ts with .eml parser (mailparser) and SQLite storage
-- [ ] Create electron-main/emailMainChannel.ts for IPC communication
-- [ ] Create browser/emailService.ts as IPC client and register singleton
-- [ ] Extend RAG search to support case folder path filtering in ragMainService.ts
-- [ ] Create browser/emailDraftService.ts with RAG integration and LLM drafting logic
-- [ ] Create browser/emailDashboard/emailDashboardPane.ts extending ViewPane
-- [ ] Build React components: EmailDashboard.tsx, EmailList.tsx, EmailDrafter.tsx in react/src/email-dashboard-tsx/
-- [ ] Create emailDashboardContribution.ts with view registration, command, and keybinding
-- [ ] Create emailWorkspaceService.ts with file system watcher for .eml/.pdf files
-- [ ] Add email dashboard settings to voidSettingsTypes.ts
-- [ ] Update void.contribution.ts to import all email dashboard modules
-- [ ] Add mailparser dependency to package.json
-- [ ] Test with sample .eml files, verify parsing, inbox display, and RAG-powered drafting

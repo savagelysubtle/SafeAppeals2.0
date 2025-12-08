@@ -431,6 +431,8 @@ function createTypeScriptBuilder(config, projectFile, cmd) {
     };
 }
 class ScriptSnapshot {
+    _text;
+    _mtime;
     constructor(text, mtime) {
         this._text = text;
         this._mtime = mtime;
@@ -449,6 +451,8 @@ class ScriptSnapshot {
     }
 }
 class VinylScriptSnapshot extends ScriptSnapshot {
+    _base;
+    sourceMap;
     constructor(file) {
         super(file.contents.toString(), file.stat.mtime);
         this._base = file.base;
@@ -459,15 +463,20 @@ class VinylScriptSnapshot extends ScriptSnapshot {
     }
 }
 class LanguageServiceHost {
+    _cmdLine;
+    _projectPath;
+    _log;
+    _snapshots;
+    _filesInProject;
+    _filesAdded;
+    _dependencies;
+    _dependenciesRecomputeList;
+    _fileNameToDeclaredModule;
+    _projectVersion;
     constructor(_cmdLine, _projectPath, _log) {
         this._cmdLine = _cmdLine;
         this._projectPath = _projectPath;
         this._log = _log;
-        this.directoryExists = ts.sys.directoryExists;
-        this.getDirectories = ts.sys.getDirectories;
-        this.fileExists = ts.sys.fileExists;
-        this.readFile = ts.sys.readFile;
-        this.readDirectory = ts.sys.readDirectory;
         this._snapshots = Object.create(null);
         this._filesInProject = new Set(_cmdLine.fileNames);
         this._filesAdded = new Set();
@@ -522,6 +531,7 @@ class LanguageServiceHost {
         }
         return result;
     }
+    static _declareModule = /declare\s+module\s+('|")(.+)\1/g;
     addScriptSnapshot(filename, snapshot) {
         this._projectVersion++;
         filename = normalize(filename);
@@ -561,6 +571,11 @@ class LanguageServiceHost {
     getDefaultLibFileName(options) {
         return ts.getDefaultLibFilePath(options);
     }
+    directoryExists = ts.sys.directoryExists;
+    getDirectories = ts.sys.getDirectories;
+    fileExists = ts.sys.fileExists;
+    readFile = ts.sys.readFile;
+    readDirectory = ts.sys.readDirectory;
     // ---- dependency management
     collectDependents(filename, target) {
         while (this._dependenciesRecomputeList.length) {
@@ -640,4 +655,4 @@ class LanguageServiceHost {
         });
     }
 }
-LanguageServiceHost._declareModule = /declare\s+module\s+('|")(.+)\1/g;
+//# sourceMappingURL=builder.js.map

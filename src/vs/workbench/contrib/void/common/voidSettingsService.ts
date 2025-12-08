@@ -143,6 +143,9 @@ const _stateWithMergedDefaultModels = (state: VoidSettingsState): VoidSettingsSt
 	}
 }
 
+// Providers that support SafeAppeals Cloud (we manage the API keys)
+const cloudSupportedProviders: ProviderName[] = ['anthropic', 'openAI', 'gemini']
+
 const _validatedModelState = (state: Omit<VoidSettingsState, '_modelOptions'>): VoidSettingsState => {
 
 	let newSettingsOfProvider = state.settingsOfProvider
@@ -151,7 +154,15 @@ const _validatedModelState = (state: Omit<VoidSettingsState, '_modelOptions'>): 
 	for (const providerName of providerNames) {
 		const settingsAtProvider = newSettingsOfProvider[providerName]
 
-		const didFillInProviderSettings = Object.keys(defaultProviderSettings[providerName]).every(key => !!settingsAtProvider[key as keyof typeof settingsAtProvider])
+		// Check if this provider is enabled via SafeAppeals Cloud
+		// When cloud mode is enabled for a supported provider, it counts as "filled in"
+		// because we manage the API keys on the backend
+		const isCloudEnabled = state.globalSettings.voidCloudEnabled &&
+			cloudSupportedProviders.includes(providerName) &&
+			state.globalSettings.voidCloudModeOfProvider[providerName]
+
+		const didFillInProviderSettings = isCloudEnabled ||
+			Object.keys(defaultProviderSettings[providerName]).every(key => !!settingsAtProvider[key as keyof typeof settingsAtProvider])
 
 		if (didFillInProviderSettings === settingsAtProvider._didFillInProviderSettings) continue
 
@@ -260,8 +271,15 @@ class VoidSettingsService extends Disposable implements IVoidSettingsService {
 
 	dangerousSetState = async (newState: VoidSettingsState) => {
 		this.state = _validatedModelState(newState)
-		await this._storeState()
+
+		// Fire state change immediately so UI updates
 		this._onDidChangeState.fire()
+
+		// Store in background - don't block UI updates on storage success
+		this._storeState().catch(e => {
+			console.error('[VoidSettingsService] Failed to persist settings:', e)
+		})
+
 		this._onUpdate_syncApplyToChat()
 		this._onUpdate_syncSCMToChat()
 	}
@@ -289,7 +307,7 @@ class VoidSettingsService extends Disposable implements IVoidSettingsService {
 			}
 			// add disableSystemMessage feature
 			if (readS.globalSettings.disableSystemMessage === undefined) readS.globalSettings.disableSystemMessage = false;
-			
+
 			// add autoAcceptLLMChanges feature
 			if (readS.globalSettings.autoAcceptLLMChanges === undefined) readS.globalSettings.autoAcceptLLMChanges = false;
 		}
@@ -394,8 +412,13 @@ class VoidSettingsService extends Disposable implements IVoidSettingsService {
 
 		this.state = _validatedModelState(newState)
 
-		await this._storeState()
+		// Fire state change immediately so UI updates, then persist in background
 		this._onDidChangeState.fire()
+
+		// Store in background - don't block UI updates on storage success
+		this._storeState().catch(e => {
+			console.error('[VoidSettingsService] Failed to persist settings:', e)
+		})
 
 	}
 
@@ -418,8 +441,14 @@ class VoidSettingsService extends Disposable implements IVoidSettingsService {
 			}
 		}
 		this.state = _validatedModelState(newState)
-		await this._storeState()
+
+		// Fire state change immediately so UI updates
 		this._onDidChangeState.fire()
+
+		// Store in background - don't block UI updates on storage success
+		this._storeState().catch(e => {
+			console.error('[VoidSettingsService] Failed to persist settings:', e)
+		})
 
 		// hooks
 		if (this.state.globalSettings.syncApplyToChat) this._onUpdate_syncApplyToChat()
@@ -439,8 +468,13 @@ class VoidSettingsService extends Disposable implements IVoidSettingsService {
 
 		this.state = _validatedModelState(newState)
 
-		await this._storeState()
+		// Fire state change immediately so UI updates
 		this._onDidChangeState.fire()
+
+		// Store in background - don't block UI updates on storage success
+		this._storeState().catch(e => {
+			console.error('[VoidSettingsService] Failed to persist settings:', e)
+		})
 
 		// hooks
 		if (featureName === 'Chat') {
@@ -470,8 +504,13 @@ class VoidSettingsService extends Disposable implements IVoidSettingsService {
 		}
 		this.state = _validatedModelState(newState)
 
-		await this._storeState()
+		// Fire state change immediately so UI updates
 		this._onDidChangeState.fire()
+
+		// Store in background - don't block UI updates on storage success
+		this._storeState().catch(e => {
+			console.error('[VoidSettingsService] Failed to persist settings:', e)
+		})
 	}
 
 	setOverridesOfModel = async (providerName: ProviderName, modelName: string, overrides: Partial<ModelOverrides> | undefined) => {
@@ -490,8 +529,14 @@ class VoidSettingsService extends Disposable implements IVoidSettingsService {
 		};
 
 		this.state = _validatedModelState(newState);
-		await this._storeState();
+
+		// Fire state change immediately so UI updates
 		this._onDidChangeState.fire();
+
+		// Store in background - don't block UI updates on storage success
+		this._storeState().catch(e => {
+			console.error('[VoidSettingsService] Failed to persist settings:', e)
+		});
 
 		this._metricsService.capture('Update Model Overrides', { providerName, modelName, overrides });
 	}
@@ -570,8 +615,15 @@ class VoidSettingsService extends Disposable implements IVoidSettingsService {
 			}
 		};
 		this.state = _validatedModelState(newState);
-		await this._storeState();
+
+		// Fire state change immediately so UI updates
 		this._onDidChangeState.fire();
+
+		// Store in background - don't block UI updates on storage success
+		this._storeState().catch(e => {
+			console.error('[VoidSettingsService] Failed to persist settings:', e)
+		});
+
 		this._metricsService.capture('Set MCP Server States', { newStates });
 	}
 

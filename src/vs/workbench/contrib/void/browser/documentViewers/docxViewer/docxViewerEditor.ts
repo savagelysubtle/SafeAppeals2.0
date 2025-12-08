@@ -114,6 +114,18 @@ export class DOCXViewerEditor extends EditorPane {
 		if (this.webview && this._webviewReady) {
 			const currentUri = input.resource.toString();
 
+			// If input has modified content, use that
+			if (input.hasContent()) {
+				console.log('[DOCX Viewer] Loading from input modified content');
+				this.webview.postMessage({
+					type: 'loadDOCX',
+					data: input.getContent(),
+					encoding: 'base64',
+					docxUri: currentUri
+				});
+				return;
+			}
+
 			// If same DOCX is already loaded and cached, resend to webview
 			if (this._docxDataCache?.uri === currentUri) {
 				console.log('✅ [DOCX Viewer] Same DOCX cached, resending to webview');
@@ -138,6 +150,18 @@ export class DOCXViewerEditor extends EditorPane {
 
 	private async loadDOCX(input: DOCXViewerInput): Promise<void> {
 		if (this._isLoading || !this.webview) {
+			return;
+		}
+
+		// If input has modified content, use that instead of loading from disk
+		if (input.hasContent()) {
+			console.log('[DOCX Viewer] Loading DOCX from input content');
+			this.webview.postMessage({
+				type: 'loadDOCX',
+				data: input.getContent(),
+				encoding: 'base64',
+				docxUri: input.resource.toString()
+			});
 			return;
 		}
 
@@ -257,8 +281,12 @@ export class DOCXViewerEditor extends EditorPane {
 			case 'contentChanged':
 				// Mark working copy as dirty when content changes
 				if (this._workingCopy) {
-					console.log('[DOCX Viewer] Content changed, marking working copy dirty');
+					// console.log('[DOCX Viewer] Content changed, marking working copy dirty'); // noisy
 					this._workingCopy.markDirty();
+				}
+				// Update input content if provided
+				if (this._currentInput && (data.docxData || data.data)) {
+					this._currentInput.setContent(data.docxData || data.data);
 				}
 				break;
 
@@ -277,12 +305,19 @@ export class DOCXViewerEditor extends EditorPane {
 
 			case 'saveRequested':
 				if (this._currentInput && (data.text || data.docxData)) {
-					this.saveDOCX(this._currentInput.resource, data.text, data.html, data.docxData);
-
-					// Resolve save complete promise if waiting
-					if (this._saveCompleteResolver) {
-						this._saveCompleteResolver(true);
-					}
+					// Await the save and resolve based on actual result
+					this.saveDOCX(this._currentInput.resource, data.text, data.html, data.docxData)
+						.then(() => {
+							if (this._saveCompleteResolver) {
+								this._saveCompleteResolver(true);
+							}
+						})
+						.catch((error) => {
+							console.error('[DOCX Viewer] Save failed:', error);
+							if (this._saveCompleteResolver) {
+								this._saveCompleteResolver(false);
+							}
+						});
 				} else {
 					// Resolve with false if no data
 					if (this._saveCompleteResolver) {
@@ -324,6 +359,12 @@ export class DOCXViewerEditor extends EditorPane {
 
 			await this.fileService.writeFile(uri, bytes);
 			console.log('[DOCX Viewer] Document saved successfully');
+
+			// Update the cache with the newly saved data so navigating away and back shows correct content
+			if (docxData) {
+				this._docxDataCache = { uri: uri.toString(), data: docxData };
+				console.log('[DOCX Viewer] Cache updated with saved data');
+			}
 
 			// Mark working copy as saved
 			if (this._workingCopy) {
@@ -453,15 +494,6 @@ export class DOCXViewerEditor extends EditorPane {
 	}
 
 	protected override setEditorVisible(visible: boolean): void {
-		// If becoming invisible and working copy is dirty, save in background
-		if (!visible && this._workingCopy && this._workingCopy.isDirty()) {
-			console.log('[DOCX Viewer] Editor becoming invisible with dirty content, saving');
-			this._workingCopy.save().then(
-				() => console.log('[DOCX Viewer] Save completed'),
-				(err) => console.error('[DOCX Viewer] Failed to save on visibility change:', err)
-			);
-		}
-
 		if (this.webview && this._element) {
 			const targetWindow = DOM.getWindow(this._element);
 			if (visible) {
@@ -478,8 +510,11 @@ export class DOCXViewerEditor extends EditorPane {
 			this.webview.postMessage({ type: 'clearDOCX' });
 		}
 
-		// Unregister working copy
+		// Unregister working copy and clear input's reference to prevent stale dirty state
 		if (this._workingCopy) {
+			if (this._currentInput) {
+				this._currentInput.clearWorkingCopy();
+			}
 			this._workingCopyDisposable?.dispose();
 			this._workingCopy.dispose();
 			this._workingCopy = undefined;

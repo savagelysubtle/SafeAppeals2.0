@@ -2,6 +2,9 @@
 	"folders": [
 		{
 			"path": "."
+		},
+		{
+			"path": "../AiChemistCodex/AiChemistForge/ToolRack/TypeScript"
 		}
 	],
 	"settings": {
@@ -25,9 +28,7 @@
 		},
 		"githubPullRequests.assignCreated": "${user}",
 		"githubPullRequests.defaultMergeMethod": "squash",
-		"githubPullRequests.ignoredPullRequestBranches": [
-			"main"
-		],
+		"githubPullRequests.ignoredPullRequestBranches": ["main"],
 		"application.experimental.rendererProfiling": true,
 		"terminal.integrated.suggest.enabled": true,
 		"typescript.enablePromptUseWorkspaceTsdk": true,

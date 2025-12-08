@@ -1,29 +1,31 @@
-import { timeout } from '../../../../base/common/async.js'
-import { CancellationToken } from '../../../../base/common/cancellation.js'
-import { URI } from '../../../../base/common/uri.js'
-import { generateUuid } from '../../../../base/common/uuid.js'
-import { EndOfLinePreference } from '../../../../editor/common/model.js'
-import { IFileService } from '../../../../platform/files/common/files.js'
-import { InstantiationType, registerSingleton } from '../../../../platform/instantiation/common/extensions.js'
-import { createDecorator, IInstantiationService } from '../../../../platform/instantiation/common/instantiation.js'
-import { IMarkerService, MarkerSeverity } from '../../../../platform/markers/common/markers.js'
-import { IWorkspaceContextService } from '../../../../platform/workspace/common/workspace.js'
-import { QueryBuilder } from '../../../services/search/common/queryBuilder.js'
-import { ISearchService } from '../../../services/search/common/search.js'
-import { computeDirectoryTree1Deep, IDirectoryStrService, stringifyDirectoryTree1Deep } from '../common/directoryStrService.js'
-import { IDocumentViewerService } from '../common/documentViewerService.js'
-import { MAX_CHILDREN_URIs_PAGE, MAX_FILE_CHARS_PAGE, MAX_TERMINAL_BG_COMMAND_TIME, MAX_TERMINAL_INACTIVE_TIME } from '../common/prompt/prompts.js'
-import { RAGContextService } from '../common/ragContextService.js'
-import { IRAGService } from '../common/ragService.js'
-import { RawToolParamsObj } from '../common/sendLLMMessageTypes.js'
-import { BuiltinToolCallParams, BuiltinToolName, BuiltinToolResultType, LintErrorItem } from '../common/toolsServiceTypes.js'
-import { IVoidModelService } from '../common/voidModelService.js'
-import { IVoidSettingsService } from '../common/voidSettingsService.js'
-import { IDocumentCreatorService } from './documentCreatorService.js'
-import { IDocumentEditorService } from './documentViewers/documentEditorService.js'
-import { IEditCodeService } from './editCodeServiceInterface.js'
+import { timeout } from '../../../../../base/common/async.js'
+import { CancellationToken } from '../../../../../base/common/cancellation.js'
+import { URI } from '../../../../../base/common/uri.js'
+import { generateUuid } from '../../../../../base/common/uuid.js'
+import { EndOfLinePreference } from '../../../../../editor/common/model.js'
+import { IChannel } from '../../../../../base/parts/ipc/common/ipc.js'
+import { IFileService } from '../../../../../platform/files/common/files.js'
+import { InstantiationType, registerSingleton } from '../../../../../platform/instantiation/common/extensions.js'
+import { createDecorator, IInstantiationService } from '../../../../../platform/instantiation/common/instantiation.js'
+import { IMainProcessService } from '../../../../../platform/ipc/common/mainProcessService.js'
+import { IMarkerService, MarkerSeverity } from '../../../../../platform/markers/common/markers.js'
+import { IWorkspaceContextService } from '../../../../../platform/workspace/common/workspace.js'
+import { QueryBuilder } from '../../../../services/search/common/queryBuilder.js'
+import { ISearchService } from '../../../../services/search/common/search.js'
+import { computeDirectoryTree1Deep, IDirectoryStrService, stringifyDirectoryTree1Deep } from '../../common/directoryStrService.js'
+import { IDocumentViewerService } from '../../common/documentViewerService.js'
+import { MAX_CHILDREN_URIs_PAGE, MAX_FILE_CHARS_PAGE, MAX_TERMINAL_BG_COMMAND_TIME, MAX_TERMINAL_INACTIVE_TIME } from '../../common/prompt/prompts.js'
+import { RAGContextService } from '../../common/ragContextService.js'
+import { IRAGService } from '../../common/ragService.js'
+import { RawToolParamsObj } from '../../common/sendLLMMessageTypes.js'
+import { BuiltinToolCallParams, BuiltinToolName, BuiltinToolResultType, LintErrorItem } from '../../common/tools/toolsServiceTypes.js'
+import { IVoidModelService } from '../../common/voidModelService.js'
+import { IVoidSettingsService } from '../../common/voidSettingsService.js'
+import { IDocumentCreatorService } from '../documentCreatorService.js'
+import { IDocumentEditorService } from '../documentViewers/documentEditorService.js'
+import { IEditCodeService } from '../editCodeServiceInterface.js'
 import { ITerminalToolService } from './terminalToolService.js'
-import { IVoidCommandBarService } from './voidCommandBarService.js'
+import { IVoidCommandBarService } from '../voidCommandBarService.js'
 
 
 // tool use for AI
@@ -146,6 +148,8 @@ export class ToolsService implements IToolsService {
 	public callTool: CallBuiltinTool;
 	public stringOfResult: BuiltinToolResultToString;
 
+	private readonly braveSearchChannel: IChannel;
+
 	constructor(
 		@IFileService fileService: IFileService,
 		@IWorkspaceContextService workspaceContextService: IWorkspaceContextService,
@@ -162,8 +166,12 @@ export class ToolsService implements IToolsService {
 		@IDocumentViewerService private readonly documentViewerService: IDocumentViewerService,
 		@IDocumentEditorService private readonly documentEditorService: IDocumentEditorService,
 		@IDocumentCreatorService private readonly documentCreatorService: IDocumentCreatorService,
+		@IMainProcessService mainProcessService: IMainProcessService,
 	) {
 		const queryBuilder = instantiationService.createInstance(QueryBuilder);
+
+		// Get IPC channel for Brave Search (runs in electron-main to avoid CORS)
+		this.braveSearchChannel = mainProcessService.getChannel('void-channel-brave-search');
 
 		this.validateParams = {
 			read_file: (params: RawToolParamsObj) => {
@@ -320,6 +328,39 @@ export class ToolsService implements IToolsService {
 			},
 			rag_get_stats: (params: RawToolParamsObj) => {
 				return {};
+			},
+
+			// --- Web Search tools
+			web_search: (params: RawToolParamsObj) => {
+				const { query: queryUnknown, count: countUnknown, offset: offsetUnknown } = params;
+				const query = validateStr('query', queryUnknown);
+				const count = validateNumber(countUnknown, { default: 10 });
+				const offset = validateNumber(offsetUnknown, { default: 0 });
+				return { query, count, offset };
+			},
+			multi_link_search: (params: RawToolParamsObj) => {
+				const { queries: queriesUnknown, count: countUnknown } = params;
+
+				// Handle queries - could be array or JSON string
+				let queries: string[];
+				if (typeof queriesUnknown === 'string') {
+					try {
+						queries = JSON.parse(queriesUnknown);
+						if (!Array.isArray(queries)) {
+							throw new Error('Parsed value is not an array');
+						}
+					} catch {
+						// Treat as single query if not valid JSON array
+						queries = [queriesUnknown];
+					}
+				} else if (Array.isArray(queriesUnknown)) {
+					queries = (queriesUnknown as unknown[]).map((q: unknown, i: number) => validateStr(`queries[${i}]`, q));
+				} else {
+					throw new Error(`Invalid LLM output: queries must be an array of strings.`);
+				}
+
+				const count = validateNumber(countUnknown, { default: 10 });
+				return { queries, count };
 			},
 
 			edit_document: (params: RawToolParamsObj) => {
@@ -696,6 +737,48 @@ Example: rag_index_document with uri="/path/to/document.pdf" and is_policy_manua
 					};
 				}
 			},
+
+			// --- Web Search tools (via IPC to electron-main to avoid CORS)
+			web_search: async ({ query, count, offset }) => {
+				const apiKey = this.voidSettingsService.state.globalSettings.braveSearchApiKey;
+				if (!apiKey) {
+					throw new Error('Brave Search API key is required. Configure it in Settings > Web Search.');
+				}
+
+				if (!this.voidSettingsService.state.globalSettings.webSearchEnabled) {
+					throw new Error('Web Search is disabled. Enable it in Settings > Web Search.');
+				}
+
+				// Call electron-main via IPC to avoid CORS
+				const result = await this.braveSearchChannel.call('webSearch', {
+					apiKey,
+					query,
+					count: count || 10,
+					offset: offset || 0,
+				}) as BuiltinToolResultType['web_search'];
+
+				return { result };
+			},
+
+			multi_link_search: async ({ queries, count }) => {
+				const apiKey = this.voidSettingsService.state.globalSettings.braveSearchApiKey;
+				if (!apiKey) {
+					throw new Error('Brave Search API key is required. Configure it in Settings > Web Search.');
+				}
+
+				if (!this.voidSettingsService.state.globalSettings.webSearchEnabled) {
+					throw new Error('Web Search is disabled. Enable it in Settings > Web Search.');
+				}
+
+				// Call electron-main via IPC to avoid CORS
+				const result = await this.braveSearchChannel.call('multiLinkSearch', {
+					apiKey,
+					queries,
+					count: count || 10,
+				}) as BuiltinToolResultType['multi_link_search'];
+
+				return { result };
+			},
 		}
 
 
@@ -825,6 +908,49 @@ Example: rag_index_document with uri="/path/to/document.pdf" and is_policy_manua
 					return `Failed to edit document: ${params.uri.fsPath}\nError: ${result.error}`;
 				}
 			},
+
+			// --- Web Search tools
+			web_search: (_params, result) => {
+				if (result.results.length === 0) {
+					return 'No results found.';
+				}
+
+				return result.results.map((r, i) => {
+					const parts = [
+						`${i + 1}. **${r.title}**`,
+						`   URL: ${r.url}`,
+						`   ${r.description}`,
+					];
+					if (r.age) {
+						parts.push(`   Published: ${r.age}`);
+					}
+					return parts.join('\n');
+				}).join('\n\n');
+			},
+
+			multi_link_search: (_params, result) => {
+				return result.searchResults.map(search => {
+					const header = `## Search: "${search.query}"`;
+					if (search.error) {
+						return `${header}\n\n❌ Error: ${search.error}`;
+					}
+					if (search.results.length === 0) {
+						return `${header}\n\nNo results found.`;
+					}
+					const resultsStr = search.results.map((r, i) => {
+						const parts = [
+							`${i + 1}. **${r.title}**`,
+							`   URL: ${r.url}`,
+							`   ${r.description}`,
+						];
+						if (r.age) {
+							parts.push(`   Published: ${r.age}`);
+						}
+						return parts.join('\n');
+					}).join('\n\n');
+					return `${header}\n\n${resultsStr}`;
+				}).join('\n\n---\n\n');
+			},
 		}
 
 
@@ -852,3 +978,6 @@ Example: rag_index_document with uri="/path/to/document.pdf" and is_policy_manua
 }
 
 registerSingleton(IToolsService, ToolsService, InstantiationType.Eager);
+
+
+

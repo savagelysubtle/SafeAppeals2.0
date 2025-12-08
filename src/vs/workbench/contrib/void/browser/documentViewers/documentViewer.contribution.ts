@@ -25,6 +25,8 @@ import { IDocumentViewerService } from '../../common/documentViewerService.js';
 import { DOCXContentExtractor } from './docxViewer/docxContentExtractor.js';
 import { PDFContentExtractor } from './pdfViewer/pdfContentExtractor.js';
 import './pdfViewer/pdfQuickEditActions.js';
+// Import PDF Annotation Service (registers the singleton)
+import './pdfViewer/pdfAnnotationService.js';
 import { XLSXContentExtractor } from './xlsxViewer/xlsxContentExtractor.js';
 
 // Register PDF Viewer Editor Pane
