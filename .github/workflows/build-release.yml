@@ -1,21 +1,27 @@
 name: Build SafeAppeals Release
 
 on:
+  push:
+    tags:
+      - 'v*'
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version tag (e.g., v1.0.0)'
+        description: 'Version tag (e.g., v1.4.9)'
         required: true
-        default: 'v1.0.0'
-  release:
-    types: [created]
+        default: 'v1.4.9'
 
 env:
   NODE_VERSION: '20'
+  NODE_OPTIONS: '--max-old-space-size=8192'
 
 jobs:
+  # ============================================
+  # Windows x64 Build
+  # ============================================
   build-windows:
     runs-on: windows-latest
+    timeout-minutes: 60
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -24,43 +30,89 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
 
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.x'
+          python-version: '3.11'
 
-      - name: Install Visual Studio Build Tools
-        uses: microsoft/setup-msbuild@v2
+      - name: Cache node_modules
+        uses: actions/cache@v4
+        with:
+          path: node_modules
+          key: ${{ runner.os }}-node-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-
 
       - name: Install dependencies
         run: npm install --no-audit --no-fund
         env:
-          ELECTRON_SKIP_BINARY_DOWNLOAD: 1
-          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: 1
           npm_config_arch: x64
+
+      - name: Fetch Electron and prebuilts
+        run: node build/lib/preLaunch.js
 
       - name: Build React components
         run: npm run buildreact
 
-      - name: Compile source (without mangling for CI memory limits)
+      - name: Compile TypeScript (CI mode - no mangling)
         run: npm run compile-build-ci
 
-      - name: Build Windows x64
-        run: npm run gulp vscode-win32-x64-min-ci
+      - name: Bundle VS Code
+        run: npm run gulp bundle-vscode
+
+      - name: Package Windows x64
+        run: npm run gulp vscode-win32-x64-ci
 
       - name: Add Inno Updater
         run: npm run gulp vscode-win32-x64-inno-updater
 
-      - name: Upload Windows Build
+      - name: Create Windows Installer
+        run: npm run gulp vscode-win32-x64-user-setup
+
+      - name: Get version from tag
+        id: get_version
+        shell: pwsh
+        run: |
+          $version = "${{ github.ref_name }}"
+          if ($version -eq "") { $version = "${{ github.event.inputs.version }}" }
+          if ($version -eq "") { $version = "v1.4.9" }
+          $version = $version -replace "^v", ""
+          echo "VERSION=$version" >> $env:GITHUB_OUTPUT
+
+      - name: Rename installer
+        shell: pwsh
+        run: |
+          $version = "${{ steps.get_version.outputs.VERSION }}"
+          Move-Item ".build/win32-x64/user-setup/VSCodeSetup.exe" ".build/win32-x64/user-setup/SafeAppealsNavigator-$version-win32-x64-user-setup.exe"
+
+      - name: Upload Windows Installer
         uses: actions/upload-artifact@v4
         with:
-          name: SafeAppeals-Windows-x64
-          path: ../VSCode-win32-x64/
+          name: SafeAppeals-Windows-x64-Installer
+          path: .build/win32-x64/user-setup/*.exe
           retention-days: 30
 
-  build-macos:
-    runs-on: macos-latest
+      - name: Create portable ZIP
+        shell: pwsh
+        run: |
+          $version = "${{ steps.get_version.outputs.VERSION }}"
+          Compress-Archive -Path "../VSCode-win32-x64/*" -DestinationPath "SafeAppealsNavigator-$version-win32-x64-portable.zip"
+
+      - name: Upload Windows Portable
+        uses: actions/upload-artifact@v4
+        with:
+          name: SafeAppeals-Windows-x64-Portable
+          path: SafeAppealsNavigator-*-win32-x64-portable.zip
+          retention-days: 30
+
+  # ============================================
+  # macOS x64 (Intel) Build
+  # ============================================
+  build-macos-x64:
+    runs-on: macos-13  # Intel Mac
+    timeout-minutes: 60
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -69,36 +121,67 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
 
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.x'
+          python-version: '3.11'
+
+      - name: Cache node_modules
+        uses: actions/cache@v4
+        with:
+          path: node_modules
+          key: ${{ runner.os }}-x64-node-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-x64-node-
 
       - name: Install dependencies
         run: npm install --no-audit --no-fund
-        env:
-          ELECTRON_SKIP_BINARY_DOWNLOAD: 1
-          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: 1
+
+      - name: Fetch Electron and prebuilts
+        run: node build/lib/preLaunch.js
 
       - name: Build React components
         run: npm run buildreact
 
-      - name: Compile source (without mangling for CI memory limits)
+      - name: Compile TypeScript (CI mode - no mangling)
         run: npm run compile-build-ci
 
-      - name: Build macOS x64
-        run: npm run gulp vscode-darwin-x64-min-ci
+      - name: Bundle VS Code
+        run: npm run gulp bundle-vscode
 
-      - name: Upload macOS Build
+      - name: Package macOS x64
+        run: npm run gulp vscode-darwin-x64-ci
+
+      - name: Get version from tag
+        id: get_version
+        run: |
+          version="${{ github.ref_name }}"
+          if [ -z "$version" ]; then version="${{ github.event.inputs.version }}"; fi
+          if [ -z "$version" ]; then version="v1.4.9"; fi
+          version="${version#v}"
+          echo "VERSION=$version" >> $GITHUB_OUTPUT
+
+      - name: Create macOS ZIP
+        run: |
+          version="${{ steps.get_version.outputs.VERSION }}"
+          cd ..
+          zip -r -y "$GITHUB_WORKSPACE/SafeAppealsNavigator-$version-darwin-x64.zip" VSCode-darwin-x64
+
+      - name: Upload macOS x64 Build
         uses: actions/upload-artifact@v4
         with:
           name: SafeAppeals-macOS-x64
-          path: ../VSCode-darwin-x64/
+          path: SafeAppealsNavigator-*-darwin-x64.zip
           retention-days: 30
 
-  build-linux:
-    runs-on: ubuntu-latest
+  # ============================================
+  # macOS ARM64 (Apple Silicon) Build
+  # ============================================
+  build-macos-arm64:
+    runs-on: macos-14  # Apple Silicon Mac
+    timeout-minutes: 60
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -107,87 +190,221 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
 
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.x'
+          python-version: '3.11'
+
+      - name: Cache node_modules
+        uses: actions/cache@v4
+        with:
+          path: node_modules
+          key: ${{ runner.os }}-arm64-node-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-arm64-node-
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Fetch Electron and prebuilts
+        run: node build/lib/preLaunch.js
+
+      - name: Build React components
+        run: npm run buildreact
+
+      - name: Compile TypeScript (CI mode - no mangling)
+        run: npm run compile-build-ci
+
+      - name: Bundle VS Code
+        run: npm run gulp bundle-vscode
+
+      - name: Package macOS ARM64
+        run: npm run gulp vscode-darwin-arm64-ci
+
+      - name: Get version from tag
+        id: get_version
+        run: |
+          version="${{ github.ref_name }}"
+          if [ -z "$version" ]; then version="${{ github.event.inputs.version }}"; fi
+          if [ -z "$version" ]; then version="v1.4.9"; fi
+          version="${version#v}"
+          echo "VERSION=$version" >> $GITHUB_OUTPUT
+
+      - name: Create macOS ARM64 ZIP
+        run: |
+          version="${{ steps.get_version.outputs.VERSION }}"
+          cd ..
+          zip -r -y "$GITHUB_WORKSPACE/SafeAppealsNavigator-$version-darwin-arm64.zip" VSCode-darwin-arm64
+
+      - name: Upload macOS ARM64 Build
+        uses: actions/upload-artifact@v4
+        with:
+          name: SafeAppeals-macOS-arm64
+          path: SafeAppealsNavigator-*-darwin-arm64.zip
+          retention-days: 30
+
+  # ============================================
+  # Linux x64 Build
+  # ============================================
+  build-linux:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 60
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
 
       - name: Install build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libxkbfile-dev pkg-config libsecret-1-dev libkrb5-dev
+          sudo apt-get install -y \
+            libxkbfile-dev \
+            pkg-config \
+            libsecret-1-dev \
+            libkrb5-dev \
+            libx11-dev \
+            libxrandr-dev \
+            libxi-dev \
+            fakeroot \
+            rpm
+
+      - name: Cache node_modules
+        uses: actions/cache@v4
+        with:
+          path: node_modules
+          key: ${{ runner.os }}-node-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-
 
       - name: Install dependencies
         run: npm install --no-audit --no-fund
-        env:
-          ELECTRON_SKIP_BINARY_DOWNLOAD: 1
-          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: 1
+
+      - name: Fetch Electron and prebuilts
+        run: node build/lib/preLaunch.js
 
       - name: Build React components
         run: npm run buildreact
 
-      - name: Compile source (without mangling for CI memory limits)
+      - name: Compile TypeScript (CI mode - no mangling)
         run: npm run compile-build-ci
 
-      - name: Build Linux x64
-        run: npm run gulp vscode-linux-x64-min-ci
+      - name: Bundle VS Code
+        run: npm run gulp bundle-vscode
+
+      - name: Package Linux x64
+        run: npm run gulp vscode-linux-x64-ci
+
+      - name: Get version from tag
+        id: get_version
+        run: |
+          version="${{ github.ref_name }}"
+          if [ -z "$version" ]; then version="${{ github.event.inputs.version }}"; fi
+          if [ -z "$version" ]; then version="v1.4.9"; fi
+          version="${version#v}"
+          echo "VERSION=$version" >> $GITHUB_OUTPUT
+
+      - name: Create Linux tarball
+        run: |
+          version="${{ steps.get_version.outputs.VERSION }}"
+          cd ..
+          tar -czvf "$GITHUB_WORKSPACE/SafeAppealsNavigator-$version-linux-x64.tar.gz" VSCode-linux-x64
 
       - name: Upload Linux Build
         uses: actions/upload-artifact@v4
         with:
           name: SafeAppeals-Linux-x64
-          path: ../VSCode-linux-x64/
+          path: SafeAppealsNavigator-*-linux-x64.tar.gz
           retention-days: 30
 
+  # ============================================
+  # Create GitHub Release with all assets
+  # ============================================
   create-release:
-    needs: [build-windows, build-macos, build-linux]
+    needs: [build-windows, build-macos-x64, build-macos-arm64, build-linux]
     runs-on: ubuntu-latest
-    if: github.event_name == 'release' || github.event_name == 'workflow_dispatch'
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+    permissions:
+      contents: write
     steps:
-      - name: Download Windows artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: SafeAppeals-Windows-x64
-          path: ./SafeAppeals-Windows-x64
-
-      - name: Download macOS artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: SafeAppeals-macOS-x64
-          path: ./SafeAppeals-macOS-x64
-
-      - name: Download Linux artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: SafeAppeals-Linux-x64
-          path: ./SafeAppeals-Linux-x64
-
-      - name: Create ZIP archives
+      - name: Get version
+        id: get_version
         run: |
-          zip -r SafeAppeals-Windows-x64.zip SafeAppeals-Windows-x64
-          zip -r SafeAppeals-macOS-x64.zip SafeAppeals-macOS-x64
-          tar -czvf SafeAppeals-Linux-x64.tar.gz SafeAppeals-Linux-x64
+          version="${{ github.ref_name }}"
+          if [ -z "$version" ]; then version="${{ github.event.inputs.version }}"; fi
+          if [ -z "$version" ]; then version="v1.4.9"; fi
+          version="${version#v}"
+          echo "VERSION=$version" >> $GITHUB_OUTPUT
 
-      - name: Upload Release Assets
-        uses: softprops/action-gh-release@v1
-        if: github.event_name == 'release'
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
         with:
-          files: |
-            SafeAppeals-Windows-x64.zip
-            SafeAppeals-macOS-x64.zip
-            SafeAppeals-Linux-x64.tar.gz
+          path: ./artifacts
+
+      - name: List artifacts
+        run: |
+          echo "Downloaded artifacts:"
+          find ./artifacts -type f -name "*"
+
+      - name: Prepare release assets
+        run: |
+          mkdir -p release-assets
+          # Find and copy all release files
+          find ./artifacts -name "*.exe" -exec cp {} release-assets/ \;
+          find ./artifacts -name "*.zip" -exec cp {} release-assets/ \;
+          find ./artifacts -name "*.tar.gz" -exec cp {} release-assets/ \;
+          echo "Release assets:"
+          ls -la release-assets/
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name || github.event.inputs.version }}
+          name: Safe Appeals Navigator v${{ steps.get_version.outputs.VERSION }}
+          body: |
+            ## 🎉 Safe Appeals Navigator v${{ steps.get_version.outputs.VERSION }}
+
+            Safe Appeals Navigator is a VSCode fork combining AI-powered code editing with specialized legal research and case management tools for workers' compensation appeals.
+
+            ### 📦 Downloads
+
+            | Platform | File | Description |
+            |----------|------|-------------|
+            | **Windows** | `SafeAppealsNavigator-${{ steps.get_version.outputs.VERSION }}-win32-x64-user-setup.exe` | Installer (recommended) |
+            | **Windows** | `SafeAppealsNavigator-${{ steps.get_version.outputs.VERSION }}-win32-x64-portable.zip` | Portable version |
+            | **macOS Intel** | `SafeAppealsNavigator-${{ steps.get_version.outputs.VERSION }}-darwin-x64.zip` | For Intel Macs |
+            | **macOS Apple Silicon** | `SafeAppealsNavigator-${{ steps.get_version.outputs.VERSION }}-darwin-arm64.zip` | For M1/M2/M3 Macs |
+            | **Linux** | `SafeAppealsNavigator-${{ steps.get_version.outputs.VERSION }}-linux-x64.tar.gz` | Linux x64 |
+
+            ### ✨ Key Features
+            - AI Agent Mode for code editing assistance
+            - Legal Research Tools for workers' compensation cases
+            - Case Organizer for managing case profiles and documents
+            - Custom SafeAppeals-branded themes
+
+            ### 💻 System Requirements
+            - **Windows**: Windows 10 or later (64-bit)
+            - **macOS**: macOS 10.15 or later
+            - **Linux**: Ubuntu 18.04+, Fedora 32+, or equivalent
+
+            ### 📝 Installation
+            - **Windows**: Run the `.exe` installer (no admin required for user setup)
+            - **macOS**: Extract the `.zip` and drag to Applications
+            - **Linux**: Extract the `.tar.gz` and run `./safe-appeals-navigator`
+
+          draft: false
+          prerelease: false
+          files: release-assets/*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Upload artifacts for manual dispatch
-        if: github.event_name == 'workflow_dispatch'
-        uses: actions/upload-artifact@v4
-        with:
-          name: SafeAppeals-All-Platforms-${{ github.event.inputs.version }}
-          path: |
-            SafeAppeals-Windows-x64.zip
-            SafeAppeals-macOS-x64.zip
-            SafeAppeals-Linux-x64.tar.gz
-          retention-days: 90
-
