@@ -36,6 +36,7 @@ import { approvalTypeOfBuiltinToolName, BuiltinToolCallParams, ToolCallParams, T
 import { IVoidModelService } from '../common/voidModelService.js';
 import { IVoidSettingsService } from '../common/voidSettingsService.js';
 import { FeatureName, ModelSelection, ModelSelectionOptions } from '../common/voidSettingsTypes.js';
+import { IContextTrackingService } from '../common/contextTrackingService.js';
 import { IConvertToLLMMessageService } from './convertToLLMMessageService.js';
 import { IEditCodeService } from './editCodeServiceInterface.js';
 import { IToolsService } from './tools/toolsService.js';
@@ -291,6 +292,10 @@ export interface IChatThreadService {
 
 	focusCurrentChat: () => Promise<void>
 	blurCurrentChat: () => Promise<void>
+
+	// context window management
+	summarizeThread(threadId: string, preserveCount?: number): Promise<void>;
+	getContextUsage(threadId: string): { totalTokens: number; contextWindow: number; usagePercent: number } | null;
 }
 
 export const IChatThreadService = createDecorator<IChatThreadService>('voidChatThreadService');
@@ -327,6 +332,7 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 		@IDirectoryStrService private readonly _directoryStringService: IDirectoryStrService,
 		@IFileService private readonly _fileService: IFileService,
 		@IMCPService private readonly _mcpService: IMCPService,
+		@IContextTrackingService private readonly _contextTrackingService: IContextTrackingService,
 	) {
 		super()
 		this.state = { allThreads: {}, currentThreadId: null as unknown as string } // default state
@@ -1396,6 +1402,16 @@ We only need to do it for files that were edited since `from`, ie files between 
 			await this.abortRunning(threadId)
 		}
 
+		// Check for auto-summarization before adding message
+		const { contextWindowAutoSummarize, contextWindowAutoSummarizeThreshold, contextWindowPreserveRecentMessages } = this._settingsService.state.globalSettings
+		if (contextWindowAutoSummarize) {
+			const usage = this.getContextUsage(threadId)
+			if (usage && usage.usagePercent >= contextWindowAutoSummarizeThreshold) {
+				// Auto-summarize before adding new message
+				await this.summarizeThread(threadId, contextWindowPreserveRecentMessages)
+			}
+		}
+
 		// add dummy before this message to keep checkpoint before user message idea consistent
 		if (thread.messages.length === 0) {
 			this._addUserCheckpoint({ threadId })
@@ -2033,7 +2049,179 @@ We only need to do it for files that were edited since `from`, ie files between 
 		this._setCurrentMessageState(newState, messageIdx)
 	}
 
+	// ============================================
+	// CONTEXT WINDOW MANAGEMENT
+	// ============================================
 
+	/**
+	 * Get context usage information for a thread
+	 */
+	getContextUsage(threadId: string): { totalTokens: number; contextWindow: number; usagePercent: number } | null {
+		const thread = this.state.allThreads[threadId]
+		if (!thread) return null
+
+		const modelSelection = this._settingsService.state.modelSelectionOfFeature['Chat']
+		if (!modelSelection) return null
+
+		// Use the context tracking service for calculations
+		const usage = this._contextTrackingService.getContextUsageForThread(
+			thread.messages,
+			modelSelection.providerName,
+			modelSelection.modelName
+		)
+
+		return {
+			totalTokens: usage.totalTokens,
+			contextWindow: usage.availableInputTokens,
+			usagePercent: usage.usagePercent
+		}
+	}
+
+	/**
+	 * Summarize thread conversation to reduce context usage.
+	 * This sends a summarization request to the LLM, then replaces older messages
+	 * with a summary message while preserving recent messages.
+	 */
+	async summarizeThread(threadId: string, preserveCount: number = 4): Promise<void> {
+		const thread = this.state.allThreads[threadId]
+		if (!thread) return
+
+		// Filter out checkpoints and get content messages only
+		const contentMessages = thread.messages.filter(m =>
+			m.role === 'user' || m.role === 'assistant' || m.role === 'tool'
+		)
+
+		// Need at least preserveCount + 2 messages to summarize
+		if (contentMessages.length <= preserveCount + 1) {
+			this._notificationService.info('Not enough messages to summarize.')
+			return
+		}
+
+		// Split messages to summarize vs preserve
+		const preserveStartIdx = Math.max(0, contentMessages.length - preserveCount)
+		const messagesToSummarize = contentMessages.slice(0, preserveStartIdx)
+		const messagesToPreserve = contentMessages.slice(preserveStartIdx)
+
+		if (messagesToSummarize.length === 0) {
+			this._notificationService.info('Nothing to summarize.')
+			return
+		}
+
+		// Create a summary of the conversation
+		const summaryContent = this._createConversationSummary(messagesToSummarize)
+
+		// Build new messages array:
+		// 1. Checkpoints at the beginning
+		// 2. Summary message
+		// 3. Preserved recent messages
+		// 4. Checkpoints at the end
+		const checkpointsBeforeIdx = thread.messages.findIndex(m => m.role !== 'checkpoint')
+		const checkpointsBefore = checkpointsBeforeIdx > 0 ? thread.messages.slice(0, checkpointsBeforeIdx) : []
+
+		const newMessages: ChatMessage[] = [
+			...checkpointsBefore,
+			// Add a new checkpoint before the summary
+			{
+				role: 'checkpoint',
+				type: 'user_edit',
+				voidFileSnapshotOfURI: {},
+				userModifications: { voidFileSnapshotOfURI: {} },
+			},
+			// Summary as a "system-like" user message
+			{
+				role: 'user',
+				content: `[Conversation Summary]\n${summaryContent}`,
+				displayContent: `📋 **Conversation Summary** (${messagesToSummarize.length} messages condensed)\n\n${summaryContent}`,
+				selections: [],
+				state: {
+					stagingSelections: [],
+					isBeingEdited: false,
+				},
+			},
+			// Assistant acknowledgment
+			{
+				role: 'assistant',
+				displayContent: 'I\'ve noted the conversation summary. The context has been condensed to free up space. How can I help you continue?',
+				reasoning: '',
+				anthropicReasoning: null,
+			},
+			...messagesToPreserve,
+		]
+
+		// Update the thread with new messages
+		const newThreads = {
+			...this.state.allThreads,
+			[threadId]: {
+				...thread,
+				lastModified: new Date().toISOString(),
+				messages: newMessages,
+			}
+		}
+
+		this._storeAllThreads(newThreads)
+		this._setState({ allThreads: newThreads })
+
+		this._notificationService.info(
+			`Summarized ${messagesToSummarize.length} messages. ${messagesToPreserve.length} recent messages preserved.`
+		)
+
+		this._metricsService.capture('Thread Summarized', {
+			threadId,
+			messagesSummarized: messagesToSummarize.length,
+			messagesPreserved: messagesToPreserve.length,
+		})
+	}
+
+	/**
+	 * Create a text summary of conversation messages
+	 */
+	private _createConversationSummary(messages: ChatMessage[]): string {
+		const summaryParts: string[] = []
+
+		// Group messages by conversation turns
+		let currentTurn: string[] = []
+		let lastRole: string | null = null
+
+		for (const message of messages) {
+			if (message.role === 'user') {
+				if (currentTurn.length > 0 && lastRole !== 'user') {
+					summaryParts.push(currentTurn.join('\n'))
+					currentTurn = []
+				}
+				const content = message.displayContent || message.content || ''
+				if (content.trim()) {
+					currentTurn.push(`• User asked: ${this._truncateText(content, 200)}`)
+				}
+				lastRole = 'user'
+			} else if (message.role === 'assistant') {
+				const content = message.displayContent || ''
+				if (content.trim()) {
+					currentTurn.push(`• Assistant responded: ${this._truncateText(content, 300)}`)
+				}
+				lastRole = 'assistant'
+			} else if (message.role === 'tool') {
+				currentTurn.push(`• Tool "${message.name}" was used`)
+				lastRole = 'tool'
+			}
+		}
+
+		if (currentTurn.length > 0) {
+			summaryParts.push(currentTurn.join('\n'))
+		}
+
+		return summaryParts.join('\n\n')
+	}
+
+	/**
+	 * Truncate text to a maximum length with ellipsis
+	 */
+	private _truncateText(text: string, maxLength: number): string {
+		// Remove code blocks for summary
+		const withoutCodeBlocks = text.replace(/```[\s\S]*?```/g, '[code block]')
+		const trimmed = withoutCodeBlocks.trim().replace(/\n+/g, ' ')
+		if (trimmed.length <= maxLength) return trimmed
+		return trimmed.substring(0, maxLength - 3) + '...'
+	}
 
 }
 

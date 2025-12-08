@@ -7,8 +7,8 @@
 import { defaultModelsOfProvider, defaultProviderSettings, ModelOverrides } from './modelCapabilities.js';
 import { RAGOpenAIModel, RAGStorageScope, RAGVectorBackend } from './ragServiceTypes.js';
 import { ToolApprovalType } from './tools/toolsServiceTypes.js';
-import { VoidSettingsState } from './voidSettingsService.js';
 import { CloudModeOfProvider, defaultCloudModeOfProvider } from './voidCloudTypes.js';
+import { VoidSettingsState } from './voidSettingsService.js';
 
 
 type UnionOfKeys<T> = T extends T ? keyof T : never;
@@ -66,6 +66,9 @@ export const displayInfoOfProviderName = (providerName: ProviderName): DisplayIn
 	else if (providerName === 'openAI') {
 		return { title: 'OpenAI', }
 	}
+	else if (providerName === 'gemini') {
+		return { title: 'Gemini', }
+	}
 	else if (providerName === 'deepseek') {
 		return { title: 'DeepSeek', }
 	}
@@ -86,9 +89,6 @@ export const displayInfoOfProviderName = (providerName: ProviderName): DisplayIn
 	}
 	else if (providerName === 'openAICompatible') {
 		return { title: 'OpenAI-Compatible', }
-	}
-	else if (providerName === 'gemini') {
-		return { title: 'Gemini', }
 	}
 	else if (providerName === 'groq') {
 		return { title: 'Groq', }
@@ -116,9 +116,9 @@ export const subTextMdOfProviderName = (providerName: ProviderName): string => {
 
 	if (providerName === 'anthropic') return 'Get your [API Key here](https://console.anthropic.com/settings/keys).'
 	if (providerName === 'openAI') return 'Get your [API Key here](https://platform.openai.com/api-keys).'
+	if (providerName === 'gemini') return 'Get your [API Key here](https://aistudio.google.com/apikey). Read about [rate limits here](https://ai.google.dev/gemini-api/docs/rate-limits#current-rate-limits).'
 	if (providerName === 'deepseek') return 'Get your [API Key here](https://platform.deepseek.com/api_keys).'
 	if (providerName === 'openRouter') return 'Get your [API Key here](https://openrouter.ai/settings/keys). Read about [rate limits here](https://openrouter.ai/docs/api-reference/limits).'
-	if (providerName === 'gemini') return 'Get your [API Key here](https://aistudio.google.com/apikey). Read about [rate limits here](https://ai.google.dev/gemini-api/docs/rate-limits#current-rate-limits).'
 	if (providerName === 'groq') return 'Get your [API Key here](https://console.groq.com/keys).'
 	if (providerName === 'xAI') return 'Get your [API Key here](https://console.x.ai).'
 	if (providerName === 'mistral') return 'Get your [API Key here](https://console.mistral.ai/api-keys).'
@@ -498,6 +498,11 @@ export type GlobalSettings = {
 	voidCloudEnabled: boolean;                    // Master toggle for SafeAppeals Cloud
 	voidCloudApiUrl: string;                      // API URL (for self-hosting)
 	voidCloudModeOfProvider: CloudModeOfProvider; // Per-provider cloud mode toggle
+	// Context Window Tracking settings
+	contextWindowShowIndicator: boolean;          // Show context usage indicator in chat
+	contextWindowAutoSummarize: boolean;          // Enable auto-summarization when approaching limit
+	contextWindowAutoSummarizeThreshold: number;  // Threshold percentage to trigger auto-summarize (0.0-1.0)
+	contextWindowPreserveRecentMessages: number;  // Number of recent messages to preserve when summarizing
 }
 
 export const defaultGlobalSettings: GlobalSettings = {
@@ -558,6 +563,11 @@ export const defaultGlobalSettings: GlobalSettings = {
 	voidCloudEnabled: false,                      // Disabled by default, user must opt-in
 	voidCloudApiUrl: 'https://void-cloud-production.up.railway.app', // Default API URL
 	voidCloudModeOfProvider: defaultCloudModeOfProvider,
+	// Context Window Tracking defaults
+	contextWindowShowIndicator: true,             // Show indicator by default
+	contextWindowAutoSummarize: false,            // Disabled by default, user must opt-in
+	contextWindowAutoSummarizeThreshold: 0.85,    // Trigger at 85% capacity
+	contextWindowPreserveRecentMessages: 4,       // Preserve last 4 messages
 }
 
 export type GlobalSettingName = keyof GlobalSettings
