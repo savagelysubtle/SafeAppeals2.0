@@ -321,9 +321,9 @@
 		{
 			"label": "run dashboard",
 			"type": "shell",
-			"command": "bun run dev",
+			"command": "cd void-cloud/dashboard && bun run dev",
 			"options": {
-				"cwd": "${workspaceFolder}/void-cloud/dashboard"
+				"cwd": "${workspaceFolder:SafeAppeals2.0}"
 			},
 			"isBackground": true,
 			"problemMatcher": [],

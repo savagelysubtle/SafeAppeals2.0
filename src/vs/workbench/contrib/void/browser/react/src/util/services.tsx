@@ -56,6 +56,9 @@ import { IStorageService, StorageScope } from '../../../../../../../platform/sto
 import { OPT_OUT_KEY } from '../../../../common/storageKeys.js'
 import { IFileOrganizerService } from '../../../fileOrganizer/fileOrganizerService.js';
 import { IVoidCloudService } from '../../../voidCloudService.js';
+import { IFileDialogService } from '../../../../../../../platform/dialogs/common/dialogs.js';
+import { IOpenerService } from '../../../../../../../platform/opener/common/opener.js';
+import { IFileConverterService } from '../../../fileConverter/fileConverterService.js';
 
 
 // normally to do this you'd use a useEffect that calls .onDidChangeState(), but useEffect mounts too late and misses initial state changes
@@ -233,6 +236,9 @@ const getReactAccessor = (accessor: ServicesAccessor) => {
 		IStorageService: accessor.get(IStorageService),
 		IFileOrganizerService: accessor.get(IFileOrganizerService),
 		IVoidCloudService: accessor.get(IVoidCloudService),
+		IFileDialogService: accessor.get(IFileDialogService),
+		IOpenerService: accessor.get(IOpenerService),
+		IFileConverterService: accessor.get(IFileConverterService),
 
 	} as const
 	return reactAccessor

@@ -5,8 +5,6 @@ _Support this project: [paypal.me/safeappealnavigator](https://paypal.me/safeapp
 [![GitHub stars](https://img.shields.io/github/stars/savagelysubtle/SafeAppeals2.0?style=social)](https://github.com/savagelysubtle/SafeAppeals2.0/stargazers)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![TypeScript](https://img.shields.io/badge/TypeScript-94.7%25-blue.svg)](https://www.typescriptlang.org/)
-[![Python](https://img.shields.io/badge/Python-3.8%2B-blue.svg)](https://www.python.org/)
-[![Node.js](https://img.shields.io/badge/Node.js-18%2B-green.svg)](https://nodejs.org/)
 
 <div align="center">
  <img
@@ -17,81 +15,198 @@ _Support this project: [paypal.me/safeappealnavigator](https://paypal.me/safeapp
  />
 </div>
 
-**Your intelligent companion for navigating workers compensation appeals. Organize case files, research legal precedents, and build compelling appeals with AI-powered document management and legal research—all within a powerful code editor environment.**
+**Your intelligent companion for navigating workers' compensation appeals.** Organize case files, research policy manuals, and manage your documents with AI-powered assistance—all in one desktop application designed specifically for legal case management.
 
-SafeAppealNavigator is a next-generation IDE and research platform built on VSCode, combining the power of AI-assisted code editing with specialized tools for legal research and case management. Whether you're developing software, managing legal documents, or navigating Workers' Compensation appeals, SafeAppealNavigator provides an integrated environment with vibrant lime green accents.
-
----
-
-## 🎯 SafeAppealNavigator
-
-_Support this project: [paypal.me/safeappealnavigator](https://paypal.me/safeappealnavigator)_
-
-### ⚖️ **Legal Research & Case Management**
-
-- **For Injured Workers**: Organize your case, understand your rights, build stronger appeals
-- **For Legal Advocates**: Streamline case research and document preparation
-- **For Support Organizations**: Assist multiple clients with professional case management
+SafeAppealNavigator is a specialized document management platform that combines native PDF, DOCX, and XLSX viewing with intelligent file organization and AI-powered research tools. Whether you're an injured worker managing your own case, a legal advocate helping clients, or a support organization assisting multiple claimants, SafeAppealNavigator provides the tools you need to build compelling appeals.
 
 ---
 
-## 🧭 Quick Links
+## 🎯 Who Is This For?
 
-- 📂 [GitHub Repository](https://github.com/savagelysubtle/SafeAppeals2.0)
-- 🐛 [Issues](https://github.com/savagelysubtle/SafeAppeals2.0/issues)
-- 📋 [Project Board](https://github.com/savagelysubtle/SafeAppeals2.0/projects)
-
----
-
-## ✨ Key Features
-
-_Support this project: [paypal.me/safeappealnavigator](https://paypal.me/safeappealnavigator)_
-
-### 📁 Smart Case Organization
-
-- **Document Management**: Automatically organize medical reports, correspondence, and legal documents
-- **Timeline Builder**: Create visual timelines of case progression and key milestones
-- **Deadline Tracking**: Never miss critical deadlines or hearing dates
-- **Evidence Categorization**: Smart tagging and organization of supporting documentation
-
-### ⚖️ Workers Compensation Research
-
-- **Precedent Discovery**: Find appeal decisions and case law with circumstances similar to your case
-- **Policy Analysis**: Search and understand relevant workers compensation policies and procedures
-- **Case Strength Assessment**: AI analysis of your position based on similar successful cases
-- **Gap Identification**: Discover what evidence or documentation might strengthen your case
-
-### 📝 Professional Document Creation
-
-- **Appeal Letters**: Generate well-structured appeal submissions with proper legal formatting
-- **Medical Summaries**: Transform complex medical records into clear, compelling narratives
-- **Case Briefs**: Create comprehensive overviews for legal representatives or hearings
-- **Evidence Packages**: Organize supporting documentation for maximum impact
-
-### 🤖 AI-Powered Insights
-
-- **Plain Language Explanations**: Complex legal concepts explained in understandable terms
-- **Strategic Recommendations**: Next steps and strategies based on case analysis
-- **Document Analysis**: AI review of documents to identify strengths and weaknesses
-- **Research Assistance**: Intelligent search across legal databases and precedent cases
-
-### 🛠️ Advanced Development Tools
-
-- **AI Code Agents**: Multi-agent workflows for code analysis and refactoring
-- **Version Control Integration**: Git integration with visual diff and merge tools
-- **Rich Text Editing**: Built-in support for DOCX and rich text formats
-- **Extensible Architecture**: MCP (Model Context Protocol) support for custom tool integration
+- **Injured Workers**: Organize your case, understand your rights, build stronger appeals
+- **Legal Advocates**: Streamline case research and document preparation
+- **Support Organizations**: Assist multiple clients with professional case management
 
 ---
 
-## 🚀 Installation & Setup
+## ✨ Core Features
 
-_Support this project: [paypal.me/safeappealnavigator](https://paypal.me/safeappealnavigator)_
+### 📄 Native Document Viewing & Editing
+
+Open and work with your legal documents directly—no external apps needed.
+
+**PDF Viewer**
+
+- Multi-page navigation with smooth scrolling
+- Zoom controls (fit-to-width, fit-to-page, custom zoom)
+- Text selection and copy
+- Highlight annotations with color options (yellow, green, blue, pink)
+- Bookmarks for quick navigation
+- Annotation persistence to workspace
+
+**Word Documents (DOCX)**
+
+- Rich text display with formatting preservation
+- Live editing via built-in editor
+- Insert text, tables, and page breaks
+- Find and replace functionality
+- Format text (bold, italic, underline, font size, color)
+
+**Excel Spreadsheets (XLSX/XLS)**
+
+- Multi-sheet support with tab navigation
+- Cell selection and editing
+- Formula display and evaluation
+- Insert/delete rows and columns
+- Cell formatting options
+
+**Image Viewer**
+
+- Support for JPG, PNG, GIF, WEBP, SVG
+- Zoom controls with fit-to-window and 100% view
+- Pan/drag navigation when zoomed
+- Rotate controls (left/right)
+- Checkerboard background for transparency
+
+---
+
+### 📁 Smart File Organization
+
+Organize your case files intelligently with the File Organizer.
+
+**Classification System**
+
+- Categorize files as "Your Side" or "Their Side"
+- Keyword-based auto-classification using configurable keyword lists
+- AI-powered classification with naming suggestions and tag recommendations
+
+**Rule Engine**
+
+- Apply naming patterns: `{Side}_{Category}_{Date}_{Description}.ext`
+- Tag files automatically based on content
+- Route files to appropriate folders based on classification
+
+**Smart Destination Routing**
+
+- Auto-detection of case folder structure
+- Classification-based folder routing
+- Preview changes before applying
+
+**Safety Features**
+
+- No overwrites—duplicate detection with auto-suffix
+- Automatic folder creation
+- Metadata storage in companion `.meta` files
+
+---
+
+### 📋 Case Info Dashboard
+
+Track all case details in one place with the dedicated sidebar panel.
+
+**What You Can Store**
+
+- Case number and claimant name
+- Injury date and case type
+- Party information:
+  - **Your Side**: Advocates, treating doctors, lawyers
+  - **Their Side**: Employer, case managers, review officers, IME doctors
+  - **WCB**: Adjudicators, references
+
+**Keyword Configuration**
+
+- Define keywords for automatic file tagging
+- Separate "Your Side" and "Their Side" keywords
+- Names from parties are automatically added to keywords
+
+**AI Context Integration**
+
+- Case information is automatically available to the AI chat
+- Helps AI understand your case context for better assistance
+
+---
+
+### 🔍 Policy Manual Research (RAG System)
+
+Build a searchable knowledge base of policy manuals and reference documents.
+
+**Document Indexing**
+
+- Drop PDF, DOCX, TXT, or MD files into `policy-manuals/` folder
+- Auto-indexing with file watching
+- Right-click context menu: "Index as Policy Manual"
+
+**Semantic Search**
+
+- Find relevant policies by meaning, not just keywords
+- Local embeddings using `all-MiniLM-L6-v2` model (~23 MB)
+- **$0 cost** — works offline after first model download
+
+**AI Integration**
+
+- Search policy manuals from chat
+- Get context-aware answers based on your indexed documents
+- Relevance scoring and attribution
+
+---
+
+### 🤖 AI-Powered Assistance
+
+Built-in AI chat to help with your case research.
+
+**Chat Features**
+
+- Multi-provider support (OpenAI, Anthropic, Google, DeepSeek)
+- BYOK (Bring Your Own Key) or use Void Cloud
+- Context-aware responses using your case info and documents
+
+**Agent Mode**
+
+- Automated workflows for file organization
+- Case Organizer agent for sorting unsorted files
+- Terminal tool access for file operations
+
+**Quick Actions**
+
+- Ctrl+K for quick edits
+- Ctrl+L to open chat with context
+
+---
+
+### 📂 Case Organizer Workflow
+
+Automated agent workflow for organizing messy case folders.
+
+**How It Works**
+
+1. Run "Void: Initialize Case Organizer" command
+2. Agent opens in sidebar with pre-filled prompt
+3. Choose mode: Full Auto, Interactive, or Manual
+4. Agent organizes files with dry-run preview
+
+**Folder Structure Created**
+
+- `Medical_Reports/`
+- `Correspondence/`
+- `Decisions_and_Orders/`
+- `Evidence/`
+- `Personal_Notes/`
+- `Uncategorized/`
+
+**Safety Features**
+
+- Dry-run preview before any changes
+- Automatic backups to `tosort/_originals/`
+- Operation logging and undo plans
+- No deletions by default
+
+---
+
+## 🚀 Installation
 
 ### Prerequisites
 
-- **Node.js 20** (see `.nvmrc` file)
-- **Python 3.8+** (for advanced PDF extraction)
+- **Node.js 20+** (see `.nvmrc` file)
 - **Git**
 - **Windows, macOS, or Linux**
 
@@ -104,177 +219,115 @@ _Support this project: [paypal.me/safeappealnavigator](https://paypal.me/safeapp
    cd SafeAppeals2.0
    ```
 
-2. **Install Python Environment (One-Time Setup)**
-
-   Set up the Python virtual environment for Docling:
+2. **Install Dependencies**
 
    ```bash
-   # Create virtual environment
-   uv venv
-
-   # Install Python dependencies
-   uv pip install -r pyproject.toml
-   ```
-
-3. **Download Docling ML Models (One-Time Setup)**
-
-   Download ML models locally (~260MB, takes 5-10 minutes):
-
-   ```bash
-   # Your .env file should already have HF_TOKEN
-   # Get token at: https://huggingface.co/settings/tokens
-   # Accept terms at: https://huggingface.co/ds4sd/docling-layout-heron
-
-   # Verify .env has your token:
-   # HF_TOKEN=hf_your_token_here
-
-   # Download models (uses Python from .venv)
-   .venv\Scripts\python.exe scripts\download-docling-models.py
-   ```
-
-   **After this one-time setup:**
-
-   - ✅ Models stored in `.docling_models/` (~260MB)
-   - ✅ No HF token needed at runtime
-   - ✅ Works offline
-   - ✅ Can optionally commit models to git (see `.gitignore`)
-
-4. **Install Node.js Dependencies**
-
-   ```bash
-   # Install all Node.js dependencies
    npm install
    ```
 
-5. **Fetch Prelaunch Dependencies**
+3. **Fetch Prelaunch Dependencies**
 
    ```bash
-   # Download Electron and required prebuilts
    node build/lib/preLaunch.js
    ```
 
-6. **Build the Editor**
+4. **Build the Application**
 
    ```bash
-   # Start watch mode builds (TypeScript core, React components, extensions)
+   # Start watch mode (recommended for development)
    npm run watch-clientd
+
+   # Or single build
+   npm run compile
    ```
 
-   Or run the default build task in VS Code: **Ctrl/Cmd+Shift+B** → "VS Code - Build"
-
-7. **Launch SafeAppealNavigator**
-
-   **From Terminal:**
+5. **Launch SafeAppealNavigator**
 
    ```bash
-   # macOS/Linux
-   ./scripts/code.sh
-
    # Windows
    .\scripts\code.bat
+
+   # macOS/Linux
+   ./scripts/code.sh
    ```
 
-   **From VS Code:**
+6. **Configure AI (Optional)**
 
-   - Press **F5** or use the "Launch VS Code Internal" debug configuration
-   - This sets `VSCODE_DEV=1` for proper CSS import support
+   Open Settings (Ctrl+,) and add your API keys for enhanced AI features:
 
-8. **Configure AI API Keys** (Optional)
-
-   For enhanced AI features, you can configure your API keys in the editor settings or through environment variables:
-
-   ```env
-   OPENAI_API_KEY="your-openai-key"
-   ANTHROPIC_API_KEY="your-anthropic-key"
-   GOOGLE_API_KEY="your-google-key"
-   ```
-
-9. **Optional: Configure MCP Tools**
-
-   SafeAppealNavigator supports extensible tool integration through MCP (Model Context Protocol). Configure additional research databases, document processing services, or legal research tools through the Void settings panel. The system comes pre-configured with essential file management and vector database tools.
-
-### Development Workflows
-
-- **Desktop App** (Recommended): Build with "VS Code - Build" task, then launch with "Launch VS Code Internal" (F5)
-- **Web Server**: Run task "Run code server" → Opens on `http://localhost:8080`
-- **Static Web**: Run task "Run code web" → Opens on `http://localhost:8080`
-- **Tests**: Run `./scripts/test.sh` (macOS/Linux) or `.\scripts\test.bat` (Windows)
-
-For detailed development instructions, see [`.vscode/README.md`](./.vscode/README.md)
+   - OpenAI, Anthropic, Google, or DeepSeek
+   - Or sign in to Void Cloud for managed access
 
 ---
 
-## 📖 How to Use
+## 📖 Getting Started
 
-_Support this project: [paypal.me/safeappealnavigator](https://paypal.me/safeappealnavigator)_
+### 1. Set Up Your Case
 
-### 🏥 Legal Case Management
+1. Open a folder for your case files
+2. Click the **Briefcase icon** in the sidebar to open Case Info
+3. Enter your claimant name, case number, and case type
+4. Add party names (advocates, case managers, etc.)
+5. Save to create `.fileorg.json`
 
-1. **Create New Case**: Set up a case file with injury and claim information
-2. **Upload Documents**: Import medical reports, agency correspondence, legal documents
-3. **Build Timeline**: Add key dates like injury date, claim submission, decisions, deadlines
-4. **Research Precedents**: Find appeal decisions and case law similar to your case
-5. **Generate Appeals**: Create professional appeal letters and supporting documents
+### 2. Organize Your Documents
 
-### 💻 Code Development
+1. Press **Ctrl+Shift+O** to open File Organizer
+2. Select files to organize
+3. Classify as "Your Side" or "Their Side"
+4. Review proposed changes
+5. Apply organization
 
-1. **Open Project**: Use File > Open Folder to open your codebase
-2. **AI Assistance**: Access AI agents through the Void panel
-3. **Code Analysis**: Let AI agents analyze and suggest improvements
-4. **Version Control**: Use built-in Git tools for change tracking
+### 3. Build Your Policy Reference
 
----
+1. Drop policy manuals into the `policy-manuals/` folder
+2. Files are automatically indexed
+3. Use AI chat to search: "What does policy say about..."
 
-## 📊 Real-World Success Stories (Coming Soon)
+### 4. Get AI Assistance
 
-_Support this project: [paypal.me/safeappealnavigator](https://paypal.me/safeappealnavigator)_
-
-### 🏗️ Construction Worker - Denied Surgery Coverage
-
-**Challenge**: Back injury from lifting, surgery coverage denied
-**Solution**: Found 12 similar appeal cases where surgery was approved, generated appeal emphasizing medical necessity
-**Outcome**: Surgery coverage approved on appeal
-
-### 🏥 Healthcare Worker - "Not Work-Related" Claim
-
-**Challenge**: Repetitive strain injury denied as non-work related
-**Solution**: Organized evidence linking injury to work duties, found precedents for similar injuries
-**Outcome**: Claim accepted after comprehensive appeal submission
-
-### 🚛 Driver - Mental Health Benefits
-
-**Challenge**: PTSD after workplace accident, mental health benefits denied
-**Solution**: Research showed precedents for psychological injury acceptance, organized witness statements
-**Outcome**: Mental health claim recognized and benefits approved
+1. Press **Ctrl+L** to open AI chat
+2. Ask questions about your case
+3. Request document summaries
+4. Get help drafting responses
 
 ---
 
 ## 🛡️ Privacy & Security
 
 - **Local Data Storage**: All case information stays on your computer
-- **Secure API Connections**: All AI interactions use encrypted connections
-- **No Data Sharing**: Your personal and legal information is never shared or stored externally
+- **Offline Capable**: RAG system works without internet after model download
+- **No Data Sharing**: Your documents are never uploaded without explicit action
 - **Open Source**: Full transparency—review the code yourself
-- **Direct Provider Access**: Messages sent directly to AI providers without retention
+
+---
+
+## 📊 Supported File Formats
+
+| Format      | View | Edit        | Index for RAG |
+| ----------- | ---- | ----------- | ------------- |
+| PDF         | ✅   | Annotations | ✅            |
+| DOCX        | ✅   | ✅          | ✅            |
+| XLSX/XLS    | ✅   | ✅          | ✅            |
+| TXT         | ✅   | ✅          | ✅            |
+| MD          | ✅   | ✅          | ✅            |
+| JPG/PNG/GIF | ✅   | —           | —             |
+| SVG/WEBP    | ✅   | —           | —             |
 
 ---
 
 ## 🤝 Contributing
 
-SafeAppealNavigator is open source and welcomes contributions from developers, legal professionals, and anyone who has navigated the workers compensation system.
+SafeAppealNavigator welcomes contributions from developers, legal professionals, and anyone who has navigated the workers' compensation system.
 
-### Development Setup
-
-1. Check out our [Project Board](https://github.com/savagelysubtle/SafeAppeals2.0/projects)
+1. Check the [Project Board](https://github.com/savagelysubtle/SafeAppeals2.0/projects)
 2. Read [HOW_TO_CONTRIBUTE](https://github.com/savagelysubtle/SafeAppeals2.0/blob/main/HOW_TO_CONTRIBUTE.md)
-3. Review [VOID_CODEBASE_GUIDE](https://github.com/savagelysubtle/SafeAppeals2.0/blob/main/VOID_CODEBASE_GUIDE.md) for codebase architecture
+3. Review [VOID_CODEBASE_GUIDE](https://github.com/savagelysubtle/SafeAppeals2.0/blob/main/VOID_CODEBASE_GUIDE.md)
 
 ### Code Standards
 
-- **TypeScript** (94.7% of codebase): Use Prettier for formatting, follow existing VSCode conventions, no unnecessary type casts or `any` types
-- **CSS/JavaScript**: Follow existing patterns in the codebase
-- **Python** (for extensions): Follow PEP 8, use Ruff for formatting, add type hints
-- Add comprehensive JSDoc/TSDoc comments for TypeScript code
+- **TypeScript**: Use Prettier, follow existing conventions, no `any` types
+- **React Components**: Located in `src/vs/workbench/contrib/void/browser/react/`
 - Write tests for new features
 - Submit pull requests with clear descriptions
 
@@ -282,7 +335,7 @@ SafeAppealNavigator is open source and welcomes contributions from developers, l
 
 ## 📄 License
 
-Licensed under the Apache License 2.0 - see the [LICENSE.txt](LICENSE.txt) file for details.
+Licensed under the Apache License 2.0 - see [LICENSE.txt](LICENSE.txt) for details.
 
 - ✅ Commercial use allowed
 - ✅ Modification and distribution permitted
@@ -294,29 +347,30 @@ Licensed under the Apache License 2.0 - see the [LICENSE.txt](LICENSE.txt) file 
 
 ## 🆘 Support & Resources
 
-- **Documentation**: Comprehensive guides in `/docs`
-- **Issues**: Report bugs and request features on [GitHub Issues](https://github.com/savagelysubtle/SafeAppeals2.0/issues)
-- **Email Support**: <simpleflowworks@gmail.com>
-- **Legal Disclaimer**: This tool assists with legal research and document preparation. Always consult qualified legal professionals for legal advice.
+- **Documentation**: See `ADDED_FEATURES_TRACKER.md` for detailed feature documentation
+- **Issues**: [GitHub Issues](https://github.com/savagelysubtle/SafeAppeals2.0/issues)
+- **Email**: simpleflowworks@gmail.com
+
+**Legal Disclaimer**: This tool assists with legal research and document preparation. Always consult qualified legal professionals for legal advice.
 
 ---
 
-## 📚 Reference
+## 🧭 Quick Reference
 
-SafeAppealNavigator is a fork of the [vscode](https://github.com/microsoft/vscode) repository with enhanced capabilities for legal research and AI-powered development. The editor core provides a robust foundation, while custom extensions add specialized functionality for case management and legal document processing.
+| Action              | Shortcut           |
+| ------------------- | ------------------ |
+| Open AI Chat        | Ctrl+L             |
+| Quick Edit          | Ctrl+K             |
+| Open File Organizer | Ctrl+Shift+O       |
+| Command Palette     | F1 or Ctrl+Shift+P |
+| Open Settings       | Ctrl+,             |
 
 ---
 
 **Created and maintained by [SavagelySubtle](https://github.com/savagelysubtle)**
 
-_Empowering injured workers to navigate the legal system with confidence while providing developers with cutting-edge AI-assisted coding tools_ ⚖️💻
+_Empowering injured workers to navigate the legal system with confidence_ ⚖️
 
 ---
-
-## Note
-
-_Support this project: [paypal.me/safeappealnavigator](https://paypal.me/safeappealnavigator)_
-
-SafeAppealNavigator is actively maintained and developed. Stay updated with new releases by watching the repository!
 
 _Support this project: [paypal.me/safeappealnavigator](https://paypal.me/safeappealnavigator)_
