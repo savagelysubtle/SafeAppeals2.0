@@ -76,13 +76,13 @@ export const defaultProviderSettings = {
 // ============================================================================
 
 export const defaultModelsOfProvider = {
-	// OpenAI - synced with LiteLLM config
+	// OpenAI - synced with LiteLLM config (December 2024)
+	// Shorthand names only - LiteLLM handles routing to latest versions
 	openAI: [
+		'gpt-5.2',
 		'gpt-5',
 		'gpt-5-mini',
 		'gpt-5-nano',
-		'gpt-4o',
-		'gpt-4o-mini',
 	],
 	// Anthropic - synced with LiteLLM config (shorthand names)
 	anthropic: [

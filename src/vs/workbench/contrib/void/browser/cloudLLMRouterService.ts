@@ -66,9 +66,12 @@ class CloudLLMRouterService extends Disposable implements ICloudLLMRouterService
 		'claude-3-5-haiku-20241022': 'claude-3-5-haiku-20241022',
 		'claude-3.5-sonnet': 'claude-sonnet-4-20250514', // fallback mapping
 		'claude-3-haiku': 'claude-3-5-haiku-20241022',
-		// OpenAI models (when we add OpenAI to cloud)
-		'gpt-4o': 'gpt-4o',
-		'gpt-4o-mini': 'gpt-4o-mini',
+		// OpenAI models - synced with LiteLLM (December 2024)
+		// Shorthand names only - LiteLLM handles routing to latest versions
+		'gpt-5.2': 'gpt-5.2',
+		'gpt-5': 'gpt-5',
+		'gpt-5-mini': 'gpt-5-mini',
+		'gpt-5-nano': 'gpt-5-nano',
 		// Gemini models (when we add Gemini to cloud)
 		'gemini-1.5-flash': 'gemini-1.5-flash',
 		'gemini-1.5-pro': 'gemini-1.5-pro',
