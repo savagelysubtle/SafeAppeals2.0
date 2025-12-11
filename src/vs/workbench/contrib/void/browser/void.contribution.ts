@@ -74,6 +74,9 @@ import './fileOrgContextService.js';
 // register case info panel
 import './caseInfo/caseInfo.contribution.js';
 
+// register file converter
+import './fileConverter/fileConverter.contribution.js';
+
 // register email dashboard - FULLY DISABLED FOR DEBUGGING
 // import '../common/emailService.js';
 // import './emailService.js';

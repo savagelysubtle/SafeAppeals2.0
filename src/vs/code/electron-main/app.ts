@@ -135,6 +135,7 @@ import { DOCXCreatorChannel } from '../../workbench/contrib/void/electron-main/d
 // import { EmailMainChannel } from '../../workbench/contrib/void/electron-main/emailMainChannel.js';
 // import { EmailMainService } from '../../workbench/contrib/void/electron-main/emailService.js';
 import { DOCXExtractorChannel } from '../../workbench/contrib/void/electron-main/docxExtractorChannel.js';
+import { FileConverterChannel, FileConverterMainService } from '../../workbench/contrib/void/electron-main/fileConverterChannel.js';
 import { MCPChannel } from '../../workbench/contrib/void/electron-main/mcpChannel.js';
 import { MetricsMainService } from '../../workbench/contrib/void/electron-main/metricsMainService.js';
 import { PDFExtractorChannel } from '../../workbench/contrib/void/electron-main/pdfExtractorChannel.js';
@@ -1288,6 +1289,11 @@ export class CodeApplication extends Disposable {
 		// Void DOCX/XLSX creator service (uses RAGMainService directly)
 		const docxCreatorChannel = new DOCXCreatorChannel(ragMainService);
 		mainProcessElectronServer.registerChannel('void-channel-docx-creator', docxCreatorChannel);
+
+		// Void File Converter service
+		const fileConverterService = new FileConverterMainService();
+		const fileConverterChannel = new FileConverterChannel(fileConverterService);
+		mainProcessElectronServer.registerChannel('void-channel-file-converter', fileConverterChannel);
 
 		// Void Brave Search service (for web search tools)
 		const braveSearchChannel = new BraveSearchChannel();

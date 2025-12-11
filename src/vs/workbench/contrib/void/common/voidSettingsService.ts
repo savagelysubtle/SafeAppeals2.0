@@ -310,6 +310,10 @@ class VoidSettingsService extends Disposable implements IVoidSettingsService {
 
 			// add autoAcceptLLMChanges feature
 			if (readS.globalSettings.autoAcceptLLMChanges === undefined) readS.globalSettings.autoAcceptLLMChanges = false;
+
+			// add file converter feature (Phase 6 integration)
+			if (readS.globalSettings.fileConverterEnabled === undefined) readS.globalSettings.fileConverterEnabled = true;
+			if (readS.globalSettings.fileConverterPythonPath === undefined) readS.globalSettings.fileConverterPythonPath = '';
 		}
 		catch (e) {
 			readS = defaultState()

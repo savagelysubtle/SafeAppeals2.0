@@ -503,6 +503,9 @@ export type GlobalSettings = {
 	contextWindowAutoSummarize: boolean;          // Enable auto-summarization when approaching limit
 	contextWindowAutoSummarizeThreshold: number;  // Threshold percentage to trigger auto-summarize (0.0-1.0)
 	contextWindowPreserveRecentMessages: number;  // Number of recent messages to preserve when summarizing
+	// File Converter settings
+	fileConverterEnabled: boolean;                // Enable file converter feature
+	fileConverterPythonPath: string;              // Path to Python executable (empty = use system Python)
 }
 
 export const defaultGlobalSettings: GlobalSettings = {
@@ -568,6 +571,9 @@ export const defaultGlobalSettings: GlobalSettings = {
 	contextWindowAutoSummarize: false,            // Disabled by default, user must opt-in
 	contextWindowAutoSummarizeThreshold: 0.85,    // Trigger at 85% capacity
 	contextWindowPreserveRecentMessages: 4,       // Preserve last 4 messages
+	// File Converter defaults
+	fileConverterEnabled: true,                   // Enabled by default
+	fileConverterPythonPath: '',                  // Empty = use system Python
 }
 
 export type GlobalSettingName = keyof GlobalSettings
