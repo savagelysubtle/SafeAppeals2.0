@@ -3,7 +3,7 @@
  *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
  *--------------------------------------------------------------------------------------*/
 
-import type { VoidStaticModelInfo, SendableReasoningInfo } from './types.js';
+import type { SendableReasoningInfo, VoidStaticModelInfo } from './types.js';
 
 // ============================================================================
 // OPEN SOURCE MODEL OPTIONS (for Ollama, vLLM, etc.)
@@ -234,13 +234,12 @@ export const createExtensiveModelOptionsFallback = (providerModelOptions: Record
 
 		if (lower.includes('quasar') || lower.includes('quaser')) return toFallback(openSourceModelOptions_assumingOAICompat, 'quasar')
 
-		// OpenAI fallbacks - synced with LiteLLM (shorthand names)
+		// OpenAI fallbacks - synced with LiteLLM (December 2024)
+		// Shorthand names only - LiteLLM handles routing to latest versions
+		if (lower.includes('gpt-5.2') || lower.includes('gpt5.2')) return toFallback(openai, 'gpt-5.2' as any)
 		if (lower.includes('gpt-5-nano') || lower.includes('gpt-5 nano')) return toFallback(openai, 'gpt-5-nano' as any)
 		if (lower.includes('gpt-5-mini') || lower.includes('gpt-5 mini')) return toFallback(openai, 'gpt-5-mini' as any)
 		if (lower.includes('gpt-5') || lower.includes('gpt5')) return toFallback(openai, 'gpt-5' as any)
-
-		if (lower.includes('4o') && lower.includes('mini')) return toFallback(openai, 'gpt-4o-mini' as any)
-		if (lower.includes('4o')) return toFallback(openai, 'gpt-4o' as any)
 
 		if (Object.keys(openSourceModelOptions_assumingOAICompat).map(k => k.toLowerCase()).includes(lower))
 			return toFallback(openSourceModelOptions_assumingOAICompat, lower as keyof typeof openSourceModelOptions_assumingOAICompat)
