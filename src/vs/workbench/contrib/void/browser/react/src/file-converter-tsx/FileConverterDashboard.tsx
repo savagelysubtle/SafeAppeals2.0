@@ -34,12 +34,41 @@ interface ProgressInfo {
 	current_file?: string;
 }
 
+// Map conversion types to their target file extensions
+const TARGET_EXTENSION_OF_CONVERSION: Record<string, string> = {
+	"md2pdf": "pdf",
+	"md2html": "html",
+	"md2docx": "docx",
+	"pdf2md": "md",
+	"pdf2html": "html",
+	"pdf2images": "png",
+	"pdf2ocr": "pdf",
+	"docx2pdf": "pdf",
+	"docx2md": "md",
+	"html2pdf": "pdf",
+	"image2pdf": "pdf",
+	"image2text": "txt",
+};
+
+function getTargetExtension(conversionType: string): string {
+	return TARGET_EXTENSION_OF_CONVERSION[conversionType] || "";
+}
+
 export const FileConverterDashboard: React.FC = () => {
 	const accessor = useAccessor();
 
 	// Get services properly
 	const fileDialogService = useMemo(() => accessor.get("IFileDialogService"), [accessor]);
 	const openerService = useMemo(() => accessor.get("IOpenerService"), [accessor]);
+	const commandService = useMemo(() => accessor.get("ICommandService"), [accessor]);
+	const workspaceContextService = useMemo(() => {
+		try {
+			return accessor.get("IWorkspaceContextService");
+		} catch (error) {
+			console.error("[FileConverterDashboard] Failed to get IWorkspaceContextService:", error);
+			return null;
+		}
+	}, [accessor]);
 	const fileConverterService = useMemo(() => {
 		try {
 			return accessor.get("IFileConverterService");
@@ -49,15 +78,56 @@ export const FileConverterDashboard: React.FC = () => {
 		}
 	}, [accessor]);
 
+	// Get workspace folder as default output directory
+	const workspaceFolder = useMemo(() => {
+		if (workspaceContextService) {
+			const workspace = workspaceContextService.getWorkspace();
+			if (workspace.folders && workspace.folders.length > 0) {
+				return workspace.folders[0].uri.fsPath;
+			}
+		}
+		return "";
+	}, [workspaceContextService]);
+
 	const [currentStep, setCurrentStep] = useState<"select" | "converting" | "complete">("select");
 	const [selectedFile, setSelectedFile] = useState<string>("");
-	const [outputPath, setOutputPath] = useState<string>("");
+	// Split output into directory and filename
+	const [outputDir, setOutputDir] = useState<string>("");
+	const [outputFilename, setOutputFilename] = useState<string>("");
 	const [conversionType, setConversionType] = useState<string>("");
 	const [progress, setProgress] = useState<ProgressInfo>({ percent: 0, message: "" });
 	const [history, setHistory] = useState<HistoryItem[]>([]);
 	const [currentResult, setCurrentResult] = useState<ConversionResult | null>(null);
 	const [availableConversions, setAvailableConversions] = useState<Record<string, any>>({});
 	const [isDragging, setIsDragging] = useState(false);
+
+	// Compute full output path from dir + filename
+	const outputPath = useMemo(() => {
+		if (!outputDir || !outputFilename) return "";
+		// Handle both Windows and Unix path separators
+		const separator = outputDir.includes("\\") ? "\\" : "/";
+		// Remove trailing separator if present
+		const cleanDir = outputDir.endsWith(separator) ? outputDir.slice(0, -1) : outputDir;
+		return `${cleanDir}${separator}${outputFilename}`;
+	}, [outputDir, outputFilename]);
+
+	// Auto-set output directory to workspace when it becomes available
+	useEffect(() => {
+		if (!outputDir && workspaceFolder) {
+			setOutputDir(workspaceFolder);
+		}
+	}, [workspaceFolder, outputDir]);
+
+	// Auto-generate output filename when input file or conversion type changes
+	useEffect(() => {
+		if (selectedFile && conversionType) {
+			const inputFileName = selectedFile.split(/[\\/]/).pop() || "";
+			const baseName = inputFileName.replace(/\.[^.]+$/, "");
+			const targetExtension = getTargetExtension(conversionType);
+			const newFilename = baseName + (targetExtension ? `.${targetExtension}` : "");
+			setOutputFilename(newFilename);
+		}
+	}, [selectedFile, conversionType]);
 
 	useEffect(() => {
 		const loadConversions = async () => {
@@ -160,18 +230,31 @@ export const FileConverterDashboard: React.FC = () => {
 		}
 	}, []);
 
-	const handleOutputSelect = useCallback(async () => {
+	// Handle directory selection (separate from filename)
+	const handleOutputDirSelect = useCallback(async () => {
 		try {
-			const result = await fileDialogService.showSaveDialog({
-				title: "Save Converted File As"
+			// Default to current outputDir or workspace folder
+			const defaultUri = outputDir ? URI.file(outputDir) : (workspaceFolder ? URI.file(workspaceFolder) : undefined);
+
+			const result = await fileDialogService.showOpenDialog({
+				title: "Select Output Directory",
+				canSelectFiles: false,
+				canSelectFolders: true,
+				canSelectMany: false,
+				defaultUri
 			});
-			if (result) {
-				setOutputPath(result.fsPath);
+			if (result && result.length > 0) {
+				setOutputDir(result[0].fsPath);
 			}
 		} catch (error) {
-			console.error("[FileConverterDashboard] Error selecting output:", error);
+			console.error("[FileConverterDashboard] Error selecting output directory:", error);
 		}
-	}, [fileDialogService]);
+	}, [fileDialogService, outputDir, workspaceFolder]);
+
+	// Handle filename change (user can type directly)
+	const handleFilenameChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+		setOutputFilename(e.target.value);
+	}, []);
 
 	const handleStartConversion = useCallback(async () => {
 		if (!selectedFile || !outputPath || !conversionType) return;
@@ -225,10 +308,12 @@ export const FileConverterDashboard: React.FC = () => {
 
 	const handleNewConversion = useCallback(() => {
 		setCurrentStep("select");
-		setOutputPath("");
+		// Reset to workspace folder, clear filename
+		setOutputDir(workspaceFolder);
+		setOutputFilename("");
 		setProgress({ percent: 0, message: "" });
 		setCurrentResult(null);
-	}, []);
+	}, [workspaceFolder]);
 
 	const openFile = useCallback(async (path: string) => {
 		try {
@@ -240,11 +325,12 @@ export const FileConverterDashboard: React.FC = () => {
 
 	const revealFile = useCallback(async (path: string) => {
 		try {
-			await openerService.open(URI.file(path), { openExternal: false });
+			// Use the VSCode command to reveal file in OS file explorer (same as Shift+Alt+R)
+			await commandService.executeCommand("revealFileInOS", URI.file(path));
 		} catch (e) {
 			console.error("Failed to reveal file:", e);
 		}
-	}, [openerService]);
+	}, [commandService]);
 
 	const renderContent = () => {
 		switch (currentStep) {
@@ -252,11 +338,14 @@ export const FileConverterDashboard: React.FC = () => {
 				return (
 					<ConversionSelector
 						selectedFile={selectedFile}
+						outputDir={outputDir}
+						outputFilename={outputFilename}
 						outputPath={outputPath}
 						conversionType={conversionType}
 						availableConversions={availableConversions}
 						onFileSelect={handleFileSelect}
-						onOutputSelect={handleOutputSelect}
+						onOutputDirSelect={handleOutputDirSelect}
+						onFilenameChange={handleFilenameChange}
 						onTypeChange={setConversionType}
 						onStartConversion={handleStartConversion}
 						isDragging={isDragging}

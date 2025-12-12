@@ -195,6 +195,9 @@ def convert_xlsx_to_pdf_libreoffice(
         cmd = [
             soffice_path,
             "--headless",
+            "--nologo",
+            "--nofirststartwizard",
+            "--norestore",
             "--convert-to",
             f"pdf:{filter_name}:{filter_options_str}",
             "--outdir",
@@ -252,7 +255,17 @@ def convert_xlsx_to_pdf_libreoffice(
                 logger.error(error_msg)
                 raise RuntimeError(error_msg)
 
-            # Check if output file was created
+            # Check if output file was created (with retry for filesystem sync)
+            # LibreOffice may exit before the file is fully written to disk
+            max_retries = 20
+            retry_delay = 0.5  # 500ms between retries (10 seconds total)
+            for attempt in range(max_retries):
+                if temp_output_path.exists() and temp_output_path.stat().st_size > 0:
+                    break
+                if attempt < max_retries - 1:
+                    logger.debug(f"Waiting for output file (attempt {attempt + 1}/{max_retries})...")
+                    time.sleep(retry_delay)
+
             if not temp_output_path.exists():
                 error_msg = (
                     f"LibreOffice conversion completed but output file not found: {temp_output_path}\n"
@@ -281,8 +294,9 @@ def convert_xlsx_to_pdf_libreoffice(
 
         # Record conversion for trial tracking
         record_conversion_attempt(
+            conversion_type="xlsx2pdf",
+            file_path=str(input_path),
             converter_name="xlsx2pdf_libreoffice",
-            input_file=str(input_path),
             output_file=str(output_path),
             success=True,
         )

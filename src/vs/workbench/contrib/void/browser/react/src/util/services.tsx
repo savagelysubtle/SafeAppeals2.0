@@ -481,5 +481,6 @@ export const useVoidCloudState = () => {
 		signInWithGoogle: () => cloudService.signInWithGoogle(),
 		signOut: () => cloudService.signOut(),
 		createCheckoutSession: (packId: 'starter' | 'pro') => cloudService.createCheckoutSession(packId),
+		refreshBalance: () => cloudService.fetchBalance(),
 	}
 }

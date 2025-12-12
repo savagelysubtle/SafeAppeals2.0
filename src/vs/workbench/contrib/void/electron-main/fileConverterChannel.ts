@@ -4,17 +4,97 @@
  *--------------------------------------------------------------------------------------*/
 
 import * as path from 'path';
+import * as fs from 'fs';
+import { fileURLToPath } from 'url';
 import { spawn } from 'child_process';
 import { Event } from '../../../../base/common/event.js';
 import { IServerChannel } from '../../../../base/parts/ipc/common/ipc.js';
 import { IFileConverterMainService, ConversionResult, BatchResult, MergeResult, ConversionMap, FileConverterConfig } from '../common/fileConverterTypes.js';
 
+// ESM equivalent of __dirname
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Get the project root directory (handles both source and compiled locations)
+function getProjectRoot(): string {
+	// __dirname is either:
+	// - Source: src/vs/workbench/contrib/void/electron-main/
+	// - Compiled: out/vs/workbench/contrib/void/electron-main/
+	// Both are 6 levels deep from project root
+	const projectRoot = path.resolve(__dirname, '..', '..', '..', '..', '..', '..');
+	console.log(`[FileConverterMainService] __dirname: ${__dirname}`);
+	console.log(`[FileConverterMainService] Project root: ${projectRoot}`);
+	return projectRoot;
+}
+
+// Get the path to the bundled Python venv
+function getBundledPythonPath(): string | null {
+	const isWindows = process.platform === 'win32';
+	const projectRoot = getProjectRoot();
+	const pythonDir = path.join(projectRoot, 'python');
+
+	// Path to venv Python executable
+	const venvPython = isWindows
+		? path.join(pythonDir, '.venv', 'Scripts', 'python.exe')
+		: path.join(pythonDir, '.venv', 'bin', 'python');
+
+	console.log(`[FileConverterMainService] Looking for venv Python at: ${venvPython}`);
+
+	if (fs.existsSync(venvPython)) {
+		console.log(`[FileConverterMainService] Found bundled Python venv: ${venvPython}`);
+		return venvPython;
+	}
+
+	console.log(`[FileConverterMainService] Bundled venv not found at: ${venvPython}`);
+	return null;
+}
+
+// Detect available Python executable
+async function detectPythonExecutable(): Promise<string> {
+	const isWindows = process.platform === 'win32';
+
+	// 1. First, try bundled venv
+	const bundledPython = getBundledPythonPath();
+	if (bundledPython) {
+		return bundledPython;
+	}
+
+	console.log('[FileConverterMainService] No bundled venv found, searching system Python...');
+
+	// 2. List of system Python commands to try, in order of preference
+	const pythonCommands = isWindows
+		? ['py', 'python', 'python3']  // 'py' is the Python Launcher on Windows
+		: ['python3', 'python'];
+
+	for (const cmd of pythonCommands) {
+		try {
+			const { execSync } = await import('child_process');
+			// Try to get Python version to verify it works
+			// execSync with a string command uses shell by default
+			execSync(`${cmd} --version`, {
+				stdio: 'pipe',
+				timeout: 5000,
+				windowsHide: true
+			});
+			console.log(`[FileConverterMainService] Found system Python: ${cmd}`);
+			return cmd;
+		} catch {
+			// This command doesn't work, try next
+		}
+	}
+
+	// Fallback to 'python' and let the error propagate
+	console.warn('[FileConverterMainService] No Python found, defaulting to "python"');
+	return 'python';
+}
+
 export class FileConverterMainService implements IFileConverterMainService {
 
 	private pythonProcess: any = null;
 	private pythonProcessPromise: Promise<any> | null = null;
-	private pythonPath: string = 'python'; // Default to system Python
+	private pythonPath: string = ''; // Will be auto-detected if not configured
 	private configured: boolean = false;
+	private pythonDetected: boolean = false;
 
 	constructor() {
 		// Initialize Python process lazily when first needed
@@ -29,9 +109,16 @@ export class FileConverterMainService implements IFileConverterMainService {
 			this.pythonProcessPromise = null;
 		}
 
-		this.pythonPath = config.pythonPath && config.pythonPath.trim() ? config.pythonPath.trim() : 'python';
-		this.configured = true;
+		if (config.pythonPath && config.pythonPath.trim()) {
+			this.pythonPath = config.pythonPath.trim();
+			this.pythonDetected = true;
+		} else if (!this.pythonDetected) {
+			// Auto-detect Python if not already detected
+			this.pythonPath = await detectPythonExecutable();
+			this.pythonDetected = true;
+		}
 
+		this.configured = true;
 		console.log('[FileConverterMainService] Configured with Python path:', this.pythonPath);
 	}
 
@@ -45,20 +132,48 @@ export class FileConverterMainService implements IFileConverterMainService {
 	}
 
 	private async spawnPythonProcess(): Promise<any> {
+		console.log('[FileConverterMainService] spawnPythonProcess called');
+
+		// Ensure Python is detected before spawning
+		if (!this.pythonDetected) {
+			console.log('[FileConverterMainService] Detecting Python...');
+			this.pythonPath = await detectPythonExecutable();
+			this.pythonDetected = true;
+			console.log('[FileConverterMainService] Python detected:', this.pythonPath);
+		}
+
 		return new Promise((resolve, reject) => {
 			try {
+				console.log('[FileConverterMainService] Starting spawn process...');
 				// Get the path to the Python backend
-				const pythonDir = path.join(__dirname, '..', '..', '..', '..', 'python');
+				const projectRoot = getProjectRoot();
+				const pythonDir = path.join(projectRoot, 'python');
 				const bridgePath = path.join(pythonDir, 'transmutation_codex', 'adapters', 'bridges', 'electron_bridge.py');
 
-				console.log('[FileConverterMainService] Spawning Python process:', {
+				const debugInfo = {
 					pythonDir,
 					bridgePath,
 					pythonExecutable: this.pythonPath,
-					exists: require('fs').existsSync(bridgePath)
-				});
+					pythonExists: fs.existsSync(this.pythonPath),
+					bridgeExists: fs.existsSync(bridgePath),
+					projectRoot
+				};
+
+				console.log('[FileConverterMainService] Spawning Python process:', debugInfo);
+
+				// Pre-flight checks
+				if (!fs.existsSync(bridgePath)) {
+					reject(new Error(`Python bridge script not found at: ${bridgePath}. Project root: ${projectRoot}`));
+					return;
+				}
+
+				if (path.isAbsolute(this.pythonPath) && !fs.existsSync(this.pythonPath)) {
+					reject(new Error(`Python executable not found at: ${this.pythonPath}. Did you run setup-venv.ps1?`));
+					return;
+				}
 
 				// Spawn Python process with configured Python path
+				console.log('[FileConverterMainService] Calling spawn...');
 				this.pythonProcess = spawn(this.pythonPath, [bridgePath], {
 					cwd: pythonDir,
 					stdio: ['pipe', 'pipe', 'pipe'],
@@ -67,6 +182,7 @@ export class FileConverterMainService implements IFileConverterMainService {
 						PYTHONPATH: pythonDir
 					}
 				});
+				console.log('[FileConverterMainService] Spawn returned, pid:', this.pythonProcess?.pid);
 
 				let stdoutBuffer = '';
 				let stderrBuffer = '';
@@ -101,10 +217,20 @@ export class FileConverterMainService implements IFileConverterMainService {
 					}
 				});
 
+				let spawnError: Error | null = null;
+				let hasResolved = false;
+
 				this.pythonProcess.on('error', (error: Error) => {
-					console.error('[FileConverterMainService] Python process error:', error);
+					console.error('[FileConverterMainService] Python process spawn error:', error.message);
+					console.error('[FileConverterMainService] Python path was:', this.pythonPath);
+					console.error('[FileConverterMainService] Full error:', error);
+					spawnError = error;
+					this.pythonProcess = null;
 					this.pythonProcessPromise = null;
-					reject(error);
+					if (!hasResolved) {
+						hasResolved = true;
+						reject(new Error(`Failed to spawn Python: ${error.message}. Python path: ${this.pythonPath}`));
+					}
 				});
 
 				this.pythonProcess.on('exit', (code: number, signal: string) => {
@@ -115,10 +241,16 @@ export class FileConverterMainService implements IFileConverterMainService {
 
 				// Wait a bit for process to initialize
 				setTimeout(() => {
+					if (hasResolved) return; // Already resolved/rejected
+					hasResolved = true;
+
 					if (this.pythonProcess) {
+						console.log('[FileConverterMainService] Python process started successfully');
 						resolve(this.pythonProcess);
+					} else if (spawnError) {
+						reject(new Error(`Python process failed: ${spawnError.message}`));
 					} else {
-						reject(new Error('Python process failed to start'));
+						reject(new Error(`Python process failed to start. Python: ${this.pythonPath}, Bridge: ${bridgePath}, Exists: python=${debugInfo.pythonExists}, bridge=${debugInfo.bridgeExists}`));
 					}
 				}, 1000);
 
@@ -189,27 +321,108 @@ export class FileConverterMainService implements IFileConverterMainService {
 	}
 
 	async convert(input: string, output: string, type: string, options?: any): Promise<ConversionResult> {
-		try {
-			console.log('[FileConverterMainService] Starting conversion:', { input, output, type, options });
+		console.log('[FileConverterMainService] Starting conversion:', { input, output, type, options });
 
-			await this.sendCommandToPython('convert', [input, output, type, options]);
-
-			// For now, return a placeholder result
-			// In a real implementation, we'd wait for the RESULT message
-			return {
-				success: true,
-				output_path: output,
-				duration: 0
-			};
-
-		} catch (error) {
-			console.error('[FileConverterMainService] Conversion failed:', error);
-			return {
-				success: false,
-				error: error instanceof Error ? error.message : 'Unknown error',
-				error_type: 'conversion'
-			};
+		// Ensure Python is detected
+		if (!this.pythonDetected) {
+			this.pythonPath = await detectPythonExecutable();
+			this.pythonDetected = true;
 		}
+
+		const projectRoot = getProjectRoot();
+		const pythonDir = path.join(projectRoot, 'python');
+		const bridgePath = path.join(pythonDir, 'transmutation_codex', 'adapters', 'bridges', 'electron_bridge.py');
+
+		// Build command-line arguments for the Python bridge
+		// Format: python electron_bridge.py <conversion_type> --input-files <input> --output <output>
+		const args = [
+			bridgePath,
+			type,  // e.g., 'docx2pdf'
+			'--input-files', input,
+			'--output', output
+		];
+
+		console.log('[FileConverterMainService] Running Python with args:', args);
+
+		return new Promise((resolve) => {
+			const startTime = Date.now();
+
+			const pythonProcess = spawn(this.pythonPath, args, {
+				cwd: pythonDir,
+				env: {
+					...process.env,
+					PYTHONPATH: pythonDir
+				}
+			});
+
+			let stdout = '';
+			let stderr = '';
+
+			pythonProcess.stdout.on('data', (data: Buffer) => {
+				const output = data.toString();
+				stdout += output;
+				console.log('[FileConverterMainService] Python stdout:', output.trim());
+			});
+
+			pythonProcess.stderr.on('data', (data: Buffer) => {
+				const output = data.toString();
+				stderr += output;
+				console.log('[FileConverterMainService] Python stderr:', output.trim());
+			});
+
+			pythonProcess.on('error', (error: Error) => {
+				console.error('[FileConverterMainService] Python process error:', error);
+				resolve({
+					success: false,
+					error: `Failed to start Python: ${error.message}`,
+					error_type: 'spawn'
+				});
+			});
+
+			pythonProcess.on('close', (code: number) => {
+				const duration = (Date.now() - startTime) / 1000;
+				console.log('[FileConverterMainService] Python process exited with code:', code);
+
+				// Check if output file was created - this is the real success indicator
+				// Python may exit with code 1 due to internal error handling even when conversion works
+				if (fs.existsSync(output)) {
+					const stats = fs.statSync(output);
+					if (stats.size > 0) {
+						console.log('[FileConverterMainService] Output file created successfully:', output, 'size:', stats.size);
+						resolve({
+							success: true,
+							output_path: output,
+							duration
+						});
+						return;
+					}
+				}
+
+				// No valid output file - report error
+				if (code !== 0) {
+					// Parse error from stderr
+					let errorMessage = stderr || `Python exited with code ${code}`;
+
+					// Try to extract a cleaner error message
+					const errorMatch = stderr.match(/error: (.+)/i) || stderr.match(/Error: (.+)/i);
+					if (errorMatch) {
+						errorMessage = errorMatch[1];
+					}
+
+					resolve({
+						success: false,
+						error: errorMessage,
+						error_type: 'conversion'
+					});
+				} else {
+					resolve({
+						success: false,
+						error: 'Conversion completed but output file was not created',
+						error_type: 'conversion'
+					});
+				}
+			});
+		});
 	}
 
 	async batchConvert(files: string[], outputDir: string, type: string): Promise<BatchResult> {
@@ -255,30 +468,23 @@ export class FileConverterMainService implements IFileConverterMainService {
 	}
 
 	async getAvailableConversions(): Promise<ConversionMap> {
-		try {
-			console.log('[FileConverterMainService] Getting available conversions');
+		console.log('[FileConverterMainService] Getting available conversions');
 
-			await this.sendCommandToPython('get_available_conversions', []);
-
-			// Return a sample conversion map for now
-			return {
-				'md2pdf': {
-					source_formats: ['md', 'markdown'],
-					target_formats: ['pdf'],
-					description: 'Convert Markdown to PDF'
-				},
-				'pdf2md': {
-					source_formats: ['pdf'],
-					target_formats: ['md', 'markdown'],
-					description: 'Convert PDF to Markdown'
-				}
-				// TODO: Add all supported conversions
-			};
-
-		} catch (error) {
-			console.error('[FileConverterMainService] Failed to get conversions:', error);
-			return {};
-		}
+		// Return the full list of supported conversions
+		// These match the Python transmutation_codex converters
+		return {
+			'md2pdf': { source_formats: ['md', 'markdown'], target_formats: ['pdf'], description: 'Markdown → PDF' },
+			'md2html': { source_formats: ['md', 'markdown'], target_formats: ['html'], description: 'Markdown → HTML' },
+			'md2docx': { source_formats: ['md', 'markdown'], target_formats: ['docx'], description: 'Markdown → DOCX' },
+			'pdf2md': { source_formats: ['pdf'], target_formats: ['md'], description: 'PDF → Markdown' },
+			'pdf2html': { source_formats: ['pdf'], target_formats: ['html'], description: 'PDF → HTML' },
+			'pdf2images': { source_formats: ['pdf'], target_formats: ['png', 'jpg'], description: 'PDF → Images' },
+			'docx2pdf': { source_formats: ['docx'], target_formats: ['pdf'], description: 'DOCX → PDF' },
+			'docx2md': { source_formats: ['docx'], target_formats: ['md'], description: 'DOCX → Markdown' },
+			'html2pdf': { source_formats: ['html', 'htm'], target_formats: ['pdf'], description: 'HTML → PDF' },
+			'image2pdf': { source_formats: ['png', 'jpg', 'jpeg', 'gif', 'bmp', 'tiff'], target_formats: ['pdf'], description: 'Image → PDF' },
+			'image2text': { source_formats: ['png', 'jpg', 'jpeg', 'gif', 'bmp', 'tiff'], target_formats: ['txt'], description: 'Image → Text (OCR)' },
+		};
 	}
 
 	dispose(): void {

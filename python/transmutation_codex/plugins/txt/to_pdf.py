@@ -164,8 +164,9 @@ def convert_txt_to_pdf(
         # Complete operation
         # Record conversion for trial tracking
         record_conversion_attempt(
+            conversion_type="txt2pdf",
+            file_path=str(input_path),
             converter_name="txt2pdf",
-            input_file=str(input_path),
             output_file=str(output_path),
             success=True,
         )

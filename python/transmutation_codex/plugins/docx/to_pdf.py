@@ -365,8 +365,9 @@ def convert_docx_to_pdf(
         # Complete operation
         # Record conversion for trial tracking
         record_conversion_attempt(
+            conversion_type="docx2pdf",
+            file_path=str(input_path),
             converter_name="docx2pdf",
-            input_file=str(input_path),
             output_file=str(output_path),
             success=True,
         )
