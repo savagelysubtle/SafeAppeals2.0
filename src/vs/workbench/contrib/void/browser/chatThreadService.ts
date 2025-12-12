@@ -31,6 +31,7 @@ import { IMetricsService } from '../common/metricsService.js';
 import { chat_userMessageContent, isABuiltinToolName } from '../common/prompt/prompts.js';
 import { ILLMMessageService } from '../common/sendLLMMessageService.js';
 import { AnthropicReasoning, getErrorMessage, RawToolCallObj, RawToolParamsObj } from '../common/sendLLMMessageTypes.js';
+import { ICloudLLMRouterService } from './cloudLLMRouterService.js';
 import { THREAD_STORAGE_KEY } from '../common/storageKeys.js';
 import { approvalTypeOfBuiltinToolName, BuiltinToolCallParams, ToolCallParams, ToolName, ToolResult } from '../common/tools/toolsServiceTypes.js';
 import { IVoidModelService } from '../common/voidModelService.js';
@@ -321,6 +322,7 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 		@IStorageService private readonly _storageService: IStorageService,
 		@IVoidModelService private readonly _voidModelService: IVoidModelService,
 		@ILLMMessageService private readonly _llmMessageService: ILLMMessageService,
+		@ICloudLLMRouterService private readonly _cloudLLMRouterService: ICloudLLMRouterService,
 		@IToolsService private readonly _toolsService: IToolsService,
 		@IVoidSettingsService private readonly _settingsService: IVoidSettingsService,
 		@ILanguageFeaturesService private readonly _languageFeaturesService: ILanguageFeaturesService,
@@ -836,7 +838,8 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 				let resMessageIsDonePromise: (res: ResTypes) => void // resolves when user approves this tool use (or if tool doesn't require approval)
 				const messageIsDonePromise = new Promise<ResTypes>((res, rej) => { resMessageIsDonePromise = res })
 
-				const llmCancelToken = this._llmMessageService.sendLLMMessage({
+				// Use cloud router service to automatically route through cloud if enabled
+				const llmCancelToken = this._cloudLLMRouterService.sendLLMMessage({
 					messagesType: 'chatMessages',
 					chatMode,
 					messages: messages,
