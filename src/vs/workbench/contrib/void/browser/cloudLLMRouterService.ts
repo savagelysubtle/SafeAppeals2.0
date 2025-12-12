@@ -181,10 +181,12 @@ class CloudLLMRouterService extends Disposable implements ICloudLLMRouterService
 			originalModel: modelSelection.modelName,
 			cloudModel,
 			messageCount: (messages as any[])?.length ?? 0,
+			apiUrl: this.settingsService.state.globalSettings.voidCloudApiUrl,
 		});
 
 		// Convert messages to cloud format
 		const cloudMessages = this._convertMessages(messages as any[]);
+		console.log('[CloudLLMRouter] Sending request now...');
 
 		// Send via cloud service
 		this.cloudService.sendCloudRequest({

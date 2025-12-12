@@ -384,6 +384,7 @@ class VoidCloudService extends Disposable implements IVoidCloudService {
 		}
 
 		const url = `${this.apiUrl}${endpoint}`;
+		console.log('[VoidCloudService] _apiRequest to:', url);
 
 		const headers: Record<string, string> = {
 			'Content-Type': 'application/json',
@@ -705,16 +706,21 @@ class VoidCloudService extends Disposable implements IVoidCloudService {
 	// ============================================
 
 	async sendCloudRequest(params: CloudRequestParams, abortSignal?: AbortSignal): Promise<CloudRequestResponse> {
+		console.log('[VoidCloudService] sendCloudRequest called with model:', params.model);
+
 		if (!this.isSignedIn()) {
 			throw new Error('Must be signed in to use SafeAppeals Cloud');
 		}
 
 		// Check credits first (rough estimate)
 		const estimatedTokens = Math.ceil(JSON.stringify(params.messages).length / 4) + (params.maxTokens || 4096);
+		console.log('[VoidCloudService] Estimated tokens:', estimatedTokens, 'Balance:', this._creditBalance);
+
 		if (!this.hasCredits(estimatedTokens)) {
 			throw new Error(`Insufficient credits. Need ~${estimatedTokens}, have ${this._creditBalance}`);
 		}
 
+		console.log('[VoidCloudService] Making API request to /llm/chat...');
 		const response = await this._apiRequest<{
 			choices: { message: { content: string } }[];
 			usage: {
@@ -736,6 +742,12 @@ class VoidCloudService extends Disposable implements IVoidCloudService {
 				stream: false, // TODO: Implement streaming
 			}),
 		}, 0, LLM_REQUEST_TIMEOUT_MS, abortSignal);
+
+		console.log('[VoidCloudService] API response received:', {
+			hasContent: !!response.choices?.[0]?.message?.content,
+			usage: response.usage,
+			voidUsage: response.void_usage,
+		});
 
 		// Update balance if provided
 		if (response.void_usage) {
