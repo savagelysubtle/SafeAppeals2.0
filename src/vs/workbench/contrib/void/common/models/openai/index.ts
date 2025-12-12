@@ -22,11 +22,33 @@ const openAICompatIncludeInPayloadReasoning = (reasoningInfo: SendableReasoningI
 }
 
 export const openAIModelOptions = {
-	// GPT-5.2 - Latest flagship (December 2024)
+	// GPT-5.2 Thinking - Latest flagship (December 2025)
 	'gpt-5.2': {
 		contextWindow: 400_000,
 		reservedOutputTokenSpace: 128_000,
 		cost: { input: 1.75, output: 14.00, cache_read: 0.44 },
+		downloadable: false,
+		supportsFIM: false,
+		specialToolFormat: 'openai-style',
+		supportsSystemMessage: 'developer-role',
+		reasoningCapabilities: { supportsReasoning: true, canIOReasoning: true },
+	},
+	// GPT-5.2 Pro - Highest accuracy, critical tasks
+	'gpt-5.2-pro': {
+		contextWindow: 400_000,
+		reservedOutputTokenSpace: 128_000,
+		cost: { input: 3.50, output: 28.00, cache_read: 0.88 },
+		downloadable: false,
+		supportsFIM: false,
+		specialToolFormat: 'openai-style',
+		supportsSystemMessage: 'developer-role',
+		reasoningCapabilities: { supportsReasoning: true, canIOReasoning: true },
+	},
+	// GPT-5.1 - Previous gen (November 2025)
+	'gpt-5.1': {
+		contextWindow: 400_000,
+		reservedOutputTokenSpace: 128_000,
+		cost: { input: 1.50, output: 12.00, cache_read: 0.38 },
 		downloadable: false,
 		supportsFIM: false,
 		specialToolFormat: 'openai-style',
@@ -71,6 +93,8 @@ export const openAIModelOptions = {
 // Display name mapping for UI (shorthand only)
 export const openAIDisplayNames: { [displayName: string]: keyof typeof openAIModelOptions } = {
 	'GPT-5.2': 'gpt-5.2',
+	'GPT-5.2 Pro': 'gpt-5.2-pro',
+	'GPT-5.1': 'gpt-5.1',
 	'GPT-5': 'gpt-5',
 	'GPT-5 Mini': 'gpt-5-mini',
 	'GPT-5 Nano': 'gpt-5-nano',
@@ -82,9 +106,15 @@ export const openAISettings: VoidStaticProviderInfo = {
 		const lower = modelName.toLowerCase()
 		let fallbackName: keyof typeof openAIModelOptions | null = null
 
-		// GPT-5.2 (check first - latest)
-		if (lower.includes('gpt-5.2') || lower.includes('gpt5.2')) {
+		// GPT-5.2 variants (check most specific first)
+		if (lower.includes('gpt-5.2-pro') || lower.includes('gpt-5.2 pro')) {
+			fallbackName = 'gpt-5.2-pro'
+		} else if (lower.includes('gpt-5.2') || lower.includes('gpt5.2')) {
 			fallbackName = 'gpt-5.2'
+		}
+		// GPT-5.1 (November 2025)
+		else if (lower.includes('gpt-5.1') || lower.includes('gpt5.1')) {
+			fallbackName = 'gpt-5.1'
 		}
 		// GPT-5 variants (check specific first)
 		else if (lower.includes('gpt-5-nano') || lower.includes('gpt-5 nano')) {
