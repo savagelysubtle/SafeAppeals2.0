@@ -13,11 +13,14 @@ interface ConversionInfo {
 
 interface ConversionSelectorProps {
 	selectedFile: string;
+	outputDir: string;
+	outputFilename: string;
 	outputPath: string;
 	conversionType: string;
 	availableConversions: Record<string, ConversionInfo>;
 	onFileSelect: () => void;
-	onOutputSelect: () => void;
+	onOutputDirSelect: () => void;
+	onFilenameChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
 	onTypeChange: (type: string) => void;
 	onStartConversion: () => void;
 	isDragging: boolean;
@@ -39,8 +42,8 @@ const SUPPORTED_CONVERSIONS: Record<string, ConversionInfo> = {
 };
 
 export const ConversionSelector: React.FC<ConversionSelectorProps> = ({
-	selectedFile, outputPath, conversionType, availableConversions,
-	onFileSelect, onOutputSelect, onTypeChange, onStartConversion, isDragging
+	selectedFile, outputDir, outputFilename, outputPath, conversionType, availableConversions,
+	onFileSelect, onOutputDirSelect, onFilenameChange, onTypeChange, onStartConversion, isDragging
 }) => {
 	const conversions = useMemo(() => ({ ...SUPPORTED_CONVERSIONS, ...availableConversions }), [availableConversions]);
 
@@ -129,41 +132,56 @@ export const ConversionSelector: React.FC<ConversionSelectorProps> = ({
 				</div>
 			</div>
 
-			{/* Step 3: Output & Action */}
+			{/* Step 3: Output Location */}
 			<div className={`space-y-4 transition-opacity duration-300 ${!conversionType ? 'opacity-50 pointer-events-none' : ''}`}>
-				<div className="flex items-end gap-4">
-					<div className="flex-1 space-y-2">
-						<label className="flex items-center gap-2 text-sm font-semibold text-void-fg-1">
-							<div className="w-6 h-6 rounded-full bg-void-button-primary text-void-button-primary-text flex items-center justify-center text-xs">3</div>
-							Output Location
-						</label>
-						<div className="flex gap-2">
-							<input
-								type="text"
-								value={outputPath}
-								readOnly
-								className="flex-1 px-3 py-2.5 bg-void-bg-1 border border-void-border-2 rounded-lg text-void-fg-2 text-sm"
-								placeholder="Select output..."
-							/>
-							<button
-								onClick={onOutputSelect}
-								className="px-3 bg-void-bg-1 border border-void-border-2 rounded-lg text-void-fg-1 hover:bg-void-bg-2"
-								title="Change Output Location"
-							>📁</button>
-						</div>
+				<label className="flex items-center gap-2 text-sm font-semibold text-void-fg-1">
+					<div className="w-6 h-6 rounded-full bg-void-button-primary text-void-button-primary-text flex items-center justify-center text-xs">3</div>
+					Output Location
+				</label>
+
+				{/* Directory Selection */}
+				<div className="space-y-2">
+					<label className="text-xs text-void-fg-3 font-medium">Directory</label>
+					<div className="flex gap-2">
+						<input
+							type="text"
+							value={outputDir}
+							readOnly
+							className="flex-1 px-3 py-2.5 bg-void-bg-1 border border-void-border-2 rounded-lg text-void-fg-2 text-sm font-mono"
+							placeholder="Select output directory..."
+						/>
+						<button
+							onClick={onOutputDirSelect}
+							className="px-3 bg-void-bg-1 border border-void-border-2 rounded-lg text-void-fg-1 hover:bg-void-bg-2"
+							title="Change Output Directory"
+						>📁</button>
 					</div>
-					<button
-						onClick={onStartConversion}
-						disabled={!canConvert}
-						className={`h-[42px] px-8 rounded-lg font-semibold transition-all flex items-center gap-2 ${
-							canConvert
-								? "bg-void-button-primary text-void-button-primary-text hover:bg-void-button-primary-hover shadow-lg"
-								: "bg-void-bg-1 text-void-fg-4 cursor-not-allowed border border-void-border-2"
-						}`}
-					>
-						<span>Convert</span><span>▶</span>
-					</button>
 				</div>
+
+				{/* Filename Input */}
+				<div className="space-y-2">
+					<label className="text-xs text-void-fg-3 font-medium">Filename</label>
+					<input
+						type="text"
+						value={outputFilename}
+						onChange={onFilenameChange}
+						className="w-full px-3 py-2.5 bg-void-bg-1 border border-void-border-2 rounded-lg text-void-fg-1 text-sm"
+						placeholder="Enter output filename..."
+					/>
+				</div>
+
+				{/* Convert Button */}
+				<button
+					onClick={onStartConversion}
+					disabled={!canConvert}
+					className={`w-full h-[42px] px-8 rounded-lg font-semibold transition-all flex items-center justify-center gap-2 ${
+						canConvert
+							? "bg-void-button-primary text-void-button-primary-text hover:bg-void-button-primary-hover shadow-lg"
+							: "bg-void-bg-1 text-void-fg-4 cursor-not-allowed border border-void-border-2"
+					}`}
+				>
+					<span>Convert</span><span>▶</span>
+				</button>
 			</div>
 		</div>
 	);

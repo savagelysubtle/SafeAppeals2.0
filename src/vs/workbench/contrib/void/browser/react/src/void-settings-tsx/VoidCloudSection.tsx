@@ -13,10 +13,11 @@ const LOW_CREDITS_THRESHOLD = 1000;
 
 export const VoidCloudSection = () => {
 	const accessor = useAccessor();
-	const { authState, creditBalance, isOnline, signInWithGoogle, signOut, createCheckoutSession } = useVoidCloudState();
+	const { authState, creditBalance, isOnline, signInWithGoogle, signOut, createCheckoutSession, refreshBalance } = useVoidCloudState();
 
 	// Track signing in state locally (for spinner)
 	const [isSigningIn, setIsSigningIn] = useState(false);
+	const [isRefreshing, setIsRefreshing] = useState(false);
 
 	const handleSignIn = useCallback(async () => {
 		try {
@@ -35,6 +36,17 @@ export const VoidCloudSection = () => {
 			console.error("Sign out failed:", error);
 		}
 	}, [signOut]);
+
+	const handleRefreshBalance = useCallback(async () => {
+		try {
+			setIsRefreshing(true);
+			await refreshBalance();
+		} catch (error) {
+			console.error("Balance refresh failed:", error);
+		} finally {
+			setIsRefreshing(false);
+		}
+	}, [refreshBalance]);
 
 	const handleBuyCredits = useCallback(
 		async (pack: "starter" | "pro") => {
@@ -155,8 +167,18 @@ export const VoidCloudSection = () => {
 
 							{/* Credits Balance */}
 							<div className="bg-void-bg-1 rounded p-3">
-								<div className="text-void-fg-3 text-xs uppercase tracking-wide mb-1">
-									Credits Balance
+								<div className="flex items-center justify-between mb-1">
+									<div className="text-void-fg-3 text-xs uppercase tracking-wide">
+										Credits Balance
+									</div>
+									<button
+										className="text-void-fg-3 hover:text-void-fg-1 p-1 rounded transition-colors"
+										onClick={handleRefreshBalance}
+										disabled={isRefreshing}
+										title="Refresh balance"
+									>
+										<RefreshCw className={`size-3 ${isRefreshing ? 'animate-spin' : ''}`} />
+									</button>
 								</div>
 								<div className="text-2xl font-semibold text-void-fg-1">
 									{formatCredits(creditBalance)} tokens

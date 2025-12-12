@@ -1,0 +1,18 @@
+Metadata-Version: 2.4
+Name: transmutation-codex
+Version: 1.0.0
+Summary: AiChemist File Converter - Document conversion engine for SafeAppeals
+Requires-Python: >=3.10
+Requires-Dist: pypandoc>=1.13
+Requires-Dist: PyPDF2>=3.0.0
+Requires-Dist: psutil>=5.9.0
+Requires-Dist: pyyaml>=6.0
+Requires-Dist: openpyxl>=3.1.0
+Requires-Dist: ebooklib>=0.18
+Requires-Dist: markdown>=3.5
+Requires-Dist: markdown-pdf>=1.0
+Requires-Dist: pdfkit>=1.0.0
+Requires-Dist: pytesseract>=0.3.10
+Provides-Extra: dev
+Requires-Dist: ruff>=0.1.0; extra == "dev"
+Requires-Dist: pytest>=7.0.0; extra == "dev"

@@ -1,0 +1,176 @@
+2025-12-11 20:09:06 - 20251211_200906_c125efa0 - root - INFO - logger._configure_programmatic_logging:343 - Logging configured programmatically. Session ID: 20251211_200906_c125efa0. File log: D:\Coding\SafeAppeals2.0\python\logs\python\app_session_20251211_200906_c125efa0.log
+2025-12-11 20:09:06 - 20251211_200906_c125efa0 - aichemist_codex.electron_bridge - INFO - electron_bridge.main:40 - Electron bridge starting
+2025-12-11 20:09:06 - 20251211_200906_c125efa0 - aichemist_codex.electron_bridge - DEBUG - argument_parser.validate:62 - Validating arguments for mode: convert
+2025-12-11 20:09:06 - 20251211_200906_c125efa0 - aichemist_codex.electron_bridge - DEBUG - argument_parser._validate_convert:84 - Validating convert mode arguments
+2025-12-11 20:09:06 - 20251211_200906_c125efa0 - aichemist_codex.electron_bridge - DEBUG - base.validate_file_exists:150 - Validating file exists: d:\Coding\test3\test.docx
+2025-12-11 20:09:06 - 20251211_200906_c125efa0 - aichemist_codex.electron_bridge - DEBUG - base.validate_file_exists:160 - File validation passed: d:\Coding\test3\test.docx
+2025-12-11 20:09:06 - 20251211_200906_c125efa0 - aichemist_codex.electron_bridge - DEBUG - base.validate_output_directory:178 - Validating output directory: d:\Coding\test3
+2025-12-11 20:09:06 - 20251211_200906_c125efa0 - aichemist_codex.electron_bridge - DEBUG - base.validate_output_directory:188 - Output directory is writable: d:\Coding\test3
+2025-12-11 20:09:06 - 20251211_200906_c125efa0 - aichemist_codex.electron_bridge - DEBUG - argument_parser.validate:74 - Argument validation passed
+2025-12-11 20:09:06 - 20251211_200906_c125efa0 - aichemist_codex.electron_bridge - INFO - electron_bridge.main:45 - Bridge mode: convert, type: docx2pdf
+2025-12-11 20:09:06 - 20251211_200906_c125efa0 - aichemist_codex.electron_bridge - DEBUG - progress_reporter.report:55 - Reporting progress: 0/100 - Initializing conversion...
+2025-12-11 20:09:06 - 20251211_200906_c125efa0 - aichemist_codex.electron_bridge - DEBUG - base.send_json_message:49 - Sending PROGRESS message: {"current": 0, "total": 100, "message": "Initializing conversion...", "type": "single_progress", "filename": ""}...
+2025-12-11 20:09:06 - 20251211_200906_c125efa0 - aichemist_codex.electron_bridge - DEBUG - progress_reporter.report:55 - Reporting progress: 10/100 - Loading converter...
+2025-12-11 20:09:06 - 20251211_200906_c125efa0 - aichemist_codex.electron_bridge - DEBUG - base.send_json_message:49 - Sending PROGRESS message: {"current": 10, "total": 100, "message": "Loading converter...", "type": "single_progress", "filename": ""}...
+2025-12-11 20:09:06 - 20251211_200906_c125efa0 - aichemist_codex.electron_bridge - DEBUG - conversion_handler.handle_single_conversion:41 - Importing plugins to trigger auto-registration
+2025-12-11 20:09:06 - 20251211_200906_c125efa0 - aichemist_codex.converters.md2html - DEBUG - to_html.<module>:38 - Markdown library available
+2025-12-11 20:09:07 - 20251211_200906_c125efa0 - aichemist_codex.plugins - DEBUG - __init__.<module>:20 - Markdown to HTML converter loaded
+2025-12-11 20:09:07 - 20251211_200906_c125efa0 - aichemist_codex.plugins - DEBUG - __init__.<module>:29 - Markdown to PDF converter loaded
+2025-12-11 20:09:07 - 20251211_200906_c125efa0 - aichemist_codex.plugins - DEBUG - __init__.<module>:38 - Markdown to DOCX converter loaded
+2025-12-11 20:09:07 - 20251211_200906_c125efa0 - aichemist_codex.plugins - WARNING - __init__.<module>:55 - PDF to Markdown converters not available: No module named 'ocrmypdf'
+2025-12-11 20:09:07 - 20251211_200906_c125efa0 - aichemist_codex.plugins - WARNING - __init__.<module>:64 - PDF to HTML converter not available: No module named 'ocrmypdf'
+2025-12-11 20:09:07 - 20251211_200906_c125efa0 - aichemist_codex.plugins - WARNING - __init__.<module>:73 - PDF to Editable converter not available: No module named 'ocrmypdf'
+2025-12-11 20:09:07 - 20251211_200906_c125efa0 - aichemist_codex.plugins - DEBUG - __init__.<module>:81 - DOCX to Markdown converter loaded
+2025-12-11 20:09:07 - 20251211_200906_c125efa0 - aichemist_codex.plugins - DEBUG - __init__.<module>:90 - DOCX to PDF converter loaded
+2025-12-11 20:09:07 - 20251211_200906_c125efa0 - aichemist_codex.plugins - DEBUG - __init__.<module>:100 - HTML to PDF converter loaded
+2025-12-11 20:09:07 - 20251211_200906_c125efa0 - aichemist_codex.plugins - WARNING - __init__.<module>:112 - TXT to PDF converter not available: No module named 'reportlab'
+2025-12-11 20:09:07 - 20251211_200906_c125efa0 - aichemist_codex.plugins - DEBUG - __init__.<module>:125 - Excel converters loaded
+2025-12-11 20:09:07 - 20251211_200906_c125efa0 - aichemist_codex.plugins - DEBUG - __init__.<module>:136 - CSV converters loaded
+2025-12-11 20:09:07 - 20251211_200906_c125efa0 - aichemist_codex.plugins - DEBUG - __init__.<module>:150 - PowerPoint converters loaded
+2025-12-11 20:09:07 - 20251211_200906_c125efa0 - aichemist_codex.plugins - DEBUG - __init__.<module>:162 - Image converters loaded
+2025-12-11 20:09:07 - 20251211_200906_c125efa0 - aichemist_codex.plugins - WARNING - __init__.<module>:174 - PDF to Excel converter not available: No module named 'ocrmypdf'
+2025-12-11 20:09:07 - 20251211_200906_c125efa0 - aichemist_codex.plugins - WARNING - __init__.<module>:184 - PDF to Images converter not available: No module named 'ocrmypdf'
+2025-12-11 20:09:07 - 20251211_200906_c125efa0 - aichemist_codex.plugins - WARNING - __init__.<module>:199 - Advanced PDF operations not available: No module named 'ocrmypdf'
+2025-12-11 20:09:07 - 20251211_200906_c125efa0 - aichemist_codex.plugins - DEBUG - __init__.<module>:211 - EPUB converters loaded
+2025-12-11 20:09:07 - 20251211_200906_c125efa0 - aichemist_codex.plugins - ERROR - __init__.<module>:227 - EPUB creation converters failed: name 'Document' is not defined
+Traceback (most recent call last):
+  File "D:\Coding\SafeAppeals2.0\python\transmutation_codex\plugins\__init__.py", line 219, in <module>
+    from .docx.to_epub import convert_docx_to_epub
+  File "D:\Coding\SafeAppeals2.0\python\transmutation_codex\plugins\docx\to_epub.py", line 248, in <module>
+    def _docx_to_html(doc: Document) -> str:
+                           ^^^^^^^^
+NameError: name 'Document' is not defined
+2025-12-11 20:09:07 - 20251211_200906_c125efa0 - aichemist_codex.plugins - INFO - __init__.<module>:229 - Plugin package initialized - all converters registered
+2025-12-11 20:09:07 - 20251211_200906_c125efa0 - aichemist_codex.electron_bridge - DEBUG - conversion_handler.handle_single_conversion:44 - Successfully imported plugins
+2025-12-11 20:09:07 - 20251211_200906_c125efa0 - aichemist_codex.electron_bridge - DEBUG - conversion_handler.handle_single_conversion:54 - Parsing conversion type: docx2pdf
+2025-12-11 20:09:07 - 20251211_200906_c125efa0 - aichemist_codex.electron_bridge - DEBUG - conversion_handler.handle_single_conversion:64 - Parsed conversion: docx -> pdf
+2025-12-11 20:09:07 - 20251211_200906_c125efa0 - aichemist_codex.electron_bridge - DEBUG - progress_reporter.report:55 - Reporting progress: 20/100 - Finding converter for docx2pdf...
+2025-12-11 20:09:07 - 20251211_200906_c125efa0 - aichemist_codex.electron_bridge - DEBUG - base.send_json_message:49 - Sending PROGRESS message: {"current": 20, "total": 100, "message": "Finding converter for docx2pdf...", "type": "single_progress", "filename": ""}...
+2025-12-11 20:09:07 - 20251211_200906_c125efa0 - aichemist_codex.electron_bridge - DEBUG - conversion_handler.handle_single_conversion:68 - Looking up converter in registry: docx -> pdf
+2025-12-11 20:09:07 - 20251211_200906_c125efa0 - aichemist_codex.electron_bridge - INFO - conversion_handler.handle_single_conversion:88 - Using converter: docx_to_pdf_libreoffice (priority: 10, version: 1.1.0)
+2025-12-11 20:09:07 - 20251211_200906_c125efa0 - aichemist_codex.electron_bridge - DEBUG - progress_reporter.report:55 - Reporting progress: 30/100 - Converting test.docx...
+2025-12-11 20:09:07 - 20251211_200906_c125efa0 - aichemist_codex.electron_bridge - DEBUG - base.send_json_message:49 - Sending PROGRESS message: {"current": 30, "total": 100, "message": "Converting test.docx...", "type": "single_progress", "filename": "test.docx"}...
+2025-12-11 20:09:07 - 20251211_200906_c125efa0 - aichemist_codex.electron_bridge - INFO - conversion_handler.handle_single_conversion:107 - Executing conversion: test.docx -> test.pdf
+2025-12-11 20:09:07 - 20251211_200906_c125efa0 - aichemist_codex.electron_bridge - DEBUG - conversion_handler.handle_single_conversion:108 - Converter options: {'force_ocr': False, 'include_charts': False, 'preserve_formatting': False, 'include_notes': False, 'include_images': False, 'use_lossless_compression': False, 'reduce_image_resolution': False, 'export_bookmarks': False, 'export_notes': False, 'pdfa': False, 'deskew': False, 'clean': False, 'redo_ocr': False}
+2025-12-11 20:09:07 - 20251211_200906_c125efa0 - aichemist_codex.electron_bridge - DEBUG - conversion_handler.handle_single_conversion:115 - Calling converter function
+2025-12-11 20:09:07 - 20251211_200906_c125efa0 - aichemist_codex.transmutation_codex.utils.validators - DEBUG - validators.validate_file_path:51 - Validating file path: d:\Coding\test3\test.docx
+2025-12-11 20:09:07 - 20251211_200906_c125efa0 - aichemist_codex.transmutation_codex.utils.validators - DEBUG - validators.validate_file_path:89 - File path validation passed: d:\Coding\test3\test.docx
+2025-12-11 20:09:07 - 20251211_200906_c125efa0 - aichemist_codex.converters.docx2pdf_libreoffice - INFO - to_pdf_libreoffice.convert_docx_to_pdf_libreoffice:149 - Starting LibreOffice DOCX to PDF conversion: d:\Coding\test3\test.docx
+2025-12-11 20:09:07 - 20251211_200906_c125efa0 - aichemist_codex.converters.docx2pdf_libreoffice - INFO - to_pdf_libreoffice.convert_docx_to_pdf_libreoffice:150 - Output will be saved to: d:\Coding\test3\test.pdf
+2025-12-11 20:09:07 - 20251211_200906_c125efa0 - aichemist_codex.converters.libreoffice_utils - DEBUG - libreoffice_utils.find_libreoffice:63 - Found LibreOffice at: C:\Program Files\LibreOffice\program\soffice.exe
+2025-12-11 20:09:07 - 20251211_200906_c125efa0 - aichemist_codex.converters.libreoffice_utils - DEBUG - libreoffice_utils.build_pdf_export_filter_options:172 - PDF filter options: Selection=false:Quality=90:ReduceImageResolution=false:UseLosslessCompression=false:ExportBookmarks=false:ExportNotes=false:ExportNotesPages=false:ExportFormFields=true:FormsType=1:EmbedStandardFonts=true:UseTaggedPDF=true:IsSkipEmptyPages=false:FirstPageOnLeft=false:DisplayPDFDocumentTitle=true:SelectPdfVersion=0
+2025-12-11 20:09:07 - 20251211_200906_c125efa0 - aichemist_codex.converters.docx2pdf_libreoffice - INFO - to_pdf_libreoffice.convert_docx_to_pdf_libreoffice:221 - Running command: C:\Program Files\LibreOffice\program\soffice.exe --headless --convert-to pdf:writer_pdf_Export:Selection=false:Quality=90:ReduceImageResolution=false:UseLosslessCompression=false:ExportBookmarks=false:ExportNotes=false:ExportNotesPages=false:ExportFormFields=true:FormsType=1:EmbedStandardFonts=true:UseTaggedPDF=true:IsSkipEmptyPages=false:FirstPageOnLeft=false:DisplayPDFDocumentTitle=true:SelectPdfVersion=0 --outdir d:\Coding\test3 d:\Coding\test3\test.docx
+2025-12-11 20:09:07 - 20251211_200906_c125efa0 - aichemist_codex.converters.docx2pdf_libreoffice - DEBUG - to_pdf_libreoffice.convert_docx_to_pdf_libreoffice:222 - PDF export settings: quality=90, lossless=False, pdfa=False
+2025-12-11 20:09:07 - 20251211_200906_c125efa0 - aichemist_codex.converters.docx2pdf_libreoffice - DEBUG - to_pdf_libreoffice.convert_docx_to_pdf_libreoffice:229 - Full command: ['C:\\Program Files\\LibreOffice\\program\\soffice.exe', '--headless', '--convert-to', 'pdf:writer_pdf_Export:Selection=false:Quality=90:ReduceImageResolution=false:UseLosslessCompression=false:ExportBookmarks=false:ExportNotes=false:ExportNotesPages=false:ExportFormFields=true:FormsType=1:EmbedStandardFonts=true:UseTaggedPDF=true:IsSkipEmptyPages=false:FirstPageOnLeft=false:DisplayPDFDocumentTitle=true:SelectPdfVersion=0', '--outdir', 'd:\\Coding\\test3', 'd:\\Coding\\test3\\test.docx']
+2025-12-11 20:09:07 - 20251211_200906_c125efa0 - aichemist_codex.converters.docx2pdf_libreoffice - DEBUG - to_pdf_libreoffice.convert_docx_to_pdf_libreoffice:276 - Waiting for output file (attempt 1/10)...
+2025-12-11 20:09:08 - 20251211_200906_c125efa0 - aichemist_codex.converters.docx2pdf_libreoffice - DEBUG - to_pdf_libreoffice.convert_docx_to_pdf_libreoffice:276 - Waiting for output file (attempt 2/10)...
+2025-12-11 20:09:08 - 20251211_200906_c125efa0 - aichemist_codex.converters.docx2pdf_libreoffice - DEBUG - to_pdf_libreoffice.convert_docx_to_pdf_libreoffice:276 - Waiting for output file (attempt 3/10)...
+2025-12-11 20:09:09 - 20251211_200906_c125efa0 - aichemist_codex.converters.docx2pdf_libreoffice - DEBUG - to_pdf_libreoffice.convert_docx_to_pdf_libreoffice:276 - Waiting for output file (attempt 4/10)...
+2025-12-11 20:09:09 - 20251211_200906_c125efa0 - aichemist_codex.converters.docx2pdf_libreoffice - DEBUG - to_pdf_libreoffice.convert_docx_to_pdf_libreoffice:276 - Waiting for output file (attempt 5/10)...
+2025-12-11 20:09:10 - 20251211_200906_c125efa0 - aichemist_codex.converters.docx2pdf_libreoffice - DEBUG - to_pdf_libreoffice.convert_docx_to_pdf_libreoffice:276 - Waiting for output file (attempt 6/10)...
+2025-12-11 20:09:10 - 20251211_200906_c125efa0 - aichemist_codex.converters.docx2pdf_libreoffice - DEBUG - to_pdf_libreoffice.convert_docx_to_pdf_libreoffice:276 - Waiting for output file (attempt 7/10)...
+2025-12-11 20:09:11 - 20251211_200906_c125efa0 - aichemist_codex.converters.docx2pdf_libreoffice - DEBUG - to_pdf_libreoffice.convert_docx_to_pdf_libreoffice:276 - Waiting for output file (attempt 8/10)...
+2025-12-11 20:09:11 - 20251211_200906_c125efa0 - aichemist_codex.converters.docx2pdf_libreoffice - DEBUG - to_pdf_libreoffice.convert_docx_to_pdf_libreoffice:276 - Waiting for output file (attempt 9/10)...
+2025-12-11 20:09:12 - 20251211_200906_c125efa0 - aichemist_codex.converters.docx2pdf_libreoffice - ERROR - to_pdf_libreoffice.convert_docx_to_pdf_libreoffice:285 - LibreOffice conversion completed but output file not found: d:\Coding\test3\test.pdf
+STDOUT: 
+STDERR: 
+2025-12-11 20:09:12 - 20251211_200906_c125efa0 - aichemist_codex.converters.docx2pdf_libreoffice - ERROR - to_pdf_libreoffice.convert_docx_to_pdf_libreoffice:347 - LibreOffice conversion failed: LibreOffice conversion completed but output file not found: d:\Coding\test3\test.pdf
+STDOUT: 
+STDERR: 
+Traceback (most recent call last):
+  File "D:\Coding\SafeAppeals2.0\python\transmutation_codex\plugins\docx\to_pdf_libreoffice.py", line 286, in convert_docx_to_pdf_libreoffice
+    raise RuntimeError(error_msg)
+RuntimeError: LibreOffice conversion completed but output file not found: d:\Coding\test3\test.pdf
+STDOUT: 
+STDERR: 
+2025-12-11 20:09:12 - 20251211_200906_c125efa0 - aichemist_codex.electron_bridge - WARNING - conversion_handler.handle_single_conversion:121 - Initial conversion attempt failed: LibreOffice conversion failed: LibreOffice conversion completed but output file not found: d:\Coding\test3\test.pdf
+STDOUT: 
+STDERR: 
+Traceback (most recent call last):
+  File "D:\Coding\SafeAppeals2.0\python\transmutation_codex\plugins\docx\to_pdf_libreoffice.py", line 286, in convert_docx_to_pdf_libreoffice
+    raise RuntimeError(error_msg)
+RuntimeError: LibreOffice conversion completed but output file not found: d:\Coding\test3\test.pdf
+STDOUT: 
+STDERR: 
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "D:\Coding\SafeAppeals2.0\python\transmutation_codex\adapters\bridges\conversion_handler.py", line 116, in handle_single_conversion
+    result_path = converter_callable(
+        str(input_path), str(output_path), **args.options
+    )
+  File "D:\Coding\SafeAppeals2.0\python\transmutation_codex\core\decorators.py", line 113, in wrapper
+    return func(input_path, output_path, **kwargs)
+  File "D:\Coding\SafeAppeals2.0\python\transmutation_codex\plugins\docx\to_pdf_libreoffice.py", line 362, in convert_docx_to_pdf_libreoffice
+    raise RuntimeError(error_message) from e
+RuntimeError: LibreOffice conversion failed: LibreOffice conversion completed but output file not found: d:\Coding\test3\test.pdf
+STDOUT: 
+STDERR: 
+2025-12-11 20:09:12 - 20251211_200906_c125efa0 - aichemist_codex.electron_bridge - ERROR - conversion_handler.handle_single_conversion:176 - [BRIDGE_004] Conversion failed: LibreOffice conversion failed: LibreOffice conversion completed but output file not found: d:\Coding\test3\test.pdf
+STDOUT: 
+STDERR: 
+Traceback (most recent call last):
+  File "D:\Coding\SafeAppeals2.0\python\transmutation_codex\plugins\docx\to_pdf_libreoffice.py", line 286, in convert_docx_to_pdf_libreoffice
+    raise RuntimeError(error_msg)
+RuntimeError: LibreOffice conversion completed but output file not found: d:\Coding\test3\test.pdf
+STDOUT: 
+STDERR: 
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "D:\Coding\SafeAppeals2.0\python\transmutation_codex\adapters\bridges\conversion_handler.py", line 116, in handle_single_conversion
+    result_path = converter_callable(
+        str(input_path), str(output_path), **args.options
+    )
+  File "D:\Coding\SafeAppeals2.0\python\transmutation_codex\core\decorators.py", line 113, in wrapper
+    return func(input_path, output_path, **kwargs)
+  File "D:\Coding\SafeAppeals2.0\python\transmutation_codex\plugins\docx\to_pdf_libreoffice.py", line 362, in convert_docx_to_pdf_libreoffice
+    raise RuntimeError(error_message) from e
+RuntimeError: LibreOffice conversion failed: LibreOffice conversion completed but output file not found: d:\Coding\test3\test.pdf
+STDOUT: 
+STDERR: 
+2025-12-11 20:09:12 - 20251211_200906_c125efa0 - aichemist_codex.electron_bridge - ERROR - progress_reporter.report_error:97 - Reporting error (conversion): LibreOffice conversion failed: LibreOffice conversion completed but output file not found: d:\Coding\test3\test.pdf
+STDOUT: 
+STDERR: 
+2025-12-11 20:09:12 - 20251211_200906_c125efa0 - aichemist_codex.electron_bridge - DEBUG - base.send_json_message:49 - Sending PROGRESS message: {"current": 30, "total": 100, "message": "Error: LibreOffice conversion failed: LibreOffice conversion completed but output file not found: d:\\Coding\\test3\\test.pdf\nSTDOUT: \nSTDERR: ", "type": "s...
+2025-12-11 20:09:12 - 20251211_200906_c125efa0 - aichemist_codex.electron_bridge - DEBUG - base.send_json_message:49 - Sending ERROR message: {"error": "LibreOffice conversion failed: LibreOffice conversion completed but output file not found: d:\\Coding\\test3\\test.pdf\nSTDOUT: \nSTDERR: ", "type": "conversion"}...
+2025-12-11 20:09:12 - 20251211_200906_c125efa0 - aichemist_codex.electron_bridge - DEBUG - base.send_json_message:49 - Sending RESULT message: {"success": false, "message": "Conversion failed: LibreOffice conversion failed: LibreOffice conversion completed but output file not found: d:\\Coding\\test3\\test.pdf\nSTDOUT: \nSTDERR: ", "input_pa...
+2025-12-11 20:09:12 - 20251211_200906_c125efa0 - aichemist_codex.electron_bridge - ERROR - conversion_handler.handle_conversion:411 - [BRIDGE_004] Conversion error: Conversion failed: LibreOffice conversion failed: LibreOffice conversion completed but output file not found: d:\Coding\test3\test.pdf
+STDOUT: 
+STDERR: 
+Traceback (most recent call last):
+  File "D:\Coding\SafeAppeals2.0\python\transmutation_codex\plugins\docx\to_pdf_libreoffice.py", line 286, in convert_docx_to_pdf_libreoffice
+    raise RuntimeError(error_msg)
+RuntimeError: LibreOffice conversion completed but output file not found: d:\Coding\test3\test.pdf
+STDOUT: 
+STDERR: 
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "D:\Coding\SafeAppeals2.0\python\transmutation_codex\adapters\bridges\conversion_handler.py", line 116, in handle_single_conversion
+    result_path = converter_callable(
+        str(input_path), str(output_path), **args.options
+    )
+  File "D:\Coding\SafeAppeals2.0\python\transmutation_codex\core\decorators.py", line 113, in wrapper
+    return func(input_path, output_path, **kwargs)
+  File "D:\Coding\SafeAppeals2.0\python\transmutation_codex\plugins\docx\to_pdf_libreoffice.py", line 362, in convert_docx_to_pdf_libreoffice
+    raise RuntimeError(error_message) from e
+RuntimeError: LibreOffice conversion failed: LibreOffice conversion completed but output file not found: d:\Coding\test3\test.pdf
+STDOUT: 
+STDERR: 
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "D:\Coding\SafeAppeals2.0\python\transmutation_codex\adapters\bridges\conversion_handler.py", line 391, in handle_conversion
+    handle_single_conversion(args, reporter)
+    ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^
+  File "D:\Coding\SafeAppeals2.0\python\transmutation_codex\adapters\bridges\conversion_handler.py", line 189, in handle_single_conversion
+    raise BridgeConversionError(f"Conversion failed: {e}") from e
+transmutation_codex.adapters.bridges.base.BridgeConversionError: Conversion failed: LibreOffice conversion failed: LibreOffice conversion completed but output file not found: d:\Coding\test3\test.pdf
+STDOUT: 
+STDERR: 
+2025-12-11 20:09:12 - 20251211_200906_c125efa0 - aichemist_codex.electron_bridge - INFO - electron_bridge.main:50 - Electron bridge exiting with code 1

@@ -3,6 +3,7 @@
  *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
  *--------------------------------------------------------------------------------------*/
 
+import { createRequire } from 'module'
 import { generateUuid } from '../../../../../base/common/uuid.js'
 import { InternalToolInfo } from '../../common/prompt/prompts.js'
 import { MultipleToolCalls, RawToolCallObj, RawToolParamsObj, SingleToolCall } from '../../common/sendLLMMessageTypes.js'
@@ -10,9 +11,10 @@ import { ToolName, ToolParamName } from '../../common/tools/toolsServiceTypes.js
 import { parseXMLPrefixToToolCall } from './extractGrammar.js'
 
 // Try to import partial-xml-stream-parser, but handle if it's not available
+// Use createRequire for ESM compatibility with CommonJS modules
 let PartialXMLStreamParser: any = null
 try {
-	// Try CommonJS require first
+	const require = createRequire(import.meta.url)
 	const parserModule = require('partial-xml-stream-parser')
 	PartialXMLStreamParser = parserModule.default || parserModule.PartialXMLStreamParser || parserModule
 } catch (e) {

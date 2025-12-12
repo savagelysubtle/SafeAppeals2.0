@@ -1,0 +1,2 @@
+2025-12-11 19:23:23 - 20251211_192323_1d8c186c - root - INFO - logger._configure_programmatic_logging:343 - Logging configured programmatically. Session ID: 20251211_192323_1d8c186c. File log: D:\Coding\SafeAppeals2.0\python\logs\python\app_session_20251211_192323_1d8c186c.log
+2025-12-11 19:23:24 - 20251211_192323_1d8c186c - aichemist_codex.electron_bridge - INFO - electron_bridge.main:40 - Electron bridge starting
