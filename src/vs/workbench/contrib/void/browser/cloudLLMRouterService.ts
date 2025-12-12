@@ -13,13 +13,13 @@
  */
 
 import { Disposable } from '../../../../base/common/lifecycle.js';
+import { InstantiationType, registerSingleton } from '../../../../platform/instantiation/common/extensions.js';
 import { createDecorator } from '../../../../platform/instantiation/common/instantiation.js';
-import { registerSingleton, InstantiationType } from '../../../../platform/instantiation/common/extensions.js';
 import { ILLMMessageService } from '../common/sendLLMMessageService.js';
 import { ServiceSendLLMMessageParams } from '../common/sendLLMMessageTypes.js';
 import { IVoidSettingsService } from '../common/voidSettingsService.js';
-import { IVoidCloudService } from './voidCloudService.js';
 import { ProviderName } from '../common/voidSettingsTypes.js';
+import { IVoidCloudService } from './voidCloudService.js';
 
 // ============================================
 // SERVICE INTERFACE
@@ -59,22 +59,24 @@ export const ICloudLLMRouterService = createDecorator<ICloudLLMRouterService>('c
 class CloudLLMRouterService extends Disposable implements ICloudLLMRouterService {
 	readonly _serviceBrand: undefined;
 
-	// Map provider names to cloud model names
+	// Map app model names to LiteLLM model_name (from config.yaml)
+	// 1:1 mapping - app names match LiteLLM model_name values
 	private readonly cloudModelMapping: Record<string, string> = {
-		// Anthropic models
-		'claude-sonnet-4-20250514': 'claude-sonnet-4-20250514',
-		'claude-3-5-haiku-20241022': 'claude-3-5-haiku-20241022',
-		'claude-3.5-sonnet': 'claude-sonnet-4-20250514', // fallback mapping
-		'claude-3-haiku': 'claude-3-5-haiku-20241022',
-		// OpenAI models - synced with LiteLLM (December 2024)
-		// Shorthand names only - LiteLLM handles routing to latest versions
+		// Anthropic (matches litellm/config.yaml model_name)
+		'claude-opus-4.5': 'claude-opus-4.5',
+		'claude-sonnet-4.5': 'claude-sonnet-4.5',
+		'claude-opus-4.1': 'claude-opus-4.1',
+		'claude-sonnet-4': 'claude-sonnet-4',
+		'claude-haiku-4.5': 'claude-haiku-4.5',
+		// OpenAI (matches litellm/config.yaml model_name)
 		'gpt-5.2': 'gpt-5.2',
 		'gpt-5': 'gpt-5',
 		'gpt-5-mini': 'gpt-5-mini',
 		'gpt-5-nano': 'gpt-5-nano',
-		// Gemini models (when we add Gemini to cloud)
-		'gemini-1.5-flash': 'gemini-1.5-flash',
-		'gemini-1.5-pro': 'gemini-1.5-pro',
+		// Gemini (matches litellm/config.yaml model_name)
+		'gemini-3-pro': 'gemini-3-pro',
+		'gemini-2.5-pro': 'gemini-2.5-pro',
+		'gemini-2.5-flash': 'gemini-2.5-flash',
 	};
 
 	constructor(
@@ -128,7 +130,24 @@ class CloudLLMRouterService extends Disposable implements ICloudLLMRouterService
 	// ============================================
 
 	private shouldUseCloud(providerName: ProviderName): boolean {
-		return this.isCloudEnabledForProvider(providerName) && this.canUseCloud();
+		// If user explicitly enabled cloud mode for this provider, use cloud
+		if (this.isCloudEnabledForProvider(providerName) && this.canUseCloud()) {
+			return true;
+		}
+
+		// Smart fallback: If user is signed in with credits but has NO API key for this provider,
+		// automatically use cloud (better UX than showing "no API key" error)
+		if (this.canUseCloud() && !this._hasApiKeyForProvider(providerName)) {
+			console.log('[CloudLLMRouter] No API key for provider, auto-routing through cloud:', providerName);
+			return true;
+		}
+
+		return false;
+	}
+
+	private _hasApiKeyForProvider(providerName: ProviderName): boolean {
+		const providerSettings = this.settingsService.state.settingsOfProvider[providerName];
+		return !!providerSettings?.apiKey && providerSettings.apiKey.trim() !== '';
 	}
 
 	private _sendViaCloud(params: ServiceSendLLMMessageParams): string | null {
