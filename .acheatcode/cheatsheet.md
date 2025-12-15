@@ -7,12 +7,14 @@
 ### Complete Build (Production Windows)
 
 ```bash
-# Using bun (faster) ⚡
-bun buildreact && bun compile-build-ci && bun gulp bundle-vscode && bun gulp vscode-win32-x64-ci && bun gulp vscode-win32-x64-inno-updater && bun gulp vscode-win32-x64-user-setup
+# Using bun (faster) ⚡ - includes Python environment for file converter
+bun gulp setup-python && bun buildreact && bun compile-build-ci && bun gulp bundle-vscode && bun gulp vscode-win32-x64-ci && bun gulp vscode-win32-x64-inno-updater && bun gulp vscode-win32-x64-user-setup
 
 # Using npm (legacy)
-npm run buildreact && npm run compile-build-ci && npm run gulp bundle-vscode && npm run gulp vscode-win32-x64-ci && npm run gulp vscode-win32-x64-inno-updater && npm run gulp vscode-win32-x64-user-setup
+npm run gulp setup-python && npm run buildreact && npm run compile-build-ci && npm run gulp bundle-vscode && npm run gulp vscode-win32-x64-ci && npm run gulp vscode-win32-x64-inno-updater && npm run gulp vscode-win32-x64-user-setup
 ```
+
+> **📝 Note**: `setup-python` prepares the Python virtual environment (`python/.venv`) which is bundled into the production build. The venv contains dependencies for the Transmutation Codex file converter.
 
 ### Development Workflow
 
