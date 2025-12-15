@@ -852,8 +852,10 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 						const hasEditDocumentTag = fullText.includes('<edit_document>')
 						const hasToolCall = !!toolCall
 
-						// DEBUG: Check for ANY tool call XML tags
-						const hasAnyToolTag = fullText.includes('<rag_') || fullText.includes('<read_file') || fullText.includes('<edit_') || fullText.includes('<create_file')
+						// DEBUG: Check for ANY tool call XML tags (both legacy and ANTML formats)
+						const hasLegacyToolTag = fullText.includes('<rag_') || fullText.includes('<read_file') || fullText.includes('<edit_') || fullText.includes('<create_file')
+						const hasAntmlToolTag = fullText.includes('<function_calls>') || fullText.includes('<invoke name=')
+						const hasAnyToolTag = hasLegacyToolTag || hasAntmlToolTag
 
 						// DEBUG: If XML is present but no toolCall, the wrapper might not be working
 						if ((hasEditDocumentTag || hasAnyToolTag) && !hasToolCall) {
@@ -863,8 +865,11 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 								toolCall,
 								chatMode,
 								hasEditDocumentTag,
-								hasAnyToolTag,
-								note: 'extractXMLToolsWrapper is NOT working! Check if it is being called in main process (sendLLMMessage.impl.ts)',
+								hasLegacyToolTag,
+								hasAntmlToolTag,
+								note: hasAntmlToolTag
+									? 'ANTML format detected - cloudLLMRouterService should parse this'
+									: 'extractXMLToolsWrapper is NOT working! Check if it is being called in main process',
 								likelyIssue: 'specialToolFormat may be set when it should be undefined'
 							})
 						}
@@ -875,7 +880,8 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 						toolCallInfo: toolCall ? ('name' in toolCall ? `single: ${toolCall.name}` : `multiple: ${toolCall.toolCalls.length} tools`) : 'none',
 						fullTextPreview: fullText.substring(0, 200),
 						hasEditDocumentTag,
-						hasAnyToolTag,
+						hasLegacyToolTag,
+						hasAntmlToolTag,
 						chatMode
 					})
 					this._setStreamState(threadId, { isRunning: 'LLM', llmInfo: { displayContentSoFar: fullText, reasoningSoFar: fullReasoning, toolCallSoFar: toolCall ?? null }, interrupt: Promise.resolve(() => { if (llmCancelToken) this._llmMessageService.abort(llmCancelToken) }) })

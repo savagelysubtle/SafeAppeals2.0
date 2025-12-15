@@ -13,13 +13,155 @@
  */
 
 import { Disposable } from '../../../../base/common/lifecycle.js';
+import { generateUuid } from '../../../../base/common/uuid.js';
 import { InstantiationType, registerSingleton } from '../../../../platform/instantiation/common/extensions.js';
 import { createDecorator } from '../../../../platform/instantiation/common/instantiation.js';
+import { availableTools } from '../common/prompt/prompts.js';
 import { ILLMMessageService } from '../common/sendLLMMessageService.js';
-import { ServiceSendLLMMessageParams } from '../common/sendLLMMessageTypes.js';
+import { ServiceSendLLMMessageParams, OnFinalMessage, OnText, RawToolCallObj, RawToolParamsObj, SingleToolCall } from '../common/sendLLMMessageTypes.js';
+import { ToolName, ToolParamName } from '../common/tools/toolsServiceTypes.js';
 import { IVoidSettingsService } from '../common/voidSettingsService.js';
-import { ProviderName } from '../common/voidSettingsTypes.js';
+import { ChatMode, ProviderName } from '../common/voidSettingsTypes.js';
 import { IVoidCloudService } from './voidCloudService.js';
+
+// ============================================
+// BROWSER-SIDE XML TOOL PARSER FOR CLOUD RESPONSES
+// ============================================
+
+/**
+ * Parse ANTML format tool calls from cloud response
+ * Format: <function_calls><invoke name="X"><parameter name="Y">value</parameter></invoke></function_calls>
+ */
+function parseCloudToolCalls(
+	text: string,
+	chatMode: ChatMode | null
+): { textBeforeTools: string; toolCall: RawToolCallObj | null } {
+	// Get available tools for this chat mode
+	const tools = availableTools(chatMode, undefined);
+	if (!tools || tools.length === 0) {
+		console.warn('[CloudXMLParser] No tools available for chatMode:', chatMode);
+		return { textBeforeTools: text, toolCall: null };
+	}
+
+	// Build tool lookup map
+	const toolOfToolName: { [name: string]: typeof tools[0] } = {};
+	for (const t of tools) { toolOfToolName[t.name] = t; }
+
+	// Find <function_calls> wrapper
+	const functionCallsIdx = text.indexOf('<function_calls>');
+	if (functionCallsIdx === -1) {
+		return { textBeforeTools: text, toolCall: null };
+	}
+
+	const textBeforeTools = text.substring(0, functionCallsIdx);
+	const xmlSubstring = text.substring(functionCallsIdx);
+
+	console.log('[CloudXMLParser] Found <function_calls> at index:', functionCallsIdx);
+
+	// Extract content between <function_calls> and </function_calls>
+	const functionCallsMatch = xmlSubstring.match(/<function_calls>([\s\S]*?)<\/function_calls>/);
+	if (!functionCallsMatch) {
+		console.warn('[CloudXMLParser] No closing </function_calls> found');
+		return { textBeforeTools, toolCall: null };
+	}
+
+	const innerContent = functionCallsMatch[1];
+	const toolCalls: SingleToolCall[] = [];
+
+	// Find all <invoke> blocks
+	const invokeRegex = /<invoke\s+name="([^"]+)">([\s\S]*?)<\/invoke>/g;
+	let match;
+
+	while ((match = invokeRegex.exec(innerContent)) !== null) {
+		const toolName = match[1] as ToolName;
+		const invokeContent = match[2];
+
+		console.log('[CloudXMLParser] Found invoke for tool:', toolName);
+
+		const toolDef = toolOfToolName[toolName];
+		if (!toolDef) {
+			console.warn('[CloudXMLParser] Unknown tool:', toolName, '- skipping');
+			continue;
+		}
+
+		// Extract parameters
+		const paramsObj: RawToolParamsObj = {};
+		const doneParams: ToolParamName<ToolName>[] = [];
+
+		const paramRegex = /<parameter\s+name="([^"]+)">([\s\S]*?)<\/parameter>/g;
+		let paramMatch;
+
+		while ((paramMatch = paramRegex.exec(invokeContent)) !== null) {
+			const paramName = paramMatch[1] as ToolParamName<ToolName>;
+			const paramValue = paramMatch[2].trim();
+
+			if (paramName in toolDef.params) {
+				paramsObj[paramName] = paramValue;
+				doneParams.push(paramName);
+			}
+		}
+
+		console.log('[CloudXMLParser] Extracted tool:', toolName, 'with params:', doneParams);
+
+		toolCalls.push({
+			name: toolName,
+			rawParams: paramsObj,
+			doneParams,
+			id: generateUuid(),
+			isDone: true
+		});
+	}
+
+	if (toolCalls.length === 0) {
+		console.warn('[CloudXMLParser] No valid tool calls found in <function_calls>');
+		return { textBeforeTools, toolCall: null };
+	}
+
+	// Return single or multi tool call
+	const toolCall: RawToolCallObj = toolCalls.length === 1
+		? toolCalls[0]
+		: { toolCalls, format: 'antml' };
+
+	console.log('[CloudXMLParser] ✅ Parsed', toolCalls.length, 'tool calls successfully');
+	return { textBeforeTools, toolCall };
+}
+
+/**
+ * Wrap onText and onFinalMessage to apply XML tool parsing
+ */
+function wrapWithXMLParsing(
+	onText: OnText | undefined,
+	onFinalMessage: OnFinalMessage,
+	chatMode: ChatMode | null
+): { wrappedOnText: OnText | undefined; wrappedOnFinalMessage: OnFinalMessage } {
+	let lastToolCall: RawToolCallObj | null = null;
+
+	const wrappedOnText: OnText | undefined = onText ? (params) => {
+		const { textBeforeTools, toolCall } = parseCloudToolCalls(params.fullText, chatMode);
+		if (toolCall) {
+			lastToolCall = toolCall;
+		}
+		onText({
+			...params,
+			fullText: textBeforeTools,
+			toolCall: toolCall || undefined,
+		});
+	} : undefined;
+
+	const wrappedOnFinalMessage: OnFinalMessage = (params) => {
+		const { textBeforeTools, toolCall } = parseCloudToolCalls(params.fullText, chatMode);
+		if (toolCall) {
+			lastToolCall = toolCall;
+		}
+		onFinalMessage({
+			...params,
+			fullText: textBeforeTools,
+			toolCall: toolCall || lastToolCall || undefined,
+		});
+	};
+
+	return { wrappedOnText, wrappedOnFinalMessage };
+}
 
 // ============================================
 // SERVICE INTERFACE
@@ -151,7 +293,7 @@ class CloudLLMRouterService extends Disposable implements ICloudLLMRouterService
 	}
 
 	private _sendViaCloud(params: ServiceSendLLMMessageParams): string | null {
-		const { modelSelection, messages, onText, onFinalMessage, onError, messagesType } = params;
+		const { modelSelection, messages, onText, onFinalMessage, onError, messagesType, chatMode } = params;
 
 		if (!modelSelection) {
 			onError({ message: 'No model selected', fullError: null });
@@ -182,21 +324,25 @@ class CloudLLMRouterService extends Disposable implements ICloudLLMRouterService
 			cloudModel,
 			messageCount: (messages as any[])?.length ?? 0,
 			apiUrl: this.settingsService.state.globalSettings.voidCloudApiUrl,
+			chatMode,
 		});
 
 		// Convert messages to cloud format
 		const cloudMessages = this._convertMessages(messages as any[]);
 		console.log('[CloudLLMRouter] Sending request now...');
 
+		// Wrap callbacks with XML tool parsing for chat modes that support tools
+		const { wrappedOnText, wrappedOnFinalMessage } = wrapWithXMLParsing(onText, onFinalMessage, chatMode ?? null);
+
 		// Send via cloud service
 		this.cloudService.sendCloudRequest({
 			model: cloudModel,
 			messages: cloudMessages,
 			stream: false, // TODO: Implement streaming
-			onText: onText ? (text) => onText({ fullText: text, fullReasoning: '' }) : undefined,
+			onText: wrappedOnText ? (text) => wrappedOnText({ fullText: text, fullReasoning: '' }) : undefined,
 		}).then((response) => {
-			// Call final message callback
-			onFinalMessage({
+			// Call final message callback with XML parsing applied
+			wrappedOnFinalMessage({
 				fullText: response.content,
 				fullReasoning: '',
 				anthropicReasoning: null,

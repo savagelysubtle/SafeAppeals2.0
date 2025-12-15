@@ -35,6 +35,57 @@ const { compileNonNativeExtensionsBuildTask, compileNativeExtensionsBuildTask, c
 const { promisify } = require('util');
 const glob = promisify(require('glob'));
 const rcedit = promisify(require('rcedit'));
+const cp = require('child_process');
+
+// Python Setup Task - ensures the Python venv is ready for bundling
+function setupPythonTask() {
+	return async () => {
+		const pythonDir = path.join(root, 'python');
+		const venvPath = path.join(pythonDir, '.venv');
+		const isWindows = process.platform === 'win32';
+
+		// Check if venv already exists
+		if (fs.existsSync(venvPath)) {
+			console.log('[setup-python] Python venv already exists at:', venvPath);
+			return;
+		}
+
+		console.log('[setup-python] Setting up Python venv...');
+
+		// Run the appropriate setup script
+		const setupScript = isWindows
+			? path.join(pythonDir, 'setup-venv.ps1')
+			: path.join(pythonDir, 'setup-venv.sh');
+
+		if (!fs.existsSync(setupScript)) {
+			throw new Error(`Python setup script not found: ${setupScript}`);
+		}
+
+		return new Promise((resolve, reject) => {
+			const command = isWindows
+				? ['powershell.exe', ['-ExecutionPolicy', 'Bypass', '-File', setupScript]]
+				: ['/bin/bash', [setupScript]];
+
+			const child = cp.spawn(command[0], command[1], {
+				cwd: pythonDir,
+				stdio: 'inherit',
+				shell: false
+			});
+
+			child.on('error', reject);
+			child.on('exit', (code) => {
+				if (code === 0) {
+					console.log('[setup-python] Python venv setup complete');
+					resolve();
+				} else {
+					reject(new Error(`Python setup script exited with code ${code}`));
+				}
+			});
+		});
+	};
+}
+
+gulp.task(task.define('setup-python', setupPythonTask()));
 
 // Build
 const vscodeEntryPoints = [
@@ -332,6 +383,30 @@ function packageTask(platform, arch, sourceFolderName, destinationFolderName, op
 				'node_modules/vsda/**' // retain copy of `vsda` in node_modules for internal use
 			], 'node_modules.asar'));
 
+		// Python environment for file converter (transmutation_codex)
+		// Copy Python source code and venv to resources/app/python/
+		const pythonSrc = gulp.src([
+			'python/transmutation_codex/**',
+			'python/pyproject.toml',
+			// Exclude cache and build artifacts
+			'!python/transmutation_codex/**/__pycache__/**',
+			'!python/transmutation_codex/**/*.pyc',
+			'!python/transmutation_codex/**/*.pyo',
+		], { base: '.', dot: true, allowEmpty: true });
+
+		// Copy the Python venv with platform-specific binaries
+		// This contains the installed dependencies for file conversion
+		const pythonVenv = gulp.src([
+			'python/.venv/**',
+			// Exclude cache and unnecessary files
+			'!python/.venv/**/__pycache__/**',
+			'!python/.venv/**/*.pyc',
+			'!python/.venv/**/*.pyo',
+			'!python/.venv/**/pip/**',
+			'!python/.venv/**/setuptools/**',
+			'!python/.venv/**/wheel/**',
+		], { base: '.', dot: true, allowEmpty: true });
+
 		let all = es.merge(
 			packageJsonStream,
 			productJsonStream,
@@ -339,7 +414,9 @@ function packageTask(platform, arch, sourceFolderName, destinationFolderName, op
 			api,
 			telemetry,
 			sources,
-			deps
+			deps,
+			pythonSrc,
+			pythonVenv
 		);
 
 		if (platform === 'win32') {

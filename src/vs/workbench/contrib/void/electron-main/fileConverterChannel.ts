@@ -3,17 +3,22 @@
  *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
  *--------------------------------------------------------------------------------------*/
 
-import * as path from 'path';
-import * as fs from 'fs';
-import { fileURLToPath } from 'url';
 import { spawn } from 'child_process';
+import * as fs from 'fs';
+import * as path from 'path';
+import { fileURLToPath } from 'url';
 import { Event } from '../../../../base/common/event.js';
 import { IServerChannel } from '../../../../base/parts/ipc/common/ipc.js';
-import { IFileConverterMainService, ConversionResult, BatchResult, MergeResult, ConversionMap, FileConverterConfig } from '../common/fileConverterTypes.js';
+import { BatchResult, ConversionMap, ConversionResult, FileConverterConfig, IFileConverterMainService, MergeResult } from '../common/fileConverterTypes.js';
 
 // ESM equivalent of __dirname
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+// Log once at module load for debugging path resolution
+console.log(`[FileConverterMainService] Module loaded. import.meta.url: ${import.meta.url}`);
+console.log(`[FileConverterMainService] __filename: ${__filename}`);
+console.log(`[FileConverterMainService] __dirname: ${__dirname}`);
 
 // Get the project root directory (handles both source and compiled locations)
 function getProjectRoot(): string {
@@ -22,8 +27,18 @@ function getProjectRoot(): string {
 	// - Compiled: out/vs/workbench/contrib/void/electron-main/
 	// Both are 6 levels deep from project root
 	const projectRoot = path.resolve(__dirname, '..', '..', '..', '..', '..', '..');
-	console.log(`[FileConverterMainService] __dirname: ${__dirname}`);
-	console.log(`[FileConverterMainService] Project root: ${projectRoot}`);
+
+	// In packaged Electron apps, use the resources/app directory
+	if (process.resourcesPath) {
+		const resourcesAppDir = path.join(process.resourcesPath, 'app');
+		console.log(`[FileConverterMainService] PACKAGED APP DETECTED:`);
+		console.log(`  process.resourcesPath: ${process.resourcesPath}`);
+		console.log(`  Using resources/app directory: ${resourcesAppDir}`);
+		console.log(`  (instead of project root: ${projectRoot})`);
+		return resourcesAppDir;
+	}
+
+	console.log(`[FileConverterMainService] DEVELOPMENT MODE - Project root: ${projectRoot}`);
 	return projectRoot;
 }
 
@@ -39,13 +54,46 @@ function getBundledPythonPath(): string | null {
 		: path.join(pythonDir, '.venv', 'bin', 'python');
 
 	console.log(`[FileConverterMainService] Looking for venv Python at: ${venvPython}`);
+	console.log(`[FileConverterMainService] Python dir exists: ${fs.existsSync(pythonDir)}`);
+	console.log(`[FileConverterMainService] .venv dir exists: ${fs.existsSync(path.join(pythonDir, '.venv'))}`);
 
 	if (fs.existsSync(venvPython)) {
 		console.log(`[FileConverterMainService] Found bundled Python venv: ${venvPython}`);
 		return venvPython;
 	}
 
-	console.log(`[FileConverterMainService] Bundled venv not found at: ${venvPython}`);
+	// Try alternative location using process.cwd() (useful when running from dev)
+	const cwdPythonDir = path.join(process.cwd(), 'python');
+	const cwdVenvPython = isWindows
+		? path.join(cwdPythonDir, '.venv', 'Scripts', 'python.exe')
+		: path.join(cwdPythonDir, '.venv', 'bin', 'python');
+
+	console.log(`[FileConverterMainService] Trying cwd-based path: ${cwdVenvPython}`);
+	console.log(`[FileConverterMainService] cwd: ${process.cwd()}`);
+
+	if (fs.existsSync(cwdVenvPython)) {
+		console.log(`[FileConverterMainService] Found bundled Python venv at cwd path: ${cwdVenvPython}`);
+		return cwdVenvPython;
+	}
+
+	// Try using process.resourcesPath (available in packaged Electron apps)
+	// In packaged apps, resources are at: <app>/resources/app/python/.venv/...
+	if (process.resourcesPath) {
+		const resourcesPythonDir = path.join(process.resourcesPath, 'app', 'python');
+		const resourcesVenvPython = isWindows
+			? path.join(resourcesPythonDir, '.venv', 'Scripts', 'python.exe')
+			: path.join(resourcesPythonDir, '.venv', 'bin', 'python');
+
+		console.log(`[FileConverterMainService] Trying resources-based path: ${resourcesVenvPython}`);
+		console.log(`[FileConverterMainService] process.resourcesPath: ${process.resourcesPath}`);
+
+		if (fs.existsSync(resourcesVenvPython)) {
+			console.log(`[FileConverterMainService] Found bundled Python venv at resources path: ${resourcesVenvPython}`);
+			return resourcesVenvPython;
+		}
+	}
+
+	console.log(`[FileConverterMainService] Bundled venv not found in any location`);
 	return null;
 }
 
@@ -173,13 +221,32 @@ export class FileConverterMainService implements IFileConverterMainService {
 				}
 
 				// Spawn Python process with configured Python path
-				console.log('[FileConverterMainService] Calling spawn...');
+				// Use shell: true when using a command name (not absolute path)
+				// This is needed on Windows where 'py' and 'python' require shell resolution
+				const useShell = !path.isAbsolute(this.pythonPath);
+				console.log('[FileConverterMainService] Calling spawn with shell:', useShell);
+
+				// For packaged apps, use the directory containing the venv Python executable
+				const workingDir = path.isAbsolute(this.pythonPath)
+					? path.dirname(path.dirname(path.dirname(this.pythonPath))) // Go up from Scripts/python.exe to python/
+					: pythonDir;
+
+				console.log('[FileConverterMainService] Using working directory for persistent process:', workingDir);
+
+				// For packaged apps, the python source should be in the same directory as the venv
+				const pythonPathEnv = path.isAbsolute(this.pythonPath)
+					? workingDir
+					: pythonDir;
+
+				console.log('[FileConverterMainService] Using PYTHONPATH for persistent process:', pythonPathEnv);
+
 				this.pythonProcess = spawn(this.pythonPath, [bridgePath], {
-					cwd: pythonDir,
+					cwd: workingDir,
 					stdio: ['pipe', 'pipe', 'pipe'],
+					shell: useShell,
 					env: {
 						...process.env,
-						PYTHONPATH: pythonDir
+						PYTHONPATH: pythonPathEnv
 					}
 				});
 				console.log('[FileConverterMainService] Spawn returned, pid:', this.pythonProcess?.pid);
@@ -347,11 +414,38 @@ export class FileConverterMainService implements IFileConverterMainService {
 		return new Promise((resolve) => {
 			const startTime = Date.now();
 
+			// Use shell: true when using a command name (not absolute path)
+			// This is needed on Windows where 'py' and 'python' require shell resolution
+			const useShell = !path.isAbsolute(this.pythonPath);
+			console.log('[FileConverterMainService] Spawning conversion with shell:', useShell);
+
+			// For packaged apps, use the directory containing the venv Python executable
+			// For bundled venv, cwd should be the python directory containing the venv
+			const workingDir = path.isAbsolute(this.pythonPath)
+				? path.dirname(path.dirname(path.dirname(this.pythonPath))) // Go up from Scripts/python.exe to python/
+				: pythonDir;
+
+			console.log('[FileConverterMainService] Using working directory:', workingDir);
+
+			// For packaged apps, the python source should be in the same directory as the venv
+			// If we're using an absolute path to venv python.exe, use that directory for PYTHONPATH too
+			const pythonPathEnv = path.isAbsolute(this.pythonPath)
+				? workingDir
+				: pythonDir;
+
+			console.log('[FileConverterMainService] PYTHONPATH calculation:');
+			console.log('  this.pythonPath:', this.pythonPath);
+			console.log('  path.isAbsolute(this.pythonPath):', path.isAbsolute(this.pythonPath));
+			console.log('  workingDir:', workingDir);
+			console.log('  pythonDir (fallback):', pythonDir);
+			console.log('  Final PYTHONPATH:', pythonPathEnv);
+
 			const pythonProcess = spawn(this.pythonPath, args, {
-				cwd: pythonDir,
+				cwd: workingDir,
+				shell: useShell,
 				env: {
 					...process.env,
-					PYTHONPATH: pythonDir
+					PYTHONPATH: pythonPathEnv
 				}
 			});
 
