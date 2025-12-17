@@ -21,6 +21,7 @@ import { RawToolParamsObj } from '../../common/sendLLMMessageTypes.js'
 import { BuiltinToolCallParams, BuiltinToolName, BuiltinToolResultType, LintErrorItem } from '../../common/tools/toolsServiceTypes.js'
 import { IVoidModelService } from '../../common/voidModelService.js'
 import { IVoidSettingsService } from '../../common/voidSettingsService.js'
+import { IVoidCloudService } from '../voidCloudService.js'
 import { IDocumentCreatorService } from '../documentCreatorService.js'
 import { IDocumentEditorService } from '../documentViewers/documentEditorService.js'
 import { IEditCodeService } from '../editCodeServiceInterface.js'
@@ -163,6 +164,7 @@ export class ToolsService implements IToolsService {
 		@IMarkerService private readonly markerService: IMarkerService,
 		@IVoidSettingsService private readonly voidSettingsService: IVoidSettingsService,
 		@IRAGService private readonly ragService: IRAGService,
+		@IVoidCloudService private readonly voidCloudService: IVoidCloudService,
 		@IDocumentViewerService private readonly documentViewerService: IDocumentViewerService,
 		@IDocumentEditorService private readonly documentEditorService: IDocumentEditorService,
 		@IDocumentCreatorService private readonly documentCreatorService: IDocumentCreatorService,
@@ -738,46 +740,95 @@ Example: rag_index_document with uri="/path/to/document.pdf" and is_policy_manua
 				}
 			},
 
-			// --- Web Search tools (via IPC to electron-main to avoid CORS)
+			// --- Web Search tools (via IPC to electron-main to avoid CORS or through cloud)
 			web_search: async ({ query, count, offset }) => {
-				const apiKey = this.voidSettingsService.state.globalSettings.braveSearchApiKey;
-				if (!apiKey) {
-					throw new Error('Brave Search API key is required. Configure it in Settings > Web Search.');
+				// Check if cloud mode is enabled and user is signed in
+				if (this.voidSettingsService.state.globalSettings.voidCloudEnabled && this.voidCloudService.isSignedIn()) {
+					// Route through cloud service
+					if (!this.voidSettingsService.state.globalSettings.webSearchEnabled) {
+						throw new Error('Web Search is disabled. Enable it in Settings > Web Search.');
+					}
+
+					// Get user token
+					const userToken = this.voidCloudService.authState.session?.access_token;
+					if (!userToken) {
+						throw new Error('Cloud authentication session expired. Please sign in again.');
+					}
+
+					// Call cloud web search via IPC
+					const result = await this.braveSearchChannel.call('cloudWebSearch', {
+						userToken,
+						query,
+						count: count || 10,
+						offset: offset || 0,
+					}) as BuiltinToolResultType['web_search'];
+
+					return { result };
+				} else {
+					// Use direct Brave Search API (legacy mode)
+					const apiKey = this.voidSettingsService.state.globalSettings.braveSearchApiKey;
+					if (!apiKey) {
+						throw new Error('Brave Search API key is required. Configure it in Settings > Web Search, or sign in to SafeAppeals Cloud for managed API access.');
+					}
+
+					if (!this.voidSettingsService.state.globalSettings.webSearchEnabled) {
+						throw new Error('Web Search is disabled. Enable it in Settings > Web Search.');
+					}
+
+					// Call electron-main via IPC to avoid CORS
+					const result = await this.braveSearchChannel.call('webSearch', {
+						apiKey,
+						query,
+						count: count || 10,
+						offset: offset || 0,
+					}) as BuiltinToolResultType['web_search'];
+
+					return { result };
 				}
-
-				if (!this.voidSettingsService.state.globalSettings.webSearchEnabled) {
-					throw new Error('Web Search is disabled. Enable it in Settings > Web Search.');
-				}
-
-				// Call electron-main via IPC to avoid CORS
-				const result = await this.braveSearchChannel.call('webSearch', {
-					apiKey,
-					query,
-					count: count || 10,
-					offset: offset || 0,
-				}) as BuiltinToolResultType['web_search'];
-
-				return { result };
 			},
 
 			multi_link_search: async ({ queries, count }) => {
-				const apiKey = this.voidSettingsService.state.globalSettings.braveSearchApiKey;
-				if (!apiKey) {
-					throw new Error('Brave Search API key is required. Configure it in Settings > Web Search.');
+				// Check if cloud mode is enabled and user is signed in
+				if (this.voidSettingsService.state.globalSettings.voidCloudEnabled && this.voidCloudService.isSignedIn()) {
+					// Route through cloud service
+					if (!this.voidSettingsService.state.globalSettings.webSearchEnabled) {
+						throw new Error('Web Search is disabled. Enable it in Settings > Web Search.');
+					}
+
+					// Get user token
+					const userToken = this.voidCloudService.authState.session?.access_token;
+					if (!userToken) {
+						throw new Error('Cloud authentication session expired. Please sign in again.');
+					}
+
+					// Call cloud multi web search via IPC
+					const result = await this.braveSearchChannel.call('cloudMultiWebSearch', {
+						userToken,
+						queries,
+						count: count || 10,
+					}) as BuiltinToolResultType['multi_link_search'];
+
+					return { result };
+				} else {
+					// Use direct Brave Search API (legacy mode)
+					const apiKey = this.voidSettingsService.state.globalSettings.braveSearchApiKey;
+					if (!apiKey) {
+						throw new Error('Brave Search API key is required. Configure it in Settings > Web Search, or sign in to SafeAppeals Cloud for managed API access.');
+					}
+
+					if (!this.voidSettingsService.state.globalSettings.webSearchEnabled) {
+						throw new Error('Web Search is disabled. Enable it in Settings > Web Search.');
+					}
+
+					// Call electron-main via IPC to avoid CORS
+					const result = await this.braveSearchChannel.call('multiLinkSearch', {
+						apiKey,
+						queries,
+						count: count || 10,
+					}) as BuiltinToolResultType['multi_link_search'];
+
+					return { result };
 				}
-
-				if (!this.voidSettingsService.state.globalSettings.webSearchEnabled) {
-					throw new Error('Web Search is disabled. Enable it in Settings > Web Search.');
-				}
-
-				// Call electron-main via IPC to avoid CORS
-				const result = await this.braveSearchChannel.call('multiLinkSearch', {
-					apiKey,
-					queries,
-					count: count || 10,
-				}) as BuiltinToolResultType['multi_link_search'];
-
-				return { result };
 			},
 		}
 
