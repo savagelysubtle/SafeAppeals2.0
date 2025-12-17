@@ -2014,27 +2014,44 @@ export const Settings = () => {
 													<span>Enable Web Search Tools</span>
 												</div>
 
-												{/* API Key Input */}
-												<div className="flex flex-col gap-1">
-													<label className="text-sm text-void-fg-3">
-														Brave Search API Key
-													</label>
-													<VoidSimpleInputBox
-														placeholder="BSAxxxxxxxxxxxxxxxxxxxxxxxxxx"
-														passwordBlur={true}
-														value={settingsState.globalSettings.braveSearchApiKey ?? ""}
-														onChangeValue={(value) => {
-															voidSettingsService.setGlobalSetting(
-																"braveSearchApiKey",
-																value
-															);
-														}}
-														className="font-mono"
-													/>
-													<span className="text-xs text-void-fg-3">
-														Free tier: 2,000 requests/month, 1 request/second
-													</span>
-												</div>
+												{/* API Key Input - Only show when not using cloud */}
+												{!settingsState.globalSettings.voidCloudEnabled && (
+													<div className="flex flex-col gap-1">
+														<label className="text-sm text-void-fg-3">
+															Brave Search API Key
+														</label>
+														<VoidSimpleInputBox
+															placeholder="BSAxxxxxxxxxxxxxxxxxxxxxxxxxx"
+															passwordBlur={true}
+															value={settingsState.globalSettings.braveSearchApiKey ?? ""}
+															onChangeValue={(value) => {
+																voidSettingsService.setGlobalSetting(
+																	"braveSearchApiKey",
+																	value
+																);
+															}}
+															className="font-mono"
+														/>
+														<span className="text-xs text-void-fg-3">
+															Free tier: 2,000 requests/month, 1 request/second
+														</span>
+													</div>
+												)}
+
+												{/* Cloud Web Search Info */}
+												{settingsState.globalSettings.voidCloudEnabled && (
+													<div className="flex flex-col gap-1">
+														<div className="text-sm text-void-fg-3">
+															🌐 Web Search via SafeAppeals Cloud
+														</div>
+														<span className="text-xs text-void-fg-3">
+															Pro tier: $5.00 per 1,000 requests, 50 requests/second
+														</span>
+														<span className="text-xs text-green-600">
+															✓ No API key required - managed by SafeAppeals
+														</span>
+													</div>
+												)}
 											</div>
 										</ErrorBoundary>
 									</div>
