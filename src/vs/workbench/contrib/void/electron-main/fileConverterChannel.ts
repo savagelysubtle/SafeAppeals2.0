@@ -15,31 +15,69 @@ import { BatchResult, ConversionMap, ConversionResult, FileConverterConfig, IFil
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Log once at module load for debugging path resolution
-console.log(`[FileConverterMainService] Module loaded. import.meta.url: ${import.meta.url}`);
-console.log(`[FileConverterMainService] __filename: ${__filename}`);
-console.log(`[FileConverterMainService] __dirname: ${__dirname}`);
+// #region agent log - module init
+fetch('http://127.0.0.1:7242/ingest/46b90235-167b-46c3-ba20-4e094ee4fbac', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'fileConverterChannel.ts:23', message: 'Module initialization', data: { importMetaUrl: import.meta.url, __filename, __dirname, cwd: process.cwd(), resourcesPath: process.resourcesPath, execPath: process.execPath }, timestamp: Date.now(), sessionId: 'debug-session', runId: 'init', hypothesisId: 'A' }) }).catch(() => { });
+// #endregion
 
 // Get the project root directory (handles both source and compiled locations)
-function getProjectRoot(): string {
-	// __dirname is either:
+function getProjectRoot(pythonPath?: string): string {
+	// In packaged Electron apps (both installer and portable), use the resources/app directory
+	if (process.resourcesPath) {
+		// For installed apps, the app directory is at resources/app
+		const resourcesAppDir = path.join(process.resourcesPath, 'app');
+
+		// Check if this looks like an installed app (has python in resources/app)
+		if (fs.existsSync(path.join(resourcesAppDir, 'python'))) {
+			return resourcesAppDir;
+		}
+
+		// Check if python is directly in resources (alternative layout)
+		if (fs.existsSync(path.join(process.resourcesPath, 'python'))) {
+			return process.resourcesPath;
+		}
+
+		// Last resort: try to find the app directory from the executable path
+		const exeDir = path.dirname(process.execPath);
+		const appDir = path.join(exeDir, 'resources', 'app');
+		if (fs.existsSync(appDir)) {
+			return appDir;
+		}
+
+		// PRODUCTION FIX: Work backwards from the Python executable to find the SafeAppealsNavigator app directory
+		// The Python exe is at: ...SafeAppealsNavigator/resources/app/python/.venv/Scripts/python.exe
+		// We need to find: ...SafeAppealsNavigator/resources/app/
+		if (pythonPath && path.isAbsolute(pythonPath)) {
+			console.log('[FileConverterMainService] Working backwards from Python exe to find app directory');
+			console.log('  pythonPath:', pythonPath);
+
+			// Navigate up from python exe to find the app directory
+			let currentDir = path.dirname(pythonPath); // Scripts/
+			currentDir = path.dirname(currentDir);     // .venv/
+			currentDir = path.dirname(currentDir);     // python/
+			const appDir = path.dirname(currentDir);   // app/
+
+			const bridgePathTest = path.join(currentDir, 'transmutation_codex', 'adapters', 'bridges', 'electron_bridge.py');
+
+			console.log('[FileConverterMainService] Path navigation:');
+			console.log('  Scripts dir:', path.dirname(pythonPath));
+			console.log('  .venv dir:', path.dirname(path.dirname(pythonPath)));
+			console.log('  python dir:', currentDir);
+			console.log('  app dir:', appDir);
+			console.log('  bridge path test:', bridgePathTest);
+			console.log('  bridge exists:', fs.existsSync(bridgePathTest));
+
+			if (fs.existsSync(bridgePathTest)) {
+				console.log('[FileConverterMainService] Found app directory from Python exe:', appDir);
+				return appDir;
+			}
+		}
+	}
+
+	// Development mode: __dirname is either:
 	// - Source: src/vs/workbench/contrib/void/electron-main/
 	// - Compiled: out/vs/workbench/contrib/void/electron-main/
 	// Both are 6 levels deep from project root
-	const projectRoot = path.resolve(__dirname, '..', '..', '..', '..', '..', '..');
-
-	// In packaged Electron apps, use the resources/app directory
-	if (process.resourcesPath) {
-		const resourcesAppDir = path.join(process.resourcesPath, 'app');
-		console.log(`[FileConverterMainService] PACKAGED APP DETECTED:`);
-		console.log(`  process.resourcesPath: ${process.resourcesPath}`);
-		console.log(`  Using resources/app directory: ${resourcesAppDir}`);
-		console.log(`  (instead of project root: ${projectRoot})`);
-		return resourcesAppDir;
-	}
-
-	console.log(`[FileConverterMainService] DEVELOPMENT MODE - Project root: ${projectRoot}`);
-	return projectRoot;
+	return path.resolve(__dirname, '..', '..', '..', '..', '..', '..');
 }
 
 // Get the path to the bundled Python venv
@@ -90,6 +128,19 @@ function getBundledPythonPath(): string | null {
 		if (fs.existsSync(resourcesVenvPython)) {
 			console.log(`[FileConverterMainService] Found bundled Python venv at resources path: ${resourcesVenvPython}`);
 			return resourcesVenvPython;
+		}
+
+		// Try just resources path without /app (for installer versions)
+		const simpleResourcesPythonDir = path.join(process.resourcesPath, 'python');
+		const simpleResourcesVenvPython = isWindows
+			? path.join(simpleResourcesPythonDir, '.venv', 'Scripts', 'python.exe')
+			: path.join(simpleResourcesPythonDir, '.venv', 'bin', 'python');
+
+		console.log(`[FileConverterMainService] Trying simple resources path: ${simpleResourcesVenvPython}`);
+
+		if (fs.existsSync(simpleResourcesVenvPython)) {
+			console.log(`[FileConverterMainService] Found bundled Python venv at simple resources path: ${simpleResourcesVenvPython}`);
+			return simpleResourcesVenvPython;
 		}
 	}
 
@@ -388,17 +439,56 @@ export class FileConverterMainService implements IFileConverterMainService {
 	}
 
 	async convert(input: string, output: string, type: string, options?: any): Promise<ConversionResult> {
-		console.log('[FileConverterMainService] Starting conversion:', { input, output, type, options });
-
 		// Ensure Python is detected
 		if (!this.pythonDetected) {
 			this.pythonPath = await detectPythonExecutable();
 			this.pythonDetected = true;
 		}
 
-		const projectRoot = getProjectRoot();
-		const pythonDir = path.join(projectRoot, 'python');
-		const bridgePath = path.join(pythonDir, 'transmutation_codex', 'adapters', 'bridges', 'electron_bridge.py');
+		console.log('[FileConverterMainService] About to call getProjectRoot with pythonPath:', this.pythonPath);
+		let projectRoot = getProjectRoot(this.pythonPath);
+		let pythonDir = path.join(projectRoot, 'python');
+		let bridgePath = path.join(pythonDir, 'transmutation_codex', 'adapters', 'bridges', 'electron_bridge.py');
+
+		console.log('[FileConverterMainService] Path calculation results:');
+		console.log('  projectRoot:', projectRoot);
+		console.log('  pythonDir:', pythonDir);
+		console.log('  bridgePath:', bridgePath);
+		console.log('  bridge exists at calculated path:', fs.existsSync(bridgePath));
+
+		// Debug: log what we calculated
+		console.log('[FileConverterMainService] Path calculation:', {
+			projectRoot,
+			pythonDir,
+			bridgePath,
+			bridgeExists: fs.existsSync(bridgePath),
+			pythonPath: this.pythonPath,
+			resourcesPath: process.resourcesPath
+		});
+
+		// Fallback: if bridge doesn't exist at calculated path, try to find it relative to Python executable
+		if (!fs.existsSync(bridgePath) && this.pythonPath && path.isAbsolute(this.pythonPath)) {
+			// Python exe is at: ...python\.venv\Scripts\python.exe
+			// Bridge should be at: ...python\transmutation_codex\adapters\bridges\electron_bridge.py
+			const scriptsDir = path.dirname(this.pythonPath); // Scripts/
+			const venvDir = path.dirname(scriptsDir); // .venv/
+			const pythonVenvDir = path.dirname(venvDir); // python/
+			const fallbackBridgePath = path.join(pythonVenvDir, 'transmutation_codex', 'adapters', 'bridges', 'electron_bridge.py');
+
+			console.log('[FileConverterMainService] Trying fallback path calculation:');
+			console.log('  this.pythonPath:', this.pythonPath);
+			console.log('  scriptsDir:', scriptsDir);
+			console.log('  venvDir:', venvDir);
+			console.log('  pythonVenvDir:', pythonVenvDir);
+			console.log('  fallbackBridgePath:', fallbackBridgePath);
+			console.log('  fallbackExists:', fs.existsSync(fallbackBridgePath));
+
+			if (fs.existsSync(fallbackBridgePath)) {
+				console.log('[FileConverterMainService] Using fallback path');
+				bridgePath = fallbackBridgePath;
+				pythonDir = pythonVenvDir;
+			}
+		}
 
 		// Build command-line arguments for the Python bridge
 		// Format: python electron_bridge.py <conversion_type> --input-files <input> --output <output>
@@ -426,6 +516,8 @@ export class FileConverterMainService implements IFileConverterMainService {
 				: pythonDir;
 
 			console.log('[FileConverterMainService] Using working directory:', workingDir);
+			console.log('[FileConverterMainService] Bridge path to execute:', bridgePath);
+			console.log('[FileConverterMainService] Bridge exists at path:', fs.existsSync(bridgePath));
 
 			// For packaged apps, the python source should be in the same directory as the venv
 			// If we're using an absolute path to venv python.exe, use that directory for PYTHONPATH too
