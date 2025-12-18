@@ -89,8 +89,8 @@
 		}
 	],
 	"git.ignoreLimitWarning": true,
-	"git.branchProtection": ["main", "distro", "release/*"],
-	"git.branchProtectionPrompt": "alwaysCommitToNewBranch",
+	"git.branchProtection": ["distro", "release/*"],
+	"git.branchProtectionPrompt": "alwaysPrompt",
 	"git.branchRandomName.enable": true,
 	"git.pullBeforeCheckout": true,
 	"git.mergeEditor": true,
