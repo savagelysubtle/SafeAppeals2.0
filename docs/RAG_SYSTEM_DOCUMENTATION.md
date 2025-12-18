@@ -410,3 +410,5 @@ tail -f ~/.safe-appeals-navigator/logs/rag.log
 ---
 
 *This documentation covers the RAG system implementation as of December 2025. For the latest changes, refer to the codebase and commit history.*
+
+

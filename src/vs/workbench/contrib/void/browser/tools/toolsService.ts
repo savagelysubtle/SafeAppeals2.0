@@ -750,7 +750,7 @@ Example: rag_index_document with uri="/path/to/document.pdf" and is_policy_manua
 					}
 
 					// Get user token
-					const userToken = this.voidCloudService.authState.session?.access_token;
+					const userToken = this.voidCloudService.authState.session?.accessToken;
 					if (!userToken) {
 						throw new Error('Cloud authentication session expired. Please sign in again.');
 					}
@@ -796,7 +796,7 @@ Example: rag_index_document with uri="/path/to/document.pdf" and is_policy_manua
 					}
 
 					// Get user token
-					const userToken = this.voidCloudService.authState.session?.access_token;
+					const userToken = this.voidCloudService.authState.session?.accessToken;
 					if (!userToken) {
 						throw new Error('Cloud authentication session expired. Please sign in again.');
 					}

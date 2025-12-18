@@ -553,3 +553,5 @@ class LegalSearchService {
 ---
 
 *API Reference last updated: December 2025*
+
+

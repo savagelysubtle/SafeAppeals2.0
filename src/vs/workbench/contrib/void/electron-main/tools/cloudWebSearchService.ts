@@ -68,6 +68,9 @@ export class CloudWebSearchService {
 			offset: sanitizedOffset,
 		};
 
+		const controller = new AbortController();
+		const timeoutId = setTimeout(() => controller.abort(), CLOUD_WEB_SEARCH_TIMEOUT_MS);
+
 		const response = await fetch(`${this.cloudApiUrl}/api/web-search`, {
 			method: 'POST',
 			headers: {
@@ -75,7 +78,10 @@ export class CloudWebSearchService {
 				'Authorization': `Bearer ${userToken}`,
 			},
 			body: JSON.stringify(requestBody),
+			signal: controller.signal,
 		});
+
+		clearTimeout(timeoutId);
 
 		if (!response.ok) {
 			if (response.status === 401) {
@@ -127,6 +133,9 @@ export class CloudWebSearchService {
 			count: Math.max(1, Math.min(20, count || 10)),
 		};
 
+		const controller = new AbortController();
+		const timeoutId = setTimeout(() => controller.abort(), CLOUD_WEB_SEARCH_TIMEOUT_MS);
+
 		const response = await fetch(`${this.cloudApiUrl}/api/web-search/multi`, {
 			method: 'POST',
 			headers: {
@@ -134,7 +143,10 @@ export class CloudWebSearchService {
 				'Authorization': `Bearer ${userToken}`,
 			},
 			body: JSON.stringify(requestBody),
+			signal: controller.signal,
 		});
+
+		clearTimeout(timeoutId);
 
 		if (!response.ok) {
 			if (response.status === 401) {

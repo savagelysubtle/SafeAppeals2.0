@@ -57,3 +57,5 @@ Features in this folder often integrate with SafeAppeals Navigator's AI capabili
 - Case configurations auto-load on project open
 - Theme preferences persist across sessions
 - Document features work automatically
+
+
