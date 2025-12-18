@@ -588,3 +588,5 @@ class MigrationV3 implements Migration {
 ---
 
 *Migration guide last updated: December 2025*
+
+

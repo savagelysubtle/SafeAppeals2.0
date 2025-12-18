@@ -544,3 +544,5 @@ RAG_MODEL_CACHE=/custom/models
 ---
 
 *Architecture documentation last updated: December 2025*
+
+
