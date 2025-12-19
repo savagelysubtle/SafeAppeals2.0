@@ -13,7 +13,8 @@ export class BraveSearchChannel implements IServerChannel {
 
 	constructor() {
 		// Get cloud API URL from environment variable
-		const cloudApiUrl = process.env.VOID_CLOUD_API_URL || 'https://api.safeappeals.cloud';
+		// Default to Railway production URL
+		const cloudApiUrl = process.env.VOID_CLOUD_API_URL || 'https://void-cloud-production.up.railway.app';
 		this.cloudWebSearchService = new CloudWebSearchService(cloudApiUrl);
 	}
 

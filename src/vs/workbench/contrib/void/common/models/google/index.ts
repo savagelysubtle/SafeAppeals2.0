@@ -7,13 +7,14 @@ import type { VoidStaticModelInfo, VoidStaticProviderInfo } from '../types.js';
 
 // ============================================================================
 // GOOGLE GEMINI MODELS
-// https://ai.google.dev/gemini-api/docs/models/gemini
-// Synced with LiteLLM config - December 2024
+// https://ai.google.dev/gemini-api/docs/models
+// Synced with LiteLLM config - December 2025
+// Pricing uses ≤200K context tier (higher tiers cost more)
 // ============================================================================
 
 export const geminiModelOptions = {
-	// Gemini 3 Series - Latest flagship
-	'gemini-3-pro': {
+	// Gemini 3 Pro Preview - Latest flagship (preview)
+	'gemini-3-pro-preview': {
 		contextWindow: 1_048_576,
 		reservedOutputTokenSpace: 65_536,
 		cost: { input: 2.00, output: 12.00 },
@@ -28,7 +29,7 @@ export const geminiModelOptions = {
 			reasoningReservedOutputTokenSpace: 16384,
 		},
 	},
-	// Gemini 2.5 Series - Production ready
+	// Gemini 2.5 Pro - Production ready
 	'gemini-2.5-pro': {
 		contextWindow: 1_048_576,
 		reservedOutputTokenSpace: 65_536,
@@ -44,6 +45,7 @@ export const geminiModelOptions = {
 			reasoningReservedOutputTokenSpace: 8192,
 		},
 	},
+	// Gemini 2.5 Flash - Fast and affordable
 	'gemini-2.5-flash': {
 		contextWindow: 1_048_576,
 		reservedOutputTokenSpace: 65_536,
@@ -59,15 +61,13 @@ export const geminiModelOptions = {
 			reasoningReservedOutputTokenSpace: 8192,
 		},
 	},
-
 } as const satisfies { [s: string]: VoidStaticModelInfo }
 
-// Display name mapping for UI (shorthand → API name)
+// Display name mapping for UI
 export const geminiDisplayNames: { [displayName: string]: keyof typeof geminiModelOptions } = {
-	'Gemini 3 Pro': 'gemini-3-pro',
+	'Gemini 3 Pro': 'gemini-3-pro-preview',
 	'Gemini 2.5 Pro': 'gemini-2.5-pro',
 	'Gemini 2.5 Flash': 'gemini-2.5-flash',
-
 }
 
 export const geminiSettings: VoidStaticProviderInfo = {
@@ -76,9 +76,9 @@ export const geminiSettings: VoidStaticProviderInfo = {
 		const lower = modelName.toLowerCase()
 		let fallbackName: keyof typeof geminiModelOptions | null = null
 
-		// Gemini 3 series
+		// Gemini 3 series (handles gemini-3-pro-preview etc)
 		if (lower.includes('gemini-3') || lower.includes('gemini 3')) {
-			fallbackName = 'gemini-3-pro'
+			fallbackName = 'gemini-3-pro-preview'
 		}
 		// Gemini 2.5 series
 		else if (lower.includes('2.5') && lower.includes('flash')) {

@@ -71,7 +71,7 @@ export class CloudWebSearchService {
 		const controller = new AbortController();
 		const timeoutId = setTimeout(() => controller.abort(), CLOUD_WEB_SEARCH_TIMEOUT_MS);
 
-		const response = await fetch(`${this.cloudApiUrl}/api/web-search`, {
+		const response = await fetch(`${this.cloudApiUrl}/web-search`, {
 			method: 'POST',
 			headers: {
 				'Content-Type': 'application/json',
@@ -136,7 +136,7 @@ export class CloudWebSearchService {
 		const controller = new AbortController();
 		const timeoutId = setTimeout(() => controller.abort(), CLOUD_WEB_SEARCH_TIMEOUT_MS);
 
-		const response = await fetch(`${this.cloudApiUrl}/api/web-search/multi`, {
+		const response = await fetch(`${this.cloudApiUrl}/web-search/multi`, {
 			method: 'POST',
 			headers: {
 				'Content-Type': 'application/json',
