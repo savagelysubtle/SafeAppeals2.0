@@ -14,6 +14,7 @@ import { URI } from '../../../../../../base/common/uri.js';
 import { generateUuid } from '../../../../../../base/common/uuid.js';
 import { IEditorOptions } from '../../../../../../platform/editor/common/editor.js';
 import { IFileService } from '../../../../../../platform/files/common/files.js';
+import { IOpenerService } from '../../../../../../platform/opener/common/opener.js';
 import { IStorageService } from '../../../../../../platform/storage/common/storage.js';
 import { ITelemetryService } from '../../../../../../platform/telemetry/common/telemetry.js';
 import { IThemeService } from '../../../../../../platform/theme/common/themeService.js';
@@ -21,11 +22,17 @@ import { EditorPane } from '../../../../../browser/parts/editor/editorPane.js';
 import { IEditorOpenContext } from '../../../../../common/editor.js';
 import { EditorInput } from '../../../../../common/editor/editorInput.js';
 import { IEditorGroup } from '../../../../../services/editor/common/editorGroupsService.js';
+import { INativeWorkbenchEnvironmentService } from '../../../../../services/environment/electron-sandbox/environmentService.js';
 import { IWorkingCopyService } from '../../../../../services/workingCopy/common/workingCopyService.js';
 import { IOverlayWebview, IWebviewService } from '../../../../webview/browser/webview.js';
 import { asWebviewUri } from '../../../../webview/common/webview.js';
+// import { createTrustedTypesPolicy } from '../../../../../../base/browser/trustedTypes.js';
 import { DOCXSelection, DOCXViewerInput } from './docxViewerInput.js';
 import { DOCXWorkingCopy } from './docxWorkingCopy.js';
+
+// const docxPrintPolicy = createTrustedTypesPolicy('docxViewerPrint', {
+// 	createHTML: value => value
+// });
 
 export class DOCXViewerEditor extends EditorPane {
 	static readonly ID = 'void.docxViewer';
@@ -50,7 +57,9 @@ export class DOCXViewerEditor extends EditorPane {
 		@IStorageService storageService: IStorageService,
 		@IWebviewService private readonly webviewService: IWebviewService,
 		@IFileService private readonly fileService: IFileService,
-		@IWorkingCopyService private readonly workingCopyService: IWorkingCopyService
+		@IWorkingCopyService private readonly workingCopyService: IWorkingCopyService,
+		@IOpenerService private readonly openerService: IOpenerService,
+		@INativeWorkbenchEnvironmentService private readonly environmentService: INativeWorkbenchEnvironmentService
 	) {
 		super(DOCXViewerEditor.ID, group, telemetryService, themeService, storageService);
 	}
@@ -326,6 +335,13 @@ export class DOCXViewerEditor extends EditorPane {
 				}
 				break;
 
+			case 'print':
+				// Handle printing from the main editor process (outside sandbox)
+				if (data.html) {
+					this.printHtml(data.html);
+				}
+				break;
+
 			case 'applyEdits':
 				// Forward agent edit operations to webview for execution
 				if (this.webview) {
@@ -335,6 +351,56 @@ export class DOCXViewerEditor extends EditorPane {
 					});
 				}
 				break;
+		}
+	}
+
+	private async printHtml(html: string): Promise<void> {
+		// Write HTML to a temp file and open in system browser for printing
+		// This bypasses all CSP, Trusted Types, and Electron sandbox restrictions
+		console.log('[DOCX Viewer] Printing via temp file in browser');
+
+		try {
+			// Add print script to HTML to auto-trigger print dialog
+			const printReadyHtml = html.replace(
+				'</body>',
+				`<script>
+					window.onload = function() {
+						setTimeout(function() {
+							window.print();
+						}, 500);
+					};
+				</script>
+				</body>`
+			);
+
+			// Generate a unique temp file path
+			const tempDir = this.environmentService.tmpDir;
+			const tempFileName = `docx-print-${generateUuid()}.html`;
+			const tempFileUri = URI.joinPath(tempDir, tempFileName);
+
+			console.log('[DOCX Viewer] Writing print HTML to:', tempFileUri.toString());
+
+			// Write HTML to temp file
+			await this.fileService.writeFile(tempFileUri, VSBuffer.fromString(printReadyHtml));
+
+			// Open in external browser
+			await this.openerService.open(tempFileUri, { openExternal: true });
+
+			console.log('[DOCX Viewer] Opened print file in browser');
+
+			// Schedule cleanup of temp file after a delay (give user time to print)
+			setTimeout(async () => {
+				try {
+					await this.fileService.del(tempFileUri);
+					console.log('[DOCX Viewer] Cleaned up temp print file');
+				} catch (e) {
+					// Ignore cleanup errors
+					console.warn('[DOCX Viewer] Could not clean up temp file:', e);
+				}
+			}, 60000); // Cleanup after 1 minute
+
+		} catch (error) {
+			console.error('[DOCX Viewer] Print error:', error);
 		}
 	}
 

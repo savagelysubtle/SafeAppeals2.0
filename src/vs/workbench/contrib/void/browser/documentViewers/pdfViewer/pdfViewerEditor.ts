@@ -12,6 +12,7 @@ import { URI } from '../../../../../../base/common/uri.js';
 import { generateUuid } from '../../../../../../base/common/uuid.js';
 import { IEditorOptions } from '../../../../../../platform/editor/common/editor.js';
 import { IFileService } from '../../../../../../platform/files/common/files.js';
+import { IOpenerService } from '../../../../../../platform/opener/common/opener.js';
 import { IStorageService } from '../../../../../../platform/storage/common/storage.js';
 import { ITelemetryService } from '../../../../../../platform/telemetry/common/telemetry.js';
 import { IThemeService } from '../../../../../../platform/theme/common/themeService.js';
@@ -47,7 +48,8 @@ export class PDFViewerEditor extends EditorPane {
 		@IWebviewService private readonly webviewService: IWebviewService,
 		@IFileService private readonly fileService: IFileService,
 		@IVoidSettingsService private readonly voidSettingsService: IVoidSettingsService,
-		@IPDFAnnotationService private readonly pdfAnnotationService: IPDFAnnotationService
+		@IPDFAnnotationService private readonly pdfAnnotationService: IPDFAnnotationService,
+		@IOpenerService private readonly openerService: IOpenerService
 	) {
 		super(PDFViewerEditor.ID, group, telemetryService, themeService, storageService);
 
@@ -323,6 +325,31 @@ export class PDFViewerEditor extends EditorPane {
 				// Webview requesting annotations
 				this.sendAnnotationsToWebview();
 				break;
+
+			case 'printPdf':
+				// Open the original PDF in system browser for native printing
+				// This is much more efficient than rendering pages to images
+				this.printPdf();
+				break;
+		}
+	}
+
+	private async printPdf(): Promise<void> {
+		// Open the original PDF file in the system's default browser
+		// Browsers can print PDFs natively, which is more efficient and higher quality
+		if (!this._currentInput) {
+			console.warn('[PDF Viewer] No PDF loaded for printing');
+			return;
+		}
+
+		console.log('[PDF Viewer] Opening PDF in system browser for printing');
+
+		try {
+			// Simply open the original PDF file in the system browser
+			await this.openerService.open(this._currentInput.resource, { openExternal: true });
+			console.log('[PDF Viewer] Opened PDF in system browser');
+		} catch (error) {
+			console.error('[PDF Viewer] Print error:', error);
 		}
 	}
 
