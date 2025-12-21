@@ -23,6 +23,9 @@ import { ReactNodeViewRenderer, NodeViewWrapper, NodeViewContent } from '@tiptap
 import Underline from '@tiptap/extension-underline';
 import TextAlign from '@tiptap/extension-text-align';
 import Link from '@tiptap/extension-link';
+import FontFamily from '@tiptap/extension-font-family';
+import TextStyle from '@tiptap/extension-text-style';
+import Color from '@tiptap/extension-color';
 
 // Import Pagination extension (@adalat-ai/page-extension)
 // This replaces the previous hugs7 extension and provides automatic page management
@@ -61,6 +64,9 @@ window.TiptapStarterKit = StarterKit;
 window.TiptapUnderline = Underline;
 window.TiptapTextAlign = TextAlign;
 window.TiptapLink = Link;
+window.TiptapFontFamily = FontFamily;
+window.TiptapTextStyle = TextStyle;
+window.TiptapColor = Color;
 // Note: HorizontalRule is already in StarterKit, no need to export separately
 
 // Export pagination extensions

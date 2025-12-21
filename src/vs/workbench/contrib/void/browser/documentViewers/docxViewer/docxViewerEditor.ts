@@ -568,6 +568,7 @@ export class DOCXViewerEditor extends EditorPane {
 		const tiptapDocxBundleUri = asWebviewUri(URI.joinPath(mediaUri, 'tiptapDocxBundle.js'));
 		const tiptapBundleUri = asWebviewUri(URI.joinPath(mediaUri, 'tiptapBundle.js'));
 		const docxLibUri = asWebviewUri(URI.joinPath(mediaUri, 'lib', 'docx-preview.min.js'));
+		const ribbonScriptUri = asWebviewUri(URI.joinPath(mediaUri, 'docxRibbon.js'));
 		const scriptUri = asWebviewUri(URI.joinPath(mediaUri, 'docxViewerTiptap.js'));
 		const styleUri = asWebviewUri(URI.joinPath(mediaUri, 'docxViewer.css'));
 
@@ -818,9 +819,10 @@ export class DOCXViewerEditor extends EditorPane {
 	<!-- Load dependencies in order -->
 	<script nonce="${nonce}" src="${jszipCdnUri}"></script>
 	<script nonce="${nonce}" src="${docxLibUri}"></script>
-	<script nonce="${nonce}" src="${tiptapDocxBundleUri}"></script>
-	<script nonce="${nonce}" src="${tiptapBundleUri}"></script>
-	<script nonce="${nonce}" src="${scriptUri}"></script>
+	<script nonce="${nonce}" src="${tiptapDocxBundleUri}?v=${Date.now()}"></script>
+	<script nonce="${nonce}" src="${tiptapBundleUri}?v=${Date.now()}"></script>
+	<script nonce="${nonce}" src="${ribbonScriptUri}?v=${Date.now()}"></script>
+	<script nonce="${nonce}" src="${scriptUri}?v=${Date.now()}"></script>
 </body>
 </html>`;
 	}

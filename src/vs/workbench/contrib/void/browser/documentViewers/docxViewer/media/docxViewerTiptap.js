@@ -3,12 +3,12 @@
 	const vscode = acquireVsCodeApi();
 
 	let tiptapEditor = null;
+	let ribbon = null;
 	let contentModified = false;
 	let docxUri = null;
 	let currentZoom = 100;
 	let currentPage = 1;
 	let totalPages = 1;
-	let activeRibbonTab = 'home';
 
 	// Debounce timer for content change notifications
 	let contentChangeDebounceTimer = null;
@@ -35,23 +35,13 @@
 	const container = document.getElementById('docx-container');
 	if (container) container.classList.add('void-scrollbar');
 
-	const saveBtn = document.getElementById('save-btn');
 	const statusText = document.getElementById('status-text');
 	const pageSizeSelect = document.getElementById('page-size-select');
 	const marginPresetSelect = document.getElementById('margin-preset-select');
-	const rulerContainer = document.getElementById('docx-ruler-container');
 	const ruler = document.getElementById('docx-ruler');
 	const pageCountDisplay = document.getElementById('page-count-display');
 	const zoomDisplay = document.getElementById('zoom-display');
 	const zoomSlider = document.getElementById('zoom-slider');
-
-	// Formatting buttons
-	const boldBtn = document.getElementById('bold-btn');
-	const italicBtn = document.getElementById('italic-btn');
-	const underlineBtn = document.getElementById('underline-btn');
-	const heading1Btn = document.getElementById('heading1-btn');
-	const heading2Btn = document.getElementById('heading2-btn');
-	const pageBreakBtn = document.getElementById('page-break-btn');
 
 	// Debounced content change notification
 	function notifyContentChanged() {
@@ -158,14 +148,6 @@
 	}
 
 	// ============================================
-	// VISUAL PAGE SPLITTING
-	// Handled by @adalat-ai/page-extension
-	// ============================================
-
-	// Manual pagination logic removed in favor of PageExtension
-
-
-	// ============================================
 	// RULER FUNCTIONS
 	// ============================================
 
@@ -196,7 +178,7 @@
 			(pageDimensions.width / 96); // inches
 
 		const isMetric = pageSize === 'a4' || pageSize === 'a3';
-		const unit = isMetric ? 'cm' : 'in';
+		// const unit = isMetric ? 'cm' : 'in';
 		const divisions = isMetric ? 10 : 8; // 10 for cm, 8 for inches
 
 		// Add margin indicators
@@ -238,38 +220,6 @@
 	}
 
 	// ============================================
-	// RIBBON TAB FUNCTIONS
-	// ============================================
-
-	function initializeRibbon() {
-		const ribbonTabs = document.querySelectorAll('.ribbon-tab');
-		const ribbonPanels = document.querySelectorAll('.ribbon-panel');
-
-		ribbonTabs.forEach(tab => {
-			tab.addEventListener('click', () => {
-				const tabId = tab.dataset.tab;
-				switchRibbonTab(tabId);
-			});
-		});
-	}
-
-	function switchRibbonTab(tabId) {
-		activeRibbonTab = tabId;
-
-		// Update tab active states
-		const ribbonTabs = document.querySelectorAll('.ribbon-tab');
-		ribbonTabs.forEach(tab => {
-			tab.classList.toggle('active', tab.dataset.tab === tabId);
-		});
-
-		// Update panel visibility
-		const ribbonPanels = document.querySelectorAll('.ribbon-panel');
-		ribbonPanels.forEach(panel => {
-			panel.classList.toggle('active', panel.dataset.panel === tabId);
-		});
-	}
-
-	// ============================================
 	// ZOOM FUNCTIONS
 	// ============================================
 
@@ -298,11 +248,75 @@
 		});
 	}
 
+	const zoomInBtn = document.getElementById('zoom-in-btn');
+	const zoomOutBtn = document.getElementById('zoom-out-btn');
+
+	if (zoomInBtn) {
+		zoomInBtn.addEventListener('click', () => {
+			setZoom(currentZoom + 10);
+		});
+	}
+
+	if (zoomOutBtn) {
+		zoomOutBtn.addEventListener('click', () => {
+			setZoom(currentZoom - 10);
+		});
+	}
+
+	// ============================================
+	// INITIALIZATION
+	// ============================================
+
 	// Initialize Tiptap editor
 	function initializeTiptapEditor() {
 		console.log('[DOCX Webview] Initializing Tiptap editor');
 
 		try {
+			// Initialize Ribbon
+			if (window.DocxRibbon) {
+				ribbon = new window.DocxRibbon({
+					onSave: handleSaveRequest,
+					onPrint: handlePrint,
+					onModification: trackModification,
+					onPageSizeChange: (pageSize) => {
+						console.log('[DOCX Webview] Page size changed to:', pageSize);
+						const marginPreset = marginPresetSelect ? marginPresetSelect.value : 'normal';
+
+						if (tiptapEditor) {
+							tiptapEditor.setPageSize(pageSize);
+							trackModification();
+						}
+						// Update ruler
+						renderRuler(pageSize, marginPreset);
+						// Update page count
+						updatePageCount();
+					},
+					onMarginChange: (marginPreset) => {
+						console.log('[DOCX Webview] Margin preset changed to:', marginPreset);
+						const pageSize = pageSizeSelect ? pageSizeSelect.value : 'letter';
+
+						if (tiptapEditor) {
+							const margin = getMarginPixels(marginPreset);
+							tiptapEditor.setMargin(margin);
+							trackModification();
+							// Update CSS variable
+							document.documentElement.style.setProperty('--docx-margin', `${margin}px`);
+						}
+						// Update ruler
+						renderRuler(pageSize, marginPreset);
+						// Update page count
+						updatePageCount();
+					},
+					onOrientationChange: (orientation) => {
+						console.log('[DOCX Webview] Orientation changed to:', orientation);
+						// Placeholder for future implementation
+					}
+				});
+				console.log('[DOCX Webview] Ribbon initialized');
+			} else {
+				console.error('[DOCX Webview] DocxRibbon class not found');
+			}
+
 			// Get page dimensions based on selected size
 			const pageSize = pageSizeSelect ? pageSizeSelect.value : 'letter';
 			const marginPreset = marginPresetSelect ? marginPresetSelect.value : 'normal';
@@ -330,6 +344,28 @@
 				},
 			});
 
+			// Pass editor to ribbon
+			if (ribbon) {
+				ribbon.setEditor(tiptapEditor);
+			}
+
+			// Hook into editor transaction events to update ribbon state
+			if (tiptapEditor && tiptapEditor.editor) {
+				tiptapEditor.editor.on('transaction', () => {
+					if (ribbon) {
+						ribbon.updateState();
+					}
+					// Update word count on transaction (more responsive)
+					updateWordCount();
+				});
+
+				tiptapEditor.editor.on('selectionUpdate', () => {
+					if (ribbon) {
+						ribbon.updateState();
+					}
+				});
+			}
+
 			// Set initial CSS variable for margin styling
 			document.documentElement.style.setProperty('--docx-margin', `${margin}px`);
 			console.log('[DOCX Webview] Set --docx-margin CSS variable to:', margin, 'px');
@@ -342,9 +378,6 @@
 
 			// Initialize ruler
 			initializeRuler();
-
-			// Initialize ribbon tabs
-			initializeRibbon();
 
 			// Initial page count and word count
 			setTimeout(() => {
@@ -467,61 +500,6 @@
 		}
 	}
 
-	// Page size selector
-	if (pageSizeSelect) {
-		pageSizeSelect.addEventListener('change', () => {
-			const pageSize = pageSizeSelect.value;
-			const marginPreset = marginPresetSelect ? marginPresetSelect.value : 'normal';
-			console.log('[DOCX Webview] Page size changed to:', pageSize);
-
-			if (tiptapEditor) {
-				tiptapEditor.setPageSize(pageSize);
-				trackModification();
-			}
-
-			// Update ruler to match new page size
-			renderRuler(pageSize, marginPreset);
-
-			// Update page count
-			updatePageCount();
-		});
-	}
-
-	// Margin preset selector
-	if (marginPresetSelect) {
-		marginPresetSelect.addEventListener('change', () => {
-			const pageSize = pageSizeSelect ? pageSizeSelect.value : 'letter';
-			const marginPreset = marginPresetSelect.value;
-			console.log('[DOCX Webview] Margin preset changed to:', marginPreset);
-
-			if (tiptapEditor) {
-				const margin = getMarginPixels(marginPreset);
-				tiptapEditor.setMargin(margin);
-				trackModification();
-
-				// Update CSS variable for margin styling
-				document.documentElement.style.setProperty('--docx-margin', `${margin}px`);
-			}
-
-			// Update ruler to match new margins
-			renderRuler(pageSize, marginPreset);
-
-			// Update page count
-			updatePageCount();
-		});
-	}
-
-	// Save button
-	if (saveBtn) {
-		saveBtn.addEventListener('click', handleSaveRequest);
-	}
-
-	// Print button
-	const printBtn = document.getElementById('print-btn');
-	if (printBtn) {
-		printBtn.addEventListener('click', handlePrint);
-	}
-
 	// Print function - exports HTML and prints
 	async function handlePrint() {
 		if (!tiptapEditor) {
@@ -642,328 +620,6 @@
 		}
 	}
 
-	// Formatting buttons
-	const undoBtn = document.getElementById('undo-btn');
-	const redoBtn = document.getElementById('redo-btn');
-	const strikethroughBtn = document.getElementById('strikethrough-btn');
-	const bulletListBtn = document.getElementById('bullet-list-btn');
-	const orderedListBtn = document.getElementById('ordered-list-btn');
-	const alignLeftBtn = document.getElementById('align-left-btn');
-	const alignCenterBtn = document.getElementById('align-center-btn');
-	const alignRightBtn = document.getElementById('align-right-btn');
-	const textStyleSelect = document.getElementById('text-style-select');
-
-	// Existing buttons
-	if (boldBtn) {
-		boldBtn.addEventListener('click', () => {
-			if (tiptapEditor && tiptapEditor.editor) {
-				tiptapEditor.editor.chain().focus().toggleBold().run();
-				trackModification();
-			}
-		});
-	}
-
-	if (italicBtn) {
-		italicBtn.addEventListener('click', () => {
-			if (tiptapEditor && tiptapEditor.editor) {
-				tiptapEditor.editor.chain().focus().toggleItalic().run();
-				trackModification();
-			}
-		});
-	}
-
-	if (underlineBtn) {
-		underlineBtn.addEventListener('click', () => {
-			if (tiptapEditor && tiptapEditor.editor) {
-				tiptapEditor.editor.chain().focus().toggleUnderline().run();
-				trackModification();
-			}
-		});
-	}
-
-	// New buttons
-	if (undoBtn) {
-		undoBtn.addEventListener('click', () => {
-			if (tiptapEditor && tiptapEditor.editor) {
-				tiptapEditor.editor.chain().focus().undo().run();
-			}
-		});
-	}
-
-	if (redoBtn) {
-		redoBtn.addEventListener('click', () => {
-			if (tiptapEditor && tiptapEditor.editor) {
-				tiptapEditor.editor.chain().focus().redo().run();
-			}
-		});
-	}
-
-	if (strikethroughBtn) {
-		strikethroughBtn.addEventListener('click', () => {
-			if (tiptapEditor && tiptapEditor.editor) {
-				tiptapEditor.editor.chain().focus().toggleStrike().run();
-				trackModification();
-			}
-		});
-	}
-
-	if (bulletListBtn) {
-		bulletListBtn.addEventListener('click', () => {
-			if (tiptapEditor && tiptapEditor.editor) {
-				tiptapEditor.editor.chain().focus().toggleBulletList().run();
-				trackModification();
-			}
-		});
-	}
-
-	if (orderedListBtn) {
-		orderedListBtn.addEventListener('click', () => {
-			if (tiptapEditor && tiptapEditor.editor) {
-				tiptapEditor.editor.chain().focus().toggleOrderedList().run();
-				trackModification();
-			}
-		});
-	}
-
-	if (alignLeftBtn) {
-		alignLeftBtn.addEventListener('click', () => {
-			if (tiptapEditor && tiptapEditor.editor) {
-				tiptapEditor.editor.chain().focus().setTextAlign('left').run();
-				trackModification();
-			}
-		});
-	}
-
-	if (alignCenterBtn) {
-		alignCenterBtn.addEventListener('click', () => {
-			if (tiptapEditor && tiptapEditor.editor) {
-				tiptapEditor.editor.chain().focus().setTextAlign('center').run();
-				trackModification();
-			}
-		});
-	}
-
-	if (alignRightBtn) {
-		alignRightBtn.addEventListener('click', () => {
-			if (tiptapEditor && tiptapEditor.editor) {
-				tiptapEditor.editor.chain().focus().setTextAlign('right').run();
-				trackModification();
-			}
-		});
-	}
-
-	if (textStyleSelect) {
-		textStyleSelect.addEventListener('change', () => {
-			if (tiptapEditor && tiptapEditor.editor) {
-				const value = textStyleSelect.value;
-				switch (value) {
-					case 'paragraph':
-						tiptapEditor.editor.chain().focus().setParagraph().run();
-						break;
-					case 'heading1':
-						tiptapEditor.editor.chain().focus().toggleHeading({ level: 1 }).run();
-						break;
-					case 'heading2':
-						tiptapEditor.editor.chain().focus().toggleHeading({ level: 2 }).run();
-						break;
-					case 'heading3':
-						tiptapEditor.editor.chain().focus().toggleHeading({ level: 3 }).run();
-						break;
-					case 'heading4':
-						tiptapEditor.editor.chain().focus().toggleHeading({ level: 4 }).run();
-						break;
-				}
-				trackModification();
-			}
-		});
-	}
-
-	// Remove old heading buttons
-	if (heading1Btn) {
-		heading1Btn.addEventListener('click', () => {
-			if (tiptapEditor && tiptapEditor.editor) {
-				tiptapEditor.editor.chain().focus().toggleHeading({ level: 1 }).run();
-				trackModification();
-			}
-		});
-	}
-
-	if (heading2Btn) {
-		heading2Btn.addEventListener('click', () => {
-			if (tiptapEditor && tiptapEditor.editor) {
-				tiptapEditor.editor.chain().focus().toggleHeading({ level: 2 }).run();
-				trackModification();
-			}
-		});
-	}
-
-	if (pageBreakBtn) {
-		pageBreakBtn.addEventListener('click', () => {
-			if (tiptapEditor && tiptapEditor.editor) {
-				tiptapEditor.editor.chain().focus().setHardBreak().run();
-				trackModification();
-			}
-		});
-	}
-
-	// ============================================
-	// ZOOM CONTROLS
-	// ============================================
-
-	const zoomInBtn = document.getElementById('zoom-in-btn');
-	const zoomOutBtn = document.getElementById('zoom-out-btn');
-
-	if (zoomInBtn) {
-		zoomInBtn.addEventListener('click', () => {
-			setZoom(currentZoom + 10);
-		});
-	}
-
-	if (zoomOutBtn) {
-		zoomOutBtn.addEventListener('click', () => {
-			setZoom(currentZoom - 10);
-		});
-	}
-
-	// ============================================
-	// FONT CONTROLS (NOTE: Requires TextStyle extension)
-	// ============================================
-
-	const fontFamilySelect = document.getElementById('font-family-select');
-	const fontSizeSelect = document.getElementById('font-size-select');
-	const fontColorPicker = document.getElementById('font-color-picker');
-
-	if (fontFamilySelect) {
-		fontFamilySelect.addEventListener('change', () => {
-			if (tiptapEditor && tiptapEditor.editor) {
-				// Note: Requires @tiptap/extension-font-family
-				const fontFamily = fontFamilySelect.value;
-				try {
-					tiptapEditor.editor.chain().focus().setFontFamily(fontFamily).run();
-					trackModification();
-				} catch (e) {
-					console.warn('[DOCX Webview] Font family extension not available');
-				}
-			}
-		});
-	}
-
-	if (fontSizeSelect) {
-		fontSizeSelect.addEventListener('change', () => {
-			if (tiptapEditor && tiptapEditor.editor) {
-				// Note: Requires custom font size extension
-				const fontSize = fontSizeSelect.value + 'pt';
-				try {
-					// Try to set font size via mark if available
-					const editorElement = container.querySelector('.ProseMirror');
-					if (editorElement) {
-						editorElement.style.fontSize = fontSize;
-					}
-					trackModification();
-				} catch (e) {
-					console.warn('[DOCX Webview] Font size change failed');
-				}
-			}
-		});
-	}
-
-	if (fontColorPicker) {
-		fontColorPicker.addEventListener('input', () => {
-			if (tiptapEditor && tiptapEditor.editor) {
-				const color = fontColorPicker.value;
-				try {
-					// Note: Requires @tiptap/extension-color
-					tiptapEditor.editor.chain().focus().setColor(color).run();
-					trackModification();
-				} catch (e) {
-					console.warn('[DOCX Webview] Color extension not available');
-				}
-			}
-		});
-	}
-
-	// ============================================
-	// INSERT CONTROLS
-	// ============================================
-
-	const insertTableBtn = document.getElementById('insert-table-btn');
-	const insertImageBtn = document.getElementById('insert-image-btn');
-	const insertLinkBtn = document.getElementById('insert-link-btn');
-	const insertHrBtn = document.getElementById('insert-hr-btn');
-
-	if (insertTableBtn) {
-		insertTableBtn.addEventListener('click', () => {
-			if (tiptapEditor && tiptapEditor.editor) {
-				try {
-					// Note: Requires @tiptap/extension-table
-					tiptapEditor.editor.chain().focus().insertTable({ rows: 3, cols: 3 }).run();
-					trackModification();
-				} catch (e) {
-					console.warn('[DOCX Webview] Table extension not available');
-					alert('Table insertion requires the Table extension');
-				}
-			}
-		});
-	}
-
-	if (insertImageBtn) {
-		insertImageBtn.addEventListener('click', () => {
-			// TODO: Implement image upload dialog
-			console.log('[DOCX Webview] Image insertion requested');
-			alert('Image insertion coming soon');
-		});
-	}
-
-	if (insertLinkBtn) {
-		insertLinkBtn.addEventListener('click', () => {
-			if (tiptapEditor && tiptapEditor.editor) {
-				const url = prompt('Enter URL:');
-				if (url) {
-					try {
-						tiptapEditor.editor.chain().focus().setLink({ href: url }).run();
-						trackModification();
-					} catch (e) {
-						console.warn('[DOCX Webview] Link extension not available');
-					}
-				}
-			}
-		});
-	}
-
-	if (insertHrBtn) {
-		insertHrBtn.addEventListener('click', () => {
-			if (tiptapEditor && tiptapEditor.editor) {
-				try {
-					tiptapEditor.editor.chain().focus().setHorizontalRule().run();
-					trackModification();
-				} catch (e) {
-					console.warn('[DOCX Webview] HorizontalRule extension not available');
-				}
-			}
-		});
-	}
-
-	// ============================================
-	// ORIENTATION CONTROLS (placeholder)
-	// ============================================
-
-	const orientationPortraitBtn = document.getElementById('orientation-portrait-btn');
-	const orientationLandscapeBtn = document.getElementById('orientation-landscape-btn');
-
-	if (orientationPortraitBtn) {
-		orientationPortraitBtn.addEventListener('click', () => {
-			// TODO: Implement orientation change
-			console.log('[DOCX Webview] Portrait orientation requested');
-		});
-	}
-
-	if (orientationLandscapeBtn) {
-		orientationLandscapeBtn.addEventListener('click', () => {
-			// TODO: Implement orientation change
-			console.log('[DOCX Webview] Landscape orientation requested');
-		});
-	}
-
 	// ============================================
 	// WORD COUNT
 	// ============================================
@@ -1078,6 +734,12 @@
 		const hasEditor = typeof window.TiptapEditor !== 'undefined';
 		const hasStarterKit = typeof window.TiptapStarterKit !== 'undefined';
 		const hasPageExtension = typeof window.TiptapPageExtension !== 'undefined';
+		const hasRibbon = typeof window.DocxRibbon !== 'undefined';
+
+        // Debug loaded font extensions
+        const hasTextStyle = typeof window.TiptapTextStyle !== 'undefined';
+        const hasFontFamily = typeof window.TiptapFontFamily !== 'undefined';
+        const hasColor = typeof window.TiptapColor !== 'undefined';
 
 		console.log('[DOCX Webview] Checking dependencies (attempt', waitAttempts + '):', {
 			docx: hasDocx,
@@ -1085,10 +747,13 @@
 			TiptapEditor: hasEditor,
 			TiptapStarterKit: hasStarterKit,
 			TiptapPageExtension: hasPageExtension,
-			'Available Tiptap globals': Object.keys(window).filter(k => k.toLowerCase().includes('tiptap') || k === 'Editor' || k === 'StarterKit')
+			DocxRibbon: hasRibbon,
+            TiptapTextStyle: hasTextStyle,
+            TiptapFontFamily: hasFontFamily,
+            TiptapColor: hasColor
 		});
 
-		if (hasTiptapEditor && hasDocx && hasEditor && hasStarterKit && hasPageExtension) {
+		if (hasTiptapEditor && hasDocx && hasEditor && hasStarterKit && hasPageExtension && hasRibbon) {
 			console.log('[DOCX Webview] All dependencies loaded, initializing');
 			initializeTiptapEditor();
 			// Notify host that webview is ready
@@ -1102,7 +767,8 @@
 				'TiptapStarterKit': !hasStarterKit,
 				'TiptapDocxEditor': !hasTiptapEditor,
 				'docx': !hasDocx,
-				'TiptapPageExtension': !hasPageExtension
+				'TiptapPageExtension': !hasPageExtension,
+				'DocxRibbon': !hasRibbon
 			});
 			updateStatus('Error: Failed to load editor dependencies');
 			// Still notify ready so user can see the error
@@ -1114,4 +780,3 @@
 	waitForTiptap();
 
 })();
-

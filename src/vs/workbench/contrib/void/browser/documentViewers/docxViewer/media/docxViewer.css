@@ -75,6 +75,14 @@ body {
 .ProseMirror,
 .ProseMirror * {
 	color: #333 !important;
+    /* Ensure paragraphs inherit font family unless overridden by inline style */
+    font-family: inherit;
+}
+
+/* Explicitly target paragraphs to override potential Tailwind prose styles */
+.tiptap-editor p,
+.ProseMirror p {
+    font-family: inherit;
 }
 
 /* Links should still be blue */
@@ -122,6 +130,7 @@ body {
 	/* We need !important to override these since the extension CSS loads later */
 	transform: none !important; /* Disable the scale(0.9) from extension */
 	min-height: auto !important; /* Override extension's min-height: 1056px */
+    font-family: 'Calibri', 'Segoe UI', Arial, sans-serif; /* Ensure default font on pages */
 }
 
 /* PageContent is the actual text content area */
@@ -196,6 +205,7 @@ body {
 	display: block;
 	border-radius: 4px;
 	/* NO fixed width/height/overflow - let extension control via inline styles */
+    font-family: 'Calibri', 'Segoe UI', Arial, sans-serif;
 }
 
 .ProseMirror [data-page]:hover,
@@ -796,6 +806,7 @@ body[data-vscode-theme-kind="vscode-dark"] #docx-container {
 	overflow: visible;
 	min-height: 11in;
 	border-radius: 0; /* Sharp corners like real paper */
+    font-family: 'Calibri', 'Segoe UI', Arial, sans-serif;
 }
 
 /* Page hover effect - subtle lift */

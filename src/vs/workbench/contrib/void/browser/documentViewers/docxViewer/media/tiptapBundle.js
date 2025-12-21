@@ -156,8 +156,38 @@
 			if (Link) {
 				extensions.push(Link.configure({
 					openOnClick: false,
+					HTMLAttributes: {
+						class: 'docx-link',
+					},
 				}));
 				console.log('[TiptapDocxEditor] ✅ Link extension added');
+			}
+
+			// Add TextStyle extension (required for FontFamily and Color)
+			const TextStyle = window.TiptapTextStyle;
+			if (TextStyle) {
+				console.log('[TiptapDocxEditor] ✅ TextStyle extension added');
+				extensions.push(TextStyle);
+			} else {
+				console.warn('[TiptapDocxEditor] ❌ TextStyle extension MISSING - Fonts will not work');
+			}
+
+			// Add FontFamily extension
+			const FontFamily = window.TiptapFontFamily;
+			if (FontFamily) {
+				console.log('[TiptapDocxEditor] ✅ FontFamily extension added');
+				extensions.push(FontFamily);
+			} else {
+				console.warn('[TiptapDocxEditor] ❌ FontFamily extension MISSING');
+			}
+
+			// Add Color extension
+			const Color = window.TiptapColor;
+			if (Color) {
+				console.log('[TiptapDocxEditor] ✅ Color extension added');
+				extensions.push(Color);
+			} else {
+				console.warn('[TiptapDocxEditor] ❌ Color extension MISSING');
 			}
 
 			// NOTE: HorizontalRule is already included in StarterKit, don't add separately
