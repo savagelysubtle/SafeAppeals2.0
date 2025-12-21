@@ -19,10 +19,10 @@ import { IStorageService } from '../../../../../../platform/storage/common/stora
 import { ITelemetryService } from '../../../../../../platform/telemetry/common/telemetry.js';
 import { IThemeService } from '../../../../../../platform/theme/common/themeService.js';
 import { EditorPane } from '../../../../../browser/parts/editor/editorPane.js';
-import { INativeWorkbenchEnvironmentService } from '../../../../../services/environment/electron-sandbox/environmentService.js';
 import { IEditorOpenContext } from '../../../../../common/editor.js';
 import { EditorInput } from '../../../../../common/editor/editorInput.js';
 import { IEditorGroup } from '../../../../../services/editor/common/editorGroupsService.js';
+import { INativeWorkbenchEnvironmentService } from '../../../../../services/environment/electron-sandbox/environmentService.js';
 import { IWorkingCopyService } from '../../../../../services/workingCopy/common/workingCopyService.js';
 import { IOverlayWebview, IWebviewService } from '../../../../webview/browser/webview.js';
 import { asWebviewUri } from '../../../../webview/common/webview.js';
@@ -583,7 +583,7 @@ export class XLSXViewerEditor extends EditorPane {
 	<meta name="viewport" content="width=device-width, initial-scale=1.0">
 	<title>XLSX Viewer</title>
 	<link rel="stylesheet" href="${xspreadsheetCssUri}">
-	<link rel="stylesheet" href="${styleUri}">
+	<link rel="stylesheet" href="${styleUri}?v=${Date.now()}">
 </head>
 <body>
 	<div class="ribbon-container">
@@ -735,7 +735,7 @@ export class XLSXViewerEditor extends EditorPane {
 
 	<script nonce="${nonce}" src="${xlsxLibUri}"></script>
 	<script nonce="${nonce}" src="${xspreadsheetJsUri}"></script>
-	<script nonce="${nonce}" src="${scriptUri}"></script>
+	<script nonce="${nonce}" src="${scriptUri}?v=${Date.now()}"></script>
 </body>
 </html>`;
 	}
