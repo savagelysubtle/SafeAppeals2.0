@@ -6,13 +6,18 @@
 import * as DOM from '../../../../../../base/browser/dom.js';
 import { Dimension } from '../../../../../../base/browser/dom.js';
 import { CodeWindow } from '../../../../../../base/browser/window.js';
+import { VSBuffer } from '../../../../../../base/common/buffer.js';
 import { CancellationToken } from '../../../../../../base/common/cancellation.js';
 import { URI } from '../../../../../../base/common/uri.js';
+import { generateUuid } from '../../../../../../base/common/uuid.js';
 import { IEditorOptions } from '../../../../../../platform/editor/common/editor.js';
+import { IFileService } from '../../../../../../platform/files/common/files.js';
+import { IOpenerService } from '../../../../../../platform/opener/common/opener.js';
 import { IStorageService } from '../../../../../../platform/storage/common/storage.js';
 import { ITelemetryService } from '../../../../../../platform/telemetry/common/telemetry.js';
 import { IThemeService } from '../../../../../../platform/theme/common/themeService.js';
 import { EditorPane } from '../../../../../browser/parts/editor/editorPane.js';
+import { INativeWorkbenchEnvironmentService } from '../../../../../services/environment/electron-sandbox/environmentService.js';
 import { IEditorOpenContext } from '../../../../../common/editor.js';
 import { EditorInput } from '../../../../../common/editor/editorInput.js';
 import { IEditorGroup } from '../../../../../services/editor/common/editorGroupsService.js';
@@ -32,7 +37,10 @@ export class ImageViewerEditor extends EditorPane {
 		@ITelemetryService telemetryService: ITelemetryService,
 		@IThemeService themeService: IThemeService,
 		@IStorageService storageService: IStorageService,
-		@IWebviewService private readonly webviewService: IWebviewService
+		@IWebviewService private readonly webviewService: IWebviewService,
+		@IFileService private readonly fileService: IFileService,
+		@IOpenerService private readonly openerService: IOpenerService,
+		@INativeWorkbenchEnvironmentService private readonly environmentService: INativeWorkbenchEnvironmentService
 	) {
 		super(ImageViewerEditor.ID, group, telemetryService, themeService, storageService);
 	}
@@ -76,6 +84,11 @@ export class ImageViewerEditor extends EditorPane {
 			const targetWindow = DOM.getWindow(this._element);
 			this.webview.claim(this, targetWindow as CodeWindow, undefined);
 			this.webview.layoutWebviewOverElement(this._element);
+
+			// Set up message handlers
+			this._register(this.webview.onMessage(message => {
+				this.handleWebviewMessage(message);
+			}));
 
 			if (this._dimension) {
 				this.webview.layoutWebviewOverElement(this._element, this._dimension);
@@ -125,6 +138,70 @@ export class ImageViewerEditor extends EditorPane {
 			this.webview.release(this);
 		}
 		super.dispose();
+	}
+
+	private handleWebviewMessage(message: any): void {
+		// Unwrap the message - VSCode webview wraps messages in a 'message' property
+		const data = message.message || message;
+
+		switch (data.type) {
+			case 'print':
+				// Handle printing from the main editor process (outside sandbox)
+				if (data.html) {
+					this.printHtml(data.html);
+				}
+				break;
+		}
+	}
+
+	private async printHtml(html: string): Promise<void> {
+		// Write HTML to a temp file and open in system browser for printing
+		// This bypasses all CSP, Trusted Types, and Electron sandbox restrictions
+		console.log('[Image Viewer] Printing via temp file in browser');
+
+		try {
+			// Add print script to HTML to auto-trigger print dialog
+			const printReadyHtml = html.replace(
+				'</body>',
+				`<script>
+					window.onload = function() {
+						setTimeout(function() {
+							window.print();
+						}, 500);
+					};
+				</script>
+				</body>`
+			);
+
+			// Generate a unique temp file path
+			const tempDir = this.environmentService.tmpDir;
+			const tempFileName = `image-print-${generateUuid()}.html`;
+			const tempFileUri = URI.joinPath(tempDir, tempFileName);
+
+			console.log('[Image Viewer] Writing print HTML to:', tempFileUri.toString());
+
+			// Write HTML to temp file
+			await this.fileService.writeFile(tempFileUri, VSBuffer.fromString(printReadyHtml));
+
+			// Open in external browser
+			await this.openerService.open(tempFileUri, { openExternal: true });
+
+			console.log('[Image Viewer] Opened print file in browser');
+
+			// Schedule cleanup of temp file after a delay (give user time to print)
+			setTimeout(async () => {
+				try {
+					await this.fileService.del(tempFileUri);
+					console.log('[Image Viewer] Cleaned up temp print file');
+				} catch (e) {
+					// Ignore cleanup errors
+					console.warn('[Image Viewer] Could not clean up temp file:', e);
+				}
+			}, 60000); // Cleanup after 1 minute
+
+		} catch (error) {
+			console.error('[Image Viewer] Print error:', error);
+		}
 	}
 
 	private getWebviewHTML(input: ImageViewerInput): string {
@@ -377,21 +454,34 @@ export class ImageViewerEditor extends EditorPane {
 					document.getElementById('reset-btn').addEventListener('click', resetView);
 					document.getElementById('print-btn').addEventListener('click', handlePrint);
 
-					// Print function
+					// Get VS Code API for messaging
+					const vscode = acquireVsCodeApi();
+
+					// Print function - converts image to base64 and sends HTML to host for printing
 					function handlePrint() {
 						console.log('[Image Viewer] Starting print process...');
 
-						// Create hidden iframe for printing
-						const printFrame = document.createElement('iframe');
-						printFrame.style.position = 'absolute';
-						printFrame.style.left = '-9999px';
-						printFrame.style.width = '0';
-						printFrame.style.height = '0';
-						printFrame.style.border = 'none';
-						printFrame.setAttribute('sandbox', 'allow-same-origin allow-scripts allow-modals');
-						document.body.appendChild(printFrame);
+						// Convert image to base64 data URL using canvas
+						// This is necessary because the webview resource URL won't work in external browser
+						const canvas = document.createElement('canvas');
+						canvas.width = image.naturalWidth;
+						canvas.height = image.naturalHeight;
+						const ctx = canvas.getContext('2d');
+						ctx.drawImage(image, 0, 0);
 
-						// Build print HTML with the image
+						// Get data URL (use PNG for lossless, or JPEG for photos)
+						let dataUrl;
+						try {
+							dataUrl = canvas.toDataURL('image/png');
+						} catch (e) {
+							// Fallback to JPEG if PNG fails (e.g., for very large images)
+							console.warn('[Image Viewer] PNG conversion failed, trying JPEG:', e);
+							dataUrl = canvas.toDataURL('image/jpeg', 0.95);
+						}
+
+						console.log('[Image Viewer] Converted image to base64, length:', dataUrl.length);
+
+						// Build print HTML with the base64 image
 						const printHTML = \`
 							<!DOCTYPE html>
 							<html>
@@ -422,30 +512,17 @@ export class ImageViewerEditor extends EditorPane {
 								</style>
 							</head>
 							<body>
-								<img src="\${image.src}" alt="\${image.alt}">
+								<img src="\${dataUrl}" alt="\${image.alt}">
 							</body>
 							</html>
 						\`;
 
-						// Write to iframe and trigger print
-						const doc = printFrame.contentDocument || printFrame.contentWindow.document;
-						doc.open();
-						doc.write(printHTML);
-						doc.close();
-
-						// Wait for image to load, then print
-						printFrame.contentWindow.onload = () => {
-							setTimeout(() => {
-								printFrame.contentWindow.focus();
-								printFrame.contentWindow.print();
-
-								// Cleanup after print dialog closes
-								setTimeout(() => {
-									document.body.removeChild(printFrame);
-									console.log('[Image Viewer] Print process complete');
-								}, 1000);
-							}, 500);
-						};
+						// Send to host to handle printing (bypass sandbox)
+						vscode.postMessage({
+							type: 'print',
+							html: printHTML
+						});
+						console.log('[Image Viewer] Sent print request to host');
 					}
 
 					// Zoom slider

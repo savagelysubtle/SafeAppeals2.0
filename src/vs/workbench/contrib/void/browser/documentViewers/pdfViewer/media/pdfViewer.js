@@ -786,126 +786,22 @@
 		});
 	}
 
-	// Print function - renders all pages to images and prints
-	async function handlePrint() {
+	// Print function - opens original PDF in system browser for native printing
+	// This is much more efficient than rendering pages to images
+	function handlePrint() {
 		if (!pdfDoc) {
 			console.warn('[PDF Viewer] No PDF loaded for printing');
 			return;
 		}
 
-		console.log('[PDF Viewer] Starting print process...');
+		console.log('[PDF Viewer] Requesting print via system browser...');
 
-		// Create hidden iframe for printing
-		const printFrame = document.createElement('iframe');
-		printFrame.style.position = 'absolute';
-		printFrame.style.left = '-9999px';
-		printFrame.style.width = '0';
-		printFrame.style.height = '0';
-		printFrame.style.border = 'none';
-		printFrame.setAttribute('sandbox', 'allow-same-origin allow-scripts allow-modals');
-		document.body.appendChild(printFrame);
-
-		try {
-			// Generate print HTML with all pages as images
-			const printScale = 2.0; // Higher quality for printing
-			const pageImages = [];
-
-			// Render all pages to images
-			for (let pageNum = 1; pageNum <= pdfDoc.numPages; pageNum++) {
-				const page = await pdfDoc.getPage(pageNum);
-				const viewport = page.getViewport({ scale: printScale });
-
-				// Create temporary canvas for this page
-				const tempCanvas = document.createElement('canvas');
-				tempCanvas.width = viewport.width;
-				tempCanvas.height = viewport.height;
-				const tempCtx = tempCanvas.getContext('2d');
-
-				await page.render({
-					canvasContext: tempCtx,
-					viewport: viewport
-				}).promise;
-
-				// Convert canvas to data URL
-				const imgData = tempCanvas.toDataURL('image/png');
-				pageImages.push(imgData);
-			}
-
-			// Build print HTML
-			const printHTML = `
-				<!DOCTYPE html>
-				<html>
-				<head>
-					<meta charset="UTF-8">
-					<title>Print PDF</title>
-					<style>
-						@page {
-							size: auto;
-							margin: 0;
-						}
-						body {
-							margin: 0;
-							padding: 0;
-						}
-						.page {
-							page-break-after: always;
-							page-break-inside: avoid;
-							display: flex;
-							justify-content: center;
-							align-items: center;
-							width: 100%;
-							height: 100vh;
-						}
-						.page:last-child {
-							page-break-after: auto;
-						}
-						.page img {
-							max-width: 100%;
-							max-height: 100%;
-							object-fit: contain;
-						}
-						@media print {
-							.page {
-								margin: 0;
-								padding: 0;
-							}
-						}
-					</style>
-				</head>
-				<body>
-					${pageImages.map((img, idx) => `
-						<div class="page">
-							<img src="${img}" alt="Page ${idx + 1}">
-						</div>
-					`).join('')}
-				</body>
-				</html>
-			`;
-
-			// Write to iframe and trigger print
-			const doc = printFrame.contentDocument || printFrame.contentWindow.document;
-			doc.open();
-			doc.write(printHTML);
-			doc.close();
-
-			// Wait for images to load, then print
-			printFrame.contentWindow.onload = () => {
-				setTimeout(() => {
-					printFrame.contentWindow.focus();
-					printFrame.contentWindow.print();
-
-					// Cleanup after print dialog closes
-					setTimeout(() => {
-						document.body.removeChild(printFrame);
-						console.log('[PDF Viewer] Print process complete');
-					}, 1000);
-				}, 500);
-			};
-
-		} catch (error) {
-			console.error('[PDF Viewer] Print error:', error);
-			document.body.removeChild(printFrame);
-		}
+		// Send request to host to open the original PDF in system browser
+		// The browser can print PDFs natively, which is more efficient and higher quality
+		vscode.postMessage({
+			type: 'printPdf'
+		});
+		console.log('[PDF Viewer] Sent print request to host');
 	}
 
 	// Keyboard shortcut for print (Ctrl+P / Cmd+P)

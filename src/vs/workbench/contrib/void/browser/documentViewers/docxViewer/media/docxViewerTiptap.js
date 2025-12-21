@@ -510,16 +510,6 @@
 		console.log('[DOCX Webview] Starting print process...');
 
 		try {
-			// Create hidden iframe for printing
-			const printFrame = document.createElement('iframe');
-			printFrame.style.position = 'absolute';
-			printFrame.style.left = '-9999px';
-			printFrame.style.width = '0';
-			printFrame.style.height = '0';
-			printFrame.style.border = 'none';
-			printFrame.setAttribute('sandbox', 'allow-same-origin allow-scripts allow-modals');
-			document.body.appendChild(printFrame);
-
 			// Get HTML content from Tiptap editor
 			const htmlContent = tiptapEditor.getHTML();
 
@@ -597,23 +587,12 @@
 				</html>
 			`;
 
-			// Write to iframe and trigger print
-			const doc = printFrame.contentDocument || printFrame.contentWindow.document;
-			doc.open();
-			doc.write(printHTML);
-			doc.close();
-
-			// Wait for content to load, then print
-			setTimeout(() => {
-				printFrame.contentWindow.focus();
-				printFrame.contentWindow.print();
-
-				// Cleanup after print dialog closes
-				setTimeout(() => {
-					document.body.removeChild(printFrame);
-					console.log('[DOCX Webview] Print process complete');
-				}, 1000);
-			}, 500);
+			// Send to host to handle printing (bypass sandbox)
+			vscode.postMessage({
+				type: 'print',
+				html: printHTML
+			});
+			console.log('[DOCX Webview] Sent print request to host');
 
 		} catch (error) {
 			console.error('[DOCX Webview] Print error:', error);
