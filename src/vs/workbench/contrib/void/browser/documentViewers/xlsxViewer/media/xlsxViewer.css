@@ -283,3 +283,39 @@ body {
 	color: var(--vscode-statusBar-foreground) !important;
 	border-top: 1px solid var(--vscode-panel-border) !important;
 }
+
+/* Print Styles */
+@media print {
+	/* Hide UI elements */
+	.ribbon-container,
+	#formula-bar,
+	.x-spreadsheet-toolbar,
+	.x-spreadsheet-bottombar {
+		display: none !important;
+	}
+
+	/* Reset page layout */
+	body {
+		margin: 0;
+		padding: 0;
+		background: white;
+	}
+
+	#xlsx-container {
+		display: block;
+		height: auto;
+	}
+
+	#x-spreadsheet-demo {
+		overflow: visible;
+	}
+
+	/* Page break control for sheets */
+	.sheet-section {
+		page-break-after: always;
+	}
+
+	.sheet-section:last-child {
+		page-break-after: auto;
+	}
+}
