@@ -208,7 +208,53 @@
 	// ==========================================
 	// Ribbon Controller
 	// ==========================================
+
+	// Store the last selection so we can apply styles even when dropdown takes focus
+	// This gets updated on every spreadsheet interaction
+	let lastSelection = { ri: -1, ci: -1, sri: -1, sci: -1, eri: -1, eci: -1 };
+
+	function saveCurrentSelection() {
+		// x-spreadsheet stores selection in selector.range as { sri, sci, eri, eci }
+		// sri/sci = start row/col, eri/eci = end row/col
+		const range = grid.sheet.selector.range;
+		const { sri, sci, eri, eci } = range;
+		// Use sri/sci as the primary cell (top-left of selection)
+		if (sri !== undefined && sci !== undefined && sri !== -1 && sci !== -1) {
+			lastSelection = { ri: sri, ci: sci, sri, sci, eri, eci };
+			const cellCount = (eri - sri + 1) * (eci - sci + 1);
+			console.log('[XLSX Webview] Saved selection:', lastSelection, 'cells:', cellCount);
+		}
+	}
+
+	// Continuously track selection changes on the spreadsheet
+	// This ensures we always have the latest selection before clicking toolbar buttons
+	function setupSelectionTracking() {
+		const spreadsheetEl = document.getElementById("x-spreadsheet-demo");
+		if (spreadsheetEl) {
+			// Track selection on mouse release (after drag selection is complete)
+			spreadsheetEl.addEventListener("mouseup", () => {
+				setTimeout(saveCurrentSelection, 50); // Delay to let x-spreadsheet finalize selection
+			});
+
+			// Track selection on keyboard navigation (Shift+Arrow keys)
+			spreadsheetEl.addEventListener("keyup", (e) => {
+				// Only save on selection-related keys
+				if (e.key.startsWith('Arrow') || e.key === 'Tab' || e.key === 'Enter') {
+					setTimeout(saveCurrentSelection, 50);
+				}
+			});
+
+			// Also track on click (for single cell selection)
+			spreadsheetEl.addEventListener("click", () => {
+				setTimeout(saveCurrentSelection, 50);
+			});
+		}
+	}
+
 	function initRibbonController(gridInstance) {
+		// Setup continuous selection tracking for multi-cell selections
+		setupSelectionTracking();
+
 		// --- Tab Switching ---
 		const tabs = document.querySelectorAll(".ribbon-tab");
 		tabs.forEach(tab => {
@@ -238,21 +284,66 @@
 		bindActionButton("btn-align-right", () => setStyle("align", "right"));
 
 		// --- Font Family & Size ---
+		// Save selection BEFORE dropdown takes focus
+		document.getElementById("font-family").addEventListener("mousedown", saveCurrentSelection);
+		document.getElementById("font-family").addEventListener("focus", saveCurrentSelection);
+		document.getElementById("font-size").addEventListener("mousedown", saveCurrentSelection);
+		document.getElementById("font-size").addEventListener("focus", saveCurrentSelection);
+
 		document.getElementById("font-family").addEventListener("change", (e) => {
 			// @ts-ignore
-			setStyle("font", { name: e.target.value });
+			const fontName = e.target.value;
+			console.log('[XLSX Webview] Setting font family to:', fontName);
+
+			// Use saved selection since the dropdown may have stolen focus
+			const { ri, ci, sri, sci, eri, eci } = lastSelection;
+			console.log('[XLSX Webview] Using saved selection:', { sri, sci, eri, eci });
+
+			if (ri === -1 || ci === -1) {
+				console.warn('[XLSX Webview] No saved cell selection for font change');
+				return;
+			}
+
+			// Apply font family using the saved selection
+			setStyle("font", { name: fontName }, { sri, sci, eri, eci });
+
+			// Debug: Check what was actually applied using indexed style system
+			const sheetData = grid.sheet.data;
+			const rows = sheetData.rows;
+			let cell = null;
+			if (rows._ && rows._[ri] && rows._[ri].cells && rows._[ri].cells[ci]) {
+				cell = rows._[ri].cells[ci];
+			}
+			const stylesArray = sheetData.styles || [];
+			let newStyle = {};
+			if (cell && typeof cell.style === 'number' && cell.style >= 0 && cell.style < stylesArray.length) {
+				newStyle = stylesArray[cell.style] || {};
+			}
+			console.log('[XLSX Webview] Cell style after change:', newStyle);
+			console.log('[XLSX Webview] Font after change:', newStyle.font || 'none');
 		});
 		document.getElementById("font-size").addEventListener("change", (e) => {
 			// @ts-ignore
-			setStyle("font", { size: parseInt(e.target.value) });
+			const fontSize = parseInt(e.target.value);
+			console.log('[XLSX Webview] Setting font size to:', fontSize);
+
+			// Use saved selection
+			const { ri, ci, sri, sci, eri, eci } = lastSelection;
+			if (ri === -1 || ci === -1) {
+				console.warn('[XLSX Webview] No saved cell selection for font size change');
+				return;
+			}
+			setStyle("font", { size: fontSize }, { sri, sci, eri, eci });
 		});
 
 		// --- Color Pickers ---
 		initColorPicker("text-color-picker", "btn-text-color", "text-color-indicator", (color) => {
-			setStyle("color", color);
+			const { sri, sci, eri, eci } = lastSelection;
+			setStyle("color", color, { sri, sci, eri, eci });
 		});
 		initColorPicker("fill-color-picker", "btn-fill-color", "fill-color-indicator", (color) => {
-			setStyle("bgcolor", color);
+			const { sri, sci, eri, eci } = lastSelection;
+			setStyle("bgcolor", color, { sri, sci, eri, eci });
 		});
 
 		// --- Formulas ---
@@ -304,18 +395,51 @@
 			}
 		});
 
+		/**
+		 * Update ribbon UI state based on currently selected cell's style.
+		 * Uses x-spreadsheet's indexed style system:
+		 * - Cell has `style` property that is an INTEGER INDEX into data.styles array
+		 * - We look up the actual style object using this index
+		 */
 		function updateRibbonState() {
-			const { ri, ci } = gridInstance.sheet.selector;
-			if (ri === -1 || ci === -1) return;
+			// x-spreadsheet stores selection in selector.range as { sri, sci, eri, eci }
+			const range = gridInstance.sheet.selector.range;
+			const { sri, sci } = range;
+
+			// Use sri/sci as the primary cell (top-left of selection)
+			const ri = sri;
+			const ci = sci;
+
+			if (ri === undefined || ci === undefined || ri === -1 || ci === -1) return;
 
 			// Update Cell Name (A1, B2, etc.)
 			// @ts-ignore
 			const cellRef = XLSX.utils.encode_cell({ r: ri, c: ci });
 			cellName.textContent = cellRef;
 
-			// Get Cell Data
-			const cell = gridInstance.sheet.data.getCell(ri, ci);
-			const style = gridInstance.sheet.data.getCellStyle(ri, ci); // Merged style
+			// Get Cell Data from the rows internal structure
+			const sheetData = gridInstance.sheet.data;
+			const rows = sheetData.rows;
+			let cell = null;
+			if (rows._ && rows._[ri] && rows._[ri].cells && rows._[ri].cells[ci]) {
+				cell = rows._[ri].cells[ci];
+			}
+
+			// Get styles array from sheet data
+			const stylesArray = sheetData.styles || [];
+
+			// Get style object by looking up the style index
+			let style = {};
+			if (cell && typeof cell.style === 'number') {
+				// cell.style is an index into the styles array
+				const styleIndex = cell.style;
+				if (styleIndex >= 0 && styleIndex < stylesArray.length) {
+					style = stylesArray[styleIndex] || {};
+				}
+				console.log('[XLSX Webview] updateRibbonState - Cell:', { ri, ci }, 'style index:', styleIndex, 'style:', style);
+			} else {
+				console.log('[XLSX Webview] updateRibbonState - Cell:', { ri, ci }, 'no style index, using default');
+			}
 
 			// Update Formula Bar
 			// @ts-ignore
@@ -336,28 +460,58 @@
 				document.getElementById("font-family").value = style.font.name || "Helvetica";
 				// @ts-ignore
 				document.getElementById("font-size").value = style.font.size || 10;
+			} else {
+				// Reset to defaults when no font style exists
+				// @ts-ignore
+				document.getElementById("font-family").value = "Helvetica";
+				// @ts-ignore
+				document.getElementById("font-size").value = 10;
 			}
 		}
 	}
 
 	// --- Helper Functions ---
 
+	/**
+	 * Bind a toggle button (bold, italic, underline, strike) to toggle the style property.
+	 * Uses x-spreadsheet's indexed style system to read current state.
+	 */
 	function bindToggleButton(id, styleProp) {
 		document.getElementById(id).addEventListener("click", () => {
-			// We need to toggle. First get current state.
-			const { ri, ci } = grid.sheet.selector;
-			if (ri === -1) return;
+			// Save selection before processing
+			saveCurrentSelection();
 
-			const style = grid.sheet.data.getCellStyle(ri, ci);
+			// We need to toggle. First get current state.
+			const { ri, ci } = lastSelection;
+			if (ri === -1 || ci === -1) return;
+
+			// Get cell from the rows internal structure
+			const sheetData = grid.sheet.data;
+			const rows = sheetData.rows;
+			let cell = null;
+			if (rows._ && rows._[ri] && rows._[ri].cells && rows._[ri].cells[ci]) {
+				cell = rows._[ri].cells[ci];
+			}
+			const stylesArray = sheetData.styles || [];
+
+			// Look up style by index
+			let style = {};
+			if (cell && typeof cell.style === 'number') {
+				const styleIndex = cell.style;
+				if (styleIndex >= 0 && styleIndex < stylesArray.length) {
+					style = stylesArray[styleIndex] || {};
+				}
+			}
+
 			let currentVal = false;
 
 			if (styleProp === "bold" || styleProp === "italic") {
 				currentVal = style.font && style.font[styleProp];
-				// Apply
-				setStyle("font", { [styleProp]: !currentVal });
+				// Apply using saved selection
+				setStyle("font", { [styleProp]: !currentVal }, lastSelection);
 			} else {
 				currentVal = style[styleProp];
-				setStyle(styleProp, !currentVal);
+				setStyle(styleProp, !currentVal, lastSelection);
 			}
 
 			// Update UI immediately
@@ -385,27 +539,117 @@
 		else document.getElementById("btn-align-left").classList.add("active"); // Default
 	}
 
-	function setStyle(key, value) {
-		const { ri, ci } = grid.sheet.selector;
-		// Apply to selected range
-		// x-spreadsheet internal API: sheet.data.setStyle(ri, ci, key, value)
-		// But we want to apply to range.
-		const { sri, sci, eri, eci } = grid.sheet.selector.range;
+	/**
+	 * Set style for selected cells using x-spreadsheet's indexed style system.
+	 *
+	 * x-spreadsheet architecture:
+	 * - Styles are stored in `grid.sheet.data.styles` array (centralized)
+	 * - Each cell's `style` property is an INTEGER INDEX into this array
+	 * - Cells are accessed via `grid.sheet.data.rows._[rowIndex].cells[colIndex]`
+	 * - To set a style: create/find style object, add to array, set index on cell
+	 */
+	function setStyle(key, value, optionalRange) {
+		// Use optional range if provided, otherwise use saved selection (for dropdowns)
+		let sri, sci, eri, eci;
+		if (optionalRange) {
+			({ sri, sci, eri, eci } = optionalRange);
+		} else {
+			// Use saved selection since dropdown may have caused focus loss
+			({ sri, sci, eri, eci } = lastSelection);
+		}
+
+		console.log('[XLSX Webview] setStyle called:', { key, value, range: { sri, sci, eri, eci } });
+
+		// Validate range
+		if (sri === -1 || sci === -1 || sri === undefined || sci === undefined) {
+			console.warn('[XLSX Webview] Invalid range for setStyle, using current selector');
+			const selector = grid.sheet.selector;
+			({ sri, sci, eri, eci } = selector.range);
+			if (sri === -1 || sci === -1) {
+				console.warn('[XLSX Webview] Still invalid range, aborting');
+				return;
+			}
+		}
+
+		// Get reference to the sheet data object
+		const sheetData = grid.sheet.data;
+
+		// Ensure styles array exists on sheet data
+		if (!sheetData.styles) {
+			sheetData.styles = [];
+		}
+		const styles = sheetData.styles;
+
+		console.log('[XLSX Webview] Current styles array length:', styles.length);
+
+		// Access rows directly - this is the internal structure of x-spreadsheet
+		const rows = sheetData.rows;
 
 		for (let r = sri; r <= eri; r++) {
 			for (let c = sci; c <= eci; c++) {
-				// Special handling for font object merging
-				if (key === "font") {
-					const currentStyle = grid.sheet.data.getCellStyle(r, c);
-					const currentFont = currentStyle.font || {};
-					const newFont = { ...currentFont, ...value };
-					grid.sheet.data.setStyle(r, c, "font", newFont);
-				} else {
-					grid.sheet.data.setStyle(r, c, key, value);
+				// Ensure row exists
+				if (!rows._) {
+					rows._ = {};
 				}
+				if (!rows._[r]) {
+					rows._[r] = { cells: {} };
+				}
+				if (!rows._[r].cells) {
+					rows._[r].cells = {};
+				}
+				if (!rows._[r].cells[c]) {
+					rows._[r].cells[c] = {};
+				}
+
+				const cell = rows._[r].cells[c];
+
+				// Get current style index (if any)
+				const currentStyleIndex = typeof cell.style === 'number' ? cell.style : undefined;
+
+				// Get current style object (clone it to avoid mutation)
+				let currentStyleObj = {};
+				if (currentStyleIndex !== undefined && styles[currentStyleIndex]) {
+					currentStyleObj = JSON.parse(JSON.stringify(styles[currentStyleIndex]));
+				}
+
+				console.log('[XLSX Webview] Cell', { r, c }, 'current style index:', currentStyleIndex, 'style:', currentStyleObj);
+
+				// Merge the new style property
+				let newStyleObj;
+				if (key === "font") {
+					// Merge font properties with existing font
+					const currentFont = currentStyleObj.font || {};
+					newStyleObj = {
+						...currentStyleObj,
+						font: { ...currentFont, ...value }
+					};
+					console.log('[XLSX Webview] New font for cell', { r, c }, ':', newStyleObj.font);
+				} else {
+					// Set other style properties
+					newStyleObj = {
+						...currentStyleObj,
+						[key]: value
+					};
+				}
+
+				// Add the new style to the styles array and get its index
+				const newStyleIndex = styles.length;
+				styles.push(newStyleObj);
+
+				// Set the cell's style property to the new index
+				cell.style = newStyleIndex;
+
+				console.log('[XLSX Webview] Cell', { r, c }, 'assigned style index:', newStyleIndex);
 			}
 		}
+
+		// Update the data's styles array
+		data.styles = styles;
+
+		// Re-render the grid to apply visual changes
 		grid.reRender();
+		console.log('[XLSX Webview] Called reRender(), styles array now has', styles.length, 'entries');
+
 		// Notify host of change (debounced)
 		notifyContentChanged();
 	}
@@ -429,9 +673,11 @@
 			picker.appendChild(swatch);
 		});
 
-		// Toggle popup
+		// Toggle popup - save selection before opening
 		btn.addEventListener("click", (e) => {
 			e.stopPropagation();
+			// Save selection before color picker opens
+			saveCurrentSelection();
 			// Close others
 			document.querySelectorAll(".color-picker-popup").forEach(p => {
 				if (p.id !== pickerId) p.classList.remove("show");
@@ -545,17 +791,33 @@
 					for (let ci = 0; ci <= maxCol; ci++) {
 						const cell = cells[ci] || {};
 						const text = cell.text || '';
-						const style = cell.style || {};
 
-						// Build cell style
+						// Get style using the indexed style system
+						// cell.style is an integer index into grid.sheet.data.styles array
+						const stylesArray = grid.sheet.data.styles || [];
+						let style = {};
+						if (typeof cell.style === 'number' && cell.style >= 0 && cell.style < stylesArray.length) {
+							style = stylesArray[cell.style] || {};
+						}
+
+						// Build cell style - x-spreadsheet stores font in style.font object
 						let cellStyle = '';
-						if (style.bold) cellStyle += 'font-weight: bold; ';
-						if (style.italic) cellStyle += 'font-style: italic; ';
+
+						// Handle font properties from style.font object
+						if (style.font) {
+							if (style.font.name) cellStyle += `font-family: "${style.font.name}"; `;
+							if (style.font.size) cellStyle += `font-size: ${style.font.size}pt; `;
+							if (style.font.bold) cellStyle += 'font-weight: bold; ';
+							if (style.font.italic) cellStyle += 'font-style: italic; ';
+						}
+
+						// Handle other style properties
 						if (style.underline) cellStyle += 'text-decoration: underline; ';
+						if (style.strike) cellStyle += 'text-decoration: line-through; ';
 						if (style.color) cellStyle += `color: ${style.color}; `;
 						if (style.bgcolor) cellStyle += `background-color: ${style.bgcolor}; `;
-						if (style.fontSize) cellStyle += `font-size: ${style.fontSize}pt; `;
 						if (style.align) cellStyle += `text-align: ${style.align}; `;
+						if (style.valign) cellStyle += `vertical-align: ${style.valign}; `;
 
 						tableHTML += `<td style="${cellStyle}">${text || ''}</td>`;
 					}
