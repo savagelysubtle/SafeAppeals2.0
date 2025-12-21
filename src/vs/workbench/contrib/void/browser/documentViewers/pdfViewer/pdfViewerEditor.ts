@@ -456,10 +456,12 @@ export class PDFViewerEditor extends EditorPane {
 						<span id="page-info">Page <span id="current-page">1</span> of <span id="total-pages">1</span></span>
 						<button id="next-page">Next</button>
 						<span class="controls-separator"></span>
-						<button id="zoom-in">Zoom In</button>
-						<button id="zoom-out">Zoom Out</button>
-						<span class="controls-separator"></span>
-						<div id="annotation-toolbar">
+					<button id="zoom-in">Zoom In</button>
+					<button id="zoom-out">Zoom Out</button>
+					<span class="controls-separator"></span>
+					<button id="print-btn" title="Print (Ctrl+P)">🖨️ Print</button>
+					<span class="controls-separator"></span>
+					<div id="annotation-toolbar">
 							<button class="highlight-btn" data-color="yellow" title="Yellow Highlight" style="background-color: rgba(255, 235, 59, 0.7);">🖍️</button>
 							<button class="highlight-btn" data-color="green" title="Green Highlight" style="background-color: rgba(76, 175, 80, 0.7);">🖍️</button>
 							<button class="highlight-btn" data-color="blue" title="Blue Highlight" style="background-color: rgba(33, 150, 243, 0.7);">🖍️</button>

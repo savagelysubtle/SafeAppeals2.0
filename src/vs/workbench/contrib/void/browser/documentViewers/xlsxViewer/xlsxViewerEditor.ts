@@ -539,6 +539,9 @@ export class XLSXViewerEditor extends EditorPane {
 					<div class="ribbon-btn-col">
 						<button class="ribbon-btn" id="btn-save" title="Save (Ctrl+S)">${icons.save}<span>Save</span></button>
 					</div>
+					<div class="ribbon-btn-col">
+						<button class="ribbon-btn" id="btn-print" title="Print (Ctrl+P)">🖨️<span>Print</span></button>
+					</div>
 					<div class="ribbon-group-label">File</div>
 				</div>
 				<div class="ribbon-separator"></div>

@@ -585,63 +585,235 @@ export class DOCXViewerEditor extends EditorPane {
 	<link rel="stylesheet" href="${styleUri}">
 </head>
 <body>
-	<div id="docx-toolbar">
-		<!-- File Operations -->
-		<button id="save-btn" title="Save (Ctrl+S)">💾 Save</button>
-		<span class="toolbar-separator">|</span>
+	<!-- ============================================
+	     RIBBON TOOLBAR - MS Word Style
+	     ============================================ -->
+	<div id="docx-ribbon-container">
+		<!-- Ribbon Tab Bar -->
+		<div class="ribbon-tabs">
+			<button class="ribbon-tab active" data-tab="home">Home</button>
+			<button class="ribbon-tab" data-tab="insert">Insert</button>
+			<button class="ribbon-tab" data-tab="layout">Layout</button>
+		</div>
 
-		<!-- Edit Operations -->
-		<button id="undo-btn" title="Undo (Ctrl+Z)">↶ Undo</button>
-		<button id="redo-btn" title="Redo (Ctrl+Y)">↷ Redo</button>
-		<span class="toolbar-separator">|</span>
+		<!-- HOME TAB PANEL -->
+		<div class="ribbon-panel active" data-panel="home">
+			<!-- Clipboard Section -->
+			<div class="ribbon-section">
+				<div class="ribbon-section-content">
+					<button class="ribbon-btn" id="save-btn" title="Save (Ctrl+S)">
+						<span class="ribbon-btn-icon">💾</span>
+						<span class="ribbon-btn-label">Save</span>
+					</button>
+					<button class="ribbon-btn" id="print-btn" title="Print (Ctrl+P)">
+						<span class="ribbon-btn-icon">🖨️</span>
+						<span class="ribbon-btn-label">Print</span>
+					</button>
+				</div>
+				<span class="ribbon-section-label">File</span>
+			</div>
 
-		<!-- Text Formatting -->
-		<button id="bold-btn" title="Bold (Ctrl+B)"><strong>B</strong></button>
-		<button id="italic-btn" title="Italic (Ctrl+I)"><em>I</em></button>
-		<button id="underline-btn" title="Underline (Ctrl+U)"><u>U</u></button>
-		<button id="strikethrough-btn" title="Strikethrough"><s>S</s></button>
-		<span class="toolbar-separator">|</span>
+			<!-- Undo/Redo Section -->
+			<div class="ribbon-section">
+				<div class="ribbon-section-content">
+					<button class="ribbon-btn ribbon-btn-small" id="undo-btn" title="Undo (Ctrl+Z)">↶</button>
+					<button class="ribbon-btn ribbon-btn-small" id="redo-btn" title="Redo (Ctrl+Y)">↷</button>
+				</div>
+				<span class="ribbon-section-label">Undo</span>
+			</div>
 
-		<!-- Headings & Paragraphs -->
-		<select id="text-style-select" title="Text Style">
-			<option value="paragraph" selected>Normal Text</option>
-			<option value="heading1">Heading 1</option>
-			<option value="heading2">Heading 2</option>
-			<option value="heading3">Heading 3</option>
-			<option value="heading4">Heading 4</option>
-		</select>
-		<span class="toolbar-separator">|</span>
+			<!-- Font Section -->
+			<div class="ribbon-section">
+				<div class="ribbon-section-content">
+					<select class="ribbon-select" id="font-family-select" title="Font Family">
+						<option value="Calibri" selected>Calibri</option>
+						<option value="Arial">Arial</option>
+						<option value="Times New Roman">Times New Roman</option>
+						<option value="Georgia">Georgia</option>
+						<option value="Verdana">Verdana</option>
+						<option value="Courier New">Courier New</option>
+					</select>
+					<select class="ribbon-select" id="font-size-select" title="Font Size" style="width: 60px;">
+						<option value="8">8</option>
+						<option value="9">9</option>
+						<option value="10">10</option>
+						<option value="11" selected>11</option>
+						<option value="12">12</option>
+						<option value="14">14</option>
+						<option value="16">16</option>
+						<option value="18">18</option>
+						<option value="20">20</option>
+						<option value="24">24</option>
+						<option value="28">28</option>
+						<option value="36">36</option>
+						<option value="48">48</option>
+						<option value="72">72</option>
+					</select>
+				</div>
+				<div class="ribbon-section-content">
+					<button class="ribbon-btn ribbon-btn-small" id="bold-btn" title="Bold (Ctrl+B)"><strong>B</strong></button>
+					<button class="ribbon-btn ribbon-btn-small" id="italic-btn" title="Italic (Ctrl+I)"><em>I</em></button>
+					<button class="ribbon-btn ribbon-btn-small" id="underline-btn" title="Underline (Ctrl+U)"><u>U</u></button>
+					<button class="ribbon-btn ribbon-btn-small" id="strikethrough-btn" title="Strikethrough"><s>S</s></button>
+					<input type="color" class="ribbon-color-picker" id="font-color-picker" value="#000000" title="Font Color">
+				</div>
+				<span class="ribbon-section-label">Font</span>
+			</div>
 
-		<!-- Lists -->
-		<button id="bullet-list-btn" title="Bullet List">• List</button>
-		<button id="ordered-list-btn" title="Numbered List">1. List</button>
-		<span class="toolbar-separator">|</span>
+			<!-- Paragraph Section -->
+			<div class="ribbon-section">
+				<div class="ribbon-section-content">
+					<button class="ribbon-btn ribbon-btn-small" id="align-left-btn" title="Align Left">⬅</button>
+					<button class="ribbon-btn ribbon-btn-small" id="align-center-btn" title="Align Center">⬌</button>
+					<button class="ribbon-btn ribbon-btn-small" id="align-right-btn" title="Align Right">➡</button>
+				</div>
+				<div class="ribbon-section-content">
+					<button class="ribbon-btn ribbon-btn-small" id="bullet-list-btn" title="Bullet List">•</button>
+					<button class="ribbon-btn ribbon-btn-small" id="ordered-list-btn" title="Numbered List">1.</button>
+				</div>
+				<span class="ribbon-section-label">Paragraph</span>
+			</div>
 
-		<!-- Alignment -->
-		<button id="align-left-btn" title="Align Left">⬅</button>
-		<button id="align-center-btn" title="Align Center">⬌</button>
-		<button id="align-right-btn" title="Align Right">➡</button>
-		<span class="toolbar-separator">|</span>
+			<!-- Styles Section -->
+			<div class="ribbon-section">
+				<div class="ribbon-section-content">
+					<select class="ribbon-select" id="text-style-select" title="Text Style" style="width: 100px;">
+						<option value="paragraph" selected>Normal</option>
+						<option value="heading1">Heading 1</option>
+						<option value="heading2">Heading 2</option>
+						<option value="heading3">Heading 3</option>
+						<option value="heading4">Heading 4</option>
+					</select>
+				</div>
+				<span class="ribbon-section-label">Styles</span>
+			</div>
+		</div>
 
-		<!-- Page Settings -->
-		<button id="page-break-btn" title="Page Break">📄 Break</button>
-		<select id="page-size-select" title="Page Size">
-			<option value="letter" selected>Letter</option>
-			<option value="legal">Legal</option>
-			<option value="tabloid">Tabloid</option>
-			<option value="a4">A4</option>
-			<option value="a3">A3</option>
-		</select>
-		<select id="margin-preset-select" title="Margins">
-			<option value="normal" selected>Normal</option>
-			<option value="narrow">Narrow</option>
-			<option value="moderate">Moderate</option>
-			<option value="wide">Wide</option>
-		</select>
+		<!-- INSERT TAB PANEL -->
+		<div class="ribbon-panel" data-panel="insert">
+			<!-- Tables Section -->
+			<div class="ribbon-section">
+				<div class="ribbon-section-content">
+					<button class="ribbon-btn" id="insert-table-btn" title="Insert Table">
+						<span class="ribbon-btn-icon">📊</span>
+						<span class="ribbon-btn-label">Table</span>
+					</button>
+				</div>
+				<span class="ribbon-section-label">Tables</span>
+			</div>
 
-		<div id="status-text">Loading...</div>
+			<!-- Illustrations Section -->
+			<div class="ribbon-section">
+				<div class="ribbon-section-content">
+					<button class="ribbon-btn" id="insert-image-btn" title="Insert Image">
+						<span class="ribbon-btn-icon">🖼️</span>
+						<span class="ribbon-btn-label">Picture</span>
+					</button>
+				</div>
+				<span class="ribbon-section-label">Illustrations</span>
+			</div>
+
+			<!-- Links Section -->
+			<div class="ribbon-section">
+				<div class="ribbon-section-content">
+					<button class="ribbon-btn" id="insert-link-btn" title="Insert Link">
+						<span class="ribbon-btn-icon">🔗</span>
+						<span class="ribbon-btn-label">Link</span>
+					</button>
+				</div>
+				<span class="ribbon-section-label">Links</span>
+			</div>
+
+			<!-- Pages Section -->
+			<div class="ribbon-section">
+				<div class="ribbon-section-content">
+					<button class="ribbon-btn" id="page-break-btn" title="Page Break">
+						<span class="ribbon-btn-icon">📄</span>
+						<span class="ribbon-btn-label">Page Break</span>
+					</button>
+					<button class="ribbon-btn" id="insert-hr-btn" title="Horizontal Line">
+						<span class="ribbon-btn-icon">━</span>
+						<span class="ribbon-btn-label">Line</span>
+					</button>
+				</div>
+				<span class="ribbon-section-label">Pages</span>
+			</div>
+		</div>
+
+		<!-- LAYOUT TAB PANEL -->
+		<div class="ribbon-panel" data-panel="layout">
+			<!-- Page Setup Section -->
+			<div class="ribbon-section">
+				<div class="ribbon-section-content">
+					<select class="ribbon-select" id="page-size-select" title="Page Size">
+						<option value="letter" selected>Letter</option>
+						<option value="legal">Legal</option>
+						<option value="tabloid">Tabloid</option>
+						<option value="a4">A4</option>
+						<option value="a3">A3</option>
+					</select>
+				</div>
+				<span class="ribbon-section-label">Size</span>
+			</div>
+
+			<!-- Margins Section -->
+			<div class="ribbon-section">
+				<div class="ribbon-section-content">
+					<select class="ribbon-select" id="margin-preset-select" title="Margins">
+						<option value="normal" selected>Normal</option>
+						<option value="narrow">Narrow</option>
+						<option value="moderate">Moderate</option>
+						<option value="wide">Wide</option>
+					</select>
+				</div>
+				<span class="ribbon-section-label">Margins</span>
+			</div>
+
+			<!-- Orientation Section -->
+			<div class="ribbon-section">
+				<div class="ribbon-section-content">
+					<button class="ribbon-btn" id="orientation-portrait-btn" title="Portrait">
+						<span class="ribbon-btn-icon">📃</span>
+						<span class="ribbon-btn-label">Portrait</span>
+					</button>
+					<button class="ribbon-btn" id="orientation-landscape-btn" title="Landscape">
+						<span class="ribbon-btn-icon">📃</span>
+						<span class="ribbon-btn-label">Landscape</span>
+					</button>
+				</div>
+				<span class="ribbon-section-label">Orientation</span>
+			</div>
+		</div>
 	</div>
-	<div id="docx-container"></div>
+
+	<!-- ============================================
+	     DOCUMENT CANVAS
+	     ============================================ -->
+	<div id="docx-container">
+		<!-- Ruler moved inside container for better alignment -->
+		<div id="docx-ruler-sticky-wrapper">
+			<div id="docx-ruler"></div>
+		</div>
+	</div>
+
+	<!-- ============================================
+	     STATUS BAR
+	     ============================================ -->
+	<div id="docx-statusbar">
+		<div class="statusbar-left">
+			<span class="statusbar-item" id="page-count-display">Page 1 of 1</span>
+			<span class="statusbar-item" id="word-count-display">0 words</span>
+			<span class="statusbar-item" id="status-text">Loading...</span>
+		</div>
+		<div class="statusbar-right">
+			<span class="statusbar-item">
+				<button class="ribbon-btn ribbon-btn-small" id="zoom-out-btn" title="Zoom Out">−</button>
+				<input type="range" id="zoom-slider" min="50" max="200" value="100" title="Zoom">
+				<button class="ribbon-btn ribbon-btn-small" id="zoom-in-btn" title="Zoom In">+</button>
+				<span id="zoom-display">100%</span>
+			</span>
+		</div>
+	</div>
 
 	<!-- Load dependencies in order -->
 	<script nonce="${nonce}" src="${jszipCdnUri}"></script>

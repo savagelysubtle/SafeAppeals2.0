@@ -11,8 +11,17 @@
 declare global {
 	interface Window {
 		TiptapEditor: any; // Editor class from @tiptap/core
+		TiptapExtension: any; // Extension class from @tiptap/core
 		TiptapStarterKit: any; // StarterKit from @tiptap/starter-kit
-		PaginationBreaks?: any; // Optional community extension
+		TiptapPageExtension?: any; // @adalat-ai/page-extension
+		TiptapPageDocument?: any; // @adalat-ai/page-extension
+		TiptapPage?: any; // @adalat-ai/page-extension Page Node
+		TiptapPagination?: any; // Legacy hugs7
+		TiptapPaginationBreaks?: any; // Legacy
+		TiptapUnderline?: any; // Underline extension
+		TiptapTextAlign?: any; // TextAlign extension
+		TiptapLink?: any; // Link extension
+		TiptapHorizontalRule?: any; // HorizontalRule extension
 		DocxLib: {
 			Document: any;
 			Packer: any;
@@ -20,6 +29,7 @@ declare global {
 			TextRun: any;
 			HeadingLevel: any;
 			AlignmentType: any;
+			PageBreak: any;
 		};
 		docx: any; // docx-preview library
 	}
@@ -31,8 +41,16 @@ const getGlobals = () => {
 	const win = globalThis as any;
 	return {
 		Editor: win.TiptapEditor,
+		Extension: win.TiptapExtension,
 		StarterKit: win.TiptapStarterKit,
-		PaginationBreaks: win.PaginationBreaks,
+		TiptapPageExtension: win.TiptapPageExtension,
+		TiptapPageDocument: win.TiptapPageDocument,
+		TiptapPagination: win.TiptapPagination,
+		TiptapPaginationBreaks: win.TiptapPaginationBreaks,
+		Underline: win.TiptapUnderline,
+		TextAlign: win.TiptapTextAlign,
+		Link: win.TiptapLink,
+		HorizontalRule: win.TiptapHorizontalRule,
 		DocxLib: win.DocxLib,
 		docx: win.docx,
 	};
@@ -45,6 +63,7 @@ type TextRunType = any; // TextRun instance type
 
 export interface TiptapEditorOptions {
 	pageSize?: 'letter' | 'legal' | 'a4' | 'tabloid' | 'a3';
+	orientation?: 'portrait' | 'landscape';
 	margin?: number; // in pixels (96 DPI = 1 inch)
 	enableAutoPageBreaks?: boolean;
 	onContentChange?: (content: { html: string; json: any }) => void;
@@ -67,6 +86,7 @@ export class TiptapDocxEditor {
 		// Set default options
 		this.options = {
 			pageSize: options.pageSize ?? 'letter',
+			orientation: options.orientation ?? 'portrait',
 			margin: options.margin ?? 96, // Default 1 inch
 			enableAutoPageBreaks: options.enableAutoPageBreaks ?? true,
 			onContentChange: options.onContentChange ?? (() => { }),
@@ -89,7 +109,7 @@ export class TiptapDocxEditor {
 	}
 
 	private initialize(): void {
-		console.log('[TiptapDocxEditor] Initializing editor');
+		console.log('[TiptapDocxEditor] Initializing editor - MS Word Style (@adalat-ai/page-extension)');
 
 		const globals = getGlobals();
 		if (!globals.Editor || !globals.StarterKit) {
@@ -98,22 +118,90 @@ export class TiptapDocxEditor {
 
 		const extensions: any[] = [
 			globals.StarterKit.configure({
-				document: false, // We'll use pagination extension's document
+				document: false, // Required for PageDocument to take over
 			}),
 		];
 
-		// Add pagination breaks if available
-		if (globals.PaginationBreaks) {
-			extensions.push(globals.PaginationBreaks.configure({
-				pageHeight: this.pageDimensions.height,
-				pageWidth: this.pageDimensions.width,
-				margin: this.options.margin,
-				autoBreak: this.options.enableAutoPageBreaks,
-				pageSpacing: 20, // Space between pages
+		// Add Underline extension if available
+		if (globals.Underline) {
+			extensions.push(globals.Underline);
+		}
+
+		// Add TextAlign extension if available
+		if (globals.TextAlign) {
+			extensions.push(globals.TextAlign.configure({
+				types: ['heading', 'paragraph'],
 			}));
 		}
 
-		// Create editor with pagination
+		// Add Link extension if available
+		if (globals.Link) {
+			extensions.push(globals.Link.configure({
+				openOnClick: false,
+				HTMLAttributes: {
+					class: 'docx-link',
+				},
+			}));
+		}
+
+		// Add HorizontalRule extension if available
+		if (globals.HorizontalRule) {
+			extensions.push(globals.HorizontalRule);
+		}
+
+		// Configure @adalat-ai/page-extension
+		// This extension uses React (ReactNodeViewRenderer) to render pages.
+		// React is bundled in tiptapBundleEntry.js and exposed globally.
+		if (globals.TiptapPageExtension && globals.TiptapPageDocument) {
+			console.log('[TiptapDocxEditor] Configuring @adalat-ai/page-extension');
+
+			// Add PageDocument extension (required - replaces the default doc node)
+			extensions.push(globals.TiptapPageDocument);
+
+			// Calculate margins in inches (96 DPI)
+			const marginInches = this.options.margin / 96;
+
+			// Configure PageExtension with our page dimensions and margins
+			// The extension's React-based PageComponent will render each page
+			extensions.push(globals.TiptapPageExtension.configure({
+				// Page dimensions (pixels)
+				// bodyHeight is the FULL page height including margins
+				// The extension internally subtracts margins to get content height
+				bodyHeight: this.pageDimensions.height,
+				bodyWidth: this.pageDimensions.width,
+
+				// Layout configuration with margins in inches
+				pageLayout: {
+					margins: {
+						top: { unit: 'INCHES', value: marginInches },
+						right: { unit: 'INCHES', value: marginInches },
+						bottom: { unit: 'INCHES', value: marginInches },
+						left: { unit: 'INCHES', value: marginInches },
+					},
+				},
+
+				// Page numbering (can be enabled if needed)
+				pageNumber: {
+					show: false,
+				},
+			}));
+			console.log('[TiptapDocxEditor] PageExtension configured with dimensions:', this.pageDimensions, 'margin:', marginInches, 'inches');
+
+		} else if (globals.TiptapPagination) {
+			// Fallback to legacy hugs7 if new one missing
+			console.warn('[TiptapDocxEditor] @adalat-ai/page-extension missing, falling back to hugs7');
+			const marginMm = (this.options.margin / 96) * 25.4;
+			extensions.push(globals.TiptapPagination.configure({
+				defaultPaperSize: this.options.pageSize === 'letter' ? 'Letter' : this.options.pageSize,
+				defaultPaperColour: '#ffffff',
+				defaultPaperOrientation: this.options.orientation,
+				defaultMarginConfig: { top: marginMm, right: marginMm, bottom: marginMm, left: marginMm },
+			}));
+		} else {
+			console.warn('[TiptapDocxEditor] No pagination extension found!');
+		}
+
+		// Create editor
 		this.editor = new globals.Editor({
 			element: this.container,
 			extensions,
@@ -129,6 +217,15 @@ export class TiptapDocxEditor {
 					html: editor.getHTML(),
 					json: editor.getJSON(),
 				});
+			},
+			onCreate: ({ editor }: { editor: EditorType }) => {
+				// Force pagination check after initialization
+				setTimeout(() => {
+					if (!editor.isDestroyed) {
+						console.log('[TiptapDocxEditor] Forcing initial pagination check');
+						editor.view.dispatch(editor.state.tr.setMeta('addToHistory', false));
+					}
+				}, 200);
 			},
 		});
 
@@ -187,6 +284,25 @@ export class TiptapDocxEditor {
 
 		console.log('[TiptapDocxEditor] Loading HTML content');
 		this.editor.commands.setContent(html);
+
+		// Force pagination check after content load with retries
+		// The extension needs the DOM to be fully rendered to calculate splits
+		const checkPagination = (attempt: number) => {
+			if (!this.editor || this.editor.isDestroyed) return;
+
+			// Dispatch a transaction to trigger extension updates
+			console.log(`[TiptapDocxEditor] Forcing pagination check (attempt ${attempt})`);
+			this.editor.view.dispatch(this.editor.state.tr.setMeta('addToHistory', false));
+
+			// If we still have 1 page but lots of content, keep trying
+			// This is a heuristic: if scrollHeight is huge but we have 1 page, something is wrong
+			// Note: We can't easily access the page count from here without inspecting the DOM or state
+			if (attempt < 5) {
+				setTimeout(() => checkPagination(attempt + 1), 500 * attempt);
+			}
+		};
+
+		setTimeout(() => checkPagination(1), 500);
 	}
 
 	/**
@@ -466,6 +582,21 @@ export class TiptapDocxEditor {
 		this.options.margin = margin;
 
 		// Reinitialize editor with new margins
+		if (this.editor) {
+			const currentContent = this.editor.getJSON();
+			this.destroy();
+			this.initialize();
+			this.editor?.commands.setContent(currentContent);
+		}
+	}
+
+	/**
+	 * Update page orientation
+	 */
+	setOrientation(orientation: 'portrait' | 'landscape'): void {
+		this.options.orientation = orientation;
+
+		// Reinitialize editor with new orientation
 		if (this.editor) {
 			const currentContent = this.editor.getJSON();
 			this.destroy();

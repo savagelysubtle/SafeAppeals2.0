@@ -1,4 +1,37 @@
-/* DOCX Viewer CSS - Tiptap Edition */
+/* DOCX Viewer CSS - MS Word Style Edition */
+
+:root {
+	/* Page dimensions - Letter size at 96 DPI */
+	--page-width-letter: 8.5in;
+	--page-height-letter: 11in;
+	--page-width-legal: 8.5in;
+	--page-height-legal: 14in;
+	--page-width-a4: 210mm;
+	--page-height-a4: 297mm;
+
+	/* Default margin (can be overridden by JS) */
+	--docx-margin: 96px;
+
+	/* Editor chrome colors - MS Word Print Layout style */
+	--docx-canvas-bg: #525659;
+	--docx-canvas-bg-dark: #3c3c3c;
+	--docx-page-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+	--docx-page-shadow-hover: 0 4px 12px rgba(0, 0, 0, 0.3);
+	--docx-page-gap: 24px;
+
+	/* Ribbon colors */
+	--ribbon-bg: #f3f3f3;
+	--ribbon-bg-dark: #2d2d2d;
+	--ribbon-border: #d1d1d1;
+	--ribbon-tab-active: #ffffff;
+	--ribbon-tab-hover: #e5e5e5;
+
+	/* Ruler colors */
+	--ruler-bg: #ffffff;
+	--ruler-border: #c0c0c0;
+	--ruler-tick: #666666;
+	--ruler-margin: #4a90d9;
+}
 
 body {
 	margin: 0;
@@ -12,21 +45,214 @@ body {
 	font-family: var(--vscode-font-family);
 }
 
-/* Tiptap Editor Styles */
+/* ============================================
+   TIPTAP EDITOR STYLES - Document Content
+   ============================================ */
+
 .tiptap-editor {
 	outline: none;
-	min-height: 100%;
+	min-height: 11in;
+	height: auto !important; /* Force growth to fit content */
 	background: white;
-	color: black;
-	padding: 1in; /* Standard 1-inch margins */
+	color: #333 !important;
+	padding: var(--docx-margin, 96px); /* Dynamic margins */
 	box-sizing: border-box;
 	width: 8.5in; /* Letter width */
-	margin: 20px auto;
-	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+	margin: 0 auto;
+	box-shadow: var(--docx-page-shadow);
 	cursor: text;
 	font-size: 11pt;
 	line-height: 1.5;
 	font-family: 'Calibri', 'Segoe UI', Arial, sans-serif;
+	position: relative;
+	transition: box-shadow 0.2s ease;
+	overflow: visible;
+}
+
+/* Ensure text is always readable (dark on white) */
+.tiptap-editor,
+.tiptap-editor *,
+.ProseMirror,
+.ProseMirror * {
+	color: #333 !important;
+}
+
+/* Links should still be blue */
+.tiptap-editor a,
+.ProseMirror a {
+	color: #0066cc !important;
+}
+
+/*
+   MS WORD STYLE PAGES (Advanced)
+   If the pagination extension creates page wrappers ([data-page], .Page, or <page>),
+   we turn the editor into a transparent container and style the pages individually.
+*/
+.tiptap-editor:has([data-page]),
+.tiptap-editor:has(.Page),
+.tiptap-editor:has(page) {
+	background: transparent !important;
+	box-shadow: none !important;
+	padding: 20px 0 !important; /* Vertical padding for first/last page spacing */
+	border: none !important;
+	width: 100% !important;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 24px; /* Gap between pages - this is non-editable space */
+}
+
+.tiptap-editor [data-page],
+.tiptap-editor .Page,
+.tiptap-editor page,
+.ProseMirror .Page,
+.ProseMirror [data-page],
+.ProseMirror page {
+	background: white !important;
+	color: #333 !important;
+	box-shadow: var(--docx-page-shadow) !important;
+	margin: 0 auto 20px auto !important; /* Center with bottom spacing */
+	box-sizing: border-box !important;
+	position: relative !important;
+	flex-shrink: 0; /* Don't shrink pages */
+	display: block !important; /* Ensure it behaves as block */
+	border-radius: 4px;
+	/* CRITICAL: Override the extension's injected CSS which has hardcoded values */
+	/* The extension injects: width: 816px, padding: 96px, transform: scale(0.9) */
+	/* We need !important to override these since the extension CSS loads later */
+	transform: none !important; /* Disable the scale(0.9) from extension */
+	min-height: auto !important; /* Override extension's min-height: 1056px */
+}
+
+/* PageContent is the actual text content area */
+.tiptap-editor .PageContent,
+.ProseMirror .PageContent {
+	box-sizing: border-box;
+	/* Content area - no additional padding here */
+	line-height: 1.5;
+}
+
+.tiptap-editor [data-page]:hover,
+.tiptap-editor .Page:hover,
+.tiptap-editor page:hover {
+	box-shadow: var(--docx-page-shadow-hover);
+}
+
+/* Ensure content inside pages doesn't leak out */
+.tiptap-editor [data-page] > *,
+.tiptap-editor .Page > *,
+.tiptap-editor page > * {
+	max-width: 100%;
+	overflow-wrap: break-word;
+	word-wrap: break-word;
+	word-break: break-word;
+}
+
+/* Force word break on all text elements */
+.tiptap-editor p,
+.tiptap-editor h1,
+.tiptap-editor h2,
+.tiptap-editor h3,
+.tiptap-editor h4,
+.tiptap-editor h5,
+.tiptap-editor h6,
+.tiptap-editor li,
+.tiptap-editor span {
+	overflow-wrap: break-word;
+	word-wrap: break-word;
+	word-break: break-word;
+}
+
+/* Page hover effect for single-page mode */
+.tiptap-editor:not(:has([data-page])):not(:has(.Page)):not(:has(page)):hover {
+	box-shadow: var(--docx-page-shadow-hover);
+}
+
+/* Ensure ProseMirror element with pages has correct layout */
+.ProseMirror:has([data-page]),
+.ProseMirror:has(.Page),
+.ProseMirror:has(page) {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 24px; /* Gray gap between pages */
+	padding: 20px 0;
+	background: transparent !important;
+}
+
+/* ProseMirror page wrapper styling */
+/* NOTE: Width, height, and padding are controlled by React inline styles from @adalat-ai/page-extension */
+/* DO NOT add !important to dimensions - it will override the extension's inline styles */
+.ProseMirror [data-page],
+.ProseMirror .Page,
+.ProseMirror page {
+	background: white !important;
+	color: #333 !important;
+	box-shadow: var(--docx-page-shadow);
+	margin: 0 auto 20px auto; /* Center with gap between pages */
+	box-sizing: border-box;
+	position: relative;
+	flex-shrink: 0;
+	display: block;
+	border-radius: 4px;
+	/* NO fixed width/height/overflow - let extension control via inline styles */
+}
+
+.ProseMirror [data-page]:hover,
+.ProseMirror .Page:hover,
+.ProseMirror page:hover {
+	box-shadow: var(--docx-page-shadow-hover);
+}
+
+/* Page size variants for pagination extension */
+.tiptap-editor [data-page][data-paper-size="Letter"],
+.ProseMirror [data-page][data-paper-size="Letter"],
+.tiptap-editor [data-page][data-paper-size="letter"],
+.ProseMirror [data-page][data-paper-size="letter"] {
+	width: 8.5in !important;
+	height: 11in !important;
+	min-height: 11in;
+	max-height: 11in;
+}
+
+.tiptap-editor [data-page][data-paper-size="Legal"],
+.ProseMirror [data-page][data-paper-size="Legal"],
+.tiptap-editor [data-page][data-paper-size="legal"],
+.ProseMirror [data-page][data-paper-size="legal"] {
+	width: 8.5in !important;
+	height: 14in !important;
+	min-height: 14in;
+	max-height: 14in;
+}
+
+.tiptap-editor [data-page][data-paper-size="A4"],
+.ProseMirror [data-page][data-paper-size="A4"],
+.tiptap-editor [data-page][data-paper-size="a4"],
+.ProseMirror [data-page][data-paper-size="a4"] {
+	width: 210mm !important;
+	height: 297mm !important;
+	min-height: 297mm;
+	max-height: 297mm;
+}
+
+.tiptap-editor [data-page][data-paper-size="A3"],
+.ProseMirror [data-page][data-paper-size="A3"],
+.tiptap-editor [data-page][data-paper-size="a3"],
+.ProseMirror [data-page][data-paper-size="a3"] {
+	width: 297mm !important;
+	height: 420mm !important;
+	min-height: 420mm;
+	max-height: 420mm;
+}
+
+.tiptap-editor [data-page][data-paper-size="Tabloid"],
+.ProseMirror [data-page][data-paper-size="Tabloid"],
+.tiptap-editor [data-page][data-paper-size="tabloid"],
+.ProseMirror [data-page][data-paper-size="tabloid"] {
+	width: 11in !important;
+	height: 17in !important;
+	min-height: 17in;
+	max-height: 17in;
 }
 
 /* Make editor editable and focusable */
@@ -34,32 +260,53 @@ body {
 	cursor: text;
 }
 
+/* Editor wrapper for page card layout */
+.editor-page-wrapper {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	width: 100%;
+	padding: 20px 0;
+}
+
 .tiptap-editor:focus {
 	outline: 2px solid var(--vscode-focusBorder);
 	outline-offset: 2px;
 }
 
-/* Pagination extension styles - page breaks */
-.tiptap-editor .page-break {
-	border-top: 2px dashed #999;
-	margin: 20px 0;
-	padding-top: 20px;
+/* Pagination extension styles - visual page gaps */
+.tiptap-editor .page-break,
+.ProseMirror .page-break,
+[data-page-break],
+.tiptap-page-break {
+	height: 24px !important;
+	background-color: #525659 !important; /* Match container background */
+	margin: 0 -96px !important; /* Extend to full width (counteract 1in padding) */
+	width: calc(100% + 192px) !important;
+	border: none !important;
+	position: relative;
+	box-shadow: inset 0 4px 8px -4px rgba(0,0,0,0.5), inset 0 -4px 8px -4px rgba(0,0,0,0.5) !important;
 	page-break-after: always;
 	break-after: page;
-	position: relative;
+	display: block !important;
+	z-index: 10;
 }
 
-.tiptap-editor .page-break::before {
-	content: 'Page Break';
-	position: absolute;
-	top: -12px;
-	left: 50%;
-	transform: translateX(-50%);
-	background: white;
-	padding: 0 8px;
-	font-size: 9pt;
-	color: #999;
-	font-weight: 500;
+body.vscode-dark .tiptap-editor .page-break,
+body.vscode-dark .ProseMirror .page-break,
+body.vscode-dark [data-page-break],
+body.vscode-dark .tiptap-page-break,
+body[data-vscode-theme-kind="vscode-dark"] .tiptap-editor .page-break,
+body[data-vscode-theme-kind="vscode-dark"] .ProseMirror .page-break,
+body[data-vscode-theme-kind="vscode-dark"] [data-page-break],
+body[data-vscode-theme-kind="vscode-dark"] .tiptap-page-break {
+	background-color: #3c3c3c !important;
+}
+
+.tiptap-editor .page-break::before,
+.ProseMirror .page-break::before {
+	content: '' !important;
+	display: none !important;
 }
 
 /* Page number styling (if extension adds it) */
@@ -71,11 +318,13 @@ body {
 	font-family: 'Segoe UI', Arial, sans-serif;
 }
 
-/* Pagination container styling */
-.tiptap-editor [data-page] {
-	position: relative;
-	padding-bottom: 1in;
-	min-height: 9in; /* Letter height minus margins (11" - 2") */
+/* Additional pagination container styling - page number positioning */
+.tiptap-editor [data-page] .page-number {
+	position: absolute;
+	bottom: 0.5in;
+	right: 0;
+	font-size: 10pt;
+	color: #666;
 }
 
 .tiptap-editor p {
@@ -478,54 +727,96 @@ body {
 	border-radius: 2px;
 }
 
+/* ============================================
+   DOCUMENT CANVAS - Google Docs Style Layout
+   ============================================ */
+
 #docx-container {
 	flex: 1;
 	overflow: auto;
-	background-color: #525252; /* Gray background like MS Word */
+	background-color: #525659; /* Darker gray like MS Word print layout */
 	display: flex;
-	justify-content: center;
-	align-items: flex-start;
-	padding: 20px 0;
+	flex-direction: column;
+	align-items: center;
+	padding: 0;
+	scroll-behavior: smooth;
 }
 
-/* Page container - holds all pages */
+/* Dark mode canvas */
+body.vscode-dark #docx-container,
+body[data-vscode-theme-kind="vscode-dark"] #docx-container {
+	background-color: #3c3c3c;
+}
+
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+	#docx-container {
+		background-color: var(--docx-canvas-bg-dark);
+	}
+}
+
+/* VSCode dark theme detection */
+body.vscode-dark #docx-container,
+body[data-vscode-theme-kind="vscode-dark"] #docx-container {
+	background-color: var(--docx-canvas-bg-dark);
+}
+
+/* ============================================
+   PAGE CONTAINER - Holds all document pages
+   ============================================ */
+
 .pages-container {
 	display: flex;
 	flex-direction: column;
 	align-items: center;
-	gap: 20px;
-	padding: 20px;
+	gap: 24px; /* Gap between pages - Google Docs style */
+	padding: 0;
 	width: 100%;
 	max-width: fit-content;
 	margin: 0 auto;
 }
 
-/* Individual page styling - mimics MS Word page appearance */
+/* ============================================
+   INDIVIDUAL PAGE - MS Word/Google Docs Style
+   ============================================ */
+
 .docx-page {
 	background: white;
 	color: black;
-	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
-	padding: 1in; /* Standard 1-inch margins */
+	box-shadow: var(--docx-page-shadow);
+	/* Use !important to ensure ruler alignment even if extension adds inline styles */
+	padding: var(--docx-margin, 96px) !important;
 	box-sizing: border-box;
 	position: relative;
 	page-break-after: always;
-	break-after: page; /* Modern CSS */
+	break-after: page;
 	cursor: text;
-	transition: width 0.2s, padding 0.2s;
-	display: block; /* Block display for proper content flow */
-	overflow: visible; /* Allow content to flow naturally */
-	min-height: 11in; /* Minimum height but allow growth */
-	max-height: 11in; /* But cap at page height */
+	transition: box-shadow 0.2s ease, transform 0.1s ease;
+	display: block;
+	overflow: visible;
+	min-height: 11in;
+	border-radius: 0; /* Sharp corners like real paper */
+}
+
+/* Page hover effect - subtle lift */
+.docx-page:hover {
+	box-shadow: var(--docx-page-shadow-hover);
+}
+
+/* Page focus state */
+.docx-page:focus-within {
+	box-shadow: var(--docx-page-shadow-hover);
+	outline: none;
 }
 
 /* Margin guide overlay */
 .docx-page::before {
 	content: '';
 	position: absolute;
-	top: 1in;
-	left: 1in;
-	right: 1in;
-	bottom: 1in;
+	top: var(--docx-margin, 96px);
+	left: var(--docx-margin, 96px);
+	right: var(--docx-margin, 96px);
+	bottom: var(--docx-margin, 96px);
 	border: 1px dashed transparent;
 	pointer-events: none;
 	z-index: 0;
@@ -960,4 +1251,536 @@ body {
 
 .dialog-content button#cancel-margins:hover {
 	background-color: var(--vscode-button-secondaryHoverBackground);
+}
+
+/* ============================================
+   RIBBON TOOLBAR - MS Word Style Tabs
+   ============================================ */
+
+#docx-ribbon-container {
+	display: flex;
+	flex-direction: column;
+	background-color: var(--ribbon-bg);
+	border-bottom: 1px solid var(--ribbon-border);
+	flex-shrink: 0;
+}
+
+/* Dark mode ribbon */
+body.vscode-dark #docx-ribbon-container,
+body[data-vscode-theme-kind="vscode-dark"] #docx-ribbon-container {
+	background-color: var(--ribbon-bg-dark);
+	border-bottom-color: var(--vscode-panel-border);
+}
+
+/* Ribbon Tab Bar */
+.ribbon-tabs {
+	display: flex;
+	gap: 0;
+	padding: 0 8px;
+	background-color: var(--vscode-editorGroupHeader-tabsBackground);
+	border-bottom: 1px solid var(--vscode-panel-border);
+}
+
+.ribbon-tab {
+	padding: 8px 16px;
+	background: transparent;
+	border: none;
+	border-bottom: 2px solid transparent;
+	color: var(--vscode-foreground);
+	font-size: 12px;
+	font-family: var(--vscode-font-family);
+	cursor: pointer;
+	transition: all 0.15s ease;
+	text-transform: uppercase;
+	font-weight: 500;
+	letter-spacing: 0.5px;
+}
+
+.ribbon-tab:hover {
+	background-color: var(--vscode-list-hoverBackground);
+}
+
+.ribbon-tab.active {
+	background-color: var(--vscode-editor-background);
+	border-bottom-color: var(--vscode-focusBorder);
+	color: var(--vscode-focusBorder);
+}
+
+/* Ribbon Content Panels */
+.ribbon-panel {
+	display: none;
+	padding: 8px 12px;
+	gap: 4px;
+	flex-wrap: wrap;
+	align-items: center;
+	background-color: var(--vscode-editor-background);
+	min-height: 60px;
+}
+
+.ribbon-panel.active {
+	display: flex;
+}
+
+/* Ribbon Groups (sections within panel) */
+.ribbon-section {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	padding: 4px 12px;
+	border-right: 1px solid var(--vscode-panel-border);
+	gap: 4px;
+}
+
+.ribbon-section:last-child {
+	border-right: none;
+}
+
+.ribbon-section-label {
+	font-size: 9px;
+	color: var(--vscode-descriptionForeground);
+	text-transform: uppercase;
+	letter-spacing: 0.5px;
+	margin-top: 4px;
+}
+
+.ribbon-section-content {
+	display: flex;
+	align-items: center;
+	gap: 2px;
+}
+
+/* Ribbon Buttons */
+.ribbon-btn {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	padding: 4px 8px;
+	min-width: 32px;
+	min-height: 32px;
+	background: transparent;
+	border: 1px solid transparent;
+	border-radius: 3px;
+	color: var(--vscode-foreground);
+	cursor: pointer;
+	font-size: 11px;
+	transition: all 0.1s ease;
+}
+
+.ribbon-btn:hover {
+	background-color: var(--vscode-list-hoverBackground);
+	border-color: var(--vscode-panel-border);
+}
+
+.ribbon-btn:active,
+.ribbon-btn.active {
+	background-color: var(--vscode-list-activeSelectionBackground);
+	color: var(--vscode-list-activeSelectionForeground);
+}
+
+.ribbon-btn-icon {
+	font-size: 16px;
+	line-height: 1;
+}
+
+.ribbon-btn-label {
+	font-size: 9px;
+	margin-top: 2px;
+}
+
+/* Small format buttons (B, I, U, etc.) */
+.ribbon-btn-small {
+	padding: 4px 6px;
+	min-width: 28px;
+	min-height: 28px;
+	font-weight: bold;
+	font-size: 13px;
+}
+
+/* Ribbon Dropdowns */
+.ribbon-select {
+	padding: 4px 24px 4px 8px;
+	background-color: var(--vscode-dropdown-background);
+	color: var(--vscode-dropdown-foreground);
+	border: 1px solid var(--vscode-dropdown-border);
+	border-radius: 3px;
+	font-size: 11px;
+	font-family: var(--vscode-font-family);
+	cursor: pointer;
+	min-width: 80px;
+	appearance: none;
+	background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 10 10"><path fill="%23666" d="M5 7L1 3h8z"/></svg>');
+	background-repeat: no-repeat;
+	background-position: right 6px center;
+}
+
+.ribbon-select:hover {
+	background-color: var(--vscode-list-hoverBackground);
+}
+
+.ribbon-select:focus {
+	outline: 1px solid var(--vscode-focusBorder);
+	outline-offset: -1px;
+}
+
+/* Color picker in ribbon */
+.ribbon-color-picker {
+	width: 28px;
+	height: 28px;
+	padding: 2px;
+	border: 1px solid var(--vscode-panel-border);
+	border-radius: 3px;
+	cursor: pointer;
+	background: transparent;
+}
+
+.ribbon-color-picker::-webkit-color-swatch-wrapper {
+	padding: 2px;
+}
+
+.ribbon-color-picker::-webkit-color-swatch {
+	border: none;
+	border-radius: 2px;
+}
+
+/* ============================================
+   HORIZONTAL RULER - STICKY POSITIONING
+   ============================================ */
+
+/* Wrapper for sticky positioning inside the scrollable container */
+#docx-ruler-sticky-wrapper {
+	position: sticky;
+	top: 0;
+	z-index: 100;
+	width: 100%;
+	display: flex;
+	justify-content: center;
+	background-color: var(--docx-canvas-bg);
+	padding: 10px 0 10px 0;
+	margin-bottom: 10px;
+}
+
+body.vscode-dark #docx-ruler-sticky-wrapper,
+body[data-vscode-theme-kind="vscode-dark"] #docx-ruler-sticky-wrapper {
+	background-color: var(--docx-canvas-bg-dark);
+}
+
+/* Old container style removed/replaced */
+#docx-ruler-container {
+	display: none;
+}
+
+#docx-ruler {
+	width: 8.5in; /* Match page width */
+	height: 24px;
+	background-color: var(--ruler-bg);
+	border: 1px solid var(--ruler-border);
+	border-top: none;
+	position: relative;
+	user-select: none;
+	box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+	flex-shrink: 0;
+}
+
+body.vscode-dark #docx-ruler,
+body[data-vscode-theme-kind="vscode-dark"] #docx-ruler {
+	background-color: #3c3c3c;
+	border-color: #555;
+}
+
+/* Ruler tick marks */
+.ruler-tick {
+	position: absolute;
+	bottom: 0;
+	width: 1px;
+	background-color: var(--ruler-tick);
+}
+
+.ruler-tick.major {
+	height: 12px;
+}
+
+.ruler-tick.minor {
+	height: 6px;
+}
+
+.ruler-tick.half {
+	height: 9px;
+}
+
+/* Ruler numbers */
+.ruler-number {
+	position: absolute;
+	bottom: 12px;
+	transform: translateX(-50%);
+	font-size: 9px;
+	color: var(--ruler-tick);
+	font-family: 'Segoe UI', Arial, sans-serif;
+}
+
+/* Margin indicators */
+.ruler-margin {
+	position: absolute;
+	top: 0;
+	bottom: 0;
+	background-color: rgba(200, 200, 200, 0.5);
+}
+
+.ruler-margin.left {
+	left: 0;
+	width: 1in; /* Default 1 inch left margin */
+	border-right: 2px solid var(--ruler-margin);
+}
+
+.ruler-margin.right {
+	right: 0;
+	width: 1in; /* Default 1 inch right margin */
+	border-left: 2px solid var(--ruler-margin);
+}
+
+/* Margin drag handles */
+.ruler-handle {
+	position: absolute;
+	top: 50%;
+	transform: translateY(-50%);
+	width: 0;
+	height: 0;
+	cursor: ew-resize;
+	z-index: 10;
+}
+
+.ruler-handle.left {
+	right: -6px;
+	border-left: 6px solid var(--ruler-margin);
+	border-top: 6px solid transparent;
+	border-bottom: 6px solid transparent;
+}
+
+.ruler-handle.right {
+	left: -6px;
+	border-right: 6px solid var(--ruler-margin);
+	border-top: 6px solid transparent;
+	border-bottom: 6px solid transparent;
+}
+
+.ruler-handle:hover {
+	opacity: 0.8;
+}
+
+/* ============================================
+   PAGE NUMBERS - Footer Display
+   ============================================ */
+
+.page-footer {
+	position: absolute;
+	bottom: 0.5in;
+	left: 1in;
+	right: 1in;
+	text-align: center;
+	font-size: 10pt;
+	color: #666;
+	font-family: 'Calibri', 'Segoe UI', Arial, sans-serif;
+	pointer-events: none;
+}
+
+.page-number-display {
+	display: inline-block;
+}
+
+/* Page number variants */
+.page-footer.left-align {
+	text-align: left;
+}
+
+.page-footer.right-align {
+	text-align: right;
+}
+
+/* ============================================
+   STATUS BAR
+   ============================================ */
+
+#docx-statusbar {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	padding: 4px 12px;
+	background-color: #2d2d2d; /* Fixed dark background for readability */
+	border-top: 1px solid #444;
+	font-size: 11px;
+	color: #ffffff; /* Fixed white text */
+	flex-shrink: 0;
+}
+
+.statusbar-left,
+.statusbar-right {
+	display: flex;
+	align-items: center;
+	gap: 16px;
+}
+
+.statusbar-item {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+}
+
+/* Zoom slider in status bar */
+#zoom-slider {
+	width: 100px;
+	height: 4px;
+	-webkit-appearance: none;
+	appearance: none;
+	background: var(--vscode-scrollbarSlider-background);
+	border-radius: 2px;
+	cursor: pointer;
+}
+
+#zoom-slider::-webkit-slider-thumb {
+	-webkit-appearance: none;
+	appearance: none;
+	width: 12px;
+	height: 12px;
+	background: var(--vscode-button-background);
+	border-radius: 50%;
+	cursor: pointer;
+}
+
+#zoom-slider::-moz-range-thumb {
+	width: 12px;
+	height: 12px;
+	background: var(--vscode-button-background);
+	border-radius: 50%;
+	cursor: pointer;
+	border: none;
+}
+
+/* ============================================
+   VISUAL PAGE SPLITTING - MS Word Style
+   ============================================ */
+
+.visual-pages-container {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	padding: 20px 0;
+	gap: 0; /* Gap is handled by .page-gap elements */
+}
+
+.visual-page-wrapper {
+	background: white !important;
+	color: #333 !important;
+	box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12), 0 1px 2px rgba(0, 0, 0, 0.24) !important;
+	position: relative;
+	transition: box-shadow 0.2s ease;
+	border-radius: 0; /* Sharp corners like real paper */
+}
+
+.visual-page-wrapper:hover {
+	box-shadow: 0 3px 6px rgba(0, 0, 0, 0.16), 0 3px 6px rgba(0, 0, 0, 0.23) !important;
+}
+
+.visual-page-wrapper .page-content {
+	background: white;
+	color: #333;
+}
+
+.visual-page-wrapper .page-content * {
+	color: inherit;
+}
+
+/* Gray gap between pages - simulates physical paper separation */
+.page-gap {
+	width: 100%;
+	height: 24px;
+	background-color: var(--docx-canvas-bg);
+	flex-shrink: 0;
+}
+
+body.vscode-dark .page-gap,
+body[data-vscode-theme-kind="vscode-dark"] .page-gap {
+	background-color: var(--docx-canvas-bg-dark);
+}
+
+/* Ensure container has correct background */
+#docx-container {
+	background-color: var(--docx-canvas-bg) !important;
+}
+
+body.vscode-dark #docx-container,
+body[data-vscode-theme-kind="vscode-dark"] #docx-container {
+	background-color: var(--docx-canvas-bg-dark) !important;
+}
+
+/* ============================================
+   PRINT STYLES
+   ============================================ */
+
+@media print {
+	/* Hide all UI elements */
+	#docx-toolbar,
+	#docx-ribbon,
+	#docx-ribbon-container,
+	#docx-ruler-container,
+	#docx-ruler-sticky-wrapper,
+	#docx-statusbar,
+	.toolbar-separator,
+	#status-text,
+	#page-nav,
+	.ribbon-tabs,
+	.ribbon-panel,
+	.page-footer,
+	.page-gap {
+		display: none !important;
+	}
+
+	/* Reset page layout */
+	body {
+		margin: 0;
+		padding: 0;
+		background: white;
+		overflow: visible;
+	}
+
+	#docx-container {
+		padding: 0;
+		margin: 0;
+		background: white !important;
+		overflow: visible;
+	}
+
+	/* Remove page shadows and margin guides */
+	.docx-page,
+	.visual-page-wrapper {
+		box-shadow: none !important;
+		margin: 0;
+		page-break-after: always;
+	}
+
+	.docx-page::before {
+		display: none;
+	}
+
+	.tiptap-editor {
+		box-shadow: none;
+		margin: 0;
+	}
+
+	.visual-pages-container {
+		padding: 0;
+		gap: 0;
+	}
+
+	/* Page break control */
+	.page-break,
+	.tiptap-page-break {
+		page-break-after: always;
+		border: none;
+	}
+
+	.page-break::before,
+	.page-break::after,
+	.tiptap-page-break::after {
+		display: none;
+	}
 }

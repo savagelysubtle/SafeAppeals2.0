@@ -518,3 +518,43 @@ body {
 	outline: 2px solid var(--vscode-focusBorder, #007acc);
 }
 
+/* Print Styles */
+@media print {
+	/* Hide UI elements */
+	#sidebar,
+	#pdf-controls,
+	#annotation-toolbar,
+	.controls-separator {
+		display: none !important;
+	}
+
+	/* Reset page layout */
+	body {
+		margin: 0;
+		padding: 0;
+		background: white;
+	}
+
+	#pdf-viewer-layout {
+		display: block;
+		height: auto;
+	}
+
+	#pdf-container {
+		display: block;
+	}
+
+	#canvas-wrapper {
+		padding: 0;
+		overflow: visible;
+	}
+
+	#pdf-render-container {
+		box-shadow: none;
+	}
+
+	#pdf-canvas {
+		box-shadow: none;
+	}
+}
+

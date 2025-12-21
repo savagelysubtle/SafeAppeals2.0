@@ -21,6 +21,10 @@ module.exports = {
 	},
 	resolve: {
 		extensions: ['.ts', '.js'],
+		extensionAlias: {
+			'.js': ['.js', '.ts'],
+		},
+		fullySpecified: false, // Disable fully specified rule
 		fallback: {
 			"buffer": false,
 			"stream": false,
@@ -30,6 +34,12 @@ module.exports = {
 	},
 	module: {
 		rules: [
+			{
+				test: /\.m?js/,
+				resolve: {
+					fullySpecified: false
+				}
+			},
 			{
 				test: /\.ts$/,
 				use: 'ts-loader',

@@ -265,6 +265,7 @@ export class ImageViewerEditor extends EditorPane {
 				<button id="rotate-cw-btn" title="Rotate right (R)">↻</button>
 				<div class="separator"></div>
 				<button id="reset-btn" title="Reset view (0)">Reset</button>
+				<button id="print-btn" title="Print (Ctrl+P)">🖨️ Print</button>
 				<span id="info-text" class="info-text">Loading...</span>
 			</div>
 			<div class="image-container" id="container">
@@ -374,6 +375,78 @@ export class ImageViewerEditor extends EditorPane {
 						updateTransform();
 					});
 					document.getElementById('reset-btn').addEventListener('click', resetView);
+					document.getElementById('print-btn').addEventListener('click', handlePrint);
+
+					// Print function
+					function handlePrint() {
+						console.log('[Image Viewer] Starting print process...');
+
+						// Create hidden iframe for printing
+						const printFrame = document.createElement('iframe');
+						printFrame.style.position = 'absolute';
+						printFrame.style.left = '-9999px';
+						printFrame.style.width = '0';
+						printFrame.style.height = '0';
+						printFrame.style.border = 'none';
+						printFrame.setAttribute('sandbox', 'allow-same-origin allow-scripts allow-modals');
+						document.body.appendChild(printFrame);
+
+						// Build print HTML with the image
+						const printHTML = \`
+							<!DOCTYPE html>
+							<html>
+							<head>
+								<meta charset="UTF-8">
+								<title>Print Image</title>
+								<style>
+									@page {
+										size: auto;
+										margin: 0.5in;
+									}
+									body {
+										margin: 0;
+										padding: 0;
+										display: flex;
+										justify-content: center;
+										align-items: center;
+										min-height: 100vh;
+									}
+									img {
+										max-width: 100%;
+										max-height: 100vh;
+										object-fit: contain;
+									}
+									@media print {
+										body { margin: 0; padding: 0; }
+									}
+								</style>
+							</head>
+							<body>
+								<img src="\${image.src}" alt="\${image.alt}">
+							</body>
+							</html>
+						\`;
+
+						// Write to iframe and trigger print
+						const doc = printFrame.contentDocument || printFrame.contentWindow.document;
+						doc.open();
+						doc.write(printHTML);
+						doc.close();
+
+						// Wait for image to load, then print
+						printFrame.contentWindow.onload = () => {
+							setTimeout(() => {
+								printFrame.contentWindow.focus();
+								printFrame.contentWindow.print();
+
+								// Cleanup after print dialog closes
+								setTimeout(() => {
+									document.body.removeChild(printFrame);
+									console.log('[Image Viewer] Print process complete');
+								}, 1000);
+							}, 500);
+						};
+					}
 
 					// Zoom slider
 					zoomSlider.addEventListener('input', (e) => {
@@ -423,6 +496,13 @@ export class ImageViewerEditor extends EditorPane {
 
 					// Keyboard shortcuts
 					document.addEventListener('keydown', (e) => {
+						// Ctrl+P / Cmd+P - Print
+						if ((e.ctrlKey || e.metaKey) && e.key === 'p') {
+							e.preventDefault();
+							handlePrint();
+							return;
+						}
+
 						switch(e.key.toLowerCase()) {
 							case 'f': fitToWindow(); break;
 							case '1': scale = 1; translateX = 0; translateY = 0; updateTransform(); break;

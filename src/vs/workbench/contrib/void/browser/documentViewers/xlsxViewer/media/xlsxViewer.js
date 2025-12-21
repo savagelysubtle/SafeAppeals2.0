@@ -224,6 +224,7 @@
 
 		// --- File Operations ---
 		document.getElementById("btn-save").addEventListener("click", saveSpreadsheet);
+		document.getElementById("btn-print").addEventListener("click", handlePrint);
 
 		// --- Font Styling ---
 		bindToggleButton("btn-bold", "bold");
@@ -444,11 +445,18 @@
 		});
 	}
 
-	// Save shortcut (Ctrl+S or Cmd+S)
+	// Keyboard shortcuts
 	document.addEventListener("keydown", (e) => {
+		// Ctrl+S / Cmd+S - Save
 		if ((e.ctrlKey || e.metaKey) && e.key === "s") {
 			e.preventDefault();
 			saveSpreadsheet();
+		}
+
+		// Ctrl+P / Cmd+P - Print
+		if ((e.ctrlKey || e.metaKey) && e.key === "p") {
+			e.preventDefault();
+			handlePrint();
 		}
 	});
 
@@ -486,6 +494,163 @@
 
 		} catch (error) {
 			console.error("[XLSX Webview] Failed to save:", error);
+		}
+	}
+
+	/**
+	 * Print the spreadsheet - converts to HTML table and prints
+	 */
+	function handlePrint() {
+		if (!grid) {
+			console.warn('[XLSX Webview] Grid not initialized for printing');
+			return;
+		}
+
+		console.log('[XLSX Webview] Starting print process...');
+
+		try {
+			// Create hidden iframe for printing
+			const printFrame = document.createElement('iframe');
+			printFrame.style.position = 'absolute';
+			printFrame.style.left = '-9999px';
+			printFrame.style.width = '0';
+			printFrame.style.height = '0';
+			printFrame.style.border = 'none';
+			printFrame.setAttribute('sandbox', 'allow-same-origin allow-scripts allow-modals');
+			document.body.appendChild(printFrame);
+
+			// Get data from x-spreadsheet
+			const data = grid.getData();
+
+			// Convert to HTML tables (one per sheet)
+			let sheetsHTML = '';
+			for (const [sheetIndex, sheet] of Object.entries(data)) {
+				const sheetName = sheet.name || `Sheet ${parseInt(sheetIndex) + 1}`;
+				const rows = sheet.rows || {};
+
+				// Build HTML table
+				let tableHTML = `<div class="sheet-section">
+					<h2>${sheetName}</h2>
+					<table class="spreadsheet-table">`;
+
+				// Get max row and col
+				let maxRow = 0;
+				let maxCol = 0;
+				for (const [rowIdx, row] of Object.entries(rows)) {
+					const ri = parseInt(rowIdx);
+					if (ri > maxRow) maxRow = ri;
+					const cells = row.cells || {};
+					for (const colIdx of Object.keys(cells)) {
+						const ci = parseInt(colIdx);
+						if (ci > maxCol) maxCol = ci;
+					}
+				}
+
+				// Generate table rows
+				for (let ri = 0; ri <= maxRow; ri++) {
+					tableHTML += '<tr>';
+					const row = rows[ri] || {};
+					const cells = row.cells || {};
+
+					for (let ci = 0; ci <= maxCol; ci++) {
+						const cell = cells[ci] || {};
+						const text = cell.text || '';
+						const style = cell.style || {};
+
+						// Build cell style
+						let cellStyle = '';
+						if (style.bold) cellStyle += 'font-weight: bold; ';
+						if (style.italic) cellStyle += 'font-style: italic; ';
+						if (style.underline) cellStyle += 'text-decoration: underline; ';
+						if (style.color) cellStyle += `color: ${style.color}; `;
+						if (style.bgcolor) cellStyle += `background-color: ${style.bgcolor}; `;
+						if (style.fontSize) cellStyle += `font-size: ${style.fontSize}pt; `;
+						if (style.align) cellStyle += `text-align: ${style.align}; `;
+
+						tableHTML += `<td style="${cellStyle}">${text || ''}</td>`;
+					}
+
+					tableHTML += '</tr>';
+				}
+
+				tableHTML += '</table></div>';
+				sheetsHTML += tableHTML;
+			}
+
+			// Build print HTML
+			const printHTML = `
+				<!DOCTYPE html>
+				<html>
+				<head>
+					<meta charset="UTF-8">
+					<title>Print Spreadsheet</title>
+					<style>
+						@page {
+							size: landscape;
+							margin: 0.5in;
+						}
+						body {
+							margin: 0;
+							padding: 20px;
+							font-family: 'Calibri', 'Arial', sans-serif;
+							font-size: 10pt;
+							color: #000;
+							background: #fff;
+						}
+						.sheet-section {
+							page-break-after: always;
+							margin-bottom: 20px;
+						}
+						.sheet-section:last-child {
+							page-break-after: auto;
+						}
+						h2 {
+							margin: 0 0 10px 0;
+							font-size: 14pt;
+							font-weight: bold;
+						}
+						.spreadsheet-table {
+							border-collapse: collapse;
+							width: 100%;
+							font-size: 10pt;
+						}
+						.spreadsheet-table td {
+							border: 1px solid #ddd;
+							padding: 4px 8px;
+							min-width: 60px;
+						}
+						@media print {
+							body { padding: 0; }
+							.sheet-section { margin-bottom: 0; }
+						}
+					</style>
+				</head>
+				<body>
+					${sheetsHTML}
+				</body>
+				</html>
+			`;
+
+			// Write to iframe and trigger print
+			const doc = printFrame.contentDocument || printFrame.contentWindow.document;
+			doc.open();
+			doc.write(printHTML);
+			doc.close();
+
+			// Wait for content to load, then print
+			setTimeout(() => {
+				printFrame.contentWindow.focus();
+				printFrame.contentWindow.print();
+
+				// Cleanup after print dialog closes
+				setTimeout(() => {
+					document.body.removeChild(printFrame);
+					console.log('[XLSX Webview] Print process complete');
+				}, 1000);
+			}, 500);
+
+		} catch (error) {
+			console.error('[XLSX Webview] Print error:', error);
 		}
 	}
 
