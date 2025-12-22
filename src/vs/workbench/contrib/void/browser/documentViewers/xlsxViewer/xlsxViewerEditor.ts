@@ -552,6 +552,7 @@ export class XLSXViewerEditor extends EditorPane {
 		const xlsxLibUri = asWebviewUri(URI.joinPath(mediaUri, 'lib', 'xlsx.full.min.js'));
 		const xspreadsheetJsUri = asWebviewUri(URI.joinPath(mediaUri, 'lib', 'xspreadsheet.js'));
 		const xspreadsheetCssUri = asWebviewUri(URI.joinPath(mediaUri, 'lib', 'xspreadsheet.css'));
+		const ribbonUri = asWebviewUri(URI.joinPath(mediaUri, 'xlsxRibbon.js'));
 		const scriptUri = asWebviewUri(URI.joinPath(mediaUri, 'xlsxViewer.js'));
 		const styleUri = asWebviewUri(URI.joinPath(mediaUri, 'xlsxViewer.css'));
 
@@ -735,6 +736,7 @@ export class XLSXViewerEditor extends EditorPane {
 
 	<script nonce="${nonce}" src="${xlsxLibUri}"></script>
 	<script nonce="${nonce}" src="${xspreadsheetJsUri}"></script>
+	<script nonce="${nonce}" src="${ribbonUri}?v=${Date.now()}"></script>
 	<script nonce="${nonce}" src="${scriptUri}?v=${Date.now()}"></script>
 </body>
 </html>`;
