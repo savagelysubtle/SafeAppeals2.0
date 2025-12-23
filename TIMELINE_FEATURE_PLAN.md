@@ -3,8 +3,8 @@
 **Jira Epic**: KAN-51 (Timeline & Case Management)
 **Jira Feature**: KAN-57 (Timeline & Event Tracker)
 **Branch**: `feature/kan-57-timeline-event-tracker`
-**Priority**: High - Phase 1
-**Status**: ✅ Phase 1 Complete
+**Priority**: High
+**Status**: ✅ Phase 1 & 2 Complete
 
 ---
 
@@ -182,7 +182,7 @@ interface CaseTimeline {
 
 ---
 
-## Phase 2 (Pending) 📋
+## Phase 2 (Complete) ✅
 
 ### Document Linking UI ✅
 
@@ -190,18 +190,40 @@ interface CaseTimeline {
 - [x] Document picker modal (DocumentPicker.tsx)
 - [x] Link/unlink from event editor
 - [x] Show linked documents on event cards (clickable to open)
-- [ ] Right-click "Link to Timeline Event" with event picker
+- [x] File type icons (PDF, DOC, TXT, images)
 ```
 
 ### PDF Export ✅
 
 ```
 - [x] Create electron-main/timelineExportChannel.ts
-- [x] HTML template for timeline export
-- [x] Export button in toolbar
-- [x] Include case info header
+- [x] HTML template for timeline export (print-friendly CSS)
+- [x] Export PDF button in toolbar
+- [x] Include case info header, jurisdiction, event count
 - [x] Native printToPDF via Electron IPC (registered in app.ts)
 ```
+
+### Jurisdiction Selector ✅
+
+```
+- [x] Dropdown button in toolbar
+- [x] Modal with grouped jurisdictions (Canada/US)
+- [x] Show statute of limitations days
+- [x] Persist jurisdiction to timeline file
+```
+
+### UI Polish ✅
+
+```
+- [x] Green/black SafeAppeals theming
+- [x] Shadcn-inspired card design
+- [x] Customizable first event (no hardcoded default)
+- [x] Immutable state updates for React re-renders
+```
+
+---
+
+## Phase 3 (Next) 📋
 
 ### Enhanced Timeline
 
@@ -209,7 +231,7 @@ interface CaseTimeline {
 - [ ] Drag-and-drop event reordering
 - [ ] Zoom controls (year/month/week view)
 - [ ] Scroll to today marker
-- [ ] Print-friendly CSS
+- [ ] Right-click "Link to Timeline Event" with event picker
 ```
 
 ### Case Config Integration
@@ -220,27 +242,35 @@ interface CaseTimeline {
 - [ ] Import parties for event descriptions
 ```
 
+### Calendar View
+
+```
+- [ ] Month grid view toggle
+- [ ] Week view for detailed planning
+- [ ] Today indicator
+```
+
 ---
 
-## Phase 3 (Future) 🔮
+## Phase 4 (Future) 🔮
 
 ### Advanced Features
 
 ```
-- [ ] Calendar view (month grid)
 - [ ] Recurring events
-- [ ] Event templates
-- [ ] Multi-case search
-- [ ] Timeline sharing/export
+- [ ] Event templates (e.g., "Medical Appointment", "Appeal Deadline")
+- [ ] Multi-case timeline search
+- [ ] Timeline comparison between cases
 ```
 
-### Integrations
+### External Integrations
 
 ```
 - [ ] Google Calendar sync
 - [ ] Outlook calendar sync
-- [ ] Mobile notifications
-- [ ] Email reminders
+- [ ] iCal export (.ics)
+- [ ] Mobile push notifications
+- [ ] Email reminders via SafeAppeals Cloud
 ```
 
 ---
@@ -279,30 +309,33 @@ Ctrl+Shift+T (or Command Palette → "Open Case Timeline")
 
 ## Files Created/Modified
 
-### New Files (Phase 1)
+### New Files (Phase 1 & 2)
 
-| File                                           | Lines | Purpose                        |
-| ---------------------------------------------- | ----- | ------------------------------ |
-| `common/timeline/timelineTypes.ts`             | ~300  | Core types and helpers         |
-| `browser/timeline/jurisdictionConfig.ts`       | ~250  | 12 jurisdiction configs        |
-| `browser/timeline/timelineService.ts`          | ~350  | CRUD, deadlines, notifications |
-| `browser/timeline/timelinePane.ts`             | ~70   | Sidebar panel                  |
-| `browser/timeline/timeline.contribution.ts`    | ~150  | Commands, registration         |
-| `react/src/timeline-tsx/index.tsx`             | ~10   | Mount export                   |
-| `react/src/timeline-tsx/TimelineDashboard.tsx` | ~200  | Main container                 |
-| `react/src/timeline-tsx/TimelineEventCard.tsx` | ~200  | Event cards                    |
-| `react/src/timeline-tsx/TimelineToolbar.tsx`   | ~120  | Toolbar                        |
-| `react/src/timeline-tsx/EventEditor.tsx`       | ~300  | Event editor modal             |
-| `react/src/timeline-tsx/DeadlineWarnings.tsx`  | ~150  | Warning banners                |
+| File                                                | Lines | Purpose                        |
+| --------------------------------------------------- | ----- | ------------------------------ |
+| `common/timeline/timelineTypes.ts`                  | ~300  | Core types and helpers         |
+| `browser/timeline/jurisdictionConfig.ts`            | ~250  | 12 jurisdiction configs        |
+| `browser/timeline/timelineService.ts`               | ~450  | CRUD, deadlines, notifications |
+| `browser/timeline/timelinePane.ts`                  | ~70   | Sidebar panel                  |
+| `browser/timeline/timeline.contribution.ts`         | ~150  | Commands, registration         |
+| `electron-main/timelineExportChannel.ts`            | ~250  | PDF export via IPC             |
+| `react/src/timeline-tsx/index.tsx`                  | ~10   | Mount export                   |
+| `react/src/timeline-tsx/TimelineDashboard.tsx`      | ~300  | Main container                 |
+| `react/src/timeline-tsx/TimelineEventCard.tsx`      | ~280  | Event cards with doc links     |
+| `react/src/timeline-tsx/TimelineToolbar.tsx`        | ~180  | Toolbar with export/filter     |
+| `react/src/timeline-tsx/EventEditor.tsx`            | ~400  | Event editor with doc linking  |
+| `react/src/timeline-tsx/DeadlineWarnings.tsx`       | ~150  | Warning banners                |
+| `react/src/timeline-tsx/DocumentPicker.tsx`         | ~280  | Document linking modal         |
+| `react/src/timeline-tsx/JurisdictionSelector.tsx`   | ~160  | Jurisdiction selection modal   |
 
 ### Modified Files
 
-| File                          | Change                                 |
-| ----------------------------- | -------------------------------------- |
-| `void.contribution.ts`        | Import timeline contribution           |
-| `react/src/util/services.tsx` | Add ITimelineService to accessor       |
-| `react/tsup.config.js`        | Add timeline-tsx entry, switch to src/ |
-| `react/build.js`              | Update styles path to src/             |
+| File                          | Change                                       |
+| ----------------------------- | -------------------------------------------- |
+| `void.contribution.ts`        | Import timeline contribution                 |
+| `react/src/util/services.tsx` | Add ITimelineService, IEditorService, URI    |
+| `react/tsup.config.js`        | Add timeline-tsx entry                       |
+| `code/electron-main/app.ts`   | Register TimelineExportChannel for PDF       |
 
 ---
 
@@ -310,8 +343,8 @@ Ctrl+Shift+T (or Command Palette → "Open Case Timeline")
 
 - [x] User can add events with date, title, description, and category
 - [x] Events display on visual timeline with scroll
-- [ ] Documents can be linked to events _(service ready, UI pending)_
-- [ ] Timeline can be exported as PDF _(Phase 2)_
+- [x] Documents can be linked to events
+- [x] Timeline can be exported as PDF
 - [x] Deadline notifications appear 7, 3, and 1 days before
 - [x] Statute of limitations automatically calculated based on injury date
 
@@ -319,4 +352,4 @@ Ctrl+Shift+T (or Command Palette → "Open Case Timeline")
 
 **Created**: December 23, 2025
 **Author**: Claude (Cursor AI Assistant)
-**Last Updated**: December 23, 2025
+**Last Updated**: December 23, 2025 - Phase 2 Complete
