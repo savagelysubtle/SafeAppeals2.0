@@ -15,6 +15,7 @@ import { ITelemetryService } from '../../../../../platform/telemetry/common/tele
 import { IThemeService } from '../../../../../platform/theme/common/themeService.js';
 import { IViewPaneOptions, ViewPane } from '../../../../browser/parts/views/viewPane.js';
 import { IViewDescriptorService } from '../../../../common/views.js';
+import { mountTimeline } from '../react/out/timeline-tsx/index.js';
 
 export class TimelinePane extends ViewPane {
 
@@ -37,29 +38,15 @@ export class TimelinePane extends ViewPane {
 		super(options, keybindingService, contextMenuService, configurationService, contextKeyService, viewDescriptorService, instantiationService, openerService, themeService, hoverService);
 	}
 
-	protected override async renderBody(parent: HTMLElement): Promise<void> {
+	protected override renderBody(parent: HTMLElement): void {
 		super.renderBody(parent);
 		parent.style.overflow = 'auto';
 		parent.style.userSelect = 'text';
 
-		// Dynamically import React component to avoid blocking startup
-		try {
-			const { mountTimeline } = await import('../react/out/timeline-tsx/index.js');
-			this.instantiationService.invokeFunction(accessor => {
-				const disposeFn: (() => void) | undefined = mountTimeline(parent, accessor)?.dispose;
-				this._register(toDisposable(() => disposeFn?.()));
-			});
-		} catch (error) {
-			console.error('[TimelinePane] Failed to load Timeline component:', error);
-			parent.innerHTML = `
-				<div style="padding: 20px; color: var(--vscode-foreground);">
-					<h3>Timeline Loading...</h3>
-					<p style="color: var(--vscode-descriptionForeground);">
-						If this message persists, run <code>bun run buildreact</code> to build the React components.
-					</p>
-				</div>
-			`;
-		}
+		this.instantiationService.invokeFunction(accessor => {
+			const disposeFn: (() => void) | undefined = mountTimeline(parent, accessor)?.dispose;
+			this._register(toDisposable(() => disposeFn?.()));
+		});
 	}
 
 	protected override layoutBody(height: number, width: number): void {

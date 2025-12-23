@@ -56,14 +56,29 @@ function findDesiredPathFromLocalPath(localDesiredPath, currentPath) {
 	return globalDesiredPath;
 }
 
-// hack to refresh styles automatically
+// hack to refresh styles automatically - but only once per build cycle
+let stylesSaveScheduled = false;
+let stylesSaveTimeout = null;
+
 function saveStylesFile() {
-	setTimeout(() => {
+	// Debounce: only schedule one save per 10-second window
+	if (stylesSaveScheduled) {
+		return;
+	}
+	stylesSaveScheduled = true;
+
+	// Clear any existing timeout
+	if (stylesSaveTimeout) {
+		clearTimeout(stylesSaveTimeout);
+	}
+
+	stylesSaveTimeout = setTimeout(() => {
 		try {
 			const pathToCssFile = findDesiredPathFromLocalPath('./src/vs/workbench/contrib/void/browser/react/src/styles.css', __dirname);
 
 			if (pathToCssFile === undefined) {
 				console.error('[scope-tailwind] Error finding styles.css');
+				stylesSaveScheduled = false;
 				return;
 			}
 
@@ -71,8 +86,14 @@ function saveStylesFile() {
 			const content = fs.readFileSync(pathToCssFile, 'utf8');
 			fs.writeFileSync(pathToCssFile, content, 'utf8');
 			console.log('[scope-tailwind] Force-saved styles.css');
+
+			// Reset flag after a longer delay to prevent re-triggering
+			setTimeout(() => {
+				stylesSaveScheduled = false;
+			}, 15000);
 		} catch (err) {
 			console.error('[scope-tailwind] Error saving styles.css:', err);
+			stylesSaveScheduled = false;
 		}
 	}, 6000);
 }

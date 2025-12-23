@@ -14,13 +14,13 @@ A visual timeline of case events for tracking injury progression, medical visits
 
 ## Design Decisions
 
-| Decision | Choice | Rationale |
-|----------|--------|-----------|
-| **Storage** | `.timeline.json` in workspace | Portable, version-controllable, syncs across machines |
-| **Timeline UI** | Custom React (Tailwind) | Full control, VSCode integration, avoid external library issues |
-| **PDF Export** | Electron HTML-to-PDF | Clean output, full styling control (Phase 2) |
-| **Notifications** | Scheduled on app startup | Simple, reliable, no background service needed |
-| **Statute Limits** | Configurable per jurisdiction/case | Flexible for BC WCB, WSIB, CA DWC, etc. |
+| Decision           | Choice                             | Rationale                                                       |
+| ------------------ | ---------------------------------- | --------------------------------------------------------------- |
+| **Storage**        | `.timeline.json` in workspace      | Portable, version-controllable, syncs across machines           |
+| **Timeline UI**    | Custom React (Tailwind)            | Full control, VSCode integration, avoid external library issues |
+| **PDF Export**     | Electron HTML-to-PDF               | Clean output, full styling control (Phase 2)                    |
+| **Notifications**  | Scheduled on app startup           | Simple, reliable, no background service needed                  |
+| **Statute Limits** | Configurable per jurisdiction/case | Flexible for BC WCB, WSIB, CA DWC, etc.                         |
 
 ---
 
@@ -62,19 +62,19 @@ src/vs/workbench/contrib/void/
 
 ```typescript
 interface TimelineEvent {
-  id: string;
-  date: string;                    // ISO 8601
-  endDate?: string;                // For date ranges
-  title: string;
-  description?: string;
-  category: EventCategory;         // injury | medical | hearing | decision | deadline | filing | correspondence | custom
-  linkedDocuments: string[];       // URI strings
-  isDeadline: boolean;
-  reminderDays?: number[];         // e.g., [7, 3, 1]
-  isComplete?: boolean;
-  tags?: string[];
-  createdAt: string;
-  updatedAt: string;
+	id: string;
+	date: string; // ISO 8601
+	endDate?: string; // For date ranges
+	title: string;
+	description?: string;
+	category: EventCategory; // injury | medical | hearing | decision | deadline | filing | correspondence | custom
+	linkedDocuments: string[]; // URI strings
+	isDeadline: boolean;
+	reminderDays?: number[]; // e.g., [7, 3, 1]
+	isComplete?: boolean;
+	tags?: string[];
+	createdAt: string;
+	updatedAt: string;
 }
 ```
 
@@ -82,16 +82,16 @@ interface TimelineEvent {
 
 ```typescript
 interface CaseTimeline {
-  version: '1.0';
-  caseId: string;
-  caseName?: string;
-  jurisdiction: string;            // e.g., 'bc-wcb', 'ontario-wsib'
-  injuryDate?: string;
-  events: TimelineEvent[];
-  customStatuteDays?: number;      // Override jurisdiction default
-  notificationsEnabled: boolean;
-  createdAt: string;
-  updatedAt: string;
+	version: "1.0";
+	caseId: string;
+	caseName?: string;
+	jurisdiction: string; // e.g., 'bc-wcb', 'ontario-wsib'
+	injuryDate?: string;
+	events: TimelineEvent[];
+	customStatuteDays?: number; // Override jurisdiction default
+	notificationsEnabled: boolean;
+	createdAt: string;
+	updatedAt: string;
 }
 ```
 
@@ -100,6 +100,7 @@ interface CaseTimeline {
 ## Jurisdictions Supported
 
 ### Canada
+
 - **BC WCB** - 90 days (Review Division: 90d, WCAT: 30d)
 - **Ontario WSIB** - 30 days (ARO: 30d, WSIAT: 30d)
 - **Alberta WCB** - 60 days (DRDRB: 60d, Appeals Commission: 30d)
@@ -109,6 +110,7 @@ interface CaseTimeline {
 - **Nova Scotia WCB** - 30 days
 
 ### United States
+
 - **California DWC** - 365 days (Petition: 20d, Appeal: 45d)
 - **Texas DWC** - 365 days (Contested: 20d, Panel: 15d)
 - **New York WCB** - 730 days (Review: 30d, Appeal: 30d)
@@ -116,6 +118,7 @@ interface CaseTimeline {
 - **Washington L&I** - 60 days (Protest: 60d, BIIA: 60d)
 
 ### Custom
+
 - User-configurable statute days and deadline rules
 
 ---
@@ -125,40 +128,47 @@ interface CaseTimeline {
 ### Implemented Features
 
 1. **Event CRUD**
+
    - ✅ Add events with date, title, description, category
    - ✅ Edit existing events
    - ✅ Delete events with confirmation
    - ✅ 8 event categories with color coding
 
 2. **Timeline Visualization**
+
    - ✅ Chronological event display
    - ✅ Visual timeline with colored dots
    - ✅ Category badges and labels
    - ✅ Deadline status indicators (overdue/upcoming)
 
 3. **Filtering**
+
    - ✅ Filter by category
    - ✅ Show deadlines only toggle
    - ✅ Event count display
 
 4. **Deadline Management**
+
    - ✅ Mark events as deadlines
    - ✅ Reminder days configuration
    - ✅ Mark complete functionality
    - ✅ Overdue/upcoming warnings banner
 
 5. **Notifications**
+
    - ✅ Deadline notifications on startup
    - ✅ 7, 3, 1 day warning levels
    - ✅ Overdue deadline alerts
 
 6. **Jurisdiction Support**
+
    - ✅ 12 pre-configured jurisdictions
    - ✅ Statute of limitations calculation
    - ✅ Auto-generate deadlines from decisions
    - ✅ Custom jurisdiction override per case
 
 7. **Service Infrastructure**
+
    - ✅ ITimelineService interface
    - ✅ File-based storage (.timeline.json)
    - ✅ Event-driven updates
@@ -271,28 +281,28 @@ Ctrl+Shift+T (or Command Palette → "Open Case Timeline")
 
 ### New Files (Phase 1)
 
-| File | Lines | Purpose |
-|------|-------|---------|
-| `common/timeline/timelineTypes.ts` | ~300 | Core types and helpers |
-| `browser/timeline/jurisdictionConfig.ts` | ~250 | 12 jurisdiction configs |
-| `browser/timeline/timelineService.ts` | ~350 | CRUD, deadlines, notifications |
-| `browser/timeline/timelinePane.ts` | ~70 | Sidebar panel |
-| `browser/timeline/timeline.contribution.ts` | ~150 | Commands, registration |
-| `react/src/timeline-tsx/index.tsx` | ~10 | Mount export |
-| `react/src/timeline-tsx/TimelineDashboard.tsx` | ~200 | Main container |
-| `react/src/timeline-tsx/TimelineEventCard.tsx` | ~200 | Event cards |
-| `react/src/timeline-tsx/TimelineToolbar.tsx` | ~120 | Toolbar |
-| `react/src/timeline-tsx/EventEditor.tsx` | ~300 | Event editor modal |
-| `react/src/timeline-tsx/DeadlineWarnings.tsx` | ~150 | Warning banners |
+| File                                           | Lines | Purpose                        |
+| ---------------------------------------------- | ----- | ------------------------------ |
+| `common/timeline/timelineTypes.ts`             | ~300  | Core types and helpers         |
+| `browser/timeline/jurisdictionConfig.ts`       | ~250  | 12 jurisdiction configs        |
+| `browser/timeline/timelineService.ts`          | ~350  | CRUD, deadlines, notifications |
+| `browser/timeline/timelinePane.ts`             | ~70   | Sidebar panel                  |
+| `browser/timeline/timeline.contribution.ts`    | ~150  | Commands, registration         |
+| `react/src/timeline-tsx/index.tsx`             | ~10   | Mount export                   |
+| `react/src/timeline-tsx/TimelineDashboard.tsx` | ~200  | Main container                 |
+| `react/src/timeline-tsx/TimelineEventCard.tsx` | ~200  | Event cards                    |
+| `react/src/timeline-tsx/TimelineToolbar.tsx`   | ~120  | Toolbar                        |
+| `react/src/timeline-tsx/EventEditor.tsx`       | ~300  | Event editor modal             |
+| `react/src/timeline-tsx/DeadlineWarnings.tsx`  | ~150  | Warning banners                |
 
 ### Modified Files
 
-| File | Change |
-|------|--------|
-| `void.contribution.ts` | Import timeline contribution |
-| `react/src/util/services.tsx` | Add ITimelineService to accessor |
-| `react/tsup.config.js` | Add timeline-tsx entry, switch to src/ |
-| `react/build.js` | Update styles path to src/ |
+| File                          | Change                                 |
+| ----------------------------- | -------------------------------------- |
+| `void.contribution.ts`        | Import timeline contribution           |
+| `react/src/util/services.tsx` | Add ITimelineService to accessor       |
+| `react/tsup.config.js`        | Add timeline-tsx entry, switch to src/ |
+| `react/build.js`              | Update styles path to src/             |
 
 ---
 
@@ -300,8 +310,8 @@ Ctrl+Shift+T (or Command Palette → "Open Case Timeline")
 
 - [x] User can add events with date, title, description, and category
 - [x] Events display on visual timeline with scroll
-- [ ] Documents can be linked to events *(service ready, UI pending)*
-- [ ] Timeline can be exported as PDF *(Phase 2)*
+- [ ] Documents can be linked to events _(service ready, UI pending)_
+- [ ] Timeline can be exported as PDF _(Phase 2)_
 - [x] Deadline notifications appear 7, 3, and 1 days before
 - [x] Statute of limitations automatically calculated based on injury date
 
@@ -310,4 +320,3 @@ Ctrl+Shift+T (or Command Palette → "Open Case Timeline")
 **Created**: December 23, 2025
 **Author**: Claude (Cursor AI Assistant)
 **Last Updated**: December 23, 2025
-

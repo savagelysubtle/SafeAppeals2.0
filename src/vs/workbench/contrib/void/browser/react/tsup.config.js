@@ -7,18 +7,17 @@ import { defineConfig } from 'tsup'
 
 export default defineConfig({
 	entry: [
-		'./src/void-editor-widgets-tsx/index.tsx',
-		'./src/sidebar-tsx/index.tsx',
-		'./src/void-settings-tsx/index.tsx',
-		'./src/void-tooltip/index.tsx',
-		'./src/void-onboarding/index.tsx',
-		'./src/quick-edit-tsx/index.tsx',
-		'./src/diff/index.tsx',
-		'./src/file-organizer-tsx/index.tsx',
-		'./src/case-info-dashboard-tsx/index.tsx',
-		'./src/email-dashboard-tsx/index.tsx',
-		'./src/file-converter-tsx/index.tsx',
-		'./src/timeline-tsx/index.tsx',
+		'./src2/void-editor-widgets-tsx/index.tsx',
+		'./src2/sidebar-tsx/index.tsx',
+		'./src2/void-settings-tsx/index.tsx',
+		'./src2/void-tooltip/index.tsx',
+		'./src2/void-onboarding/index.tsx',
+		'./src2/quick-edit-tsx/index.tsx',
+		'./src2/diff/index.tsx',
+		'./src2/file-organizer-tsx/index.tsx',
+		'./src2/case-info-dashboard-tsx/index.tsx',
+		'./src2/file-converter-tsx/index.tsx',
+		'./src2/timeline-tsx/index.tsx',
 	],
 	outDir: './out',
 	format: ['esm'],
@@ -42,8 +41,10 @@ export default defineConfig({
 			.replaceAll('*', '.*'))
 	],
 	treeshake: true,
+	// Ignore CSS files to prevent infinite rebuild loop with scope-tailwind
+	ignoreWatch: ['**/styles.css', '**/styles-tailwind.css', '**/src2/**'],
 	esbuildOptions(options) {
-		options.outbase = 'src'  // tries copying the folder hierarchy starting at src
+		options.outbase = 'src2'  // tries copying the folder hierarchy starting at src2
 		// Suppress "X is imported from external module but never used" warnings
 		// These are false positives - the imports ARE used internally by hooks
 		// in services.tsx (e.g., useIsOptedOut uses DisposableStore, StorageScope)

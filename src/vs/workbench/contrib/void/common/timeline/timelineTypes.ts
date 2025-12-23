@@ -221,6 +221,11 @@ export interface ITimelineService {
 	 */
 	getJurisdiction(id: string): JurisdictionConfig | undefined;
 
+	/**
+	 * Set the jurisdiction for the current timeline
+	 */
+	setJurisdiction(jurisdictionId: string): Promise<void>;
+
 	// ---- Events ----
 
 	/**
