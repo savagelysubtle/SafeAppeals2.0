@@ -60,6 +60,7 @@ import { IFileDialogService } from '../../../../../../../platform/dialogs/common
 import { IOpenerService } from '../../../../../../../platform/opener/common/opener.js';
 import { IFileConverterService } from '../../../fileConverter/fileConverterService.js';
 import { ITimelineService } from '../../../../common/timeline/timelineTypes.js';
+import { IEditorService } from '../../../../../../../workbench/services/editor/common/editorService.js';
 
 
 // normally to do this you'd use a useEffect that calls .onDidChangeState(), but useEffect mounts too late and misses initial state changes
@@ -240,6 +241,8 @@ const getReactAccessor = (accessor: ServicesAccessor) => {
 		IFileDialogService: accessor.get(IFileDialogService),
 		IOpenerService: accessor.get(IOpenerService),
 		IFileConverterService: accessor.get(IFileConverterService),
+		IEditorService: accessor.get(IEditorService),
+		URI: URI,
 		ITimelineService: accessor.get(ITimelineService),
 
 	} as const

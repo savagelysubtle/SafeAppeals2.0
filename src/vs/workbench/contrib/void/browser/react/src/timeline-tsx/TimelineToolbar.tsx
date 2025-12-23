@@ -15,6 +15,7 @@ const BRAND_GREEN = '#22c55e';
 
 interface TimelineToolbarProps {
   onAddEvent: () => void;
+  onExport: () => void;
   filterCategory: EventCategory | 'all';
   onFilterChange: (category: EventCategory | 'all') => void;
   showDeadlinesOnly: boolean;
@@ -26,6 +27,7 @@ interface TimelineToolbarProps {
 
 export const TimelineToolbar: React.FC<TimelineToolbarProps> = ({
   onAddEvent,
+  onExport,
   filterCategory,
   onFilterChange,
   showDeadlinesOnly,
@@ -118,6 +120,29 @@ export const TimelineToolbar: React.FC<TimelineToolbarProps> = ({
 
       {/* Spacer */}
       <div className="flex-1" />
+
+      {/* Export Button */}
+      <button
+        onClick={onExport}
+        className="text-xs px-3 py-1.5 rounded-lg flex items-center gap-2 transition-all cursor-pointer"
+        style={{
+          backgroundColor: '#1a1a1a',
+          color: '#a1a1aa',
+          border: '1px solid #27272a'
+        }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.backgroundColor = '#27272a';
+          e.currentTarget.style.color = '#fafafa';
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.backgroundColor = '#1a1a1a';
+          e.currentTarget.style.color = '#a1a1aa';
+        }}
+        title="Export timeline to HTML"
+      >
+        <i className="codicon codicon-export" style={{ fontSize: '12px' }} />
+        <span>Export</span>
+      </button>
 
       {/* Jurisdiction Selector Button */}
       <button

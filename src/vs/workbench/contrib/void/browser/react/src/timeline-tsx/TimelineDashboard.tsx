@@ -123,6 +123,28 @@ export const TimelineDashboard: React.FC = () => {
     setShowJurisdictionSelector(true);
   }, []);
 
+  const handleExport = useCallback(async () => {
+    try {
+      const htmlBytes = await timelineService.exportToPDF();
+      const html = new TextDecoder().decode(htmlBytes);
+
+      // Create a Blob and download it
+      const blob = new Blob([html], { type: 'text/html' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `timeline-${timeline?.caseId || 'export'}-${new Date().toISOString().split('T')[0]}.html`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      console.log('[TimelineDashboard] Timeline exported successfully');
+    } catch (error) {
+      console.error('[TimelineDashboard] Failed to export timeline:', error);
+    }
+  }, [timelineService, timeline]);
+
   // Filter and sort events
   const filteredEvents = React.useMemo(() => {
     if (!timeline) return [];
@@ -230,6 +252,7 @@ export const TimelineDashboard: React.FC = () => {
       {/* Toolbar */}
       <TimelineToolbar
         onAddEvent={handleAddEvent}
+        onExport={handleExport}
         filterCategory={filterCategory}
         onFilterChange={setFilterCategory}
         showDeadlinesOnly={showDeadlinesOnly}

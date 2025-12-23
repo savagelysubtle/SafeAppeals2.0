@@ -3,7 +3,7 @@
  *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
  *--------------------------------------------------------------------------------------*/
 
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   TimelineEvent,
   EventCategory,
@@ -11,10 +11,30 @@ import {
   EVENT_CATEGORY_COLORS,
   JurisdictionConfig } from
 '../../../../common/timeline/timelineTypes.js';
+import { DocumentPicker } from './DocumentPicker.js';
 
 // SafeAppeals brand colors
 const BRAND_GREEN = '#22c55e';
 const BRAND_GREEN_HOVER = '#16a34a';
+
+// File icons based on extension
+const FILE_ICONS: Record<string, { icon: string; color: string }> = {
+  pdf: { icon: 'file-pdf', color: '#ef4444' },
+  doc: { icon: 'file-text', color: '#3b82f6' },
+  docx: { icon: 'file-text', color: '#3b82f6' },
+  txt: { icon: 'file-text', color: '#6b7280' },
+  default: { icon: 'file', color: '#64748b' }
+};
+
+function getFileIcon(filename: string): { icon: string; color: string } {
+  const ext = filename.split('.').pop()?.toLowerCase() || '';
+  return FILE_ICONS[ext] || FILE_ICONS.default;
+}
+
+function getFileName(uri: string): string {
+  const parts = uri.split('/');
+  return parts[parts.length - 1] || uri;
+}
 
 interface EventEditorProps {
   event: TimelineEvent | null;
@@ -52,8 +72,18 @@ export const EventEditor: React.FC<EventEditorProps> = ({
   const [reminderDays, setReminderDays] = useState(
     event?.reminderDays?.join(', ') || '7, 3, 1'
   );
+  const [linkedDocuments, setLinkedDocuments] = useState<string[]>(event?.linkedDocuments || []);
+  const [showDocumentPicker, setShowDocumentPicker] = useState(false);
 
   const isEditing = !!event;
+
+  const handleLinkDocument = useCallback((uri: string) => {
+    setLinkedDocuments(prev => [...prev, uri]);
+  }, []);
+
+  const handleUnlinkDocument = useCallback((uri: string) => {
+    setLinkedDocuments(prev => prev.filter(d => d !== uri));
+  }, []);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -67,7 +97,7 @@ export const EventEditor: React.FC<EventEditorProps> = ({
       category,
       isDeadline,
       isComplete: isDeadline ? isComplete : undefined,
-      linkedDocuments: event?.linkedDocuments || [],
+      linkedDocuments,
       tags: tagsInput.split(',').map(t => t.trim()).filter(Boolean),
       reminderDays: isDeadline ? reminderDays.split(',').map(d => parseInt(d.trim(), 10)).filter(n => !isNaN(n)) : undefined
     };
@@ -325,6 +355,95 @@ export const EventEditor: React.FC<EventEditorProps> = ({
             <p className="text-xs" style={{ color: '#52525b' }}>Separate tags with commas</p>
           </div>
 
+          {/* Linked Documents */}
+          <div
+            className="rounded-lg p-4"
+            style={{ backgroundColor: '#1a1a1a', border: '1px solid #27272a' }}
+          >
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <i className="codicon codicon-file-symlink-file" style={{ color: BRAND_GREEN, fontSize: '14px' }} />
+                <span className="text-sm font-medium" style={{ color: '#e4e4e7' }}>
+                  Linked Documents
+                </span>
+                {linkedDocuments.length > 0 && (
+                  <span
+                    className="text-xs px-1.5 py-0.5 rounded-full"
+                    style={{ backgroundColor: `${BRAND_GREEN}20`, color: BRAND_GREEN }}
+                  >
+                    {linkedDocuments.length}
+                  </span>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowDocumentPicker(true)}
+                className="text-xs px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-all"
+                style={{
+                  backgroundColor: `${BRAND_GREEN}15`,
+                  color: BRAND_GREEN,
+                  border: `1px solid ${BRAND_GREEN}30`
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = `${BRAND_GREEN}25`;
+                  e.currentTarget.style.borderColor = BRAND_GREEN;
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = `${BRAND_GREEN}15`;
+                  e.currentTarget.style.borderColor = `${BRAND_GREEN}30`;
+                }}
+              >
+                <i className="codicon codicon-add" style={{ fontSize: '12px' }} />
+                {linkedDocuments.length === 0 ? 'Link Documents' : 'Manage'}
+              </button>
+            </div>
+
+            {linkedDocuments.length > 0 ? (
+              <div className="space-y-2">
+                {linkedDocuments.slice(0, 3).map(uri => {
+                  const fileName = getFileName(uri);
+                  const { icon, color } = getFileIcon(fileName);
+                  return (
+                    <div
+                      key={uri}
+                      className="flex items-center gap-2 px-3 py-2 rounded-lg"
+                      style={{ backgroundColor: '#0f0f0f' }}
+                    >
+                      <i className={`codicon codicon-${icon}`} style={{ color, fontSize: '14px' }} />
+                      <span className="text-sm truncate flex-1" style={{ color: '#a1a1aa' }}>
+                        {fileName}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => handleUnlinkDocument(uri)}
+                        className="text-xs px-1.5 py-0.5 rounded transition-colors"
+                        style={{ color: '#ef4444' }}
+                        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#ef444420'}
+                        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                      >
+                        <i className="codicon codicon-close" style={{ fontSize: '12px' }} />
+                      </button>
+                    </div>
+                  );
+                })}
+                {linkedDocuments.length > 3 && (
+                  <button
+                    type="button"
+                    onClick={() => setShowDocumentPicker(true)}
+                    className="text-xs w-full py-1.5 rounded-lg"
+                    style={{ color: '#71717a' }}
+                  >
+                    +{linkedDocuments.length - 3} more documents
+                  </button>
+                )}
+              </div>
+            ) : (
+              <p className="text-xs" style={{ color: '#52525b' }}>
+                Link related documents like medical records, decisions, or correspondence
+              </p>
+            )}
+          </div>
+
           {/* Actions */}
           <div className="flex justify-end gap-3 pt-2">
             <button
@@ -357,6 +476,16 @@ export const EventEditor: React.FC<EventEditorProps> = ({
           </div>
         </form>
       </div>
+
+      {/* Document Picker Modal */}
+      {showDocumentPicker && (
+        <DocumentPicker
+          linkedDocuments={linkedDocuments}
+          onLink={handleLinkDocument}
+          onUnlink={handleUnlinkDocument}
+          onClose={() => setShowDocumentPicker(false)}
+        />
+      )}
     </div>
   );
 };

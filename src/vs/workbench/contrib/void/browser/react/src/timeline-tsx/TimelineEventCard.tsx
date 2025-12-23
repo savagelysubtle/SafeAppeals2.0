@@ -12,9 +12,33 @@ import {
   isDeadlineOverdue,
   isDeadlineUpcoming } from
 '../../../../common/timeline/timelineTypes.js';
+import { useAccessor } from '../util/services.js';
 
 // SafeAppeals brand colors
 const BRAND_GREEN = '#22c55e';
+
+// File icons based on extension
+const FILE_ICONS: Record<string, { icon: string; color: string }> = {
+  pdf: { icon: 'file-pdf', color: '#ef4444' },
+  doc: { icon: 'file-text', color: '#3b82f6' },
+  docx: { icon: 'file-text', color: '#3b82f6' },
+  txt: { icon: 'file-text', color: '#6b7280' },
+  md: { icon: 'markdown', color: '#6b7280' },
+  jpg: { icon: 'file-media', color: '#f59e0b' },
+  jpeg: { icon: 'file-media', color: '#f59e0b' },
+  png: { icon: 'file-media', color: '#f59e0b' },
+  default: { icon: 'file', color: '#64748b' }
+};
+
+function getFileIcon(filename: string): { icon: string; color: string } {
+  const ext = filename.split('.').pop()?.toLowerCase() || '';
+  return FILE_ICONS[ext] || FILE_ICONS.default;
+}
+
+function getFileName(uri: string): string {
+  const parts = uri.split('/');
+  return parts[parts.length - 1] || uri;
+}
 
 interface TimelineEventCardProps {
   event: TimelineEvent;
@@ -31,9 +55,21 @@ export const TimelineEventCard: React.FC<TimelineEventCardProps> = ({
   isFirst,
   isLast
 }) => {
+  const accessor = useAccessor();
   const [confirmDelete, setConfirmDelete] = useState(false);
 
   const categoryColor = EVENT_CATEGORY_COLORS[event.category];
+
+  const handleOpenDocument = async (uriString: string) => {
+    try {
+      const editorService = accessor.get('IEditorService');
+      const URI = accessor.get('URI');
+      const uri = URI.parse(uriString);
+      await editorService.openEditor({ resource: uri });
+    } catch (error) {
+      console.error('[TimelineEventCard] Failed to open document:', error);
+    }
+  };
   const categoryLabel = EVENT_CATEGORY_LABELS[event.category];
   const isOverdue = isDeadlineOverdue(event);
   const isUpcoming = isDeadlineUpcoming(event, 7);
@@ -232,21 +268,46 @@ export const TimelineEventCard: React.FC<TimelineEventCardProps> = ({
 
               {/* Linked Docs */}
               {event.linkedDocuments.length > 0 && (
-                <div className="flex flex-wrap gap-2 mb-3">
-                  {event.linkedDocuments.map((docUri, idx) => (
-                    <div
-                      key={idx}
-                      className="inline-flex items-center rounded-md px-2 py-1 text-xs cursor-pointer transition-colors"
-                      style={{
-                        backgroundColor: '#1a1a1a',
-                        border: '1px solid #27272a',
-                        color: '#a1a1aa'
-                      }}
-                    >
-                      <i className="codicon codicon-file mr-1.5" style={{ fontSize: '12px' }} />
-                      {docUri.split('/').pop() || docUri}
-                    </div>
-                  ))}
+                <div className="mb-3">
+                  <div className="flex items-center gap-1.5 mb-2">
+                    <i className="codicon codicon-file-symlink-file" style={{ color: BRAND_GREEN, fontSize: '12px' }} />
+                    <span className="text-xs font-medium" style={{ color: '#71717a' }}>
+                      Linked Documents ({event.linkedDocuments.length})
+                    </span>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {event.linkedDocuments.map((docUri, idx) => {
+                      const fileName = getFileName(docUri);
+                      const { icon, color } = getFileIcon(fileName);
+                      return (
+                        <button
+                          key={idx}
+                          onClick={() => handleOpenDocument(docUri)}
+                          className="inline-flex items-center rounded-lg px-2.5 py-1.5 text-xs cursor-pointer transition-all"
+                          style={{
+                            backgroundColor: '#1a1a1a',
+                            border: '1px solid #27272a',
+                            color: '#a1a1aa'
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.backgroundColor = `${BRAND_GREEN}15`;
+                            e.currentTarget.style.borderColor = `${BRAND_GREEN}40`;
+                            e.currentTarget.style.color = '#fafafa';
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.backgroundColor = '#1a1a1a';
+                            e.currentTarget.style.borderColor = '#27272a';
+                            e.currentTarget.style.color = '#a1a1aa';
+                          }}
+                          title={`Open ${fileName}`}
+                        >
+                          <i className={`codicon codicon-${icon} mr-1.5`} style={{ color, fontSize: '12px' }} />
+                          {fileName}
+                          <i className="codicon codicon-link-external ml-1.5" style={{ fontSize: '10px', opacity: 0.5 }} />
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
               )}
 

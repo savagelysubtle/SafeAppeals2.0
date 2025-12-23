@@ -184,23 +184,23 @@ interface CaseTimeline {
 
 ## Phase 2 (Pending) 📋
 
-### Document Linking UI
+### Document Linking UI ✅
 
 ```
-- [ ] Document picker modal
-- [ ] Link/unlink from event editor
-- [ ] Show linked documents on event cards (clickable)
+- [x] Document picker modal (DocumentPicker.tsx)
+- [x] Link/unlink from event editor
+- [x] Show linked documents on event cards (clickable to open)
 - [ ] Right-click "Link to Timeline Event" with event picker
 ```
 
-### PDF Export
+### PDF Export ✅
 
 ```
-- [ ] Create electron-main/timelineExportChannel.ts
-- [ ] HTML template for timeline export
-- [ ] Electron webContents.printToPDF()
-- [ ] Export button in toolbar
-- [ ] Include case info header
+- [x] Create electron-main/timelineExportChannel.ts (for future IPC integration)
+- [x] HTML template for timeline export (generateExportHTML in timelineService)
+- [x] Export button in toolbar
+- [x] Include case info header
+- [ ] Native printToPDF via Electron IPC (requires app.ts modification)
 ```
 
 ### Enhanced Timeline
