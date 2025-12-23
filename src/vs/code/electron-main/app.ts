@@ -1301,7 +1301,7 @@ export class CodeApplication extends Disposable {
 		mainProcessElectronServer.registerChannel('void-channel-brave-search', braveSearchChannel);
 
 		// Void Timeline Export service (for PDF export)
-		const timelineExportChannel = new TimelineExportChannel(logService);
+		const timelineExportChannel = new TimelineExportChannel(this.logService);
 		mainProcessElectronServer.registerChannel('void-channel-timeline-export', timelineExportChannel);
 
 		// Void Email service - TEMPORARILY DISABLED
