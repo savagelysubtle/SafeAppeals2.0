@@ -146,6 +146,7 @@ import { VoidSCMService } from '../../workbench/contrib/void/electron-main/voidS
 import { VoidMainUpdateService } from '../../workbench/contrib/void/electron-main/voidUpdateMainService.js';
 import { XLSXExtractorChannel } from '../../workbench/contrib/void/electron-main/xlsxExtractorChannel.js';
 import { BraveSearchChannel } from '../../workbench/contrib/void/electron-main/braveSearchChannel.js';
+import { TimelineExportChannel } from '../../workbench/contrib/void/electron-main/timelineExportChannel.js';
 /**
  * The main VS Code application. There will only ever be one instance,
  * even if the user starts many instances (e.g. from the command line).
@@ -1298,6 +1299,10 @@ export class CodeApplication extends Disposable {
 		// Void Brave Search service (for web search tools)
 		const braveSearchChannel = new BraveSearchChannel();
 		mainProcessElectronServer.registerChannel('void-channel-brave-search', braveSearchChannel);
+
+		// Void Timeline Export service (for PDF export)
+		const timelineExportChannel = new TimelineExportChannel(logService);
+		mainProcessElectronServer.registerChannel('void-channel-timeline-export', timelineExportChannel);
 
 		// Void Email service - TEMPORARILY DISABLED
 		// const ragPathService = accessor.get(IRAGPathService);

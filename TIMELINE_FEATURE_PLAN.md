@@ -196,11 +196,11 @@ interface CaseTimeline {
 ### PDF Export ✅
 
 ```
-- [x] Create electron-main/timelineExportChannel.ts (for future IPC integration)
-- [x] HTML template for timeline export (generateExportHTML in timelineService)
+- [x] Create electron-main/timelineExportChannel.ts
+- [x] HTML template for timeline export
 - [x] Export button in toolbar
 - [x] Include case info header
-- [ ] Native printToPDF via Electron IPC (requires app.ts modification)
+- [x] Native printToPDF via Electron IPC (registered in app.ts)
 ```
 
 ### Enhanced Timeline

@@ -138,10 +138,10 @@ export const TimelineToolbar: React.FC<TimelineToolbarProps> = ({
           e.currentTarget.style.backgroundColor = '#1a1a1a';
           e.currentTarget.style.color = '#a1a1aa';
         }}
-        title="Export timeline to HTML"
+        title="Export timeline to PDF"
       >
-        <i className="codicon codicon-export" style={{ fontSize: '12px' }} />
-        <span>Export</span>
+        <i className="codicon codicon-file-pdf" style={{ fontSize: '12px' }} />
+        <span>Export PDF</span>
       </button>
 
       {/* Jurisdiction Selector Button */}

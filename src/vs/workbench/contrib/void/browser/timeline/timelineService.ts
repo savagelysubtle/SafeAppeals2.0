@@ -7,8 +7,10 @@ import { VSBuffer } from '../../../../../base/common/buffer.js';
 import { Emitter, Event } from '../../../../../base/common/event.js';
 import { Disposable } from '../../../../../base/common/lifecycle.js';
 import { URI } from '../../../../../base/common/uri.js';
+import { IChannel } from '../../../../../base/parts/ipc/common/ipc.js';
 import { IFileService } from '../../../../../platform/files/common/files.js';
 import { registerSingleton, InstantiationType } from '../../../../../platform/instantiation/common/extensions.js';
+import { IMainProcessService } from '../../../../../platform/ipc/common/mainProcessService.js';
 import { INotificationService, Severity } from '../../../../../platform/notification/common/notification.js';
 import { IWorkspaceContextService } from '../../../../../platform/workspace/common/workspace.js';
 
@@ -38,12 +40,18 @@ export class TimelineService extends Disposable implements ITimelineService {
 	private readonly _onDidChangeTimeline = this._register(new Emitter<CaseTimeline | null>());
 	readonly onDidChangeTimeline: Event<CaseTimeline | null> = this._onDidChangeTimeline.event;
 
+	private readonly timelineExportChannel: IChannel;
+
 	constructor(
 		@IFileService private readonly fileService: IFileService,
 		@IWorkspaceContextService private readonly contextService: IWorkspaceContextService,
-		@INotificationService private readonly notificationService: INotificationService
+		@INotificationService private readonly notificationService: INotificationService,
+		@IMainProcessService mainProcessService: IMainProcessService
 	) {
 		super();
+
+		// Get the timeline export IPC channel
+		this.timelineExportChannel = mainProcessService.getChannel('void-channel-timeline-export');
 
 		// Auto-load timeline when workspace opens
 		this.initializeTimeline();
@@ -414,10 +422,14 @@ export class TimelineService extends Disposable implements ITimelineService {
 		}
 
 		const jurisdiction = this.getJurisdiction(this._timeline.jurisdiction);
-		const html = this.generateExportHTML(this._timeline, jurisdiction);
 
-		// Return HTML as Uint8Array - caller can handle saving or opening
-		return new TextEncoder().encode(html);
+		// Call electron-main to generate PDF
+		const pdfData = await this.timelineExportChannel.call<Uint8Array>('exportToPDF', {
+			timeline: this._timeline,
+			jurisdiction
+		});
+
+		return pdfData;
 	}
 
 	/**
