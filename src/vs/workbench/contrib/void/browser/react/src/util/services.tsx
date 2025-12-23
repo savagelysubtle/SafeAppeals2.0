@@ -59,6 +59,7 @@ import { IVoidCloudService } from '../../../voidCloudService.js';
 import { IFileDialogService } from '../../../../../../../platform/dialogs/common/dialogs.js';
 import { IOpenerService } from '../../../../../../../platform/opener/common/opener.js';
 import { IFileConverterService } from '../../../fileConverter/fileConverterService.js';
+import { ITimelineService } from '../../../../common/timeline/timelineTypes.js';
 
 
 // normally to do this you'd use a useEffect that calls .onDidChangeState(), but useEffect mounts too late and misses initial state changes
@@ -239,6 +240,7 @@ const getReactAccessor = (accessor: ServicesAccessor) => {
 		IFileDialogService: accessor.get(IFileDialogService),
 		IOpenerService: accessor.get(IOpenerService),
 		IFileConverterService: accessor.get(IFileConverterService),
+		ITimelineService: accessor.get(ITimelineService),
 
 	} as const
 	return reactAccessor
