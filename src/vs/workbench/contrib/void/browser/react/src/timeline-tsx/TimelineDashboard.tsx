@@ -125,21 +125,20 @@ export const TimelineDashboard: React.FC = () => {
 
   const handleExport = useCallback(async () => {
     try {
-      const htmlBytes = await timelineService.exportToPDF();
-      const html = new TextDecoder().decode(htmlBytes);
+      const pdfBytes = await timelineService.exportToPDF();
 
-      // Create a Blob and download it
-      const blob = new Blob([html], { type: 'text/html' });
+      // Create a Blob and download as PDF
+      const blob = new Blob([pdfBytes], { type: 'application/pdf' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `timeline-${timeline?.caseId || 'export'}-${new Date().toISOString().split('T')[0]}.html`;
+      a.download = `timeline-${timeline?.caseId || 'export'}-${new Date().toISOString().split('T')[0]}.pdf`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
 
-      console.log('[TimelineDashboard] Timeline exported successfully');
+      console.log('[TimelineDashboard] Timeline exported as PDF successfully');
     } catch (error) {
       console.error('[TimelineDashboard] Failed to export timeline:', error);
     }
