@@ -5,6 +5,22 @@
 
 import { URI } from '../../../../../base/common/uri.js';
 
+export type DocketStatus = 'new' | 'analyzing' | 'ready' | 'filed' | 'error';
+
+export interface Tag {
+	id: string;
+	name: string;
+	type: 'entity' | 'category' | 'date' | 'custom';
+	color?: string;
+}
+
+export interface EntityMatch {
+	entityName: string;
+	entityType: 'lawyer' | 'doctor' | 'adjudicator' | 'employer' | 'claimant' | 'caseManager' | 'reviewOfficer';
+	side: 'YourSide' | 'TheirSide' | 'Neutral';
+	confidence: number;
+}
+
 export interface FileMetadata {
 	uri: URI;
 	name: string;
@@ -13,7 +29,21 @@ export interface FileMetadata {
 	mimeType: string;
 	preview?: string; // For images
 	classification?: 'YourSide' | 'TheirSide' | 'Unknown'; // Manual classification
-	classificationMethod?: 'manual' | 'keyword' | 'folder'; // How it was classified
+	classificationMethod?: 'manual' | 'keyword' | 'folder' | 'ai'; // How it was classified
+}
+
+export interface DocketItem extends FileMetadata {
+	docketStatus: DocketStatus;
+	aiConfidence?: number;
+	entityMatches?: EntityMatch[];
+	suggestedTags?: Tag[];
+	suggestedFolder?: string;
+	addedAt: string; // ISO timestamp
+}
+
+export interface AIClassificationContext {
+	caseInfo: CaseInfo;
+	file: FileMetadata;
 }
 
 export interface OrganizationTemplate {
@@ -56,7 +86,7 @@ export interface FileChange {
 
 export interface ProcessResult {
 	success: boolean;
-	file: URI;
+	file?: URI;
 	error?: string;
 }
 
