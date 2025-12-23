@@ -26,6 +26,8 @@ import {
 	TimelineEvent
 } from '../../common/timeline/timelineTypes.js';
 import { DEFAULT_JURISDICTIONS, getJurisdictionById } from './jurisdictionConfig.js';
+import { IFileOrganizerService } from '../fileOrganizer/fileOrganizerService.js';
+import { CaseInfo } from '../fileOrganizer/types.js';
 
 const TIMELINE_FILENAME = '.timeline.json';
 
@@ -43,7 +45,8 @@ export class TimelineService extends Disposable implements ITimelineService {
 		@IFileService private readonly fileService: IFileService,
 		@IWorkspaceContextService private readonly contextService: IWorkspaceContextService,
 		@INotificationService private readonly notificationService: INotificationService,
-		@IMainProcessService mainProcessService: IMainProcessService
+		@IMainProcessService mainProcessService: IMainProcessService,
+		@IFileOrganizerService private readonly fileOrganizerService: IFileOrganizerService
 	) {
 		super();
 
@@ -459,6 +462,145 @@ export class TimelineService extends Disposable implements ITimelineService {
 
 		await this.saveTimeline(updatedTimeline);
 		console.log('[TimelineService] Jurisdiction changed to:', jurisdiction.name);
+	}
+
+	// ============================================================================
+	// Case Config Integration
+	// ============================================================================
+
+	/**
+	 * Get case info from FileOrganizerService
+	 */
+	private async getCaseInfo(): Promise<CaseInfo | null> {
+		try {
+			const workspaceFolder = this.getWorkspaceFolder();
+			if (!workspaceFolder) {
+				return null;
+			}
+
+			const config = await this.fileOrganizerService.loadCaseConfig(workspaceFolder);
+			return config?.caseInfo || null;
+		} catch (error) {
+			console.log('[TimelineService] No case config found:', error);
+			return null;
+		}
+	}
+
+	/**
+	 * Sync timeline with case config data
+	 * Updates timeline with case info (injuryDate, caseName, etc.)
+	 */
+	async syncFromCaseConfig(): Promise<boolean> {
+		const caseInfo = await this.getCaseInfo();
+		if (!caseInfo) {
+			console.log('[TimelineService] No case config to sync from');
+			return false;
+		}
+
+		const updates: Partial<CaseTimeline> = {};
+		let hasUpdates = false;
+
+		// Sync case name from claimant name or case number
+		const caseName = caseInfo.claimantName || (caseInfo.caseNumber ? `Case ${caseInfo.caseNumber}` : undefined);
+		if (caseName && this._timeline?.caseName !== caseName) {
+			updates.caseName = caseName;
+			hasUpdates = true;
+		}
+
+		// Sync case ID from case number
+		if (caseInfo.caseNumber && this._timeline?.caseId !== caseInfo.caseNumber) {
+			updates.caseId = caseInfo.caseNumber;
+			hasUpdates = true;
+		}
+
+		// Sync injury date
+		if (caseInfo.injuryDate && this._timeline?.injuryDate !== caseInfo.injuryDate) {
+			updates.injuryDate = caseInfo.injuryDate;
+			hasUpdates = true;
+		}
+
+		if (hasUpdates && this._timeline) {
+			const updatedTimeline: CaseTimeline = {
+				...this._timeline,
+				...updates,
+				events: [...this._timeline.events]
+			};
+			await this.saveTimeline(updatedTimeline);
+			console.log('[TimelineService] Synced from case config:', updates);
+
+			this.notificationService.info('Timeline synced with case information');
+			return true;
+		}
+
+		return false;
+	}
+
+	/**
+	 * Create initial injury event from case config
+	 * Call this when creating a new timeline to auto-populate the first event
+	 */
+	async createInjuryEventFromCaseConfig(): Promise<TimelineEvent | null> {
+		const caseInfo = await this.getCaseInfo();
+		if (!caseInfo?.injuryDate) {
+			return null;
+		}
+
+		// Check if we already have an injury event with this date
+		if (this._timeline) {
+			const existingInjury = this._timeline.events.find(
+				e => e.category === 'injury' && e.date.startsWith(caseInfo.injuryDate!.split('T')[0])
+			);
+			if (existingInjury) {
+				console.log('[TimelineService] Injury event already exists');
+				return null;
+			}
+		}
+
+		// Create injury event
+		const eventData = {
+			title: 'Injury Date',
+			description: caseInfo.description || `Initial injury for ${caseInfo.claimantName || 'claimant'}`,
+			date: new Date(caseInfo.injuryDate).toISOString(),
+			category: 'injury' as EventCategory,
+			isDeadline: false,
+			linkedDocuments: [],
+			tags: ['auto-imported']
+		};
+
+		const event = await this.addEvent(eventData);
+		console.log('[TimelineService] Created injury event from case config:', event.id);
+
+		this.notificationService.info('Created injury event from case information');
+		return event;
+	}
+
+	/**
+	 * Create a new timeline pre-populated with case config data
+	 */
+	async createTimelineWithCaseConfig(): Promise<CaseTimeline> {
+		const caseInfo = await this.getCaseInfo();
+		const workspaceFolder = this.getWorkspaceFolder();
+
+		const now = new Date().toISOString();
+		this._timeline = {
+			...DEFAULT_CASE_TIMELINE,
+			caseId: caseInfo?.caseNumber || workspaceFolder?.path || 'unknown',
+			caseName: caseInfo?.claimantName || undefined,
+			injuryDate: caseInfo?.injuryDate || undefined,
+			createdAt: now,
+			updatedAt: now,
+			events: []
+		};
+
+		await this.saveTimeline(this._timeline);
+		console.log('[TimelineService] Created new timeline with case config');
+
+		// Auto-create injury event if we have an injury date
+		if (caseInfo?.injuryDate) {
+			await this.createInjuryEventFromCaseConfig();
+		}
+
+		return this._timeline;
 	}
 }
 

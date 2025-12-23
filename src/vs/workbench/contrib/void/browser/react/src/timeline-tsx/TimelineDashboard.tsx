@@ -103,13 +103,31 @@ export const TimelineDashboard: React.FC = () => {
     setIsFirstEventCreation(false);
   }, []);
 
-  const handleCreateTimeline = useCallback(() => {
-    // Instead of auto-creating a "Timeline Created" event,
-    // open the event editor to let user create their first event
-    setEditingEvent(null);
-    setIsFirstEventCreation(true);
-    setShowEventEditor(true);
-  }, []);
+  const handleCreateTimeline = useCallback(async () => {
+    try {
+      // Create timeline pre-populated with case config data
+      // This will also auto-create an injury event if injury date is available
+      await timelineService.createTimelineWithCaseConfig();
+      // Timeline will update via onDidChangeTimeline event
+    } catch (error) {
+      console.error('[TimelineDashboard] Failed to create timeline:', error);
+      // Fallback: open event editor for manual creation
+      setEditingEvent(null);
+      setIsFirstEventCreation(true);
+      setShowEventEditor(true);
+    }
+  }, [timelineService]);
+
+  const handleSyncFromCase = useCallback(async () => {
+    try {
+      const synced = await timelineService.syncFromCaseConfig();
+      if (!synced) {
+        console.log('[TimelineDashboard] No case config to sync from');
+      }
+    } catch (error) {
+      console.error('[TimelineDashboard] Failed to sync from case config:', error);
+    }
+  }, [timelineService]);
 
   const handleJurisdictionChange = useCallback(async (jurisdictionId: string) => {
     try {
@@ -252,6 +270,7 @@ export const TimelineDashboard: React.FC = () => {
       <TimelineToolbar
         onAddEvent={handleAddEvent}
         onExport={handleExport}
+        onSyncFromCase={handleSyncFromCase}
         filterCategory={filterCategory}
         onFilterChange={setFilterCategory}
         showDeadlinesOnly={showDeadlinesOnly}

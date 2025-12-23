@@ -16,6 +16,7 @@ const BRAND_GREEN = '#22c55e';
 interface TimelineToolbarProps {
   onAddEvent: () => void;
   onExport: () => void;
+  onSyncFromCase: () => void;
   filterCategory: EventCategory | 'all';
   onFilterChange: (category: EventCategory | 'all') => void;
   showDeadlinesOnly: boolean;
@@ -28,6 +29,7 @@ interface TimelineToolbarProps {
 export const TimelineToolbar: React.FC<TimelineToolbarProps> = ({
   onAddEvent,
   onExport,
+  onSyncFromCase,
   filterCategory,
   onFilterChange,
   showDeadlinesOnly,
@@ -142,6 +144,29 @@ export const TimelineToolbar: React.FC<TimelineToolbarProps> = ({
       >
         <i className="codicon codicon-file-pdf" style={{ fontSize: '12px' }} />
         <span>Export PDF</span>
+      </button>
+
+      {/* Sync from Case Button */}
+      <button
+        onClick={onSyncFromCase}
+        className="text-xs px-3 py-1.5 rounded-lg flex items-center gap-2 transition-all cursor-pointer"
+        style={{
+          backgroundColor: '#1a1a1a',
+          color: '#a1a1aa',
+          border: '1px solid #27272a'
+        }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.backgroundColor = '#27272a';
+          e.currentTarget.style.color = '#fafafa';
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.backgroundColor = '#1a1a1a';
+          e.currentTarget.style.color = '#a1a1aa';
+        }}
+        title="Sync timeline with case configuration"
+      >
+        <i className="codicon codicon-sync" style={{ fontSize: '12px' }} />
+        <span>Sync Case</span>
       </button>
 
       {/* Jurisdiction Selector Button */}
