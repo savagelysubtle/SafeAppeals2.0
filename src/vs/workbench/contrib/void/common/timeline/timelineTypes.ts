@@ -226,6 +226,23 @@ export interface ITimelineService {
 	 */
 	setJurisdiction(jurisdictionId: string): Promise<void>;
 
+	// ---- Case Config Integration ----
+
+	/**
+	 * Sync timeline with case config data (injuryDate, caseName, etc.)
+	 */
+	syncFromCaseConfig(): Promise<boolean>;
+
+	/**
+	 * Create an injury event from case config if injury date exists
+	 */
+	createInjuryEventFromCaseConfig(): Promise<TimelineEvent | null>;
+
+	/**
+	 * Create a new timeline pre-populated with case config data
+	 */
+	createTimelineWithCaseConfig(): Promise<CaseTimeline>;
+
 	// ---- Events ----
 
 	/**

@@ -234,12 +234,14 @@ interface CaseTimeline {
 - [ ] Right-click "Link to Timeline Event" with event picker
 ```
 
-### Case Config Integration
+### Case Config Integration ✅
 
 ```
-- [ ] Auto-import injuryDate from .fileorg.json
-- [ ] Sync case name from caseInfo
-- [ ] Import parties for event descriptions
+- [x] Auto-import injuryDate from .fileorg.json
+- [x] Sync case name from caseInfo (claimantName or caseNumber)
+- [x] Auto-create injury event when creating timeline
+- [x] "Sync Case" button in toolbar for manual refresh
+- [ ] Import parties for event descriptions (Phase 4)
 ```
 
 ### Calendar View
@@ -311,31 +313,31 @@ Ctrl+Shift+T (or Command Palette → "Open Case Timeline")
 
 ### New Files (Phase 1 & 2)
 
-| File                                                | Lines | Purpose                        |
-| --------------------------------------------------- | ----- | ------------------------------ |
-| `common/timeline/timelineTypes.ts`                  | ~300  | Core types and helpers         |
-| `browser/timeline/jurisdictionConfig.ts`            | ~250  | 12 jurisdiction configs        |
-| `browser/timeline/timelineService.ts`               | ~450  | CRUD, deadlines, notifications |
-| `browser/timeline/timelinePane.ts`                  | ~70   | Sidebar panel                  |
-| `browser/timeline/timeline.contribution.ts`         | ~150  | Commands, registration         |
-| `electron-main/timelineExportChannel.ts`            | ~250  | PDF export via IPC             |
-| `react/src/timeline-tsx/index.tsx`                  | ~10   | Mount export                   |
-| `react/src/timeline-tsx/TimelineDashboard.tsx`      | ~300  | Main container                 |
-| `react/src/timeline-tsx/TimelineEventCard.tsx`      | ~280  | Event cards with doc links     |
-| `react/src/timeline-tsx/TimelineToolbar.tsx`        | ~180  | Toolbar with export/filter     |
-| `react/src/timeline-tsx/EventEditor.tsx`            | ~400  | Event editor with doc linking  |
-| `react/src/timeline-tsx/DeadlineWarnings.tsx`       | ~150  | Warning banners                |
-| `react/src/timeline-tsx/DocumentPicker.tsx`         | ~280  | Document linking modal         |
-| `react/src/timeline-tsx/JurisdictionSelector.tsx`   | ~160  | Jurisdiction selection modal   |
+| File                                              | Lines | Purpose                        |
+| ------------------------------------------------- | ----- | ------------------------------ |
+| `common/timeline/timelineTypes.ts`                | ~300  | Core types and helpers         |
+| `browser/timeline/jurisdictionConfig.ts`          | ~250  | 12 jurisdiction configs        |
+| `browser/timeline/timelineService.ts`             | ~450  | CRUD, deadlines, notifications |
+| `browser/timeline/timelinePane.ts`                | ~70   | Sidebar panel                  |
+| `browser/timeline/timeline.contribution.ts`       | ~150  | Commands, registration         |
+| `electron-main/timelineExportChannel.ts`          | ~250  | PDF export via IPC             |
+| `react/src/timeline-tsx/index.tsx`                | ~10   | Mount export                   |
+| `react/src/timeline-tsx/TimelineDashboard.tsx`    | ~300  | Main container                 |
+| `react/src/timeline-tsx/TimelineEventCard.tsx`    | ~280  | Event cards with doc links     |
+| `react/src/timeline-tsx/TimelineToolbar.tsx`      | ~180  | Toolbar with export/filter     |
+| `react/src/timeline-tsx/EventEditor.tsx`          | ~400  | Event editor with doc linking  |
+| `react/src/timeline-tsx/DeadlineWarnings.tsx`     | ~150  | Warning banners                |
+| `react/src/timeline-tsx/DocumentPicker.tsx`       | ~280  | Document linking modal         |
+| `react/src/timeline-tsx/JurisdictionSelector.tsx` | ~160  | Jurisdiction selection modal   |
 
 ### Modified Files
 
-| File                          | Change                                       |
-| ----------------------------- | -------------------------------------------- |
-| `void.contribution.ts`        | Import timeline contribution                 |
-| `react/src/util/services.tsx` | Add ITimelineService, IEditorService, URI    |
-| `react/tsup.config.js`        | Add timeline-tsx entry                       |
-| `code/electron-main/app.ts`   | Register TimelineExportChannel for PDF       |
+| File                          | Change                                    |
+| ----------------------------- | ----------------------------------------- |
+| `void.contribution.ts`        | Import timeline contribution              |
+| `react/src/util/services.tsx` | Add ITimelineService, IEditorService, URI |
+| `react/tsup.config.js`        | Add timeline-tsx entry                    |
+| `code/electron-main/app.ts`   | Register TimelineExportChannel for PDF    |
 
 ---
 
