@@ -1042,6 +1042,140 @@ React component for email management integration.
 
 ---
 
+## 📅 Timeline & Event Tracker
+
+**Status**: ✅ Phase 1 Complete
+**Date Added**: December 2025
+**Jira**: KAN-51 (Epic), KAN-57 (Feature)
+**Branch**: `feature/kan-57-timeline-event-tracker`
+
+### Overview
+
+A visual timeline of case events for tracking injury progression, medical visits, hearings, and decisions. Part of the SafeAppeals workers' compensation case management system with jurisdiction-specific statute of limitations and deadline tracking.
+
+### Core Features
+
+#### 1. **Event Management**
+
+- ✅ Add/edit/delete events with date, title, description, category
+- ✅ 8 event categories with color coding:
+  - Injury (red), Medical (blue), Hearing (purple), Decision (amber)
+  - Deadline (dark red), Filing (emerald), Correspondence (gray), Custom (slate)
+- ✅ Date ranges for multi-day events (hospitalization, etc.)
+- ✅ Tags and custom labels
+
+#### 2. **Timeline Visualization**
+
+- ✅ Chronological event display with visual timeline line
+- ✅ Category badges with color indicators
+- ✅ Deadline status indicators (overdue/upcoming/complete)
+- ✅ Filter by category
+- ✅ Show deadlines only toggle
+
+#### 3. **Deadline Management**
+
+- ✅ Mark events as deadlines
+- ✅ Configurable reminder days (default: 7, 3, 1)
+- ✅ Mark deadlines as complete
+- ✅ Overdue/upcoming warnings banner
+- ✅ Notifications on app startup
+
+#### 4. **Jurisdiction Support**
+
+12 pre-configured jurisdictions with statute of limitations:
+
+**Canada**:
+- BC WCB (90 days), Ontario WSIB (30 days), Alberta WCB (60 days)
+- Quebec CNESST (30 days), Manitoba WCB (30 days), Saskatchewan WCB (60 days)
+- Nova Scotia WCB (30 days)
+
+**United States**:
+- California DWC (365 days), Texas DWC (365 days)
+- New York WCB (730 days), Florida DWC (730 days)
+- Washington L&I (60 days)
+
+**Features**:
+- ✅ Auto-calculate statute deadline from injury date
+- ✅ Auto-generate deadline events from decision events
+- ✅ Custom statute days per case
+
+#### 5. **Commands & Actions**
+
+- ✅ **Keybinding**: `Ctrl+Shift+T` to open timeline
+- ✅ **Command**: "Open Case Timeline" (F1 palette)
+- ✅ **Command**: "Add Timeline Event"
+- ✅ **Explorer Context Menu**: "Link to Timeline Event..."
+
+### Storage
+
+Timeline data stored in `.timeline.json` at workspace root:
+
+```typescript
+interface CaseTimeline {
+  version: '1.0';
+  caseId: string;
+  caseName?: string;
+  jurisdiction: string;
+  injuryDate?: string;
+  events: TimelineEvent[];
+  customStatuteDays?: number;
+  notificationsEnabled: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+```
+
+### Service Interface
+
+```typescript
+interface ITimelineService {
+  loadTimeline(): Promise<CaseTimeline | null>;
+  saveTimeline(timeline: CaseTimeline): Promise<void>;
+  addEvent(event: Omit<TimelineEvent, 'id' | 'createdAt' | 'updatedAt'>): Promise<TimelineEvent>;
+  updateEvent(id: string, updates: Partial<TimelineEvent>): Promise<void>;
+  deleteEvent(id: string): Promise<void>;
+  calculateStatuteDeadline(injuryDate: Date, jurisdictionId: string): Date;
+  getUpcomingDeadlines(daysAhead: number): TimelineEvent[];
+  getOverdueDeadlines(): TimelineEvent[];
+  generateDeadlinesFromDecision(decisionEvent: TimelineEvent): TimelineEvent[];
+  linkDocument(eventId: string, documentUri: URI): Promise<void>;
+  scheduleDeadlineNotifications(): void;
+  exportToPDF(): Promise<Uint8Array>; // Phase 2
+}
+```
+
+### Files (Modular Structure)
+
+**Browser Module** (`browser/timeline/`):
+- `timeline.contribution.ts` - View registration, commands, actions
+- `timelineService.ts` - Core CRUD, deadline calculations, notifications
+- `timelinePane.ts` - Sidebar panel with React mount
+- `jurisdictionConfig.ts` - 12 jurisdiction configurations
+
+**Common Types** (`common/timeline/`):
+- `timelineTypes.ts` - Interfaces, types, helper functions
+
+**React Components** (`browser/react/src/timeline-tsx/`):
+- `TimelineDashboard.tsx` - Main container with event list
+- `TimelineEventCard.tsx` - Individual event cards with actions
+- `TimelineToolbar.tsx` - Add button, filters, jurisdiction badge
+- `EventEditor.tsx` - Modal for creating/editing events
+- `DeadlineWarnings.tsx` - Overdue/upcoming deadline banners
+
+### Pending (Phase 2)
+
+- 🔄 Document linking UI (picker modal, clickable links)
+- 🔄 PDF export via electron-main
+- 🔄 Drag-and-drop event creation
+- 🔄 Zoom/scroll controls (year/month/week view)
+- 🔄 Case config integration (auto-import injuryDate)
+
+### Plan Document
+
+See `TIMELINE_FEATURE_PLAN.md` at project root for detailed implementation plan.
+
+---
+
 ## 📞 Contacts & Resources
 
 - **GitHub**: <https://github.com/savagelysubtle/SafeAppeals2.0>
@@ -1052,5 +1186,5 @@ React component for email management integration.
 
 ---
 
-**Last Updated**: December 8, 2025
-**Version**: 1.99.3
+**Last Updated**: December 23, 2025
+**Version**: 1.99.4

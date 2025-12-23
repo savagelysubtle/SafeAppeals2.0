@@ -7,4 +7,3 @@ import { mountFnGenerator } from '../util/mountFnGenerator.js';
 import { TimelineDashboard } from './TimelineDashboard.js';
 
 export const mountTimeline = mountFnGenerator(TimelineDashboard);
-
