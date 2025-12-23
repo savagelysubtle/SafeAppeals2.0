@@ -77,6 +77,9 @@ import './caseInfo/caseInfo.contribution.js';
 // register file converter
 import './fileConverter/fileConverter.contribution.js';
 
+// register timeline & case management
+import './timeline/timeline.contribution.js';
+
 // register email dashboard - FULLY DISABLED FOR DEBUGGING
 // import '../common/emailService.js';
 // import './emailService.js';
