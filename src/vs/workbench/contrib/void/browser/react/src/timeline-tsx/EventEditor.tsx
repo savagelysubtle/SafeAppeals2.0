@@ -3,14 +3,18 @@
  *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
  *--------------------------------------------------------------------------------------*/
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   TimelineEvent,
   EventCategory,
   EVENT_CATEGORY_LABELS,
   EVENT_CATEGORY_COLORS,
   JurisdictionConfig } from
-'../../../../../../workbench/contrib/void/common/timeline/timelineTypes.js';
+'../../../../common/timeline/timelineTypes.js';
+
+// SafeAppeals brand colors
+const BRAND_GREEN = '#22c55e';
+const BRAND_GREEN_HOVER = '#16a34a';
 
 interface EventEditorProps {
   event: TimelineEvent | null;
@@ -18,6 +22,7 @@ interface EventEditorProps {
   currentJurisdiction: string;
   onSave: (eventData: Omit<TimelineEvent, 'id' | 'createdAt' | 'updatedAt'>) => void;
   onCancel: () => void;
+  isFirstEvent?: boolean;
 }
 
 export const EventEditor: React.FC<EventEditorProps> = ({
@@ -25,7 +30,8 @@ export const EventEditor: React.FC<EventEditorProps> = ({
   jurisdictions,
   currentJurisdiction,
   onSave,
-  onCancel
+  onCancel,
+  isFirstEvent = false
 }) => {
   const [title, setTitle] = useState(event?.title || '');
   const [description, setDescription] = useState(event?.description || '');
@@ -39,7 +45,7 @@ export const EventEditor: React.FC<EventEditorProps> = ({
     new Date(event.endDate).toISOString().split('T')[0] :
     ''
   );
-  const [category, setCategory] = useState<EventCategory>(event?.category || 'custom');
+  const [category, setCategory] = useState<EventCategory>(event?.category || (isFirstEvent ? 'injury' : 'custom'));
   const [isDeadline, setIsDeadline] = useState(event?.isDeadline || false);
   const [isComplete, setIsComplete] = useState(event?.isComplete || false);
   const [tagsInput, setTagsInput] = useState(event?.tags?.join(', ') || '');
@@ -51,10 +57,7 @@ export const EventEditor: React.FC<EventEditorProps> = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-
-    if (!title.trim() || !date) {
-      return;
-    }
+    if (!title.trim() || !date) return;
 
     const eventData: Omit<TimelineEvent, 'id' | 'createdAt' | 'updatedAt'> = {
       title: title.trim(),
@@ -65,289 +68,295 @@ export const EventEditor: React.FC<EventEditorProps> = ({
       isDeadline,
       isComplete: isDeadline ? isComplete : undefined,
       linkedDocuments: event?.linkedDocuments || [],
-      tags: tagsInput.
-      split(',').
-      map((t) => t.trim()).
-      filter((t) => t.length > 0),
-      reminderDays: isDeadline ?
-      reminderDays.
-      split(',').
-      map((d) => parseInt(d.trim(), 10)).
-      filter((d) => !isNaN(d)) :
-      undefined
+      tags: tagsInput.split(',').map(t => t.trim()).filter(Boolean),
+      reminderDays: isDeadline ? reminderDays.split(',').map(d => parseInt(d.trim(), 10)).filter(n => !isNaN(n)) : undefined
     };
 
     onSave(eventData);
   };
 
-  const categories: EventCategory[] = [
-  'injury',
-  'medical',
-  'hearing',
-  'decision',
-  'deadline',
-  'filing',
-  'correspondence',
-  'custom'];
-
+  const categories: EventCategory[] = ['injury', 'medical', 'hearing', 'decision', 'deadline', 'filing', 'correspondence', 'custom'];
 
   return (
+    // More opaque backdrop for better focus
     <div
-      className="void-fixed void-inset-0 void-flex void-items-center void-justify-center void-z-50"
-      style={{ backgroundColor: 'rgba(0, 0, 0, 0.5)' }}
-      onClick={onCancel}>
-      
-			<div
-        className="void-w-full void-max-w-lg void-mx-4 void-rounded-lg void-shadow-xl void-overflow-hidden"
+      className="fixed inset-0 z-50 flex items-center justify-center"
+      style={{ backgroundColor: 'rgba(0, 0, 0, 0.85)' }}
+      onClick={onCancel}
+    >
+      {/* Modal Card - solid black with green accents */}
+      <div
+        className="w-full max-w-lg rounded-xl shadow-2xl transition-all duration-200"
         style={{
-          backgroundColor: 'var(--vscode-editorWidget-background)',
-          border: '1px solid var(--vscode-editorWidget-border)'
+          backgroundColor: '#0f0f0f',
+          border: `1px solid ${BRAND_GREEN}30`,
+          boxShadow: `0 25px 50px -12px rgba(0, 0, 0, 0.8), 0 0 0 1px ${BRAND_GREEN}10`
         }}
-        onClick={(e) => e.stopPropagation()}>
-        
-				{/* Header */}
-				<div
-          className="void-px-4 void-py-3 void-border-b void-flex void-items-center void-justify-between"
-          style={{ borderColor: 'var(--vscode-editorWidget-border)' }}>
-          
-					<h2
-            className="void-text-lg void-font-semibold"
-            style={{ color: 'var(--vscode-foreground)' }}>
-            
-						{isEditing ? 'Edit Event' : 'Add Event'}
-					</h2>
-					<button
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Header with green accent */}
+        <div
+          className="flex items-center justify-between px-6 py-4 rounded-t-xl"
+          style={{ borderBottom: `1px solid ${BRAND_GREEN}20` }}
+        >
+          <div className="flex items-center gap-3">
+            <div
+              className="w-10 h-10 rounded-lg flex items-center justify-center"
+              style={{ backgroundColor: `${BRAND_GREEN}15` }}
+            >
+              <i className="codicon codicon-calendar" style={{ color: BRAND_GREEN, fontSize: '18px' }} />
+            </div>
+            <div>
+              <h2 className="text-lg font-semibold" style={{ color: '#fafafa' }}>
+                {isFirstEvent ? 'Add Your First Event' : isEditing ? 'Edit Event' : 'New Event'}
+              </h2>
+              {isFirstEvent && (
+                <p className="text-xs" style={{ color: '#71717a' }}>
+                  Start with your injury date or initial incident
+                </p>
+              )}
+            </div>
+          </div>
+          <button
             onClick={onCancel}
-            className="void-text-xl hover:void-opacity-70 void-transition-opacity"
-            style={{ color: 'var(--vscode-foreground)' }}>
-            
-						×
-					</button>
-				</div>
+            className="w-8 h-8 rounded-lg flex items-center justify-center transition-colors"
+            style={{ color: '#71717a' }}
+            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#1f1f1f'}
+            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+          >
+            <i className="codicon codicon-close" />
+          </button>
+        </div>
 
-				{/* Form */}
-				<form onSubmit={handleSubmit} className="void-p-4 void-space-y-4">
-					{/* Title */}
-					<div>
-						<label
-              className="void-block void-text-sm void-font-medium void-mb-1"
-              style={{ color: 'var(--vscode-foreground)' }}>
-              
-							Title *
-						</label>
-						<input
+        {/* Form */}
+        <form onSubmit={handleSubmit} className="p-6 space-y-5">
+          {/* Title */}
+          <div className="grid gap-2">
+            <label className="text-sm font-medium" style={{ color: '#e4e4e7' }}>
+              Title <span style={{ color: BRAND_GREEN }}>*</span>
+            </label>
+            <input
               type="text"
               value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="Event title..."
+              onChange={e => setTitle(e.target.value)}
+              placeholder="Enter event title..."
               required
-              className="void-w-full void-px-3 void-py-2 void-rounded"
+              autoFocus
+              className="h-10 w-full rounded-lg px-3 text-sm transition-all outline-none"
               style={{
-                backgroundColor: 'var(--vscode-input-background)',
-                color: 'var(--vscode-input-foreground)',
-                border: '1px solid var(--vscode-input-border)'
-              }} />
-            
-					</div>
+                backgroundColor: '#1a1a1a',
+                border: '1px solid #27272a',
+                color: '#fafafa'
+              }}
+              onFocus={(e) => e.currentTarget.style.borderColor = BRAND_GREEN}
+              onBlur={(e) => e.currentTarget.style.borderColor = '#27272a'}
+            />
+          </div>
 
-					{/* Date Row */}
-					<div className="void-grid void-grid-cols-2 void-gap-4">
-						<div>
-							<label
-                className="void-block void-text-sm void-font-medium void-mb-1"
-                style={{ color: 'var(--vscode-foreground)' }}>
-                
-								Date *
-							</label>
-							<input
+          {/* Dates */}
+          <div className="grid grid-cols-2 gap-4">
+            <div className="grid gap-2">
+              <label className="text-sm font-medium" style={{ color: '#e4e4e7' }}>
+                Date <span style={{ color: BRAND_GREEN }}>*</span>
+              </label>
+              <input
                 type="date"
                 value={date}
-                onChange={(e) => setDate(e.target.value)}
+                onChange={e => setDate(e.target.value)}
                 required
-                className="void-w-full void-px-3 void-py-2 void-rounded"
+                className="h-10 w-full rounded-lg px-3 text-sm transition-all outline-none"
                 style={{
-                  backgroundColor: 'var(--vscode-input-background)',
-                  color: 'var(--vscode-input-foreground)',
-                  border: '1px solid var(--vscode-input-border)'
-                }} />
-              
-						</div>
-						<div>
-							<label
-                className="void-block void-text-sm void-font-medium void-mb-1"
-                style={{ color: 'var(--vscode-foreground)' }}>
-                
-								End Date (optional)
-							</label>
-							<input
+                  backgroundColor: '#1a1a1a',
+                  border: '1px solid #27272a',
+                  color: '#fafafa',
+                  colorScheme: 'dark'
+                }}
+                onFocus={(e) => e.currentTarget.style.borderColor = BRAND_GREEN}
+                onBlur={(e) => e.currentTarget.style.borderColor = '#27272a'}
+              />
+            </div>
+            <div className="grid gap-2">
+              <label className="text-sm font-medium" style={{ color: '#a1a1aa' }}>
+                End Date <span style={{ color: '#52525b' }}>(optional)</span>
+              </label>
+              <input
                 type="date"
                 value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
-                className="void-w-full void-px-3 void-py-2 void-rounded"
+                onChange={e => setEndDate(e.target.value)}
+                className="h-10 w-full rounded-lg px-3 text-sm transition-all outline-none"
                 style={{
-                  backgroundColor: 'var(--vscode-input-background)',
-                  color: 'var(--vscode-input-foreground)',
-                  border: '1px solid var(--vscode-input-border)'
-                }} />
-              
-						</div>
-					</div>
+                  backgroundColor: '#1a1a1a',
+                  border: '1px solid #27272a',
+                  color: '#fafafa',
+                  colorScheme: 'dark'
+                }}
+                onFocus={(e) => e.currentTarget.style.borderColor = BRAND_GREEN}
+                onBlur={(e) => e.currentTarget.style.borderColor = '#27272a'}
+              />
+            </div>
+          </div>
 
-					{/* Category */}
-					<div>
-						<label
-              className="void-block void-text-sm void-font-medium void-mb-1"
-              style={{ color: 'var(--vscode-foreground)' }}>
-              
-							Category
-						</label>
-						<div className="void-grid void-grid-cols-4 void-gap-2">
-							{categories.map((cat) =>
-              <button
-                key={cat}
-                type="button"
-                onClick={() => setCategory(cat)}
-                className="void-px-2 void-py-1.5 void-rounded void-text-xs void-font-medium void-transition-all"
-                style={{
-                  backgroundColor: category === cat ?
-                  EVENT_CATEGORY_COLORS[cat] :
-                  'var(--vscode-button-secondaryBackground)',
-                  color: category === cat ?
-                  '#ffffff' :
-                  'var(--vscode-button-secondaryForeground)',
-                  border: category === cat ?
-                  `2px solid ${EVENT_CATEGORY_COLORS[cat]}` :
-                  '2px solid transparent'
-                }}>
-                
-									{EVENT_CATEGORY_LABELS[cat]}
-								</button>
-              )}
-						</div>
-					</div>
+          {/* Category */}
+          <div className="grid gap-2">
+            <label className="text-sm font-medium" style={{ color: '#e4e4e7' }}>Category</label>
+            <div className="flex flex-wrap gap-2">
+              {categories.map(cat => {
+                const isSelected = category === cat;
+                const catColor = EVENT_CATEGORY_COLORS[cat];
+                return (
+                  <button
+                    key={cat}
+                    type="button"
+                    onClick={() => setCategory(cat)}
+                    className="px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
+                    style={{
+                      backgroundColor: isSelected ? catColor : '#1a1a1a',
+                      color: isSelected ? '#0a0a0a' : '#a1a1aa',
+                      border: `1px solid ${isSelected ? catColor : '#27272a'}`,
+                      fontWeight: isSelected ? 600 : 500
+                    }}
+                  >
+                    {EVENT_CATEGORY_LABELS[cat]}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
 
-					{/* Description */}
-					<div>
-						<label
-              className="void-block void-text-sm void-font-medium void-mb-1"
-              style={{ color: 'var(--vscode-foreground)' }}>
-              
-							Description
-						</label>
-						<textarea
+          {/* Description */}
+          <div className="grid gap-2">
+            <label className="text-sm font-medium" style={{ color: '#a1a1aa' }}>Description</label>
+            <textarea
               value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="Optional description..."
+              onChange={e => setDescription(e.target.value)}
+              placeholder="Add details about this event..."
               rows={3}
-              className="void-w-full void-px-3 void-py-2 void-rounded void-resize-none"
+              className="w-full rounded-lg px-3 py-2 text-sm transition-all outline-none resize-none"
               style={{
-                backgroundColor: 'var(--vscode-input-background)',
-                color: 'var(--vscode-input-foreground)',
-                border: '1px solid var(--vscode-input-border)'
-              }} />
-            
-					</div>
+                backgroundColor: '#1a1a1a',
+                border: '1px solid #27272a',
+                color: '#fafafa'
+              }}
+              onFocus={(e) => e.currentTarget.style.borderColor = BRAND_GREEN}
+              onBlur={(e) => e.currentTarget.style.borderColor = '#27272a'}
+            />
+          </div>
 
-					{/* Deadline Options */}
-					<div className="void-space-y-3">
-						<label className="void-flex void-items-center void-gap-2 void-cursor-pointer">
-							<input
-                type="checkbox"
-                checked={isDeadline}
-                onChange={(e) => setIsDeadline(e.target.checked)}
-                className="void-rounded" />
-              
-							<span style={{ color: 'var(--vscode-foreground)' }}>
-								This is a deadline
-							</span>
-						</label>
-
-						{isDeadline &&
-            <>
-								<label className="void-flex void-items-center void-gap-2 void-cursor-pointer void-ml-6">
-									<input
-                  type="checkbox"
-                  checked={isComplete}
-                  onChange={(e) => setIsComplete(e.target.checked)}
-                  className="void-rounded" />
-                
-									<span style={{ color: 'var(--vscode-foreground)' }}>
-										Mark as complete
-									</span>
-								</label>
-
-								<div className="void-ml-6">
-									<label
-                  className="void-block void-text-sm void-font-medium void-mb-1"
-                  style={{ color: 'var(--vscode-descriptionForeground)' }}>
-                  
-										Reminder days (comma-separated)
-									</label>
-									<input
-                  type="text"
-                  value={reminderDays}
-                  onChange={(e) => setReminderDays(e.target.value)}
-                  placeholder="7, 3, 1"
-                  className="void-w-full void-px-3 void-py-2 void-rounded void-text-sm"
+          {/* Deadline Toggle */}
+          <div
+            className="rounded-lg p-4"
+            style={{ backgroundColor: '#1a1a1a', border: '1px solid #27272a' }}
+          >
+            <label className="flex items-center gap-3 cursor-pointer">
+              <div
+                className="relative w-10 h-6 rounded-full transition-colors cursor-pointer"
+                style={{ backgroundColor: isDeadline ? BRAND_GREEN : '#27272a' }}
+                onClick={() => setIsDeadline(!isDeadline)}
+              >
+                <div
+                  className="absolute top-1 w-4 h-4 rounded-full transition-transform"
                   style={{
-                    backgroundColor: 'var(--vscode-input-background)',
-                    color: 'var(--vscode-input-foreground)',
-                    border: '1px solid var(--vscode-input-border)'
-                  }} />
-                
-								</div>
-							</>
-            }
-					</div>
+                    backgroundColor: '#fafafa',
+                    transform: isDeadline ? 'translateX(20px)' : 'translateX(4px)'
+                  }}
+                />
+              </div>
+              <div>
+                <span className="text-sm font-medium" style={{ color: '#e4e4e7' }}>
+                  This is a deadline
+                </span>
+                <p className="text-xs" style={{ color: '#71717a' }}>
+                  Get reminders before this date
+                </p>
+              </div>
+            </label>
 
-					{/* Tags */}
-					<div>
-						<label
-              className="void-block void-text-sm void-font-medium void-mb-1"
-              style={{ color: 'var(--vscode-foreground)' }}>
-              
-							Tags (comma-separated)
-						</label>
-						<input
+            {isDeadline && (
+              <div className="mt-4 pt-4 space-y-3" style={{ borderTop: '1px solid #27272a' }}>
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={isComplete}
+                    onChange={e => setIsComplete(e.target.checked)}
+                    className="w-4 h-4 rounded"
+                    style={{ accentColor: BRAND_GREEN }}
+                  />
+                  <span className="text-sm" style={{ color: '#a1a1aa' }}>Mark as complete</span>
+                </label>
+
+                <div className="grid gap-2">
+                  <label className="text-xs font-medium" style={{ color: '#71717a' }}>
+                    Reminder days before deadline
+                  </label>
+                  <input
+                    type="text"
+                    value={reminderDays}
+                    onChange={e => setReminderDays(e.target.value)}
+                    placeholder="7, 3, 1"
+                    className="h-9 w-full rounded-lg px-3 text-sm transition-all outline-none"
+                    style={{
+                      backgroundColor: '#0f0f0f',
+                      border: '1px solid #27272a',
+                      color: '#fafafa'
+                    }}
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Tags */}
+          <div className="grid gap-2">
+            <label className="text-sm font-medium" style={{ color: '#a1a1aa' }}>Tags</label>
+            <input
               type="text"
               value={tagsInput}
-              onChange={(e) => setTagsInput(e.target.value)}
+              onChange={e => setTagsInput(e.target.value)}
               placeholder="important, appeal, urgent"
-              className="void-w-full void-px-3 void-py-2 void-rounded"
+              className="h-10 w-full rounded-lg px-3 text-sm transition-all outline-none"
               style={{
-                backgroundColor: 'var(--vscode-input-background)',
-                color: 'var(--vscode-input-foreground)',
-                border: '1px solid var(--vscode-input-border)'
-              }} />
-            
-					</div>
+                backgroundColor: '#1a1a1a',
+                border: '1px solid #27272a',
+                color: '#fafafa'
+              }}
+              onFocus={(e) => e.currentTarget.style.borderColor = BRAND_GREEN}
+              onBlur={(e) => e.currentTarget.style.borderColor = '#27272a'}
+            />
+            <p className="text-xs" style={{ color: '#52525b' }}>Separate tags with commas</p>
+          </div>
 
-					{/* Actions */}
-					<div className="void-flex void-justify-end void-gap-3 void-pt-2">
-						<button
+          {/* Actions */}
+          <div className="flex justify-end gap-3 pt-2">
+            <button
               type="button"
               onClick={onCancel}
-              className="void-px-4 void-py-2 void-rounded void-font-medium void-transition-colors"
+              className="px-4 py-2 rounded-lg text-sm font-medium transition-colors"
               style={{
-                backgroundColor: 'var(--vscode-button-secondaryBackground)',
-                color: 'var(--vscode-button-secondaryForeground)'
-              }}>
-              
-							Cancel
-						</button>
-						<button
+                backgroundColor: '#1a1a1a',
+                border: '1px solid #27272a',
+                color: '#a1a1aa'
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#27272a'}
+              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#1a1a1a'}
+            >
+              Cancel
+            </button>
+            <button
               type="submit"
-              className="void-px-4 void-py-2 void-rounded void-font-medium void-transition-colors"
+              className="px-5 py-2 rounded-lg text-sm font-semibold transition-all"
               style={{
-                backgroundColor: 'var(--vscode-button-background)',
-                color: 'var(--vscode-button-foreground)'
-              }}>
-              
-							{isEditing ? 'Save Changes' : 'Add Event'}
-						</button>
-					</div>
-				</form>
-			</div>
-		</div>);
-
+                backgroundColor: BRAND_GREEN,
+                color: '#0a0a0a',
+                boxShadow: `0 2px 8px ${BRAND_GREEN}30`
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = BRAND_GREEN_HOVER}
+              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = BRAND_GREEN}
+            >
+              {isEditing ? 'Save Changes' : 'Create Event'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
 };

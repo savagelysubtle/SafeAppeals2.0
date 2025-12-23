@@ -118,7 +118,11 @@ export class TimelineService extends Disposable implements ITimelineService {
 			timeline.updatedAt = new Date().toISOString();
 			const content = JSON.stringify(timeline, null, 2);
 			await this.fileService.writeFile(timelineUri, VSBuffer.fromString(content));
-			this._timeline = timeline;
+			// Create a new object reference so React detects the state change
+			this._timeline = {
+				...timeline,
+				events: [...timeline.events]
+			};
 			console.log('[TimelineService] Timeline saved to:', timelineUri.toString());
 			this._onDidChangeTimeline.fire(this._timeline);
 		} catch (error) {
@@ -143,7 +147,8 @@ export class TimelineService extends Disposable implements ITimelineService {
 				...DEFAULT_CASE_TIMELINE,
 				caseId: workspaceFolder?.path || 'unknown',
 				createdAt: new Date().toISOString(),
-				updatedAt: new Date().toISOString()
+				updatedAt: new Date().toISOString(),
+				events: [] // Initialize empty events array
 			};
 		}
 
@@ -155,8 +160,12 @@ export class TimelineService extends Disposable implements ITimelineService {
 			updatedAt: now
 		};
 
-		this._timeline.events.push(event);
-		await this.saveTimeline(this._timeline);
+		// Create new array instead of mutating (for React state detection)
+		const updatedTimeline: CaseTimeline = {
+			...this._timeline,
+			events: [...this._timeline.events, event]
+		};
+		await this.saveTimeline(updatedTimeline);
 
 		console.log('[TimelineService] Event added:', event.id, event.title);
 		return event;
@@ -172,13 +181,19 @@ export class TimelineService extends Disposable implements ITimelineService {
 			throw new Error(`Event not found: ${id}`);
 		}
 
-		this._timeline.events[index] = {
-			...this._timeline.events[index],
-			...updates,
-			updatedAt: new Date().toISOString()
+		// Create new array with updated event (immutable pattern for React)
+		const updatedEvents = this._timeline.events.map((event, i) =>
+			i === index
+				? { ...event, ...updates, updatedAt: new Date().toISOString() }
+				: event
+		);
+
+		const updatedTimeline: CaseTimeline = {
+			...this._timeline,
+			events: updatedEvents
 		};
 
-		await this.saveTimeline(this._timeline);
+		await this.saveTimeline(updatedTimeline);
 		console.log('[TimelineService] Event updated:', id);
 	}
 
@@ -192,8 +207,13 @@ export class TimelineService extends Disposable implements ITimelineService {
 			throw new Error(`Event not found: ${id}`);
 		}
 
-		this._timeline.events.splice(index, 1);
-		await this.saveTimeline(this._timeline);
+		// Create new array without the deleted event (immutable pattern for React)
+		const updatedTimeline: CaseTimeline = {
+			...this._timeline,
+			events: this._timeline.events.filter(e => e.id !== id)
+		};
+
+		await this.saveTimeline(updatedTimeline);
 		console.log('[TimelineService] Event deleted:', id);
 	}
 
@@ -401,6 +421,26 @@ export class TimelineService extends Disposable implements ITimelineService {
 
 	getJurisdiction(id: string): JurisdictionConfig | undefined {
 		return getJurisdictionById(id);
+	}
+
+	async setJurisdiction(jurisdictionId: string): Promise<void> {
+		if (!this._timeline) {
+			throw new Error('No timeline loaded');
+		}
+
+		const jurisdiction = getJurisdictionById(jurisdictionId);
+		if (!jurisdiction) {
+			throw new Error(`Unknown jurisdiction: ${jurisdictionId}`);
+		}
+
+		const updatedTimeline: CaseTimeline = {
+			...this._timeline,
+			jurisdiction: jurisdictionId,
+			events: [...this._timeline.events]
+		};
+
+		await this.saveTimeline(updatedTimeline);
+		console.log('[TimelineService] Jurisdiction changed to:', jurisdiction.name);
 	}
 }
 

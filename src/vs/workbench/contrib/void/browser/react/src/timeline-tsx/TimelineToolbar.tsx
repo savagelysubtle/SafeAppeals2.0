@@ -8,7 +8,10 @@ import {
   EventCategory,
   EVENT_CATEGORY_LABELS,
   JurisdictionConfig } from
-'../../../../../../workbench/contrib/void/common/timeline/timelineTypes.js';
+'../../../../common/timeline/timelineTypes.js';
+
+// SafeAppeals brand colors
+const BRAND_GREEN = '#22c55e';
 
 interface TimelineToolbarProps {
   onAddEvent: () => void;
@@ -17,6 +20,7 @@ interface TimelineToolbarProps {
   showDeadlinesOnly: boolean;
   onShowDeadlinesChange: (show: boolean) => void;
   jurisdiction?: JurisdictionConfig;
+  onJurisdictionClick: () => void;
   eventCount: number;
 }
 
@@ -27,112 +31,128 @@ export const TimelineToolbar: React.FC<TimelineToolbarProps> = ({
   showDeadlinesOnly,
   onShowDeadlinesChange,
   jurisdiction,
+  onJurisdictionClick,
   eventCount
 }) => {
   const categories: (EventCategory | 'all')[] = [
-  'all',
-  'injury',
-  'medical',
-  'hearing',
-  'decision',
-  'deadline',
-  'filing',
-  'correspondence',
-  'custom'];
-
+    'all',
+    'injury',
+    'medical',
+    'hearing',
+    'decision',
+    'deadline',
+    'filing',
+    'correspondence',
+    'custom'
+  ];
 
   return (
     <div
-      className="void-p-3 void-border-b void-flex void-flex-wrap void-items-center void-gap-3"
+      className="p-3 flex flex-wrap items-center gap-3"
       style={{
-        backgroundColor: 'var(--vscode-sideBar-background)',
-        borderColor: 'var(--vscode-sideBar-border)'
-      }}>
-      
-			{/* Add Event Button */}
-			<button
+        backgroundColor: '#0f0f0f',
+        borderBottom: `1px solid ${BRAND_GREEN}20`
+      }}
+    >
+      {/* Add Event Button - Green accent */}
+      <button
         onClick={onAddEvent}
-        className="void-px-3 void-py-1.5 void-rounded void-font-medium void-flex void-items-center void-gap-1.5 void-transition-colors hover:void-opacity-90"
+        className="px-4 py-2 rounded-lg font-semibold flex items-center gap-2 transition-all"
         style={{
-          backgroundColor: 'var(--vscode-button-background)',
-          color: 'var(--vscode-button-foreground)'
-        }}>
-        
-				<span>➕</span>
-				<span>Add Event</span>
-			</button>
+          backgroundColor: BRAND_GREEN,
+          color: '#0a0a0a',
+          boxShadow: `0 2px 8px ${BRAND_GREEN}30`
+        }}
+        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#16a34a'}
+        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = BRAND_GREEN}
+      >
+        <i className="codicon codicon-add" />
+        <span>Add Event</span>
+      </button>
 
-			{/* Divider */}
-			<div
-        className="void-w-px void-h-6"
-        style={{ backgroundColor: 'var(--vscode-sideBar-border)' }} />
-      
+      {/* Divider */}
+      <div className="w-px h-6" style={{ backgroundColor: '#27272a' }} />
 
-			{/* Category Filter */}
-			<div className="void-flex void-items-center void-gap-2">
-				<label
-          className="void-text-sm"
-          style={{ color: 'var(--vscode-descriptionForeground)' }}>
-          
-					Filter:
-				</label>
-				<select
+      {/* Category Filter */}
+      <div className="flex items-center gap-2">
+        <label className="text-sm" style={{ color: '#71717a' }}>
+          Filter:
+        </label>
+        <select
           value={filterCategory}
           onChange={(e) => onFilterChange(e.target.value as EventCategory | 'all')}
-          className="void-px-2 void-py-1 void-rounded void-text-sm"
+          className="px-3 py-1.5 rounded-lg text-sm outline-none cursor-pointer"
           style={{
-            backgroundColor: 'var(--vscode-dropdown-background)',
-            color: 'var(--vscode-dropdown-foreground)',
-            border: '1px solid var(--vscode-dropdown-border)'
-          }}>
-          
-					{categories.map((cat) =>
-          <option key={cat} value={cat}>
-							{cat === 'all' ? 'All Categories' : EVENT_CATEGORY_LABELS[cat]}
-						</option>
-          )}
-				</select>
-			</div>
+            backgroundColor: '#1a1a1a',
+            color: '#fafafa',
+            border: '1px solid #27272a'
+          }}
+        >
+          {categories.map((cat) => (
+            <option key={cat} value={cat}>
+              {cat === 'all' ? 'All Categories' : EVENT_CATEGORY_LABELS[cat]}
+            </option>
+          ))}
+        </select>
+      </div>
 
-			{/* Deadlines Only Toggle */}
-			<label className="void-flex void-items-center void-gap-2 void-cursor-pointer">
-				<input
-          type="checkbox"
-          checked={showDeadlinesOnly}
-          onChange={(e) => onShowDeadlinesChange(e.target.checked)}
-          className="void-rounded" />
-        
-				<span
-          className="void-text-sm"
-          style={{ color: 'var(--vscode-foreground)' }}>
-          
-					Deadlines only
-				</span>
-			</label>
+      {/* Deadlines Only Toggle */}
+      <label className="flex items-center gap-2 cursor-pointer select-none">
+        <div
+          className="relative w-8 h-5 rounded-full transition-colors cursor-pointer"
+          style={{ backgroundColor: showDeadlinesOnly ? BRAND_GREEN : '#27272a' }}
+          onClick={() => onShowDeadlinesChange(!showDeadlinesOnly)}
+        >
+          <div
+            className="absolute top-0.5 w-4 h-4 rounded-full transition-transform"
+            style={{
+              backgroundColor: '#fafafa',
+              transform: showDeadlinesOnly ? 'translateX(14px)' : 'translateX(2px)'
+            }}
+          />
+        </div>
+        <span className="text-sm" style={{ color: '#a1a1aa' }}>
+          Deadlines only
+        </span>
+      </label>
 
-			{/* Spacer */}
-			<div className="void-flex-1" />
+      {/* Spacer */}
+      <div className="flex-1" />
 
-			{/* Jurisdiction Badge */}
-			{jurisdiction &&
-      <span
-        className="void-text-xs void-px-2 void-py-1 void-rounded"
+      {/* Jurisdiction Selector Button */}
+      <button
+        onClick={onJurisdictionClick}
+        className="text-xs px-3 py-1.5 rounded-lg flex items-center gap-2 transition-all cursor-pointer"
         style={{
-          backgroundColor: 'var(--vscode-badge-background)',
-          color: 'var(--vscode-badge-foreground)'
-        }}>
-        
-					📍 {jurisdiction.name}
-				</span>
-      }
+          backgroundColor: `${BRAND_GREEN}15`,
+          color: BRAND_GREEN,
+          border: `1px solid ${BRAND_GREEN}30`
+        }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.backgroundColor = `${BRAND_GREEN}25`;
+          e.currentTarget.style.borderColor = BRAND_GREEN;
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.backgroundColor = `${BRAND_GREEN}15`;
+          e.currentTarget.style.borderColor = `${BRAND_GREEN}30`;
+        }}
+      >
+        <i className="codicon codicon-law" style={{ fontSize: '12px' }} />
+        <span>{jurisdiction?.name || 'Select Jurisdiction'}</span>
+        <i className="codicon codicon-chevron-down" style={{ fontSize: '12px' }} />
+      </button>
 
-			{/* Event Count */}
-			<span
-        className="void-text-sm"
-        style={{ color: 'var(--vscode-descriptionForeground)' }}>
-        
-				{eventCount} event{eventCount !== 1 ? 's' : ''}
-			</span>
-		</div>);
-
+      {/* Event Count */}
+      <span
+        className="text-sm px-3 py-1 rounded-lg"
+        style={{
+          backgroundColor: '#1a1a1a',
+          color: '#71717a',
+          border: '1px solid #27272a'
+        }}
+      >
+        {eventCount} event{eventCount !== 1 ? 's' : ''}
+      </span>
+    </div>
+  );
 };
