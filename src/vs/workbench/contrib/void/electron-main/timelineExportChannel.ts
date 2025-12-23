@@ -7,7 +7,7 @@ import { BrowserWindow } from 'electron';
 import { IServerChannel } from '../../../../base/parts/ipc/common/ipc.js';
 import { ILogService } from '../../../../platform/log/common/log.js';
 import { Event } from '../../../../base/common/event.js';
-import { CaseTimeline, TimelineEvent, JurisdictionConfig, formatTimelineDate } from '../common/timeline/timelineTypes.js';
+import { CaseTimeline, JurisdictionConfig, formatTimelineDate } from '../common/timeline/timelineTypes.js';
 
 /**
  * Channel identifier for timeline export IPC

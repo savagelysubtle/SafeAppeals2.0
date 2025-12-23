@@ -15,7 +15,10 @@ import { IWorkspaceContextService } from '../../../../../platform/workspace/comm
 import {
 	CaseTimeline,
 	DEFAULT_CASE_TIMELINE,
+	EVENT_CATEGORY_COLORS,
+	EVENT_CATEGORY_LABELS,
 	EventCategory,
+	formatTimelineDate,
 	generateEventId,
 	ITimelineService,
 	isDeadlineOverdue,
