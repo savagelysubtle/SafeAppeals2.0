@@ -11,8 +11,11 @@ import { IWorkspaceContextService } from '../../../../../platform/workspace/comm
 
 import { IFileService } from '../../../../../platform/files/common/files.js';
 import { createDecorator } from '../../../../../platform/instantiation/common/instantiation.js';
-import { FileOrgConfig } from './caseConfig.js';
-import { FileChange, FileMetadata, ProcessResult, Rule } from './types.js';
+import { ILLMMessageService } from '../../common/sendLLMMessageService.js';
+import { IVoidSettingsService } from '../../common/voidSettingsService.js';
+import { AIFileClassifier } from './aiClassifier.js';
+import { CaseInfo, FileOrgConfig } from './caseConfig.js';
+import { DocketItem, FileChange, FileMetadata, ProcessResult, Rule } from './types.js';
 
 export const IFileOrganizerService = createDecorator<IFileOrganizerService>('fileOrganizerService');
 
@@ -58,16 +61,76 @@ export interface IFileOrganizerService {
 	 * Load case info from .caseinfo
 	 */
 	loadCaseInfo(workspaceFolder: URI): Promise<any | null>;
+
+	/**
+	 * Set the inbox folder for the docket
+	 */
+	setInboxFolder(uri: URI): void;
+
+	/**
+	 * Get the current inbox folder
+	 */
+	getInboxFolder(): URI | undefined;
+
+	/**
+	 * Auto-detect and initialize the "To Sort" inbox folder
+	 * Returns the folder path string, or null if not available
+	 */
+	autoDetectInbox(): string | null;
+
+	/**
+	 * Scan the inbox folder for new files
+	 * @param force If true, bypasses the cooldown and forces a fresh scan
+	 */
+	scanInboxFolder(force?: boolean): Promise<DocketItem[]>;
+
+	/**
+	 * Classify a single file with case context using AI
+	 */
+	classifySingleFile(file: DocketItem, caseInfo: CaseInfo | null): Promise<DocketItem>;
+
+	/**
+	 * Move a file to its destination
+	 */
+	moveFileToDestination(file: DocketItem, destinationUri: URI): Promise<ProcessResult>;
+
+	/**
+	 * Update docket item with manual changes
+	 */
+	updateDocketItem(item: DocketItem): Promise<DocketItem>;
+
+	/**
+	 * Move a file to a destination folder path (relative to workspace)
+	 */
+	moveFileToFolder(file: DocketItem, folderPath: string): Promise<ProcessResult>;
+
+	/**
+	 * Open a folder in the OS file explorer
+	 */
+	revealInExplorer(folderPath: string): Promise<void>;
 }
 
 export class FileOrganizerService implements IFileOrganizerService {
 	declare readonly _serviceBrand: undefined;
 
+	private inboxFolderUri: URI | undefined;
+	private aiClassifier: AIFileClassifier;
+	private lastScanTime: number = 0;
+	private readonly SCAN_COOLDOWN_MS = 5000; // 5 seconds between scans
+	private cachedDocketItems: DocketItem[] = [];
+	private cachedCaseInfo: any | null = null;
+	private lastCaseInfoCheck: number = 0;
+	private readonly CASE_INFO_COOLDOWN_MS = 30000; // 30 seconds between case info checks
+
 	constructor(
 		@IFileService private readonly fileService: IFileService,
 		@IFileDialogService private readonly fileDialogService: IFileDialogService,
-		@IWorkspaceContextService private readonly contextService: IWorkspaceContextService
-	) { }
+		@IWorkspaceContextService private readonly contextService: IWorkspaceContextService,
+		@ILLMMessageService llmMessageService: ILLMMessageService,
+		@IVoidSettingsService voidSettingsService: IVoidSettingsService
+	) {
+		this.aiClassifier = new AIFileClassifier(llmMessageService, voidSettingsService);
+	}
 
 	async selectFiles(): Promise<URI[]> {
 		try {
@@ -379,9 +442,47 @@ export class FileOrganizerService implements IFileOrganizerService {
 			const content = JSON.stringify(config, null, 2);
 			await this.fileService.writeFile(configUri, VSBuffer.fromString(content));
 			console.log('[FileOrganizerService] Case config saved to:', configUri.toString());
+
+			// Initialize folders based on config
+			await this.initializeCaseFolders(workspaceFolder, config);
 		} catch (error) {
 			console.error('[FileOrganizerService] Error saving case config:', error);
 			throw error;
+		}
+	}
+
+	async initializeCaseFolders(workspaceFolder: URI, config: FileOrgConfig): Promise<void> {
+		try {
+			// 1. Create "tosort" inbox folder
+			const toSortUri = URI.joinPath(workspaceFolder, 'tosort');
+			if (!(await this.fileService.exists(toSortUri))) {
+				await this.fileService.createFolder(toSortUri);
+			}
+			this.setInboxFolder(toSortUri);
+
+			// 2. Create destination folders based on template
+			// For now, we'll create standard legal folders. In future, read from template rules.
+			const standardFolders = [
+				'Medical/Reports',
+				'Medical/Imaging',
+				'Medical/Bills',
+				'Legal/Correspondence',
+				'Legal/Court Filings',
+				'Legal/Decisions',
+				'Evidence',
+				'Your Side',
+				'Their Side'
+			];
+
+			for (const folder of standardFolders) {
+				const folderUri = URI.joinPath(workspaceFolder, folder);
+				if (!(await this.fileService.exists(folderUri))) {
+					await this.fileService.createFolder(folderUri);
+				}
+			}
+			console.log('[FileOrganizerService] Case folders initialized');
+		} catch (error) {
+			console.error('[FileOrganizerService] Error initializing folders:', error);
 		}
 	}
 
@@ -434,6 +535,13 @@ export class FileOrganizerService implements IFileOrganizerService {
 	}
 
 	async loadCaseInfo(workspaceFolder: URI): Promise<any | null> {
+		// Return cached result if within cooldown
+		const now = Date.now();
+		if (now - this.lastCaseInfoCheck < this.CASE_INFO_COOLDOWN_MS && this.cachedCaseInfo !== undefined) {
+			return this.cachedCaseInfo;
+		}
+		this.lastCaseInfoCheck = now;
+
 		try {
 			// Try to read .caseinfo from workspace root
 			const caseInfoUri = URI.joinPath(workspaceFolder, '.caseinfo');
@@ -441,6 +549,7 @@ export class FileOrganizerService implements IFileOrganizerService {
 
 			if (!exists) {
 				console.log('[FileOrganizerService] .caseinfo not found at:', caseInfoUri.toString());
+				this.cachedCaseInfo = null;
 				return null;
 			}
 
@@ -449,9 +558,11 @@ export class FileOrganizerService implements IFileOrganizerService {
 			console.log('[FileOrganizerService] Loaded .caseinfo:', parsed);
 
 			// Return the caseInfo property if it exists (structure from CaseInfoPane), otherwise return the whole object
-			return parsed.caseInfo || parsed;
+			this.cachedCaseInfo = parsed.caseInfo || parsed;
+			return this.cachedCaseInfo;
 		} catch (error) {
 			console.error('[FileOrganizerService] Error loading .caseinfo:', error);
+			this.cachedCaseInfo = null;
 			return null;
 		}
 	}
@@ -470,6 +581,229 @@ export class FileOrganizerService implements IFileOrganizerService {
 
 		const metadata = JSON.stringify({ tags, timestamp: new Date().toISOString() }, null, 2);
 		await this.fileService.writeFile(metaUri, VSBuffer.fromString(metadata));
+	}
+
+	// ============================================================================
+	// DOCKET FUNCTIONALITY
+	// ============================================================================
+
+	setInboxFolder(uri: URI): void {
+		this.inboxFolderUri = uri;
+		console.log('[FileOrganizerService] Inbox folder set to:', uri.toString());
+	}
+
+	getInboxFolder(): URI | undefined {
+		return this.inboxFolderUri;
+	}
+
+	autoDetectInbox(): string | null {
+		const workspace = this.contextService.getWorkspace();
+		const workspaceFolder = workspace.folders?.[0]?.uri;
+
+		if (!workspaceFolder) {
+			console.warn('[FileOrganizerService] No workspace folder available');
+			return null;
+		}
+
+		// Check for existing inbox folders (try both naming conventions)
+		const toSortUri = URI.joinPath(workspaceFolder, 'tosort');
+		this.inboxFolderUri = toSortUri;
+
+		return toSortUri.fsPath || toSortUri.path;
+	}
+
+	async scanInboxFolder(force: boolean = false): Promise<DocketItem[]> {
+		if (!this.inboxFolderUri) {
+			throw new Error('Inbox folder not set. Please set an inbox folder first.');
+		}
+
+		// Rate limiting - return cached results if within cooldown (unless forced)
+		const now = Date.now();
+		if (!force && now - this.lastScanTime < this.SCAN_COOLDOWN_MS && this.cachedDocketItems.length > 0) {
+			console.log('[FileOrganizerService] Scan skipped (cooldown) - returning cached results');
+			return this.cachedDocketItems;
+		}
+		this.lastScanTime = now;
+
+		try {
+			const stat = await this.fileService.resolve(this.inboxFolderUri);
+
+			if (!stat.isDirectory) {
+				throw new Error('Inbox path is not a directory');
+			}
+
+			const docketItems: DocketItem[] = [];
+
+			if (stat.children) {
+				for (const child of stat.children) {
+					if (!child.isDirectory) {
+						try {
+							const metadata = await this.analyzeFiles([child.resource]);
+							if (metadata.length > 0) {
+								docketItems.push({
+									...metadata[0],
+									docketStatus: 'new',
+									addedAt: new Date().toISOString(),
+								});
+							}
+						} catch (error) {
+							console.error(`Failed to analyze file ${child.resource.toString()}:`, error);
+						}
+					}
+				}
+			}
+
+			// Cache results
+			this.cachedDocketItems = docketItems;
+			console.log(`[FileOrganizerService] Scanned inbox, found ${docketItems.length} files`);
+			return docketItems;
+		} catch (error) {
+			console.error('[FileOrganizerService] Error scanning inbox folder:', error);
+			throw error;
+		}
+	}
+
+	async classifySingleFile(file: DocketItem, caseInfo: CaseInfo | null): Promise<DocketItem> {
+		console.log('[FileOrganizerService] Classifying file with AI:', file.name);
+
+		// Update status to analyzing
+		const analyzingFile: DocketItem = {
+			...file,
+			docketStatus: 'analyzing'
+		};
+
+		try {
+			// Use AI classifier with case context (or default empty context if null)
+			const effectiveCaseInfo: CaseInfo = caseInfo || {
+				caseType: 'Workers Compensation',
+				keywords: {
+					yourSide: [],
+					theirSide: [],
+					medical: [],
+					legal: [],
+					evidence: []
+				}
+			};
+			const result = await this.aiClassifier.classifyFileWithContext(file, effectiveCaseInfo);
+
+			if (!result) {
+				console.warn('[FileOrganizerService] AI classification returned null');
+				return {
+					...analyzingFile,
+					docketStatus: 'error'
+				};
+			}
+
+			// Convert AI result to docket item
+			const classifiedFile: DocketItem = {
+				...analyzingFile,
+				docketStatus: 'ready',
+				aiConfidence: result.confidence,
+				classification: result.side && result.side !== 'Neutral' ? result.side : 'Unknown',
+				classificationMethod: 'ai',
+				entityMatches: result.entityMatches,
+				suggestedTags: result.tags.map(tag => ({
+					id: tag,
+					name: tag,
+					type: 'category' as const
+				})),
+				suggestedFolder: result.suggestedFolder
+			};
+
+			console.log('[FileOrganizerService] Classification complete:', {
+				name: file.name,
+				side: result.side,
+				category: result.category,
+				confidence: result.confidence
+			});
+
+			return classifiedFile;
+		} catch (error) {
+			console.error('[FileOrganizerService] Error classifying file:', error);
+			return {
+				...analyzingFile,
+				docketStatus: 'error'
+			};
+		}
+	}
+
+	async moveFileToDestination(file: DocketItem, destinationUri: URI): Promise<ProcessResult> {
+		try {
+			// Create destination folder if it doesn't exist
+			const destinationDirExists = await this.fileService.exists(destinationUri);
+			if (!destinationDirExists) {
+				console.log(`[FileOrganizerService] Creating destination folder: ${destinationUri.path}`);
+				await this.fileService.createFolder(destinationUri);
+			}
+
+			const targetUri = URI.joinPath(destinationUri, file.name);
+
+			// Check if target already exists
+			const targetExists = await this.fileService.exists(targetUri);
+			const isSameFile = file.uri.toString() === targetUri.toString();
+
+			if (targetExists && !isSameFile) {
+				return {
+					success: false,
+					file: file.uri,
+					error: `Target file already exists: ${file.name}. File was NOT moved to prevent data loss.`
+				};
+			}
+
+			// Move the file
+			await this.fileService.move(file.uri, targetUri, false);
+
+			// Store tags if any
+			if (file.suggestedTags && file.suggestedTags.length > 0) {
+				await this.storeMetadata(targetUri, file.suggestedTags.map(t => t.name));
+			}
+
+			console.log(`[FileOrganizerService] File moved successfully: ${file.name} -> ${destinationUri.path}`);
+
+			return {
+				success: true,
+				file: file.uri
+			};
+		} catch (error) {
+			console.error('[FileOrganizerService] Error moving file:', error);
+			return {
+				success: false,
+				file: file.uri,
+				error: error instanceof Error ? error.message : String(error)
+			};
+		}
+	}
+
+	async updateDocketItem(item: DocketItem): Promise<DocketItem> {
+		// This method allows manual updates to docket items
+		// For now, it just returns the updated item
+		// In the future, this could save state to a database or file
+		console.log('[FileOrganizerService] Docket item updated:', item.name);
+		return item;
+	}
+
+	async moveFileToFolder(file: DocketItem, folderPath: string): Promise<ProcessResult> {
+		const workspace = this.contextService.getWorkspace();
+		const workspaceFolder = workspace.folders?.[0]?.uri;
+
+		if (!workspaceFolder) {
+			return { success: false, error: 'No workspace folder available' };
+		}
+
+		const destUri = URI.joinPath(workspaceFolder, folderPath);
+		return this.moveFileToDestination(file, destUri);
+	}
+
+	async revealInExplorer(folderPath: string): Promise<void> {
+		try {
+			const uri = URI.file(folderPath);
+			// Use the native host service to reveal in OS explorer
+			// For now, we'll just log - the opener service approach is trickier
+			console.log('[FileOrganizerService] Would reveal:', uri.toString());
+			// Alternative: use shell.openPath from electron if available
+		} catch (error) {
+			console.error('[FileOrganizerService] Failed to reveal folder:', error);
+		}
 	}
 }
 

@@ -18,6 +18,12 @@ export interface CaseParty {
 	employerRepresentative?: string[];
 }
 
+export interface Entity {
+	name: string;
+	type: 'lawyer' | 'doctor' | 'adjudicator' | 'employer' | 'claimant' | 'caseManager' | 'reviewOfficer' | 'advocate';
+	side: 'YourSide' | 'TheirSide' | 'Neutral';
+}
+
 export interface WCBInfo {
 	adjudicators?: string[];
 	references?: string[];
@@ -208,5 +214,108 @@ export function classifyFileUsingCaseConfig(filename: string, config: FileOrgCon
 	}
 
 	return result;
+}
+
+/**
+ * Extract all known entities from case info for AI context
+ */
+export function extractEntitiesFromCaseInfo(caseInfo: CaseInfo): Entity[] {
+	const entities: Entity[] = [];
+
+	if (!caseInfo.parties) {
+		return entities;
+	}
+
+	// Claimant
+	if (caseInfo.parties.claimant) {
+		entities.push({
+			name: caseInfo.parties.claimant.name,
+			type: 'claimant',
+			side: 'YourSide'
+		});
+
+		// Claimant's lawyers
+		if (caseInfo.parties.claimant.lawyers) {
+			entities.push(...caseInfo.parties.claimant.lawyers.map(name => ({
+				name,
+				type: 'lawyer' as const,
+				side: 'YourSide' as const
+			})));
+		}
+
+		// Treating physicians
+		if (caseInfo.parties.claimant.doctors) {
+			entities.push(...caseInfo.parties.claimant.doctors.map(name => ({
+				name,
+				type: 'doctor' as const,
+				side: 'YourSide' as const
+			})));
+		}
+
+		// Advocates
+		if (caseInfo.parties.claimant.advocate) {
+			entities.push(...caseInfo.parties.claimant.advocate.map(name => ({
+				name,
+				type: 'advocate' as const,
+				side: 'YourSide' as const
+			})));
+		}
+	}
+
+	// Employer/Defendant
+	if (caseInfo.parties.employer) {
+		entities.push({
+			name: caseInfo.parties.employer.name,
+			type: 'employer',
+			side: 'TheirSide'
+		});
+
+		// Defense lawyers
+		if (caseInfo.parties.employer.lawyers) {
+			entities.push(...caseInfo.parties.employer.lawyers.map(name => ({
+				name,
+				type: 'lawyer' as const,
+				side: 'TheirSide' as const
+			})));
+		}
+
+		// IME doctors
+		if (caseInfo.parties.employer.doctors) {
+			entities.push(...caseInfo.parties.employer.doctors.map(name => ({
+				name,
+				type: 'doctor' as const,
+				side: 'TheirSide' as const
+			})));
+		}
+
+		// Case managers
+		if (caseInfo.parties.employer.caseManager) {
+			entities.push(...caseInfo.parties.employer.caseManager.map(name => ({
+				name,
+				type: 'caseManager' as const,
+				side: 'TheirSide' as const
+			})));
+		}
+
+		// Review officers
+		if (caseInfo.parties.employer.reviewOfficer) {
+			entities.push(...caseInfo.parties.employer.reviewOfficer.map(name => ({
+				name,
+				type: 'reviewOfficer' as const,
+				side: 'TheirSide' as const
+			})));
+		}
+	}
+
+	// WCB/Board adjudicators
+	if (caseInfo.parties.wcb?.adjudicators) {
+		entities.push(...caseInfo.parties.wcb.adjudicators.map(name => ({
+			name,
+			type: 'adjudicator' as const,
+			side: 'Neutral' as const
+		})));
+	}
+
+	return entities;
 }
 

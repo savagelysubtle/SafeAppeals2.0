@@ -9,10 +9,23 @@ import { ClassificationReview } from "./ClassificationReview.js";
 import { ReviewChanges } from "./ReviewChanges.js";
 import { RuleBuilder } from "./RuleBuilder.js";
 import { TemplateSelector } from "./TemplateSelector.js";
+import { DocketDashboard } from "./DocketDashboard.js";
 
 export const FileOrganizerDashboard: React.FC = () => {
+	// Feature Flag for Docket View
+	const [viewMode, setViewMode] = useState<'wizard' | 'docket'>('docket');
+
+	if (viewMode === 'docket') {
+		return (
+			<div className="void-scope" style={{ height: '100%', width: '100%' }}>
+				<DocketDashboard />
+			</div>
+		);
+	}
+
+	// ... Existing Wizard Code ...
 	const accessor = useAccessor();
-	const [currentStep, setCurrentStep] = useState(0);
+    const [currentStep, setCurrentStep] = useState(0);
 	const [selectedFiles, setSelectedFiles] = useState<any[]>([]);
 	const [selectedTemplate, setSelectedTemplate] = useState<any | null>(null);
 	const [customRules, setCustomRules] = useState<any[]>([]);
