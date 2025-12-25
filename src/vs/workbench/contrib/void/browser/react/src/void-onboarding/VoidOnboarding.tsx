@@ -6,6 +6,7 @@
 import { Check, ChevronRight, Cloud, ExternalLink, LogIn, RefreshCw, User } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { isLinux } from "../../../../../../../base/common/platform.js";
+import { FileAccess } from "../../../../../../../base/common/network.js";
 import { ColorScheme } from "../../../../../../../platform/theme/common/theme.js";
 import {
 	displayInfoOfProviderName,
@@ -65,7 +66,17 @@ const VoidIcon = () => {
 	const accessor = useAccessor();
 	const themeService = accessor.get("IThemeService");
 
-	const divRef = useRef<HTMLDivElement | null>(null);
+	const imgRef = useRef<HTMLImageElement | null>(null);
+
+	// Get the image URI using FileAccess.asBrowserUri - this resolves to a browser-accessible URI
+	const imageUri = useMemo(() => {
+		try {
+			return FileAccess.asBrowserUri('vs/workbench/browser/media/slice_of_void.png').toString(true);
+		} catch (e) {
+			console.error('[VoidIcon] Failed to get image URI:', e);
+			return '';
+		}
+	}, []);
 
 	useEffect(() => {
 		// void icon style
@@ -73,10 +84,10 @@ const VoidIcon = () => {
 			const theme = themeService.getColorTheme().type;
 			const isDark =
 				theme === ColorScheme.DARK || theme === ColorScheme.HIGH_CONTRAST_DARK;
-			if (divRef.current) {
-				divRef.current.style.maxWidth = "220px";
-				divRef.current.style.opacity = "50%";
-				divRef.current.style.filter = isDark ? "" : "invert(1)"; //brightness(.5)
+			if (imgRef.current) {
+				imgRef.current.style.maxWidth = "220px";
+				imgRef.current.style.opacity = "50%";
+				imgRef.current.style.filter = isDark ? "" : "invert(1)"; //brightness(.5)
 			}
 		};
 		updateTheme();
@@ -84,7 +95,22 @@ const VoidIcon = () => {
 		return () => d.dispose();
 	}, []);
 
-	return <div ref={divRef} className="@@void-void-icon" />;
+	if (!imageUri) {
+		return null;
+	}
+
+	return (
+		<img
+			ref={imgRef}
+			src={imageUri}
+			alt="Safe Appeals Logo"
+			style={{
+				width: '100%',
+				height: '100%',
+				objectFit: 'contain',
+			}}
+		/>
+	);
 };
 
 const FADE_DURATION_MS = 2000;

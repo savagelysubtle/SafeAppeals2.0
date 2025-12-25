@@ -115,7 +115,7 @@ export const EventEditor: React.FC<EventEditorProps> = ({
       onClick={onCancel}
     >
       {/* Modal Card - solid black with green accents */}
-      <div
+			<div
         className="w-full max-w-lg rounded-xl shadow-2xl transition-all duration-200"
         style={{
           backgroundColor: '#0f0f0f',
@@ -125,7 +125,7 @@ export const EventEditor: React.FC<EventEditorProps> = ({
         onClick={e => e.stopPropagation()}
       >
         {/* Header with green accent */}
-        <div
+				<div
           className="flex items-center justify-between px-6 py-4 rounded-t-xl"
           style={{ borderBottom: `1px solid ${BRAND_GREEN}20` }}
         >
@@ -139,7 +139,7 @@ export const EventEditor: React.FC<EventEditorProps> = ({
             <div>
               <h2 className="text-lg font-semibold" style={{ color: '#fafafa' }}>
                 {isFirstEvent ? 'Add Your First Event' : isEditing ? 'Edit Event' : 'New Event'}
-              </h2>
+					</h2>
               {isFirstEvent && (
                 <p className="text-xs" style={{ color: '#71717a' }}>
                   Start with your injury date or initial incident
@@ -147,7 +147,7 @@ export const EventEditor: React.FC<EventEditorProps> = ({
               )}
             </div>
           </div>
-          <button
+					<button
             onClick={onCancel}
             className="w-8 h-8 rounded-lg flex items-center justify-center transition-colors"
             style={{ color: '#71717a' }}
@@ -155,17 +155,17 @@ export const EventEditor: React.FC<EventEditorProps> = ({
             onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
           >
             <i className="codicon codicon-close" />
-          </button>
-        </div>
+					</button>
+				</div>
 
-        {/* Form */}
+				{/* Form */}
         <form onSubmit={handleSubmit} className="p-6 space-y-5">
-          {/* Title */}
+					{/* Title */}
           <div className="grid gap-2">
             <label className="text-sm font-medium" style={{ color: '#e4e4e7' }}>
               Title <span style={{ color: BRAND_GREEN }}>*</span>
-            </label>
-            <input
+						</label>
+						<input
               type="text"
               value={title}
               onChange={e => setTitle(e.target.value)}
@@ -181,15 +181,15 @@ export const EventEditor: React.FC<EventEditorProps> = ({
               onFocus={(e) => e.currentTarget.style.borderColor = BRAND_GREEN}
               onBlur={(e) => e.currentTarget.style.borderColor = '#27272a'}
             />
-          </div>
+					</div>
 
           {/* Dates */}
           <div className="grid grid-cols-2 gap-4">
             <div className="grid gap-2">
               <label className="text-sm font-medium" style={{ color: '#e4e4e7' }}>
                 Date <span style={{ color: BRAND_GREEN }}>*</span>
-              </label>
-              <input
+							</label>
+							<input
                 type="date"
                 value={date}
                 onChange={e => setDate(e.target.value)}
@@ -204,12 +204,12 @@ export const EventEditor: React.FC<EventEditorProps> = ({
                 onFocus={(e) => e.currentTarget.style.borderColor = BRAND_GREEN}
                 onBlur={(e) => e.currentTarget.style.borderColor = '#27272a'}
               />
-            </div>
+						</div>
             <div className="grid gap-2">
               <label className="text-sm font-medium" style={{ color: '#a1a1aa' }}>
                 End Date <span style={{ color: '#52525b' }}>(optional)</span>
-              </label>
-              <input
+							</label>
+							<input
                 type="date"
                 value={endDate}
                 onChange={e => setEndDate(e.target.value)}
@@ -223,10 +223,10 @@ export const EventEditor: React.FC<EventEditorProps> = ({
                 onFocus={(e) => e.currentTarget.style.borderColor = BRAND_GREEN}
                 onBlur={(e) => e.currentTarget.style.borderColor = '#27272a'}
               />
-            </div>
-          </div>
+						</div>
+					</div>
 
-          {/* Category */}
+					{/* Category */}
           <div className="grid gap-2">
             <label className="text-sm font-medium" style={{ color: '#e4e4e7' }}>Category</label>
             <div className="flex flex-wrap gap-2">
@@ -234,29 +234,29 @@ export const EventEditor: React.FC<EventEditorProps> = ({
                 const isSelected = category === cat;
                 const catColor = EVENT_CATEGORY_COLORS[cat];
                 return (
-                  <button
-                    key={cat}
-                    type="button"
-                    onClick={() => setCategory(cat)}
+              <button
+                key={cat}
+                type="button"
+                onClick={() => setCategory(cat)}
                     className="px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
-                    style={{
+                style={{
                       backgroundColor: isSelected ? catColor : '#1a1a1a',
                       color: isSelected ? '#0a0a0a' : '#a1a1aa',
                       border: `1px solid ${isSelected ? catColor : '#27272a'}`,
                       fontWeight: isSelected ? 600 : 500
                     }}
                   >
-                    {EVENT_CATEGORY_LABELS[cat]}
-                  </button>
+									{EVENT_CATEGORY_LABELS[cat]}
+								</button>
                 );
               })}
-            </div>
-          </div>
+						</div>
+					</div>
 
-          {/* Description */}
+					{/* Description */}
           <div className="grid gap-2">
             <label className="text-sm font-medium" style={{ color: '#a1a1aa' }}>Description</label>
-            <textarea
+						<textarea
               value={description}
               onChange={e => setDescription(e.target.value)}
               placeholder="Add details about this event..."
@@ -270,7 +270,7 @@ export const EventEditor: React.FC<EventEditorProps> = ({
               onFocus={(e) => e.currentTarget.style.borderColor = BRAND_GREEN}
               onBlur={(e) => e.currentTarget.style.borderColor = '#27272a'}
             />
-          </div>
+					</div>
 
           {/* Deadline Toggle */}
           <div
@@ -293,52 +293,52 @@ export const EventEditor: React.FC<EventEditorProps> = ({
               </div>
               <div>
                 <span className="text-sm font-medium" style={{ color: '#e4e4e7' }}>
-                  This is a deadline
-                </span>
+								This is a deadline
+							</span>
                 <p className="text-xs" style={{ color: '#71717a' }}>
                   Get reminders before this date
                 </p>
               </div>
-            </label>
+						</label>
 
             {isDeadline && (
               <div className="mt-4 pt-4 space-y-3" style={{ borderTop: '1px solid #27272a' }}>
                 <label className="flex items-center gap-3 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={isComplete}
+									<input
+                  type="checkbox"
+                  checked={isComplete}
                     onChange={e => setIsComplete(e.target.checked)}
                     className="w-4 h-4 rounded"
                     style={{ accentColor: BRAND_GREEN }}
                   />
                   <span className="text-sm" style={{ color: '#a1a1aa' }}>Mark as complete</span>
-                </label>
+								</label>
 
                 <div className="grid gap-2">
                   <label className="text-xs font-medium" style={{ color: '#71717a' }}>
                     Reminder days before deadline
-                  </label>
-                  <input
-                    type="text"
-                    value={reminderDays}
+									</label>
+									<input
+                  type="text"
+                  value={reminderDays}
                     onChange={e => setReminderDays(e.target.value)}
-                    placeholder="7, 3, 1"
+                  placeholder="7, 3, 1"
                     className="h-9 w-full rounded-lg px-3 text-sm transition-all outline-none"
-                    style={{
+                  style={{
                       backgroundColor: '#0f0f0f',
                       border: '1px solid #27272a',
                       color: '#fafafa'
                     }}
                   />
                 </div>
-              </div>
+								</div>
             )}
-          </div>
+					</div>
 
-          {/* Tags */}
+					{/* Tags */}
           <div className="grid gap-2">
             <label className="text-sm font-medium" style={{ color: '#a1a1aa' }}>Tags</label>
-            <input
+						<input
               type="text"
               value={tagsInput}
               onChange={e => setTagsInput(e.target.value)}
@@ -442,11 +442,11 @@ export const EventEditor: React.FC<EventEditorProps> = ({
                 Link related documents like medical records, decisions, or correspondence
               </p>
             )}
-          </div>
+					</div>
 
-          {/* Actions */}
+					{/* Actions */}
           <div className="flex justify-end gap-3 pt-2">
-            <button
+						<button
               type="button"
               onClick={onCancel}
               className="px-4 py-2 rounded-lg text-sm font-medium transition-colors"
@@ -458,9 +458,9 @@ export const EventEditor: React.FC<EventEditorProps> = ({
               onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#27272a'}
               onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#1a1a1a'}
             >
-              Cancel
-            </button>
-            <button
+							Cancel
+						</button>
+						<button
               type="submit"
               className="px-5 py-2 rounded-lg text-sm font-semibold transition-all"
               style={{
@@ -472,10 +472,10 @@ export const EventEditor: React.FC<EventEditorProps> = ({
               onMouseLeave={(e) => e.currentTarget.style.backgroundColor = BRAND_GREEN}
             >
               {isEditing ? 'Save Changes' : 'Create Event'}
-            </button>
-          </div>
-        </form>
-      </div>
+						</button>
+					</div>
+				</form>
+			</div>
 
       {/* Document Picker Modal */}
       {showDocumentPicker && (

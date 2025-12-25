@@ -84,6 +84,69 @@ export interface JurisdictionConfig {
 }
 
 // ============================================================================
+// Notifications
+// ============================================================================
+
+export type NotificationType =
+	| 'deadline_upcoming'      // Deadline approaching (7, 3, 1 day)
+	| 'deadline_overdue'       // Deadline passed
+	| 'document_expiring'      // Medical report older than X months
+	| 'document_missing'       // Event without linked documents
+	| 'follow_up'              // Follow-up reminder
+	| 'statute_warning';       // Statute of limitations approaching
+
+export const NOTIFICATION_TYPE_LABELS: Record<NotificationType, string> = {
+	deadline_upcoming: 'Upcoming Deadline',
+	deadline_overdue: 'Overdue Deadline',
+	document_expiring: 'Expiring Document',
+	document_missing: 'Missing Document',
+	follow_up: 'Follow-up Reminder',
+	statute_warning: 'Statute Warning'
+};
+
+export const NOTIFICATION_TYPE_ICONS: Record<NotificationType, string> = {
+	deadline_upcoming: 'clock',
+	deadline_overdue: 'warning',
+	document_expiring: 'file',
+	document_missing: 'file-add',
+	follow_up: 'bell',
+	statute_warning: 'law'
+};
+
+export interface TimelineNotification {
+	id: string;
+	type: NotificationType;
+	title: string;
+	message: string;
+	eventId?: string;                // Related timeline event (if any)
+	severity: 'info' | 'warning' | 'error';
+	isRead: boolean;
+	isDismissed: boolean;
+	snoozedUntil?: string;           // ISO 8601 - snooze until this date
+	createdAt: string;
+}
+
+export interface NotificationPreferences {
+	enabled: boolean;
+	deadlineAlerts: boolean;
+	deadlineReminderDays: number[];  // e.g., [7, 3, 1]
+	documentExpirationMonths: number; // Alert when medical docs older than X months
+	documentMissingAlerts: boolean;  // Alert for events without docs
+	followUpReminders: boolean;
+	statuteWarningDays: number;      // Warn X days before statute expires
+}
+
+export const DEFAULT_NOTIFICATION_PREFERENCES: NotificationPreferences = {
+	enabled: true,
+	deadlineAlerts: true,
+	deadlineReminderDays: [7, 3, 1],
+	documentExpirationMonths: 6,
+	documentMissingAlerts: true,
+	followUpReminders: true,
+	statuteWarningDays: 30
+};
+
+// ============================================================================
 // Case Timeline (File Storage Format)
 // ============================================================================
 
@@ -96,6 +159,8 @@ export interface CaseTimeline {
 	events: TimelineEvent[];
 	customStatuteDays?: number;      // Override jurisdiction default per case
 	notificationsEnabled: boolean;
+	notificationPreferences?: NotificationPreferences;
+	notifications?: TimelineNotification[];  // Notification history
 	createdAt: string;
 	updatedAt: string;
 }
@@ -202,6 +267,51 @@ export interface ITimelineService {
 	 */
 	scheduleDeadlineNotifications(): void;
 
+	/**
+	 * Generate all notifications based on current timeline state
+	 */
+	generateNotifications(): TimelineNotification[];
+
+	/**
+	 * Get all notifications (unread first, then by date)
+	 */
+	getNotifications(): TimelineNotification[];
+
+	/**
+	 * Get unread notification count
+	 */
+	getUnreadCount(): number;
+
+	/**
+	 * Mark a notification as read
+	 */
+	markAsRead(notificationId: string): Promise<void>;
+
+	/**
+	 * Mark all notifications as read
+	 */
+	markAllAsRead(): Promise<void>;
+
+	/**
+	 * Dismiss a notification
+	 */
+	dismissNotification(notificationId: string): Promise<void>;
+
+	/**
+	 * Snooze a notification for X days
+	 */
+	snoozeNotification(notificationId: string, days: number): Promise<void>;
+
+	/**
+	 * Update notification preferences
+	 */
+	updateNotificationPreferences(prefs: Partial<NotificationPreferences>): Promise<void>;
+
+	/**
+	 * Get notification preferences
+	 */
+	getNotificationPreferences(): NotificationPreferences;
+
 	// ---- Export ----
 
 	/**
@@ -249,6 +359,11 @@ export interface ITimelineService {
 	 * Fired when the timeline changes
 	 */
 	readonly onDidChangeTimeline: Event<CaseTimeline | null>;
+
+	/**
+	 * Fired when notifications change
+	 */
+	readonly onDidChangeNotifications: Event<TimelineNotification[]>;
 }
 
 export const ITimelineService = createDecorator<ITimelineService>('timelineService');

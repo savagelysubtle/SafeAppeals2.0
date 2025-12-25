@@ -205,6 +205,18 @@ export const getToolSchemaDescription = (toolName: string): string => {
 			return 'Search indexed policy manuals for rules, eligibility, procedures. Returns relevant sections with citations.';
 		case 'rag_search_workspace':
 			return 'Search indexed case documents (medical reports, decisions, correspondence) for case-specific information.';
+		case 'timeline_add_event':
+			return 'Add a new event to the case timeline with date, title, category, and optional document links.';
+		case 'timeline_update_event':
+			return 'Update an existing timeline event. Use timeline_get_events first to find event IDs.';
+		case 'timeline_delete_event':
+			return 'Delete an event from the timeline by event ID.';
+		case 'timeline_get_events':
+			return 'Query timeline events with optional filters (category, date range, deadline status).';
+		case 'timeline_link_document':
+			return 'Link a document to an existing timeline event for traceability.';
+		case 'timeline_get_deadlines':
+			return 'Get upcoming and overdue deadlines from the timeline.';
 		default:
 			return '';
 	}

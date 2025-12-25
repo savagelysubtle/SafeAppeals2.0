@@ -3,13 +3,18 @@
  *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
  *--------------------------------------------------------------------------------------*/
 
-import { WebSearchResult, MultiSearchResult } from '../../common/tools/toolsServiceTypes.js';
+import { MultiSearchResult, WebSearchResult } from '../../common/tools/toolsServiceTypes.js';
 
 // Cloud Web Search configuration
 const CLOUD_WEB_SEARCH_TIMEOUT_MS = 30000; // 30 second timeout
 
-// Credit costs for web search (in credits)
-const WEB_SEARCH_CREDIT_COST = 5; // 5 credits per web search request
+// Credit costs for web search (in tokens/credits)
+// Token pack pricing: $30 = 700K tokens, $60 = 1.4M tokens
+// Therefore: 1 token = $0.0000428
+// To charge ~1 penny ($0.01) per search: $0.01 / $0.0000428 = 233 tokens
+// We round to 250 tokens for clean math + margin
+// Your cost: $0.009 (Brave Pro), User pays: ~$0.0107, Profit: ~19%
+const WEB_SEARCH_CREDIT_COST = 250; // 250 tokens per web search (~1 penny)
 
 /**
  * Cloud Web Search API response types

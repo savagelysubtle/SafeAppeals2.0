@@ -18,7 +18,7 @@ import { InstantiationType, registerSingleton } from '../../../../platform/insta
 import { createDecorator } from '../../../../platform/instantiation/common/instantiation.js';
 import { availableTools } from '../common/prompt/prompts.js';
 import { ILLMMessageService } from '../common/sendLLMMessageService.js';
-import { ServiceSendLLMMessageParams, OnFinalMessage, OnText, RawToolCallObj, RawToolParamsObj, SingleToolCall } from '../common/sendLLMMessageTypes.js';
+import { OnFinalMessage, OnText, RawToolCallObj, RawToolParamsObj, ServiceSendLLMMessageParams, SingleToolCall } from '../common/sendLLMMessageTypes.js';
 import { ToolName, ToolParamName } from '../common/tools/toolsServiceTypes.js';
 import { IVoidSettingsService } from '../common/voidSettingsService.js';
 import { ChatMode, ProviderName } from '../common/voidSettingsTypes.js';
@@ -335,9 +335,12 @@ class CloudLLMRouterService extends Disposable implements ICloudLLMRouterService
 		const { wrappedOnText, wrappedOnFinalMessage } = wrapWithXMLParsing(onText, onFinalMessage, chatMode ?? null);
 
 		// Send via cloud service
+		// Temperature 0.5: Balance between creativity (1.0) and determinism (0.0)
+		// Lower temperature encourages tool use adherence per Anthropic best practices
 		this.cloudService.sendCloudRequest({
 			model: cloudModel,
 			messages: cloudMessages,
+			temperature: 0.5,
 			stream: false, // TODO: Implement streaming
 			onText: wrappedOnText ? (text) => wrappedOnText({ fullText: text, fullReasoning: '' }) : undefined,
 		}).then((response) => {

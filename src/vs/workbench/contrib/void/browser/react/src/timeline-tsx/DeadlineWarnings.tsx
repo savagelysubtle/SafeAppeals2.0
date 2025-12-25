@@ -27,11 +27,11 @@ export const DeadlineWarnings: React.FC<DeadlineWarningsProps> = ({
 
   return (
     <div className="p-3 space-y-2" style={{ backgroundColor: '#0a0a0a' }}>
-      {/* Overdue Deadlines */}
+			{/* Overdue Deadlines */}
       {overdueDeadlines.length > 0 && (
-        <div
+      <div
           className="rounded-xl p-4"
-          style={{
+        style={{
             backgroundColor: '#1a0a0a',
             border: '1px solid #ef444430'
           }}
@@ -44,16 +44,16 @@ export const DeadlineWarnings: React.FC<DeadlineWarningsProps> = ({
               <i className="codicon codicon-warning" style={{ color: '#ef4444', fontSize: '16px' }} />
             </div>
             <span className="font-semibold" style={{ color: '#ef4444' }}>
-              {overdueDeadlines.length} Overdue Deadline{overdueDeadlines.length !== 1 ? 's' : ''}
-            </span>
-          </div>
+							{overdueDeadlines.length} Overdue Deadline{overdueDeadlines.length !== 1 ? 's' : ''}
+						</span>
+					</div>
           <div className="space-y-1">
-            {overdueDeadlines.slice(0, 3).map((deadline) => {
-              const daysOverdue = daysBetween(new Date(deadline.date), new Date());
-              return (
-                <button
-                  key={deadline.id}
-                  onClick={() => onClickEvent(deadline)}
+						{overdueDeadlines.slice(0, 3).map((deadline) => {
+            const daysOverdue = daysBetween(new Date(deadline.date), new Date());
+            return (
+              <button
+                key={deadline.id}
+                onClick={() => onClickEvent(deadline)}
                   className="w-full text-left px-3 py-2 rounded-lg transition-colors"
                   style={{ backgroundColor: 'transparent' }}
                   onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#27272a'}
@@ -61,29 +61,29 @@ export const DeadlineWarnings: React.FC<DeadlineWarningsProps> = ({
                 >
                   <div className="flex items-center justify-between">
                     <span style={{ color: '#fafafa' }}>
-                      {deadline.title}
-                    </span>
+											{deadline.title}
+										</span>
                     <span className="text-xs font-medium" style={{ color: '#ef4444' }}>
-                      {daysOverdue} day{daysOverdue !== 1 ? 's' : ''} overdue
-                    </span>
-                  </div>
+											{daysOverdue} day{daysOverdue !== 1 ? 's' : ''} overdue
+										</span>
+									</div>
                 </button>
               );
-            })}
+          })}
             {overdueDeadlines.length > 3 && (
               <p className="text-xs pl-3 pt-1" style={{ color: '#71717a' }}>
-                +{overdueDeadlines.length - 3} more overdue
-              </p>
+								+{overdueDeadlines.length - 3} more overdue
+							</p>
             )}
-          </div>
-        </div>
+					</div>
+				</div>
       )}
 
-      {/* Upcoming Deadlines */}
+			{/* Upcoming Deadlines */}
       {upcomingDeadlines.length > 0 && (
-        <div
+      <div
           className="rounded-xl p-4"
-          style={{
+        style={{
             backgroundColor: '#1a1505',
             border: '1px solid #f59e0b30'
           }}
@@ -96,21 +96,21 @@ export const DeadlineWarnings: React.FC<DeadlineWarningsProps> = ({
               <i className="codicon codicon-clock" style={{ color: '#f59e0b', fontSize: '16px' }} />
             </div>
             <span className="font-semibold" style={{ color: '#f59e0b' }}>
-              {upcomingDeadlines.length} Upcoming Deadline{upcomingDeadlines.length !== 1 ? 's' : ''}
-            </span>
-          </div>
+							{upcomingDeadlines.length} Upcoming Deadline{upcomingDeadlines.length !== 1 ? 's' : ''}
+						</span>
+					</div>
           <div className="space-y-1">
-            {upcomingDeadlines.slice(0, 3).map((deadline) => {
-              const daysUntil = daysBetween(new Date(), new Date(deadline.date));
+						{upcomingDeadlines.slice(0, 3).map((deadline) => {
+            const daysUntil = daysBetween(new Date(), new Date(deadline.date));
               const getUrgencyColor = () => {
                 if (daysUntil <= 1) return '#ef4444';
                 if (daysUntil <= 3) return '#f59e0b';
                 return '#71717a';
               };
-              return (
-                <button
-                  key={deadline.id}
-                  onClick={() => onClickEvent(deadline)}
+            return (
+              <button
+                key={deadline.id}
+                onClick={() => onClickEvent(deadline)}
                   className="w-full text-left px-3 py-2 rounded-lg transition-colors"
                   style={{ backgroundColor: 'transparent' }}
                   onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#27272a'}
@@ -118,24 +118,24 @@ export const DeadlineWarnings: React.FC<DeadlineWarningsProps> = ({
                 >
                   <div className="flex items-center justify-between">
                     <span style={{ color: '#fafafa' }}>
-                      {deadline.title}
-                    </span>
+											{deadline.title}
+										</span>
                     <span className="text-xs font-medium" style={{ color: getUrgencyColor() }}>
                       {daysUntil === 0 ? 'Due today!' :
                        daysUntil === 1 ? 'Due tomorrow' :
-                       `${daysUntil} days left`}
-                    </span>
-                  </div>
+                    `${daysUntil} days left`}
+										</span>
+									</div>
                 </button>
               );
-            })}
+          })}
             {upcomingDeadlines.length > 3 && (
               <p className="text-xs pl-3 pt-1" style={{ color: '#71717a' }}>
-                +{upcomingDeadlines.length - 3} more upcoming
-              </p>
+								+{upcomingDeadlines.length - 3} more upcoming
+							</p>
             )}
-          </div>
-        </div>
+					</div>
+				</div>
       )}
     </div>
   );

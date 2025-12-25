@@ -16,6 +16,11 @@ import { ServicesAccessor } from '../../../../../editor/browser/editorExtensions
 import { IViewsService } from '../../../../services/views/common/viewsService.js';
 import { KeyMod, KeyCode } from '../../../../../base/common/keyCodes.js';
 import { KeybindingWeight } from '../../../../../platform/keybinding/common/keybindingsRegistry.js';
+import { IQuickInputService, IQuickPickItem } from '../../../../../platform/quickinput/common/quickInput.js';
+import { INotificationService } from '../../../../../platform/notification/common/notification.js';
+import { ITimelineService, formatTimelineDate, EVENT_CATEGORY_LABELS } from '../../common/timeline/timelineTypes.js';
+import { URI } from '../../../../../base/common/uri.js';
+import { IExplorerService } from '../../../../contrib/files/browser/files.js';
 
 // Import to trigger service registration
 import './timelineService.js';
@@ -147,10 +152,64 @@ class LinkDocumentToTimelineAction extends Action2 {
 		});
 	}
 
-	async run(accessor: ServicesAccessor): Promise<void> {
-		// TODO: Show picker to select which event to link the document to
-		const viewsService = accessor.get(IViewsService);
-		await viewsService.openView(TIMELINE_VIEW_ID, true);
+	async run(accessor: ServicesAccessor, resource?: URI): Promise<void> {
+		const quickInputService = accessor.get(IQuickInputService);
+		const notificationService = accessor.get(INotificationService);
+		const timelineService = accessor.get(ITimelineService);
+		const explorerService = accessor.get(IExplorerService);
+
+		// Get selected file(s) from explorer
+		let selectedUri: URI | undefined = resource;
+
+		if (!selectedUri) {
+			// Try to get from explorer selection
+			const selection = explorerService.getContext(true);
+			if (selection.length > 0) {
+				selectedUri = selection[0].resource;
+			}
+		}
+
+		if (!selectedUri) {
+			notificationService.warn('No file selected. Please right-click on a file in the explorer.');
+			return;
+		}
+
+		// Load timeline to get events
+		const timeline = await timelineService.loadTimeline();
+		if (!timeline || timeline.events.length === 0) {
+			notificationService.info('No timeline events found. Create a timeline first.');
+			const viewsService = accessor.get(IViewsService);
+			await viewsService.openView(TIMELINE_VIEW_ID, true);
+			return;
+		}
+
+		// Create quick pick items from events
+		const items: IQuickPickItem[] = timeline.events
+			.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()) // Most recent first
+			.map(event => ({
+				id: event.id,
+				label: event.title,
+				description: `${formatTimelineDate(event.date)} • ${EVENT_CATEGORY_LABELS[event.category]}`,
+				detail: event.description?.substring(0, 100) || undefined
+			}));
+
+		// Show quick pick
+		const selected = await quickInputService.pick(items, {
+			placeHolder: 'Select an event to link this document to...',
+			title: `Link: ${selectedUri.path.split('/').pop()}`
+		});
+
+		if (!selected || !selected.id) {
+			return; // User cancelled
+		}
+
+		// Link the document
+		try {
+			await timelineService.linkDocument(selected.id, selectedUri);
+			notificationService.info(`Document linked to "${selected.label}"`);
+		} catch (error) {
+			notificationService.error(`Failed to link document: ${error}`);
+		}
 	}
 }
 

@@ -2,6 +2,7 @@ import { URI } from '../../../../../base/common/uri.js';
 import { RawMCPToolCall } from '../mcpServiceTypes.js';
 import { builtinTools } from '../prompt/prompts.js';
 import { RawToolParamsObj } from '../sendLLMMessageTypes.js';
+import { EventCategory, TimelineEvent } from '../timeline/timelineTypes.js';
 
 
 
@@ -76,6 +77,13 @@ export type BuiltinToolCallParams = {
 	// --- Web Search tools
 	'web_search': { query: string, count: number | null, offset: number | null },
 	'multi_link_search': { queries: string[], count: number | null },
+	// --- Timeline tools
+	'timeline_add_event': { date: string, title: string, description: string | null, category: EventCategory, isDeadline: boolean, linkedDocuments: string[] },
+	'timeline_update_event': { eventId: string, date: string | null, title: string | null, description: string | null, category: EventCategory | null, isDeadline: boolean | null, isComplete: boolean | null },
+	'timeline_delete_event': { eventId: string },
+	'timeline_get_events': { category: EventCategory | null, startDate: string | null, endDate: string | null, isDeadline: boolean | null, limit: number },
+	'timeline_link_document': { eventId: string, documentUri: URI },
+	'timeline_get_deadlines': { daysAhead: number },
 }
 
 // Web Search result types
@@ -121,6 +129,13 @@ export type BuiltinToolResultType = {
 	// --- Web Search tools
 	'web_search': { results: WebSearchResult[], totalResults: number },
 	'multi_link_search': { searchResults: MultiSearchResult[] },
+	// --- Timeline tools
+	'timeline_add_event': { event: TimelineEvent },
+	'timeline_update_event': { success: boolean },
+	'timeline_delete_event': { success: boolean },
+	'timeline_get_events': { events: TimelineEvent[], totalCount: number },
+	'timeline_link_document': { success: boolean },
+	'timeline_get_deadlines': { upcoming: TimelineEvent[], overdue: TimelineEvent[] },
 }
 
 

@@ -94,6 +94,17 @@ export const TimelineEventCard: React.FC<TimelineEventCardProps> = ({
 
   return (
     <div className="relative pl-12 group mb-4">
+      {/* Drag Handle - shown on group hover via CSS (no React state to avoid re-renders) */}
+      <div
+        className="absolute left-0 top-1/2 -translate-y-1/2 w-3 h-8 rounded cursor-grab active:cursor-grabbing flex flex-col items-center justify-center gap-0.5 opacity-0 group-hover:opacity-60 transition-opacity"
+        style={{ backgroundColor: '#27272a' }}
+        title="Drag to reorder (coming soon)"
+      >
+        <div className="w-1 h-1 rounded-full" style={{ backgroundColor: '#71717a' }} />
+        <div className="w-1 h-1 rounded-full" style={{ backgroundColor: '#71717a' }} />
+        <div className="w-1 h-1 rounded-full" style={{ backgroundColor: '#71717a' }} />
+      </div>
+
       {/* Timeline Dot - green for first event */}
       <div
         className="absolute left-4 w-4 h-4 rounded-full border-2 transform -translate-x-1/2 z-10 mt-5"

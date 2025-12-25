@@ -3,7 +3,7 @@
  *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
  *--------------------------------------------------------------------------------------*/
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAccessor, useIsDark } from '../util/services.js';
 import {
   CaseTimeline,
@@ -21,6 +21,16 @@ import { EventEditor } from './EventEditor.js';
 import { TimelineToolbar } from './TimelineToolbar.js';
 import { DeadlineWarnings } from './DeadlineWarnings.js';
 import { JurisdictionSelector } from './JurisdictionSelector.js';
+import { TodayMarker } from './TodayMarker.js';
+import { CalendarView } from './CalendarView.js';
+import { CaseSummary } from './CaseSummary.js';
+import { NotificationPreferences } from './NotificationPreferences.js';
+
+// Zoom/view mode types
+export type TimelineViewMode = 'all' | 'year' | 'month' | 'week';
+
+// Display mode: timeline list vs calendar grid
+export type DisplayMode = 'timeline' | 'calendar';
 
 // SafeAppeals brand colors
 const BRAND_GREEN = '#22c55e';
@@ -38,6 +48,10 @@ export const TimelineDashboard: React.FC = () => {
   const [showDeadlinesOnly, setShowDeadlinesOnly] = useState(false);
   const [isFirstEventCreation, setIsFirstEventCreation] = useState(false);
   const [showJurisdictionSelector, setShowJurisdictionSelector] = useState(false);
+  const [viewMode, setViewMode] = useState<TimelineViewMode>('all');
+  const [displayMode, setDisplayMode] = useState<DisplayMode>('timeline');
+  const [prefilledDate, setPrefilledDate] = useState<string | null>(null);
+  const [showNotificationSettings, setShowNotificationSettings] = useState(false);
 
   // Load timeline on mount
   useEffect(() => {
@@ -65,6 +79,14 @@ export const TimelineDashboard: React.FC = () => {
   const handleAddEvent = useCallback(() => {
     setEditingEvent(null);
     setIsFirstEventCreation(false);
+    setPrefilledDate(null);
+    setShowEventEditor(true);
+  }, []);
+
+  const handleAddEventWithDate = useCallback((date: Date) => {
+    setEditingEvent(null);
+    setIsFirstEventCreation(false);
+    setPrefilledDate(date.toISOString().split('T')[0]);
     setShowEventEditor(true);
   }, []);
 
@@ -163,7 +185,7 @@ export const TimelineDashboard: React.FC = () => {
   }, [timelineService, timeline]);
 
   // Filter and sort events
-  const filteredEvents = React.useMemo(() => {
+  const filteredEvents = useMemo(() => {
     if (!timeline) return [];
 
     let events = [...timeline.events];
@@ -178,11 +200,80 @@ export const TimelineDashboard: React.FC = () => {
       events = events.filter((e) => e.isDeadline);
     }
 
+    // Filter by view mode (time range)
+    if (viewMode !== 'all') {
+      const now = new Date();
+      let startDate: Date;
+      let endDate: Date = new Date(now.getFullYear() + 10, 11, 31); // Far future
+
+      switch (viewMode) {
+        case 'week':
+          // Show events from 1 week ago to 1 week ahead
+          startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+          endDate = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+          break;
+        case 'month':
+          // Show events from this month (start of month to end of month)
+          startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+          endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+          break;
+        case 'year':
+          // Show events from this year
+          startDate = new Date(now.getFullYear(), 0, 1);
+          endDate = new Date(now.getFullYear(), 11, 31);
+          break;
+        default:
+          startDate = new Date(0);
+      }
+
+      events = events.filter((e) => {
+        const eventDate = new Date(e.date);
+        return eventDate >= startDate && eventDate <= endDate;
+      });
+    }
+
     // Sort by date (ascending)
     events.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
     return events;
-  }, [timeline, filterCategory, showDeadlinesOnly]);
+  }, [timeline, filterCategory, showDeadlinesOnly, viewMode]);
+
+  // Calculate today marker position (no accessor dependency - uses filteredEvents which is stable)
+  const todayMarkerIndex = useMemo(() => {
+    if (filteredEvents.length === 0) return -1;
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    // Find where today falls in the sorted events
+    for (let i = 0; i < filteredEvents.length; i++) {
+      const eventDate = new Date(filteredEvents[i].date);
+      eventDate.setHours(0, 0, 0, 0);
+
+      if (eventDate > today) {
+        return i; // Insert before this event
+      }
+    }
+
+    // All events are in the past
+    return filteredEvents.length;
+  }, [filteredEvents]);
+
+  // Check if today is within the timeline range
+  const showTodayMarker = useMemo(() => {
+    if (filteredEvents.length === 0) return false;
+
+    const today = new Date();
+    const firstEventDate = new Date(filteredEvents[0].date);
+    const lastEventDate = new Date(filteredEvents[filteredEvents.length - 1].date);
+
+    // Show marker if today is between first and last event (with some buffer)
+    const bufferDays = 30;
+    const bufferMs = bufferDays * 24 * 60 * 60 * 1000;
+
+    return today.getTime() >= firstEventDate.getTime() - bufferMs &&
+           today.getTime() <= lastEventDate.getTime() + bufferMs;
+  }, [filteredEvents]);
 
   // Get deadline warnings
   const upcomingDeadlines = React.useMemo(() => {
@@ -257,6 +348,12 @@ export const TimelineDashboard: React.FC = () => {
 
   return (
     <div className="h-full flex flex-col" style={{ backgroundColor: '#0a0a0a' }}>
+      {/* Case Summary Dashboard */}
+      <CaseSummary
+        timeline={timeline}
+        onEditEvent={handleEditEvent}
+      />
+
       {/* Deadline Warnings */}
       {(overdueDeadlines.length > 0 || upcomingDeadlines.length > 0) && (
         <DeadlineWarnings
@@ -278,42 +375,65 @@ export const TimelineDashboard: React.FC = () => {
         jurisdiction={timelineService.getJurisdiction(timeline.jurisdiction)}
         onJurisdictionClick={handleJurisdictionClick}
         eventCount={timeline.events.length}
+        viewMode={viewMode}
+        onViewModeChange={setViewMode}
+        displayMode={displayMode}
+        onDisplayModeChange={setDisplayMode}
+        onEditEvent={handleEditEvent}
+        onOpenNotificationSettings={() => setShowNotificationSettings(true)}
       />
 
-      {/* Timeline */}
-      <div className="flex-1 overflow-y-auto p-4">
-        {filteredEvents.length === 0 ? (
-          <div className="text-center py-12">
-            <p style={{ color: '#71717a' }}>
-              {timeline.events.length === 0
-                ? 'No events yet. Click "Add Event" to get started.'
-                : 'No events match the current filter.'}
-            </p>
-          </div>
-        ) : (
-          <div className="relative">
-            {/* Timeline line - green accent */}
-            <div
-              className="absolute left-6 top-0 bottom-0 w-0.5"
-              style={{ background: `linear-gradient(to bottom, ${BRAND_GREEN}, ${BRAND_GREEN}40)` }}
-            />
-
-            {/* Events */}
-            <div className="space-y-4">
-              {filteredEvents.map((event, index) => (
-                <TimelineEventCard
-                  key={event.id}
-                  event={event}
-                  onEdit={() => handleEditEvent(event)}
-                  onDelete={() => handleDeleteEvent(event.id)}
-                  isFirst={index === 0}
-                  isLast={index === filteredEvents.length - 1}
-                />
-              ))}
+      {/* Content Area - Timeline or Calendar */}
+      {displayMode === 'calendar' ? (
+        <CalendarView
+          events={timeline.events}
+          onEventClick={handleEditEvent}
+          onAddEvent={handleAddEventWithDate}
+        />
+      ) : (
+        <div className="flex-1 overflow-y-auto p-4">
+          {filteredEvents.length === 0 ? (
+            <div className="text-center py-12">
+              <p style={{ color: '#71717a' }}>
+                {timeline.events.length === 0
+                  ? 'No events yet. Click "Add Event" to get started.'
+                  : 'No events match the current filter.'}
+              </p>
             </div>
-          </div>
-        )}
-      </div>
+          ) : (
+            <div className="relative">
+              {/* Timeline line - green accent */}
+              <div
+                className="absolute left-6 top-0 bottom-0 w-0.5"
+                style={{ background: `linear-gradient(to bottom, ${BRAND_GREEN}, ${BRAND_GREEN}40)` }}
+              />
+
+              {/* Events with Today Marker */}
+              <div className="space-y-4">
+                {filteredEvents.map((event, index) => (
+                  <React.Fragment key={event.id}>
+                    {/* Insert Today Marker before this event if appropriate */}
+                    {showTodayMarker && todayMarkerIndex === index && (
+                      <TodayMarker />
+                    )}
+                    <TimelineEventCard
+                      event={event}
+                      onEdit={() => handleEditEvent(event)}
+                      onDelete={() => handleDeleteEvent(event.id)}
+                      isFirst={index === 0}
+                      isLast={index === filteredEvents.length - 1}
+                    />
+                  </React.Fragment>
+                ))}
+                {/* Insert Today Marker at end if all events are in the past */}
+                {showTodayMarker && todayMarkerIndex === filteredEvents.length && (
+                  <TodayMarker />
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Event Editor Modal */}
       {showEventEditor && (
@@ -334,6 +454,13 @@ export const TimelineDashboard: React.FC = () => {
           currentJurisdiction={timelineService.getJurisdiction(timeline.jurisdiction)}
           onSelect={handleJurisdictionChange}
           onClose={() => setShowJurisdictionSelector(false)}
+        />
+      )}
+
+      {/* Notification Preferences Modal */}
+      {showNotificationSettings && (
+        <NotificationPreferences
+          onClose={() => setShowNotificationSettings(false)}
         />
       )}
     </div>
