@@ -201,6 +201,9 @@ interface CaseTimeline {
 - [x] Export PDF button in toolbar
 - [x] Include case info header, jurisdiction, event count
 - [x] Native printToPDF via Electron IPC (registered in app.ts)
+- [x] Base64 IPC encoding for reliable binary transfer (Dec 25)
+- [x] Smart filename: Timeline_{CaseName}_{YYYY-MM-DD}.pdf (Dec 25)
+- [x] Path segment extraction for workspace-based case IDs (Dec 25)
 ```
 
 ### Jurisdiction Selector ✅
@@ -219,6 +222,9 @@ interface CaseTimeline {
 - [x] Shadcn-inspired card design
 - [x] Customizable first event (no hardcoded default)
 - [x] Immutable state updates for React re-renders
+- [x] Two-panel dashboard layout (Dec 25):
+      - Left: Case Summary KPIs + Deadline Warnings
+      - Right: Timeline/Calendar view + Toolbar
 ```
 
 ---
@@ -300,15 +306,15 @@ Ctrl+Shift+T (or Command Palette → "Open Case Timeline")
 
 ### Functional Tests
 
-- [ ] Create new timeline (click "Create Timeline" on empty state)
-- [ ] Add event with all fields
-- [ ] Edit existing event
-- [ ] Delete event (double-click to confirm)
-- [ ] Filter by category
-- [ ] Toggle "Deadlines only"
-- [ ] Mark deadline as complete
-- [ ] Verify `.timeline.json` created in workspace
-- [ ] Verify deadline notifications on reload
+- [ x] Create new timeline (click "Create Timeline" on empty state)
+- [ x] Add event with all fields
+- [ x] Edit existing event
+- [ x] Delete event (double-click to confirm)
+- [ x] Filter by category
+- [ x] Toggle "Deadlines only"
+- [ x] Mark deadline as complete
+- [ x] Verify `.timeline.json` created in workspace
+- [ x] Verify deadline notifications on reload
 
 ---
 
@@ -357,6 +363,20 @@ Ctrl+Shift+T (or Command Palette → "Open Case Timeline")
 
 ---
 
+## Documentation
+
+Comprehensive documentation for the Timeline feature:
+
+| Document                                      | Description                      |
+| --------------------------------------------- | -------------------------------- |
+| [README.md](README.md)                        | Feature overview and quick start |
+| [User Guide](user-guide.md)                   | Complete usage instructions      |
+| [Configuration Guide](configuration-guide.md) | Jurisdictions and settings       |
+| [API Reference](api-reference.md)             | Service interface and types      |
+| [Architecture](architecture.md)               | Technical implementation details |
+
+---
+
 **Created**: December 23, 2025
 **Author**: Claude (Cursor AI Assistant)
-**Last Updated**: December 23, 2025 - Phase 3 Complete (All Features)
+**Last Updated**: December 25, 2025 - PDF Export Fixed, Two-Panel Layout, Documentation Added

@@ -24,18 +24,8 @@ const NATIVE_MODULES = [
 	'kerberos',
 ];
 
-// Read Electron version from .npmrc or package.json
+// Read Electron version from package.json
 function getElectronVersion() {
-	const npmrcPath = path.join(root, '.npmrc');
-	if (fs.existsSync(npmrcPath)) {
-		const npmrc = fs.readFileSync(npmrcPath, 'utf8');
-		const match = npmrc.match(/target="?([^"\n]+)"?/);
-		if (match) {
-			return match[1];
-		}
-	}
-
-	// Fallback to package.json
 	const pkg = require(path.join(root, 'package.json'));
 	return pkg.devDependencies?.electron || '34.3.2';
 }

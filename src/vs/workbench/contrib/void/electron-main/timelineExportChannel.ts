@@ -4,9 +4,9 @@
  *--------------------------------------------------------------------------------------*/
 
 import { BrowserWindow } from 'electron';
+import { Event } from '../../../../base/common/event.js';
 import { IServerChannel } from '../../../../base/parts/ipc/common/ipc.js';
 import { ILogService } from '../../../../platform/log/common/log.js';
-import { Event } from '../../../../base/common/event.js';
 import { CaseTimeline, JurisdictionConfig, formatTimelineDate } from '../common/timeline/timelineTypes.js';
 
 /**
@@ -322,7 +322,7 @@ function getCategoryLabel(category: string): string {
 export class TimelineExportChannel implements IServerChannel {
 	constructor(
 		@ILogService private readonly logService: ILogService
-	) {}
+	) { }
 
 	listen(_: unknown, event: string): Event<any> {
 		throw new Error(`Event not supported: ${event}`);
@@ -338,7 +338,12 @@ export class TimelineExportChannel implements IServerChannel {
 		}
 	}
 
-	private async exportToPDF(data: TimelineExportData): Promise<Uint8Array> {
+	/**
+	 * Export timeline to PDF.
+	 * Returns base64-encoded PDF data for reliable IPC transfer.
+	 * (VSCode pattern: binary data is base64 encoded for IPC, see ipc.cp.ts)
+	 */
+	private async exportToPDF(data: TimelineExportData): Promise<string> {
 		this.logService.info('[TimelineExportChannel] Starting PDF export');
 
 		try {
@@ -355,11 +360,15 @@ export class TimelineExportChannel implements IServerChannel {
 			// Generate HTML content
 			const html = generateTimelineHTML(data);
 
-			// Load HTML into the window
+			this.logService.info('[TimelineExportChannel] Loading HTML content...');
+
+			// Load HTML into the window - loadURL() already waits for load to complete
 			await win.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
 
-			// Wait for content to render
-			await new Promise(resolve => setTimeout(resolve, 500));
+			// Additional delay to ensure CSS/fonts are fully applied
+			await new Promise<void>((resolve) => setTimeout(resolve, 500));
+
+			this.logService.info('[TimelineExportChannel] Generating PDF...');
 
 			// Generate PDF
 			const pdfBuffer = await win.webContents.printToPDF({
@@ -377,8 +386,11 @@ export class TimelineExportChannel implements IServerChannel {
 			// Cleanup
 			win.close();
 
-			this.logService.info('[TimelineExportChannel] PDF export complete', pdfBuffer.length);
-			return new Uint8Array(pdfBuffer);
+			this.logService.info('[TimelineExportChannel] PDF export complete, size:', pdfBuffer.length);
+
+			// Return as base64 string for reliable IPC transfer
+			// This is the VSCode pattern - binary data doesn't survive IPC as typed arrays
+			return Buffer.from(pdfBuffer).toString('base64');
 
 		} catch (error) {
 			this.logService.error('[TimelineExportChannel] PDF export failed:', error);

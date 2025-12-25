@@ -12,8 +12,11 @@ import { IDisposable } from '../../../../../../base/common/lifecycle.js';
 import { FileAccess } from '../../../../../../base/common/network.js';
 import { URI } from '../../../../../../base/common/uri.js';
 import { generateUuid } from '../../../../../../base/common/uuid.js';
+import { IChannel } from '../../../../../../base/parts/ipc/common/ipc.js';
 import { IEditorOptions } from '../../../../../../platform/editor/common/editor.js';
 import { IFileService } from '../../../../../../platform/files/common/files.js';
+import { IFileDialogService } from '../../../../../../platform/dialogs/common/dialogs.js';
+import { IMainProcessService } from '../../../../../../platform/ipc/common/mainProcessService.js';
 import { IOpenerService } from '../../../../../../platform/opener/common/opener.js';
 import { IStorageService } from '../../../../../../platform/storage/common/storage.js';
 import { ITelemetryService } from '../../../../../../platform/telemetry/common/telemetry.js';
@@ -49,6 +52,7 @@ export class DOCXViewerEditor extends EditorPane {
 	private _workingCopyDisposable?: IDisposable;
 	private _saveCompleteResolver?: (success: boolean) => void;
 	private _pendingSaveTimeout?: NodeJS.Timeout;
+	private readonly documentExportChannel: IChannel;
 
 	constructor(
 		group: IEditorGroup,
@@ -59,9 +63,12 @@ export class DOCXViewerEditor extends EditorPane {
 		@IFileService private readonly fileService: IFileService,
 		@IWorkingCopyService private readonly workingCopyService: IWorkingCopyService,
 		@IOpenerService private readonly openerService: IOpenerService,
-		@INativeWorkbenchEnvironmentService private readonly environmentService: INativeWorkbenchEnvironmentService
+		@INativeWorkbenchEnvironmentService private readonly environmentService: INativeWorkbenchEnvironmentService,
+		@IFileDialogService private readonly fileDialogService: IFileDialogService,
+		@IMainProcessService mainProcessService: IMainProcessService
 	) {
 		super(DOCXViewerEditor.ID, group, telemetryService, themeService, storageService);
+		this.documentExportChannel = mainProcessService.getChannel('void-channel-document-export');
 	}
 
 	protected override createEditor(parent: HTMLElement): void {
@@ -342,6 +349,13 @@ export class DOCXViewerEditor extends EditorPane {
 				}
 				break;
 
+			case 'exportToPDF':
+				// Handle PDF export
+				if (data.html) {
+					this.handleExportToPDF(data.html, data.title);
+				}
+				break;
+
 			case 'applyEdits':
 				// Forward agent edit operations to webview for execution
 				if (this.webview) {
@@ -401,6 +415,50 @@ export class DOCXViewerEditor extends EditorPane {
 
 		} catch (error) {
 			console.error('[DOCX Viewer] Print error:', error);
+		}
+	}
+
+	private async handleExportToPDF(html: string, title?: string): Promise<void> {
+		console.log('[DOCX Viewer] Starting PDF export');
+
+		try {
+			// Call electron-main to generate PDF
+			const base64Pdf = await this.documentExportChannel.call<string>('exportToPDF', {
+				html,
+				title: title || this._currentInput?.getName() || 'document'
+			});
+
+			// Decode base64 to Uint8Array
+			const binaryString = atob(base64Pdf);
+			const bytes = new Uint8Array(binaryString.length);
+			for (let i = 0; i < binaryString.length; i++) {
+				bytes[i] = binaryString.charCodeAt(i);
+			}
+
+			console.log('[DOCX Viewer] PDF generated, size:', bytes.length);
+
+			// Prompt user for save location
+			const defaultFileName = title || this._currentInput?.getName() || 'document';
+			const defaultUri = this._currentInput?.resource 
+				? URI.joinPath(this._currentInput.resource, '..', `${defaultFileName.replace(/\.(docx|doc)$/i, '')}.pdf`)
+				: undefined;
+
+			const result = await this.fileDialogService.showSaveDialog({
+				title: 'Export to PDF',
+				defaultUri,
+				filters: [
+					{ name: 'PDF Files', extensions: ['pdf'] }
+				]
+			});
+
+			if (result) {
+				// Write PDF to selected location
+				await this.fileService.writeFile(result, VSBuffer.wrap(bytes));
+				console.log('[DOCX Viewer] PDF saved to:', result.toString());
+			}
+
+		} catch (error) {
+			console.error('[DOCX Viewer] PDF export error:', error);
 		}
 	}
 
@@ -675,6 +733,10 @@ export class DOCXViewerEditor extends EditorPane {
 					<button class="ribbon-btn" id="print-btn" title="Print (Ctrl+P)">
 						<span class="ribbon-btn-icon">🖨️</span>
 						<span class="ribbon-btn-label">Print</span>
+					</button>
+					<button class="ribbon-btn" id="export-pdf-btn" title="Export to PDF">
+						<span class="ribbon-btn-icon">📄</span>
+						<span class="ribbon-btn-label">Export PDF</span>
 					</button>
 				</div>
 				<span class="ribbon-section-label">File</span>

@@ -33,16 +33,18 @@ const supportsReasoning = capabilities.reasoningCapabilities?.supportsReasoning;
 
 ## Supported Providers
 
-| Provider | Models | Key Features |
-|----------|--------|--------------|
-| **OpenAI** | GPT-5 series | Reasoning, tool calling, developer role |
-| **Anthropic** | Claude 4.x series | Advanced reasoning, separated system messages |
-| **Google** | Gemini 3.x/2.x | Multimodal, budget-based reasoning |
-| **xAI** | Grok series | Fast inference, reasoning support |
-| **DeepSeek** | Chat/Reasoner | Cost-effective reasoning |
-| **Mistral** | Codestral, Devstral | Code-focused models |
-| **Groq** | Llama/Qwen optimized | High-speed inference |
-| **OpenRouter** | 100+ models | Model routing service |
+| Provider | Models | Reasoning Method | Key Features |
+|----------|--------|------------------|--------------|
+| **OpenAI** | GPT-5.2, GPT-5, GPT-5.1-codex-max | `reasoning_effort: 'high'` | Effort-based, developer role |
+| **Anthropic** | Claude Opus 4.5 | `reasoning_effort: 'high'` | Effort-based, separated system |
+| **Anthropic** | Claude Sonnet 4.5 | `thinking.budget_tokens` | Budget-based (8K tokens) |
+| **Google** | Gemini 3 Pro Preview | `thinking_level: 'high'` | Effort-based via LiteLLM |
+| **Google** | Gemini 2.5 Pro/Flash | `thinking.budget_tokens` | Budget-based (24K tokens) |
+| **xAI** | Grok series | `reasoning_effort` | Effort-based |
+| **DeepSeek** | Chat/Reasoner | Think tags | Open-source style |
+| **Mistral** | Codestral, Devstral | N/A | Code-focused models |
+| **Groq** | Llama/Qwen optimized | N/A | High-speed inference |
+| **OpenRouter** | 100+ models | Varies | Model routing service |
 
 ### Local/Open-Source Providers
 - **Ollama**: Local model serving
@@ -90,17 +92,21 @@ interface VoidStaticModelInfo {
   reasoningCapabilities?: {
     supportsReasoning: true;
     canIOReasoning: boolean;       // Whether reasoning is output to user
-    maxReasoningBudget?: number;   // Budget-based providers
-    maxReasoningEffort?: string;   // Effort-based providers
+    reasoningReservedOutputTokenSpace?: number; // Extra space for reasoning output
+    // Use ONE of the following (not both):
+    maxReasoningBudget?: number;   // Budget-based (Anthropic Sonnet, Gemini 2.5)
+    maxReasoningEffort?: string;   // Effort-based (OpenAI, Anthropic Opus, Gemini 3+)
   };
   cost: {
-    input: number;                 // Cost per 1K input tokens
-    output: number;                // Cost per 1K output tokens
+    input: number;                 // Cost per 1M input tokens
+    output: number;                // Cost per 1M output tokens
     cache_read?: number;           // Cached input cost
     cache_write?: number;          // Cache write cost
   };
 }
 ```
+
+**Note:** For budget-based providers like Anthropic, `max_tokens` (from `reasoningReservedOutputTokenSpace`) must be greater than `thinking.budget_tokens` (from `maxReasoningBudget`).
 
 ## Usage Examples
 
@@ -109,10 +115,11 @@ interface VoidStaticModelInfo {
 ```typescript
 import { getModelCapabilities } from './models/index.js';
 
-// Get GPT-5 capabilities
-const gpt5 = getModelCapabilities('openAI', 'gpt-5', undefined);
-console.log(`Context window: ${gpt5.contextWindow}`);        // 400,000
-console.log(`Supports reasoning: ${!!gpt5.reasoningCapabilities}`); // true
+// Get GPT-5.2 capabilities
+const gpt52 = getModelCapabilities('openAI', 'gpt-5.2', undefined);
+console.log(`Context window: ${gpt52.contextWindow}`);        // 128,000
+console.log(`Supports reasoning: ${!!gpt52.reasoningCapabilities}`); // true
+console.log(`Reasoning effort: ${gpt52.reasoningCapabilities?.maxReasoningEffort}`); // 'high'
 ```
 
 ### Provider Settings Access
@@ -122,10 +129,10 @@ import { modelSettingsOfProvider } from './models/index.js';
 
 // Get all OpenAI models
 const openAIModels = Object.keys(modelSettingsOfProvider.openAI.modelOptions);
-// ['gpt-5.2', 'gpt-5', 'gpt-5-mini', ...]
+// ['gpt-5.2', 'gpt-5', 'gpt-5.1-codex-max']
 
 // Check if model exists
-const exists = 'gpt-5' in modelSettingsOfProvider.openAI.modelOptions;
+const exists = 'gpt-5.2' in modelSettingsOfProvider.openAI.modelOptions;
 ```
 
 ### Reasoning Configuration
@@ -133,10 +140,16 @@ const exists = 'gpt-5' in modelSettingsOfProvider.openAI.modelOptions;
 ```typescript
 import { getSendableReasoningInfo } from './models/index.js';
 
-// Get reasoning config for Claude
-const reasoning = getSendableReasoningInfo('anthropic', 'claude-sonnet-4.5');
-if (reasoning?.type === 'budget') {
-  console.log(`Budget: ${reasoning.reasoningBudget}`); // 8192
+// Get reasoning config for Claude Opus 4.5 (effort-based)
+const opusReasoning = getSendableReasoningInfo('chat', 'anthropic', 'claude-opus-4-5', undefined, undefined);
+if (opusReasoning?.type === 'effort') {
+  console.log(`Effort: ${opusReasoning.reasoningEffort}`); // 'high'
+}
+
+// Get reasoning config for Claude Sonnet 4.5 (budget-based)
+const sonnetReasoning = getSendableReasoningInfo('chat', 'anthropic', 'claude-sonnet-4-5', undefined, undefined);
+if (sonnetReasoning?.type === 'budget') {
+  console.log(`Budget: ${sonnetReasoning.reasoningBudget}`); // 8192
 }
 ```
 
@@ -144,8 +157,8 @@ if (reasoning?.type === 'budget') {
 
 ```typescript
 // Automatic fallback for unrecognized model names
-const capabilities = getModelCapabilities('openAI', 'gpt-5-turbo', undefined);
-// Falls back to 'gpt-5' if exact match not found
+const capabilities = getModelCapabilities('openAI', 'gpt-5.2-2025-12-11', undefined);
+// Falls back to 'gpt-5.2' if exact match not found
 ```
 
 ## Documentation

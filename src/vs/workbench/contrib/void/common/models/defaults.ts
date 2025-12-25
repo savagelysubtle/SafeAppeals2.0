@@ -80,17 +80,13 @@ export const defaultModelsOfProvider = {
 	// Shorthand names only - LiteLLM handles routing to latest versions
 	openAI: [
 		'gpt-5.2',
+		'gpt-5.1-codex-max',
 		'gpt-5',
-		'gpt-5-mini',
-		'gpt-5-nano',
 	],
 	// Anthropic - synced with LiteLLM config (shorthand names)
 	anthropic: [
 		'claude-opus-4.5',     // Claude Opus 4.5 (Premium)
 		'claude-sonnet-4.5',   // Claude Sonnet 4.5 (Best balance)
-		'claude-opus-4.1',     // Claude Opus 4.1 (Agentic)
-		'claude-sonnet-4',     // Claude Sonnet 4 (Stable)
-		'claude-haiku-4.5',    // Claude Haiku 4.5 (Fast)
 	],
 	// xAI - not in LiteLLM config, keeping for direct xAI API usage
 	xAI: [

@@ -1147,7 +1147,7 @@ interface ITimelineService {
 	generateDeadlinesFromDecision(decisionEvent: TimelineEvent): TimelineEvent[];
 	linkDocument(eventId: string, documentUri: URI): Promise<void>;
 	scheduleDeadlineNotifications(): void;
-	exportToPDF(): Promise<Uint8Array>; // Phase 2
+	exportToPDF(): Promise<string>; // Returns base64-encoded PDF
 }
 ```
 
@@ -1156,9 +1156,13 @@ interface ITimelineService {
 **Browser Module** (`browser/timeline/`):
 
 - `timeline.contribution.ts` - View registration, commands, actions
-- `timelineService.ts` - Core CRUD, deadline calculations, notifications
+- `timelineService.ts` - Core CRUD, deadline calculations, notifications, PDF export orchestration
 - `timelinePane.ts` - Sidebar panel with React mount
 - `jurisdictionConfig.ts` - 12 jurisdiction configurations
+
+**Electron Main** (`electron-main/`):
+
+- `timelineExportChannel.ts` - PDF generation via BrowserWindow.printToPDF(), HTML templating, base64 IPC transfer
 
 **Common Types** (`common/timeline/`):
 
@@ -1166,16 +1170,32 @@ interface ITimelineService {
 
 **React Components** (`browser/react/src/timeline-tsx/`):
 
-- `TimelineDashboard.tsx` - Main container with event list
+- `TimelineDashboard.tsx` - Main container with two-panel layout, PDF export button, smart filename generation
 - `TimelineEventCard.tsx` - Individual event cards with actions
 - `TimelineToolbar.tsx` - Add button, filters, jurisdiction badge
 - `EventEditor.tsx` - Modal for creating/editing events
 - `DeadlineWarnings.tsx` - Overdue/upcoming deadline banners
+- `CaseSummary.tsx` - Case KPI cards (left panel)
+- `CalendarView.tsx` - Calendar visualization (right panel)
+
+#### 5. **PDF Export**
+
+- ✅ Export timeline to PDF with event cards layout
+- ✅ Base64 IPC transfer for reliable binary data handling
+- ✅ Hidden BrowserWindow for HTML-to-PDF rendering
+- ✅ Smart filename generation (extracts folder name from path)
+- ✅ Filename sanitization for cross-platform compatibility
+- ✅ Format: `Timeline_{CaseName}_{YYYY-MM-DD}.pdf`
+
+#### 6. **Two-Panel Dashboard Layout**
+
+- ✅ Left panel: Case Summary + Deadline Warnings (fixed width)
+- ✅ Right panel: Timeline/Calendar view + Toolbar (flexible width)
+- ✅ Improved visibility for timeline events
 
 ### Pending (Phase 2)
 
 - 🔄 Document linking UI (picker modal, clickable links)
-- 🔄 PDF export via electron-main
 - 🔄 Drag-and-drop event creation
 - 🔄 Zoom/scroll controls (year/month/week view)
 - 🔄 Case config integration (auto-import injuryDate)
@@ -1199,14 +1219,14 @@ AI agent tools that allow the LLM to programmatically create, update, query, and
 
 ### Tools Implemented
 
-| Tool | Purpose |
-|------|---------|
-| `timeline_add_event` | Create new timeline event with optional document linking |
-| `timeline_update_event` | Modify existing event details or mark deadlines complete |
-| `timeline_delete_event` | Remove event from timeline |
-| `timeline_get_events` | Query events with filters (category, date range, deadline status) |
-| `timeline_link_document` | Attach a document to an existing event |
-| `timeline_get_deadlines` | Get upcoming and overdue deadlines |
+| Tool                     | Purpose                                                           |
+| ------------------------ | ----------------------------------------------------------------- |
+| `timeline_add_event`     | Create new timeline event with optional document linking          |
+| `timeline_update_event`  | Modify existing event details or mark deadlines complete          |
+| `timeline_delete_event`  | Remove event from timeline                                        |
+| `timeline_get_events`    | Query events with filters (category, date range, deadline status) |
+| `timeline_link_document` | Attach a document to an existing event                            |
+| `timeline_get_deadlines` | Get upcoming and overdue deadlines                                |
 
 ### Features
 
@@ -1267,5 +1287,5 @@ When user asks: "Add the medical appointment from this report to my timeline"
 
 ---
 
-**Last Updated**: December 24, 2025
-**Version**: 1.99.5
+**Last Updated**: December 25, 2025
+**Version**: 1.99.6

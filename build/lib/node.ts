@@ -7,9 +7,8 @@ import path from 'path';
 import fs from 'fs';
 
 const root = path.dirname(path.dirname(__dirname));
-const npmrcPath = path.join(root, 'remote', '.npmrc');
-const npmrc = fs.readFileSync(npmrcPath, 'utf8');
-const version = /^target="(.*)"$/m.exec(npmrc)![1];
+const pkg = JSON.parse(fs.readFileSync(path.join(root, 'remote', 'package.json'), 'utf8'));
+const version = pkg.nodeBuild?.nodeVersion || '20.18.3';
 
 const platform = process.platform;
 const arch = process.arch;
