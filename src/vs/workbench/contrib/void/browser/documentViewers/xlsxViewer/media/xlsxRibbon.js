@@ -23,6 +23,7 @@ class XlsxRibbonController {
 		this.onContentChanged = options.onContentChanged || (() => {});
 		this.onSaveRequested = options.onSaveRequested || (() => {});
 		this.onPrintRequested = options.onPrintRequested || (() => {});
+		this.onExportPDFRequested = options.onExportPDFRequested || (() => {});
 
 		// Selection state - tracks the last valid selection for style operations
 		this.lastSelection = { ri: -1, ci: -1, sri: -1, sci: -1, eri: -1, eci: -1 };
@@ -355,18 +356,22 @@ class XlsxRibbonController {
 	}
 
 	/**
-	 * Setup file operations (save, print)
+	 * Setup file operations (save, print, export)
 	 * @private
 	 */
 	_setupFileOperations() {
 		const btnSave = document.getElementById("btn-save");
 		const btnPrint = document.getElementById("btn-print");
+		const btnExportPdf = document.getElementById("btn-export-pdf");
 
 		if (btnSave) {
 			btnSave.addEventListener("click", () => this.onSaveRequested());
 		}
 		if (btnPrint) {
 			btnPrint.addEventListener("click", () => this.onPrintRequested());
+		}
+		if (btnExportPdf) {
+			btnExportPdf.addEventListener("click", () => this.onExportPDFRequested());
 		}
 	}
 

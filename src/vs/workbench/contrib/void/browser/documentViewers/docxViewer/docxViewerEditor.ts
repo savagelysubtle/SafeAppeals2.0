@@ -13,9 +13,9 @@ import { FileAccess } from '../../../../../../base/common/network.js';
 import { URI } from '../../../../../../base/common/uri.js';
 import { generateUuid } from '../../../../../../base/common/uuid.js';
 import { IChannel } from '../../../../../../base/parts/ipc/common/ipc.js';
+import { IFileDialogService } from '../../../../../../platform/dialogs/common/dialogs.js';
 import { IEditorOptions } from '../../../../../../platform/editor/common/editor.js';
 import { IFileService } from '../../../../../../platform/files/common/files.js';
-import { IFileDialogService } from '../../../../../../platform/dialogs/common/dialogs.js';
 import { IMainProcessService } from '../../../../../../platform/ipc/common/mainProcessService.js';
 import { IOpenerService } from '../../../../../../platform/opener/common/opener.js';
 import { IStorageService } from '../../../../../../platform/storage/common/storage.js';
@@ -439,7 +439,7 @@ export class DOCXViewerEditor extends EditorPane {
 
 			// Prompt user for save location
 			const defaultFileName = title || this._currentInput?.getName() || 'document';
-			const defaultUri = this._currentInput?.resource 
+			const defaultUri = this._currentInput?.resource
 				? URI.joinPath(this._currentInput.resource, '..', `${defaultFileName.replace(/\.(docx|doc)$/i, '')}.pdf`)
 				: undefined;
 

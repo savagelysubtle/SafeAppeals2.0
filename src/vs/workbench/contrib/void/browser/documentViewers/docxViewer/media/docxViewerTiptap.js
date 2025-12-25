@@ -684,10 +684,21 @@
 			`;
 
 			// Send to host to handle PDF export
+			// Extract filename from docxUri if available
+			let filename = 'document';
+			if (docxUri) {
+				try {
+					const parts = docxUri.split('/');
+					filename = parts[parts.length - 1] || 'document';
+				} catch (e) {
+					console.warn('[DOCX Webview] Could not extract filename from URI');
+				}
+			}
+
 			vscode.postMessage({
 				type: 'exportToPDF',
 				html: exportHTML,
-				title: currentDocxFilename || 'document'
+				title: filename
 			});
 			console.log('[DOCX Webview] Sent PDF export request to host');
 

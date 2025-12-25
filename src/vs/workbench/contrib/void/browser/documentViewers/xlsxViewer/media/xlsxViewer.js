@@ -158,14 +158,15 @@
 				};
 				grid = new x_spreadsheet("#x-spreadsheet-demo", options);
 
-				// Initialize Ribbon Controller using the new class
-				// @ts-ignore
-				const ribbonController = new window.XlsxRibbonController(grid, {
-					onContentChanged: notifyContentChanged,
-					onSaveRequested: saveSpreadsheet,
-					onPrintRequested: handlePrint
-				});
-				ribbonController.init();
+			// Initialize Ribbon Controller using the new class
+			// @ts-ignore
+			const ribbonController = new window.XlsxRibbonController(grid, {
+				onContentChanged: notifyContentChanged,
+				onSaveRequested: saveSpreadsheet,
+				onPrintRequested: handlePrint,
+				onExportPDFRequested: handleExportPDF
+			});
+			ribbonController.init();
 
 				// Handle change events (debounced)
 				grid.change((cdata) => {
@@ -402,6 +403,151 @@
 
 		} catch (error) {
 			console.error('[XLSX Webview] Print error:', error);
+		}
+	}
+
+	function handleExportPDF() {
+		if (!grid) {
+			console.warn('[XLSX Webview] Grid not initialized for PDF export');
+			return;
+		}
+
+		console.log('[XLSX Webview] Starting PDF export process...');
+
+		try {
+			// Get data from x-spreadsheet
+			const data = grid.getData();
+
+			// Convert to HTML tables (one per sheet)
+			let sheetsHTML = '';
+			for (const [sheetIndex, sheet] of Object.entries(data)) {
+				const sheetName = sheet.name || `Sheet ${parseInt(sheetIndex) + 1}`;
+				const rows = sheet.rows || {};
+
+				// Build HTML table
+				let tableHTML = `<div class="sheet-section">
+					<h2>${sheetName}</h2>
+					<table class="spreadsheet-table">`;
+
+				// Get max row and col
+				let maxRow = 0;
+				let maxCol = 0;
+				for (const [rowIdx, row] of Object.entries(rows)) {
+					const ri = parseInt(rowIdx);
+					if (ri > maxRow) maxRow = ri;
+					const cells = row.cells || {};
+					for (const colIdx of Object.keys(cells)) {
+						const ci = parseInt(colIdx);
+						if (ci > maxCol) maxCol = ci;
+					}
+				}
+
+				// Generate table rows
+				for (let ri = 0; ri <= maxRow; ri++) {
+					tableHTML += '<tr>';
+					const row = rows[ri] || {};
+					const cells = row.cells || {};
+
+					for (let ci = 0; ci <= maxCol; ci++) {
+						const cell = cells[ci] || {};
+						const text = cell.text || '';
+
+						// Get style using the indexed style system
+						const stylesArray = grid.sheet.data.styles || [];
+						let style = {};
+						if (typeof cell.style === 'number' && cell.style >= 0 && cell.style < stylesArray.length) {
+							style = stylesArray[cell.style] || {};
+						}
+
+						// Build cell style
+						let cellStyle = '';
+
+						// Handle font properties from style.font object
+						if (style.font) {
+							if (style.font.name) cellStyle += `font-family: "${style.font.name}"; `;
+							if (style.font.size) cellStyle += `font-size: ${style.font.size}pt; `;
+							if (style.font.bold) cellStyle += 'font-weight: bold; ';
+							if (style.font.italic) cellStyle += 'font-style: italic; ';
+						}
+
+						// Handle other style properties
+						if (style.underline) cellStyle += 'text-decoration: underline; ';
+						if (style.strike) cellStyle += 'text-decoration: line-through; ';
+						if (style.color) cellStyle += `color: ${style.color}; `;
+						if (style.bgcolor) cellStyle += `background-color: ${style.bgcolor}; `;
+						if (style.align) cellStyle += `text-align: ${style.align}; `;
+						if (style.valign) cellStyle += `vertical-align: ${style.valign}; `;
+
+						tableHTML += `<td style="${cellStyle}">${text || ''}</td>`;
+					}
+
+					tableHTML += '</tr>';
+				}
+
+				tableHTML += '</table></div>';
+				sheetsHTML += tableHTML;
+			}
+
+			// Build export HTML
+			const exportHTML = `
+				<!DOCTYPE html>
+				<html>
+				<head>
+					<meta charset="UTF-8">
+					<title>Export Spreadsheet</title>
+					<style>
+						@page {
+							size: landscape;
+							margin: 0.5in;
+						}
+						body {
+							margin: 0;
+							padding: 20px;
+							font-family: 'Calibri', 'Arial', sans-serif;
+							font-size: 10pt;
+							color: #000;
+							background: #fff;
+						}
+						.sheet-section {
+							page-break-after: always;
+							margin-bottom: 20px;
+						}
+						.sheet-section:last-child {
+							page-break-after: auto;
+						}
+						h2 {
+							margin: 0 0 10px 0;
+							font-size: 14pt;
+							font-weight: bold;
+						}
+						.spreadsheet-table {
+							border-collapse: collapse;
+							width: 100%;
+							font-size: 10pt;
+						}
+						.spreadsheet-table td {
+							border: 1px solid #ddd;
+							padding: 4px 8px;
+							min-width: 60px;
+						}
+					</style>
+				</head>
+				<body>
+					${sheetsHTML}
+				</body>
+				</html>
+			`;
+
+			// Send to host to handle PDF export
+			vscode.postMessage({
+				type: 'exportToPDF',
+				html: exportHTML,
+				title: 'spreadsheet'
+			});
+			console.log('[XLSX Webview] Sent PDF export request to host');
+
+		} catch (error) {
+			console.error('[XLSX Webview] PDF export error:', error);
 		}
 	}
 
