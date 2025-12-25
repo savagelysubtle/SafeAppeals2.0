@@ -12,8 +12,11 @@ import { IDisposable } from '../../../../../../base/common/lifecycle.js';
 import { FileAccess } from '../../../../../../base/common/network.js';
 import { URI } from '../../../../../../base/common/uri.js';
 import { generateUuid } from '../../../../../../base/common/uuid.js';
+import { IChannel } from '../../../../../../base/parts/ipc/common/ipc.js';
 import { IEditorOptions } from '../../../../../../platform/editor/common/editor.js';
 import { IFileService } from '../../../../../../platform/files/common/files.js';
+import { IFileDialogService } from '../../../../../../platform/dialogs/common/dialogs.js';
+import { IMainProcessService } from '../../../../../../platform/ipc/common/mainProcessService.js';
 import { IOpenerService } from '../../../../../../platform/opener/common/opener.js';
 import { IStorageService } from '../../../../../../platform/storage/common/storage.js';
 import { ITelemetryService } from '../../../../../../platform/telemetry/common/telemetry.js';
@@ -44,6 +47,7 @@ export class XLSXViewerEditor extends EditorPane {
 	private _workingCopyDisposable?: IDisposable;
 	private _saveCompleteResolver?: (success: boolean) => void;
 	private _pendingSaveTimeout?: NodeJS.Timeout;
+	private readonly documentExportChannel: IChannel;
 
 	constructor(
 		group: IEditorGroup,
@@ -54,9 +58,12 @@ export class XLSXViewerEditor extends EditorPane {
 		@IFileService private readonly fileService: IFileService,
 		@IWorkingCopyService private readonly workingCopyService: IWorkingCopyService,
 		@IOpenerService private readonly openerService: IOpenerService,
-		@INativeWorkbenchEnvironmentService private readonly environmentService: INativeWorkbenchEnvironmentService
+		@INativeWorkbenchEnvironmentService private readonly environmentService: INativeWorkbenchEnvironmentService,
+		@IFileDialogService private readonly fileDialogService: IFileDialogService,
+		@IMainProcessService mainProcessService: IMainProcessService
 	) {
 		super(XLSXViewerEditor.ID, group, telemetryService, themeService, storageService);
+		this.documentExportChannel = mainProcessService.getChannel('void-channel-document-export');
 	}
 
 	protected override createEditor(parent: HTMLElement): void {
@@ -280,6 +287,13 @@ export class XLSXViewerEditor extends EditorPane {
 					this.printHtml(data.html);
 				}
 				break;
+
+			case 'exportToPDF':
+				// Handle PDF export
+				if (data.html) {
+					this.handleExportToPDF(data.html, data.title);
+				}
+				break;
 		}
 	}
 
@@ -330,6 +344,51 @@ export class XLSXViewerEditor extends EditorPane {
 
 		} catch (error) {
 			console.error('[XLSX Viewer] Print error:', error);
+		}
+	}
+
+	private async handleExportToPDF(html: string, title?: string): Promise<void> {
+		console.log('[XLSX Viewer] Starting PDF export');
+
+		try {
+			// Call electron-main to generate PDF
+			const base64Pdf = await this.documentExportChannel.call<string>('exportToPDF', {
+				html,
+				title: title || this._currentInput?.getName() || 'spreadsheet',
+				landscape: true // Spreadsheets typically look better in landscape
+			});
+
+			// Decode base64 to Uint8Array
+			const binaryString = atob(base64Pdf);
+			const bytes = new Uint8Array(binaryString.length);
+			for (let i = 0; i < binaryString.length; i++) {
+				bytes[i] = binaryString.charCodeAt(i);
+			}
+
+			console.log('[XLSX Viewer] PDF generated, size:', bytes.length);
+
+			// Prompt user for save location
+			const defaultFileName = title || this._currentInput?.getName() || 'spreadsheet';
+			const defaultUri = this._currentInput?.resource
+				? URI.joinPath(this._currentInput.resource, '..', `${defaultFileName.replace(/\.(xlsx|xls)$/i, '')}.pdf`)
+				: undefined;
+
+			const result = await this.fileDialogService.showSaveDialog({
+				title: 'Export to PDF',
+				defaultUri,
+				filters: [
+					{ name: 'PDF Files', extensions: ['pdf'] }
+				]
+			});
+
+			if (result) {
+				// Write PDF to selected location
+				await this.fileService.writeFile(result, VSBuffer.wrap(bytes));
+				console.log('[XLSX Viewer] PDF saved to:', result.toString());
+			}
+
+		} catch (error) {
+			console.error('[XLSX Viewer] PDF export error:', error);
 		}
 	}
 
@@ -603,6 +662,9 @@ export class XLSXViewerEditor extends EditorPane {
 					</div>
 					<div class="ribbon-btn-col">
 						<button class="ribbon-btn" id="btn-print" title="Print (Ctrl+P)">🖨️<span>Print</span></button>
+					</div>
+					<div class="ribbon-btn-col">
+						<button class="ribbon-btn" id="btn-export-pdf" title="Export to PDF">📄<span>Export PDF</span></button>
 					</div>
 					<div class="ribbon-group-label">File</div>
 				</div>

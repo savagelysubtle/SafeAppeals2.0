@@ -10,8 +10,11 @@ import { VSBuffer } from '../../../../../../base/common/buffer.js';
 import { CancellationToken } from '../../../../../../base/common/cancellation.js';
 import { URI } from '../../../../../../base/common/uri.js';
 import { generateUuid } from '../../../../../../base/common/uuid.js';
+import { IChannel } from '../../../../../../base/parts/ipc/common/ipc.js';
 import { IEditorOptions } from '../../../../../../platform/editor/common/editor.js';
 import { IFileService } from '../../../../../../platform/files/common/files.js';
+import { IFileDialogService } from '../../../../../../platform/dialogs/common/dialogs.js';
+import { IMainProcessService } from '../../../../../../platform/ipc/common/mainProcessService.js';
 import { IOpenerService } from '../../../../../../platform/opener/common/opener.js';
 import { IStorageService } from '../../../../../../platform/storage/common/storage.js';
 import { ITelemetryService } from '../../../../../../platform/telemetry/common/telemetry.js';
@@ -31,6 +34,7 @@ export class ImageViewerEditor extends EditorPane {
 	private _element?: HTMLElement;
 	private _dimension?: Dimension;
 	private webview?: IOverlayWebview;
+	private readonly documentExportChannel: IChannel;
 
 	constructor(
 		group: IEditorGroup,
@@ -40,9 +44,12 @@ export class ImageViewerEditor extends EditorPane {
 		@IWebviewService private readonly webviewService: IWebviewService,
 		@IFileService private readonly fileService: IFileService,
 		@IOpenerService private readonly openerService: IOpenerService,
-		@INativeWorkbenchEnvironmentService private readonly environmentService: INativeWorkbenchEnvironmentService
+		@INativeWorkbenchEnvironmentService private readonly environmentService: INativeWorkbenchEnvironmentService,
+		@IFileDialogService private readonly fileDialogService: IFileDialogService,
+		@IMainProcessService mainProcessService: IMainProcessService
 	) {
 		super(ImageViewerEditor.ID, group, telemetryService, themeService, storageService);
+		this.documentExportChannel = mainProcessService.getChannel('void-channel-document-export');
 	}
 
 	protected override createEditor(parent: HTMLElement): void {
@@ -151,6 +158,13 @@ export class ImageViewerEditor extends EditorPane {
 					this.printHtml(data.html);
 				}
 				break;
+
+			case 'exportToPDF':
+				// Handle PDF export
+				if (data.html) {
+					this.handleExportToPDF(data.html, data.title);
+				}
+				break;
 		}
 	}
 
@@ -201,6 +215,56 @@ export class ImageViewerEditor extends EditorPane {
 
 		} catch (error) {
 			console.error('[Image Viewer] Print error:', error);
+		}
+	}
+
+	private async handleExportToPDF(html: string, title?: string): Promise<void> {
+		console.log('[Image Viewer] Starting PDF export');
+
+		try {
+			// Call electron-main to generate PDF
+			const base64Pdf = await this.documentExportChannel.call<string>('exportToPDF', {
+				html,
+				title: title || 'image'
+			});
+
+			// Decode base64 to Uint8Array
+			const binaryString = atob(base64Pdf);
+			const bytes = new Uint8Array(binaryString.length);
+			for (let i = 0; i < binaryString.length; i++) {
+				bytes[i] = binaryString.charCodeAt(i);
+			}
+
+			console.log('[Image Viewer] PDF generated, size:', bytes.length);
+
+			// Get the current input to construct default save path
+			const input = this.input;
+			let defaultFileName = 'image.pdf';
+			let defaultUri: URI | undefined;
+
+			if (input instanceof ImageViewerInput) {
+				const imageName = input.getName().replace(/\.(jpg|jpeg|png|gif|webp|svg)$/i, '');
+				defaultFileName = `${imageName}.pdf`;
+				defaultUri = URI.joinPath(input.resource, '..', defaultFileName);
+			}
+
+			// Prompt user for save location
+			const result = await this.fileDialogService.showSaveDialog({
+				title: 'Export to PDF',
+				defaultUri,
+				filters: [
+					{ name: 'PDF Files', extensions: ['pdf'] }
+				]
+			});
+
+			if (result) {
+				// Write PDF to selected location
+				await this.fileService.writeFile(result, VSBuffer.wrap(bytes));
+				console.log('[Image Viewer] PDF saved to:', result.toString());
+			}
+
+		} catch (error) {
+			console.error('[Image Viewer] PDF export error:', error);
 		}
 	}
 
@@ -343,6 +407,7 @@ export class ImageViewerEditor extends EditorPane {
 				<div class="separator"></div>
 				<button id="reset-btn" title="Reset view (0)">Reset</button>
 				<button id="print-btn" title="Print (Ctrl+P)">🖨️ Print</button>
+				<button id="export-pdf-btn" title="Export to PDF">📄 Export PDF</button>
 				<span id="info-text" class="info-text">Loading...</span>
 			</div>
 			<div class="image-container" id="container">
@@ -453,6 +518,7 @@ export class ImageViewerEditor extends EditorPane {
 					});
 					document.getElementById('reset-btn').addEventListener('click', resetView);
 					document.getElementById('print-btn').addEventListener('click', handlePrint);
+					document.getElementById('export-pdf-btn').addEventListener('click', handleExportPDF);
 
 					// Get VS Code API for messaging
 					const vscode = acquireVsCodeApi();
@@ -523,6 +589,71 @@ export class ImageViewerEditor extends EditorPane {
 							html: printHTML
 						});
 						console.log('[Image Viewer] Sent print request to host');
+					}
+
+					// Export PDF function - similar to print but for PDF export
+					function handleExportPDF() {
+						console.log('[Image Viewer] Starting PDF export process...');
+
+						// Convert image to base64 data URL using canvas
+						const canvas = document.createElement('canvas');
+						canvas.width = image.naturalWidth;
+						canvas.height = image.naturalHeight;
+						const ctx = canvas.getContext('2d');
+						ctx.drawImage(image, 0, 0);
+
+						// Get data URL (use PNG for lossless, or JPEG for photos)
+						let dataUrl;
+						try {
+							dataUrl = canvas.toDataURL('image/png');
+						} catch (e) {
+							// Fallback to JPEG if PNG fails (e.g., for very large images)
+							console.warn('[Image Viewer] PNG conversion failed, trying JPEG:', e);
+							dataUrl = canvas.toDataURL('image/jpeg', 0.95);
+						}
+
+						console.log('[Image Viewer] Converted image to base64, length:', dataUrl.length);
+
+						// Build export HTML with the base64 image
+						const exportHTML = \`
+							<!DOCTYPE html>
+							<html>
+							<head>
+								<meta charset="UTF-8">
+								<title>Export Image</title>
+								<style>
+									@page {
+										size: auto;
+										margin: 0.5in;
+									}
+									body {
+										margin: 0;
+										padding: 0;
+										display: flex;
+										justify-content: center;
+										align-items: center;
+										min-height: 100vh;
+									}
+									img {
+										max-width: 100%;
+										max-height: 100vh;
+										object-fit: contain;
+									}
+								</style>
+							</head>
+							<body>
+								<img src="\${dataUrl}" alt="\${image.alt}">
+							</body>
+							</html>
+						\`;
+
+						// Send to host to handle PDF export (bypass sandbox)
+						vscode.postMessage({
+							type: 'exportToPDF',
+							html: exportHTML,
+							title: '${input.getName()}'
+						});
+						console.log('[Image Viewer] Sent PDF export request to host');
 					}
 
 					// Zoom slider

@@ -10,6 +10,10 @@
   "main": "./out/main.js",
   "type": "module",
   "private": true,
+  "electronBuild": {
+    "electronVersion": "34.3.2",
+    "msBuildId": "11161073"
+  },
   "scripts": {
     "buildreact": "cd ./src/vs/workbench/contrib/void/browser/react/ && node build.js && cd ../../../../../../../",
     "watchreact": "cd ./src/vs/workbench/contrib/void/browser/react/ && bun run build.js --watch && cd ../../../../../../../",
