@@ -736,12 +736,20 @@ export class TimelineService extends Disposable implements ITimelineService {
 		const jurisdiction = this.getJurisdiction(this._timeline.jurisdiction);
 
 		// Call electron-main to generate PDF
-		const pdfData = await this.timelineExportChannel.call<Uint8Array>('exportToPDF', {
+		// Receives base64-encoded string from IPC (VSCode pattern for reliable binary transfer)
+		const base64Pdf = await this.timelineExportChannel.call<string>('exportToPDF', {
 			timeline: this._timeline,
 			jurisdiction
 		});
 
-		return pdfData;
+		// Decode base64 to Uint8Array
+		// atob decodes base64 to binary string, then convert each char to byte
+		const binaryString = atob(base64Pdf);
+		const bytes = new Uint8Array(binaryString.length);
+		for (let i = 0; i < binaryString.length; i++) {
+			bytes[i] = binaryString.charCodeAt(i);
+		}
+		return bytes;
 	}
 
 	// ============================================================================

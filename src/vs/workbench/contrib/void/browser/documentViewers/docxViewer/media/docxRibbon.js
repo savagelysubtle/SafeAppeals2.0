@@ -15,6 +15,7 @@ class DocxRibbon {
 			// Home Tab
 			saveBtn: document.getElementById('save-btn'),
 			printBtn: document.getElementById('print-btn'),
+			exportPdfBtn: document.getElementById('export-pdf-btn'),
 			undoBtn: document.getElementById('undo-btn'),
 			redoBtn: document.getElementById('redo-btn'),
 			fontFamilySelect: document.getElementById('font-family-select'),
@@ -138,6 +139,7 @@ class DocxRibbon {
 		// File Operations
 		if (e.saveBtn) e.saveBtn.addEventListener('click', () => this.callbacks.onSave?.());
 		if (e.printBtn) e.printBtn.addEventListener('click', () => this.callbacks.onPrint?.());
+		if (e.exportPdfBtn) e.exportPdfBtn.addEventListener('click', () => this.callbacks.onExportPDF?.());
 
 		// Undo/Redo
 		if (e.undoBtn) {

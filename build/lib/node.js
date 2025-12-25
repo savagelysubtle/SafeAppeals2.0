@@ -10,9 +10,9 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const path_1 = __importDefault(require("path"));
 const fs_1 = __importDefault(require("fs"));
 const root = path_1.default.dirname(path_1.default.dirname(__dirname));
-const npmrcPath = path_1.default.join(root, 'remote', '.npmrc');
-const npmrc = fs_1.default.readFileSync(npmrcPath, 'utf8');
-const version = /^target="(.*)"$/m.exec(npmrc)[1];
+const pkg = JSON.parse(fs_1.default.readFileSync(path_1.default.join(root, 'remote', 'package.json'), 'utf8'));
+
+const version = pkg.nodeBuild?.nodeVersion || '20.18.3';
 const platform = process.platform;
 const arch = process.arch;
 const node = platform === 'win32' ? 'node.exe' : 'node';

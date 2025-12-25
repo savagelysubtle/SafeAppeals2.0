@@ -15,23 +15,26 @@ openAI: {
 }
 ```
 
-**Key Models:**
-- `gpt-5.2`: Flagship model with reasoning (400K context, $1.75/$14.00)
-- `gpt-5.2-pro`: Highest accuracy (400K context, $3.50/$28.00)
-- `gpt-5`: Previous flagship (400K context, $1.25/$10.00)
-- `gpt-5-mini`: Balanced cost/performance (400K context, $0.25/$2.00)
-- `gpt-5-nano`: Fastest/cheapest (400K context, $0.05/$0.40)
+**Key Models (December 2025):**
+- `gpt-5.2`: Flagship model (128K context, $1.75/$14.00) - `reasoning_effort: 'high'`
+- `gpt-5`: Previous flagship (128K context, $1.25/$10.00) - `reasoning_effort: 'high'`
+- `gpt-5.1-codex-max`: Best coding model (192K context, $1.25/$10.00) - `reasoning_effort: 'high'`, FIM support
 
 **Features:**
 - Developer role system messages
 - OpenAI-style tool calling
-- Reasoning with effort-based control
+- **Effort-based reasoning** (`reasoning_effort: 'high'` for maximum depth)
 - Advanced caching support
 
+**LiteLLM API Model Names:**
+- `gpt-5.2` → `openai/gpt-5.2-2025-12-11`
+- `gpt-5` → `openai/gpt-5-2025-08-07`
+- `gpt-5.1-codex-max` → `openai/gpt-5.1-codex-max`
+
 **Fallback Matching:**
-- `gpt-5-turbo` → `gpt-5`
-- `gpt-5.1` variants → `gpt-5.1`
-- Version-agnostic matching
+- `gpt-5.2-*` variants → `gpt-5.2`
+- `gpt-5.1-codex-max`, `codex-max` → `gpt-5.1-codex-max`
+- `gpt-5-*` variants → `gpt-5`
 
 #### Anthropic (`anthropic`)
 
@@ -42,43 +45,60 @@ anthropic: {
 }
 ```
 
-**Key Models:**
-- `claude-opus-4.5`: Premium flagship (200K context, $15.00/$75.00)
-- `claude-sonnet-4.5`: Best balance (200K context, $3.00/$15.00)
-- `claude-opus-4.1`: Enhanced agentic (200K context, $12.00/$60.00)
-- `claude-sonnet-4`: Stable production (200K context, $3.00/$15.00)
-- `claude-haiku-4.5`: Fastest (200K context, $1.00/$5.00)
+**Key Models (December 2025):**
+- `claude-opus-4-5`: Premium flagship (200K context, $5.00/$25.00)
+  - **Effort-based reasoning**: `reasoning_effort: 'high'` → `output_config.effort`
+- `claude-sonnet-4-5`: Best balance (200K context, $3.00/$15.00)
+  - **Budget-based reasoning**: `thinking.budget_tokens: 8192`
+  - **Important:** `max_tokens` (16384) must be > `budget_tokens` (8192)
 
 **Features:**
 - Separated system messages
 - Anthropic-style tool calling
-- Budget-based reasoning (max 16K tokens)
 - Advanced caching with read/write pricing
+
+**LiteLLM API Model Names:**
+- `claude-opus-4-5` → `anthropic/claude-opus-4-5-20251101`
+- `claude-sonnet-4-5` → `anthropic/claude-sonnet-4-5-20250929`
 
 **Special Considerations:**
 - Uses `x-api-key` header instead of `Authorization`
 - System messages passed in separate `system` field
-- Reasoning budget controls thinking token allocation
+- Opus 4.5 uses effort-based reasoning (like OpenAI)
+- Sonnet 4.5 uses budget-based reasoning (must ensure `max_tokens > budget_tokens`)
 
 #### Google Gemini (`gemini`)
 
 **Configuration:**
 ```typescript
 gemini: {
-  apiKey: string;  // Required: Gemini API key
+  apiKey: string;  // Required: Gemini API key (GOOGLE_API_KEY)
 }
 ```
 
-**Key Models:**
-- `gemini-3-pro`: Latest Pro model (2M context, pricing varies)
-- `gemini-2.5-pro`: Previous Pro (2M context)
-- `gemini-2.5-flash`: Fast inference (2M context)
+**Key Models (December 2025):**
+- `gemini-3-pro-preview`: Latest flagship (1M context, $2.00/$12.00)
+  - **Effort-based reasoning**: `reasoning_effort: 'high'` → `thinking_level: 'high'`
+- `gemini-2.5-pro`: Production ready (1M context, $1.25/$10.00)
+  - **Budget-based reasoning**: `thinking.budget_tokens: 24576`
+- `gemini-2.5-flash`: Fast inference (1M context, $0.15/$0.60)
+  - **Budget-based reasoning**: `thinking.budget_tokens: 24576`
 
 **Features:**
 - Multimodal capabilities
-- Budget-based reasoning
-- Google-style tool calling
-- Massive context windows
+- Gemini-style tool calling
+- Massive 1M token context windows
+
+**LiteLLM API Model Names:**
+- `gemini-3-pro` → `gemini/gemini-3-pro-preview`
+- `gemini-3-pro-preview` → `gemini/gemini-3-pro-preview`
+- `gemini-2.5-pro` → `gemini/gemini-2.5-pro`
+- `gemini-2.5-flash` → `gemini/gemini-2.5-flash`
+
+**Special Considerations:**
+- Gemini 3+ uses `thinking_level` ("low"/"high") via `reasoning_effort` mapping
+- Gemini 2.5 uses `thinking.budget_tokens` for budget-based reasoning
+- Image models do NOT support thinking parameters
 
 #### xAI (`xAI`)
 
@@ -303,29 +323,31 @@ awsBedrock: {
 
 ## Provider-Specific Settings
 
-### Reasoning Configuration
+### Reasoning Configuration (December 2025)
 
-Different providers handle reasoning differently:
+Different providers handle reasoning differently. All reasoning is set to **maximum** by default.
 
-**Budget-based (Anthropic, Gemini, OpenRouter):**
-```typescript
-reasoningCapabilities: {
-  supportsReasoning: true,
-  canIOReasoning: true,
-  maxReasoningBudget: 16384,  // Max tokens for thinking
-}
-```
-
-**Effort-based (OpenAI, xAI):**
+**Effort-based (OpenAI, Anthropic Opus 4.5, Gemini 3+, xAI):**
 ```typescript
 reasoningCapabilities: {
   supportsReasoning: true,
   canIOReasoning: true,
   maxReasoningEffort: 'high',  // 'low', 'medium', 'high'
+  reasoningReservedOutputTokenSpace: 32_768,
 }
 ```
 
-**Open-source with think tags:**
+**Budget-based (Anthropic Sonnet 4.5, Gemini 2.5, OpenRouter):**
+```typescript
+reasoningCapabilities: {
+  supportsReasoning: true,
+  canIOReasoning: true,
+  maxReasoningBudget: 8192,  // or 24576 for Gemini 2.5
+  reasoningReservedOutputTokenSpace: 16_384,  // MUST be > maxReasoningBudget
+}
+```
+
+**Open-source with think tags (DeepSeek, Ollama models):**
 ```typescript
 reasoningCapabilities: {
   supportsReasoning: true,
@@ -333,6 +355,16 @@ reasoningCapabilities: {
   openSourceThinkTags: ['<think>', '</think>'],  // Manual parsing
 }
 ```
+
+### Current Model Reasoning Summary
+
+| Provider | Model | Type | Setting |
+|----------|-------|------|---------|
+| OpenAI | GPT-5.2, GPT-5, GPT-5.1-codex-max | Effort | `reasoning_effort: 'high'` |
+| Anthropic | Claude Opus 4.5 | Effort | `reasoning_effort: 'high'` |
+| Anthropic | Claude Sonnet 4.5 | Budget | `budget_tokens: 8192` |
+| Gemini | Gemini 3 Pro Preview | Effort | `thinking_level: 'high'` |
+| Gemini | Gemini 2.5 Pro/Flash | Budget | `budget_tokens: 24576` |
 
 ### System Message Formats
 

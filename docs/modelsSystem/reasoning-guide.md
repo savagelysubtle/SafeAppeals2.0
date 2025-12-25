@@ -8,34 +8,37 @@ Reasoning capabilities allow AI models to show their step-by-step thinking proce
 
 ## Reasoning Types
 
+### Effort-Based Reasoning
+
+Used by OpenAI GPT, Anthropic Claude Opus 4.5, Google Gemini 3+, and xAI Grok. Controls reasoning quality through effort levels.
+
+**Characteristics:**
+- Variable token usage based on complexity
+- Effort levels: `'low'`, `'medium'`, `'high'` (we use `'high'` for maximum reasoning)
+- Provider optimizes internally
+- Less predictable costs but better reasoning quality
+
+**Supported Providers & Models:**
+- **OpenAI** (GPT-5.2, GPT-5, GPT-5.1-codex-max): `reasoning_effort: 'high'`
+- **Anthropic** (Claude Opus 4.5): `reasoning_effort: 'high'` → `output_config.effort`
+- **Google** (Gemini 3 Pro Preview): `reasoning_effort: 'high'` → `thinking_level: 'high'`
+- **xAI** (Grok series): `reasoning_effort: 'high'`
+
 ### Budget-Based Reasoning
 
-Used by Anthropic Claude, Google Gemini, and OpenRouter models. Controls reasoning by allocating a specific token budget for thinking.
+Used by Anthropic Claude Sonnet 4.5 and Google Gemini 2.5 models. Controls reasoning by allocating a specific token budget.
 
 **Characteristics:**
 - Fixed token allocation for reasoning
 - Provider manages reasoning internally
 - Output includes reasoning trace
 - Predictable token usage
+- **Important:** `max_tokens` must be > `thinking.budget_tokens` (Anthropic requirement)
 
-**Supported Providers:**
-- Anthropic Claude (Opus, Sonnet variants)
-- Google Gemini (Pro, Flash variants)
-- OpenRouter (when routing to supported models)
-
-### Effort-Based Reasoning
-
-Used by OpenAI GPT and xAI Grok models. Controls reasoning quality through effort levels rather than token budgets.
-
-**Characteristics:**
-- Variable token usage based on complexity
-- Effort levels: 'low', 'medium', 'high'
-- Provider optimizes internally
-- Less predictable costs
-
-**Supported Providers:**
-- OpenAI (GPT-5 series)
-- xAI (Grok series)
+**Supported Providers & Models:**
+- **Anthropic** (Claude Sonnet 4.5): `thinking.budget_tokens: 8192`, `max_tokens: 16384`
+- **Google** (Gemini 2.5 Pro/Flash): `thinking.budget_tokens: 24576`
+- **OpenRouter** (when routing to supported models)
 
 ### Open-Source Reasoning
 
@@ -89,25 +92,52 @@ type SendableReasoningInfo = {
 
 ### Anthropic Claude
 
+Anthropic has two models with different reasoning approaches:
+
+#### Claude Opus 4.5 (Effort-Based)
+
 **Configuration:**
 ```typescript
 reasoningCapabilities: {
   supportsReasoning: true,
   canIOReasoning: true,
-  reasoningReservedOutputTokenSpace: 16384,
-  maxReasoningBudget: 16384,  // Up to 16K tokens for thinking
+  maxReasoningEffort: 'high',  // Opus 4.5 supports effort-based
+  reasoningReservedOutputTokenSpace: 32_768,
+}
+```
+
+**API Integration (via LiteLLM):**
+```typescript
+// LiteLLM maps reasoning_effort to output_config.effort
+{
+  "messages": [...],
+  "model": "anthropic/claude-opus-4-5-20251101",
+  "reasoning_effort": "high"  // → output_config: { effort: "high" }
+}
+```
+
+#### Claude Sonnet 4.5 (Budget-Based)
+
+**Configuration:**
+```typescript
+reasoningCapabilities: {
+  supportsReasoning: true,
+  canIOReasoning: true,
+  maxReasoningBudget: 8_192,  // Sonnet 4.5 uses budget-based
+  reasoningReservedOutputTokenSpace: 16_384,  // MUST be > maxReasoningBudget
 }
 ```
 
 **API Integration:**
 ```typescript
-// Payload includes reasoning budget
+// Payload includes thinking budget
+// NOTE: max_tokens MUST be > thinking.budget_tokens
 {
   "messages": [...],
-  "max_tokens": 4096,
+  "max_tokens": 16384,  // Must be > 8192
   "thinking": {
     "type": "enabled",
-    "budget_tokens": 16384
+    "budget_tokens": 8192
   }
 }
 ```
@@ -117,14 +147,8 @@ reasoningCapabilities: {
 // Response includes thinking block
 {
   "content": [
-    {
-      "type": "thinking",
-      "thinking": "Let me analyze this step by step..."
-    },
-    {
-      "type": "text",
-      "text": "Based on my analysis..."
-    }
+    { "type": "thinking", "thinking": "Let me analyze..." },
+    { "type": "text", "text": "Based on my analysis..." }
   ]
 }
 ```
@@ -133,19 +157,20 @@ reasoningCapabilities: {
 
 **Configuration:**
 ```typescript
+// All GPT-5.x models use effort-based reasoning
 reasoningCapabilities: {
   supportsReasoning: true,
   canIOReasoning: true,
   maxReasoningEffort: 'high',  // 'low', 'medium', 'high'
+  reasoningReservedOutputTokenSpace: 32_768,
 }
 ```
 
 **API Integration:**
 ```typescript
-// Include reasoning_effort in payload
 {
   "messages": [...],
-  "model": "gpt-5",
+  "model": "gpt-5.2",
   "reasoning_effort": "high"
 }
 ```
@@ -157,21 +182,51 @@ reasoningCapabilities: {
 
 ### Google Gemini
 
+Gemini has different approaches for Gemini 3+ vs Gemini 2.5:
+
+#### Gemini 3 Pro Preview (Effort-Based)
+
 **Configuration:**
 ```typescript
 reasoningCapabilities: {
   supportsReasoning: true,
   canIOReasoning: true,
-  maxReasoningBudget: 32768,  // Up to 32K budget
+  maxReasoningEffort: 'high',  // Gemini 3+ uses thinking_level
+  reasoningReservedOutputTokenSpace: 32_768,
+}
+```
+
+**API Integration (via LiteLLM):**
+```typescript
+// LiteLLM maps reasoning_effort to thinking_level for Gemini 3+
+// 'high' → thinking_level: 'high' (maximizes reasoning depth)
+// 'low' → thinking_level: 'low' (minimizes latency)
+{
+  "model": "gemini/gemini-3-pro-preview",
+  "reasoning_effort": "high"  // → thinking_level: "high"
+}
+```
+
+#### Gemini 2.5 Pro/Flash (Budget-Based)
+
+**Configuration:**
+```typescript
+reasoningCapabilities: {
+  supportsReasoning: true,
+  canIOReasoning: true,
+  maxReasoningBudget: 24_576,  // Gemini 2.5 uses budget-based
+  reasoningReservedOutputTokenSpace: 32_768,
 }
 ```
 
 **API Integration:**
 ```typescript
+// LiteLLM sends thinking.budget_tokens for Gemini 2.5
 {
   "contents": [...],
-  "generationConfig": {
-    "thinkingBudget": 32768
+  "thinking": {
+    "type": "enabled",
+    "budget_tokens": 24576
   }
 }
 ```

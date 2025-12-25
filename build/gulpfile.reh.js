@@ -136,9 +136,9 @@ const bootstrapEntryPoints = [
 ];
 
 function getNodeVersion() {
-	const npmrc = fs.readFileSync(path.join(REPO_ROOT, 'remote', '.npmrc'), 'utf8');
-	const nodeVersion = /^target="(.*)"$/m.exec(npmrc)[1];
-	const internalNodeVersion = /^ms_build_id="(.*)"$/m.exec(npmrc)[1];
+	const pkg = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, 'remote', 'package.json'), 'utf8'));
+	const nodeVersion = pkg.nodeBuild?.nodeVersion || '20.18.3';
+	const internalNodeVersion = pkg.nodeBuild?.msBuildId || '323695';
 	return { nodeVersion, internalNodeVersion };
 }
 

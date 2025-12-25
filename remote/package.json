@@ -2,6 +2,10 @@
   "name": "vscode-reh",
   "version": "0.0.0",
   "private": true,
+  "nodeBuild": {
+    "nodeVersion": "20.18.3",
+    "msBuildId": "323695"
+  },
   "dependencies": {
     "@c4312/eventsource-umd": "^3.0.5",
     "@microsoft/1ds-core-js": "^3.2.13",

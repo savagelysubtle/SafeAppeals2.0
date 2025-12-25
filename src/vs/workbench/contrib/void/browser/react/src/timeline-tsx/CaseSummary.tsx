@@ -211,8 +211,8 @@ export const CaseSummary: React.FC<CaseSummaryProps> = ({ timeline, onEditEvent 
         <i className="codicon codicon-chevron-up" style={{ color: '#71717a' }} />
       </div>
 
-      {/* KPI Cards Grid */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
+      {/* KPI Cards Grid - Always 2 columns in sidebar */}
+      <div className="grid grid-cols-2 gap-3 mb-4">
         <KPICard
           icon="calendar"
           label="Days Since Injury"

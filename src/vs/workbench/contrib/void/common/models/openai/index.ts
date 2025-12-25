@@ -22,6 +22,7 @@ const openAICompatIncludeInPayloadReasoning = (reasoningInfo: SendableReasoningI
 
 export const openAIModelOptions = {
 	// GPT-5.2 - Flagship model for coding and agentic tasks (Dec 2025)
+	// Uses reasoning_effort: "low" | "medium" | "high"
 	'gpt-5.2': {
 		contextWindow: 128_000,
 		reservedOutputTokenSpace: 16_384,
@@ -30,25 +31,54 @@ export const openAIModelOptions = {
 		supportsFIM: false,
 		specialToolFormat: 'openai-style',
 		supportsSystemMessage: 'developer-role',
-		reasoningCapabilities: { supportsReasoning: true, canIOReasoning: true },
+		reasoningCapabilities: {
+			supportsReasoning: true,
+			canIOReasoning: true,
+			maxReasoningEffort: 'high',
+			reasoningReservedOutputTokenSpace: 32_768,
+		},
 	},
-	// GPT-5.2 Pro - Premium tier for complex reasoning (400K context)
-	'gpt-5.2-pro': {
-		contextWindow: 400_000,
-		reservedOutputTokenSpace: 32_768,
-		cost: { input: 21.00, output: 168.00, cache_read: 2.10 },
+	// GPT-5 - Previous intelligent reasoning model (Aug 2025)
+	// Uses reasoning_effort: "low" | "medium" | "high"
+	'gpt-5': {
+		contextWindow: 128_000,
+		reservedOutputTokenSpace: 16_384,
+		cost: { input: 1.25, output: 10.00, cache_read: 0.125 },
 		downloadable: false,
 		supportsFIM: false,
 		specialToolFormat: 'openai-style',
 		supportsSystemMessage: 'developer-role',
-		reasoningCapabilities: { supportsReasoning: true, canIOReasoning: true },
+		reasoningCapabilities: {
+			supportsReasoning: true,
+			canIOReasoning: true,
+			maxReasoningEffort: 'high',
+			reasoningReservedOutputTokenSpace: 32_768,
+		},
+	},
+	// GPT-5.1 Codex Max - Most intelligent coding model for long-horizon agentic tasks
+	// Uses reasoning_effort: "low" | "medium" | "high"
+	'gpt-5.1-codex-max': {
+		contextWindow: 192_000,
+		reservedOutputTokenSpace: 32_768,
+		cost: { input: 1.25, output: 10.00, cache_read: 0.125 },
+		downloadable: false,
+		supportsFIM: true,
+		specialToolFormat: 'openai-style',
+		supportsSystemMessage: 'developer-role',
+		reasoningCapabilities: {
+			supportsReasoning: true,
+			canIOReasoning: true,
+			maxReasoningEffort: 'high',
+			reasoningReservedOutputTokenSpace: 64_768,
+		},
 	},
 } as const satisfies { [s: string]: VoidStaticModelInfo }
 
 // Display name mapping for UI
 export const openAIDisplayNames: { [displayName: string]: keyof typeof openAIModelOptions } = {
 	'GPT-5.2': 'gpt-5.2',
-	'GPT-5.2 Pro': 'gpt-5.2-pro',
+	'GPT-5': 'gpt-5',
+	'GPT-5.1 Codex Max': 'gpt-5.1-codex-max',
 }
 
 export const openAISettings: VoidStaticProviderInfo = {
@@ -57,11 +87,17 @@ export const openAISettings: VoidStaticProviderInfo = {
 		const lower = modelName.toLowerCase()
 		let fallbackName: keyof typeof openAIModelOptions | null = null
 
-		// GPT-5.2 variants (check most specific first)
-		if (lower.includes('gpt-5.2-pro') || lower.includes('gpt-5.2 pro')) {
-			fallbackName = 'gpt-5.2-pro'
-		} else if (lower.includes('gpt-5.2') || lower.includes('gpt5.2')) {
+		// GPT-5.2 variants
+		if (lower.includes('gpt-5.2') || lower.includes('gpt5.2')) {
 			fallbackName = 'gpt-5.2'
+		}
+		// GPT-5.1 Codex Max
+		else if (lower.includes('gpt-5.1-codex-max') || lower.includes('codex-max')) {
+			fallbackName = 'gpt-5.1-codex-max'
+		}
+		// GPT-5 variants
+		else if (lower.includes('gpt-5') || lower.includes('gpt5')) {
+			fallbackName = 'gpt-5'
 		}
 		if (fallbackName) return { modelName: fallbackName, recognizedModelName: fallbackName, ...openAIModelOptions[fallbackName] }
 		return null
