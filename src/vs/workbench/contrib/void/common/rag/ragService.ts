@@ -3,13 +3,13 @@
  *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
  *--------------------------------------------------------------------------------------*/
 
-import { URI } from '../../../../base/common/uri.js';
-import { IChannel } from '../../../../base/parts/ipc/common/ipc.js';
-import { InstantiationType, registerSingleton } from '../../../../platform/instantiation/common/extensions.js';
-import { createDecorator } from '../../../../platform/instantiation/common/instantiation.js';
-import { IMainProcessService } from '../../../../platform/ipc/common/mainProcessService.js';
+import { URI } from '../../../../../base/common/uri.js';
+import { IChannel } from '../../../../../base/parts/ipc/common/ipc.js';
+import { InstantiationType, registerSingleton } from '../../../../../platform/instantiation/common/extensions.js';
+import { createDecorator } from '../../../../../platform/instantiation/common/instantiation.js';
+import { IMainProcessService } from '../../../../../platform/ipc/common/mainProcessService.js';
 import { ContextPack, RAGIndexParams, RAGSearchParams, RAGStats } from './ragServiceTypes.js';
-import { IVoidSettingsService } from './voidSettingsService.js';
+import { IVoidSettingsService } from '../voidSettingsService.js';
 
 export interface IRAGService {
 	readonly _serviceBrand: undefined;

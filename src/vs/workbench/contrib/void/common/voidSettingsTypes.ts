@@ -5,7 +5,7 @@
  *--------------------------------------------------------------------------------------*/
 
 import { defaultModelsOfProvider, defaultProviderSettings, ModelOverrides } from './modelCapabilities.js';
-import { RAGOpenAIModel, RAGStorageScope, RAGVectorBackend } from './ragServiceTypes.js';
+import { RAGOpenAIModel, RAGStorageScope, RAGVectorBackend } from './rag/ragServiceTypes.js';
 import { ToolApprovalType } from './tools/toolsServiceTypes.js';
 import { CloudModeOfProvider, defaultCloudModeOfProvider } from './voidCloudTypes.js';
 import { VoidSettingsState } from './voidSettingsService.js';

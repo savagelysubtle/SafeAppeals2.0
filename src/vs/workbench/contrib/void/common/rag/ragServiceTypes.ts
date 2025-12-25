@@ -3,8 +3,8 @@
  *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
  *--------------------------------------------------------------------------------------*/
 
-import { URI } from '../../../../base/common/uri.js';
-import { createDecorator } from '../../../../platform/instantiation/common/instantiation.js';
+import { URI } from '../../../../../base/common/uri.js';
+import { createDecorator } from '../../../../../platform/instantiation/common/instantiation.js';
 
 export interface DocumentRecord {
 	id: string;

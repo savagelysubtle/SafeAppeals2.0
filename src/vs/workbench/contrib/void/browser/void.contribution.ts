@@ -120,8 +120,8 @@ import '../common/ragPathService.js';
 import '../common/ragService.js';
 
 // RAG workspace service
-import './ragWorkspaceService.js';
-import { IRAGWorkspaceService } from './ragWorkspaceService.js';
+import './rag/ragWorkspaceService.js';
+import { IRAGWorkspaceService } from './rag/ragWorkspaceService.js';
 
 // RAG actions
 import './ragActions.js';

@@ -5,9 +5,9 @@
 
 import { readFileSync } from 'fs';
 import { normalize } from 'path';
-import { URI } from '../../../../base/common/uri.js';
-import { ILogService } from '../../../../platform/log/common/log.js';
-import { ExtractedContent } from '../common/ragServiceTypes.js';
+import { URI } from '../../../../../base/common/uri.js';
+import { ILogService } from '../../../../../platform/log/common/log.js';
+import { ExtractedContent } from '../../common/rag/ragServiceTypes.js';
 
 export class RAGFileService {
 	public useDoclingForPdf = true; // Use Docling by default for enhanced PDF extraction

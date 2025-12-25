@@ -3,10 +3,10 @@
  *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
  *--------------------------------------------------------------------------------------*/
 
-import { ILogService } from '../../../../platform/log/common/log.js';
+import { ILogService } from '../../../../../platform/log/common/log.js';
+import type { RAGIndexService } from '../../electron-main/rag/ragIndexService.js';
 import { RAGStorageScope } from './ragServiceTypes.js';
 import type { VectorAdapter } from './ragVectorAdapter.js';
-import type { RAGIndexService } from '../electron-main/ragIndexService.js';
 
 export interface HybridSearchResult {
 	chunkId: string;

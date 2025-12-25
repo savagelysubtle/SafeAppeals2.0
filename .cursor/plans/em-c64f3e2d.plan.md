@@ -30,14 +30,12 @@ Key workflow:
 
 ### 1. Email Service Layer
 
-**electron-main/** - Email parsing and storage
-
-Create `emailService.ts`:
+**electron-main/** - Email parsing and storageCreate `emailService.ts`:
 
 - Parse .eml files using `mailparser` library (extracts from, to, subject, body, date, attachments)
 - Parse .pdf emails using existing `pdfExtractorChannel.ts`
 - SQLite storage: `emails.db` with schema:
-  - `id`, `from_email`, `to_email`, `subject`, `body_text`, `body_html`, `date`, `case_folder_path`, `file_path`, `file_type` (.eml|.pdf), `attachments_json`
+- `id`, `from_email`, `to_email`, `subject`, `body_text`, `body_html`, `date`, `case_folder_path`, `file_path`, `file_type` (.eml|.pdf), `attachments_json`
 
 Create `emailMainChannel.ts` (IPC):
 
@@ -48,7 +46,7 @@ Create `emailMainChannel.ts` (IPC):
 
 **common/emailService.ts** - Types
 
-```typescript
+````typescript
 interface Email {
   id: string;
   from: string;
@@ -92,11 +90,11 @@ Create custom EditorPane (like `docxViewerEditor.ts:27`):
 - Buttons: "Draft Reply", "Open Original", "View Case Files"
 - "Draft Reply" workflow:
 
-  1. Query RAG for case folder context
-  2. Build prompt with email + RAG chunks
-  3. Stream LLM response
-  4. Create DOCX file: `replies/Re-{subject}-{timestamp}.docx`
-  5. Open DOCX in existing `DOCXViewerEditor`
+    1. Query RAG for case folder context
+    2. Build prompt with email + RAG chunks
+    3. Stream LLM response
+    4. Create DOCX file: `replies/Re-{subject}-{timestamp}.docx`
+    5. Open DOCX in existing `DOCXViewerEditor`
 
 **browser/emailViewers/media/emailViewer.html/js/css**
 
@@ -106,10 +104,10 @@ Webview implementation:
 - Render body (plain text or HTML)
 - Attachments list
 - Draft panel with:
-  - Instructions input
-  - "Generate Draft" button
-  - RAG context preview (which docs used)
-  - Status indicator (generating, ready)
+    - Instructions input
+    - "Generate Draft" button
+    - RAG context preview (which docs used)
+    - Status indicator (generating, ready)
 
 ### 3. Email Dashboard Sidebar
 
@@ -232,10 +230,10 @@ File system watcher (like `ragWorkspaceService.ts`):
 
 - Watch for `*.eml`, `*.pdf` in workspace
 - On file created/changed:
-  - Parse email
-  - Extract case folder from path
-  - Store in emails.db
-  - Notify EmailDashboard to refresh
+    - Parse email
+    - Extract case folder from path
+    - Store in emails.db
+    - Notify EmailDashboard to refresh
 
 **Auto-parse workflow:**
 
@@ -356,4 +354,7 @@ import './emailWorkspaceService.js';
 7. LLM generates draft → Creates `replies/Re-{subject}.docx`
 8. DOCX editor opens with editable draft
 9. User edits draft, saves DOCX
-10. Export/copy final email text
+
+
+
+````

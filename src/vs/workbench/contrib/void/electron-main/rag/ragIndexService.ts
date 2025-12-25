@@ -7,10 +7,10 @@ import type { Database } from '@vscode/sqlite3';
 import { createHash } from 'crypto';
 import { readFileSync } from 'fs';
 import { createRequire } from 'module';
-import { URI } from '../../../../base/common/uri.js';
-import { ILogService } from '../../../../platform/log/common/log.js';
-import { IRAGPathService } from '../common/ragPathService.js';
-import { ChunkRecord, DocumentRecord, ExtractedContent, RAGStats, RAGStorageScope, SearchResult } from '../common/ragServiceTypes.js';
+import { URI } from '../../../../../base/common/uri.js';
+import { ILogService } from '../../../../../platform/log/common/log.js';
+import { IRAGPathService } from '../../common/rag/ragPathService.js';
+import { ChunkRecord, DocumentRecord, ExtractedContent, RAGStats, RAGStorageScope, SearchResult } from '../../common/rag/ragServiceTypes.js';
 
 export interface IndexDocumentParams {
 	uri: URI;

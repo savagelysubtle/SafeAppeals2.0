@@ -3,7 +3,7 @@
  *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
  *--------------------------------------------------------------------------------------*/
 
-import { ILogService } from '../../../../platform/log/common/log.js';
+import { ILogService } from '../../../../../platform/log/common/log.js';
 import { createRequire } from 'module';
 import { LocalEmbeddingService } from './ragLocalEmbeddings.js';
 import { LocalCrossEncoderReranker } from './ragReranker.js';

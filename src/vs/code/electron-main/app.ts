@@ -126,8 +126,8 @@ import { IWorkspacesManagementMainService, WorkspacesManagementMainService } fro
 // in theory this is not allowed
 // ignore the eslint errors below
 import { IMetricsService } from '../../workbench/contrib/void/common/metricsService.js';
-import { IRAGPathService, RAGPathService } from '../../workbench/contrib/void/common/ragPathService.js';
-import { IRAGMainService } from '../../workbench/contrib/void/common/ragServiceTypes.js';
+import { IRAGPathService, RAGPathService } from '../../workbench/contrib/void/common/rag/ragPathService.js';
+import { IRAGMainService } from '../../workbench/contrib/void/common/rag/ragServiceTypes.js';
 import { IVoidSCMService } from '../../workbench/contrib/void/common/voidSCMTypes.js';
 import { IVoidUpdateService } from '../../workbench/contrib/void/common/voidUpdateService.js';
 import { DOCXCreatorChannel } from '../../workbench/contrib/void/electron-main/docxCreatorChannel.js';
@@ -139,8 +139,8 @@ import { FileConverterChannel, FileConverterMainService } from '../../workbench/
 import { MCPChannel } from '../../workbench/contrib/void/electron-main/mcpChannel.js';
 import { MetricsMainService } from '../../workbench/contrib/void/electron-main/metricsMainService.js';
 import { PDFExtractorChannel } from '../../workbench/contrib/void/electron-main/pdfExtractorChannel.js';
-import { RAGMainChannel } from '../../workbench/contrib/void/electron-main/ragMainChannel.js';
-import { RAGMainService } from '../../workbench/contrib/void/electron-main/ragMainService.js';
+import { RAGMainChannel } from '../../workbench/contrib/void/electron-main/rag/ragMainChannel.js';
+import { RAGMainService } from '../../workbench/contrib/void/electron-main/rag/ragMainService.js';
 import { LLMMessageChannel } from '../../workbench/contrib/void/electron-main/sendLLMMessageChannel.js';
 import { VoidSCMService } from '../../workbench/contrib/void/electron-main/voidSCMMainService.js';
 import { VoidMainUpdateService } from '../../workbench/contrib/void/electron-main/voidUpdateMainService.js';
