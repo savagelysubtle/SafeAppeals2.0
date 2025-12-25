@@ -6,13 +6,13 @@
 import { ChildProcess, spawn } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
-import { URI } from '../../../../base/common/uri.js';
-import { ILogService } from '../../../../platform/log/common/log.js';
-import { HybridRetriever } from '../common/ragHybridRetriever.js';
-import { IRAGPathService } from '../common/ragPathService.js';
-import { LocalCrossEncoderReranker } from '../common/ragReranker.js';
-import { ContextPack, IRAGMainService, RAGIndexParams, RAGSearchParams, RAGStats } from '../common/ragServiceTypes.js';
-import { ChromaPersistentAdapter, PersistentVectorAdapterConfig, VectorAdapter } from '../common/ragVectorAdapter.js';
+import { URI } from '../../../../../base/common/uri.js';
+import { ILogService } from '../../../../../platform/log/common/log.js';
+import { HybridRetriever } from '../../common/rag/ragHybridRetriever.js';
+import { IRAGPathService } from '../../common/rag/ragPathService.js';
+import { LocalCrossEncoderReranker } from '../../common/rag/ragReranker.js';
+import { ContextPack, IRAGMainService, RAGIndexParams, RAGSearchParams, RAGStats } from '../../common/rag/ragServiceTypes.js';
+import { ChromaPersistentAdapter, PersistentVectorAdapterConfig, VectorAdapter } from '../../common/rag/ragVectorAdapter.js';
 import { RAGFileService } from './ragFileService.js';
 import { RAGIndexService } from './ragIndexService.js';
 

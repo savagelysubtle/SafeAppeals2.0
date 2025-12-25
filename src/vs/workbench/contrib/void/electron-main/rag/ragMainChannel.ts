@@ -3,10 +3,10 @@
  *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
  *--------------------------------------------------------------------------------------*/
 
-import { Event } from '../../../../base/common/event.js';
-import { URI, UriComponents } from '../../../../base/common/uri.js';
-import { IChannel, IServerChannel } from '../../../../base/parts/ipc/common/ipc.js';
-import { ContextPack, IRAGMainService, RAGIndexParams, RAGSearchParams, RAGStats } from '../common/ragServiceTypes.js';
+import { Event } from '../../../../../base/common/event.js';
+import { URI, UriComponents } from '../../../../../base/common/uri.js';
+import { IChannel, IServerChannel } from '../../../../../base/parts/ipc/common/ipc.js';
+import { ContextPack, IRAGMainService, RAGIndexParams, RAGSearchParams, RAGStats } from '../../common/rag/ragServiceTypes.js';
 
 export class RAGMainChannel implements IServerChannel {
 	constructor(private service: IRAGMainService) { }

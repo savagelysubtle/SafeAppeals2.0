@@ -15,8 +15,8 @@ import { KeybindingWeight } from '../../../../../../platform/keybinding/common/k
 import { INotificationService } from '../../../../../../platform/notification/common/notification.js';
 import { IChatThreadService } from '../../chatThreadService.js';
 import { IMetricsService } from '../../../common/metricsService.js';
-import { IRAGService } from '../../../common/ragService.js';
-import { RAGContextService } from '../../../common/ragContextService.js';
+import { IRAGService } from '../../../common/rag/ragService.js';
+import { RAGContextService } from '../../../common/rag/ragContextService.js';
 import { IClipboardService } from '../../../../../../platform/clipboard/common/clipboardService.js';
 import { ContextKeyExpr } from '../../../../../../platform/contextkey/common/contextkey.js';
 import { MenuId } from '../../../../../../platform/actions/common/actions.js';

@@ -6,7 +6,7 @@
 import { Event } from '../../../../base/common/event.js';
 import { URI } from '../../../../base/common/uri.js';
 import { IServerChannel } from '../../../../base/parts/ipc/common/ipc.js';
-import { IRAGMainService } from '../common/ragServiceTypes.js';
+import { IRAGMainService } from '../common/rag/ragServiceTypes.js';
 
 export class DOCXCreatorChannel implements IServerChannel {
 

@@ -3,27 +3,27 @@
  *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
  *--------------------------------------------------------------------------------------*/
 
-import { URI } from '../../../../base/common/uri.js';
-import { ITextModelService } from '../../../../editor/common/services/resolverService.js';
-import { Action2, MenuId, registerAction2 } from '../../../../platform/actions/common/actions.js';
-import { ContextKeyExpr } from '../../../../platform/contextkey/common/contextkey.js';
-import { IFileDialogService } from '../../../../platform/dialogs/common/dialogs.js';
-import { IFileService } from '../../../../platform/files/common/files.js';
-import { ServicesAccessor } from '../../../../platform/instantiation/common/instantiation.js';
-import { INotificationService } from '../../../../platform/notification/common/notification.js';
-import { IProgressService, ProgressLocation } from '../../../../platform/progress/common/progress.js';
-import { IWorkspaceContextService } from '../../../../platform/workspace/common/workspace.js';
-import { IExplorerService } from '../../../contrib/files/browser/files.js';
-import { IEditorService } from '../../../services/editor/common/editorService.js';
-import { IRAGService } from '../common/ragService.js';
-import { IVoidSettingsService } from '../common/voidSettingsService.js';
+import { URI } from '../../../../../base/common/uri.js';
+import { ITextModelService } from '../../../../../editor/common/services/resolverService.js';
+import { Action2, MenuId, registerAction2 } from '../../../../../platform/actions/common/actions.js';
+import { ContextKeyExpr } from '../../../../../platform/contextkey/common/contextkey.js';
+import { IFileDialogService } from '../../../../../platform/dialogs/common/dialogs.js';
+import { IFileService } from '../../../../../platform/files/common/files.js';
+import { ServicesAccessor } from '../../../../../platform/instantiation/common/instantiation.js';
+import { INotificationService } from '../../../../../platform/notification/common/notification.js';
+import { IProgressService, ProgressLocation } from '../../../../../platform/progress/common/progress.js';
+import { IWorkspaceContextService } from '../../../../../platform/workspace/common/workspace.js';
+import { IExplorerService } from '../../../../contrib/files/browser/files.js';
+import { IEditorService } from '../../../../services/editor/common/editorService.js';
+import { IRAGService } from '../../common/rag/ragService.js';
+import { IVoidSettingsService } from '../../common/voidSettingsService.js';
 import {
 	VOID_RAG_GET_STATS_ACTION_ID,
 	VOID_RAG_INDEX_DOCUMENT_ACTION_ID,
 	VOID_RAG_SEARCH_POLICY_ACTION_ID,
 	VOID_RAG_SEARCH_WORKSPACE_ACTION_ID,
 	VOID_RAG_TEST_DOCLING_ACTION_ID
-} from './actionIDs.js';
+} from '../actionIDs.js';
 
 class RAGIndexDocumentAction extends Action2 {
 	constructor() {

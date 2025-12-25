@@ -5,7 +5,7 @@
 
 import { IServerChannel } from '../../../../base/parts/ipc/common/ipc.js';
 import { Event } from '../../../../base/common/event.js';
-import { IRAGMainService } from '../common/ragServiceTypes.js';
+import { IRAGMainService } from '../common/rag/ragServiceTypes.js';
 import { URI, UriComponents } from '../../../../base/common/uri.js';
 
 export class PDFExtractorChannel implements IServerChannel {

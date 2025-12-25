@@ -3,16 +3,16 @@
  *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
  *--------------------------------------------------------------------------------------*/
 
-import { Disposable, IDisposable } from '../../../../base/common/lifecycle.js';
-import { URI } from '../../../../base/common/uri.js';
-import { IFileService, FileChangeType } from '../../../../platform/files/common/files.js';
-import { IWorkspaceContextService } from '../../../../platform/workspace/common/workspace.js';
-import { IRAGService } from '../common/ragService.js';
-import { IVoidSettingsService } from '../common/voidSettingsService.js';
-import { ILogService } from '../../../../platform/log/common/log.js';
-import { createDecorator } from '../../../../platform/instantiation/common/instantiation.js';
-import { registerSingleton, InstantiationType } from '../../../../platform/instantiation/common/extensions.js';
-import { basename } from '../../../../base/common/path.js';
+import { Disposable, IDisposable } from '../../../../../base/common/lifecycle.js';
+import { URI } from '../../../../../base/common/uri.js';
+import { IFileService, FileChangeType } from '../../../../../platform/files/common/files.js';
+import { IWorkspaceContextService } from '../../../../../platform/workspace/common/workspace.js';
+import { IRAGService } from '../../common/rag/ragService.js';
+import { IVoidSettingsService } from '../../common/voidSettingsService.js';
+import { ILogService } from '../../../../../platform/log/common/log.js';
+import { createDecorator } from '../../../../../platform/instantiation/common/instantiation.js';
+import { registerSingleton, InstantiationType } from '../../../../../platform/instantiation/common/extensions.js';
+import { basename } from '../../../../../base/common/path.js';
 
 export const IRAGWorkspaceService = createDecorator<IRAGWorkspaceService>('ragWorkspaceService');
 

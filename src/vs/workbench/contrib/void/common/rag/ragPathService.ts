@@ -3,12 +3,12 @@
  *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
  *--------------------------------------------------------------------------------------*/
 
-import { URI } from '../../../../base/common/uri.js';
-import { IEnvironmentService } from '../../../../platform/environment/common/environment.js';
-import { join } from '../../../../base/common/path.js';
-import { IFileService } from '../../../../platform/files/common/files.js';
-import { createDecorator } from '../../../../platform/instantiation/common/instantiation.js';
-import { registerSingleton, InstantiationType } from '../../../../platform/instantiation/common/extensions.js';
+import { join } from '../../../../../base/common/path.js';
+import { URI } from '../../../../../base/common/uri.js';
+import { IEnvironmentService } from '../../../../../platform/environment/common/environment.js';
+import { IFileService } from '../../../../../platform/files/common/files.js';
+import { InstantiationType, registerSingleton } from '../../../../../platform/instantiation/common/extensions.js';
+import { createDecorator } from '../../../../../platform/instantiation/common/instantiation.js';
 
 export interface IRAGPathService {
 	readonly _serviceBrand: undefined;

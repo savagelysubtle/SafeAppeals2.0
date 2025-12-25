@@ -50,7 +50,7 @@ todos:
 
 ## New Directory Structure
 
-```
+````javascript
 src/vs/workbench/contrib/void/common/
 ├── models/
 │   ├── index.ts              # Main registry + re-exports
@@ -142,4 +142,5 @@ export * from './models/index.js';
 
 ### 7. Verify no breaking changes
 
-All existing imports from `modelCapabilities.ts` should continue to work unchanged.
+
+````
