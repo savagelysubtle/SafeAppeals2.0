@@ -9,7 +9,7 @@ import { Disposable } from '../../../../../base/common/lifecycle.js';
 import { URI } from '../../../../../base/common/uri.js';
 import { IChannel } from '../../../../../base/parts/ipc/common/ipc.js';
 import { IFileService } from '../../../../../platform/files/common/files.js';
-import { registerSingleton, InstantiationType } from '../../../../../platform/instantiation/common/extensions.js';
+import { InstantiationType, registerSingleton } from '../../../../../platform/instantiation/common/extensions.js';
 import { IMainProcessService } from '../../../../../platform/ipc/common/mainProcessService.js';
 import { INotificationService, Severity } from '../../../../../platform/notification/common/notification.js';
 import { IWorkspaceContextService } from '../../../../../platform/workspace/common/workspace.js';
@@ -17,17 +17,20 @@ import { IWorkspaceContextService } from '../../../../../platform/workspace/comm
 import {
 	CaseTimeline,
 	DEFAULT_CASE_TIMELINE,
+	DEFAULT_NOTIFICATION_PREFERENCES,
 	EventCategory,
 	generateEventId,
-	ITimelineService,
 	isDeadlineOverdue,
 	isDeadlineUpcoming,
+	ITimelineService,
 	JurisdictionConfig,
-	TimelineEvent
+	NotificationPreferences,
+	TimelineEvent,
+	TimelineNotification
 } from '../../common/timeline/timelineTypes.js';
-import { DEFAULT_JURISDICTIONS, getJurisdictionById } from './jurisdictionConfig.js';
+import { CaseInfo } from '../fileOrganizer/caseConfig.js';
 import { IFileOrganizerService } from '../fileOrganizer/fileOrganizerService.js';
-import { CaseInfo } from '../fileOrganizer/types.js';
+import { DEFAULT_JURISDICTIONS, getJurisdictionById } from './jurisdictionConfig.js';
 
 const TIMELINE_FILENAME = '.timeline.json';
 
@@ -38,6 +41,9 @@ export class TimelineService extends Disposable implements ITimelineService {
 
 	private readonly _onDidChangeTimeline = this._register(new Emitter<CaseTimeline | null>());
 	readonly onDidChangeTimeline: Event<CaseTimeline | null> = this._onDidChangeTimeline.event;
+
+	private readonly _onDidChangeNotifications = this._register(new Emitter<TimelineNotification[]>());
+	readonly onDidChangeNotifications: Event<TimelineNotification[]> = this._onDidChangeNotifications.event;
 
 	private readonly timelineExportChannel: IChannel;
 
@@ -63,6 +69,17 @@ export class TimelineService extends Disposable implements ITimelineService {
 			// Schedule notifications after loading
 			if (this._timeline?.notificationsEnabled) {
 				this.scheduleDeadlineNotifications();
+
+				// Generate and persist new notifications
+				const newNotifications = this.generateNotifications();
+				if (newNotifications.length > 0) {
+					this._timeline.notifications = [
+						...(this._timeline.notifications || []),
+						...newNotifications
+					];
+					await this.saveTimeline(this._timeline);
+					this._onDidChangeNotifications.fire(this.getNotifications());
+				}
 			}
 		} catch (error) {
 			console.error('[TimelineService] Failed to initialize timeline:', error);
@@ -410,6 +427,301 @@ export class TimelineService extends Disposable implements ITimelineService {
 		console.log('[TimelineService] Deadline notifications scheduled:',
 			overdueDeadlines.length, 'overdue,',
 			upcomingDeadlines.length, 'upcoming');
+	}
+
+	/**
+	 * Generate a unique notification ID
+	 */
+	private generateNotificationId(): string {
+		return `notif_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+	}
+
+	/**
+	 * Generate all notifications based on current timeline state
+	 */
+	generateNotifications(): TimelineNotification[] {
+		if (!this._timeline) {
+			return [];
+		}
+
+		const prefs = this.getNotificationPreferences();
+		if (!prefs.enabled) {
+			return [];
+		}
+
+		const notifications: TimelineNotification[] = [];
+		const now = new Date();
+
+		// Existing notifications that shouldn't be regenerated
+		const existingIds = new Set(
+			(this._timeline.notifications || [])
+				.filter(n => !n.isDismissed)
+				.map(n => `${n.type}_${n.eventId}`)
+		);
+
+		// 1. Deadline notifications
+		if (prefs.deadlineAlerts) {
+			// Overdue deadlines
+			const overdueDeadlines = this.getOverdueDeadlines();
+			for (const deadline of overdueDeadlines) {
+				const key = `deadline_overdue_${deadline.id}`;
+				if (!existingIds.has(key)) {
+					notifications.push({
+						id: this.generateNotificationId(),
+						type: 'deadline_overdue',
+						title: 'Overdue Deadline',
+						message: deadline.title,
+						eventId: deadline.id,
+						severity: 'error',
+						isRead: false,
+						isDismissed: false,
+						createdAt: now.toISOString()
+					});
+				}
+			}
+
+			// Upcoming deadlines
+			for (const days of prefs.deadlineReminderDays) {
+				const upcomingDeadlines = this.getUpcomingDeadlines(days);
+				for (const deadline of upcomingDeadlines) {
+					const daysUntil = Math.ceil(
+						(new Date(deadline.date).getTime() - now.getTime()) / (1000 * 60 * 60 * 24)
+					);
+					// Only notify for the specific day thresholds
+					if (prefs.deadlineReminderDays.includes(daysUntil)) {
+						const key = `deadline_upcoming_${deadline.id}_${daysUntil}`;
+						if (!existingIds.has(key)) {
+							notifications.push({
+								id: this.generateNotificationId(),
+								type: 'deadline_upcoming',
+								title: daysUntil === 1 ? 'Tomorrow' : `${daysUntil} Days Away`,
+								message: deadline.title,
+								eventId: deadline.id,
+								severity: daysUntil <= 1 ? 'error' : daysUntil <= 3 ? 'warning' : 'info',
+								isRead: false,
+								isDismissed: false,
+								createdAt: now.toISOString()
+							});
+						}
+					}
+				}
+			}
+		}
+
+		// 2. Document expiration warnings (medical reports older than X months)
+		if (prefs.documentExpirationMonths > 0) {
+			const expirationThreshold = new Date();
+			expirationThreshold.setMonth(expirationThreshold.getMonth() - prefs.documentExpirationMonths);
+
+			const medicalEvents = this._timeline.events.filter(
+				e => e.category === 'medical' && e.linkedDocuments.length > 0
+			);
+
+			for (const event of medicalEvents) {
+				const eventDate = new Date(event.date);
+				if (eventDate < expirationThreshold) {
+					const key = `document_expiring_${event.id}`;
+					if (!existingIds.has(key)) {
+						const monthsOld = Math.floor(
+							(now.getTime() - eventDate.getTime()) / (1000 * 60 * 60 * 24 * 30)
+						);
+						notifications.push({
+							id: this.generateNotificationId(),
+							type: 'document_expiring',
+							title: 'Aging Medical Document',
+							message: `${event.title} is ${monthsOld} months old - consider obtaining updated records`,
+							eventId: event.id,
+							severity: 'warning',
+							isRead: false,
+							isDismissed: false,
+							createdAt: now.toISOString()
+						});
+					}
+				}
+			}
+		}
+
+		// 3. Missing document alerts (events without linked documents)
+		if (prefs.documentMissingAlerts) {
+			const eventsNeedingDocs = this._timeline.events.filter(
+				e => ['medical', 'hearing', 'decision', 'filing'].includes(e.category) &&
+					e.linkedDocuments.length === 0
+			);
+
+			for (const event of eventsNeedingDocs) {
+				const key = `document_missing_${event.id}`;
+				if (!existingIds.has(key)) {
+					notifications.push({
+						id: this.generateNotificationId(),
+						type: 'document_missing',
+						title: 'Missing Document',
+						message: `${event.title} has no linked documents`,
+						eventId: event.id,
+						severity: 'info',
+						isRead: false,
+						isDismissed: false,
+						createdAt: now.toISOString()
+					});
+				}
+			}
+		}
+
+		// 4. Statute of limitations warning
+		if (prefs.statuteWarningDays > 0 && this._timeline.injuryDate) {
+			const statuteDeadline = this.calculateStatuteDeadline(
+				new Date(this._timeline.injuryDate),
+				this._timeline.jurisdiction
+			);
+			const daysUntilStatute = Math.ceil(
+				(statuteDeadline.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)
+			);
+
+			if (daysUntilStatute <= prefs.statuteWarningDays && daysUntilStatute > 0) {
+				const key = `statute_warning_${daysUntilStatute}`;
+				if (!existingIds.has(key)) {
+					notifications.push({
+						id: this.generateNotificationId(),
+						type: 'statute_warning',
+						title: 'Statute of Limitations',
+						message: `Only ${daysUntilStatute} days remaining to file`,
+						severity: daysUntilStatute <= 7 ? 'error' : 'warning',
+						isRead: false,
+						isDismissed: false,
+						createdAt: now.toISOString()
+					});
+				}
+			}
+		}
+
+		return notifications;
+	}
+
+	/**
+	 * Get all notifications (filter snoozed, unread first, then by date)
+	 */
+	getNotifications(): TimelineNotification[] {
+		if (!this._timeline?.notifications) {
+			return [];
+		}
+
+		const now = new Date();
+
+		// Filter out dismissed and currently snoozed notifications
+		return this._timeline.notifications
+			.filter(n => {
+				if (n.isDismissed) return false;
+				if (n.snoozedUntil && new Date(n.snoozedUntil) > now) return false;
+				return true;
+			})
+			.sort((a, b) => {
+				// Unread first
+				if (a.isRead !== b.isRead) return a.isRead ? 1 : -1;
+				// Then by severity (error > warning > info)
+				const severityOrder = { error: 0, warning: 1, info: 2 };
+				if (a.severity !== b.severity) {
+					return severityOrder[a.severity] - severityOrder[b.severity];
+				}
+				// Then by date (newest first)
+				return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+			});
+	}
+
+	/**
+	 * Get unread notification count
+	 */
+	getUnreadCount(): number {
+		return this.getNotifications().filter(n => !n.isRead).length;
+	}
+
+	/**
+	 * Mark a notification as read
+	 */
+	async markAsRead(notificationId: string): Promise<void> {
+		if (!this._timeline?.notifications) return;
+
+		const notification = this._timeline.notifications.find(n => n.id === notificationId);
+		if (notification) {
+			notification.isRead = true;
+			await this.saveTimeline(this._timeline);
+			this._onDidChangeNotifications.fire(this.getNotifications());
+		}
+	}
+
+	/**
+	 * Mark all notifications as read
+	 */
+	async markAllAsRead(): Promise<void> {
+		if (!this._timeline?.notifications) return;
+
+		for (const notification of this._timeline.notifications) {
+			notification.isRead = true;
+		}
+		await this.saveTimeline(this._timeline);
+		this._onDidChangeNotifications.fire(this.getNotifications());
+	}
+
+	/**
+	 * Dismiss a notification (hide permanently)
+	 */
+	async dismissNotification(notificationId: string): Promise<void> {
+		if (!this._timeline?.notifications) return;
+
+		const notification = this._timeline.notifications.find(n => n.id === notificationId);
+		if (notification) {
+			notification.isDismissed = true;
+			await this.saveTimeline(this._timeline);
+			this._onDidChangeNotifications.fire(this.getNotifications());
+		}
+	}
+
+	/**
+	 * Snooze a notification for X days
+	 */
+	async snoozeNotification(notificationId: string, days: number): Promise<void> {
+		if (!this._timeline?.notifications) return;
+
+		const notification = this._timeline.notifications.find(n => n.id === notificationId);
+		if (notification) {
+			const snoozeUntil = new Date();
+			snoozeUntil.setDate(snoozeUntil.getDate() + days);
+			notification.snoozedUntil = snoozeUntil.toISOString();
+			notification.isRead = true;
+			await this.saveTimeline(this._timeline);
+			this._onDidChangeNotifications.fire(this.getNotifications());
+		}
+	}
+
+	/**
+	 * Update notification preferences
+	 */
+	async updateNotificationPreferences(prefs: Partial<NotificationPreferences>): Promise<void> {
+		if (!this._timeline) return;
+
+		const currentPrefs = this.getNotificationPreferences();
+		const updatedTimeline: CaseTimeline = {
+			...this._timeline,
+			notificationPreferences: { ...currentPrefs, ...prefs },
+			events: [...this._timeline.events]
+		};
+		await this.saveTimeline(updatedTimeline);
+
+		// Regenerate notifications if preferences changed
+		const newNotifications = this.generateNotifications();
+		if (newNotifications.length > 0) {
+			this._timeline.notifications = [
+				...(this._timeline.notifications || []),
+				...newNotifications
+			];
+			await this.saveTimeline(this._timeline);
+			this._onDidChangeNotifications.fire(this.getNotifications());
+		}
+	}
+
+	/**
+	 * Get notification preferences
+	 */
+	getNotificationPreferences(): NotificationPreferences {
+		return this._timeline?.notificationPreferences || DEFAULT_NOTIFICATION_PREFERENCES;
 	}
 
 	// ============================================================================

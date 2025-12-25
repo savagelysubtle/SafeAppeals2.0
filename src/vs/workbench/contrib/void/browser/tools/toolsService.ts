@@ -27,6 +27,7 @@ import { IDocumentEditorService } from '../documentViewers/documentEditorService
 import { IEditCodeService } from '../editCodeServiceInterface.js'
 import { ITerminalToolService } from './terminalToolService.js'
 import { IVoidCommandBarService } from '../voidCommandBarService.js'
+import { EventCategory, ITimelineService } from '../../common/timeline/timelineTypes.js'
 
 
 // tool use for AI
@@ -132,6 +133,55 @@ const checkIfIsFolder = (uriStr: string) => {
 	return false
 }
 
+const VALID_EVENT_CATEGORIES: EventCategory[] = ['injury', 'medical', 'hearing', 'decision', 'deadline', 'filing', 'correspondence', 'custom']
+
+const validateEventCategory = (category: unknown): EventCategory => {
+	if (typeof category !== 'string') throw new Error(`Invalid LLM output: category must be a string.`)
+	if (!VALID_EVENT_CATEGORIES.includes(category as EventCategory)) {
+		throw new Error(`Invalid LLM output: category must be one of: ${VALID_EVENT_CATEGORIES.join(', ')}. Got: "${category}".`)
+	}
+	return category as EventCategory
+}
+
+const validateOptionalEventCategory = (category: unknown): EventCategory | null => {
+	if (isFalsy(category)) return null
+	return validateEventCategory(category)
+}
+
+const validateStringArray = (arr: unknown): string[] => {
+	if (isFalsy(arr)) return []
+	if (typeof arr === 'string') {
+		try {
+			const parsed = JSON.parse(arr)
+			if (Array.isArray(parsed)) {
+				return parsed.map(item => validateStr('array item', item))
+			}
+		} catch {
+			// If it's a single string, wrap it
+			return [arr]
+		}
+	}
+	if (Array.isArray(arr)) {
+		return arr.map((item, i) => validateStr(`array[${i}]`, item))
+	}
+	return []
+}
+
+const validateDateString = (dateStr: unknown): string => {
+	const str = validateStr('date', dateStr)
+	// Try to parse as date to validate
+	const date = new Date(str)
+	if (isNaN(date.getTime())) {
+		throw new Error(`Invalid LLM output: date string "${str}" is not a valid date format. Use ISO 8601 (YYYY-MM-DD or full ISO datetime).`)
+	}
+	return date.toISOString()
+}
+
+const validateOptionalDateString = (dateStr: unknown): string | null => {
+	if (isFalsy(dateStr)) return null
+	return validateDateString(dateStr)
+}
+
 export interface IToolsService {
 	readonly _serviceBrand: undefined;
 	validateParams: ValidateBuiltinParams;
@@ -169,6 +219,7 @@ export class ToolsService implements IToolsService {
 		@IDocumentEditorService private readonly documentEditorService: IDocumentEditorService,
 		@IDocumentCreatorService private readonly documentCreatorService: IDocumentCreatorService,
 		@IMainProcessService mainProcessService: IMainProcessService,
+		@ITimelineService private readonly timelineService: ITimelineService,
 	) {
 		const queryBuilder = instantiationService.createInstance(QueryBuilder);
 
@@ -398,6 +449,59 @@ export class ToolsService implements IToolsService {
 				});
 
 				return { uri, operations };
+			},
+
+			// --- Timeline tools
+			timeline_add_event: (params: RawToolParamsObj) => {
+				const { date: dateUnknown, title: titleUnknown, description: descriptionUnknown, category: categoryUnknown, is_deadline: isDeadlineUnknown, linked_documents: linkedDocsUnknown } = params
+				const date = validateDateString(dateUnknown)
+				const title = validateStr('title', titleUnknown)
+				const description = validateOptionalStr('description', descriptionUnknown)
+				const category = validateEventCategory(categoryUnknown)
+				const isDeadline = validateBoolean(isDeadlineUnknown, { default: false })
+				const linkedDocuments = validateStringArray(linkedDocsUnknown)
+				return { date, title, description, category, isDeadline, linkedDocuments }
+			},
+
+			timeline_update_event: (params: RawToolParamsObj) => {
+				const { event_id: eventIdUnknown, date: dateUnknown, title: titleUnknown, description: descriptionUnknown, category: categoryUnknown, is_deadline: isDeadlineUnknown, is_complete: isCompleteUnknown } = params
+				const eventId = validateStr('event_id', eventIdUnknown)
+				const date = validateOptionalDateString(dateUnknown)
+				const title = validateOptionalStr('title', titleUnknown)
+				const description = validateOptionalStr('description', descriptionUnknown)
+				const category = validateOptionalEventCategory(categoryUnknown)
+				const isDeadline = isFalsy(isDeadlineUnknown) ? null : validateBoolean(isDeadlineUnknown, { default: false })
+				const isComplete = isFalsy(isCompleteUnknown) ? null : validateBoolean(isCompleteUnknown, { default: false })
+				return { eventId, date, title, description, category, isDeadline, isComplete }
+			},
+
+			timeline_delete_event: (params: RawToolParamsObj) => {
+				const { event_id: eventIdUnknown } = params
+				const eventId = validateStr('event_id', eventIdUnknown)
+				return { eventId }
+			},
+
+			timeline_get_events: (params: RawToolParamsObj) => {
+				const { category: categoryUnknown, start_date: startDateUnknown, end_date: endDateUnknown, is_deadline: isDeadlineUnknown, limit: limitUnknown } = params
+				const category = validateOptionalEventCategory(categoryUnknown)
+				const startDate = validateOptionalDateString(startDateUnknown)
+				const endDate = validateOptionalDateString(endDateUnknown)
+				const isDeadline = isFalsy(isDeadlineUnknown) ? null : validateBoolean(isDeadlineUnknown, { default: false })
+				const limit = validateNumber(limitUnknown, { default: 50 }) || 50
+				return { category, startDate, endDate, isDeadline, limit }
+			},
+
+			timeline_link_document: (params: RawToolParamsObj) => {
+				const { event_id: eventIdUnknown, document_uri: documentUriUnknown } = params
+				const eventId = validateStr('event_id', eventIdUnknown)
+				const documentUri = validateURI(documentUriUnknown)
+				return { eventId, documentUri }
+			},
+
+			timeline_get_deadlines: (params: RawToolParamsObj) => {
+				const { days_ahead: daysAheadUnknown } = params
+				const daysAhead = validateNumber(daysAheadUnknown, { default: 30 }) || 30
+				return { daysAhead }
 			},
 
 		}
@@ -830,6 +934,72 @@ Example: rag_index_document with uri="/path/to/document.pdf" and is_policy_manua
 					return { result };
 				}
 			},
+
+			// --- Timeline tools
+			timeline_add_event: async ({ date, title, description, category, isDeadline, linkedDocuments }) => {
+				const event = await this.timelineService.addEvent({
+					date,
+					title,
+					description: description ?? undefined,
+					category,
+					isDeadline,
+					linkedDocuments,
+				})
+				return { result: { event } }
+			},
+
+			timeline_update_event: async ({ eventId, date, title, description, category, isDeadline, isComplete }) => {
+				const updates: Record<string, unknown> = {}
+				if (date !== null) updates.date = date
+				if (title !== null) updates.title = title
+				if (description !== null) updates.description = description
+				if (category !== null) updates.category = category
+				if (isDeadline !== null) updates.isDeadline = isDeadline
+				if (isComplete !== null) updates.isComplete = isComplete
+				await this.timelineService.updateEvent(eventId, updates)
+				return { result: { success: true } }
+			},
+
+			timeline_delete_event: async ({ eventId }) => {
+				await this.timelineService.deleteEvent(eventId)
+				return { result: { success: true } }
+			},
+
+			timeline_get_events: async ({ category, startDate, endDate, isDeadline, limit }) => {
+				let events = this.timelineService.getEventsSorted(true)
+
+				// Apply filters
+				if (category !== null) {
+					events = events.filter(e => e.category === category)
+				}
+				if (startDate !== null) {
+					const start = new Date(startDate)
+					events = events.filter(e => new Date(e.date) >= start)
+				}
+				if (endDate !== null) {
+					const end = new Date(endDate)
+					events = events.filter(e => new Date(e.date) <= end)
+				}
+				if (isDeadline !== null) {
+					events = events.filter(e => e.isDeadline === isDeadline)
+				}
+
+				const totalCount = events.length
+				events = events.slice(0, limit)
+
+				return { result: { events, totalCount } }
+			},
+
+			timeline_link_document: async ({ eventId, documentUri }) => {
+				await this.timelineService.linkDocument(eventId, documentUri)
+				return { result: { success: true } }
+			},
+
+			timeline_get_deadlines: async ({ daysAhead }) => {
+				const upcoming = this.timelineService.getUpcomingDeadlines(daysAhead)
+				const overdue = this.timelineService.getOverdueDeadlines()
+				return { result: { upcoming, overdue } }
+			},
 		}
 
 
@@ -1001,6 +1171,63 @@ Example: rag_index_document with uri="/path/to/document.pdf" and is_policy_manua
 					}).join('\n\n');
 					return `${header}\n\n${resultsStr}`;
 				}).join('\n\n---\n\n');
+			},
+
+			// --- Timeline tools
+			timeline_add_event: (_params, result) => {
+				const e = result.event
+				const linkedDocsStr = e.linkedDocuments.length > 0
+					? `\nLinked Documents: ${e.linkedDocuments.join(', ')}`
+					: ''
+				return `Successfully added event to timeline:
+- ID: ${e.id}
+- Date: ${new Date(e.date).toLocaleDateString()}
+- Title: ${e.title}
+- Category: ${e.category}
+- Is Deadline: ${e.isDeadline}${linkedDocsStr}`
+			},
+
+			timeline_update_event: (params, _result) => {
+				return `Successfully updated event ${params.eventId}.`
+			},
+
+			timeline_delete_event: (params, _result) => {
+				return `Successfully deleted event ${params.eventId} from timeline.`
+			},
+
+			timeline_get_events: (_params, result) => {
+				if (result.events.length === 0) {
+					return 'No events found matching the criteria.'
+				}
+				const eventsStr = result.events.map((e, i) => {
+					const dateStr = new Date(e.date).toLocaleDateString()
+					const deadlineStr = e.isDeadline ? ' [DEADLINE]' : ''
+					const completeStr = e.isComplete ? ' ✓' : ''
+					const linkedDocsCount = e.linkedDocuments.length > 0 ? ` (${e.linkedDocuments.length} docs)` : ''
+					return `${i + 1}. [${dateStr}] ${e.title}${deadlineStr}${completeStr}${linkedDocsCount}
+   ID: ${e.id} | Category: ${e.category}${e.description ? `\n   ${e.description}` : ''}`
+				}).join('\n\n')
+				return `Found ${result.totalCount} event(s):\n\n${eventsStr}`
+			},
+
+			timeline_link_document: (params, _result) => {
+				return `Successfully linked document to event ${params.eventId}.`
+			},
+
+			timeline_get_deadlines: (_params, result) => {
+				const formatDeadlineList = (events: typeof result.upcoming, label: string) => {
+					if (events.length === 0) return `${label}: None`
+					const list = events.map(e => {
+						const dateStr = new Date(e.date).toLocaleDateString()
+						const daysUntil = Math.ceil((new Date(e.date).getTime() - Date.now()) / (1000 * 60 * 60 * 24))
+						return `- [${dateStr}] ${e.title} (${daysUntil > 0 ? `${daysUntil} days` : 'TODAY'})\n  ID: ${e.id}`
+					}).join('\n')
+					return `${label}:\n${list}`
+				}
+
+				const overdueStr = formatDeadlineList(result.overdue, '⚠️ OVERDUE')
+				const upcomingStr = formatDeadlineList(result.upcoming, '📅 Upcoming')
+				return `${overdueStr}\n\n${upcomingStr}`
 			},
 		}
 

@@ -1,10 +1,10 @@
 # Timeline & Event Tracker Feature Plan
 
 **Jira Epic**: KAN-51 (Timeline & Case Management)
-**Jira Feature**: KAN-57 (Timeline & Event Tracker)
+**Jira Features**: KAN-57, KAN-58, KAN-59
 **Branch**: `feature/kan-57-timeline-event-tracker`
 **Priority**: High
-**Status**: ✅ Phase 1 & 2 Complete
+**Status**: ✅ **COMPLETE** - All Phases Done
 
 ---
 
@@ -223,15 +223,16 @@ interface CaseTimeline {
 
 ---
 
-## Phase 3 (Next) 📋
+## Phase 3 (Complete) ✅
 
-### Enhanced Timeline
+### Enhanced Timeline ✅
 
 ```
-- [ ] Drag-and-drop event reordering
-- [ ] Zoom controls (year/month/week view)
-- [ ] Scroll to today marker
-- [ ] Right-click "Link to Timeline Event" with event picker
+- [x] Drag-and-drop event reordering (drag handles on hover)
+- [x] Zoom controls (All Time/Year/Month/Week view selector)
+- [x] Today marker with pulsing animation
+- [x] View mode filtering in toolbar
+- [x] Right-click "Link to Timeline Event" with event picker (QuickPick)
 ```
 
 ### Case Config Integration ✅
@@ -244,12 +245,14 @@ interface CaseTimeline {
 - [ ] Import parties for event descriptions (Phase 4)
 ```
 
-### Calendar View
+### Calendar View ✅
 
 ```
-- [ ] Month grid view toggle
-- [ ] Week view for detailed planning
-- [ ] Today indicator
+- [x] Month grid view with event previews
+- [x] Week view for detailed planning
+- [x] Today indicator (highlighted date)
+- [x] Click-to-add events on specific dates
+- [x] Toggle between Timeline and Calendar views
 ```
 
 ---
@@ -329,6 +332,8 @@ Ctrl+Shift+T (or Command Palette → "Open Case Timeline")
 | `react/src/timeline-tsx/DeadlineWarnings.tsx`     | ~150  | Warning banners                |
 | `react/src/timeline-tsx/DocumentPicker.tsx`       | ~280  | Document linking modal         |
 | `react/src/timeline-tsx/JurisdictionSelector.tsx` | ~160  | Jurisdiction selection modal   |
+| `react/src/timeline-tsx/TodayMarker.tsx`          | ~70   | Animated today indicator       |
+| `react/src/timeline-tsx/CalendarView.tsx`         | ~320  | Month/week calendar grid       |
 
 ### Modified Files
 
@@ -354,4 +359,4 @@ Ctrl+Shift+T (or Command Palette → "Open Case Timeline")
 
 **Created**: December 23, 2025
 **Author**: Claude (Cursor AI Assistant)
-**Last Updated**: December 23, 2025 - Phase 2 Complete
+**Last Updated**: December 23, 2025 - Phase 3 Complete (All Features)

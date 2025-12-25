@@ -56,15 +56,17 @@ export const DocumentPicker: React.FC<DocumentPickerProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [isLoading, setIsLoading] = useState(true);
 
-  // Load workspace files on mount
+  // Get services once (these are stable references)
+  const workspaceService = accessor.get('IWorkspaceContextService');
+  const fileService = accessor.get('IFileService');
+
+  // Load workspace files on mount only (empty dependency array)
   useEffect(() => {
+    let cancelled = false;
+
     const loadFiles = async () => {
       setIsLoading(true);
       try {
-        // Get workspace files via the file service
-        const workspaceService = accessor.get('IWorkspaceContextService');
-        const fileService = accessor.get('IFileService');
-        
         const folders = workspaceService.getWorkspace().folders;
         if (folders.length === 0) {
           setWorkspaceFiles([]);
@@ -76,12 +78,13 @@ export const DocumentPicker: React.FC<DocumentPickerProps> = ({
 
         // Recursive file listing (limited to common document types)
         const listDir = async (dirUri: any, depth: number = 0) => {
-          if (depth > 3) return; // Limit depth to avoid huge lists
-          
+          if (depth > 3 || cancelled) return; // Limit depth to avoid huge lists
+
           try {
             const stat = await fileService.resolve(dirUri);
             if (stat.children) {
               for (const child of stat.children) {
+                if (cancelled) return;
                 if (child.isDirectory) {
                   // Skip common non-document directories
                   const name = child.name.toLowerCase();
@@ -108,19 +111,27 @@ export const DocumentPicker: React.FC<DocumentPickerProps> = ({
         };
 
         await listDir(folderUri);
-        setWorkspaceFiles(files);
+        if (!cancelled) {
+          setWorkspaceFiles(files);
+        }
       } catch (error) {
         console.error('[DocumentPicker] Error loading files:', error);
       } finally {
-        setIsLoading(false);
+        if (!cancelled) {
+          setIsLoading(false);
+        }
       }
     };
 
     loadFiles();
-  }, [accessor]);
+
+    return () => {
+      cancelled = true;
+    };
+  }, []); // Empty dependency array - run only on mount
 
   // Filter files by search query
-  const filteredFiles = workspaceFiles.filter(file => 
+  const filteredFiles = workspaceFiles.filter(file =>
     file.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     file.path.toLowerCase().includes(searchQuery.toLowerCase())
   );
@@ -180,7 +191,7 @@ export const DocumentPicker: React.FC<DocumentPickerProps> = ({
         {/* Search */}
         <div className="px-4 py-3" style={{ borderBottom: '1px solid #27272a' }}>
           <div className="relative">
-            <i 
+            <i
               className="codicon codicon-search absolute left-3 top-1/2 -translate-y-1/2"
               style={{ color: '#71717a', fontSize: '14px' }}
             />
@@ -243,7 +254,7 @@ export const DocumentPicker: React.FC<DocumentPickerProps> = ({
           <div className="text-xs font-semibold uppercase tracking-wide mb-2" style={{ color: '#52525b' }}>
             Workspace Documents
           </div>
-          
+
           {isLoading ? (
             <div className="flex items-center justify-center py-8">
               <div

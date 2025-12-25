@@ -519,6 +519,125 @@ Returns chunks with:
 		}
 	},
 
+	// --- Timeline tools ---
+
+	timeline_add_event: {
+		name: 'timeline_add_event',
+		description: `Add a new event to the case timeline. Use this when the user mentions dates, appointments, deadlines, or events that should be tracked.
+
+**WHEN TO USE:**
+- User mentions a medical appointment, hearing date, or deadline
+- Extracting dates from documents (medical reports, decision letters, correspondence)
+- User asks to "add this to my timeline" or "remember this date"
+- Creating deadline reminders for appeal deadlines, statute of limitations, etc.
+
+**CATEGORIES:**
+- injury: Initial injury date
+- medical: Medical appointments, evaluations, treatments
+- hearing: Appeals board hearings, conferences
+- decision: Claims decisions, appeal outcomes
+- deadline: Important deadlines (appeals, filings)
+- filing: Document submissions, claim forms
+- correspondence: Letters, emails, notices
+- custom: Other events
+
+**DOCUMENT LINKING:**
+When extracting dates from documents, include the document URI in linkedDocuments to maintain traceability.
+
+**EXAMPLE WORKFLOW:**
+1. User says: "Add my medical appointment from dr_smith_report.pdf to the timeline"
+2. Agent reads document with read_file
+3. Agent extracts date (e.g., "January 15, 2025")
+4. Agent calls timeline_add_event with:
+   - date: "2025-01-15"
+   - title: "Medical Evaluation - Dr. Smith"
+   - category: "medical"
+   - linkedDocuments: ["/path/to/dr_smith_report.pdf"]`,
+		params: {
+			date: { description: `ISO 8601 date string (YYYY-MM-DD or full ISO datetime). Required.` },
+			title: { description: `Short descriptive title for the event. Required.` },
+			description: { description: `Optional. Detailed description or notes about the event.` },
+			category: { description: `Event category: injury, medical, hearing, decision, deadline, filing, correspondence, or custom. Required.` },
+			is_deadline: { description: `Set to true if this is a deadline that needs tracking. Deadlines show warnings when approaching.` },
+			linked_documents: { description: `Optional. Array of document URIs to link to this event. Use full paths.` },
+		}
+	},
+
+	timeline_update_event: {
+		name: 'timeline_update_event',
+		description: `Update an existing timeline event. Use this to modify event details, mark deadlines as complete, or correct information.
+
+**WHEN TO USE:**
+- User wants to change event details (date, title, description)
+- Marking a deadline as complete
+- Adding notes or updating category
+- Correcting errors in previously added events`,
+		params: {
+			event_id: { description: `The unique ID of the event to update. Required. Get this from timeline_get_events.` },
+			date: { description: `Optional. New ISO 8601 date string.` },
+			title: { description: `Optional. New title for the event.` },
+			description: { description: `Optional. New description.` },
+			category: { description: `Optional. New category.` },
+			is_deadline: { description: `Optional. Change deadline status.` },
+			is_complete: { description: `Optional. Set to true to mark deadline as completed.` },
+		}
+	},
+
+	timeline_delete_event: {
+		name: 'timeline_delete_event',
+		description: `Delete an event from the timeline. Use when an event was added in error or is no longer relevant.`,
+		params: {
+			event_id: { description: `The unique ID of the event to delete. Required. Get this from timeline_get_events.` },
+		}
+	},
+
+	timeline_get_events: {
+		name: 'timeline_get_events',
+		description: `Query timeline events with optional filters. Use this to view the timeline, find specific events, or get event IDs for updates.
+
+**WHEN TO USE:**
+- User asks "what's on my timeline?"
+- Looking up events before a hearing or deadline
+- Finding event IDs to update or delete
+- Reviewing medical history or case chronology
+- Checking what documents are linked to what dates`,
+		params: {
+			category: { description: `Optional. Filter by category: injury, medical, hearing, decision, deadline, filing, correspondence, custom.` },
+			start_date: { description: `Optional. ISO 8601 date. Only return events on or after this date.` },
+			end_date: { description: `Optional. ISO 8601 date. Only return events on or before this date.` },
+			is_deadline: { description: `Optional. Set to true to only show deadlines, false to exclude deadlines.` },
+			limit: { description: `Maximum number of events to return. Default 50.` },
+		}
+	},
+
+	timeline_link_document: {
+		name: 'timeline_link_document',
+		description: `Link a document to an existing timeline event. Use this to associate files with dates for easy reference.
+
+**WHEN TO USE:**
+- User says "link this document to [date/event]"
+- After finding relevant dates in a document, linking it to the corresponding event
+- Organizing case documents by timeline`,
+		params: {
+			event_id: { description: `The unique ID of the event. Required. Get this from timeline_get_events.` },
+			document_uri: { description: `Full path to the document to link. Required.` },
+		}
+	},
+
+	timeline_get_deadlines: {
+		name: 'timeline_get_deadlines',
+		description: `Get upcoming and overdue deadlines. Use this to check what deadlines are approaching or have passed.
+
+**WHEN TO USE:**
+- User asks about upcoming deadlines
+- Before drafting documents, to ensure awareness of time constraints
+- Daily/weekly case review
+- Checking if any appeals deadlines are approaching`,
+		params: {
+			days_ahead: { description: `Number of days to look ahead for upcoming deadlines. Default 30.` },
+		}
+	},
+
 
 	// go_to_definition
 	// go_to_usages
@@ -540,9 +659,9 @@ export const isABuiltinToolName = (toolName: string): toolName is BuiltinToolNam
 
 
 export const availableTools = (chatMode: ChatMode | null, mcpTools: InternalToolInfo[] | undefined) => {
-	// Drafting mode: enable document editing and RAG tools
+	// Drafting mode: enable document editing, RAG tools, and timeline tools
 	const builtinToolNames: BuiltinToolName[] | undefined = chatMode === 'drafting'
-		? ['read_file', 'edit_file', 'edit_document', 'create_file_or_folder', 'rag_search_policy', 'rag_search_workspace', 'rag_get_stats', 'web_search', 'multi_link_search'] as BuiltinToolName[]
+		? ['read_file', 'edit_file', 'edit_document', 'create_file_or_folder', 'rag_search_policy', 'rag_search_workspace', 'rag_get_stats', 'web_search', 'multi_link_search', 'timeline_add_event', 'timeline_update_event', 'timeline_delete_event', 'timeline_get_events', 'timeline_link_document', 'timeline_get_deadlines'] as BuiltinToolName[]
 		: chatMode === 'research' ? (Object.keys(builtinTools) as BuiltinToolName[]).filter(toolName => !(toolName in approvalTypeOfBuiltinToolName))
 			: chatMode === 'case_manager' ? Object.keys(builtinTools) as BuiltinToolName[]
 				: undefined
@@ -594,6 +713,12 @@ const toolCallDefinitionsXMLString = (tools: InternalToolInfo[]) => {
 			example = `\n    <example>\n    <function_calls>\n    <invoke name="rag_search_workspace">\n    <parameter name="query">medical evaluation lumbar strain</parameter>\n    <parameter name="limit">5</parameter>\n    </invoke>\n    </function_calls>\n    </example>\n`
 		} else if (t.name === 'create_file_or_folder') {
 			example = `\n    <example>\n    <function_calls>\n    <invoke name="create_file_or_folder">\n    <parameter name="uri">/case_files/appeal_letter_2024.docx</parameter>\n    <parameter name="type">file</parameter>\n    </invoke>\n    </function_calls>\n    </example>\n`
+		} else if (t.name === 'timeline_add_event') {
+			example = `\n    <example>\n    <function_calls>\n    <invoke name="timeline_add_event">\n    <parameter name="date">2024-01-15</parameter>\n    <parameter name="title">Medical Evaluation - Dr. Smith</parameter>\n    <parameter name="category">medical</parameter>\n    <parameter name="description">Follow-up evaluation for lumbar injury</parameter>\n    <parameter name="is_deadline">false</parameter>\n    </invoke>\n    </function_calls>\n    </example>\n`
+		} else if (t.name === 'timeline_get_events') {
+			example = `\n    <example>\n    <function_calls>\n    <invoke name="timeline_get_events">\n    <parameter name="category">medical</parameter>\n    <parameter name="limit">20</parameter>\n    </invoke>\n    </function_calls>\n    </example>\n`
+		} else if (t.name === 'timeline_get_deadlines') {
+			example = `\n    <example>\n    <function_calls>\n    <invoke name="timeline_get_deadlines">\n    <parameter name="days_ahead">30</parameter>\n    </invoke>\n    </function_calls>\n    </example>\n`
 		}
 
 		return `\

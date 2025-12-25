@@ -1186,6 +1186,77 @@ See `TIMELINE_FEATURE_PLAN.md` at project root for detailed implementation plan.
 
 ---
 
+## 🤖 Timeline Agent Tools
+
+**Status**: ✅ Implemented
+**Date Added**: December 2025
+**Jira**: KAN-58 (under Epic KAN-51)
+**Branch**: `feature/kan-58-timeline-agent-tools`
+
+### Overview
+
+AI agent tools that allow the LLM to programmatically create, update, query, and manage timeline events. Enables the agent to extract dates from documents and add them to the timeline with linked files.
+
+### Tools Implemented
+
+| Tool | Purpose |
+|------|---------|
+| `timeline_add_event` | Create new timeline event with optional document linking |
+| `timeline_update_event` | Modify existing event details or mark deadlines complete |
+| `timeline_delete_event` | Remove event from timeline |
+| `timeline_get_events` | Query events with filters (category, date range, deadline status) |
+| `timeline_link_document` | Attach a document to an existing event |
+| `timeline_get_deadlines` | Get upcoming and overdue deadlines |
+
+### Features
+
+#### 1. **Event Creation with Document Linking**
+
+- ✅ Agent can extract dates from documents and add to timeline
+- ✅ Automatic document linking when creating events
+- ✅ All 8 event categories supported (injury, medical, hearing, decision, deadline, filing, correspondence, custom)
+- ✅ Deadline flag with reminder support
+
+#### 2. **Event Querying**
+
+- ✅ Filter by category
+- ✅ Filter by date range (start_date, end_date)
+- ✅ Filter by deadline status
+- ✅ Configurable result limit
+- ✅ Chronological sorting
+
+#### 3. **Deadline Management**
+
+- ✅ Get upcoming deadlines within N days
+- ✅ Get overdue deadlines
+- ✅ Mark deadlines as complete via update tool
+
+#### 4. **Integration with Chat Modes**
+
+- ✅ Available in `drafting` mode
+- ✅ Available in `case_manager` mode
+- ✅ Available in `research` mode (read-only tools)
+
+### Files Modified
+
+- `common/tools/toolsServiceTypes.ts` - Tool parameter and result types
+- `common/prompt/prompts.ts` - Tool definitions with LLM descriptions
+- `browser/tools/toolsService.ts` - Tool implementations
+
+### Example Agent Workflow
+
+When user asks: "Add the medical appointment from this report to my timeline"
+
+1. Agent reads document with `read_file`
+2. Agent extracts date (e.g., "January 15, 2025")
+3. Agent calls `timeline_add_event` with:
+   - date: "2025-01-15"
+   - title: "Medical Evaluation - Dr. Smith"
+   - category: "medical"
+   - linkedDocuments: ["/path/to/dr_smith_report.pdf"]
+
+---
+
 ## 📞 Contacts & Resources
 
 - **GitHub**: <https://github.com/savagelysubtle/SafeAppeals2.0>
@@ -1196,5 +1267,5 @@ See `TIMELINE_FEATURE_PLAN.md` at project root for detailed implementation plan.
 
 ---
 
-**Last Updated**: December 23, 2025
-**Version**: 1.99.4
+**Last Updated**: December 24, 2025
+**Version**: 1.99.5
