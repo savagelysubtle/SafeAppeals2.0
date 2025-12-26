@@ -55,16 +55,32 @@ export const EventEditor: React.FC<EventEditorProps> = ({
 }) => {
   const [title, setTitle] = useState(event?.title || '');
   const [description, setDescription] = useState(event?.description || '');
-  const [date, setDate] = useState(
-    event?.date ?
-    new Date(event.date).toISOString().split('T')[0] :
-    new Date().toISOString().split('T')[0]
-  );
-  const [endDate, setEndDate] = useState(
-    event?.endDate ?
-    new Date(event.endDate).toISOString().split('T')[0] :
-    ''
-  );
+  // Parse dates as local time to avoid timezone shifts
+  const [date, setDate] = useState(() => {
+    if (event?.date) {
+      // Extract just YYYY-MM-DD from ISO string, treating as local date
+      const d = new Date(event.date);
+      const year = d.getFullYear();
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    }
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  });
+  const [endDate, setEndDate] = useState(() => {
+    if (event?.endDate) {
+      const d = new Date(event.endDate);
+      const year = d.getFullYear();
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    }
+    return '';
+  });
   const [category, setCategory] = useState<EventCategory>(event?.category || (isFirstEvent ? 'injury' : 'custom'));
   const [isDeadline, setIsDeadline] = useState(event?.isDeadline || false);
   const [isComplete, setIsComplete] = useState(event?.isComplete || false);
@@ -89,11 +105,21 @@ export const EventEditor: React.FC<EventEditorProps> = ({
     e.preventDefault();
     if (!title.trim() || !date) return;
 
+    // Create dates at noon local time to avoid timezone day-shift issues
+    const [year, month, day] = date.split('-').map(Number);
+    const localDate = new Date(year, month - 1, day, 12, 0, 0);
+
+    let localEndDate: Date | undefined;
+    if (endDate) {
+      const [ey, em, ed] = endDate.split('-').map(Number);
+      localEndDate = new Date(ey, em - 1, ed, 12, 0, 0);
+    }
+
     const eventData: Omit<TimelineEvent, 'id' | 'createdAt' | 'updatedAt'> = {
       title: title.trim(),
       description: description.trim() || undefined,
-      date: new Date(date).toISOString(),
-      endDate: endDate ? new Date(endDate).toISOString() : undefined,
+      date: localDate.toISOString(),
+      endDate: localEndDate ? localEndDate.toISOString() : undefined,
       category,
       isDeadline,
       isComplete: isDeadline ? isComplete : undefined,
@@ -114,13 +140,15 @@ export const EventEditor: React.FC<EventEditorProps> = ({
       style={{ backgroundColor: 'rgba(0, 0, 0, 0.85)' }}
       onClick={onCancel}
     >
-      {/* Modal Card - solid black with green accents */}
+      {/* Modal Card - solid black with green accents, fixed height */}
 			<div
-        className="w-full max-w-lg rounded-xl shadow-2xl transition-all duration-200"
+        className="w-full max-w-lg rounded-xl shadow-2xl transition-all duration-200 flex flex-col"
         style={{
           backgroundColor: '#0f0f0f',
           border: `1px solid ${BRAND_GREEN}30`,
-          boxShadow: `0 25px 50px -12px rgba(0, 0, 0, 0.8), 0 0 0 1px ${BRAND_GREEN}10`
+          boxShadow: `0 25px 50px -12px rgba(0, 0, 0, 0.8), 0 0 0 1px ${BRAND_GREEN}10`,
+          height: '680px',
+          maxHeight: '90vh'
         }}
         onClick={e => e.stopPropagation()}
       >
@@ -159,7 +187,15 @@ export const EventEditor: React.FC<EventEditorProps> = ({
 				</div>
 
 				{/* Form */}
-        <form onSubmit={handleSubmit} className="p-6 space-y-5">
+        <form onSubmit={handleSubmit} className="flex flex-col flex-1" style={{ minHeight: 0 }}>
+          {/* Scrollable content - always shows scrollbar */}
+          <div
+            className="p-6 space-y-5 overflow-y-auto flex-1"
+            style={{
+              minHeight: 0,
+              scrollbarGutter: 'stable'
+            }}
+          >
 					{/* Title */}
           <div className="grid gap-2">
             <label className="text-sm font-medium" style={{ color: '#e4e4e7' }}>
@@ -399,8 +435,8 @@ export const EventEditor: React.FC<EventEditorProps> = ({
             </div>
 
             {linkedDocuments.length > 0 ? (
-              <div className="space-y-2">
-                {linkedDocuments.slice(0, 3).map(uri => {
+              <div className="space-y-2 max-h-32 overflow-y-auto">
+                {linkedDocuments.slice(0, 5).map(uri => {
                   const fileName = getFileName(uri);
                   const { icon, color } = getFileIcon(fileName);
                   return (
@@ -426,14 +462,14 @@ export const EventEditor: React.FC<EventEditorProps> = ({
                     </div>
                   );
                 })}
-                {linkedDocuments.length > 3 && (
+                {linkedDocuments.length > 5 && (
                   <button
                     type="button"
                     onClick={() => setShowDocumentPicker(true)}
                     className="text-xs w-full py-1.5 rounded-lg"
                     style={{ color: '#71717a' }}
                   >
-                    +{linkedDocuments.length - 3} more documents
+                    +{linkedDocuments.length - 5} more documents
                   </button>
                 )}
               </div>
@@ -444,8 +480,13 @@ export const EventEditor: React.FC<EventEditorProps> = ({
             )}
 					</div>
 
-					{/* Actions */}
-          <div className="flex justify-end gap-3 pt-2">
+          </div>
+
+					{/* Actions - fixed footer */}
+          <div
+            className="flex justify-end gap-3 px-6 py-4 flex-shrink-0"
+            style={{ borderTop: '1px solid #27272a' }}
+          >
 						<button
               type="button"
               onClick={onCancel}

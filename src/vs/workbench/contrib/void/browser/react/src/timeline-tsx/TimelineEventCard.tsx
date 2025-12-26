@@ -286,8 +286,8 @@ export const TimelineEventCard: React.FC<TimelineEventCardProps> = ({
                       Linked Documents ({event.linkedDocuments.length})
                     </span>
                   </div>
-                  <div className="flex flex-wrap gap-2">
-                    {event.linkedDocuments.map((docUri, idx) => {
+                  <div className="flex flex-wrap gap-2 max-h-24 overflow-y-auto">
+                    {event.linkedDocuments.slice(0, 6).map((docUri, idx) => {
                       const fileName = getFileName(docUri);
                       const { icon, color } = getFileIcon(fileName);
                       return (
@@ -318,6 +318,18 @@ export const TimelineEventCard: React.FC<TimelineEventCardProps> = ({
                         </button>
                       );
                     })}
+                    {event.linkedDocuments.length > 6 && (
+                      <span
+                        className="inline-flex items-center rounded-lg px-2.5 py-1.5 text-xs"
+                        style={{
+                          backgroundColor: '#1a1a1a',
+                          border: '1px solid #27272a',
+                          color: '#71717a'
+                        }}
+                      >
+                        +{event.linkedDocuments.length - 6} more
+                      </span>
+                    )}
                   </div>
                 </div>
               )}
