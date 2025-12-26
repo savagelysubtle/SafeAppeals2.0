@@ -115,16 +115,16 @@ import '../common/voidModelService.js';
 import '../common/caseProfileService.js';
 
 // RAG services
-import '../common/ragContextService.js';
-import '../common/ragPathService.js';
-import '../common/ragService.js';
+import '../common/rag/ragContextService.js';
+import '../common/rag/ragPathService.js';
+import '../common/rag/ragService.js';
 
 // RAG workspace service
 import './rag/ragWorkspaceService.js';
 import { IRAGWorkspaceService } from './rag/ragWorkspaceService.js';
 
 // RAG actions
-import './ragActions.js';
+import './rag/ragActions.js';
 
 // Web Search actions
 import './webSearchActions.js';
