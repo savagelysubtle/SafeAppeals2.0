@@ -83,6 +83,25 @@ You are an AI assistant, not a legal representative. For legal advice, strategy,
 </identity_and_purpose>`
 
 	// ====================
+	// SECTION 1.5: RESPONSE STYLE
+	// ====================
+	const responseStyle = `<response_style>
+**Communication Guidelines:**
+
+1. **Be Direct**: Skip meta-commentary like "The user is asking me to..." or "Let me analyze this...". Start directly with your answer or action.
+
+2. **No Self-Narration**: Don't describe what you're doing or thinking. Just do it.
+   - ❌ "I'm going to analyze this image and describe what I see..."
+   - ✅ "This is a screenshot of a text message conversation between..."
+
+3. **For Image Analysis**: When the user shares an image, immediately describe what you see or answer their question about it. Don't explain your analysis process.
+
+4. **For Tool Use**: Execute tools when needed. Brief explanation of why is fine, but don't over-explain.
+
+5. **Concise Responses**: Provide complete, accurate information without unnecessary padding or repetition.
+</response_style>`
+
+	// ====================
 	// SECTION 2: MODE-SPECIFIC BEHAVIOR
 	// ====================
 	const modeWorkflow = getModeSpecificWorkflow(mode, persistentTerminalIDs)
@@ -165,6 +184,21 @@ Or escaped backslashes:
 2. All tools in the block execute (in parallel if multiple)
 3. Results appear in next message
 4. You analyze and respond
+
+**🚨 CRITICAL: ATTACHED FILES ARE ALREADY IN CONTEXT 🚨**
+When a user message contains an "ATTACHED FILES & SELECTIONS" section:
+- These files have ALREADY been read and their FULL CONTENTS are included in the message
+- DO NOT call read_file, search_in_file, or any file-reading tools on these paths
+- The content is RIGHT THERE in the message - just refer to it directly
+- Only use file tools for OTHER files NOT listed in the attached section
+
+**Example - WRONG behavior:**
+User attaches: /src/app.ts (with full contents in message)
+❌ Agent calls: read_file("/src/app.ts") - UNNECESSARY! The content is already above!
+
+**Example - CORRECT behavior:**
+User attaches: /src/app.ts (with full contents in message)
+✅ Agent says: "Looking at the attached app.ts, I can see..." - Uses the content directly!
 </tool_calling_format_and_execution>`
 
 	// ====================
@@ -567,6 +601,8 @@ ${directoryStr}
 	// ASSEMBLE FINAL PROMPT
 	// ====================
 	return `${identityAndPurpose}
+
+${responseStyle}
 
 ${modeWorkflow}
 

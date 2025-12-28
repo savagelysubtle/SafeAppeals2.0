@@ -34,6 +34,7 @@ import {
 	Copy as CopyIcon,
 	File,
 	Folder,
+	Image,
 	Pencil,
 	RotateCw,
 	Text,
@@ -462,6 +463,48 @@ export const VoidChatArea: React.FC<VoidChatAreaProps> = ({
 		}
 	};
 
+	// Helper function to get language/type for a file based on extension
+	const getFileLanguage = (uri: URI): string => {
+		const ext = uri.path.split('.').pop()?.toLowerCase() || '';
+		switch (ext) {
+			case 'pdf':
+				return 'pdf';
+			case 'docx':
+			case 'doc':
+				return 'docx';
+			case 'xlsx':
+			case 'xls':
+				return 'xlsx';
+			case 'ts':
+			case 'tsx':
+				return 'typescript';
+			case 'js':
+			case 'jsx':
+				return 'javascript';
+			case 'py':
+				return 'python';
+			case 'md':
+				return 'markdown';
+			case 'json':
+				return 'json';
+			case 'html':
+				return 'html';
+			case 'css':
+				return 'css';
+			case 'yaml':
+			case 'yml':
+				return 'yaml';
+			default:
+				return 'plaintext';
+		}
+	};
+
+	// Helper function to check if file is a binary document (PDF, DOCX, XLSX)
+	const isBinaryDocument = (uri: URI): boolean => {
+		const ext = uri.path.split('.').pop()?.toLowerCase() || '';
+		return ['pdf', 'docx', 'doc', 'xlsx', 'xls', 'pptx', 'ppt'].includes(ext);
+	};
+
 	// Helper function to recursively collect files from a folder with filtering
 	const collectFilesFromFolder = async (
 		folderUri: URI,
@@ -594,10 +637,11 @@ export const VoidChatArea: React.FC<VoidChatAreaProps> = ({
 							}
 
 							for (const fileUri of result.uris) {
+								const language = getFileLanguage(fileUri);
 								newSelections.push({
 									type: "File",
 									uri: fileUri,
-									language: "plaintext",
+									language,
 									state: { wasAddedAsCurrentFile: false },
 								});
 							}
@@ -615,10 +659,11 @@ export const VoidChatArea: React.FC<VoidChatAreaProps> = ({
 							}
 
 							// Add single file
+							const language = getFileLanguage(uri);
 							newSelections.push({
 								type: "File",
 								uri,
-								language: "plaintext",
+								language,
 								state: { wasAddedAsCurrentFile: false },
 							});
 							totalFilesProcessed++;
@@ -691,10 +736,11 @@ export const VoidChatArea: React.FC<VoidChatAreaProps> = ({
 								}
 
 								for (const fileUri of result.uris) {
+									const language = getFileLanguage(fileUri);
 									newSelections.push({
 										type: "File",
 										uri: fileUri,
-										language: "plaintext",
+										language,
 										state: { wasAddedAsCurrentFile: false },
 									});
 								}
@@ -710,10 +756,11 @@ export const VoidChatArea: React.FC<VoidChatAreaProps> = ({
 									continue;
 								}
 
+								const language = getFileLanguage(uri);
 								newSelections.push({
 									type: "File",
 									uri,
-									language: "plaintext",
+									language,
 									state: { wasAddedAsCurrentFile: false },
 								});
 								totalFilesProcessed++;
@@ -783,10 +830,11 @@ export const VoidChatArea: React.FC<VoidChatAreaProps> = ({
 							}
 
 							for (const fileUri of result.uris) {
+								const language = getFileLanguage(fileUri);
 								newSelections.push({
 									type: "File",
 									uri: fileUri,
-									language: "plaintext",
+									language,
 									state: { wasAddedAsCurrentFile: false },
 								});
 							}
@@ -804,10 +852,11 @@ export const VoidChatArea: React.FC<VoidChatAreaProps> = ({
 							}
 
 							// Add single file
+							const language = getFileLanguage(uri);
 							newSelections.push({
 								type: "File",
 								uri,
-								language: "plaintext",
+								language,
 								state: { wasAddedAsCurrentFile: false },
 							});
 							totalFilesProcessed++;
@@ -1285,6 +1334,8 @@ export const SelectedFiles = ({
 						? Folder
 						: selection.type === "CodeSelection"
 						? Text
+						: selection.type === "Image"
+						? Image
 						: (undefined as never);
 
 				return (
@@ -1348,6 +1399,9 @@ export const SelectedFiles = ({
 										voidOpenFileFn(selection.uri, accessor, selection.range);
 									} else if (selection.type === "Folder") {
 										// TODO!!! reveal in tree
+									} else if (selection.type === "Image") {
+										// Open the image file
+										voidOpenFileFn(selection.uri, accessor);
 									}
 								}}
 							>

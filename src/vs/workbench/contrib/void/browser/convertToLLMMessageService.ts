@@ -7,8 +7,9 @@ import { IWorkspaceContextService } from '../../../../platform/workspace/common/
 import { IEditorService } from '../../../services/editor/common/editorService.js';
 import { ChatMessage } from '../common/chatThreadServiceTypes.js';
 import { getIsReasoningEnabledState, getReservedOutputTokenSpace, getModelCapabilities } from '../common/modelCapabilities.js';
-import { reParsedToolXMLString, chat_systemMessage } from '../common/prompt/prompts.js';
-import { AnthropicLLMChatMessage, AnthropicReasoning, GeminiLLMChatMessage, LLMChatMessage, LLMFIMMessage, OpenAILLMChatMessage, RawToolParamsObj } from '../common/sendLLMMessageTypes.js';
+import { reParsedToolXMLString, chat_systemMessage, getImageSelectionsWithData, hasImageSelections } from '../common/prompt/prompts.js';
+import { IFileService } from '../../../../platform/files/common/files.js';
+import { AnthropicImageContent, AnthropicLLMChatMessage, AnthropicReasoning, GeminiLLMChatMessage, LLMChatMessage, LLMFIMMessage, OpenAILLMChatMessage, RawToolParamsObj } from '../common/sendLLMMessageTypes.js';
 import { IVoidSettingsService } from '../common/voidSettingsService.js';
 import { ChatMode, FeatureName, ModelSelection, ProviderName } from '../common/voidSettingsTypes.js';
 import { IDirectoryStrService } from '../common/directoryStrService.js';
@@ -23,6 +24,62 @@ export const EMPTY_MESSAGE = '(empty message)'
 
 
 
+// Image data for multi-modal messages
+type ImageData = {
+	base64: string;
+	mimeType: 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp';
+};
+
+// OpenAI user content types
+type OpenAIUserContent = (
+	| { type: 'text'; text: string }
+	| { type: 'image_url'; image_url: { url: string; detail?: 'low' | 'high' | 'auto' } }
+)[]
+
+// Convert Anthropic image format to OpenAI format
+// Anthropic: { type: 'image', source: { type: 'base64', media_type, data } }
+// OpenAI: { type: 'image_url', image_url: { url: 'data:${mimeType};base64,${data}' } }
+const convertAnthropicImagesToOpenAI = (messages: LLMChatMessage[]): OpenAILLMChatMessage[] => {
+	const result: OpenAILLMChatMessage[] = []
+	for (const msg of messages) {
+		// Only process messages that have 'content' property (Anthropic/OpenAI format)
+		// Skip Gemini messages which use 'parts' instead
+		if (msg.role === 'user' && 'content' in msg && Array.isArray(msg.content)) {
+			const msgContent = msg.content as unknown[]
+			const convertedContent: OpenAIUserContent = []
+			for (const part of msgContent) {
+				// Check if this is an Anthropic image part
+				if (part && typeof part === 'object' && 'type' in part && (part as { type: string }).type === 'image' && 'source' in part) {
+					const imgPart = part as { type: 'image'; source: { type: 'base64'; media_type: string; data: string } }
+					convertedContent.push({
+						type: 'image_url' as const,
+						image_url: {
+							url: `data:${imgPart.source.media_type};base64,${imgPart.source.data}`,
+							detail: 'auto' as const
+						}
+					})
+				}
+				// Text parts stay the same
+				else if (part && typeof part === 'object' && 'type' in part && (part as { type: string }).type === 'text') {
+					convertedContent.push({ type: 'text' as const, text: (part as { type: 'text'; text: string }).text })
+				}
+				// Tool results become text (OpenAI user messages don't have tool_result)
+				else if (part && typeof part === 'object' && 'type' in part && (part as { type: string }).type === 'tool_result') {
+					convertedContent.push({ type: 'text' as const, text: (part as { type: 'tool_result'; content: string }).content })
+				}
+				// Skip thinking blocks - OpenAI doesn't support them in user messages
+				// (thinking blocks with type 'thinking' are Anthropic-specific)
+			}
+			// Construct OpenAI user message explicitly
+			result.push({ role: 'user', content: convertedContent } as OpenAILLMChatMessage)
+		} else {
+			// Other messages pass through (cast is needed for compatibility)
+			result.push(msg as unknown as OpenAILLMChatMessage)
+		}
+	}
+	return result
+}
+
 type SimpleLLMMessage = {
 	role: 'tool';
 	content: string;
@@ -32,6 +89,7 @@ type SimpleLLMMessage = {
 } | {
 	role: 'user';
 	content: string;
+	images?: ImageData[]; // Optional images for multi-modal messages
 } | {
 	role: 'assistant';
 	content: string;
@@ -40,7 +98,10 @@ type SimpleLLMMessage = {
 
 
 
-const CHARS_PER_TOKEN = 4 // assume abysmal chars per token
+// Use conservative 4 chars/token for trimming (actual is ~8-10 for docs)
+// Being conservative ensures we trim enough to fit in context window
+// This is intentionally different from the display estimate in contextTrackingService
+const CHARS_PER_TOKEN_TRIMMING = 4
 const TRIM_TO_LEN = 120
 
 
@@ -77,7 +138,29 @@ const prepareMessages_openai_tools = (messages: SimpleLLMMessage[]): AnthropicOr
 		const currMsg = messages[i]
 
 		if (currMsg.role !== 'tool') {
-			newMessages.push(currMsg)
+			// Handle user messages with images for OpenAI
+			if (currMsg.role === 'user' && currMsg.images && currMsg.images.length > 0) {
+				const content: (
+					| { type: 'text'; text: string }
+					| { type: 'image_url'; image_url: { url: string; detail?: 'low' | 'high' | 'auto' } }
+				)[] = [{ type: 'text' as const, text: currMsg.content }]
+				for (const img of currMsg.images) {
+					content.push({
+						type: 'image_url' as const,
+						image_url: {
+							url: `data:${img.mimeType};base64,${img.base64}`,
+							detail: 'auto',
+						}
+					})
+				}
+				const openAIUserMessage: OpenAILLMChatMessage = {
+					role: 'user' as const,
+					content
+				}
+				newMessages.push(openAIUserMessage)
+			} else {
+				newMessages.push(currMsg as OpenAILLMChatMessage)
+			}
 			continue
 		}
 
@@ -164,9 +247,33 @@ const prepareMessages_anthropic_tools = (messages: SimpleLLMMessage[], supportsA
 		}
 
 		if (currMsg.role === 'user') {
-			newMessages[i] = {
-				role: 'user',
-				content: currMsg.content,
+			// Handle multi-modal messages with images
+			if (currMsg.images && currMsg.images.length > 0) {
+				// Build user message content with images (Anthropic format)
+				const userContent: (AnthropicLLMChatMessage & { role: 'user' })['content'] = [
+					{ type: 'text' as const, text: currMsg.content }
+				]
+				for (const img of currMsg.images) {
+					const imageContent: AnthropicImageContent = {
+						type: 'image' as const,
+						source: {
+							type: 'base64' as const,
+							media_type: img.mimeType,
+							data: img.base64,
+						}
+					}
+					userContent.push(imageContent)
+				}
+				const userMessage: AnthropicLLMChatMessage = {
+					role: 'user',
+					content: userContent
+				}
+				newMessages[i] = userMessage
+			} else {
+				newMessages[i] = {
+					role: 'user',
+					content: currMsg.content,
+				}
 			}
 			continue
 		}
@@ -223,16 +330,88 @@ const prepareMessages_XML_tools = (messages: SimpleLLMMessage[], supportsAnthrop
 		}
 		// add user or tool to the previous user message
 		else if (c.role === 'user' || c.role === 'tool') {
-			if (c.role === 'tool')
-				c.content = `<${c.name}_result>\n${c.content}\n</${c.name}_result>`
+			const textContent = c.role === 'tool'
+				? `<${c.name}_result>\n${c.content}\n</${c.name}_result>`
+				: c.content
 
-			if (llmChatMessages.length === 0 || llmChatMessages[llmChatMessages.length - 1].role !== 'user')
-				llmChatMessages.push({
-					role: 'user',
-					content: c.content
-				})
-			else
-				llmChatMessages[llmChatMessages.length - 1].content += '\n\n' + c.content
+			// Check if user message has images
+			const hasImages = c.role === 'user' && c.images && c.images.length > 0
+
+			if (llmChatMessages.length === 0 || llmChatMessages[llmChatMessages.length - 1].role !== 'user') {
+				if (hasImages && c.role === 'user') {
+					// Create multi-part message with images
+					const content: (
+						| { type: 'text'; text: string }
+						| { type: 'image'; source: { type: 'base64'; media_type: ImageData['mimeType']; data: string } }
+					)[] = [{ type: 'text' as const, text: textContent }]
+					for (const img of c.images!) {
+						content.push({
+							type: 'image' as const,
+							source: {
+								type: 'base64' as const,
+								media_type: img.mimeType,
+								data: img.base64,
+							}
+						})
+					}
+					llmChatMessages.push({
+						role: 'user',
+						content
+					} as AnthropicLLMChatMessage)
+				} else {
+					llmChatMessages.push({
+						role: 'user',
+						content: textContent
+					})
+				}
+			} else {
+				// Append to existing user message
+				const lastMsg = llmChatMessages[llmChatMessages.length - 1]
+				if (typeof lastMsg.content === 'string') {
+					if (hasImages && c.role === 'user') {
+						// Convert string to multi-part and add images
+						const content: (
+							| { type: 'text'; text: string }
+							| { type: 'image'; source: { type: 'base64'; media_type: ImageData['mimeType']; data: string } }
+						)[] = [
+							{ type: 'text' as const, text: lastMsg.content + '\n\n' + textContent }
+						]
+						for (const img of c.images!) {
+							content.push({
+								type: 'image' as const,
+								source: {
+									type: 'base64' as const,
+									media_type: img.mimeType,
+									data: img.base64,
+								}
+							})
+						}
+						lastMsg.content = content as AnthropicLLMChatMessage['content']
+					} else {
+						lastMsg.content += '\n\n' + textContent
+					}
+				} else if (Array.isArray(lastMsg.content)) {
+					// Find text element and append, then add images if present
+					const textPart = lastMsg.content.find((p: { type: string }) => p.type === 'text') as { type: 'text'; text: string } | undefined
+					if (textPart) {
+						textPart.text += '\n\n' + textContent
+					} else {
+						(lastMsg.content as unknown[]).unshift({ type: 'text' as const, text: textContent })
+					}
+					if (hasImages && c.role === 'user') {
+						for (const img of c.images!) {
+							(lastMsg.content as unknown[]).push({
+								type: 'image' as const,
+								source: {
+									type: 'base64' as const,
+									media_type: img.mimeType,
+									data: img.base64,
+								}
+							})
+						}
+					}
+				}
+			}
 		}
 	}
 	return llmChatMessages
@@ -295,7 +474,9 @@ const prepareOpenAIOrAnthropicMessages = ({
 			multiplier *= 1
 		}
 		else if (message.role === 'system') {
-			multiplier *= .01 // very low weight
+			// System message can be large (directory structure, MCP tools, etc.)
+			// Give it low weight but don't protect it completely
+			multiplier *= 0.3
 		}
 		else {
 			multiplier *= 10 // llm tokens are far less valuable than user tokens
@@ -305,9 +486,10 @@ const prepareOpenAIOrAnthropicMessages = ({
 		if (alreadyTrimmedIdxes.has(idx)) {
 			multiplier = 0
 		}
-		// 1st and last messages should be very low weight
-		if (idx <= 1 || idx >= messages.length - 1 - 3) {
-			multiplier *= .05
+		// Last few messages should be lower weight (preserve recent context)
+		// But DON'T protect first messages - they may contain large attachments
+		if (idx >= messages.length - 1 - 3) {
+			multiplier *= 0.3
 		}
 		return base * multiplier
 	}
@@ -329,7 +511,7 @@ const prepareOpenAIOrAnthropicMessages = ({
 	let totalLen = 0
 	for (const m of messages) { totalLen += m.content.length }
 	const charsNeedToTrim = totalLen - Math.max(
-		(contextWindow - reservedOutputTokenSpace) * CHARS_PER_TOKEN, // can be 0, in which case charsNeedToTrim=everything, bad
+		(contextWindow - reservedOutputTokenSpace) * CHARS_PER_TOKEN_TRIMMING, // can be 0, in which case charsNeedToTrim=everything, bad
 		5_000 // ensure we don't trim at least 5k chars (just a random small value)
 	)
 
@@ -340,14 +522,21 @@ const prepareOpenAIOrAnthropicMessages = ({
 	//                     contextWindow - maxOut|putTokens
 	//                                          totalLen
 	let remainingCharsToTrim = charsNeedToTrim
-	let i = 0
+	let iterations = 0
+	const maxIterations = messages.length * 2 // At most 2 passes per message
 
-	while (remainingCharsToTrim > 0) {
-		i += 1
-		if (i > 100) break
+	while (remainingCharsToTrim > 0 && iterations < maxIterations) {
+		iterations += 1
 
 		const trimIdx = _findLargestByWeight(messages)
+		if (trimIdx === -1) break // No more messages to trim
+
 		const m = messages[trimIdx]
+		if (!m || m.content.length <= TRIM_TO_LEN) {
+			// Message already small, mark as trimmed and continue
+			alreadyTrimmedIdxes.add(trimIdx)
+			continue
+		}
 
 		// if can finish here, do
 		const numCharsWillTrim = m.content.length - TRIM_TO_LEN
@@ -360,6 +549,23 @@ const prepareOpenAIOrAnthropicMessages = ({
 		remainingCharsToTrim -= numCharsWillTrim
 		m.content = m.content.substring(0, TRIM_TO_LEN - '...'.length) + '...'
 		alreadyTrimmedIdxes.add(trimIdx)
+	}
+
+	// Fallback: if we still have too many chars after all iterations,
+	// aggressively trim the largest messages regardless of weight
+	if (remainingCharsToTrim > 0) {
+		// Sort by content length descending
+		const sortedBySize = [...messages].map((m, i) => ({ m, i }))
+			.sort((a, b) => b.m.content.length - a.m.content.length)
+
+		for (const { m } of sortedBySize) {
+			if (remainingCharsToTrim <= 0) break
+			if (m.content.length <= TRIM_TO_LEN) continue
+
+			const numCharsWillTrim = m.content.length - TRIM_TO_LEN
+			remainingCharsToTrim -= numCharsWillTrim
+			m.content = m.content.substring(0, TRIM_TO_LEN - '...'.length) + '...'
+		}
 	}
 
 	// ================ system message hack ================
@@ -478,6 +684,15 @@ const prepareGeminiMessages = (messages: AnthropicLLMChatMessage[]) => {
 						if (!latestToolName) return null
 						return { functionResponse: { id: c.tool_use_id, name: latestToolName, response: { output: c.content } } }
 					}
+					// Convert Anthropic image format to Gemini inlineData format
+					else if (c.type === 'image') {
+						return {
+							inlineData: {
+								mimeType: c.source.media_type,
+								data: c.source.data
+							}
+						}
+					}
 					else return null
 				}).filter(m => !!m)
 				return { role: 'user', parts, }
@@ -490,6 +705,13 @@ const prepareGeminiMessages = (messages: AnthropicLLMChatMessage[]) => {
 	return messages2
 }
 
+
+// Providers that use OpenAI-compatible API format (need image conversion)
+const OPENAI_COMPATIBLE_PROVIDERS: ProviderName[] = [
+	'openAI', 'openRouter', 'deepseek', 'groq', 'xAI', 'mistral',
+	'openAICompatible', 'vLLM', 'lmStudio', 'liteLLM',
+	'googleVertex', 'microsoftAzure', 'awsBedrock', 'ollama'
+]
 
 const prepareMessages = (params: {
 	messages: SimpleLLMMessage[],
@@ -513,6 +735,14 @@ const prepareMessages = (params: {
 		return { messages: messages2, separateSystemMessage: res.separateSystemMessage }
 	}
 
+	// For OpenAI-compatible providers, convert Anthropic image format to OpenAI format
+	if (OPENAI_COMPATIBLE_PROVIDERS.includes(params.providerName)) {
+		const res = prepareOpenAIOrAnthropicMessages({ ...params, specialToolFormat: specialFormat })
+		const messages = convertAnthropicImagesToOpenAI(res.messages as AnthropicLLMChatMessage[])
+		return { messages, separateSystemMessage: res.separateSystemMessage }
+	}
+
+	// For Anthropic, messages are already in the correct format
 	return prepareOpenAIOrAnthropicMessages({ ...params, specialToolFormat: specialFormat })
 }
 
@@ -541,6 +771,7 @@ class ConvertToLLMMessageService extends Disposable implements IConvertToLLMMess
 		@IVoidSettingsService private readonly voidSettingsService: IVoidSettingsService,
 		@IVoidModelService private readonly voidModelService: IVoidModelService,
 		@IMCPService private readonly mcpService: IMCPService,
+		@IFileService private readonly fileService: IFileService,
 	) {
 		super()
 	}
@@ -603,7 +834,7 @@ class ConvertToLLMMessageService extends Disposable implements IConvertToLLMMess
 
 	// --- LLM Chat messages ---
 
-	private _chatMessagesToSimpleMessages(chatMessages: ChatMessage[]): SimpleLLMMessage[] {
+	private async _chatMessagesToSimpleMessages(chatMessages: ChatMessage[]): Promise<SimpleLLMMessage[]> {
 		const simpleLLMMessages: SimpleLLMMessage[] = []
 
 		for (const m of chatMessages) {
@@ -626,9 +857,24 @@ class ConvertToLLMMessageService extends Disposable implements IConvertToLLMMess
 				})
 			}
 			else if (m.role === 'user') {
+				// Check for image selections and extract image data
+				const images: ImageData[] = []
+				const hasImages = hasImageSelections(m.selections)
+				console.log(`[ConvertToLLMMessageService] User message has ${m.selections?.length ?? 0} selections, hasImages: ${hasImages}`)
+
+				if (hasImages) {
+					const imageDataList = await getImageSelectionsWithData(m.selections, this.fileService)
+					console.log(`[ConvertToLLMMessageService] Extracted ${imageDataList.length} image(s) with data`)
+					for (const img of imageDataList) {
+						console.log(`[ConvertToLLMMessageService] Image: ${img.uri.fsPath}, mimeType: ${img.mimeType}, base64 length: ${img.base64.length}`)
+						images.push({ base64: img.base64, mimeType: img.mimeType })
+					}
+				}
+
 				simpleLLMMessages.push({
 					role: m.role,
 					content: m.content,
+					images: images.length > 0 ? images : undefined,
 				})
 			}
 		}
@@ -692,7 +938,7 @@ class ConvertToLLMMessageService extends Disposable implements IConvertToLLMMess
 		const aiInstructions = this._getCombinedAIInstructions();
 		const isReasoningEnabled = getIsReasoningEnabledState('Chat', providerName, modelName, modelSelectionOptions, overridesOfModel)
 		const reservedOutputTokenSpace = getReservedOutputTokenSpace(providerName, modelName, { isReasoningEnabled, overridesOfModel })
-		const llmMessages = this._chatMessagesToSimpleMessages(chatMessages)
+		const llmMessages = await this._chatMessagesToSimpleMessages(chatMessages)
 
 		const { messages, separateSystemMessage } = prepareMessages({
 			messages: llmMessages,

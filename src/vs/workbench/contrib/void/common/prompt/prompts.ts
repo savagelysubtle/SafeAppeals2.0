@@ -813,6 +813,7 @@ export const chat_systemMessage = ({ workspaceFolders, openedURIs, activeURI, pe
 // }
 
 export const DEFAULT_FILE_SIZE_LIMIT = 2_000_000
+export const MAX_IMAGE_SIZE = 20_000_000 // 20MB max for images
 
 export const readFile = async (fileService: IFileService, uri: URI, fileSizeLimit: number): Promise<{
 	val: string,
@@ -832,6 +833,118 @@ export const readFile = async (fileService: IFileService, uri: URI, fileSizeLimi
 	catch (e) {
 		return { val: null }
 	}
+}
+
+/**
+ * Read an image file and return base64 encoded data
+ */
+export const readImageAsBase64 = async (
+	fileService: IFileService,
+	uri: URI
+): Promise<{ base64: string; mimeType: 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp' } | null> => {
+	try {
+		const fileContent = await fileService.readFile(uri)
+		if (fileContent.value.byteLength > MAX_IMAGE_SIZE) {
+			console.warn(`[readImageAsBase64] Image too large: ${fileContent.value.byteLength} bytes`)
+			return null
+		}
+
+		// Determine MIME type from extension
+		const ext = uri.path.split('.').pop()?.toLowerCase()
+		let mimeType: 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp'
+		switch (ext) {
+			case 'jpg':
+			case 'jpeg':
+				mimeType = 'image/jpeg'
+				break
+			case 'png':
+				mimeType = 'image/png'
+				break
+			case 'gif':
+				mimeType = 'image/gif'
+				break
+			case 'webp':
+				mimeType = 'image/webp'
+				break
+			default:
+				console.warn(`[readImageAsBase64] Unsupported image type: ${ext}`)
+				return null
+		}
+
+		// Convert to base64
+		const bytes = fileContent.value.buffer
+		const uint8Array = new Uint8Array(bytes)
+		let binaryString = ''
+		for (let i = 0; i < uint8Array.length; i++) {
+			binaryString += String.fromCharCode(uint8Array[i])
+		}
+		const base64 = btoa(binaryString)
+
+		return { base64, mimeType }
+	} catch (e) {
+		console.error('[readImageAsBase64] Failed to read image:', e)
+		return null
+	}
+}
+
+/**
+ * Check if a URI points to an image file by extension
+ */
+const isImageFileByExtension = (uri: URI): boolean => {
+	const ext = uri.fsPath.split('.').pop()?.toLowerCase()
+	return ext === 'jpg' || ext === 'jpeg' || ext === 'png' || ext === 'gif' || ext === 'webp'
+}
+
+/**
+ * Extract image selections from a list of staging selections
+ * Handles both explicit 'Image' type and 'File' type with image extensions
+ */
+export const getImageSelectionsWithData = async (
+	selections: StagingSelectionItem[] | null,
+	fileService: IFileService
+): Promise<Array<{ uri: URI; base64: string; mimeType: 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp' }>> => {
+	if (!selections) return []
+
+	const results: Array<{ uri: URI; base64: string; mimeType: 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp' }> = []
+
+	for (const s of selections) {
+		// Handle explicit Image type
+		if (s.type === 'Image') {
+			// Use cached data if available
+			if (s.state?.base64Data) {
+				results.push({ uri: s.uri, base64: s.state.base64Data, mimeType: s.mimeType })
+				continue
+			}
+
+			// Read and convert the image
+			const imageData = await readImageAsBase64(fileService, s.uri)
+			if (imageData) {
+				results.push({ uri: s.uri, ...imageData })
+			}
+			continue
+		}
+
+		// Handle File type that might be an image (detected by extension)
+		if (s.type === 'File' && isImageFileByExtension(s.uri)) {
+			console.log(`[getImageSelectionsWithData] Detected image file by extension: ${s.uri.fsPath}`)
+			const imageData = await readImageAsBase64(fileService, s.uri)
+			if (imageData) {
+				results.push({ uri: s.uri, ...imageData })
+			}
+		}
+	}
+
+	return results
+}
+
+/**
+ * Check if any selections contain images (explicit Image type or File with image extension)
+ */
+export const hasImageSelections = (selections: StagingSelectionItem[] | null): boolean => {
+	return (selections ?? []).some(s =>
+		s.type === 'Image' ||
+		(s.type === 'File' && isImageFileByExtension(s.uri))
+	)
 }
 
 
@@ -862,7 +975,12 @@ export const messageOfSelection = async (
 		return str
 	}
 	else if (s.type === 'File') {
-		// Check if RAG context is available (for PDFs)
+		// Check if this is an image file - skip text extraction, images are sent separately as base64
+		if (isImageFileByExtension(s.uri)) {
+			return `${s.uri.fsPath}: [Image attached - sent separately for visual analysis]`
+		}
+
+		// Check if RAG context is available (for PDFs and other documents)
 		if (s.state.ragContext) {
 			// Use pre-generated RAG context instead of extracting full file
 			// Frame it as document excerpts to guide the LLM to focus on content, not structure
@@ -870,7 +988,17 @@ export const messageOfSelection = async (
 			return str
 		}
 
-		// Standard file extraction for non-PDF or non-RAG files
+		// Check if this is a binary document (PDF, DOCX, XLSX) without RAG context
+		// These can't be read as text directly - need to indicate the file is attached
+		const ext = s.uri.path.split('.').pop()?.toLowerCase() || ''
+		const binaryDocTypes = ['pdf', 'docx', 'doc', 'xlsx', 'xls', 'pptx', 'ppt']
+		if (binaryDocTypes.includes(ext)) {
+			// Binary document without extracted content - tell the agent clearly
+			const fileName = s.uri.path.split('/').pop() || 'document'
+			return `${s.uri.fsPath}: [${ext.toUpperCase()} document attached: "${fileName}"]\n⚠️ This document was drag-dropped but text extraction is pending. The agent should use the read_file tool to read this specific file: ${s.uri.fsPath}`
+		}
+
+		// Standard file extraction for text files
 		const { val } = await readFile(opts.fileService, s.uri, DEFAULT_FILE_SIZE_LIMIT)
 
 		const innerVal = val
@@ -894,6 +1022,12 @@ export const messageOfSelection = async (
 		}))
 		const contentStr = [folderStructure, ...strOfFiles].join('\n\n')
 		return contentStr
+	}
+	else if (s.type === 'Image') {
+		// Images are handled specially via multi-modal message format
+		// Return a placeholder text that describes the image
+		const fileName = s.uri.path.split('/').pop() || 'image'
+		return `[Image attached: ${fileName}]`
 	}
 	else
 		return ''
@@ -930,9 +1064,32 @@ export const chat_userMessageContent = async (
 			s.type === 'File' && s.language === 'pdf' && s.state.ragContext
 		);
 
-		const header = hasPDFExcerpts
-			? 'SELECTIONS\nThe user has selected the following document excerpts for you to reference and explain:'
-			: 'SELECTIONS';
+		// Count selection types for clear instructions
+		const fileCount = (currSelns ?? []).filter(s => s.type === 'File').length
+		const codeCount = (currSelns ?? []).filter(s => s.type === 'CodeSelection').length
+		const folderCount = (currSelns ?? []).filter(s => s.type === 'Folder').length
+		const imageCount = (currSelns ?? []).filter(s => s.type === 'Image').length
+
+		// Build a clear header that tells the agent NOT to re-read these files
+		let header: string
+		if (hasPDFExcerpts) {
+			header = `ATTACHED FILES & SELECTIONS (ALREADY IN CONTEXT - DO NOT USE read_file ON THESE)
+The user has attached the following files/selections. Their FULL CONTENTS are included below.
+⚠️ DO NOT call read_file, search_in_file, or any file-reading tools on these paths - they are ALREADY loaded here.
+Only use file tools for OTHER files not listed in this section.`
+		} else {
+			const parts: string[] = []
+			if (fileCount > 0) parts.push(`${fileCount} file(s)`)
+			if (codeCount > 0) parts.push(`${codeCount} code selection(s)`)
+			if (folderCount > 0) parts.push(`${folderCount} folder(s)`)
+			if (imageCount > 0) parts.push(`${imageCount} image(s)`)
+			const summary = parts.length > 0 ? parts.join(', ') : 'selections'
+
+			header = `ATTACHED FILES & SELECTIONS (ALREADY IN CONTEXT - DO NOT USE read_file ON THESE)
+The user has attached ${summary}. Their FULL CONTENTS are included below.
+⚠️ DO NOT call read_file, search_in_file, or any file-reading tools on these paths - they are ALREADY loaded here.
+Only use file tools for OTHER files not listed in this section.`
+		}
 
 		str += `\n---\n${header}\n${selnsStr}`;
 	}

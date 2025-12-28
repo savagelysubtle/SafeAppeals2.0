@@ -22,6 +22,113 @@ import { ChatMode, displayInfoOfProviderName, ModelSelectionOptions, OverridesOf
 import { extractReasoningWrapper, extractXMLToolsWrapper } from './extractGrammar.js';
 import { routeToolCalling } from './toolRouter.js';
 
+/**
+ * Detects and removes repetitive text corruption at the end of LLM responses.
+ * This happens when a model gets stuck in a generation loop, producing patterns like:
+ * "injury.y.njury.ir injury.nizational shifts after their injury..."
+ * OR "was out.t.s out.e was out.eplacements while Steve was out..."
+ *
+ * Detection strategy:
+ * 1. Look for abnormal patterns: periods not followed by space, very short fragments
+ * 2. Detect repeated short phrases
+ * 3. Truncate to the last clean sentence/paragraph boundary
+ */
+const cleanRepetitiveText = (text: string): string => {
+	if (!text || text.length < 100) return text
+
+	// STRATEGY 1: Detect dense periods without proper spacing (e.g., "was out.t.s out.e was")
+	// This is a strong indicator of generation loop corruption
+	const endPortion = text.slice(-Math.min(1500, text.length))
+
+	// Look for patterns like ".x" or ".x " where x is a single lowercase letter (mid-word break)
+	const midWordBreakPattern = /\.[a-z]{1,2}[.\s]/g
+	const midWordBreaks = endPortion.match(midWordBreakPattern)
+	if (midWordBreaks && midWordBreaks.length > 5) {
+		console.log(`[cleanRepetitiveText] Detected ${midWordBreaks.length} mid-word breaks (e.g., ".t.", ".s ")`)
+
+		// Find where the corruption starts - look for a proper sentence before the mess
+		// Search backwards for a sentence that ends with ". " followed by a capital letter
+		const properSentenceEnd = /[.!?]\s+[A-Z]/g
+		let lastGoodPosition = 0
+		let match
+		while ((match = properSentenceEnd.exec(text)) !== null) {
+			// Only consider positions in the first 80% of text (corruption is usually at end)
+			if (match.index < text.length * 0.85) {
+				lastGoodPosition = match.index + 1 // Include the period
+			}
+		}
+
+		if (lastGoodPosition > text.length * 0.3) {
+			console.log(`[cleanRepetitiveText] Truncating from ${text.length} to ${lastGoodPosition} chars (mid-word break detection)`)
+			return text.slice(0, lastGoodPosition)
+		}
+	}
+
+	// STRATEGY 2: Detect very short fragments separated by periods
+	const fragments = endPortion.split(/\.+/).filter(f => f.trim().length > 0)
+	const shortFragments = fragments.filter(f => f.trim().length <= 15)
+	if (fragments.length > 10 && shortFragments.length > fragments.length * 0.5) {
+		console.log(`[cleanRepetitiveText] Detected ${shortFragments.length}/${fragments.length} short fragments`)
+
+		// Find last paragraph break (double newline) or proper sentence
+		const paragraphBreaks = [...text.matchAll(/\n\n/g)]
+		if (paragraphBreaks.length > 0) {
+			const lastBreak = paragraphBreaks[paragraphBreaks.length - 1]
+			if (lastBreak.index && lastBreak.index > text.length * 0.3 && lastBreak.index < text.length * 0.9) {
+				console.log(`[cleanRepetitiveText] Truncating at paragraph break, from ${text.length} to ${lastBreak.index}`)
+				return text.slice(0, lastBreak.index)
+			}
+		}
+	}
+
+	// STRATEGY 3: Word frequency analysis (original approach but improved)
+	const lastFragments = fragments.slice(-25)
+	if (lastFragments.length < 5) return text
+
+	// Count word occurrences - include 3-letter words this time
+	const wordCounts: Map<string, number> = new Map()
+	for (const fragment of lastFragments) {
+		const words = fragment.toLowerCase().split(/\s+/).filter(w => w.length >= 2)
+		for (const word of words) {
+			wordCounts.set(word, (wordCounts.get(word) || 0) + 1)
+		}
+	}
+
+	// If any word appears way too frequently, it's corruption
+	const fragmentCount = lastFragments.length
+	let hasRepetition = false
+	for (const [word, count] of wordCounts) {
+		// Lower threshold: 50% of fragments, and count words of length 2+
+		if (count > fragmentCount * 0.5 && word.length >= 2) {
+			hasRepetition = true
+			console.log(`[cleanRepetitiveText] Detected repetitive word: "${word}" appears ${count}/${fragmentCount} times`)
+			break
+		}
+	}
+
+	if (!hasRepetition) return text
+
+	// Find last clean paragraph - look for double newline followed by clean content
+	const paragraphs = text.split(/\n\n+/)
+	for (let i = paragraphs.length - 1; i >= 0; i--) {
+		const para = paragraphs[i]
+		// Check if paragraph has corruption indicators
+		const hasMidWordBreaks = /\.[a-z]{1,2}[.\s]/.test(para)
+		const hasExcessivePeriods = (para.match(/\./g) || []).length > para.length * 0.05
+
+		if (!hasMidWordBreaks && !hasExcessivePeriods && para.length > 50) {
+			// This paragraph looks clean - find its end
+			const paraEnd = text.indexOf(para) + para.length
+			if (paraEnd > text.length * 0.3 && paraEnd < text.length) {
+				console.log(`[cleanRepetitiveText] Truncating at clean paragraph, from ${text.length} to ${paraEnd}`)
+				return text.slice(0, paraEnd)
+			}
+		}
+	}
+
+	return text
+}
+
 const getGoogleApiKey = async () => {
 	// module‑level singleton
 	const auth = new GoogleAuth({ scopes: `https://www.googleapis.com/auth/cloud-platform` });
@@ -445,7 +552,9 @@ const _sendOpenAICompatibleChat = async ({ messages, onText, onFinalMessage, onE
 			else {
 				const toolCall = rawToolCallObjOfParamsStr(toolName, toolParamsStr, toolId)
 				const toolCallObj = toolCall ? { toolCall } : {}
-				onFinalMessage({ fullText: fullTextSoFar, fullReasoning: fullReasoningSoFar, anthropicReasoning: null, ...toolCallObj });
+				// Clean up any repetitive text corruption at the end of the response
+				const cleanedFullText = cleanRepetitiveText(fullTextSoFar)
+				onFinalMessage({ fullText: cleanedFullText, fullReasoning: fullReasoningSoFar, anthropicReasoning: null, ...toolCallObj });
 			}
 		})
 		// when error/fail - this catches errors of both .create() and .then(for await)
@@ -560,6 +669,7 @@ const sendAnthropicChat = async ({ messages, providerName, onText, onFinalMessag
 	// reasoning
 	const reasoningInfo = getSendableReasoningInfo('Chat', providerName, modelName_, modelSelectionOptions, overridesOfModel)
 	const includeInPayload = providerReasoningIOSettings?.input?.includeInPayload?.(reasoningInfo) || {}
+	console.log('[sendAnthropicChat] includeInPayload:', JSON.stringify(includeInPayload), 'reasoningInfo:', JSON.stringify(reasoningInfo))
 
 	// anthropic-specific - max tokens
 	const maxTokens = getReservedOutputTokenSpace(providerName, modelName_, { isReasoningEnabled: !!reasoningInfo?.isReasoningEnabled, overridesOfModel })
@@ -587,15 +697,24 @@ const sendAnthropicChat = async ({ messages, providerName, onText, onFinalMessag
 		console.log('[sendAnthropicChat] SKIPPING XML extraction because specialToolFormat is:', specialToolFormat)
 	}
 
-	const stream = anthropic.messages.stream({
+	const requestPayload = {
 		system: separateSystemMessage ?? undefined,
 		messages: messages as AnthropicLLMChatMessage[],
 		model: modelName,
 		max_tokens: maxTokens ?? 4_096, // anthropic requires this
 		...includeInPayload,
 		...nativeToolsObj,
+	}
+	console.log('[sendAnthropicChat] Full request:', JSON.stringify({
+		model: requestPayload.model,
+		max_tokens: requestPayload.max_tokens,
+		thinking: (requestPayload as any).thinking,
+		hasTools: !!requestPayload.tools,
+		toolCount: requestPayload.tools?.length ?? 0,
+		messageCount: requestPayload.messages?.length ?? 0,
+	}))
 
-	})
+	const stream = anthropic.messages.stream(requestPayload)
 
 	// when receive text
 	let fullText = ''
@@ -613,15 +732,21 @@ const sendAnthropicChat = async ({ messages, providerName, onText, onFinalMessag
 		})
 	}
 	// there are no events for tool_use, it comes in at the end
+	let textBlockCount = 0
+	let thinkingBlockCount = 0
 	stream.on('streamEvent', e => {
 		// start block
 		if (e.type === 'content_block_start') {
 			if (e.content_block.type === 'text') {
+				textBlockCount++
+				console.log(`[Anthropic] Text block #${textBlockCount} started, initial text length: ${e.content_block.text?.length ?? 0}`)
 				if (fullText) fullText += '\n\n' // starting a 2nd text block
 				fullText += e.content_block.text
 				runOnText()
 			}
 			else if (e.content_block.type === 'thinking') {
+				thinkingBlockCount++
+				console.log(`[Anthropic] Thinking block #${thinkingBlockCount} started, initial thinking length: ${e.content_block.thinking?.length ?? 0}`)
 				if (fullReasoning) fullReasoning += '\n\n' // starting a 2nd reasoning block
 				fullReasoning += e.content_block.thinking
 				runOnText()
@@ -657,6 +782,10 @@ const sendAnthropicChat = async ({ messages, providerName, onText, onFinalMessag
 
 	// on done - (or when error/fail) - this is called AFTER last streamEvent
 	stream.on('finalMessage', (response) => {
+		console.log(`[Anthropic] Final message received. Text blocks: ${textBlockCount}, Thinking blocks: ${thinkingBlockCount}`)
+		console.log(`[Anthropic] fullText length: ${fullText.length}, fullReasoning length: ${fullReasoning.length}`)
+		console.log(`[Anthropic] Response content types:`, response.content.map(c => c.type).join(', '))
+
 		const anthropicReasoning = response.content.filter(c => c.type === 'thinking' || c.type === 'redacted_thinking')
 		const tools = response.content.filter(c => c.type === 'tool_use')
 		// console.log('TOOLS!!!!!!', JSON.stringify(tools, null, 2))
@@ -664,7 +793,13 @@ const sendAnthropicChat = async ({ messages, providerName, onText, onFinalMessag
 		const toolCall = tools[0] && rawToolCallObjOfAnthropicParams(tools[0])
 		const toolCallObj = toolCall ? { toolCall } : {}
 
-		onFinalMessage({ fullText, fullReasoning, anthropicReasoning, ...toolCallObj })
+		// Clean up any repetitive text corruption at the end of the response
+		const cleanedFullText = cleanRepetitiveText(fullText)
+		if (cleanedFullText.length !== fullText.length) {
+			console.log(`[Anthropic] Cleaned repetitive text: removed ${fullText.length - cleanedFullText.length} chars`)
+		}
+
+		onFinalMessage({ fullText: cleanedFullText, fullReasoning, anthropicReasoning, ...toolCallObj })
 	})
 	// on error
 	stream.on('error', (error) => {
@@ -768,7 +903,9 @@ const sendOllamaFIM = ({ messages, onFinalMessage, onError, settingsOfProvider, 
 				const newText = chunk.response
 				fullText += newText
 			}
-			onFinalMessage({ fullText, fullReasoning: '', anthropicReasoning: null })
+			// Clean up any repetitive text corruption at the end of the response
+			const cleanedFullText = cleanRepetitiveText(fullText)
+			onFinalMessage({ fullText: cleanedFullText, fullReasoning: '', anthropicReasoning: null })
 		})
 		// when error/fail
 		.catch((error) => {
@@ -934,7 +1071,9 @@ const sendGeminiChat = async ({
 				if (!toolId) toolId = generateUuid() // ids are empty, but other providers might expect an id
 				const toolCall = rawToolCallObjOfParamsStr(toolName, toolParamsStr, toolId)
 				const toolCallObj = toolCall ? { toolCall } : {}
-				onFinalMessage({ fullText: fullTextSoFar, fullReasoning: fullReasoningSoFar, anthropicReasoning: null, ...toolCallObj });
+				// Clean up any repetitive text corruption at the end of the response
+				const cleanedFullText = cleanRepetitiveText(fullTextSoFar)
+				onFinalMessage({ fullText: cleanedFullText, fullReasoning: fullReasoningSoFar, anthropicReasoning: null, ...toolCallObj });
 			}
 		})
 		.catch(error => {

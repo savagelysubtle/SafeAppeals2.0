@@ -69,6 +69,9 @@ export type ChatMessage =
 	| CheckpointEntry
 
 
+// Supported image MIME types for vision models
+export type ImageMimeType = 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp';
+
 // one of the square items that indicates a selection in a chat bubble
 export type StagingSelectionItem = {
 	type: 'File';
@@ -89,6 +92,14 @@ export type StagingSelectionItem = {
 	uri: URI;
 	language?: undefined;
 	state?: undefined;
+} | {
+	type: 'Image';
+	uri: URI;
+	mimeType: ImageMimeType;
+	state: {
+		wasAddedAsCurrentFile: boolean;
+		base64Data?: string; // Cached base64 data for the image
+	};
 }
 
 

@@ -331,52 +331,48 @@ export const extractXMLToolsWrapper = (
 	const parserService = new XMLParserService() // Create once per wrapper instance
 
 	// detect <availableTools[0]></availableTools[0]>, etc
-	let fullText = '';
-	let trueFullText = ''
+	// IMPORTANT: We track displayText separately from reasoning
+	// - displayText: The text that will be shown to the user (excludes tool XML)
+	// - params.fullReasoning: Passed through unchanged (reasoning from extended thinking)
+	let displayText = '';
+	let originalFullText = '' // Store the original fullText from params for XML parsing
 	let latestToolCall: RawToolCallObj | undefined = undefined
 
 	let foundOpenTag: { idx: number, toolName: ToolName } | null = null
-	let openToolTagBuffer = '' // the characters we've seen so far that come after a < with no space afterwards, not yet added to fullText
+	let openToolTagBuffer = '' // the characters we've seen so far that come after a < with no space afterwards, not yet added to displayText
 
 	let prevFullTextLen = 0
-	let prevFullReasoningLen = 0
 	const newOnText: OnText = (params) => {
-		// CRITICAL FIX: Check BOTH fullText and fullReasoning for tool calls
-		// When extended thinking is enabled, tool calls may appear in fullReasoning instead of fullText
-		const combinedText = (params.fullText || '') + (params.fullReasoning || '')
-		const newText = combinedText.substring(prevFullTextLen + prevFullReasoningLen)
+		// FIX: Only extract new content from fullText, NOT from reasoning
+		// Reasoning is handled separately by the Anthropic SDK and should NOT be mixed with text
+		const currentFullText = params.fullText || ''
+		const newText = currentFullText.substring(prevFullTextLen)
 
-		prevFullTextLen = params.fullText?.length || 0
-		prevFullReasoningLen = params.fullReasoning?.length || 0
-		trueFullText = combinedText
+		prevFullTextLen = currentFullText.length
+		originalFullText = currentFullText // Store for XML parsing
 
-		// Log when we receive reasoning content
-		if (params.fullReasoning && params.fullReasoning.length > 0) {
-			console.log('[extractXMLToolsWrapper] 🧠 Received REASONING content (length:', params.fullReasoning.length, ') - checking for tool calls')
-			if (params.fullReasoning.includes('<')) {
-				console.log('[extractXMLToolsWrapper] 🔍 Reasoning contains XML tags:', params.fullReasoning.substring(0, 100))
-			}
+		// Debug: Log when we have both reasoning and text (extended thinking scenario)
+		if (params.fullReasoning && params.fullReasoning.length > 0 && currentFullText.length > 0) {
+			console.log('[extractXMLToolsWrapper] 📋 Extended thinking: reasoning length:', params.fullReasoning.length, ', text length:', currentFullText.length)
 		}
 
 		// Log every call to verify wrapper is running
-		if (params.fullText.includes('<edit_document>')) {
-			console.log('[extractXMLToolsWrapper] Received text with <edit_document> tag. fullText length:', params.fullText.length, 'foundOpenTag:', foundOpenTag, 'toolOpenTags:', toolOpenTags)
-			console.log('[extractXMLToolsWrapper] fullText contains <edit_document>:', params.fullText.includes('<edit_document>'))
-			console.log('[extractXMLToolsWrapper] toolOpenTags includes <edit_document>:', toolOpenTags.includes('<edit_document>'))
+		if (currentFullText.includes('<edit_document>')) {
+			console.log('[extractXMLToolsWrapper] Received text with <edit_document> tag. fullText length:', currentFullText.length, 'foundOpenTag:', foundOpenTag, 'toolOpenTags:', toolOpenTags)
 		}
 
 
 		if (foundOpenTag === null) {
-			// NEW: Check for ANTML format first - ONLY in fullText, not reasoning
-			const functionCallsIdx = params.fullText.indexOf('<function_calls>')
+			// Check for ANTML format first - ONLY in fullText, not reasoning
+			const functionCallsIdx = currentFullText.indexOf('<function_calls>')
 
 			if (functionCallsIdx !== -1) {
 				// Found ANTML format - extract text before it
-				const textBeforeTools = params.fullText.substring(0, functionCallsIdx)
-				fullText = textBeforeTools
+				const textBeforeTools = currentFullText.substring(0, functionCallsIdx)
+				displayText = textBeforeTools
 
-				// Parse ANTML format (from fullText only, not combined)
-				const xmlSubstring = params.fullText.substring(functionCallsIdx)
+				// Parse ANTML format
+				const xmlSubstring = currentFullText.substring(functionCallsIdx)
 				const parseStartTime = performance.now()
 
 				console.log('[extractXMLToolsWrapper] ✅ FOUND <function_calls> tag at index:', functionCallsIdx)
@@ -414,49 +410,30 @@ export const extractXMLToolsWrapper = (
 				// Mark as found to avoid further parsing
 				foundOpenTag = { idx: functionCallsIdx, toolName: 'function_calls' as ToolName }
 			}
-			// OLD: Legacy format detection (fallback)
+			// Legacy format detection (fallback)
 			else {
 				const newFullText = openToolTagBuffer + newText
 				// ensure the code below doesn't run if only half a tag has been written
 				const isPartial = findPartiallyWrittenToolTagAtEnd(newFullText, toolOpenTags)
 				if (isPartial) {
-					// console.log('--- partial!!!')
 					openToolTagBuffer += newText
 				}
 				// if no tooltag is partially written at the end, attempt to get the index
 				else {
 					// we will instantly retroactively remove this if it's a tag match
-					fullText += openToolTagBuffer
+					displayText += openToolTagBuffer
 					openToolTagBuffer = ''
-					fullText += newText
+					displayText += newText
 
-					const i = findIndexOfAny(fullText, toolOpenTags)
+					const i = findIndexOfAny(displayText, toolOpenTags)
 					if (i !== null) {
 						const [idx, toolTag] = i
 						const toolName = toolTag.substring(1, toolTag.length - 1) as ToolName
-						console.log('[extractXMLToolsWrapper] ✅ FOUND legacy tool tag:', toolName, 'at index:', idx, 'in text:', fullText.substring(Math.max(0, idx - 20), idx + 50))
+						console.log('[extractXMLToolsWrapper] ✅ FOUND legacy tool tag:', toolName, 'at index:', idx, 'in text:', displayText.substring(Math.max(0, idx - 20), idx + 50))
 						foundOpenTag = { idx, toolName }
 
-						// do not count anything at or after i in fullText
-						fullText = fullText.substring(0, idx)
-					} else {
-						// Debug: Check if tag exists but wasn't found
-						if (fullText.includes('<edit_document>')) {
-							const editDocIdx = fullText.indexOf('<edit_document>')
-							console.log('[extractXMLToolsWrapper] ❌ <edit_document> found in text at index', editDocIdx, 'but findIndexOfAny returned null!', {
-								fullTextSample: fullText.substring(Math.max(0, editDocIdx - 10), editDocIdx + 30),
-								toolOpenTags,
-								toolOpenTagsLength: toolOpenTags.length,
-								availableTools: Object.keys(toolOfToolName),
-								fullTextLength: fullText.length
-							})
-							// Try to see if there's a mismatch
-							for (const tag of toolOpenTags) {
-								if (fullText.includes(tag)) {
-									console.log('[extractXMLToolsWrapper] But found tag:', tag, 'at index:', fullText.indexOf(tag))
-								}
-							}
-						}
+						// do not count anything at or after i in displayText
+						displayText = displayText.substring(0, idx)
 					}
 				}
 			}
@@ -464,7 +441,9 @@ export const extractXMLToolsWrapper = (
 
 		// toolTagIdx is not null, so parse the XML (both legacy and ANTML formats)
 		if (foundOpenTag !== null) {
-			const xmlSubstring = trueFullText.substring(foundOpenTag.idx, Infinity)
+			// FIX: Use originalFullText (from params.fullText only) for XML parsing
+			// NOT the combined text that included reasoning
+			const xmlSubstring = originalFullText.substring(foundOpenTag.idx, Infinity)
 			const parseStartTime = performance.now()
 
 			// Use parser service with fallback support
@@ -516,9 +495,11 @@ export const extractXMLToolsWrapper = (
 			}
 		}
 
+		// FIX: Pass displayText (text without tool XML) as fullText
+		// Keep fullReasoning unchanged from params (don't mix it with text!)
 		onText({
 			...params,
-			fullText,
+			fullText: displayText,
 			toolCall: latestToolCall,
 		});
 	};
@@ -528,10 +509,10 @@ export const extractXMLToolsWrapper = (
 		// treat like just got text before calling onFinalMessage (or else we sometimes miss the final chunk that's new to finalMessage)
 		newOnText({ ...params })
 
-		fullText = fullText.trimEnd()
+		displayText = displayText.trimEnd()
 		let toolCall = latestToolCall
 
-		// ✅ FIX: Only pass tool call if it's complete (isDone: true)
+		// Only pass tool call if it's complete (isDone: true)
 		// Incomplete tool calls cause validation errors in ToolsService
 		if (toolCall && 'name' in toolCall && !toolCall.isDone) {
 			const singleToolCall = toolCall // Type narrowed here
@@ -543,7 +524,8 @@ export const extractXMLToolsWrapper = (
 			toolCall = undefined // Don't execute incomplete tools
 		}
 
-		onFinalMessage({ ...params, fullText, toolCall: toolCall })
+		// FIX: Pass displayText as fullText, keep fullReasoning from params unchanged
+		onFinalMessage({ ...params, fullText: displayText, toolCall: toolCall })
 	}
 	return { newOnText, newOnFinalMessage };
 }

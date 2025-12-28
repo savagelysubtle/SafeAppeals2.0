@@ -29,6 +29,31 @@ export const getErrorMessage: (error: unknown) => string = (error) => {
 
 
 
+// Image content types for multi-modal messages
+export type AnthropicImageContent = {
+	type: 'image';
+	source: {
+		type: 'base64';
+		media_type: 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp';
+		data: string; // base64 encoded image data
+	};
+};
+
+export type OpenAIImageContent = {
+	type: 'image_url';
+	image_url: {
+		url: string; // data:image/jpeg;base64,... or https://...
+		detail?: 'low' | 'high' | 'auto';
+	};
+};
+
+export type GeminiImageContent = {
+	inlineData: {
+		mimeType: 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp';
+		data: string; // base64 encoded image data
+	};
+};
+
 export type AnthropicLLMChatMessage = {
 	role: 'assistant',
 	content: string | (AnthropicReasoning | { type: 'text'; text: string }
@@ -37,12 +62,20 @@ export type AnthropicLLMChatMessage = {
 } | {
 	role: 'user',
 	content: string | (
-		{ type: 'text'; text: string; } | { type: 'tool_result'; tool_use_id: string; content: string; }
+		| { type: 'text'; text: string; }
+		| { type: 'tool_result'; tool_use_id: string; content: string; }
+		| AnthropicImageContent
 	)[]
 }
 export type OpenAILLMChatMessage = {
-	role: 'system' | 'user' | 'developer';
+	role: 'system' | 'developer';
 	content: string;
+} | {
+	role: 'user';
+	content: string | (
+		| { type: 'text'; text: string; }
+		| OpenAIImageContent
+	)[];
 } | {
 	role: 'assistant',
 	content: string | (AnthropicReasoning | { type: 'text'; text: string })[];
@@ -64,6 +97,7 @@ export type GeminiLLMChatMessage = {
 	parts: (
 		| { text: string; }
 		| { functionResponse: { id: string; name: ToolName, response: { output: string } } }
+		| GeminiImageContent
 	)[];
 }
 

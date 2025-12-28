@@ -40,6 +40,7 @@ export const geminiModelOptions = {
 		cost: { input: 2.00, output: 12.00 },
 		downloadable: false,
 		supportsFIM: false,
+		supportsVision: true, // Gemini 3 Pro supports vision/images
 		supportsSystemMessage: 'separated',
 		specialToolFormat: 'gemini-style',
 		reasoningCapabilities: {
@@ -57,6 +58,7 @@ export const geminiModelOptions = {
 		cost: { input: 1.25, output: 10.00 },
 		downloadable: false,
 		supportsFIM: false,
+		supportsVision: true, // Gemini 2.5 Pro supports vision/images
 		supportsSystemMessage: 'separated',
 		specialToolFormat: 'gemini-style',
 		reasoningCapabilities: {
@@ -74,6 +76,7 @@ export const geminiModelOptions = {
 		cost: { input: 0.15, output: 0.60 },
 		downloadable: false,
 		supportsFIM: false,
+		supportsVision: true, // Gemini 2.5 Flash supports vision/images
 		supportsSystemMessage: 'separated',
 		specialToolFormat: 'gemini-style',
 		reasoningCapabilities: {

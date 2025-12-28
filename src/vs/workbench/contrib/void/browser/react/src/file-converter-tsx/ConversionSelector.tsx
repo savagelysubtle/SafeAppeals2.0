@@ -69,119 +69,129 @@ export const ConversionSelector: React.FC<ConversionSelectorProps> = ({
 	const canConvert = selectedFile && outputPath && conversionType;
 
 	return (
-		<div className="p-6 space-y-8 max-w-3xl mx-auto w-full">
-			{/* Step 1: File Selection */}
-			<div className="space-y-2">
-				<label className="flex items-center gap-2 text-sm font-semibold text-void-fg-1">
-					<div className="w-6 h-6 rounded-full bg-void-button-primary text-void-button-primary-text flex items-center justify-center text-xs">1</div>
-					Select File
-				</label>
-				<div
-					onClick={onFileSelect}
-					className={`group relative border-2 border-dashed rounded-xl p-8 transition-all cursor-pointer ${
-						selectedFile
-							? 'border-void-button-primary bg-void-button-primary/5'
-							: 'border-void-border-3 hover:border-void-button-primary hover:bg-void-bg-2'
-					}`}
-				>
-					<div className="flex flex-col items-center justify-center text-center">
-						{selectedFile ? (
-							<>
-								<div className="w-16 h-16 bg-void-bg-1 rounded-lg shadow-sm flex items-center justify-center mb-3 text-3xl">📄</div>
-								<p className="font-medium text-void-fg-1 mb-1 break-all line-clamp-2">{selectedFile.split(/[\\/]/).pop()}</p>
-								<p className="text-xs text-void-fg-3">Click to change file</p>
-							</>
+		<div className="flex flex-col h-full w-full">
+			{/* Scrollable content area */}
+			<div
+				className="flex-1 overflow-y-auto custom-scrollbar p-6 space-y-6 w-full max-w-3xl mx-auto"
+			>
+				{/* Step 1: File Selection */}
+				<div className="space-y-2">
+					<label className="flex items-center gap-2 text-sm font-semibold text-void-fg-1">
+						<div className="w-6 h-6 rounded-full bg-void-button-primary text-void-button-primary-text flex items-center justify-center text-xs">1</div>
+						Select File
+					</label>
+					<div
+						onClick={onFileSelect}
+						className={`group relative border-2 border-dashed rounded-xl p-6 transition-all cursor-pointer ${
+							selectedFile
+								? 'border-void-button-primary bg-void-button-primary/5'
+								: 'border-void-border-3 hover:border-void-button-primary hover:bg-void-bg-2'
+						}`}
+					>
+						<div className="flex flex-col items-center justify-center text-center">
+							{selectedFile ? (
+								<>
+									<div className="w-12 h-12 bg-void-bg-1 rounded-lg shadow-sm flex items-center justify-center mb-2 text-2xl">📄</div>
+									<p className="font-medium text-void-fg-1 mb-1 break-all line-clamp-2 text-sm" title={selectedFile.split(/[\\/]/).pop()}>{selectedFile.split(/[\\/]/).pop()}</p>
+									<p className="text-xs text-void-fg-3">Click to change file</p>
+								</>
+							) : (
+								<>
+									<p className="text-3xl mb-2">📤</p>
+									<p className="font-medium text-void-fg-1 mb-1 text-sm">Drag & Drop file here</p>
+									<p className="text-xs text-void-fg-3">or click to browse</p>
+								</>
+							)}
+						</div>
+					</div>
+				</div>
+
+				{/* Step 2: Conversion Options */}
+				<div className={`space-y-3 transition-opacity duration-300 ${!selectedFile ? 'opacity-50 pointer-events-none' : ''}`}>
+					<label className="flex items-center gap-2 text-sm font-semibold text-void-fg-1">
+						<div className="w-6 h-6 rounded-full bg-void-button-primary text-void-button-primary-text flex items-center justify-center text-xs">2</div>
+						Choose Conversion
+					</label>
+					<div className="grid grid-cols-2 gap-2">
+						{applicableConversions.length > 0 ? (
+							applicableConversions.map(([key, info]) => (
+								<button
+									key={key}
+									onClick={() => onTypeChange(key)}
+									className={`flex items-center gap-2 p-2.5 rounded-lg border transition-all ${
+										conversionType === key
+											? 'bg-void-button-primary border-void-button-primary text-void-button-primary-text'
+											: 'bg-void-bg-1 border-void-border-2 hover:border-void-button-primary text-void-fg-1'
+									}`}
+								>
+									<div className={`w-7 h-7 rounded flex items-center justify-center text-sm ${conversionType === key ? 'bg-white/20' : 'bg-void-bg-2'}`}>→</div>
+									<div className="text-left"><div className="font-medium text-xs">{info.description}</div></div>
+								</button>
+							))
 						) : (
-							<>
-								<p className="text-4xl mb-4">📤</p>
-								<p className="font-medium text-void-fg-1 mb-1">Drag & Drop file here</p>
-								<p className="text-sm text-void-fg-3">or click to browse</p>
-							</>
+							<div className="col-span-2 p-3 bg-void-bg-1 rounded-lg border border-void-border-2 text-center text-void-fg-3 text-sm">
+								{selectedFile ? 'No compatible conversions found for this file type.' : 'Select a file to see options.'}
+							</div>
 						)}
 					</div>
 				</div>
-			</div>
 
-			{/* Step 2: Conversion Options */}
-			<div className={`space-y-4 transition-opacity duration-300 ${!selectedFile ? 'opacity-50 pointer-events-none' : ''}`}>
-				<label className="flex items-center gap-2 text-sm font-semibold text-void-fg-1">
-					<div className="w-6 h-6 rounded-full bg-void-button-primary text-void-button-primary-text flex items-center justify-center text-xs">2</div>
-					Choose Conversion
-				</label>
-				<div className="grid grid-cols-2 gap-3">
-					{applicableConversions.length > 0 ? (
-						applicableConversions.map(([key, info]) => (
+				{/* Step 3: Output Location */}
+				<div className={`space-y-4 transition-opacity duration-300 ${!conversionType ? 'opacity-50 pointer-events-none' : ''}`}>
+					<label className="flex items-center gap-2 text-sm font-semibold text-void-fg-1">
+						<div className="w-6 h-6 rounded-full bg-void-button-primary text-void-button-primary-text flex items-center justify-center text-xs">3</div>
+						Output Location
+					</label>
+
+					{/* Directory Selection */}
+					<div className="space-y-2">
+						<label className="text-xs text-void-fg-3 font-medium">Directory</label>
+						<div className="flex gap-2">
+							<input
+								type="text"
+								value={outputDir}
+								readOnly
+								className="flex-1 px-3 py-2.5 bg-void-bg-1 border border-void-border-2 rounded-lg text-void-fg-2 text-sm font-mono truncate"
+								placeholder="Select output directory..."
+								title={outputDir}
+							/>
 							<button
-								key={key}
-								onClick={() => onTypeChange(key)}
-								className={`flex items-center gap-3 p-3 rounded-lg border transition-all ${
-									conversionType === key
-										? 'bg-void-button-primary border-void-button-primary text-void-button-primary-text'
-										: 'bg-void-bg-1 border-void-border-2 hover:border-void-button-primary text-void-fg-1'
-								}`}
-							>
-								<div className={`w-8 h-8 rounded flex items-center justify-center ${conversionType === key ? 'bg-white/20' : 'bg-void-bg-2'}`}>→</div>
-								<div className="text-left"><div className="font-medium text-sm">{info.description}</div></div>
-							</button>
-						))
-					) : (
-						<div className="col-span-2 p-4 bg-void-bg-1 rounded-lg border border-void-border-2 text-center text-void-fg-3">
-							{selectedFile ? 'No compatible conversions found for this file type.' : 'Select a file to see options.'}
+								onClick={onOutputDirSelect}
+								className="shrink-0 px-3 bg-void-bg-1 border border-void-border-2 rounded-lg text-void-fg-1 hover:bg-void-bg-2"
+								title="Change Output Directory"
+							>📁</button>
 						</div>
-					)}
-				</div>
-			</div>
+					</div>
 
-			{/* Step 3: Output Location */}
-			<div className={`space-y-4 transition-opacity duration-300 ${!conversionType ? 'opacity-50 pointer-events-none' : ''}`}>
-				<label className="flex items-center gap-2 text-sm font-semibold text-void-fg-1">
-					<div className="w-6 h-6 rounded-full bg-void-button-primary text-void-button-primary-text flex items-center justify-center text-xs">3</div>
-					Output Location
-				</label>
-
-				{/* Directory Selection */}
-				<div className="space-y-2">
-					<label className="text-xs text-void-fg-3 font-medium">Directory</label>
-					<div className="flex gap-2">
+					{/* Filename Input */}
+					<div className="space-y-2">
+						<label className="text-xs text-void-fg-3 font-medium">Filename</label>
 						<input
 							type="text"
-							value={outputDir}
-							readOnly
-							className="flex-1 px-3 py-2.5 bg-void-bg-1 border border-void-border-2 rounded-lg text-void-fg-2 text-sm font-mono"
-							placeholder="Select output directory..."
+							value={outputFilename}
+							onChange={onFilenameChange}
+							className="w-full px-3 py-2.5 bg-void-bg-1 border border-void-border-2 rounded-lg text-void-fg-1 text-sm"
+							placeholder="Enter output filename..."
 						/>
-						<button
-							onClick={onOutputDirSelect}
-							className="px-3 bg-void-bg-1 border border-void-border-2 rounded-lg text-void-fg-1 hover:bg-void-bg-2"
-							title="Change Output Directory"
-						>📁</button>
 					</div>
 				</div>
+			</div>
 
-				{/* Filename Input */}
-				<div className="space-y-2">
-					<label className="text-xs text-void-fg-3 font-medium">Filename</label>
-					<input
-						type="text"
-						value={outputFilename}
-						onChange={onFilenameChange}
-						className="w-full px-3 py-2.5 bg-void-bg-1 border border-void-border-2 rounded-lg text-void-fg-1 text-sm"
-						placeholder="Enter output filename..."
-					/>
+			{/* Fixed Convert Button at bottom */}
+			<div className="shrink-0 p-4 border-t border-void-border-2 bg-void-bg-2 w-full">
+				<div className="max-w-3xl mx-auto w-full">
+					<button
+						onClick={onStartConversion}
+						disabled={!canConvert}
+						className={`w-full h-[42px] px-8 rounded-lg font-semibold transition-all flex items-center justify-center gap-2 ${
+							canConvert
+								? "bg-void-button-primary text-void-button-primary-text hover:bg-void-button-primary-hover shadow-lg"
+								: "bg-void-bg-1 text-void-fg-4 cursor-not-allowed border border-void-border-2"
+						}`}
+					>
+						<span>Convert Now</span><span>▶</span>
+					</button>
 				</div>
-
-				{/* Convert Button */}
-				<button
-					onClick={onStartConversion}
-					disabled={!canConvert}
-					className={`w-full h-[42px] px-8 rounded-lg font-semibold transition-all flex items-center justify-center gap-2 ${
-						canConvert
-							? "bg-void-button-primary text-void-button-primary-text hover:bg-void-button-primary-hover shadow-lg"
-							: "bg-void-bg-1 text-void-fg-4 cursor-not-allowed border border-void-border-2"
-					}`}
-				>
-					<span>Convert</span><span>▶</span>
-				</button>
 			</div>
 		</div>
 	);
