@@ -29,6 +29,7 @@ export const openAIModelOptions = {
 		cost: { input: 1.75, output: 14.00, cache_read: 0.175 },
 		downloadable: false,
 		supportsFIM: false,
+		supportsVision: true, // GPT-5.2 supports vision/images
 		specialToolFormat: 'openai-style',
 		supportsSystemMessage: 'developer-role',
 		reasoningCapabilities: {
@@ -46,6 +47,7 @@ export const openAIModelOptions = {
 		cost: { input: 1.25, output: 10.00, cache_read: 0.125 },
 		downloadable: false,
 		supportsFIM: false,
+		supportsVision: true, // GPT-5 supports vision/images
 		specialToolFormat: 'openai-style',
 		supportsSystemMessage: 'developer-role',
 		reasoningCapabilities: {
@@ -63,6 +65,7 @@ export const openAIModelOptions = {
 		cost: { input: 1.25, output: 10.00, cache_read: 0.125 },
 		downloadable: false,
 		supportsFIM: true,
+		supportsVision: true, // GPT-5.1 Codex Max supports vision/images
 		specialToolFormat: 'openai-style',
 		supportsSystemMessage: 'developer-role',
 		reasoningCapabilities: {

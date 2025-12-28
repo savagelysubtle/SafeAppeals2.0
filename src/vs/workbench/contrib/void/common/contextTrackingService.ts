@@ -13,7 +13,11 @@ import { IVoidSettingsService } from './voidSettingsService.js';
 import { ProviderName } from './voidSettingsTypes.js';
 
 // Token counting constants
-export const CHARS_PER_TOKEN = 4; // conservative estimate
+// Calibrated based on real-world usage with documents/PDFs
+// Documents typically tokenize at ~8-12 chars per token
+// Code tokenizes at ~3-4 chars per token
+// Using 8 as a balanced estimate for mixed content
+export const CHARS_PER_TOKEN = 8;
 
 // Context usage thresholds
 export const CONTEXT_THRESHOLDS = {
@@ -190,10 +194,15 @@ class ContextTrackingService extends Disposable implements IContextTrackingServi
 			}
 		}
 
-		// Add estimate for system message (varies by chat mode, estimate ~2000 tokens)
-		breakdown.systemTokens = 2000;
+		// Add estimate for system message (base prompt + tools/rules + directory structure)
+		// This is more realistic than 2000 for workspaces with MCP tools and .voidrules
+		breakdown.systemTokens = 4000;
 
 		const totalTokens = breakdown.systemTokens + breakdown.userTokens + breakdown.assistantTokens + breakdown.toolTokens;
+
+		// Note: The actual LLM service trims content to fit context window.
+		// This service reports raw usage, but usagePercent is capped at 1 (100%)
+		// to reflect that content exceeding the limit will be trimmed.
 		const usagePercent = availableInputTokens > 0 ? Math.min(totalTokens / availableInputTokens, 1) : 0;
 		const usageLevel = this._getUsageLevel(usagePercent);
 		const tokensRemaining = Math.max(availableInputTokens - totalTokens, 0);

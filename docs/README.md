@@ -70,7 +70,31 @@ Comprehensive AI tool calling system with XML parsing, schema validation, and se
 - Streaming support for real-time tool call processing
 - Comprehensive telemetry and performance monitoring
 
-#### [RAG System](./rag-system/)
+#### [Chat System](./chat/)
+
+LLM-powered conversational AI with extended thinking and tool calling.
+
+**Components:**
+
+- [Main README](./chat/README.md) - Overview and architecture
+- [Architecture](./chat/architecture.md) - System design, process model, data flow
+- [Message Flow](./chat/message-flow.md) - End-to-end message lifecycle
+- [Reasoning System](./chat/reasoning-system.md) - Extended thinking, separation
+- [Tool Calling](./chat/tool-calling.md) - XML parsing, execution flow
+- [Chat Modes](./chat/chat-modes.md) - Agent, gather, research modes
+- [Bug Fixes](./chat/bug-fixes.md) - Known issues and solutions
+- [API Reference](./chat/api-reference.md) - Service interfaces and types
+
+**Key Features:**
+
+- Multi-provider LLM support (Anthropic, OpenAI, Gemini, 10+ providers)
+- Extended thinking/reasoning (Claude Opus 4.5, Sonnet 4.5)
+- XML-based tool calling with streaming support
+- Multiple chat modes (agent, gather, research, drafting)
+- Context window tracking and management
+- Agent loop with tool execution and checkpoints
+
+#### [RAG System](./ragSystem/)
 
 Research-Augmented Generation system for enhanced AI responses.
 
@@ -188,14 +212,16 @@ Research data, matrices, and analysis files.
 | Folder                                           | Purpose                                          | Audience       |
 | ------------------------------------------------ | ------------------------------------------------ | -------------- |
 | **[SafeAppealsCloud/](./SafeAppealsCloud/)**     | Cloud backend, pricing, billing, deployment      | DevOps/Admins  |
-| **[models/](./models/)**                         | AI model configuration and capabilities          | Developers     |
+| **[chat/](./chat/)**                             | Chat system, LLM integration, agent loop         | Developers     |
+| **[models/](./modelsSystem/)**                   | AI model configuration and capabilities          | Developers     |
 | **[tools/](./tools/)**                           | AI tool calling and execution system             | Developers     |
 | **[development/](./development/)**               | Setup guides, migration plans, installation docs | Developers     |
-| **[technical-research/](./technical-research/)** | Research, analysis, implementation details       | Technical team |
+| **[technical-research/](./technicalResearch/)**  | Research, analysis, implementation details       | Technical team |
 | **[features/](./features/)**                     | User features, configuration, customization      | All users      |
-| **[data-analysis/](./data-analysis/)**           | Research data, matrices, analysis files          | Administrators |
+| **[data-analysis/](./dataAnalysis/)**            | Research data, matrices, analysis files          | Administrators |
 | **[fileOrganizer/](./fileOrganizer/)**           | File organization system documentation           | All users      |
-| **[rag-system/](./rag-system/)**                 | RAG system operational docs                      | Technical team |
+| **[ragSystem/](./ragSystem/)**                   | RAG system operational docs                      | Technical team |
+| **[timeline/](./timeline/)**                     | Timeline feature documentation                   | All users      |
 | **[images/](./images/)**                         | Documentation screenshots and diagrams           | All users      |
 
 ### File Types

@@ -8,16 +8,56 @@ import type { SendableReasoningInfo, VoidStaticModelInfo, VoidStaticProviderInfo
 // ============================================================================
 // ANTHROPIC CLAUDE MODELS
 // https://www.anthropic.com/pricing
-// https://docs.litellm.ai/docs/providers/anthropic
-// Synced with LiteLLM config - December 2025
+// https://docs.anthropic.com/en/docs/build-with-claude/extended-thinking
 //
-// NOTE: Opus 4.5 supports reasoning_effort -> output_config.effort ("high")
-//       Sonnet 4.5 uses thinking.budget_tokens
-//       max_tokens must be > thinking.budget_tokens per Anthropic API
+// TWO IMPLEMENTATIONS:
+// 1. Native Anthropic SDK: Uses `thinking.budget_tokens` (stable API)
+// 2. LiteLLM Proxy: Uses `reasoning_effort` which LiteLLM maps to `output_config.effort`
+//
+// Both Opus 4.5 and Sonnet 4.5 support extended thinking:
+// - Opus 4.5: up to 64K budget_tokens
+// - Sonnet 4.5: up to 8K budget_tokens
+// max_tokens must be > thinking.budget_tokens per Anthropic API
 // ============================================================================
 
-// Helper for Anthropic reasoning payload
-const anthropicIncludeInPayloadReasoning = (reasoningInfo: SendableReasoningInfo) => {
+// Map effort levels to approximate token budgets for native SDK
+// These values are based on Anthropic's documentation and common usage
+const effortToBudgetTokens: Record<string, number> = {
+	'low': 8_192,
+	'medium': 16_384,
+	'high': 32_768,
+}
+
+// ============================================================================
+// NATIVE ANTHROPIC SDK IMPLEMENTATION
+// Uses `thinking.budget_tokens` format (stable, no beta header required)
+// ============================================================================
+const anthropicNativeIncludeInPayloadReasoning = (reasoningInfo: SendableReasoningInfo) => {
+	if (!reasoningInfo?.isReasoningEnabled) return null
+
+	// For effort-based (Opus 4.5): convert effort to budget_tokens
+	// The native Anthropic API uses `thinking.budget_tokens`, not `reasoning_effort`
+	if (reasoningInfo.type === 'effort') {
+		const budgetTokens = effortToBudgetTokens[reasoningInfo.reasoningEffort] ?? 16_384
+		const payload = { thinking: { type: 'enabled', budget_tokens: budgetTokens } }
+		console.log('[Anthropic Native] Effort-based reasoning payload:', JSON.stringify(payload))
+		return payload
+	}
+	// For budget-based (Sonnet 4.5): send thinking budget directly
+	if (reasoningInfo.type === 'budget') {
+		const payload = { thinking: { type: 'enabled', budget_tokens: reasoningInfo.reasoningBudget } }
+		console.log('[Anthropic Native] Budget-based reasoning payload:', JSON.stringify(payload))
+		return payload
+	}
+	return null
+}
+
+// ============================================================================
+// LITELLM PROXY IMPLEMENTATION
+// Uses `reasoning_effort` which LiteLLM maps to Anthropic's `output_config.effort`
+// See: https://docs.litellm.ai/docs/providers/anthropic#effort-parameter
+// ============================================================================
+export const anthropicLiteLLMIncludeInPayloadReasoning = (reasoningInfo: SendableReasoningInfo) => {
 	if (!reasoningInfo?.isReasoningEnabled) return null
 
 	// For effort-based (Opus 4.5): send reasoning_effort which LiteLLM maps to output_config.effort
@@ -33,20 +73,22 @@ const anthropicIncludeInPayloadReasoning = (reasoningInfo: SendableReasoningInfo
 
 export const anthropicModelOptions = {
 	// Claude Opus 4.5 - Premium flagship model
-	// Uses reasoning_effort -> output_config.effort (effort-based)
+	// Effort-based reasoning: effort levels converted to thinking.budget_tokens
+	// max_tokens must be > thinking.budget_tokens (high=32K, so we need >32K)
 	'claude-opus-4-5': {
 		contextWindow: 200_000,
 		reservedOutputTokenSpace: 16_384,
 		cost: { input: 5.00, cache_read: 0.50, cache_write: 6.25, output: 25.00 },
 		downloadable: false,
 		supportsFIM: false,
+		supportsVision: true, // Claude Opus supports vision/images
 		specialToolFormat: 'anthropic-style',
 		supportsSystemMessage: 'separated',
 		reasoningCapabilities: {
 			supportsReasoning: true,
 			canIOReasoning: true,
 			maxReasoningEffort: 'high',  // Opus 4.5 supports effort-based
-			reasoningReservedOutputTokenSpace: 32_768,
+			reasoningReservedOutputTokenSpace: 40_960,  // Must be > max budget_tokens (32K for 'high')
 		},
 	},
 	// Claude Sonnet 4.5 - Best balance of intelligence and speed
@@ -58,6 +100,7 @@ export const anthropicModelOptions = {
 		cost: { input: 3.00, cache_read: 0.30, cache_write: 3.75, output: 15.00 },
 		downloadable: false,
 		supportsFIM: false,
+		supportsVision: true, // Claude Sonnet supports vision/images
 		specialToolFormat: 'anthropic-style',
 		supportsSystemMessage: 'separated',
 		reasoningCapabilities: {
@@ -77,7 +120,8 @@ export const anthropicDisplayNames: { [displayName: string]: keyof typeof anthro
 
 export const anthropicSettings: VoidStaticProviderInfo = {
 	providerReasoningIOSettings: {
-		input: { includeInPayload: anthropicIncludeInPayloadReasoning },
+		// Uses native SDK format: thinking.budget_tokens
+		input: { includeInPayload: anthropicNativeIncludeInPayloadReasoning },
 	},
 	modelOptions: anthropicModelOptions,
 	modelOptionsFallback: (modelName) => {

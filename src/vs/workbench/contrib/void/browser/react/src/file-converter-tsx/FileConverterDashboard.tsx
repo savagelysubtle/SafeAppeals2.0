@@ -412,7 +412,7 @@ export const FileConverterDashboard: React.FC = () => {
 			onDrop={handleDrop}
 		>
 			{/* Header */}
-			<div className="flex items-center justify-between p-4 border-b border-void-border-2 bg-void-bg-2">
+			<div className="flex items-center justify-between p-4 border-b border-void-border-2 bg-void-bg-2 shrink-0">
 				<div className="flex items-center gap-3">
 					<div className="w-8 h-8 bg-void-button-primary rounded-md flex items-center justify-center text-void-button-primary-text">⇄</div>
 					<div>
@@ -423,13 +423,13 @@ export const FileConverterDashboard: React.FC = () => {
 			</div>
 
 			{/* Main Content */}
-			<div className="flex-1 overflow-hidden flex flex-col">
+			<div className="flex-1 overflow-y-auto custom-scrollbar">
 				{renderContent()}
 			</div>
 
 			{/* History Section */}
 			{history.length > 0 && currentStep === "select" && (
-				<div className="border-t border-void-border-2 bg-void-bg-2 max-h-[40%] flex flex-col">
+				<div className="border-t border-void-border-2 bg-void-bg-2 shrink-0 overflow-y-auto custom-scrollbar" style={{ maxHeight: '30%' }}>
 					<ConversionHistory history={history} onOpen={openFile} onReveal={revealFile} />
 				</div>
 			)}

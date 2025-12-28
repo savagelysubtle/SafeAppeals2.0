@@ -112,6 +112,10 @@ const formatTokens = (tokens: number): string => {
  *
  * Shows a progress bar and token count indicating how much of the
  * model's context window is being used by the current conversation.
+ *
+ * NOTE: The actual content sent to the LLM is trimmed to fit the context window.
+ * This indicator shows the "effective" usage (capped at 100%) while also
+ * indicating when content exceeds the limit and will be trimmed.
  */
 export const ContextWindowIndicator: React.FC<ContextWindowIndicatorProps> = ({
 	messages,
@@ -136,8 +140,10 @@ export const ContextWindowIndicator: React.FC<ContextWindowIndicatorProps> = ({
 		const availableInputTokens = Math.max(contextWindow - reservedOutputTokens, 0);
 
 		// Count tokens by message type
+		// System message estimate: base prompt (~1500) + tools/rules (~2000-5000)
+		// This is still an estimate but more realistic than 2000
 		const breakdown = {
-			systemTokens: 2000, // Estimate for system message
+			systemTokens: 4000, // More realistic estimate for system message with tools/rules
 			userTokens: 0,
 			assistantTokens: 0,
 			toolTokens: 0,
@@ -156,13 +162,25 @@ export const ContextWindowIndicator: React.FC<ContextWindowIndicatorProps> = ({
 			}
 		}
 
-		const totalTokens = breakdown.systemTokens + breakdown.userTokens + breakdown.assistantTokens + breakdown.toolTokens;
-		const usagePercent = availableInputTokens > 0 ? Math.min(totalTokens / availableInputTokens, 1) : 0;
+		// Raw total before any trimming
+		const rawTotalTokens = breakdown.systemTokens + breakdown.userTokens + breakdown.assistantTokens + breakdown.toolTokens;
+
+		// Check if content exceeds limit (will be trimmed when sent)
+		const exceedsLimit = rawTotalTokens > availableInputTokens;
+
+		// Effective tokens (what will actually be sent after trimming)
+		// The LLM service trims content to fit, so effective is capped at available
+		const effectiveTokens = Math.min(rawTotalTokens, availableInputTokens);
+
+		// Usage percentage based on effective tokens (caps at 100%)
+		const usagePercent = availableInputTokens > 0 ? effectiveTokens / availableInputTokens : 0;
 		const usageLevel = getUsageLevel(usagePercent);
-		const tokensRemaining = Math.max(availableInputTokens - totalTokens, 0);
+		const tokensRemaining = Math.max(availableInputTokens - rawTotalTokens, 0);
 
 		return {
-			totalTokens,
+			rawTotalTokens,      // Before trimming
+			effectiveTokens,     // After trimming (what actually gets sent)
+			exceedsLimit,        // Whether trimming will occur
 			contextWindow,
 			availableInputTokens,
 			usagePercent,
@@ -180,15 +198,26 @@ export const ContextWindowIndicator: React.FC<ContextWindowIndicatorProps> = ({
 		return null;
 	}
 
-	return (
-		<div
-			className={`flex items-center gap-2 px-2 py-1 rounded-md border ${colors.border} ${colors.bg} text-xs ${className}`}
-			title={`Context Usage: ${formatTokens(usage.totalTokens)} / ${formatTokens(usage.availableInputTokens)} tokens
-System: ${formatTokens(usage.breakdown.systemTokens)}
+	// Build tooltip with detailed breakdown
+	const tooltipText = usage.exceedsLimit
+		? `Context Usage: ${formatTokens(usage.effectiveTokens)} / ${formatTokens(usage.availableInputTokens)} tokens
+⚠️ Content exceeds limit - older messages will be trimmed
+Raw content: ${formatTokens(usage.rawTotalTokens)} tokens
+System: ~${formatTokens(usage.breakdown.systemTokens)}
+User: ${formatTokens(usage.breakdown.userTokens)}
+Assistant: ${formatTokens(usage.breakdown.assistantTokens)}
+Tools: ${formatTokens(usage.breakdown.toolTokens)}`
+		: `Context Usage: ${formatTokens(usage.rawTotalTokens)} / ${formatTokens(usage.availableInputTokens)} tokens
+System: ~${formatTokens(usage.breakdown.systemTokens)}
 User: ${formatTokens(usage.breakdown.userTokens)}
 Assistant: ${formatTokens(usage.breakdown.assistantTokens)}
 Tools: ${formatTokens(usage.breakdown.toolTokens)}
-Remaining: ${formatTokens(usage.tokensRemaining)}`}
+Remaining: ${formatTokens(usage.tokensRemaining)}`;
+
+	return (
+		<div
+			className={`flex items-center gap-2 px-2 py-1 rounded-md border ${colors.border} ${colors.bg} text-xs ${className}`}
+			title={tooltipText}
 		>
 			{/* Progress bar */}
 			<div className="flex-1 h-1.5 bg-zinc-700/50 rounded-full overflow-hidden min-w-[60px]">
@@ -203,9 +232,16 @@ Remaining: ${formatTokens(usage.tokensRemaining)}`}
 				/>
 			</div>
 
-			{/* Token count */}
+			{/* Token count - show effective tokens, not raw */}
 			<span className={`${colors.text} font-mono whitespace-nowrap`}>
-				{formatTokens(usage.totalTokens)} / {formatTokens(usage.availableInputTokens)}
+				{usage.exceedsLimit ? (
+					<>
+						<span className="text-amber-400" title="Content will be trimmed to fit">⚠️</span>
+						{' '}{formatTokens(usage.effectiveTokens)} / {formatTokens(usage.availableInputTokens)}
+					</>
+				) : (
+					<>{formatTokens(usage.rawTotalTokens)} / {formatTokens(usage.availableInputTokens)}</>
+				)}
 			</span>
 
 			{/* Percentage */}
@@ -251,13 +287,17 @@ export const ContextWindowIndicatorCompact: React.FC<ContextWindowIndicatorProps
 
 		const availableInputTokens = Math.max(contextWindow - reservedOutputTokens, 0);
 
-		let totalTokens = 2000; // system message estimate
+		let rawTotalTokens = 4000; // system message estimate (more realistic)
 		for (const message of messages) {
-			totalTokens += estimateTokenCount(getMessageContent(message));
+			rawTotalTokens += estimateTokenCount(getMessageContent(message));
 		}
 
-		const usagePercent = availableInputTokens > 0 ? Math.min(totalTokens / availableInputTokens, 1) : 0;
-		return { usagePercent, usageLevel: getUsageLevel(usagePercent) };
+		// Cap at available (content gets trimmed when sent)
+		const exceedsLimit = rawTotalTokens > availableInputTokens;
+		const effectiveTokens = Math.min(rawTotalTokens, availableInputTokens);
+		const usagePercent = availableInputTokens > 0 ? effectiveTokens / availableInputTokens : 0;
+
+		return { usagePercent, usageLevel: getUsageLevel(usagePercent), exceedsLimit };
 	}, [messages, providerName, modelName, overridesOfModel]);
 
 	if (messages.length === 0) {
@@ -270,8 +310,9 @@ export const ContextWindowIndicatorCompact: React.FC<ContextWindowIndicatorProps
 	return (
 		<span
 			className={`inline-flex items-center gap-1 ${colors.text} text-xs ${className}`}
-			title={`Context: ${percentDisplay}% used`}
+			title={usage.exceedsLimit ? `Context: ${percentDisplay}% (content will be trimmed)` : `Context: ${percentDisplay}% used`}
 		>
+			{usage.exceedsLimit && <span className="text-amber-400">⚠️</span>}
 			<div className="w-8 h-1 bg-zinc-700/50 rounded-full overflow-hidden">
 				<div
 					className={`h-full ${

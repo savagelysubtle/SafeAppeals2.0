@@ -35,7 +35,7 @@ import {
 	size,
 	useFloating,
 } from "@floating-ui/react";
-import { ChevronRight, File, Folder, Loader2, LucideProps } from "lucide-react";
+import { ChevronRight, File, Folder, Image, Loader2, LucideProps } from "lucide-react";
 import { URI } from "../../../../../../../base/common/uri.js";
 import { CodeEditorWidget } from "../../../../../../../editor/browser/widget/codeEditor/codeEditorWidget.js";
 import { DiffEditorWidget } from "../../../../../../../editor/browser/widget/diffEditor/diffEditorWidget.js";
@@ -119,7 +119,7 @@ type Option = {
 			generateNextOptions: GenerateNextOptions;
 	  }
 	| {
-			leafNodeType: "File" | "Folder";
+			leafNodeType: "File" | "Folder" | "Image";
 			uri: URI;
 			nextOptions?: undefined;
 			generateNextOptions?: undefined;
@@ -245,16 +245,40 @@ const getOptionsAtPath = async (
 ): Promise<Option[]> => {
 	const toolsService = accessor.get("IToolsService");
 
+	// Helper to check if a file is an image
+	const isImageFile = (uri: URI): boolean => {
+		const ext = uri.path.split('.').pop()?.toLowerCase();
+		return ['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(ext || '');
+	};
+
+	// Helper to get image MIME type
+	const getImageMimeType = (uri: URI): 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp' => {
+		const ext = uri.path.split('.').pop()?.toLowerCase();
+		switch (ext) {
+			case 'jpg':
+			case 'jpeg':
+				return 'image/jpeg';
+			case 'png':
+				return 'image/png';
+			case 'gif':
+				return 'image/gif';
+			case 'webp':
+				return 'image/webp';
+			default:
+				return 'image/png';
+		}
+	};
+
 	const searchForFilesOrFolders = async (
 		t: string,
-		searchFor: "files" | "folders"
+		searchFor: "files" | "folders" | "images"
 	) => {
 		try {
 			const searchResults = (
 				await (
 					await toolsService.callTool.search_pathnames_only({
-						query: t,
-						includePattern: null,
+						query: searchFor === "images" ? (t || "*.png *.jpg *.jpeg *.gif *.webp") : t,
+						includePattern: searchFor === "images" ? "*.{png,jpg,jpeg,gif,webp}" : null,
 						pageNumber: 1,
 					})
 				).result
@@ -267,6 +291,20 @@ const getOptionsAtPath = async (
 						leafNodeType: "File",
 						uri: uri,
 						iconInMenu: File,
+						fullName: relativePath,
+						abbreviatedName: getAbbreviatedName(relativePath),
+					};
+				});
+				return res;
+			} else if (searchFor === "images") {
+				// Filter for image files only
+				const imageUris = searchResults.filter(isImageFile);
+				const res: Option[] = imageUris.map((uri) => {
+					const relativePath = getRelativeWorkspacePath(accessor, uri);
+					return {
+						leafNodeType: "Image",
+						uri: uri,
+						iconInMenu: Image,
 						fullName: relativePath,
 						abbreviatedName: getAbbreviatedName(relativePath),
 					};
@@ -361,6 +399,13 @@ const getOptionsAtPath = async (
 			iconInMenu: Folder,
 			generateNextOptions: async (t) =>
 				(await searchForFilesOrFolders(t, "folders")) || [],
+		},
+		{
+			fullName: "images",
+			abbreviatedName: "images",
+			iconInMenu: Image,
+			generateNextOptions: async (t) =>
+				(await searchForFilesOrFolders(t, "images")) || [],
 		},
 	];
 
@@ -529,6 +574,13 @@ export const VoidInputBox2 = forwardRef<HTMLTextAreaElement, InputBox2Props>(
 						uri: option.uri,
 						language: undefined,
 						state: undefined,
+					};
+				else if (option.leafNodeType === "Image")
+					newSelection = {
+						type: "Image",
+						uri: option.uri,
+						mimeType: getImageMimeType(option.uri),
+						state: { wasAddedAsCurrentFile: false },
 					};
 				else throw new Error(`Unexpected leafNodeType ${option.leafNodeType}`);
 
