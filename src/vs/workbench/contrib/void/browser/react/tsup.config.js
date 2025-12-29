@@ -18,6 +18,7 @@ export default defineConfig({
 		'./src2/case-info-dashboard-tsx/index.tsx',
 		'./src2/file-converter-tsx/index.tsx',
 		'./src2/timeline-tsx/index.tsx',
+		'./src2/email-dashboard-tsx/index.tsx',
 	],
 	outDir: './out',
 	format: ['esm'],

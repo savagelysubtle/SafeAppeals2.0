@@ -17,6 +17,7 @@ export interface IRAGPathService {
 	getGlobalSqlitePath(): string;
 	getWorkspaceChromaDir(workspaceId: string): string;
 	getWorkspaceSqlitePath(workspaceId: string): string;
+	getEmailSqlitePath(workspaceId: string): string;
 	getLogsDir(): string;
 	getModelCacheDir(): string;
 	ensureDirectories(): Promise<void>;
@@ -50,6 +51,10 @@ export class RAGPathService implements IRAGPathService {
 
 	getWorkspaceSqlitePath(workspaceId: string): string {
 		return join(this.getBaseDir(), 'databases', 'workspaces', workspaceId, 'workspace.db');
+	}
+
+	getEmailSqlitePath(workspaceId: string): string {
+		return join(this.getBaseDir(), 'databases', 'workspaces', workspaceId, 'emails.db');
 	}
 
 	getLogsDir(): string {
