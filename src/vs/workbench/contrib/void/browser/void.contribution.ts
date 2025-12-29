@@ -80,13 +80,12 @@ import './fileConverter/fileConverter.contribution.js';
 // register timeline & case management
 import './timeline/timeline.contribution.js';
 
-// register email dashboard - FULLY DISABLED FOR DEBUGGING
-// import '../common/emailService.js';
-// import './emailService.js';
-// import './emailDraftService.js';
-// import './emailWorkspaceService.js';
-// import './emailDashboard/emailDashboardContribution.js';
-// import './emailViewers/emailViewer.contribution.js';
+// register email dashboard
+import '../common/emailService.js';
+import './emailService.js';
+import './emailDraftService.js';
+import './emailDashboard/emailDashboard.contribution.js';
+import './emailViewers/emailViewer.contribution.js';
 
 // ---------- common (unclear if these actually need to be imported, because they're already imported wherever they're used) ----------
 

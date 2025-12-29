@@ -9,7 +9,7 @@
 	let pdfDoc = null;
 	let currentPage = previousState.currentPage || 1;
 	let loadedPdfUri = previousState.loadedPdfUri || null; // Track which PDF is loaded
-	let scale = previousState.scale || 1.5;
+	let scale = previousState.scale || 0.8;
 	let rendering = false;
 	let pdfJsReady = false;
 	let pendingLoadMessage = null;
@@ -305,7 +305,7 @@
 
 			// Validate and clamp start page
 			currentPage = Math.max(1, Math.min(startPage, pdfDoc.numPages));
-			scale = 1.5;
+			scale = 0.8;
 			pageCache.clear();
 
 			if (totalPagesSpan) {

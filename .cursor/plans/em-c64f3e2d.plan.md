@@ -120,24 +120,31 @@ Like `fileOrganizerDashboardPane.ts:20`:
 
 **browser/react/src/email-dashboard-tsx/**
 
+Create components using **shadcn-like styling** (Tailwind + Lucide icons) to match `TimelineDashboard`:
+
+- Use `BRAND_GREEN (#22c55e)` for accents
+- Dark mode optimized backgrounds (`#0a0a0a`, `#0f0f0f`)
+- Thin borders (`#27272a`)
+- Rounded corners (`rounded-lg`, `rounded-xl`)
+
 `EmailDashboard.tsx`:
 
-- Email list with columns: From, Subject, Date, Case Folder
-- Filter/search controls
-- Click email → Call `editorService.openEditor(new EmailViewerInput(email))`
-- "Import Emails" button → File picker for .eml/.pdf
+- Layout: Toolbar at top, Filter sidebar (collapsible?), Main list area
+- Style matches `TimelineDashboard.tsx` structure
 
 `EmailList.tsx`:
 
 - Virtual scrolling for large lists
-- Sorting by date/sender/case
-- Status badges (new, replied, draft created)
+- `EmailCard` component mimicking `TimelineEventCard` style:
+    - Status badges (New, Replied, Draft) using consistent colors
+    - Hover effects with `BRAND_GREEN` borders
+    - Action buttons on hover
 
 `EmailFilters.tsx`:
 
-- Case folder dropdown
+- Styled dropdowns and inputs matching `TimelineToolbar`
+- Case folder selector
 - Date range picker
-- Search input
 
 `index.tsx` - Mount function
 
@@ -160,7 +167,7 @@ Core drafting logic:
 async draftReply(emailId: string, userInstructions?: string): Promise<URI> {
   // 1. Get email
   const email = await emailService.getEmailById(emailId);
-  
+
   // 2. Query RAG with case folder scope
   const ragQuery = `Email from ${email.from} about: ${email.subject}`;
   const ragResults = await ragService.search({
@@ -168,10 +175,10 @@ async draftReply(emailId: string, userInstructions?: string): Promise<URI> {
     scope: email.caseFolderPath,
     limit: 5
   });
-  
+
   // 3. Build LLM prompt
   const prompt = buildDraftPrompt(email, ragResults, userInstructions);
-  
+
   // 4. Stream LLM response
   let draftText = '';
   await llmMessageService.sendLLMMessage({
@@ -179,16 +186,16 @@ async draftReply(emailId: string, userInstructions?: string): Promise<URI> {
     onText: ({ fullText }) => { draftText = fullText; },
     // ... model selection, etc
   });
-  
+
   // 5. Create DOCX file
   const replyUri = await documentCreatorService.createDOCX({
     path: `${email.caseFolderPath}/replies/Re-${sanitize(email.subject)}.docx`,
     content: formatEmailDraft(email, draftText)
   });
-  
+
   // 6. Open in DOCX editor
   await editorService.openEditor(new DOCXViewerInput(replyUri));
-  
+
   return replyUri;
 }
 ```
@@ -354,6 +361,7 @@ import './emailWorkspaceService.js';
 7. LLM generates draft → Creates `replies/Re-{subject}.docx`
 8. DOCX editor opens with editable draft
 9. User edits draft, saves DOCX
+
 
 
 

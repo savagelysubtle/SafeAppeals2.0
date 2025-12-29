@@ -131,9 +131,9 @@ import { IRAGMainService } from '../../workbench/contrib/void/common/rag/ragServ
 import { IVoidSCMService } from '../../workbench/contrib/void/common/voidSCMTypes.js';
 import { IVoidUpdateService } from '../../workbench/contrib/void/common/voidUpdateService.js';
 import { DOCXCreatorChannel } from '../../workbench/contrib/void/electron-main/docxCreatorChannel.js';
-// TEMPORARILY DISABLED: Email dashboard
-// import { EmailMainChannel } from '../../workbench/contrib/void/electron-main/emailMainChannel.js';
-// import { EmailMainService } from '../../workbench/contrib/void/electron-main/emailService.js';
+// Email dashboard
+import { EmailMainChannel } from '../../workbench/contrib/void/electron-main/emailMainChannel.js';
+import { EmailMainService } from '../../workbench/contrib/void/electron-main/email/emailMainService.js';
 import { DOCXExtractorChannel } from '../../workbench/contrib/void/electron-main/docxExtractorChannel.js';
 import { FileConverterChannel, FileConverterMainService } from '../../workbench/contrib/void/electron-main/fileConverterChannel.js';
 import { MCPChannel } from '../../workbench/contrib/void/electron-main/mcpChannel.js';
@@ -1309,11 +1309,11 @@ export class CodeApplication extends Disposable {
 		const documentExportChannel = new DocumentExportChannel(this.logService);
 		mainProcessElectronServer.registerChannel('void-channel-document-export', documentExportChannel);
 
-		// Void Email service - TEMPORARILY DISABLED
-		// const ragPathService = accessor.get(IRAGPathService);
-		// const emailMainService = new EmailMainService(accessor.get(ILogService), ragPathService);
-		// const emailMainChannel = new EmailMainChannel(emailMainService);
-		// mainProcessElectronServer.registerChannel('void-channel-email', emailMainChannel);
+		// Void Email service
+		const ragPathService = accessor.get(IRAGPathService);
+		const emailMainService = new EmailMainService(accessor.get(ILogService), ragPathService);
+		const emailMainChannel = new EmailMainChannel(emailMainService);
+		mainProcessElectronServer.registerChannel('void-channel-email', emailMainChannel);
 
 		// Extension Host Debug Broadcasting
 		const electronExtensionHostDebugBroadcastChannel = new ElectronExtensionHostDebugBroadcastChannel(accessor.get(IWindowsMainService));
