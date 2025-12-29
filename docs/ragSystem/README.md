@@ -235,10 +235,18 @@ interface RAGIndexParams {
 ```typescript
 interface RAGSearchParams {
     query: string;
-    scope: 'policy_manual' | 'workspace_docs' | 'both';
+    scope: RAGStorageScope; // See below
     limit: number;
-    workspaceId?: string;
+    workspaceId?: string;   // Auto-injected by RAGService
 }
+
+// Search scope options
+type RAGStorageScope =
+    | 'policy_manual'   // Only policy manuals for THIS workspace
+    | 'case_index'      // Only case files for THIS workspace
+    | 'workspace_all'   // Both policy + case for THIS workspace
+    | 'workspace_docs'  // Legacy alias for 'case_index'
+    | 'both';           // Legacy alias for 'workspace_all'
 ```
 
 #### ContextPack
@@ -261,16 +269,24 @@ interface ContextPack {
 
 ### File Paths
 
-The RAG system uses the following directory structure:
+The RAG system uses a **per-workspace isolation** architecture:
 ```
 ~/.safe-appeals-navigator/
 ├── databases/
-│   ├── workspace.db          # SQLite database
-│   ├── chroma/              # Vector embeddings
-│   └── workspaces/          # Per-workspace data
-├── models/                  # ML model cache
-└── logs/                    # System logs
+│   ├── workspace.db           # Global/fallback SQLite database
+│   ├── chroma/               # Global/fallback vector embeddings
+│   └── workspaces/           # Per-workspace isolated data
+│       ├── a1b2c3d4e5f6g7h8/ # Workspace 1 (hash of folder path)
+│       │   ├── workspace.db  # Workspace-specific SQLite
+│       │   └── chroma/       # Workspace-specific vectors
+│       └── i9j0k1l2m3n4o5p6/ # Workspace 2
+│           ├── workspace.db
+│           └── chroma/
+├── models/                    # ML model cache (shared)
+└── logs/                      # System logs
 ```
+
+**Workspace ID:** Each workspace is identified by a 16-character SHA256 hash of its root folder path, ensuring unique isolation.
 
 ### Environment Variables
 
@@ -389,6 +405,55 @@ tail -f ~/.safe-appeals-navigator/logs/rag.log
 2. **Temporal Reasoning**: Date-based query understanding
 3. **Citation Analysis**: Automatic precedent and case law linking
 4. **Multi-hop Reasoning**: Complex legal argument reconstruction
+
+## Agent RAG Tools
+
+The AI agent has access to three RAG search tools:
+
+### Tool Overview
+
+| Tool | Searches | Use Case |
+|------|----------|----------|
+| `rag_search_policy` | Policy manuals only | WC rules, procedures, regulations, eligibility |
+| `rag_search_workspace` | Case files only | Medical reports, IME evals, correspondence |
+| `rag_search_all` | **Both sources** | Comprehensive research, unsure where info is |
+
+### rag_search_policy
+Search indexed policy manuals for workers' compensation rules, eligibility criteria, procedural requirements, benefit calculations, and appeal processes.
+
+**When to use:**
+- Answering questions about WC rules or procedures
+- Drafting correspondence requiring policy citations
+- Researching appeal procedures or disability ratings
+
+### rag_search_workspace
+Search indexed case-specific documents (medical reports, IME evaluations, appeals board decisions, claim correspondence).
+
+**When to use:**
+- Finding medical opinions or diagnoses
+- Locating claim events or procedural history
+- Extracting information from IME/QME reports
+
+### rag_search_all
+Search BOTH policy manuals AND case files simultaneously.
+
+**When to use:**
+- Unsure if answer is in policy or case documents
+- Comprehensive research spanning both sources
+- Comparing policy requirements against case facts
+- Initial broad search before narrowing down
+
+### Auto-Indexing
+
+**On Drag-and-Drop:**
+When files are dropped into the chat, they are automatically indexed:
+- Files in `policy-manuals/` folder → indexed as policy manuals
+- All other files → indexed as case files
+
+**On Workspace Open:**
+When a workspace opens (if `ragAutoIndexCaseFiles` setting is true):
+- All folders except `policy-manuals/` are scanned
+- Unindexed documents are automatically indexed as case files
 
 ## Integration with Void Platform
 

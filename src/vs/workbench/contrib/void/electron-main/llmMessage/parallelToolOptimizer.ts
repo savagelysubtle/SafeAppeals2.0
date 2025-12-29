@@ -96,6 +96,14 @@ const TOOL_DEPENDENCIES: Record<string, ToolDependencyInfo> = {
 		conflictsWith: []
 	},
 
+	rag_search_all: {
+		name: 'rag_search_all',
+		category: 'rag',
+		isParallelizable: true,
+		requiresSequential: [],
+		conflictsWith: []
+	},
+
 	rag_get_stats: {
 		name: 'rag_get_stats',
 		category: 'rag',

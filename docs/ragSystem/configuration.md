@@ -53,9 +53,21 @@ modelSelectionOfFeature: {
 globalSettings: {
   chatMode: 'normal' | 'gather' | 'agent';
   autoApprove: boolean;
+  ragAutoIndexCaseFiles: boolean;  // Auto-index non-policy files on workspace open
   // ... other Void settings
 }
 ```
+
+#### RAG-Specific Settings
+
+| Setting | Type | Default | Description |
+|---------|------|---------|-------------|
+| `ragAutoIndexCaseFiles` | boolean | `true` | Automatically scan and index all non-policy documents when a workspace is opened |
+
+**When `ragAutoIndexCaseFiles` is enabled:**
+1. On workspace open, all folders (except `policy-manuals/`) are scanned
+2. Unindexed PDF, DOCX, TXT, etc. files are automatically indexed as case files
+3. Already-indexed files are skipped
 
 ## 🔧 Environment Variables
 
@@ -102,21 +114,29 @@ RAG_LOG_DIR=/custom/path/to/logs
 
 ## 📁 Directory Structure
 
-### Default Layout
+### Default Layout (Per-Workspace Isolation)
 
 ```
 ~/.safe-appeals-navigator/           # Base directory
 ├── databases/                       # Database files
-│   ├── workspace.db                 # SQLite database
-│   └── chroma/                      # Vector embeddings
-│       └── embeddings.db            # Vector storage
-├── models/                          # ML model cache
+│   ├── workspace.db                 # Global/fallback SQLite database
+│   ├── chroma/                      # Global/fallback vector embeddings
+│   └── workspaces/                  # Per-workspace isolated data
+│       ├── a1b2c3d4e5f6g7h8/        # Workspace 1 (hash of folder path)
+│       │   ├── workspace.db         # Workspace-specific SQLite
+│       │   └── chroma/              # Workspace-specific vectors
+│       └── i9j0k1l2m3n4o5p6/        # Workspace 2
+│           ├── workspace.db
+│           └── chroma/
+├── models/                          # ML model cache (shared across workspaces)
 │   ├── Xenova/                      # Embedding models
 │   └── cross-encoders/              # Reranking models
 └── logs/                            # System logs
     ├── rag.log                      # RAG service logs
     └── performance.log              # Performance metrics
 ```
+
+**Workspace ID:** Each workspace is identified by a 16-character SHA256 hash of its root folder path, ensuring unique isolation between workspaces.
 
 ### Custom Directory Configuration
 

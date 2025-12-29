@@ -284,15 +284,16 @@ export class ChromaPersistentAdapter implements VectorAdapter {
 			if (isPolicyManual) policyManualCount++;
 			else workspaceDocsCount++;
 		}
-		this.logService.info(`Embeddings breakdown: ${policyManualCount} policy_manual, ${workspaceDocsCount} workspace_docs`);
+		this.logService.info(`Embeddings breakdown: ${policyManualCount} policy_manual, ${workspaceDocsCount} case_index`);
 		this.logService.info(`Search scope: ${scope}`);
 
 		let scopeMatchCount = 0;
 			for (const [id, data] of this.embeddings.entries()) {
-				// Check scope
+				// Check scope - handle both old and new scope names for backwards compatibility
 				const isPolicyManual = data.metadata.isPolicyManual ?? false;
 				if (scope === 'policy_manual' && !isPolicyManual) continue;
-				if (scope === 'workspace_docs' && isPolicyManual) continue;
+				if ((scope === 'case_index' || scope === 'workspace_docs') && isPolicyManual) continue;
+				// 'workspace_all' and 'both' include everything
 
 			scopeMatchCount++;
 				const similarity = this.cosineSimilarity(queryVector, data.vector);
@@ -511,11 +512,12 @@ export class ChromaHttpAdapter implements VectorAdapter {
 		}
 
 		const collections = [];
-		if (scope === 'policy_manual' || scope === 'both') {
+		// Handle both old and new scope names for backwards compatibility
+		if (scope === 'policy_manual' || scope === 'workspace_all' || scope === 'both') {
 			collections.push('policy_manual');
 		}
-		if (scope === 'workspace_docs' || scope === 'both') {
-			collections.push('workspace_docs');
+		if (scope === 'case_index' || scope === 'workspace_docs' || scope === 'workspace_all' || scope === 'both') {
+			collections.push('case_index');
 		}
 
 		for (const collectionName of collections) {
@@ -539,7 +541,7 @@ export class ChromaHttpAdapter implements VectorAdapter {
 		if (chunks.length === 0) return;
 
 		const isPolicyManual = metadatas[0]?.isPolicyManual ?? false;
-		const collectionName = isPolicyManual ? 'policy_manual' : 'workspace_docs';
+		const collectionName = isPolicyManual ? 'policy_manual' : 'case_index';
 		const collection = this.collections.get(collectionName);
 
 		if (!collection) {
@@ -564,11 +566,12 @@ export class ChromaHttpAdapter implements VectorAdapter {
 		}
 
 		const collectionNames: string[] = [];
-		if (scope === 'policy_manual' || scope === 'both') {
+		// Handle both old and new scope names for backwards compatibility
+		if (scope === 'policy_manual' || scope === 'workspace_all' || scope === 'both') {
 			collectionNames.push('policy_manual');
 		}
-		if (scope === 'workspace_docs' || scope === 'both') {
-			collectionNames.push('workspace_docs');
+		if (scope === 'case_index' || scope === 'workspace_docs' || scope === 'workspace_all' || scope === 'both') {
+			collectionNames.push('case_index');
 		}
 
 		// Generate query embedding using local model
@@ -611,7 +614,7 @@ export class ChromaHttpAdapter implements VectorAdapter {
 			await this.initialize();
 		}
 
-		const collections = ['policy_manual', 'workspace_docs'];
+		const collections = ['policy_manual', 'case_index'];
 
 		for (const collectionName of collections) {
 			try {
@@ -633,7 +636,7 @@ export class ChromaHttpAdapter implements VectorAdapter {
 			await this.initialize();
 		}
 
-		const collections = ['policy_manual', 'workspace_docs'];
+		const collections = ['policy_manual', 'case_index'];
 
 		for (const collectionName of collections) {
 			try {

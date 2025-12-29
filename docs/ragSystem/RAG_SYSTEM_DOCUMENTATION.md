@@ -235,10 +235,18 @@ interface RAGIndexParams {
 ```typescript
 interface RAGSearchParams {
     query: string;
-    scope: 'policy_manual' | 'workspace_docs' | 'both';
+    scope: RAGStorageScope; // See below
     limit: number;
-    workspaceId?: string;
+    workspaceId?: string;   // Auto-injected by RAGService
 }
+
+// Search scope options
+type RAGStorageScope =
+    | 'policy_manual'   // Only policy manuals for THIS workspace
+    | 'case_index'      // Only case files for THIS workspace
+    | 'workspace_all'   // Both policy + case for THIS workspace
+    | 'workspace_docs'  // Legacy alias for 'case_index'
+    | 'both';           // Legacy alias for 'workspace_all'
 ```
 
 #### ContextPack

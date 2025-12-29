@@ -169,9 +169,9 @@ async search(params: RAGSearchParams): Promise<ContextPack>
 
 **Parameters:**
 - `params.query: string` - Search query
-- `params.scope: RAGStorageScope` - Search scope ('policy_manual', 'workspace_docs', or 'both')
+- `params.scope: RAGStorageScope` - Search scope (see below)
 - `params.limit: number` - Maximum results to return
-- `params.workspaceId?: string` - Optional workspace filter
+- `params.workspaceId?: string` - Optional workspace filter (auto-injected by RAGService)
 
 **Returns:**
 ```typescript
@@ -206,9 +206,13 @@ results.attributions.forEach(attr => {
 ```
 
 **Search Scope Options:**
-- `'policy_manual'` - Search only policy/guideline documents
-- `'workspace_docs'` - Search only case and workspace documents
-- `'both'` - Search all documents
+- `'policy_manual'` - Search only policy/guideline documents for the current workspace
+- `'case_index'` - Search only case files for the current workspace
+- `'workspace_all'` - Search ALL documents (policy + case) for the current workspace
+
+**Legacy Aliases (for backward compatibility):**
+- `'workspace_docs'` → alias for `'case_index'`
+- `'both'` → alias for `'workspace_all'`
 
 ## ⚙️ System Management
 

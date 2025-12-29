@@ -73,6 +73,7 @@ export type BuiltinToolCallParams = {
 	'rag_index_document': { uri: URI, isPolicyManual: boolean },
 	'rag_search_policy': { query: string, limit: number },
 	'rag_search_workspace': { query: string, limit: number },
+	'rag_search_all': { query: string, limit: number },
 	'rag_get_stats': {},
 	// --- Web Search tools
 	'web_search': { query: string, count: number | null, offset: number | null },
@@ -125,6 +126,7 @@ export type BuiltinToolResultType = {
 	'rag_index_document': { success: boolean, message: string },
 	'rag_search_policy': { contextPack: string },
 	'rag_search_workspace': { contextPack: string },
+	'rag_search_all': { contextPack: string },
 	'rag_get_stats': { stats: string },
 	// --- Web Search tools
 	'web_search': { results: WebSearchResult[], totalResults: number },

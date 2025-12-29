@@ -62,16 +62,35 @@ if (result.success) {
 
 ### 2.3 Search Documents
 ```typescript
-// Search for eligibility requirements
-const results = await this.ragService.search({
+// Search policy manuals only
+const policyResults = await this.ragService.search({
   query: 'worker eligibility requirements',
-  scope: 'policy_manual',
+  scope: 'policy_manual',  // Only policy manuals
   limit: 5
 });
 
-console.log('Found', results.totalResults, 'relevant chunks');
-console.log('Context:', results.answerContext);
+// Search case files only
+const caseResults = await this.ragService.search({
+  query: 'medical evaluation findings',
+  scope: 'case_index',     // Only case files
+  limit: 5
+});
+
+// Search ALL documents (both sources)
+const allResults = await this.ragService.search({
+  query: 'appeal deadline requirements',
+  scope: 'workspace_all',  // Both policy + case files
+  limit: 8
+});
+
+console.log('Found', allResults.totalResults, 'relevant chunks');
+console.log('Context:', allResults.answerContext);
 ```
+
+**Available Scopes:**
+- `'policy_manual'` - Search policy manuals only
+- `'case_index'` - Search case files only
+- `'workspace_all'` - Search both sources
 
 ### 2.4 Check System Status
 ```typescript

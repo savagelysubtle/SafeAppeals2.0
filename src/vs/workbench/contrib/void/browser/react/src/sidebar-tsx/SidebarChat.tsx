@@ -391,6 +391,7 @@ export const VoidChatArea: React.FC<VoidChatAreaProps> = ({
 	const fileService = accessor.get("IFileService");
 	const dialogService = accessor.get("IDialogService");
 	const notificationService = accessor.get("INotificationService");
+	const ragAutoIndexService = accessor.get("IRAGAutoIndexService");
 
 	// Common exclusion patterns (like .gitignore)
 	const shouldExcludeFile = (uri: URI): boolean => {
@@ -871,6 +872,14 @@ export const VoidChatArea: React.FC<VoidChatAreaProps> = ({
 			// Add the new selections if any were found
 			if (newSelections.length > 0) {
 				setSelections([...selections, ...newSelections]);
+
+				// Auto-index documents in the background (non-blocking)
+				// This ensures dropped documents are available for RAG search
+				for (const selection of newSelections) {
+					ragAutoIndexService.indexSelectionIfNeeded(selection).catch((err) => {
+						console.error("RAG auto-index failed:", err);
+					});
+				}
 
 				// Show success notification with details
 				let message = `Added ${newSelections.length} file(s) to chat context`;

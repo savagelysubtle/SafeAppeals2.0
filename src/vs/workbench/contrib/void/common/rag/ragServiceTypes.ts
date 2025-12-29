@@ -100,13 +100,14 @@ export interface RAGSearchParams {
 	query: string;
 	scope: RAGStorageScope;
 	limit: number;
-	workspaceId?: string;
+	workspaceId?: string; // Optional - automatically provided by RAGService if not specified
 }
 
 export interface RAGIndexParams {
 	uri: URI;
 	isPolicyManual: boolean;
-	workspaceId?: string;
+	workspaceId?: string; // Optional - automatically provided by RAGService if not specified
+	indexScope?: 'policy_manual' | 'case_index'; // Explicit index target
 }
 
 export interface RAGStats {
@@ -123,7 +124,14 @@ export interface RAGStats {
 	totalSize: number;
 }
 
-export type RAGStorageScope = 'policy_manual' | 'workspace_docs' | 'both';
+// Storage scope types (all scoped to current workspace)
+// Includes legacy values for backwards compatibility
+export type RAGStorageScope =
+	| 'policy_manual'   // Only policy manuals for THIS workspace
+	| 'case_index'      // Only case files for THIS workspace (renamed from workspace_docs)
+	| 'workspace_all'   // Both policy + case for THIS workspace (renamed from 'both')
+	| 'workspace_docs'  // Legacy alias for 'case_index'
+	| 'both';           // Legacy alias for 'workspace_all'
 export type RAGVectorBackend = 'chroma-http' | 'sqlite-vec';
 export type RAGOpenAIModel = 'text-embedding-3-small' | 'text-embedding-3-large';
 
@@ -135,12 +143,13 @@ export interface IRAGMainService {
 
 	indexDocument(params: RAGIndexParams): Promise<{ success: boolean; message: string }>;
 	search(params: RAGSearchParams): Promise<ContextPack>;
-	getStats(): Promise<RAGStats>;
-	deleteDocument(docId: string): Promise<void>;
-	isDocumentIndexed(uri: URI): Promise<boolean>;
-	getDocumentsByType(isPolicyManual: boolean): Promise<any[]>;
+	getStats(workspaceId?: string): Promise<RAGStats>;
+	deleteDocument(docId: string, workspaceId?: string): Promise<void>;
+	isDocumentIndexed(uri: URI, workspaceId?: string): Promise<boolean>;
+	getDocumentsByType(isPolicyManual: boolean, workspaceId?: string): Promise<any[]>;
 	initialize(openAIApiKey?: string): Promise<void>;
-	clearAllEmbeddings(): Promise<{ success: boolean; message: string }>;
+	switchWorkspace(workspaceId: string): Promise<void>;
+	clearAllEmbeddings(workspaceId?: string): Promise<{ success: boolean; message: string }>;
 	testDoclingExtraction(uri: URI): Promise<{ standard: any; docling: any; doclingError?: any }>;
 
 	// Document creation methods (delegated to fileService)

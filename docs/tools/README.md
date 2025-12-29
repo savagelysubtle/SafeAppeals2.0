@@ -38,7 +38,10 @@ tools/
 
 #### Information Retrieval Tools
 
-- **RAG system**: `rag_index_document`, `rag_search_policy`, `rag_search_workspace`, `rag_get_stats`
+- **RAG system**: `rag_index_document`, `rag_search_policy`, `rag_search_workspace`, `rag_search_all`, `rag_get_stats`
+  - `rag_search_policy` - Search policy manuals only
+  - `rag_search_workspace` - Search case files only
+  - `rag_search_all` - Search BOTH policy manuals AND case files
 - **Web search**: `web_search`, `multi_link_search` for internet research
 
 #### External Integrations

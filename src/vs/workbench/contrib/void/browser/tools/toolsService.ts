@@ -379,6 +379,12 @@ export class ToolsService implements IToolsService {
 				const limit = validateNumber(limitUnknown, { default: 8 }) || 8;  // Increased default for MMR diversity
 				return { query, limit };
 			},
+			rag_search_all: (params: RawToolParamsObj) => {
+				const { query: queryUnknown, limit: limitUnknown } = params;
+				const query = validateStr('query', queryUnknown);
+				const limit = validateNumber(limitUnknown, { default: 8 }) || 8;
+				return { query, limit };
+			},
 			rag_get_stats: (params: RawToolParamsObj) => {
 				return {};
 			},
@@ -763,7 +769,7 @@ export class ToolsService implements IToolsService {
 				try {
 					const contextPack = await this.ragService.search({
 						query,
-						scope: 'workspace_docs',
+						scope: 'case_index', // Search case files only (not policy manuals)
 						limit
 					});
 					const contextService = new RAGContextService();
@@ -771,8 +777,28 @@ export class ToolsService implements IToolsService {
 
 					// Add helpful metadata about the search
 					const enhancedResult = contextPack.totalResults === 0
-						? `No relevant documents found for query: "${query}"\n\nTry:\n- Using different search terms\n- Checking if documents are indexed with rag_get_stats\n- Indexing workspace documents first`
-						: `Found ${contextPack.totalResults} relevant chunks (after MMR re-ranking and filtering):\n\n${formatted}`;
+						? `No relevant case documents found for query: "${query}"\n\nTry:\n- Using different search terms\n- Checking if documents are indexed with rag_get_stats\n- Use rag_search_policy to search policy manuals instead`
+						: `Found ${contextPack.totalResults} relevant case file chunks (after MMR re-ranking and filtering):\n\n${formatted}`;
+
+					return { result: { contextPack: enhancedResult } };
+				} catch (error) {
+					return { result: { contextPack: `Search failed: ${error.message}` } };
+				}
+			},
+			rag_search_all: async ({ query, limit }) => {
+				try {
+					const contextPack = await this.ragService.search({
+						query,
+						scope: 'workspace_all', // Search BOTH policy manuals AND case files
+						limit
+					});
+					const contextService = new RAGContextService();
+					const formatted = contextService.formatContextPack(contextPack);
+
+					// Add helpful metadata about the search
+					const enhancedResult = contextPack.totalResults === 0
+						? `No relevant documents found for query: "${query}"\n\nTry:\n- Using different search terms\n- Checking if documents are indexed with rag_get_stats`
+						: `Found ${contextPack.totalResults} relevant chunks from ALL sources (policy manuals + case files):\n\n${formatted}`;
 
 					return { result: { contextPack: enhancedResult } };
 				} catch (error) {
@@ -797,8 +823,9 @@ export class ToolsService implements IToolsService {
 ${stats.documents.map(d => `  • ${d.filetype}: ${d.typeCount} files (${(d.totalSize / 1024 / 1024).toFixed(2)} MB)`).join('\n')}
 
 💡 Search Tips:
-- Use rag_search_policy for policy manual queries
-- Use rag_search_workspace for workspace document queries
+- Use rag_search_policy for policy manual queries (regulations, procedures, rules)
+- Use rag_search_workspace for case file queries (medical reports, IME evals, correspondence)
+- Use rag_search_all to search BOTH sources at once
 - Be specific with search terms for better results
 - Increase limit (8-10) for complex topics`
 						: `RAG Index Status: ⚠️ Empty
@@ -1116,6 +1143,9 @@ Example: rag_index_document with uri="/path/to/document.pdf" and is_policy_manua
 				return result.contextPack;
 			},
 			rag_search_workspace: (_params, result) => {
+				return result.contextPack;
+			},
+			rag_search_all: (_params, result) => {
 				return result.contextPack;
 			},
 			rag_get_stats: (_params, result) => {

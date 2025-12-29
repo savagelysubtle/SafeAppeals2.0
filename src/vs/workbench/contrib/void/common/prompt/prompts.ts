@@ -484,6 +484,33 @@ Returns chunks with:
 		}
 	},
 
+	rag_search_all: {
+		name: 'rag_search_all',
+		description: `Search BOTH policy manuals AND case-specific documents simultaneously.
+
+**PURPOSE:** When you need information that may exist in either policy documents or case files, or when you want a comprehensive view across all indexed sources.
+
+**WHEN TO USE:**
+- When unsure if the answer is in policy or case documents
+- For comprehensive research that spans both regulatory guidance AND case-specific facts
+- When comparing policy requirements against what happened in a specific case
+- For initial broad searches before narrowing down with specific tools
+
+**BEST PRACTICES:**
+- Start with rag_search_all for broad queries, then use rag_search_policy or rag_search_workspace for targeted follow-up
+- Use when drafting documents that need both policy citations AND case facts
+- Results will indicate which source (policy vs case file) each chunk came from
+
+**OUTPUT FORMAT:**
+Returns combined results from both policy manuals and case files, with source type indicated.
+
+**COST:** ~2,500 tokens per search (slightly higher due to dual-source retrieval).`,
+		params: {
+			query: { description: 'Natural language search query to search across all indexed documents.' },
+			limit: { description: 'Maximum results to return. Default 8. Each result ~250 tokens.' }
+		}
+	},
+
 	rag_get_stats: {
 		name: 'rag_get_stats',
 		description: `Gets statistics about indexed documents: shows which policy manuals and case documents are available, number of chunks per document, and total indexed content. **ALWAYS use this FIRST before searching** to understand what's available and avoid unnecessary indexing.`,
@@ -711,6 +738,8 @@ const toolCallDefinitionsXMLString = (tools: InternalToolInfo[]) => {
 			example = `\n    <example>\n    <function_calls>\n    <invoke name="rag_search_policy">\n    <parameter name="query">appeal deadline workers compensation</parameter>\n    <parameter name="limit">5</parameter>\n    </invoke>\n    </function_calls>\n    </example>\n`
 		} else if (t.name === 'rag_search_workspace') {
 			example = `\n    <example>\n    <function_calls>\n    <invoke name="rag_search_workspace">\n    <parameter name="query">medical evaluation lumbar strain</parameter>\n    <parameter name="limit">5</parameter>\n    </invoke>\n    </function_calls>\n    </example>\n`
+		} else if (t.name === 'rag_search_all') {
+			example = `\n    <example>\n    <function_calls>\n    <invoke name="rag_search_all">\n    <parameter name="query">permanent disability rating appeal</parameter>\n    <parameter name="limit">8</parameter>\n    </invoke>\n    </function_calls>\n    </example>\n`
 		} else if (t.name === 'create_file_or_folder') {
 			example = `\n    <example>\n    <function_calls>\n    <invoke name="create_file_or_folder">\n    <parameter name="uri">/case_files/appeal_letter_2024.docx</parameter>\n    <parameter name="type">file</parameter>\n    </invoke>\n    </function_calls>\n    </example>\n`
 		} else if (t.name === 'timeline_add_event') {

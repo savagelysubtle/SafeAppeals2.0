@@ -290,6 +290,26 @@ private embeddings: Map<string, {
 }> = new Map();
 ```
 
+### RAG Storage Scopes
+
+The system supports multiple search scopes for targeted retrieval:
+
+```typescript
+type RAGStorageScope =
+    | 'policy_manual'   // Only policy manuals for THIS workspace
+    | 'case_index'      // Only case files for THIS workspace
+    | 'workspace_all'   // Both policy + case for THIS workspace
+    | 'workspace_docs'  // Legacy alias for 'case_index'
+    | 'both';           // Legacy alias for 'workspace_all'
+```
+
+**Agent Tool → Scope Routing:**
+| Agent Tool | Scope |
+|------------|-------|
+| `rag_search_policy` | `'policy_manual'` |
+| `rag_search_workspace` | `'case_index'` |
+| `rag_search_all` | `'workspace_all'` |
+
 ## 🔄 Process Communication Architecture
 
 ### IPC Channels
@@ -310,6 +330,7 @@ IRAGService    ←IPC→   RAGMainService
 - `deleteDocument`: Document removal
 - `isDocumentIndexed`: Indexing status checks
 - `getDocumentsByType`: Type-based document queries
+- `switchWorkspace`: Workspace context switching (per-workspace RAG)
 - `initialize`: Service initialization
 - `clearAllEmbeddings`: Data clearing operations
 - `testDoclingExtraction`: Extraction testing
@@ -379,10 +400,63 @@ Result Reranking
 - Model unloading on service disposal
 - Process monitoring and warnings
 
+## 🗂️ Per-Workspace RAG Architecture
+
+The RAG system maintains **complete isolation** between different VS Code workspaces. Each workspace has its own:
+
+### Workspace-Specific Resources
+- **SQLite Database**: Separate document and chunk metadata per workspace
+- **Vector Embeddings**: Isolated ChromaDB collections per workspace
+- **Index Service**: Independent RAG instances managed by `WorkspaceRAGManager`
+
+### Architecture Diagram
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                   WorkspaceRAGManager                           │
+├─────────────────────────────────────────────────────────────────┤
+│  Workspace A (hash: a1b2c3d4)   │  Workspace B (hash: e5f6g7h8) │
+│  ┌───────────────────────────┐  │  ┌───────────────────────────┐│
+│  │ • VectorAdapter           │  │  │ • VectorAdapter           ││
+│  │ • RAGIndexService         │  │  │ • RAGIndexService         ││
+│  │ • HybridRetriever         │  │  │ • HybridRetriever         ││
+│  │ • CrossEncoderReranker    │  │  │ • CrossEncoderReranker    ││
+│  └───────────────────────────┘  │  └───────────────────────────┘│
+│            ↓                    │            ↓                  │
+│  databases/workspaces/a1b2c3d4/ │  databases/workspaces/e5f6g7h8/│
+│  ├── workspace.db              │  ├── workspace.db              │
+│  └── chroma/                   │  └── chroma/                   │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Workspace ID Generation
+```typescript
+// Browser-side (RAGService)
+private computeWorkspaceId(): string {
+    const folder = this.workspaceContextService.getWorkspace().folders[0];
+    return crypto.createHash('sha256')
+        .update(folder.uri.fsPath)
+        .digest('hex')
+        .substring(0, 16); // 16-char stable hash
+}
+```
+
+### Automatic Workspace Switching
+When the user switches workspaces:
+1. `RAGService` detects workspace change via `onDidChangeWorkspaceFolders`
+2. Calls `switchWorkspace(newWorkspaceId)` to main process
+3. `WorkspaceRAGManager` creates or retrieves the correct RAG instance
+4. All subsequent RAG operations use the new workspace context
+
+### Auto-Indexing on Startup
+When a workspace is opened:
+1. `RAGWorkspaceService` scans all folders (except policy-manuals/)
+2. New/unindexed files are automatically indexed as case files
+3. Policy manual folder is indexed separately with `isPolicyManual: true`
+
 ## 🔒 Security Architecture
 
 ### Data Isolation
-- **Workspace Separation**: Documents isolated by workspace ID
+- **Workspace Separation**: Documents isolated by workspace ID (cryptographic hash)
 - **Scope Enforcement**: Policy vs case document access control
 - **File System Security**: Restricted to user data directories
 

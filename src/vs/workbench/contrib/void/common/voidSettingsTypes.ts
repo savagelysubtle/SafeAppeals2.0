@@ -467,6 +467,7 @@ export type GlobalSettings = {
 	ragOpenAIModel: RAGOpenAIModel;
 	ragChromaUrl?: string;
 	ragAutoIndexPolicyFolder: boolean;
+	ragAutoIndexCaseFiles: boolean; // Auto-index all workspace documents (except policy folder) as case files
 	ragPolicyFolderName: string;
 	ragWatchPolicyFolder: boolean;
 	ragShowIndexedBadge: boolean;
@@ -535,6 +536,7 @@ export const defaultGlobalSettings: GlobalSettings = {
 	ragOpenAIModel: 'text-embedding-3-small',
 	ragChromaUrl: 'http://localhost:8000',
 	ragAutoIndexPolicyFolder: true,
+	ragAutoIndexCaseFiles: true, // Auto-index workspace documents as case files on startup
 	ragPolicyFolderName: 'policy-manuals',
 	ragWatchPolicyFolder: true,
 	ragShowIndexedBadge: true,

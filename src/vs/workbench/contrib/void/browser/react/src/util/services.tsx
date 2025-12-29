@@ -61,6 +61,7 @@ import { IOpenerService } from '../../../../../../../platform/opener/common/open
 import { IFileConverterService } from '../../../fileConverter/fileConverterService.js';
 import { ITimelineService } from '../../../../common/timeline/timelineTypes.js';
 import { IEditorService } from '../../../../../../../workbench/services/editor/common/editorService.js';
+import { IRAGAutoIndexService } from '../../../rag/ragAutoIndexService.js';
 
 
 // normally to do this you'd use a useEffect that calls .onDidChangeState(), but useEffect mounts too late and misses initial state changes
@@ -244,6 +245,7 @@ const getReactAccessor = (accessor: ServicesAccessor) => {
 		IEditorService: accessor.get(IEditorService),
 		URI: URI,
 		ITimelineService: accessor.get(ITimelineService),
+		IRAGAutoIndexService: accessor.get(IRAGAutoIndexService),
 
 	} as const
 	return reactAccessor

@@ -40,18 +40,25 @@ interface DocumentStructure {
 export class RAGIndexService {
 	private db: Database | null = null;
 	private static readonly CURRENT_SCHEMA_VERSION = 2; // Increment when schema changes
+	private readonly workspaceId: string | undefined;
 
 	constructor(
 		@ILogService private readonly logService: ILogService,
-		@IRAGPathService private readonly pathService: IRAGPathService
-	) { }
+		@IRAGPathService private readonly pathService: IRAGPathService,
+		workspaceId?: string
+	) {
+		this.workspaceId = workspaceId;
+	}
 
 	async initialize(): Promise<void> {
 		if (this.db) return;
 
 		try {
-		const dbPath = this.pathService.getGlobalSqlitePath();
-			this.logService.info(`RAG: Initializing SQLite database at: ${dbPath}`);
+			// Use workspace-specific path if workspaceId is set, otherwise global
+			const dbPath = this.workspaceId
+				? this.pathService.getWorkspaceSqlitePath(this.workspaceId)
+				: this.pathService.getGlobalSqlitePath();
+			this.logService.info(`RAG: Initializing SQLite database at: ${dbPath}${this.workspaceId ? ` (workspace: ${this.workspaceId})` : ' (global)'}`);
 
 			// Ensure parent directory exists
 			const fs = await import('fs');
@@ -1301,14 +1308,17 @@ private async checkColumnExists(tableName: string, columnName: string): Promise<
 
 	/**
 	 * Build SQL filter for scope
+	 * Handles both old and new scope names for backwards compatibility
 	 */
 	private getScopeFilter(scope: RAGStorageScope): string {
 		switch (scope) {
 			case 'policy_manual':
 				return 'AND d.is_policy_manual = 1';
-			case 'workspace_docs':
+			case 'case_index':
+			case 'workspace_docs': // Legacy support
 				return 'AND d.is_policy_manual = 0';
-			case 'both':
+			case 'workspace_all':
+			case 'both': // Legacy support
 			default:
 				return '';
 		}
