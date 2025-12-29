@@ -106,6 +106,8 @@ export type BuiltinToolCallParams = {
 	'rag_index_document': {
 		uri: URI;                  // Document to index
 		isPolicyManual: boolean;   // Whether it's a policy document
+		workspaceId?: string;      // Optional workspace ID (auto-injected)
+		indexScope?: 'policy_manual' | 'case_index'; // Target index
 	};
 
 	'rag_search_policy': {
@@ -114,7 +116,12 @@ export type BuiltinToolCallParams = {
 	};
 
 	'rag_search_workspace': {
-		query: string;             // Search query for workspace documents
+		query: string;             // Search query for case documents
+		limit: number;             // Maximum results
+	};
+
+	'rag_search_all': {
+		query: string;             // Search query across ALL documents
 		limit: number;             // Maximum results
 	};
 
@@ -220,11 +227,15 @@ export type BuiltinToolResultType = {
 	};
 
 	'rag_search_policy': {
-		contextPack: string;      // Retrieved context
+		contextPack: string;      // Retrieved context from policy manuals
 	};
 
 	'rag_search_workspace': {
-		contextPack: string;      // Retrieved context
+		contextPack: string;      // Retrieved context from case files
+	};
+
+	'rag_search_all': {
+		contextPack: string;      // Retrieved context from ALL sources
 	};
 
 	'rag_get_stats': {
@@ -278,6 +289,7 @@ export const approvalTypeOfBuiltinToolName: Partial<{
 	// 'rag_index_document': 'RAG tools', // Commented out - read-only
 	// 'rag_search_policy': 'RAG tools',   // Commented out - read-only
 	// 'rag_search_workspace': 'RAG tools', // Commented out - read-only
+	// 'rag_search_all': 'RAG tools',      // Commented out - read-only
 	// 'rag_get_stats': 'RAG tools',       // Commented out - read-only
 };
 ```

@@ -34,15 +34,27 @@ The Retrieval-Augmented Generation (RAG) system in Void provides sophisticated d
 2. [Migration Guide](./migration.md) - Database updates
 3. [Performance Monitoring](./performance.md) - Health checks
 
+## 🔧 Agent RAG Tools
+
+| Tool | Description | Scope |
+|------|-------------|-------|
+| `rag_search_policy` | Search policy manuals only | `policy_manual` |
+| `rag_search_workspace` | Search case files only | `case_index` |
+| `rag_search_all` | Search ALL documents (both) | `workspace_all` |
+| `rag_index_document` | Index a document | N/A |
+| `rag_get_stats` | Get system statistics | N/A |
+
 ## 📊 System Status
 
 | Component | Status | Version |
 |-----------|--------|---------|
-| Core RAG Service | ✅ Active | v2.0 |
+| Core RAG Service | ✅ Active | v2.1 |
+| Per-Workspace Isolation | ✅ Active | WorkspaceRAGManager |
 | Vector Search | ✅ Active | Chroma Persistent |
 | Document Indexing | ✅ Active | Hierarchical Chunks |
 | Cross-Encoder | ✅ Active | Local MS MARCO |
 | Docling Integration | ✅ Active | Hybrid Mode |
+| Auto-Index on Drop | ✅ Active | RAGAutoIndexService |
 
 ## 🔗 Related Documentation
 

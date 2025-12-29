@@ -73,13 +73,14 @@ export type ToolApprovalType = 'edits' | 'terminal' | 'MCP tools' | 'RAG tools';
 
 **Included Tools:**
 - `rag_index_document` - Document indexing
-- `rag_search_policy` - Policy document search
-- `rag_search_workspace` - Workspace document search
+- `rag_search_policy` - Policy document search (policy manuals only)
+- `rag_search_workspace` - Case document search (case files only)
+- `rag_search_all` - Combined search (both policy + case documents)
 - `rag_get_stats` - Statistics retrieval
 
 **Approval Requirements:**
 - Currently no approval needed (read-only)
-- Future: Granular permission controls
+- Per-workspace isolation ensures data security
 
 ### Approval Mapping
 

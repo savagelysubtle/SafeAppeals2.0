@@ -15,15 +15,21 @@ import { ContextPack, IRAGMainService, RAGIndexParams, RAGSearchParams, RAGStats
 import { ChromaPersistentAdapter, PersistentVectorAdapterConfig, VectorAdapter } from '../../common/rag/ragVectorAdapter.js';
 import { RAGFileService } from './ragFileService.js';
 import { RAGIndexService } from './ragIndexService.js';
+import { WorkspaceRAGManager } from './ragWorkspaceManager.js';
 
 export class RAGMainService implements IRAGMainService {
 	readonly _serviceBrand: undefined;
 
-	private indexService: RAGIndexService;
+	// Legacy global services (for backwards compatibility)
+	private globalIndexService: RAGIndexService;
 	private fileService: RAGFileService;
-	private vectorAdapter!: VectorAdapter;
-	private hybridRetriever!: HybridRetriever;
-	private reranker!: LocalCrossEncoderReranker;
+	private globalVectorAdapter!: VectorAdapter;
+	private globalHybridRetriever!: HybridRetriever;
+	private globalReranker!: LocalCrossEncoderReranker;
+
+	// Per-workspace management
+	private workspaceManager: WorkspaceRAGManager;
+
 	private initialized = false;
 	private doclingProcess?: ChildProcess;
 	private doclingServerReady = false;
@@ -32,8 +38,9 @@ export class RAGMainService implements IRAGMainService {
 		@ILogService private readonly logService: ILogService,
 		@IRAGPathService private readonly pathService: IRAGPathService
 	) {
-		this.indexService = new RAGIndexService(logService, pathService);
+		this.globalIndexService = new RAGIndexService(logService, pathService);
 		this.fileService = new RAGFileService(logService);
+		this.workspaceManager = new WorkspaceRAGManager(logService, pathService);
 	}
 
 	async initialize(openAIApiKey?: string): Promise<void> {
@@ -51,7 +58,7 @@ export class RAGMainService implements IRAGMainService {
 			// Ensure directories exist
 			await this.pathService.ensureDirectories();
 
-			// Use persistent local Chroma - no server needed!
+			// Initialize global services (for backwards compatibility / fallback)
 			const chromaPath = this.pathService.getGlobalChromaDir();
 
 			const config: PersistentVectorAdapterConfig = {
@@ -59,30 +66,30 @@ export class RAGMainService implements IRAGMainService {
 				useReranking: true // Enable reranking by default
 			};
 
-			this.vectorAdapter = new ChromaPersistentAdapter(config, this.logService);
+			this.globalVectorAdapter = new ChromaPersistentAdapter(config, this.logService);
 
 			// Log first-time initialization message
 			this.logService.info('Initializing local embedding model (first time may take 1-2 minutes to download ~23 MB model)...');
-			await this.vectorAdapter.initialize();
+			await this.globalVectorAdapter.initialize();
 			this.logService.info('Local embedding model ready');
 
 			// Initialize index service
-			await this.indexService.initialize();
+			await this.globalIndexService.initialize();
 
 			// Initialize hybrid retriever
-			this.hybridRetriever = new HybridRetriever(
-				this.vectorAdapter,
-				this.indexService,
+			this.globalHybridRetriever = new HybridRetriever(
+				this.globalVectorAdapter,
+				this.globalIndexService,
 				this.logService
 			);
 
 			// Initialize reranker
 			const modelCachePath = chromaPath + '/models';
-			this.reranker = new LocalCrossEncoderReranker(this.logService);
-			await this.reranker.initialize(modelCachePath);
+			this.globalReranker = new LocalCrossEncoderReranker(this.logService);
+			await this.globalReranker.initialize(modelCachePath);
 
 			// Ensure collections exist
-			await this.vectorAdapter.ensureCollections('both');
+			await this.globalVectorAdapter.ensureCollections('workspace_all');
 
 			// CRITICAL: Reload embeddings from database if they exist
 			// The in-memory vector store loses all embeddings on restart
@@ -96,14 +103,55 @@ export class RAGMainService implements IRAGMainService {
 		}
 	}
 
+	/**
+	 * Switch to a different workspace RAG context
+	 */
+	async switchWorkspace(workspaceId: string): Promise<void> {
+		this.logService.info(`RAG: Switching to workspace ${workspaceId}`);
+		await this.workspaceManager.switchWorkspace(workspaceId);
+	}
+
+	/**
+	 * Get the appropriate RAG instance for the given workspaceId
+	 * Falls back to global if no workspaceId or workspace not found
+	 */
+	private async getWorkspaceInstance(workspaceId?: string): Promise<{
+		vectorAdapter: VectorAdapter;
+		indexService: RAGIndexService;
+		hybridRetriever: HybridRetriever;
+		reranker: LocalCrossEncoderReranker;
+	}> {
+		if (workspaceId) {
+			const instance = await this.workspaceManager.getOrCreateWorkspace(workspaceId);
+			return {
+				vectorAdapter: instance.vectorAdapter,
+				indexService: instance.indexService,
+				hybridRetriever: instance.hybridRetriever,
+				reranker: instance.reranker
+			};
+		}
+
+		// Fall back to global
+		return {
+			vectorAdapter: this.globalVectorAdapter,
+			indexService: this.globalIndexService,
+			hybridRetriever: this.globalHybridRetriever,
+			reranker: this.globalReranker
+		};
+	}
+
 	async indexDocument(params: RAGIndexParams): Promise<{ success: boolean; message: string }> {
 		if (!this.initialized) {
 			await this.initialize();
 		}
 
+		// Get workspace-specific instance
+		const { vectorAdapter, indexService } = await this.getWorkspaceInstance(params.workspaceId);
+
 		// Log memory usage at start
 		const memStart = process.memoryUsage();
 		this.logService.info(`Memory at start: ${(memStart.heapUsed / 1024 / 1024).toFixed(2)} MB / ${(memStart.heapTotal / 1024 / 1024).toFixed(2)} MB`);
+		this.logService.info(`Using workspace: ${params.workspaceId || 'global'}`);
 
 		try {
 			const filepath = params.uri.fsPath || params.uri.path || '';
@@ -135,9 +183,9 @@ export class RAGMainService implements IRAGMainService {
 			const memAfterExtraction = process.memoryUsage();
 			this.logService.info(`Memory after extraction: ${(memAfterExtraction.heapUsed / 1024 / 1024).toFixed(2)} MB (delta: ${((memAfterExtraction.heapUsed - memStart.heapUsed) / 1024 / 1024).toFixed(2)} MB)`);
 
-			// Index the document
+			// Index the document using workspace-specific index service
 			this.logService.info('Chunking document...');
-			const result = await this.indexService.indexDocument({
+			const result = await indexService.indexDocument({
 				uri: params.uri,
 				isPolicyManual: params.isPolicyManual,
 				workspaceId: params.workspaceId,
@@ -151,7 +199,7 @@ export class RAGMainService implements IRAGMainService {
 			const memAfterChunking = process.memoryUsage();
 			this.logService.info(`Memory after chunking: ${(memAfterChunking.heapUsed / 1024 / 1024).toFixed(2)} MB (delta: ${((memAfterChunking.heapUsed - memAfterExtraction.heapUsed) / 1024 / 1024).toFixed(2)} MB)`);
 
-			// Add chunks to vector store in batches to avoid memory issues
+			// Add chunks to workspace-specific vector store in batches to avoid memory issues
 			if (result.chunks.length > 0) {
 				const pathSegments = filepath.replace(/\\/g, '/').split('/');
 				const filename = pathSegments[pathSegments.length - 1] || 'unknown';
@@ -177,7 +225,7 @@ export class RAGMainService implements IRAGMainService {
 
 					this.logService.info(`Processing embedding batch ${batchNum}/${totalBatches} (chunks ${i + 1}-${batchEnd})...`);
 
-					await this.vectorAdapter.add(batchChunks, batchMetadatas);
+					await vectorAdapter.add(batchChunks, batchMetadatas);
 
 					// Log memory after each batch
 					const memAfterBatch = process.memoryUsage();
@@ -222,17 +270,20 @@ export class RAGMainService implements IRAGMainService {
 			await this.initialize();
 		}
 
+		// Get workspace-specific instance
+		const { hybridRetriever, indexService, reranker } = await this.getWorkspaceInstance(params.workspaceId);
+
 		const startTime = Date.now();
 
 		try {
-			this.logService.info(`RAG search: "${params.query}" (scope: ${params.scope}, limit: ${params.limit})`);
+			this.logService.info(`RAG search: "${params.query}" (scope: ${params.scope}, limit: ${params.limit}, workspace: ${params.workspaceId || 'global'})`);
 
 			// Stage 1: Hybrid retrieval (high recall)
 			// Get 4x desired results for reranking
 			const initialK = params.limit * 4;
 			this.logService.info(`Stage 1: Hybrid retrieval (retrieving ${initialK} candidates)`);
 
-			const hybridResults = await this.hybridRetriever.search(
+			const hybridResults = await hybridRetriever.search(
 				params.query,
 				initialK,
 				params.scope,
@@ -259,7 +310,7 @@ export class RAGMainService implements IRAGMainService {
 			const chunkIds = hybridResults.map(r => r.chunkId);
 			this.logService.info(`Fetching ${chunkIds.length} chunks from SQLite...`);
 
-			const searchResults = await this.indexService.searchChunks(
+			const searchResults = await indexService.searchChunks(
 				chunkIds,
 				params.query
 			);
@@ -297,7 +348,7 @@ export class RAGMainService implements IRAGMainService {
 				}
 			}
 
-			const reranked = await this.reranker.rerank(
+			const reranked = await reranker.rerank(
 				params.query,
 				documentsForReranking,
 				params.limit
@@ -344,13 +395,14 @@ export class RAGMainService implements IRAGMainService {
 		}
 	}
 
-	async getStats(): Promise<RAGStats> {
+	async getStats(workspaceId?: string): Promise<RAGStats> {
 		if (!this.initialized) {
 			await this.initialize();
 		}
 
 		try {
-			return await this.indexService.getStats();
+			const { indexService } = await this.getWorkspaceInstance(workspaceId);
+			return await indexService.getStats();
 		} catch (error) {
 			this.logService.error('Failed to get RAG stats:', error);
 			return {
@@ -362,35 +414,38 @@ export class RAGMainService implements IRAGMainService {
 		}
 	}
 
-	async deleteDocument(docId: string): Promise<void> {
+	async deleteDocument(docId: string, workspaceId?: string): Promise<void> {
 		if (!this.initialized) {
 			await this.initialize();
 		}
 
 		try {
+			const { indexService, vectorAdapter } = await this.getWorkspaceInstance(workspaceId);
+
 			// Delete from SQLite
-			await this.indexService.deleteDocument(docId);
+			await indexService.deleteDocument(docId);
 
 			// Delete from vector store
-			await this.vectorAdapter.deleteByDocId(docId);
+			await vectorAdapter.deleteByDocId(docId);
 
-			this.logService.info(`Deleted document ${docId}`);
+			this.logService.info(`Deleted document ${docId} from workspace ${workspaceId || 'global'}`);
 		} catch (error) {
 			this.logService.error(`Failed to delete document ${docId}:`, error);
 			throw error;
 		}
 	}
 
-	async isDocumentIndexed(uri: URI): Promise<boolean> {
+	async isDocumentIndexed(uri: URI, workspaceId?: string): Promise<boolean> {
 		if (!this.initialized) {
 			await this.initialize();
 		}
 
 		try {
-			const docId = this.indexService.generateDocumentId(uri);
-			this.logService.info(`Checking if document is indexed: ${uri.fsPath} (docId: ${docId})`);
+			const { indexService } = await this.getWorkspaceInstance(workspaceId);
+			const docId = indexService.generateDocumentId(uri);
+			this.logService.info(`Checking if document is indexed: ${uri.fsPath} (docId: ${docId}, workspace: ${workspaceId || 'global'})`);
 
-			const doc = await this.indexService.getDocumentById(docId);
+			const doc = await indexService.getDocumentById(docId);
 			const isIndexed = doc !== null;
 
 			this.logService.info(`Document ${uri.fsPath} is ${isIndexed ? 'already indexed' : 'not indexed'}`);
@@ -401,50 +456,53 @@ export class RAGMainService implements IRAGMainService {
 		}
 	}
 
-	async getDocumentsByType(isPolicyManual: boolean): Promise<any[]> {
+	async getDocumentsByType(isPolicyManual: boolean, workspaceId?: string): Promise<any[]> {
 		if (!this.initialized) {
 			await this.initialize();
 		}
 
 		try {
-			return await this.indexService.getDocumentsByType(isPolicyManual);
+			const { indexService } = await this.getWorkspaceInstance(workspaceId);
+			return await indexService.getDocumentsByType(isPolicyManual);
 		} catch (error) {
 			this.logService.error(`Failed to get documents by type:`, error);
 			return [];
 		}
 	}
 
-	async clearAllEmbeddings(): Promise<{ success: boolean; message: string }> {
+	async clearAllEmbeddings(workspaceId?: string): Promise<{ success: boolean; message: string }> {
 		if (!this.initialized) {
 			await this.initialize();
 		}
 
 		try {
-			this.logService.info('RAG: Clearing all embeddings and metadata...');
+			const { vectorAdapter, indexService } = await this.getWorkspaceInstance(workspaceId);
+
+			this.logService.info(`RAG: Clearing all embeddings and metadata for workspace ${workspaceId || 'global'}...`);
 			this.logService.info('RAG: Step 1/3 - Clearing vector embeddings...');
 
 			// Step 1: Clear vector store (embeddings)
-			await this.vectorAdapter.clearAll();
+			await vectorAdapter.clearAll();
 			this.logService.info('RAG: ✓ Vector embeddings cleared');
 
 			this.logService.info('RAG: Step 2/3 - Clearing document metadata...');
 
 			// Step 2: Get stats before clearing for confirmation message
-			const statsBeforeClearing = await this.indexService.getStats();
+			const statsBeforeClearing = await indexService.getStats();
 			const documentCount = statsBeforeClearing.totalDocuments;
 			const chunkCount = statsBeforeClearing.chunks.totalChunks;
 
 			this.logService.info('RAG: Step 3/3 - Clearing SQLite index (documents, chunks, FTS5 keyword index)...');
 
 			// Step 3: Clear SQLite index (documents, chunks, FTS5)
-			await this.indexService.clearAll();
+			await indexService.clearAll();
 			this.logService.info('RAG: ✓ SQLite index cleared (documents, chunks, FTS5)');
 
 			this.logService.info('RAG: ✓ All RAG data cleared successfully');
 
 			return {
 				success: true,
-				message: `Successfully cleared all RAG data:\n- ${documentCount} documents\n- ${chunkCount} chunks\n- Vector embeddings\n- Keyword search index (FTS5)\n\nYou can now re-index documents.`
+				message: `Successfully cleared all RAG data for workspace ${workspaceId || 'global'}:\n- ${documentCount} documents\n- ${chunkCount} chunks\n- Vector embeddings\n- Keyword search index (FTS5)\n\nYou can now re-index documents.`
 			};
 		} catch (error) {
 			const errorMsg = error instanceof Error ? error.message : String(error);
@@ -498,7 +556,7 @@ export class RAGMainService implements IRAGMainService {
 			this.logService.info('Checking if embeddings need to be reloaded from database...');
 
 			// Get all documents from database
-			const stats = await this.indexService.getStats();
+			const stats = await this.globalIndexService.getStats();
 			const totalDocs = stats.totalDocuments;
 
 			if (totalDocs === 0) {
@@ -716,6 +774,10 @@ export class RAGMainService implements IRAGMainService {
 	 */
 	dispose(): void {
 		this.stopDoclingServe();
+		// Dispose all workspace instances
+		this.workspaceManager.disposeAll().catch(err => {
+			this.logService.error('Error disposing workspace instances:', err);
+		});
 		this.logService.info('RAG service disposed');
 	}
 }

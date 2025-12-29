@@ -26,21 +26,33 @@ export class RAGMainChannel implements IServerChannel {
 			case 'search':
 				return this.service.search(args);
 			case 'getStats':
-				return this.service.getStats();
+				// Pass workspaceId if provided
+				return this.service.getStats(args?.workspaceId);
 			case 'deleteDocument':
-				return this.service.deleteDocument(args);
+				// Handle both old format (string) and new format (object with docId and workspaceId)
+				if (typeof args === 'string') {
+					return this.service.deleteDocument(args);
+				}
+				return this.service.deleteDocument(args?.docId, args?.workspaceId);
 			case 'isDocumentIndexed':
 				if (args && args.uri) {
 					args.uri = URI.revive(args.uri as UriComponents);
 				}
-				return this.service.isDocumentIndexed(args.uri);
+				return this.service.isDocumentIndexed(args.uri, args?.workspaceId);
 			case 'getDocumentsByType':
-				return this.service.getDocumentsByType(args);
+				// Handle both old format (boolean) and new format (object)
+				if (typeof args === 'boolean') {
+					return this.service.getDocumentsByType(args);
+				}
+				return this.service.getDocumentsByType(args?.isPolicyManual, args?.workspaceId);
 			case 'initialize':
 				// Pass the openAIApiKey from browser to main process
 				return this.service.initialize(args?.openAIApiKey);
+			case 'switchWorkspace':
+				return this.service.switchWorkspace(args?.workspaceId);
 			case 'clearAllEmbeddings':
-				return this.service.clearAllEmbeddings();
+				// Pass workspaceId if provided
+				return this.service.clearAllEmbeddings(args?.workspaceId);
 			case 'testDoclingExtraction':
 				// Revive URI from serialized form
 				if (args && args.uri) {
@@ -64,23 +76,31 @@ export class RAGMainChannelClient {
 		return this.channel.call('search', params);
 	}
 
-	async getStats(): Promise<RAGStats> {
-		return this.channel.call('getStats');
+	async getStats(workspaceId?: string): Promise<RAGStats> {
+		return this.channel.call('getStats', { workspaceId });
 	}
 
-	async deleteDocument(docId: string): Promise<void> {
-		return this.channel.call('deleteDocument', { docId });
+	async deleteDocument(docId: string, workspaceId?: string): Promise<void> {
+		return this.channel.call('deleteDocument', { docId, workspaceId });
 	}
 
-	async isDocumentIndexed(uri: URI): Promise<boolean> {
-		return this.channel.call('isDocumentIndexed', { uri: uri.toString() });
+	async isDocumentIndexed(uri: URI, workspaceId?: string): Promise<boolean> {
+		return this.channel.call('isDocumentIndexed', { uri: uri.toJSON(), workspaceId });
 	}
 
-	async getDocumentsByType(isPolicyManual: boolean): Promise<any[]> {
-		return this.channel.call('getDocumentsByType', { isPolicyManual });
+	async getDocumentsByType(isPolicyManual: boolean, workspaceId?: string): Promise<any[]> {
+		return this.channel.call('getDocumentsByType', { isPolicyManual, workspaceId });
 	}
 
 	async initialize(): Promise<void> {
 		return this.channel.call('initialize');
+	}
+
+	async switchWorkspace(workspaceId: string): Promise<void> {
+		return this.channel.call('switchWorkspace', { workspaceId });
+	}
+
+	async clearAllEmbeddings(workspaceId?: string): Promise<{ success: boolean; message: string }> {
+		return this.channel.call('clearAllEmbeddings', { workspaceId });
 	}
 }

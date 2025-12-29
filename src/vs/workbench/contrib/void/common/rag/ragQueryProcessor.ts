@@ -147,13 +147,13 @@ export class QueryProcessor {
 		}
 
 		if (hasCaseKeyword && !hasPolicyKeyword) {
-			this.logService.info('Query routed to: workspace_docs');
-			return 'workspace_docs';
+			this.logService.info('Query routed to: case_index');
+			return 'case_index';
 		}
 
-		// Ambiguous or no clear keywords - search both
-		this.logService.info('Query routed to: both');
-		return 'both';
+		// Ambiguous or no clear keywords - search both (workspace_all)
+		this.logService.info('Query routed to: workspace_all');
+		return 'workspace_all';
 	}
 
 	/**

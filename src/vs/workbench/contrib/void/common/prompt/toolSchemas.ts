@@ -205,6 +205,8 @@ export const getToolSchemaDescription = (toolName: string): string => {
 			return 'Search indexed policy manuals for rules, eligibility, procedures. Returns relevant sections with citations.';
 		case 'rag_search_workspace':
 			return 'Search indexed case documents (medical reports, decisions, correspondence) for case-specific information.';
+		case 'rag_search_all':
+			return 'Search BOTH policy manuals AND case documents simultaneously for comprehensive results.';
 		case 'timeline_add_event':
 			return 'Add a new event to the case timeline with date, title, category, and optional document links.';
 		case 'timeline_update_event':

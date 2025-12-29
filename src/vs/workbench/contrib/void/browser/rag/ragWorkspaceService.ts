@@ -40,12 +40,17 @@ export class RAGWorkspaceService extends Disposable implements IRAGWorkspaceServ
 		this.logService.info('RAGWorkspaceService: Constructor called');
 		this._register(this.settingsService.onDidChangeState(() => this.onSettingsChanged()));
 
-		// Listen for workspace folder changes
-		this._register(this.workspaceService.onDidChangeWorkspaceFolders(e => {
-			this.logService.info('RAGWorkspaceService: Workspace folders changed, reinitializing...');
-			this.initialize().catch(err => {
-				this.logService.error('RAGWorkspaceService: Failed to initialize after workspace change:', err);
-			});
+		// Listen for workspace folder changes and switch RAG context
+		this._register(this.workspaceService.onDidChangeWorkspaceFolders(async (e) => {
+			this.logService.info('RAGWorkspaceService: Workspace folders changed, switching workspace context...');
+			try {
+				// Notify main process to switch workspace context
+				const workspaceId = this.ragService.getWorkspaceId();
+				await this.ragService.switchWorkspace(workspaceId);
+				await this.initialize();
+			} catch (err) {
+				this.logService.error('RAGWorkspaceService: Failed to switch workspace:', err);
+			}
 		}));
 
 		// Initialize asynchronously
@@ -60,6 +65,7 @@ export class RAGWorkspaceService extends Disposable implements IRAGWorkspaceServ
 		const currentRagSettings = JSON.stringify({
 			ragEnabled: settings.ragEnabled,
 			ragAutoIndexPolicyFolder: settings.ragAutoIndexPolicyFolder,
+			ragAutoIndexCaseFiles: settings.ragAutoIndexCaseFiles,
 			ragPolicyFolderName: settings.ragPolicyFolderName,
 			ragWatchPolicyFolder: settings.ragWatchPolicyFolder,
 			ragPollIntervalSeconds: settings.ragPollIntervalSeconds,
@@ -98,6 +104,7 @@ export class RAGWorkspaceService extends Disposable implements IRAGWorkspaceServ
 			this.lastRagSettings = JSON.stringify({
 				ragEnabled: settings.ragEnabled,
 				ragAutoIndexPolicyFolder: settings.ragAutoIndexPolicyFolder,
+				ragAutoIndexCaseFiles: settings.ragAutoIndexCaseFiles,
 				ragPolicyFolderName: settings.ragPolicyFolderName,
 				ragWatchPolicyFolder: settings.ragWatchPolicyFolder,
 				ragPollIntervalSeconds: settings.ragPollIntervalSeconds,
@@ -167,8 +174,15 @@ export class RAGWorkspaceService extends Disposable implements IRAGWorkspaceServ
 				this.disposePolling();
 			}
 
-			// Initial scan and index
+			// Initial scan and index policy manuals
 			await this.scanAndIndex(policyFolderUri);
+
+			// Scan and index case files (everything except policy folder) if enabled
+			const ragAutoIndexCaseFiles = settings.ragAutoIndexCaseFiles ?? true; // Default to true
+			if (ragAutoIndexCaseFiles) {
+				this.logService.info('RAGWorkspaceService: Starting case file scan (excluding policy folder)...');
+				await this.scanAndIndexCaseFiles(folder.uri, policyFolderUri);
+			}
 
 			this.logService.info('RAGWorkspaceService: Initialization complete');
 		} finally {
@@ -223,8 +237,8 @@ export class RAGWorkspaceService extends Disposable implements IRAGWorkspaceServ
 						this.logService.info(`RAG: File change detected (ADDED/UPDATED): ${file.resource.fsPath}. Indexing...`);
 						await this.ragService.indexDocument({
 							uri: file.resource,
-							isPolicyManual: true,
-							workspaceId: this.workspaceService.getWorkspace().id
+							isPolicyManual: true
+							// Don't pass workspaceId - let ragService use its computed hash
 						});
 					} else if (event.affects(file.resource, FileChangeType.DELETED)) {
 						this.logService.info(`RAG: File change detected (DELETED): ${file.resource.fsPath}. Removing from index...`);
@@ -252,8 +266,8 @@ export class RAGWorkspaceService extends Disposable implements IRAGWorkspaceServ
 							this.logService.info(`RAG: Initial scan found unindexed file: ${file.resource.fsPath}. Indexing...`);
 							await this.ragService.indexDocument({
 								uri: file.resource,
-								isPolicyManual: true,
-								workspaceId: this.workspaceService.getWorkspace().id
+								isPolicyManual: true
+								// Don't pass workspaceId - let ragService use its computed hash
 							});
 						}
 					}
@@ -263,6 +277,96 @@ export class RAGWorkspaceService extends Disposable implements IRAGWorkspaceServ
 		} catch (error) {
 			this.logService.error(`RAG: Error during initial scan of ${folderUri.fsPath}:`, error);
 		}
+	}
+
+	/**
+	 * Recursively scan workspace for case files (documents NOT in the policy folder)
+	 * and index them as case_index files for RAG
+	 */
+	private async scanAndIndexCaseFiles(workspaceUri: URI, policyFolderUri: URI): Promise<void> {
+		const settings = this.settingsService.state.globalSettings;
+
+		// Folders to skip (in addition to policy folder)
+		const skipFolders = new Set([
+			'node_modules',
+			'.git',
+			'.vscode',
+			'.cursor',
+			'out',
+			'dist',
+			'build',
+			'__pycache__',
+			'.venv',
+			'venv',
+			settings.caseOrganizerTosortFolderName || 'tosort' // Skip tosort folder too
+		]);
+
+		let totalIndexed = 0;
+		let totalSkipped = 0;
+
+		const scanFolder = async (folderUri: URI, depth: number = 0): Promise<void> => {
+			// Limit recursion depth to prevent infinite loops
+			if (depth > 10) {
+				this.logService.warn(`RAG: Skipping deep folder (depth ${depth}): ${folderUri.fsPath}`);
+				return;
+			}
+
+			try {
+				const folder = await this.fileService.resolve(folderUri);
+				if (!folder.children) return;
+
+				for (const item of folder.children) {
+					// Skip the policy folder entirely
+					if (item.resource.fsPath.startsWith(policyFolderUri.fsPath)) {
+						continue;
+					}
+
+					if (item.isDirectory) {
+						const folderName = basename(item.resource.fsPath);
+
+						// Skip excluded folders
+						if (skipFolders.has(folderName) || folderName.startsWith('.')) {
+							continue;
+						}
+
+						// Recursively scan subdirectories
+						await scanFolder(item.resource, depth + 1);
+					} else {
+						// Check if it's a document we can index
+						const ext = basename(item.resource.fsPath).split('.').pop()?.toLowerCase();
+						if (!['pdf', 'docx', 'doc', 'txt', 'md', 'xlsx', 'xls'].includes(ext || '')) {
+							continue;
+						}
+
+						// Check if already indexed
+						const isIndexed = await this.ragService.isDocumentIndexed(item.resource);
+						if (isIndexed) {
+							totalSkipped++;
+							continue;
+						}
+
+					// Index as case file (NOT policy manual)
+					this.logService.info(`RAG: Indexing case file: ${item.resource.fsPath}`);
+					try {
+						await this.ragService.indexDocument({
+							uri: item.resource,
+							isPolicyManual: false, // Case file, not policy manual
+							// Don't pass workspaceId - let ragService use its computed hash
+							indexScope: 'case_index'
+						});
+						totalIndexed++;
+					} catch (err) {
+						this.logService.error(`RAG: Failed to index case file ${item.resource.fsPath}:`, err);
+					}
+					}
+				}
+			} catch (error) {
+				this.logService.error(`RAG: Error scanning folder ${folderUri.fsPath}:`, error);
+			}
+		};
+
+		await scanFolder(workspaceUri);
+		this.logService.info(`RAG: Case file scan complete. Indexed: ${totalIndexed}, Already indexed: ${totalSkipped}`);
 	}
 
 	private disposeWatcher(): void {
@@ -327,8 +431,8 @@ export class RAGWorkspaceService extends Disposable implements IRAGWorkspaceServ
 					this.logService.info(`RAG: Polling found unindexed file: ${file.resource.fsPath}. Indexing...`);
 					await this.ragService.indexDocument({
 						uri: file.resource,
-						isPolicyManual: true,
-						workspaceId: this.workspaceService.getWorkspace().id
+						isPolicyManual: true
+						// Don't pass workspaceId - let ragService use its computed hash
 					});
 				}
 			}
