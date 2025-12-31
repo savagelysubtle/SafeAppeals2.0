@@ -10,6 +10,15 @@ This guide covers database schema migrations, data migrations, and version upgra
 |---------|------|---------|-------------------|
 | 1 | Initial | Basic documents and chunks tables | N/A (initial) |
 | 2 | Dec 2025 | Hierarchical chunking with sections | Yes |
+| **2.0 (Architecture)** | Dec 2025 | **MICRO DATABASE ARCHITECTURE** - Removed global database, per-workspace isolation | **Migration recommended** |
+
+### Micro Database Architecture (v2.0)
+
+As of December 2025, the RAG system uses a **MICRO DATABASE ARCHITECTURE** with:
+- ✅ **NO global database** - all data is per-workspace
+- ✅ **workspaceId is REQUIRED** for all operations
+- ✅ Complete isolation between workspaces
+- ✅ Legacy global databases should be deleted
 
 ## 🏗️ Current Schema (v2)
 
@@ -544,6 +553,57 @@ class MigrationTester {
 - [ ] Monitor performance
 - [ ] Update documentation
 - [ ] Communicate with users
+
+## 🔄 Migrating to Micro Database Architecture
+
+### Cleaning Up Legacy Global Databases
+
+If you previously used the RAG system before the micro database architecture (v2.0), you may have legacy global databases that should be removed:
+
+```bash
+# Check for legacy global databases
+ls -la ~/.safe-appeals-navigator/databases/
+
+# Legacy files that should NOT exist (delete them):
+# - ~/.safe-appeals-navigator/databases/workspace.db
+# - ~/.safe-appeals-navigator/databases/chroma/
+
+# These are the CORRECT micro database locations:
+# - ~/.safe-appeals-navigator/databases/workspaces/[hash]/workspace.db
+# - ~/.safe-appeals-navigator/databases/workspaces/[hash]/chroma/embeddings.db
+```
+
+### Cleanup Script (PowerShell)
+
+```powershell
+# Delete legacy global databases
+$basePath = "$env:APPDATA\Safe Appeals Navigator\User\.safe-appeals-navigator\databases"
+
+# Remove legacy global workspace.db
+$globalDb = "$basePath\workspace.db"
+if (Test-Path $globalDb) {
+    Remove-Item $globalDb -Force
+    Write-Host "Deleted legacy: workspace.db"
+}
+
+# Remove legacy global chroma folder
+$globalChroma = "$basePath\chroma"
+if (Test-Path $globalChroma) {
+    Remove-Item $globalChroma -Recurse -Force
+    Write-Host "Deleted legacy: chroma/"
+}
+
+# Verify only micro databases remain
+Write-Host "Remaining structure:"
+Get-ChildItem "$basePath\workspaces" -Recurse
+```
+
+### Why Migrate?
+
+1. **Data Isolation**: Prevents cross-contamination between cases
+2. **Privacy**: Legal documents from one case cannot leak to another
+3. **Independent Management**: Each workspace can be backed up/deleted separately
+4. **Required by Code**: The new architecture throws errors if global paths are accessed
 
 ## 🔄 Future Migration Planning
 

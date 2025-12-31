@@ -1035,12 +1035,193 @@ Enhanced RAG capabilities beyond basic vector search, including hybrid retrieval
 
 ### Overview
 
-React component for email management integration.
+A workspace-scoped email management system for importing, viewing, searching, and managing case-related correspondence with AI-assisted draft replies. Integrates with the RAG system for contextual email drafting.
+
+### Core Features
+
+#### 1. **Email Import & Parsing**
+
+- ✅ Import `.eml` files (standard email format) via `mailparser`
+- ✅ Import `.pdf` files (printed/exported emails) via `pdfjs-dist`
+- ✅ Automatic metadata extraction (from, to, cc, bcc, subject, date)
+- ✅ HTML and plain text body support
+- ✅ Attachment metadata extraction
+- ✅ File dialog with multi-file selection
+
+#### 2. **Workspace-Scoped Database**
+
+- ✅ SQLite database per workspace (same pattern as RAG)
+- ✅ Database path: `~/.safe-appeals-navigator/databases/workspaces/{workspaceId}/emails.db`
+- ✅ Workspace ID computed from folder path hash
+- ✅ FTS5 (Full-Text Search 5) for fast email search
+- ✅ Auto-sync triggers for FTS index maintenance
+- ✅ Complete data isolation between workspaces
+
+**Database Schema**:
+
+```sql
+CREATE TABLE emails (
+  id TEXT PRIMARY KEY,
+  from_email TEXT NOT NULL,
+  to_email TEXT NOT NULL,
+  cc TEXT, bcc TEXT,
+  subject TEXT NOT NULL,
+  body_text TEXT NOT NULL,
+  body_html TEXT,
+  date TEXT NOT NULL,
+  case_folder_path TEXT NOT NULL,
+  file_path TEXT NOT NULL,
+  file_type TEXT CHECK(file_type IN ('eml', 'pdf')),
+  attachments_json TEXT,
+  is_draft INTEGER DEFAULT 0,
+  reply_to_id TEXT,
+  created_at TEXT, updated_at TEXT
+);
+```
+
+#### 3. **Email Dashboard UI**
+
+- ✅ Sidebar panel with React-based dashboard
+- ✅ shadcn-style components (Tailwind CSS + Lucide icons)
+- ✅ Dark mode optimized (matches TimelineDashboard)
+- ✅ Brand green accent color (#22c55e)
+
+**Components**:
+
+- ✅ `EmailDashboard.tsx` - Main container with empty state
+- ✅ `EmailToolbar.tsx` - Search, sort, filter, view mode controls
+- ✅ `EmailCard.tsx` - Email list items with avatar, preview, actions
+- ✅ `EmailFilters.tsx` - Case folder filter panel (collapsible)
+
+**Features**:
+
+- ✅ Search across subject, body, and sender
+- ✅ Sort by date, from, or subject (asc/desc)
+- ✅ Filter by case folder
+- ✅ List/grid view modes
+- ✅ Two-click delete confirmation
+- ✅ Color-coded avatars from sender email
+- ✅ Draft and attachment badges
+- ✅ File type indicators (EML blue, PDF red)
+
+#### 4. **Email Viewer Editor**
+
+- ✅ Custom `EditorPane` for viewing emails
+- ✅ Webview-based HTML rendering
+- ✅ Complete email headers display
+- ✅ HTML body rendering with fallback to plain text
+- ✅ Attachment list display
+- ✅ "Draft Reply" button integration
+- ✅ Editor input serialization for session restore
+- ✅ Exclusive registration for `.eml` files
+
+#### 5. **AI-Assisted Draft Replies**
+
+- ✅ `EmailDraftService` for draft generation
+- ✅ RAG integration for case document context
+- ✅ Automatic search query building from email content
+- ✅ Three tone options: professional, friendly, formal
+- ✅ Progress events during generation
+- ✅ DOCX output with original message quoted
+- ✅ Draft saved to `{caseFolderPath}/replies/` directory
+
+**Draft Template Structure**:
+
+```
+To: {original sender}
+Subject: Re: {original subject}
+Date: {current date}
+
+{Draft content}
+
+--- Original Message ---
+From: {sender}
+To: {recipients}
+Subject: {subject}
+Date: {original date}
+
+{quoted original body}
+```
+
+#### 6. **Commands & Keybindings**
+
+- ✅ **Keybinding**: `Ctrl+Shift+E` to open Email Dashboard
+- ✅ **Command**: "SafeAppeals: Open Email Dashboard" (F1 palette)
+- ✅ **Activity Bar**: Mail icon (Codicon.mail) in sidebar
+- ✅ **Explorer Context Menu**: Integration point for future email operations
+
+### Architecture
+
+```
+Browser Process:
+├── EmailService (IPC client)
+├── EmailDraftService (RAG + LLM drafting)
+├── EmailDashboardPane (ViewPane host)
+├── EmailViewerEditor (EditorPane)
+└── React Components (email-dashboard-tsx/)
+
+IPC Channel (void-channel-email):
+├── parseEmailFile
+├── getEmails
+├── getEmailById
+├── searchEmails
+├── deleteEmail
+├── getStats
+└── createReplyDocument
+
+Electron Main:
+├── EmailMainChannel (IPC handler)
+├── EmailMainService (orchestrator)
+└── EmailIndexService (SQLite + FTS5)
+```
 
 ### Files
 
-- `browser/react/src2/email-dashboard-tsx/EmailDashboard.tsx` - Main component
-- `browser/react/src2/email-dashboard-tsx/index.tsx` - Entry point
+**Common**:
+
+- `common/emailService.ts` - Interface definitions and types
+
+**Browser**:
+
+- `browser/emailService.ts` - IPC client implementation
+- `browser/emailDraftService.ts` - AI draft generation
+- `browser/emailDashboard/emailDashboard.contribution.ts` - View registration
+- `browser/emailDashboard/emailDashboardPane.ts` - ViewPane host
+- `browser/emailViewers/emailViewer.contribution.ts` - Editor registration
+- `browser/emailViewers/emailViewerEditor.ts` - Custom editor pane
+- `browser/emailViewers/emailViewerInput.ts` - Editor input
+- `browser/emailViewers/emailViewerInputSerializer.ts` - Serialization
+
+**React Components**:
+
+- `browser/react/src/email-dashboard-tsx/index.tsx` - Mount function
+- `browser/react/src/email-dashboard-tsx/EmailDashboard.tsx` - Main container
+- `browser/react/src/email-dashboard-tsx/EmailToolbar.tsx` - Toolbar
+- `browser/react/src/email-dashboard-tsx/EmailCard.tsx` - Email cards
+- `browser/react/src/email-dashboard-tsx/EmailFilters.tsx` - Filter panel
+
+**Electron Main**:
+
+- `electron-main/emailMainChannel.ts` - IPC channel
+- `electron-main/email/emailMainService.ts` - Main service
+- `electron-main/email/emailIndexService.ts` - SQLite operations
+
+### Dependencies
+
+- `mailparser` - EML file parsing
+- `pdfjs-dist` - PDF text extraction (shared with RAG)
+- `docx` - DOCX draft reply generation
+- `@vscode/sqlite3` - Database operations
+
+### Documentation
+
+Full documentation available at `docs/email-dashboard/`:
+
+- `README.md` - Overview and quick start
+- `user-guide.md` - End-user documentation
+- `architecture.md` - Technical design
+- `api-reference.md` - Service interfaces
+- `developer-guide.md` - Extension guide
 
 ---
 

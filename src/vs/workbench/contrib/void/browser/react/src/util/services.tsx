@@ -59,6 +59,7 @@ import { IVoidCloudService } from '../../../voidCloudService.js';
 import { IFileDialogService } from '../../../../../../../platform/dialogs/common/dialogs.js';
 import { IOpenerService } from '../../../../../../../platform/opener/common/opener.js';
 import { IEmailService } from '../../../../common/emailService.js';
+import { IEmailDraftService } from '../../../emailDraftService.js';
 import { IFileConverterService } from '../../../fileConverter/fileConverterService.js';
 import { ITimelineService } from '../../../../common/timeline/timelineTypes.js';
 import { IEditorService } from '../../../../../../../workbench/services/editor/common/editorService.js';
@@ -248,6 +249,7 @@ const getReactAccessor = (accessor: ServicesAccessor) => {
 		ITimelineService: accessor.get(ITimelineService),
 		IRAGAutoIndexService: accessor.get(IRAGAutoIndexService),
 		IEmailService: accessor.get(IEmailService),
+		IEmailDraftService: accessor.get(IEmailDraftService),
 
 	} as const
 	return reactAccessor

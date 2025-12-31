@@ -195,7 +195,7 @@ class ContextTrackingService extends Disposable implements IContextTrackingServi
 		}
 
 		// Add estimate for system message (base prompt + tools/rules + directory structure)
-		// This is more realistic than 2000 for workspaces with MCP tools and .voidrules
+		// This is more realistic than 2000 for workspaces with MCP tools and .fileorg.json
 		breakdown.systemTokens = 4000;
 
 		const totalTokens = breakdown.systemTokens + breakdown.userTokens + breakdown.assistantTokens + breakdown.toolTokens;

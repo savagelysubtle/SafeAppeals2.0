@@ -314,19 +314,28 @@ const fastConfig = {
 - Database operations fail
 - System becomes unresponsive
 
-**Recovery:**
+**Recovery (Micro Database Architecture):**
 ```bash
-# Backup corrupted database
-cp workspace.db workspace.db.backup
+# Each workspace has its own isolated database
+# First, identify the workspace hash from logs or by listing:
+ls ~/.safe-appeals-navigator/databases/workspaces/
 
-# Reinitialize (WARNING: loses all data)
-rm workspace.db
-# Restart application to recreate database
+# Backup the corrupted workspace database
+cp ~/.safe-appeals-navigator/databases/workspaces/[hash]/workspace.db workspace.db.backup
+
+# Remove the corrupted workspace database (only affects this workspace)
+rm ~/.safe-appeals-navigator/databases/workspaces/[hash]/workspace.db
+rm ~/.safe-appeals-navigator/databases/workspaces/[hash]/chroma/embeddings.db
+
+# Restart application - will recreate the micro database for this workspace
+# Other workspaces are unaffected
 
 # Alternative: Repair attempt
-sqlite3 workspace.db ".recover" > recovered.sql
+sqlite3 ~/.safe-appeals-navigator/databases/workspaces/[hash]/workspace.db ".recover" > recovered.sql
 sqlite3 new.db < recovered.sql
 ```
+
+**Note:** With micro database architecture, database corruption in one workspace does NOT affect other workspaces.
 
 #### Index Synchronization Issues
 **Symptoms:**
@@ -712,12 +721,17 @@ pkill -f "void"
 # Backup existing data (optional)
 cp -r ~/.safe-appeals-navigator ~/.safe-appeals-navigator.backup
 
-# Clean reset
-rm -rf ~/.safe-appeals-navigator/
-mkdir -p ~/.safe-appeals-navigator/
+# Clean reset - removes ALL workspace micro databases
+rm -rf ~/.safe-appeals-navigator/databases/workspaces/
+mkdir -p ~/.safe-appeals-navigator/databases/workspaces/
 
-# Restart application - will recreate everything
+# Or reset a specific workspace only (safer)
+rm -rf ~/.safe-appeals-navigator/databases/workspaces/[workspace-hash]/
+
+# Restart application - will recreate micro databases as needed
 ```
+
+**Note:** With the micro database architecture, you can reset individual workspaces without affecting others. Each workspace's data is completely isolated.
 
 #### Partial Data Recovery
 **When to use:** Some data corrupted, most documents still accessible

@@ -106,6 +106,38 @@ export const EmailDashboard: React.FC = () => {
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, []); // accessor is stable
 
+	const handleDraftReply = useCallback(async (email: Email) => {
+		try {
+			const emailDraftService = accessor.get('IEmailDraftService');
+			const editorService = accessor.get('IEditorService');
+			const notificationService = accessor.get('INotificationService');
+			const URI = accessor.get('URI');
+
+			// Notify user
+			notificationService.info(`Generating draft reply for "${email.subject}"...`);
+
+			// Generate draft using RAG context
+			const draftResult = await emailDraftService.generateDraftReply(email.id);
+
+			// Save as DOCX
+			const docxUri = await emailDraftService.saveDraftAsDocx(email.id, draftResult.content);
+
+			// Open the generated file
+			await editorService.openEditor({ resource: docxUri });
+
+			// Success notification
+			const sourcesInfo = draftResult.sources.length > 0
+				? ` (referenced: ${draftResult.sources.slice(0, 2).join(', ')})`
+				: '';
+			notificationService.info(`Draft reply created!${sourcesInfo}`);
+		} catch (error) {
+			console.error('[EmailDashboard] Failed to draft reply:', error);
+			const notificationService = accessor.get('INotificationService');
+			notificationService.error(`Failed to generate draft: ${error instanceof Error ? error.message : 'Unknown error'}`);
+		}
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, []); // accessor is stable
+
 	const handleSearch = useCallback(async (query: string) => {
 		setSearchQuery(query);
 		if (!query.trim()) {
@@ -280,6 +312,7 @@ export const EmailDashboard: React.FC = () => {
 								email={email}
 								onClick={() => handleOpenEmail(email)}
 								onDelete={() => handleDeleteEmail(email.id)}
+								onDraftReply={() => handleDraftReply(email)}
 							/>
 						))}
 					</div>

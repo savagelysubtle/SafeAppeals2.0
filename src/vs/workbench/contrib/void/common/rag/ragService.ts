@@ -36,7 +36,8 @@ export class RAGService implements IRAGService {
 	readonly _serviceBrand: undefined;
 
 	private readonly channel: IChannel;
-	private readonly workspaceId: string;
+	// Cache workspaceId but allow recalculation when workspace changes
+	private cachedWorkspaceId: string | null = null;
 
 	constructor(
 		@IMainProcessService private readonly mainProcessService: IMainProcessService,
@@ -44,17 +45,35 @@ export class RAGService implements IRAGService {
 		@IWorkspaceContextService private readonly workspaceContextService: IWorkspaceContextService
 	) {
 		this.channel = this.mainProcessService.getChannel('void-channel-rag');
-		this.workspaceId = this.computeWorkspaceId();
+		// Listen for workspace folder changes and recalculate workspaceId
+		this.workspaceContextService.onDidChangeWorkspaceFolders(() => {
+			const oldId = this.cachedWorkspaceId;
+			this.cachedWorkspaceId = null; // Force recalculation
+			const newId = this.computeWorkspaceId();
+			console.log(`[RAGService] Workspace changed: ${oldId} -> ${newId}`);
+		});
 	}
 
 	/**
 	 * Compute a stable workspace ID from the workspace folder path
-	 * Uses a hash to create a unique identifier
+	 * Uses a hash to create a unique identifier for the micro database
+	 *
+	 * IMPORTANT: Each workspace MUST have its own micro database.
+	 * NO global database is allowed - this prevents cross-case data contamination.
 	 */
 	private computeWorkspaceId(): string {
+		// Return cached value if available
+		if (this.cachedWorkspaceId !== null) {
+			return this.cachedWorkspaceId;
+		}
+
 		const folders = this.workspaceContextService.getWorkspace().folders;
 		if (folders.length === 0) {
-			return 'default';
+			// NO DEFAULT FALLBACK - require a workspace folder
+			// This prevents data from being written to a shared "default" database
+			console.error('[RAGService] ERROR: No workspace folder open. RAG requires a case folder to be open.');
+			console.error('[RAGService] Each case must have its own isolated micro database.');
+			throw new Error('RAG requires a workspace folder to be open. Please open a case folder first. Each case has its own isolated database to prevent data leakage.');
 		}
 
 		const folderPath = folders[0].uri.fsPath;
@@ -68,35 +87,41 @@ export class RAGService implements IRAGService {
 		}
 		// Convert to hex string and take first 16 chars
 		const hexHash = Math.abs(hash).toString(16).padStart(8, '0');
-		return hexHash.substring(0, 16);
+		this.cachedWorkspaceId = hexHash.substring(0, 16);
+		console.log(`[RAGService] Computed workspaceId: ${this.cachedWorkspaceId} for case folder: ${folderPath}`);
+		console.log(`[RAGService] This case will have its own isolated micro database`);
+		return this.cachedWorkspaceId;
 	}
 
 	/**
-	 * Get the current workspace ID
+	 * Get the current workspace ID (dynamically computed if workspace changed)
 	 */
 	getWorkspaceId(): string {
-		return this.workspaceId;
+		return this.computeWorkspaceId();
 	}
 
 	async indexDocument(params: RAGIndexParams): Promise<{ success: boolean; message: string }> {
-		// Serialize URI to JSON for IPC and ensure workspaceId is included
+		const workspaceId = params.workspaceId || this.getWorkspaceId();
+		console.log(`[RAGService] indexDocument with workspaceId: ${workspaceId}`);
 		return this.channel.call('indexDocument', {
 			...params,
 			uri: params.uri.toJSON(),
-			workspaceId: params.workspaceId || this.workspaceId
+			workspaceId
 		});
 	}
 
 	async search(params: RAGSearchParams): Promise<ContextPack> {
-		// Ensure workspaceId is included
+		const workspaceId = params.workspaceId || this.getWorkspaceId();
+		console.log(`[RAGService] search with workspaceId: ${workspaceId}`);
 		return this.channel.call('search', {
 			...params,
-			workspaceId: params.workspaceId || this.workspaceId
+			workspaceId
 		});
 	}
 
 	async getStats(): Promise<RAGStats> {
-		return this.channel.call('getStats', { workspaceId: this.workspaceId });
+		const workspaceId = this.getWorkspaceId();
+		return this.channel.call('getStats', { workspaceId });
 	}
 
 	async deleteDocument(uriOrDocId: URI | string): Promise<void> {
@@ -114,20 +139,24 @@ export class RAGService implements IRAGService {
 			}
 			docId = Math.abs(hash).toString(16).padStart(16, '0').substring(0, 16);
 		}
-		return this.channel.call('deleteDocument', { docId, workspaceId: this.workspaceId });
+		const workspaceId = this.getWorkspaceId();
+		return this.channel.call('deleteDocument', { docId, workspaceId });
 	}
 
 	async isDocumentIndexed(uri: URI): Promise<boolean> {
+		const workspaceId = this.getWorkspaceId();
+		console.log(`[RAGService] isDocumentIndexed with workspaceId: ${workspaceId}`);
 		return this.channel.call('isDocumentIndexed', {
 			uri: uri.toJSON(),
-			workspaceId: this.workspaceId
+			workspaceId
 		});
 	}
 
 	async getDocumentsByType(isPolicyManual: boolean): Promise<any[]> {
+		const workspaceId = this.getWorkspaceId();
 		return this.channel.call('getDocumentsByType', {
 			isPolicyManual,
-			workspaceId: this.workspaceId
+			workspaceId
 		});
 	}
 
@@ -142,7 +171,8 @@ export class RAGService implements IRAGService {
 	}
 
 	async clearAllEmbeddings(): Promise<{ success: boolean; message: string }> {
-		return this.channel.call('clearAllEmbeddings', { workspaceId: this.workspaceId });
+		const workspaceId = this.getWorkspaceId();
+		return this.channel.call('clearAllEmbeddings', { workspaceId });
 	}
 
 	async testDoclingExtraction(uri: URI): Promise<{ standard: any; docling: any; doclingError?: any }> {

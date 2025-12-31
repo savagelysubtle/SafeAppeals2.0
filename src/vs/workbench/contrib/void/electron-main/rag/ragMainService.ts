@@ -12,7 +12,7 @@ import { HybridRetriever } from '../../common/rag/ragHybridRetriever.js';
 import { IRAGPathService } from '../../common/rag/ragPathService.js';
 import { LocalCrossEncoderReranker } from '../../common/rag/ragReranker.js';
 import { ContextPack, IRAGMainService, RAGIndexParams, RAGSearchParams, RAGStats } from '../../common/rag/ragServiceTypes.js';
-import { ChromaPersistentAdapter, PersistentVectorAdapterConfig, VectorAdapter } from '../../common/rag/ragVectorAdapter.js';
+import { VectorAdapter } from '../../common/rag/ragVectorAdapter.js';
 import { RAGFileService } from './ragFileService.js';
 import { RAGIndexService } from './ragIndexService.js';
 import { WorkspaceRAGManager } from './ragWorkspaceManager.js';
@@ -20,14 +20,18 @@ import { WorkspaceRAGManager } from './ragWorkspaceManager.js';
 export class RAGMainService implements IRAGMainService {
 	readonly _serviceBrand: undefined;
 
-	// Legacy global services (for backwards compatibility)
-	private globalIndexService: RAGIndexService;
+	// File extraction service (shared - stateless, no case data stored)
 	private fileService: RAGFileService;
-	private globalVectorAdapter!: VectorAdapter;
-	private globalHybridRetriever!: HybridRetriever;
-	private globalReranker!: LocalCrossEncoderReranker;
 
-	// Per-workspace management
+	// ========== MICRO DATABASE ARCHITECTURE ==========
+	// Each workspace gets its own isolated "micro database" consisting of:
+	//   - workspace.db (SQLite) - document metadata, chunks, FTS5 index
+	//   - chroma/embeddings.db (SQLite) - vector embeddings
+	//   - emails.db (SQLite) - email data
+	//
+	// NO GLOBAL DATABASE EXISTS - all data is per-workspace
+	// This prevents cross-case data contamination
+	// ================================================
 	private workspaceManager: WorkspaceRAGManager;
 
 	private initialized = false;
@@ -38,7 +42,6 @@ export class RAGMainService implements IRAGMainService {
 		@ILogService private readonly logService: ILogService,
 		@IRAGPathService private readonly pathService: IRAGPathService
 	) {
-		this.globalIndexService = new RAGIndexService(logService, pathService);
 		this.fileService = new RAGFileService(logService);
 		this.workspaceManager = new WorkspaceRAGManager(logService, pathService);
 	}
@@ -47,6 +50,12 @@ export class RAGMainService implements IRAGMainService {
 		if (this.initialized) return;
 
 		try {
+			// VERSION MARKER: v2.0 - MICRO DATABASE MODE (no global database)
+			this.logService.info('RAG: ╔════════════════════════════════════════════════════════════════════╗');
+			this.logService.info('RAG: ║  INITIALIZING RAG SERVICE v2.0 - MICRO DATABASE ARCHITECTURE       ║');
+			this.logService.info('RAG: ║  Each workspace has its own isolated database (no global DB)       ║');
+			this.logService.info('RAG: ╚════════════════════════════════════════════════════════════════════╝');
+
 			// Start Docling Serve in the background
 			await this.startDoclingServe();
 
@@ -55,48 +64,11 @@ export class RAGMainService implements IRAGMainService {
 				this.logService.info('RAG: Using local embeddings (OpenAI API key no longer required)');
 			}
 
-			// Ensure directories exist
+			// Ensure base directories exist (workspace micro databases created on-demand)
 			await this.pathService.ensureDirectories();
 
-			// Initialize global services (for backwards compatibility / fallback)
-			const chromaPath = this.pathService.getGlobalChromaDir();
-
-			const config: PersistentVectorAdapterConfig = {
-				persistPath: chromaPath,
-				useReranking: true // Enable reranking by default
-			};
-
-			this.globalVectorAdapter = new ChromaPersistentAdapter(config, this.logService);
-
-			// Log first-time initialization message
-			this.logService.info('Initializing local embedding model (first time may take 1-2 minutes to download ~23 MB model)...');
-			await this.globalVectorAdapter.initialize();
-			this.logService.info('Local embedding model ready');
-
-			// Initialize index service
-			await this.globalIndexService.initialize();
-
-			// Initialize hybrid retriever
-			this.globalHybridRetriever = new HybridRetriever(
-				this.globalVectorAdapter,
-				this.globalIndexService,
-				this.logService
-			);
-
-			// Initialize reranker
-			const modelCachePath = chromaPath + '/models';
-			this.globalReranker = new LocalCrossEncoderReranker(this.logService);
-			await this.globalReranker.initialize(modelCachePath);
-
-			// Ensure collections exist
-			await this.globalVectorAdapter.ensureCollections('workspace_all');
-
-			// CRITICAL: Reload embeddings from database if they exist
-			// The in-memory vector store loses all embeddings on restart
-			await this.reloadEmbeddingsFromDatabase();
-
 			this.initialized = true;
-			this.logService.info('RAG service initialized successfully');
+			this.logService.info('RAG: ✓ Service initialized - micro databases will be created per-workspace');
 		} catch (error) {
 			this.logService.error('Failed to initialize RAG service:', error);
 			throw error;
@@ -107,42 +79,71 @@ export class RAGMainService implements IRAGMainService {
 	 * Switch to a different workspace RAG context
 	 */
 	async switchWorkspace(workspaceId: string): Promise<void> {
-		this.logService.info(`RAG: Switching to workspace ${workspaceId}`);
-		await this.workspaceManager.switchWorkspace(workspaceId);
+		this.logService.info(`RAG: switchWorkspace called with: "${workspaceId}" (type: ${typeof workspaceId})`);
+
+		if (!workspaceId || workspaceId === 'undefined' || workspaceId === 'null') {
+			this.logService.error(`RAG: Invalid workspaceId received: "${workspaceId}"`);
+			return;
+		}
+
+		try {
+			await this.workspaceManager.switchWorkspace(workspaceId);
+			this.logService.info(`RAG: Successfully switched to workspace ${workspaceId}`);
+		} catch (error) {
+			this.logService.error(`RAG: Failed to switch workspace:`, error);
+			throw error;
+		}
 	}
 
 	/**
-	 * Get the appropriate RAG instance for the given workspaceId
-	 * Falls back to global if no workspaceId or workspace not found
+	 * Get the RAG micro database instance for the given workspaceId
+	 *
+	 * MICRO DATABASE ARCHITECTURE:
+	 * - Each workspace has its own isolated database (no global DB)
+	 * - workspaceId is REQUIRED for ALL operations
+	 * - This prevents cross-case data contamination
+	 *
+	 * @throws Error if workspaceId is missing or invalid
 	 */
-	private async getWorkspaceInstance(workspaceId?: string): Promise<{
+	private async getWorkspaceInstance(workspaceId: string): Promise<{
 		vectorAdapter: VectorAdapter;
 		indexService: RAGIndexService;
 		hybridRetriever: HybridRetriever;
 		reranker: LocalCrossEncoderReranker;
 	}> {
-		if (workspaceId) {
-			const instance = await this.workspaceManager.getOrCreateWorkspace(workspaceId);
-			return {
-				vectorAdapter: instance.vectorAdapter,
-				indexService: instance.indexService,
-				hybridRetriever: instance.hybridRetriever,
-				reranker: instance.reranker
-			};
+		this.logService.info(`RAG: getWorkspaceInstance called with workspaceId: "${workspaceId}"`);
+
+		// STRICT VALIDATION - no global database allowed
+		if (!workspaceId || workspaceId === 'undefined' || workspaceId === 'null' || workspaceId.trim() === '') {
+			const error = new Error(
+				`RAG: workspaceId is REQUIRED but received: "${workspaceId}". ` +
+				`Each workspace MUST have its own isolated micro database. ` +
+				`NO global database is allowed to prevent cross-case data contamination.`
+			);
+			this.logService.error(error.message);
+			throw error;
 		}
 
-		// Fall back to global
+		this.logService.info(`RAG: Accessing micro database for workspace: ${workspaceId}`);
+		const instance = await this.workspaceManager.getOrCreateWorkspace(workspaceId);
 		return {
-			vectorAdapter: this.globalVectorAdapter,
-			indexService: this.globalIndexService,
-			hybridRetriever: this.globalHybridRetriever,
-			reranker: this.globalReranker
+			vectorAdapter: instance.vectorAdapter,
+			indexService: instance.indexService,
+			hybridRetriever: instance.hybridRetriever,
+			reranker: instance.reranker
 		};
 	}
 
 	async indexDocument(params: RAGIndexParams): Promise<{ success: boolean; message: string }> {
 		if (!this.initialized) {
 			await this.initialize();
+		}
+
+		// Validate workspaceId is provided
+		if (!params.workspaceId) {
+			const error = `RAG indexDocument: workspaceId is REQUIRED but was not provided`;
+			this.logService.error(error);
+			return { success: false, message: error };
 		}
 
 		// Get workspace-specific instance
@@ -270,6 +271,17 @@ export class RAGMainService implements IRAGMainService {
 			await this.initialize();
 		}
 
+		// Validate workspaceId is provided
+		if (!params.workspaceId) {
+			this.logService.error('RAG search: workspaceId is REQUIRED but was not provided');
+			return {
+				answerContext: '',
+				attributions: [],
+				totalResults: 0,
+				responseTime: 0
+			};
+		}
+
 		// Get workspace-specific instance
 		const { hybridRetriever, indexService, reranker } = await this.getWorkspaceInstance(params.workspaceId);
 
@@ -395,9 +407,14 @@ export class RAGMainService implements IRAGMainService {
 		}
 	}
 
-	async getStats(workspaceId?: string): Promise<RAGStats> {
+	async getStats(workspaceId: string): Promise<RAGStats> {
 		if (!this.initialized) {
 			await this.initialize();
+		}
+
+		if (!workspaceId) {
+			this.logService.error('RAG getStats: workspaceId is REQUIRED');
+			return { documents: [], chunks: { totalChunks: 0, avgTokens: 0 }, totalDocuments: 0, totalSize: 0 };
 		}
 
 		try {
@@ -414,9 +431,14 @@ export class RAGMainService implements IRAGMainService {
 		}
 	}
 
-	async deleteDocument(docId: string, workspaceId?: string): Promise<void> {
+	async deleteDocument(docId: string, workspaceId: string): Promise<void> {
 		if (!this.initialized) {
 			await this.initialize();
+		}
+
+		if (!workspaceId) {
+			this.logService.error('RAG deleteDocument: workspaceId is REQUIRED');
+			throw new Error('workspaceId is required for deleteDocument');
 		}
 
 		try {
@@ -435,15 +457,20 @@ export class RAGMainService implements IRAGMainService {
 		}
 	}
 
-	async isDocumentIndexed(uri: URI, workspaceId?: string): Promise<boolean> {
+	async isDocumentIndexed(uri: URI, workspaceId: string): Promise<boolean> {
 		if (!this.initialized) {
 			await this.initialize();
+		}
+
+		if (!workspaceId) {
+			this.logService.error('RAG isDocumentIndexed: workspaceId is REQUIRED');
+			return false;
 		}
 
 		try {
 			const { indexService } = await this.getWorkspaceInstance(workspaceId);
 			const docId = indexService.generateDocumentId(uri);
-			this.logService.info(`Checking if document is indexed: ${uri.fsPath} (docId: ${docId}, workspace: ${workspaceId || 'global'})`);
+			this.logService.info(`Checking if document is indexed: ${uri.fsPath} (docId: ${docId}, workspace: ${workspaceId})`);
 
 			const doc = await indexService.getDocumentById(docId);
 			const isIndexed = doc !== null;
@@ -456,9 +483,14 @@ export class RAGMainService implements IRAGMainService {
 		}
 	}
 
-	async getDocumentsByType(isPolicyManual: boolean, workspaceId?: string): Promise<any[]> {
+	async getDocumentsByType(isPolicyManual: boolean, workspaceId: string): Promise<any[]> {
 		if (!this.initialized) {
 			await this.initialize();
+		}
+
+		if (!workspaceId) {
+			this.logService.error('RAG getDocumentsByType: workspaceId is REQUIRED');
+			return [];
 		}
 
 		try {
@@ -470,15 +502,21 @@ export class RAGMainService implements IRAGMainService {
 		}
 	}
 
-	async clearAllEmbeddings(workspaceId?: string): Promise<{ success: boolean; message: string }> {
+	async clearAllEmbeddings(workspaceId: string): Promise<{ success: boolean; message: string }> {
 		if (!this.initialized) {
 			await this.initialize();
+		}
+
+		if (!workspaceId) {
+			const error = 'RAG clearAllEmbeddings: workspaceId is REQUIRED';
+			this.logService.error(error);
+			return { success: false, message: error };
 		}
 
 		try {
 			const { vectorAdapter, indexService } = await this.getWorkspaceInstance(workspaceId);
 
-			this.logService.info(`RAG: Clearing all embeddings and metadata for workspace ${workspaceId || 'global'}...`);
+			this.logService.info(`RAG: Clearing all embeddings and metadata for workspace ${workspaceId}...`);
 			this.logService.info('RAG: Step 1/3 - Clearing vector embeddings...');
 
 			// Step 1: Clear vector store (embeddings)
@@ -545,35 +583,6 @@ export class RAGMainService implements IRAGMainService {
 			docling: doclingResult,
 			doclingError
 		};
-	}
-
-	/**
-	 * Reload embeddings from database into vector store
-	 * This is necessary because the in-memory vector store loses data on restart
-	 */
-	private async reloadEmbeddingsFromDatabase(): Promise<void> {
-		try {
-			this.logService.info('Checking if embeddings need to be reloaded from database...');
-
-			// Get all documents from database
-			const stats = await this.globalIndexService.getStats();
-			const totalDocs = stats.totalDocuments;
-
-			if (totalDocs === 0) {
-				this.logService.info('No documents in database, skipping embedding reload');
-				return;
-			}
-
-			this.logService.warn(`Found ${totalDocs} documents in database but vector store is empty.`);
-			this.logService.warn('Embeddings will need to be regenerated. Use "RAG: Clear All Embeddings" and re-index documents.');
-			this.logService.warn('Note: With local embeddings, this is free but takes time.');
-
-			// TODO: In the future, we could store embeddings in SQLite and reload them
-			// For now, user must clear and re-index with the new local embedding model
-
-		} catch (error) {
-			this.logService.error('Failed to check for embeddings reload:', error);
-		}
 	}
 
 	/**

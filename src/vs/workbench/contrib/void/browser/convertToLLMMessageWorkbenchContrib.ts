@@ -21,8 +21,8 @@ class ConvertContribWorkbenchContribution extends Disposable implements IWorkben
 
 		const initializeURI = (uri: URI) => {
 			this.workspaceContext.getWorkspace()
-			const voidRulesURI = URI.joinPath(uri, '.voidrules')
-			this.voidModelService.initializeModel(voidRulesURI)
+			const fileOrgURI = URI.joinPath(uri, '.fileorg.json')
+			this.voidModelService.initializeModel(fileOrgURI)
 		}
 
 		// call

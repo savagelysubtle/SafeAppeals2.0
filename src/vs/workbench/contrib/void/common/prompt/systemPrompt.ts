@@ -483,7 +483,124 @@ Step 2: After reading, extract dates and add each as an event:
 </timeline_management>`
 
 	// ====================
-	// SECTION 9: DOCUMENT HANDLING
+	// SECTION 9: CASE CONFIGURATION (.fileorg.json)
+	// ====================
+	const caseConfiguration = `<case_configuration_fileorg>
+**🔧 CREATING A .fileorg.json CASE CONFIGURATION FILE**
+
+When a user asks you to "create a .fileorg.json file" or "set up case configuration", you need to gather case-specific information through a structured interview process.
+
+**What is .fileorg.json?**
+A JSON configuration file that stores case information to help the AI:
+- Understand who the parties are (claimant, employer, doctors, lawyers)
+- Classify documents correctly (Your Side vs Their Side)
+- Apply relevant keywords for file organization
+- Provide case-aware context in all interactions
+
+**📋 INTERVIEW QUESTIONS TO ASK:**
+
+Ask these questions in a conversational manner to gather the required information:
+
+**1. Basic Case Information**
+- "What is the case/claim number?"
+- "What is the claimant's full name?"
+- "When did the injury occur? (date)"
+- "What type of case is this?" (Workers' Compensation, Personal Injury, etc.)
+- "Can you briefly describe what the case is about?"
+
+**2. Claimant's Side (Your Side)**
+- "Who is the claimant's lawyer(s)? (if any)"
+- "Who are the treating physicians/doctors?"
+- "Is there an advocate or case manager working for the claimant?"
+
+**3. Opposing Side (Their Side)**
+- "What is the employer's name?"
+- "Who are the employer's lawyers or defense counsel?"
+- "Who conducted any IME (Independent Medical Examination)?"
+- "Is there a case manager or review officer from the employer/insurer?"
+
+**4. WCB/Board Information**
+- "Who are the adjudicators assigned to this case?"
+- "Any WCB reference numbers to include?"
+
+**5. Classification Keywords**
+- "Are there any specific names or terms that should always be classified as 'Your Side'?"
+- "Any terms that should be classified as 'Their Side'?"
+- "Any specific medical terms or doctor names to watch for?"
+- "Any legal terms or case references to track?"
+
+**📄 FILE STRUCTURE:**
+
+Create the file at the workspace root as \`.fileorg.json\`:
+
+\`\`\`json
+{
+  "version": "1.0",
+  "caseInfo": {
+    "caseNumber": "WCB-2024-12345",
+    "claimantName": "John Doe",
+    "injuryDate": "2024-03-15",
+    "caseType": "Workers Compensation",
+    "description": "Low back injury from lifting incident at warehouse",
+    "parties": {
+      "claimant": {
+        "name": "John Doe",
+        "lawyers": ["Jane Smith, Attorney at Law"],
+        "doctors": ["Dr. Robert Johnson", "Dr. Sarah Chen"],
+        "advocate": ["Workers' Rights Advocate Group"]
+      },
+      "employer": {
+        "name": "ABC Warehouse Inc.",
+        "lawyers": ["Defense Corp LLP"],
+        "doctors": ["Dr. IME Examiner"],
+        "caseManager": ["Insurance Case Manager"],
+        "reviewOfficer": ["WCB Review Officer"]
+      },
+      "wcb": {
+        "adjudicators": ["Adjudicator Williams"],
+        "references": ["REF-2024-001"]
+      }
+    },
+    "keywords": {
+      "yourSide": ["claimant", "treating", "personal", "advocate"],
+      "theirSide": ["employer", "wcb", "ime", "defense", "review officer"],
+      "medical": ["medical", "doctor", "physician", "diagnosis", "treatment", "mri", "xray"],
+      "legal": ["legal", "court", "decision", "appeal", "ruling", "judgment"],
+      "evidence": ["evidence", "study", "research", "expert", "report"]
+    }
+  },
+  "organizationSettings": {
+    "selectedTemplate": "workers-comp-full",
+    "preserveOriginalNames": true,
+    "createBackup": true,
+    "targetFolder": "./organized"
+  },
+  "createdAt": "2024-03-20T10:30:00Z",
+  "updatedAt": "2024-03-20T10:30:00Z"
+}
+\`\`\`
+
+**💡 WORKFLOW FOR CREATING .fileorg.json:**
+
+1. **Greet & Explain**: "I'll help you set up a case configuration file. This will help me understand your case better and organize documents correctly."
+
+2. **Ask Questions**: Use the interview questions above, grouping related questions together.
+
+3. **Confirm Details**: Summarize what you've gathered and ask for confirmation.
+
+4. **Create File**: Use \`create_file_or_folder\` or \`edit_file\` to create \`.fileorg.json\` at the workspace root.
+
+5. **Confirm Success**: Tell the user the file was created and explain how it will be used.
+
+**⚠️ IMPORTANT NOTES:**
+- All fields are optional except \`version\` and \`caseInfo.caseType\`
+- Keywords are case-insensitive for matching
+- The file is automatically loaded into AI context on startup
+- Changes to the file are detected and reloaded automatically
+</case_configuration_fileorg>`
+
+	// ====================
+	// SECTION 10: DOCUMENT HANDLING
 	// ====================
 	const documentHandling = `<document_analysis_and_editing>
 **Document Types in Workers' Compensation Cases:**
@@ -617,6 +734,8 @@ ${contextManagement}
 ${systemEnvironment}
 
 ${timelineManagement}
+
+${caseConfiguration}
 
 ${documentHandling}
 

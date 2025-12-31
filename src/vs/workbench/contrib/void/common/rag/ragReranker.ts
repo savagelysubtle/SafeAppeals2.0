@@ -26,19 +26,47 @@ export class LocalCrossEncoderReranker {
 	private model: any;
 	private tokenizer: any;
 	private initialized = false;
+	private initializing = false;
+	private initPromise: Promise<void> | null = null;
+	private cachePath: string | null = null;
 	private readonly MODEL_NAME = 'Xenova/ms-marco-MiniLM-L-6-v2';
 	private readonly BATCH_SIZE = 10; // Process 10 pairs at a time for memory efficiency
 
 	constructor(private logService: ILogService) { }
 
 	/**
+	 * Set the cache path for lazy initialization
+	 * Call this instead of initialize() for faster workspace creation
+	 */
+	setCachePath(cachePath: string): void {
+		this.cachePath = cachePath;
+	}
+
+	/**
 	 * Initialize the cross-encoder model
 	 * First-time initialization may take 1-2 minutes to download ~90MB model
 	 * @param cachePath Path to cache downloaded models
 	 */
-	async initialize(cachePath: string): Promise<void> {
+	async initialize(cachePath?: string): Promise<void> {
+		if (cachePath) {
+			this.cachePath = cachePath;
+		}
 		if (this.initialized) return;
+		if (this.initializing && this.initPromise) {
+			// Already initializing, wait for it
+			return this.initPromise;
+		}
 
+		this.initializing = true;
+		this.initPromise = this.doInitialize();
+		try {
+			await this.initPromise;
+		} finally {
+			this.initializing = false;
+		}
+	}
+
+	private async doInitialize(): Promise<void> {
 		try {
 			this.logService.info('Initializing cross-encoder reranker (ms-marco-MiniLM-L-6-v2)...');
 			this.logService.info('First-time initialization may take 1-2 minutes to download ~90 MB model');
@@ -46,7 +74,9 @@ export class LocalCrossEncoderReranker {
 			const transformers = await import('@xenova/transformers');
 
 			// Set cache directory
-			transformers.env.cacheDir = cachePath;
+			if (this.cachePath) {
+				transformers.env.cacheDir = this.cachePath;
+			}
 
 			// Use AutoModel and AutoTokenizer for cross-encoding
 			this.tokenizer = await transformers.AutoTokenizer.from_pretrained(this.MODEL_NAME);
@@ -72,8 +102,13 @@ export class LocalCrossEncoderReranker {
 		documents: Array<{ id: string; text: string; score: number }>,
 		topN: number
 	): Promise<RerankedResult[]> {
+		// Lazy initialization - initialize on first use if not already done
 		if (!this.initialized) {
-			throw new Error('Reranker not initialized. Call initialize() first.');
+			if (!this.cachePath) {
+				throw new Error('Reranker not initialized and no cache path set. Call setCachePath() or initialize() first.');
+			}
+			this.logService.info('Reranker: Lazy initialization triggered on first rerank call');
+			await this.initialize();
 		}
 
 		if (documents.length === 0) {

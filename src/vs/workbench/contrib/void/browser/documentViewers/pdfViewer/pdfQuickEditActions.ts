@@ -279,7 +279,8 @@ class PDFAddToChatAction extends Action2 {
 				notificationService.info('Indexing PDF for the first time...');
 				const indexResult = await ragService.indexDocument({
 					uri: input.resource,
-					isPolicyManual: true // PDFs are typically policy manuals
+					isPolicyManual: true, // PDFs are typically policy manuals
+					workspaceId: ragService.getWorkspaceId()
 				});
 
 				if (!indexResult.success) {
@@ -326,7 +327,8 @@ class PDFAddToChatAction extends Action2 {
 				const ragResults = await ragService.search({
 					query: searchQuery,
 					scope: 'policy_manual',
-					limit: 5 // Get top 5 most relevant chunks
+					limit: 5, // Get top 5 most relevant chunks
+					workspaceId: ragService.getWorkspaceId()
 				});
 
 				// Format the RAG context

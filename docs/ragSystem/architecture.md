@@ -400,22 +400,26 @@ Result Reranking
 - Model unloading on service disposal
 - Process monitoring and warnings
 
-## 🗂️ Per-Workspace RAG Architecture
+## 🗂️ Micro Database Architecture (v2.0)
 
-The RAG system maintains **complete isolation** between different VS Code workspaces. Each workspace has its own:
+The RAG system uses a **MICRO DATABASE ARCHITECTURE** with **complete isolation** between workspaces. There is **NO global database** - each workspace has its own dedicated micro databases.
 
-### Workspace-Specific Resources
-- **SQLite Database**: Separate document and chunk metadata per workspace
-- **Vector Embeddings**: Isolated ChromaDB collections per workspace
-- **Index Service**: Independent RAG instances managed by `WorkspaceRAGManager`
+### Workspace-Specific Micro Databases
+Each workspace gets its own isolated set of:
+- **SQLite Database** (`workspace.db`): Document metadata, chunks, FTS5 index
+- **Vector Database** (`chroma/embeddings.db`): Local vector embeddings
+- **Email Database** (`emails.db`): Email-specific data (if applicable)
+- **RAG Instance**: Independent `WorkspaceRAGInstance` with all components
 
 ### Architecture Diagram
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │                   WorkspaceRAGManager                           │
+│            (NO global database - workspaceId REQUIRED)          │
 ├─────────────────────────────────────────────────────────────────┤
 │  Workspace A (hash: a1b2c3d4)   │  Workspace B (hash: e5f6g7h8) │
 │  ┌───────────────────────────┐  │  ┌───────────────────────────┐│
+│  │ MICRO DATABASE            │  │  │ MICRO DATABASE            ││
 │  │ • VectorAdapter           │  │  │ • VectorAdapter           ││
 │  │ • RAGIndexService         │  │  │ • RAGIndexService         ││
 │  │ • HybridRetriever         │  │  │ • HybridRetriever         ││
@@ -423,29 +427,42 @@ The RAG system maintains **complete isolation** between different VS Code worksp
 │  └───────────────────────────┘  │  └───────────────────────────┘│
 │            ↓                    │            ↓                  │
 │  databases/workspaces/a1b2c3d4/ │  databases/workspaces/e5f6g7h8/│
-│  ├── workspace.db              │  ├── workspace.db              │
-│  └── chroma/                   │  └── chroma/                   │
+│  ├── workspace.db               │  ├── workspace.db              │
+│  ├── emails.db                  │  ├── emails.db                 │
+│  └── chroma/embeddings.db       │  └── chroma/embeddings.db      │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-### Workspace ID Generation
+### Workspace ID Generation & Validation
 ```typescript
-// Browser-side (RAGService)
+// Browser-side (RAGService) - THROWS if no workspace open
 private computeWorkspaceId(): string {
-    const folder = this.workspaceContextService.getWorkspace().folders[0];
+    const folders = this.workspaceContextService.getWorkspace().folders;
+    if (folders.length === 0) {
+        throw new Error('RAG requires an open workspace folder');
+    }
+    const folder = folders[0];
     return crypto.createHash('sha256')
         .update(folder.uri.fsPath)
         .digest('hex')
-        .substring(0, 16); // 16-char stable hash
+        .substring(0, 8); // 8-char stable hash
 }
 ```
+
+### Workspace ID Validation Layers
+The system validates `workspaceId` at **5 layers** to prevent any global database access:
+1. **Browser-side**: `RAGService.computeWorkspaceId()` throws if no workspace
+2. **IPC Channel**: `RAGMainChannel` rejects calls without `workspaceId`
+3. **Main Service**: `RAGMainService` validates before delegating
+4. **Workspace Manager**: `WorkspaceRAGManager` validates before creating instances
+5. **Index Service**: `RAGIndexService` requires `workspaceId` in constructor
 
 ### Automatic Workspace Switching
 When the user switches workspaces:
 1. `RAGService` detects workspace change via `onDidChangeWorkspaceFolders`
 2. Calls `switchWorkspace(newWorkspaceId)` to main process
-3. `WorkspaceRAGManager` creates or retrieves the correct RAG instance
-4. All subsequent RAG operations use the new workspace context
+3. `WorkspaceRAGManager` creates or retrieves the correct micro database
+4. All subsequent RAG operations use the new workspace's isolated database
 
 ### Auto-Indexing on Startup
 When a workspace is opened:
@@ -547,20 +564,37 @@ interface VectorRetriever {
 
 ## 🚀 Deployment Architecture
 
-### Directory Structure
+### Directory Structure (Micro Database Architecture v2.0)
+
+The RAG system uses **per-workspace micro databases** for complete data isolation. Each workspace has its own dedicated SQLite and vector databases - **no global database exists**.
 
 ```
 ~/.safe-appeals-navigator/
 ├── databases/
-│   ├── workspace.db          # SQLite database
-│   └── chroma/              # Vector embeddings
-├── models/                  # ML model cache
-│   ├── Xenova/
-│   └── cross-encoders/
-└── logs/                    # System logs
-    ├── rag.log
-    └── performance.log
+│   └── workspaces/                    # Per-workspace micro databases
+│       ├── a1b2c3d4/                  # Workspace 1 (8-char hash of folder path)
+│       │   ├── workspace.db           # SQLite: documents, chunks, FTS5
+│       │   ├── emails.db              # Email data (if applicable)
+│       │   └── chroma/
+│       │       └── embeddings.db      # Vector embeddings
+│       ├── e5f6g7h8/                  # Workspace 2
+│       │   ├── workspace.db
+│       │   └── chroma/
+│       │       └── embeddings.db
+│       └── [more workspaces...]
+├── models/                            # ML model cache (shared)
+│   └── Xenova/
+│       ├── all-MiniLM-L6-v2/         # Embedding model
+│       └── ms-marco-MiniLM-L-6-v2/   # Reranker model
+└── logs/                              # System logs
+    └── rag-debug.log
 ```
+
+**Key Points:**
+- ✅ **No global database** - all data is isolated per workspace
+- ✅ **workspaceId is REQUIRED** for all RAG operations
+- ✅ Documents from Workspace A cannot leak into Workspace B
+- ✅ Each workspace can be independently backed up or deleted
 
 ### Environment Setup
 

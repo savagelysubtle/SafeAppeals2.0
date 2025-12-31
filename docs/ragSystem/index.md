@@ -48,13 +48,20 @@ The Retrieval-Augmented Generation (RAG) system in Void provides sophisticated d
 
 | Component | Status | Version |
 |-----------|--------|---------|
-| Core RAG Service | ✅ Active | v2.1 |
-| Per-Workspace Isolation | ✅ Active | WorkspaceRAGManager |
-| Vector Search | ✅ Active | Chroma Persistent |
+| Core RAG Service | ✅ Active | **v2.0 MICRO DATABASE** |
+| Workspace Isolation | ✅ Active | **Per-workspace micro databases** |
+| Global Database | ❌ **REMOVED** | N/A - workspaceId required |
+| Vector Search | ✅ Active | Chroma Persistent (per-workspace) |
 | Document Indexing | ✅ Active | Hierarchical Chunks |
-| Cross-Encoder | ✅ Active | Local MS MARCO |
+| Cross-Encoder | ✅ Active | Local MS MARCO (lazy init) |
 | Docling Integration | ✅ Active | Hybrid Mode |
 | Auto-Index on Drop | ✅ Active | RAGAutoIndexService |
+
+### Micro Database Architecture Highlights
+- ✅ **NO global database** - all data isolated per workspace
+- ✅ **workspaceId REQUIRED** for all operations
+- ✅ Policy manuals and case files kept logically separate
+- ✅ Each workspace can be independently managed
 
 ## 🔗 Related Documentation
 

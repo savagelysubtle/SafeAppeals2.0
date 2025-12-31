@@ -103,14 +103,19 @@ export class EmailService implements IEmailService {
 	}
 
 	async createReplyDocument(emailId: string, draftContent: string): Promise<URI> {
-		// Get the email to determine the reply folder path
+		// Get the email (for metadata used in filename)
 		const email = await this.getEmailById(emailId);
 		if (!email) {
 			throw new Error(`Email not found: ${emailId}`);
 		}
 
-		// Create reply folder path: caseFolderPath/replies
-		const replyFolderPath = `${email.caseFolderPath}/replies`;
+		// Use centralized email-replies folder at workspace root
+		const folders = this.workspaceContextService.getWorkspace().folders;
+		if (folders.length === 0) {
+			throw new Error('No workspace folder open');
+		}
+		const workspaceRoot = folders[0].uri.fsPath.replace(/\\/g, '/');
+		const replyFolderPath = `${workspaceRoot}/email-replies`;
 
 		const resultPath = await this.channel.call<string>('createReplyDocument', {
 			workspaceId: this.workspaceId,
@@ -190,9 +195,11 @@ export class EmailService implements IEmailService {
 		}
 
 		// Otherwise, return the parent directory of the file
-		const lastSlash = filePath.lastIndexOf('/');
+		// Normalize path separators for cross-platform compatibility
+		const normalizedFilePath = filePath.replace(/\\/g, '/');
+		const lastSlash = normalizedFilePath.lastIndexOf('/');
 		if (lastSlash !== -1) {
-			return filePath.substring(0, lastSlash);
+			return normalizedFilePath.substring(0, lastSlash);
 		}
 
 		return filePath;
