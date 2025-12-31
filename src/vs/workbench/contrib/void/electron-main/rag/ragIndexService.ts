@@ -15,7 +15,7 @@ import { ChunkRecord, DocumentRecord, ExtractedContent, RAGStats, RAGStorageScop
 export interface IndexDocumentParams {
 	uri: URI;
 	isPolicyManual: boolean;
-	workspaceId?: string;
+	workspaceId: string; // REQUIRED - each workspace has its own isolated micro database
 	content: string;
 	metadata: ExtractedContent['metadata'];
 }
@@ -40,13 +40,17 @@ interface DocumentStructure {
 export class RAGIndexService {
 	private db: Database | null = null;
 	private static readonly CURRENT_SCHEMA_VERSION = 2; // Increment when schema changes
-	private readonly workspaceId: string | undefined;
+	private readonly workspaceId: string; // REQUIRED - no global database allowed
 
 	constructor(
 		@ILogService private readonly logService: ILogService,
 		@IRAGPathService private readonly pathService: IRAGPathService,
-		workspaceId?: string
+		workspaceId: string // REQUIRED - each workspace must have its own micro database
 	) {
+		// Validate workspaceId - NO global fallback allowed
+		if (!workspaceId || workspaceId === 'undefined' || workspaceId === 'null' || workspaceId.trim() === '') {
+			throw new Error('RAGIndexService: workspaceId is REQUIRED. Each workspace must have its own isolated micro database. No global database is allowed.');
+		}
 		this.workspaceId = workspaceId;
 	}
 
@@ -54,11 +58,10 @@ export class RAGIndexService {
 		if (this.db) return;
 
 		try {
-			// Use workspace-specific path if workspaceId is set, otherwise global
-			const dbPath = this.workspaceId
-				? this.pathService.getWorkspaceSqlitePath(this.workspaceId)
-				: this.pathService.getGlobalSqlitePath();
-			this.logService.info(`RAG: Initializing SQLite database at: ${dbPath}${this.workspaceId ? ` (workspace: ${this.workspaceId})` : ' (global)'}`);
+			// ALWAYS use workspace-specific path - NO global database
+			const dbPath = this.pathService.getWorkspaceSqlitePath(this.workspaceId);
+			this.logService.info(`RAG: Initializing SQLite micro database for workspace: ${this.workspaceId}`);
+			this.logService.info(`RAG: Database path: ${dbPath}`);
 
 			// Ensure parent directory exists
 			const fs = await import('fs');
@@ -66,7 +69,7 @@ export class RAGIndexService {
 			const parentDir = path.dirname(dbPath);
 
 			if (!fs.existsSync(parentDir)) {
-				this.logService.info(`RAG: Creating parent directory: ${parentDir}`);
+				this.logService.info(`RAG: Creating workspace database directory: ${parentDir}`);
 				fs.mkdirSync(parentDir, { recursive: true });
 			}
 
@@ -76,7 +79,7 @@ export class RAGIndexService {
 			const sqlite3 = require('@vscode/sqlite3');
 
 			this.db = new sqlite3.Database(dbPath);
-			this.logService.info('RAG: SQLite database initialized successfully');
+			this.logService.info(`RAG: Micro database initialized for workspace ${this.workspaceId}`);
 
 		await this.createTables();
 		this.logService.info('RAG index service initialized');

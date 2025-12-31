@@ -11,7 +11,14 @@ import { ChromaPersistentAdapter, PersistentVectorAdapterConfig, VectorAdapter }
 import { RAGIndexService } from './ragIndexService.js';
 
 /**
- * Represents a single workspace's RAG instance with all its components
+ * Represents a single workspace's MICRO DATABASE instance with all its components
+ *
+ * Each workspace has its own isolated database structure:
+ *   - workspace.db (SQLite) - Document metadata, chunks, FTS5 keyword index
+ *   - chroma/embeddings.db (SQLite) - Vector embeddings for semantic search
+ *   - emails.db (SQLite) - Email metadata and content
+ *
+ * This architecture ensures complete data isolation between cases.
  */
 export interface WorkspaceRAGInstance {
 	workspaceId: string;
@@ -23,8 +30,15 @@ export interface WorkspaceRAGInstance {
 }
 
 /**
- * Manages per-workspace RAG instances
- * Each workspace gets its own isolated database and vector store
+ * ========== MICRO DATABASE MANAGER ==========
+ *
+ * Manages per-workspace RAG micro database instances.
+ * Each workspace gets its own completely isolated database and vector store.
+ *
+ * NO GLOBAL DATABASE EXISTS - all data is per-workspace.
+ * This prevents cross-case data contamination and ensures legal/HIPAA compliance.
+ *
+ * Database location: %APPDATA%/.safe-appeals-navigator/databases/workspaces/[hash]/
  */
 export class WorkspaceRAGManager {
 	private instanceOfWorkspaceId: Map<string, WorkspaceRAGInstance> = new Map();
@@ -36,17 +50,34 @@ export class WorkspaceRAGManager {
 	) { }
 
 	/**
-	 * Get or create a workspace-specific RAG instance
-	 * @param workspaceId The workspace identifier (hash of workspace path)
+	 * Get or create a workspace-specific MICRO DATABASE instance
+	 *
+	 * Creates isolated databases for this workspace:
+	 *   - workspace.db - Document metadata and chunks
+	 *   - chroma/embeddings.db - Vector embeddings
+	 *
+	 * @param workspaceId The workspace identifier (hash of workspace folder path)
+	 * @throws Error if workspaceId is missing or invalid
 	 */
 	async getOrCreateWorkspace(workspaceId: string): Promise<WorkspaceRAGInstance> {
+		// Validate workspaceId - NO global database allowed
+		if (!workspaceId || workspaceId === 'undefined' || workspaceId === 'null' || workspaceId.trim() === '') {
+			throw new Error(`WorkspaceRAGManager: workspaceId is REQUIRED. No global database is allowed.`);
+		}
+
+		this.logService.info(`RAG: ========== MICRO DATABASE: ${workspaceId} ==========`);
+		console.log(`[RAG MICRO-DB] getOrCreateWorkspace called for: ${workspaceId}`);
+
 		// Return existing instance if available
 		const existingInstance = this.instanceOfWorkspaceId.get(workspaceId);
 		if (existingInstance?.initialized) {
+			this.logService.info(`RAG: Returning existing micro database for: ${workspaceId}`);
+			console.log(`[RAG MICRO-DB] Returning EXISTING micro database for: ${workspaceId}`);
 			return existingInstance;
 		}
 
-		this.logService.info(`RAG: Creating new workspace instance for: ${workspaceId}`);
+		this.logService.info(`RAG: Creating NEW micro database for workspace: ${workspaceId}`);
+		console.log(`[RAG MICRO-DB] Creating NEW micro database for: ${workspaceId}`);
 
 		try {
 			// Get workspace-specific paths
@@ -55,7 +86,14 @@ export class WorkspaceRAGManager {
 
 			this.logService.info(`RAG: Workspace paths - Chroma: ${chromaPath}, SQLite: ${sqlitePath}`);
 
-			// Create vector adapter for this workspace
+			// STEP 1: Create index service FIRST (lightweight, needed for isDocumentIndexed)
+			this.logService.info(`RAG: Creating SQLite index service for workspace ${workspaceId}...`);
+			const indexService = new RAGIndexService(this.logService, this.pathService, workspaceId);
+			await indexService.initialize();
+			this.logService.info(`RAG: Index service initialized for workspace ${workspaceId}`);
+
+			// STEP 2: Create vector adapter (loads embedding model - can be slow)
+			this.logService.info(`RAG: Creating vector adapter for workspace ${workspaceId}...`);
 			const config: PersistentVectorAdapterConfig = {
 				persistPath: chromaPath,
 				useReranking: true
@@ -65,11 +103,6 @@ export class WorkspaceRAGManager {
 			await vectorAdapter.initialize();
 			this.logService.info(`RAG: Vector adapter initialized for workspace ${workspaceId}`);
 
-			// Create index service for this workspace with custom SQLite path
-			const indexService = new RAGIndexService(this.logService, this.pathService, workspaceId);
-			await indexService.initialize();
-			this.logService.info(`RAG: Index service initialized for workspace ${workspaceId}`);
-
 			// Create hybrid retriever
 			const hybridRetriever = new HybridRetriever(
 				vectorAdapter,
@@ -77,11 +110,13 @@ export class WorkspaceRAGManager {
 				this.logService
 			);
 
-			// Create reranker
+			// STEP 3: Create reranker with LAZY initialization
+			// The reranker is only needed for search, not for basic indexing
+			// This makes workspace creation much faster
 			const modelCachePath = chromaPath + '/models';
 			const reranker = new LocalCrossEncoderReranker(this.logService);
-			await reranker.initialize(modelCachePath);
-			this.logService.info(`RAG: Reranker initialized for workspace ${workspaceId}`);
+			reranker.setCachePath(modelCachePath); // Set path for lazy initialization
+			this.logService.info(`RAG: Reranker created (will initialize lazily on first search)`);
 
 			// Ensure collections exist
 			await vectorAdapter.ensureCollections('workspace_all');

@@ -173,7 +173,8 @@ registerAction2(class extends Action2 {
 					notificationService.info('Indexing PDF...');
 					const indexResult = await ragService.indexDocument({
 						uri: pdfInput.resource,
-						isPolicyManual: true
+						isPolicyManual: true,
+						workspaceId: ragService.getWorkspaceId()
 					});
 
 					if (!indexResult.success) {
@@ -201,7 +202,8 @@ registerAction2(class extends Action2 {
 				const ragResults = await ragService.search({
 					query: searchQuery,
 					scope: 'policy_manual',
-					limit: 10  // Increased to allow MMR to select diverse chunks
+					limit: 10,  // Increased to allow MMR to select diverse chunks
+					workspaceId: ragService.getWorkspaceId()
 				});
 
 				console.log('[Add PDF to Chat] RAG search results:', ragResults.totalResults, 'chunks');

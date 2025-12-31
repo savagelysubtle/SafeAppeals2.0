@@ -45,12 +45,16 @@ constructor(
 ```
 
 ### 2.2 Index a Document
+
+**Note:** In the micro database architecture, `workspaceId` is automatically computed from the active workspace folder. You don't need to pass it manually when using `IRAGService` from the browser process.
+
 ```typescript
 // Index a policy manual
+// workspaceId is auto-injected by RAGService based on current workspace
 const result = await this.ragService.indexDocument({
   uri: URI.file('/path/to/policy-manual.pdf'),
-  isPolicyManual: true,
-  workspaceId: 'current-workspace'
+  isPolicyManual: true
+  // workspaceId is automatically computed from active workspace
 });
 
 if (result.success) {
@@ -58,6 +62,9 @@ if (result.success) {
 } else {
   console.error('Indexing failed:', result.message);
 }
+
+// IMPORTANT: A workspace folder MUST be open for RAG to work
+// If no workspace is open, operations will throw an error
 ```
 
 ### 2.3 Search Documents

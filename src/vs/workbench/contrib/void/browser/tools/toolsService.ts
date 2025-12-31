@@ -739,7 +739,11 @@ export class ToolsService implements IToolsService {
 					}
 
 					// Document not indexed yet, proceed with indexing
-					const result = await this.ragService.indexDocument({ uri, isPolicyManual });
+					const result = await this.ragService.indexDocument({
+						uri,
+						isPolicyManual,
+						workspaceId: this.ragService.getWorkspaceId()
+					});
 					return { result };
 				} catch (error) {
 					return { result: { success: false, message: `Failed to index document: ${error.message}` } };
@@ -750,7 +754,8 @@ export class ToolsService implements IToolsService {
 					const contextPack = await this.ragService.search({
 						query,
 						scope: 'policy_manual',
-						limit
+						limit,
+						workspaceId: this.ragService.getWorkspaceId()
 					});
 					const contextService = new RAGContextService();
 					const formatted = contextService.formatContextPack(contextPack);
@@ -770,7 +775,8 @@ export class ToolsService implements IToolsService {
 					const contextPack = await this.ragService.search({
 						query,
 						scope: 'case_index', // Search case files only (not policy manuals)
-						limit
+						limit,
+						workspaceId: this.ragService.getWorkspaceId()
 					});
 					const contextService = new RAGContextService();
 					const formatted = contextService.formatContextPack(contextPack);
@@ -790,7 +796,8 @@ export class ToolsService implements IToolsService {
 					const contextPack = await this.ragService.search({
 						query,
 						scope: 'workspace_all', // Search BOTH policy manuals AND case files
-						limit
+						limit,
+						workspaceId: this.ragService.getWorkspaceId()
 					});
 					const contextService = new RAGContextService();
 					const formatted = contextService.formatContextPack(contextPack);

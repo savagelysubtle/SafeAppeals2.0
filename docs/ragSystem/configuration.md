@@ -114,45 +114,65 @@ RAG_LOG_DIR=/custom/path/to/logs
 
 ## 📁 Directory Structure
 
-### Default Layout (Per-Workspace Isolation)
+### Micro Database Architecture (v2.0) - No Global Database
+
+The RAG system uses a **MICRO DATABASE ARCHITECTURE** with **complete workspace isolation**. There is **NO global database** - all data is stored in per-workspace micro databases.
 
 ```
 ~/.safe-appeals-navigator/           # Base directory
-├── databases/                       # Database files
-│   ├── workspace.db                 # Global/fallback SQLite database
-│   ├── chroma/                      # Global/fallback vector embeddings
-│   └── workspaces/                  # Per-workspace isolated data
-│       ├── a1b2c3d4e5f6g7h8/        # Workspace 1 (hash of folder path)
-│       │   ├── workspace.db         # Workspace-specific SQLite
-│       │   └── chroma/              # Workspace-specific vectors
-│       └── i9j0k1l2m3n4o5p6/        # Workspace 2
-│           ├── workspace.db
-│           └── chroma/
-├── models/                          # ML model cache (shared across workspaces)
-│   ├── Xenova/                      # Embedding models
-│   └── cross-encoders/              # Reranking models
-└── logs/                            # System logs
-    ├── rag.log                      # RAG service logs
-    └── performance.log              # Performance metrics
+├── databases/
+│   └── workspaces/                  # Per-workspace micro databases ONLY
+│       ├── a1b2c3d4/                # Workspace 1 (8-char hash)
+│       │   ├── workspace.db         # SQLite: documents, chunks, FTS5
+│       │   ├── emails.db            # Email data (if applicable)
+│       │   └── chroma/
+│       │       ├── embeddings.db    # Vector embeddings
+│       │       └── models/          # Cached models (workspace-local)
+│       ├── e5f6g7h8/                # Workspace 2
+│       │   ├── workspace.db
+│       │   └── chroma/
+│       │       └── embeddings.db
+│       └── [more workspaces...]
+├── models/                          # ML model cache (shared)
+│   └── Xenova/
+│       ├── all-MiniLM-L6-v2/       # Embedding model (~23MB)
+│       └── ms-marco-MiniLM-L-6-v2/ # Reranker model (~22MB)
+└── logs/
+    └── rag-debug.log                # Debug logging
 ```
 
-**Workspace ID:** Each workspace is identified by a 16-character SHA256 hash of its root folder path, ensuring unique isolation between workspaces.
+**Key Points:**
+- ✅ **NO global database exists** - `workspaceId` is **REQUIRED** for all operations
+- ✅ **Workspace ID**: 8-character SHA256 hash of workspace folder path
+- ✅ **Complete isolation**: Documents from one case cannot leak to another
+- ✅ **Independent management**: Each workspace can be backed up/deleted independently
 
-### Custom Directory Configuration
+### Path Service Configuration
+
+The `RAGPathService` provides workspace-specific paths. **Global path methods have been removed** in the micro database architecture.
 
 ```typescript
-// Configure via RAGPathService
-class CustomRAGPathService implements IRAGPathService {
+// Configure via RAGPathService - WORKSPACE-SPECIFIC ONLY
+class RAGPathService implements IRAGPathService {
   private baseDir = process.env.RAG_DATA_DIR || join(os.homedir(), '.safe-appeals-navigator');
 
-  getGlobalChromaDir(): string {
-    return join(this.baseDir, 'databases', 'chroma');
+  // Workspace-specific paths (workspaceId is REQUIRED)
+  getWorkspaceChromaDir(workspaceId: string): string {
+    if (!workspaceId) throw new Error('workspaceId is required');
+    return join(this.baseDir, 'databases', 'workspaces', workspaceId, 'chroma');
   }
 
-  getGlobalSqlitePath(): string {
-    return join(this.baseDir, 'databases', 'workspace.db');
+  getWorkspaceSqlitePath(workspaceId: string): string {
+    if (!workspaceId) throw new Error('workspaceId is required');
+    return join(this.baseDir, 'databases', 'workspaces', workspaceId, 'workspace.db');
   }
 
+  getEmailSqlitePath(workspaceId: string): string {
+    if (!workspaceId) throw new Error('workspaceId is required');
+    return join(this.baseDir, 'databases', 'workspaces', workspaceId, 'emails.db');
+  }
+
+  // Shared resources (not workspace-specific)
   getLogsDir(): string {
     return process.env.RAG_LOG_DIR || join(this.baseDir, 'logs');
   }
@@ -160,6 +180,9 @@ class CustomRAGPathService implements IRAGPathService {
   getModelCacheDir(): string {
     return process.env.RAG_MODEL_CACHE || join(this.baseDir, 'models');
   }
+
+  // NOTE: getGlobalChromaDir() and getGlobalSqlitePath() have been REMOVED
+  // All database operations now require a workspaceId
 }
 ```
 

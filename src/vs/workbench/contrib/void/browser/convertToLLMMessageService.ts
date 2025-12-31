@@ -14,11 +14,9 @@ import { IVoidSettingsService } from '../common/voidSettingsService.js';
 import { ChatMode, FeatureName, ModelSelection, ProviderName } from '../common/voidSettingsTypes.js';
 import { IDirectoryStrService } from '../common/directoryStrService.js';
 import { ITerminalToolService } from './tools/terminalToolService.js';
-import { IVoidModelService } from '../common/voidModelService.js';
-import { URI } from '../../../../base/common/uri.js';
-import { EndOfLinePreference } from '../../../../editor/common/model.js';
 import { ToolName } from '../common/tools/toolsServiceTypes.js';
 import { IMCPService } from '../common/mcpService.js';
+import { IFileOrgContextService } from './fileOrgContextService.js';
 
 export const EMPTY_MESSAGE = '(empty message)'
 
@@ -450,7 +448,7 @@ const prepareOpenAIOrAnthropicMessages = ({
 	// A COMPLETE HACK: last message is system message for context purposes
 
 	const sysMsgParts: string[] = []
-	if (aiInstructions) sysMsgParts.push(`GUIDELINES (from the user's .voidrules file):\n${aiInstructions}`)
+	if (aiInstructions) sysMsgParts.push(`GUIDELINES (from the user's .fileorg.json file):\n${aiInstructions}`)
 	if (systemMessage) sysMsgParts.push(systemMessage)
 	const combinedSystemMessage = sysMsgParts.join('\n\n')
 
@@ -769,39 +767,53 @@ class ConvertToLLMMessageService extends Disposable implements IConvertToLLMMess
 		@IDirectoryStrService private readonly directoryStrService: IDirectoryStrService,
 		@ITerminalToolService private readonly terminalToolService: ITerminalToolService,
 		@IVoidSettingsService private readonly voidSettingsService: IVoidSettingsService,
-		@IVoidModelService private readonly voidModelService: IVoidModelService,
 		@IMCPService private readonly mcpService: IMCPService,
 		@IFileService private readonly fileService: IFileService,
+		@IFileOrgContextService private readonly fileOrgContextService: IFileOrgContextService,
 	) {
 		super()
 	}
 
-	// Read .voidrules files from workspace folders
-	private _getVoidRulesFileContents(): string {
+	// Get case context from .fileorg.json files (async - ensures context is loaded)
+	private async _getFileOrgContextAsync(): Promise<string> {
 		try {
-			const workspaceFolders = this.workspaceContextService.getWorkspace().folders;
-			let voidRules = '';
-			for (const folder of workspaceFolders) {
-				const uri = URI.joinPath(folder.uri, '.voidrules')
-				const { model } = this.voidModelService.getModel(uri)
-				if (!model) continue
-				voidRules += model.getValue(EndOfLinePreference.LF) + '\n\n';
-			}
-			return voidRules.trim();
+			const caseContext = await this.fileOrgContextService.getCaseContext();
+			return caseContext || '';
 		}
 		catch (e) {
 			return ''
 		}
 	}
 
-	// Get combined AI instructions from settings and .voidrules files
-	private _getCombinedAIInstructions(): string {
+	// Get case context from .fileorg.json files (sync - uses cached value)
+	private _getFileOrgContextSync(): string {
+		try {
+			return this.fileOrgContextService.getCaseContextSync() || '';
+		}
+		catch (e) {
+			return ''
+		}
+	}
+
+	// Get combined AI instructions from settings and .fileorg.json files (async)
+	private async _getCombinedAIInstructionsAsync(): Promise<string> {
 		const globalAIInstructions = this.voidSettingsService.state.globalSettings.aiInstructions;
-		const voidRulesFileContent = this._getVoidRulesFileContents();
+		const fileOrgContext = await this._getFileOrgContextAsync();
 
 		const ans: string[] = []
 		if (globalAIInstructions) ans.push(globalAIInstructions)
-		if (voidRulesFileContent) ans.push(voidRulesFileContent)
+		if (fileOrgContext) ans.push(fileOrgContext)
+		return ans.join('\n\n')
+	}
+
+	// Get combined AI instructions from settings and .fileorg.json files (sync - uses cached value)
+	private _getCombinedAIInstructionsSync(): string {
+		const globalAIInstructions = this.voidSettingsService.state.globalSettings.aiInstructions;
+		const fileOrgContext = this._getFileOrgContextSync();
+
+		const ans: string[] = []
+		if (globalAIInstructions) ans.push(globalAIInstructions)
+		if (fileOrgContext) ans.push(fileOrgContext)
 		return ans.join('\n\n')
 	}
 
@@ -895,8 +907,8 @@ class ConvertToLLMMessageService extends Disposable implements IConvertToLLMMess
 
 		const modelSelectionOptions = this.voidSettingsService.state.optionsOfModelSelection[featureName][modelSelection.providerName]?.[modelSelection.modelName]
 
-		// Get combined AI instructions
-		const aiInstructions = this._getCombinedAIInstructions();
+		// Get combined AI instructions from settings and .fileorg.json (sync - uses cached context)
+		const aiInstructions = this._getCombinedAIInstructionsSync();
 
 		const isReasoningEnabled = getIsReasoningEnabledState(featureName, providerName, modelName, modelSelectionOptions, overridesOfModel)
 		const reservedOutputTokenSpace = getReservedOutputTokenSpace(providerName, modelName, { isReasoningEnabled, overridesOfModel })
@@ -934,8 +946,8 @@ class ConvertToLLMMessageService extends Disposable implements IConvertToLLMMess
 
 		const modelSelectionOptions = this.voidSettingsService.state.optionsOfModelSelection['Chat'][modelSelection.providerName]?.[modelSelection.modelName]
 
-		// Get combined AI instructions
-		const aiInstructions = this._getCombinedAIInstructions();
+		// Get combined AI instructions from settings and .fileorg.json (async - ensures context is loaded)
+		const aiInstructions = await this._getCombinedAIInstructionsAsync();
 		const isReasoningEnabled = getIsReasoningEnabledState('Chat', providerName, modelName, modelSelectionOptions, overridesOfModel)
 		const reservedOutputTokenSpace = getReservedOutputTokenSpace(providerName, modelName, { isReasoningEnabled, overridesOfModel })
 		const llmMessages = await this._chatMessagesToSimpleMessages(chatMessages)
@@ -958,8 +970,8 @@ class ConvertToLLMMessageService extends Disposable implements IConvertToLLMMess
 	// --- FIM ---
 
 	prepareFIMMessage: IConvertToLLMMessageService['prepareFIMMessage'] = ({ messages }) => {
-		// Get combined AI instructions with the provided aiInstructions as the base
-		const combinedInstructions = this._getCombinedAIInstructions();
+		// Get combined AI instructions from settings and .fileorg.json (sync - uses cached context)
+		const combinedInstructions = this._getCombinedAIInstructionsSync();
 
 		let prefix = `\
 ${!combinedInstructions ? '' : `\

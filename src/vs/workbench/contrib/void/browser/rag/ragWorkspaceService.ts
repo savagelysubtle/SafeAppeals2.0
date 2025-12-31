@@ -127,8 +127,14 @@ export class RAGWorkspaceService extends Disposable implements IRAGWorkspaceServ
 			}
 
 			// Initialize RAG service with API key from settings BEFORE using it
-			this.logService.info('RAGWorkspaceService: Initializing RAG service with API key from settings...');
+			this.logService.info('RAGWorkspaceService: Initializing RAG service (local embeddings - no API key required)...');
 			await this.ragService.initialize();
+
+			// CRITICAL: Switch to workspace context BEFORE indexing any documents
+			// This ensures the main process creates per-workspace databases
+			const workspaceId = this.ragService.getWorkspaceId();
+			this.logService.info(`RAGWorkspaceService: Switching to workspace context: ${workspaceId}`);
+			await this.ragService.switchWorkspace(workspaceId);
 
 			const folder = this.workspaceService.getWorkspace().folders[0];
 			if (!folder) {
@@ -237,8 +243,8 @@ export class RAGWorkspaceService extends Disposable implements IRAGWorkspaceServ
 						this.logService.info(`RAG: File change detected (ADDED/UPDATED): ${file.resource.fsPath}. Indexing...`);
 						await this.ragService.indexDocument({
 							uri: file.resource,
-							isPolicyManual: true
-							// Don't pass workspaceId - let ragService use its computed hash
+							isPolicyManual: true,
+							workspaceId: this.ragService.getWorkspaceId()
 						});
 					} else if (event.affects(file.resource, FileChangeType.DELETED)) {
 						this.logService.info(`RAG: File change detected (DELETED): ${file.resource.fsPath}. Removing from index...`);
@@ -266,8 +272,8 @@ export class RAGWorkspaceService extends Disposable implements IRAGWorkspaceServ
 							this.logService.info(`RAG: Initial scan found unindexed file: ${file.resource.fsPath}. Indexing...`);
 							await this.ragService.indexDocument({
 								uri: file.resource,
-								isPolicyManual: true
-								// Don't pass workspaceId - let ragService use its computed hash
+								isPolicyManual: true,
+								workspaceId: this.ragService.getWorkspaceId()
 							});
 						}
 					}
@@ -351,7 +357,7 @@ export class RAGWorkspaceService extends Disposable implements IRAGWorkspaceServ
 						await this.ragService.indexDocument({
 							uri: item.resource,
 							isPolicyManual: false, // Case file, not policy manual
-							// Don't pass workspaceId - let ragService use its computed hash
+							workspaceId: this.ragService.getWorkspaceId(),
 							indexScope: 'case_index'
 						});
 						totalIndexed++;
@@ -431,8 +437,8 @@ export class RAGWorkspaceService extends Disposable implements IRAGWorkspaceServ
 					this.logService.info(`RAG: Polling found unindexed file: ${file.resource.fsPath}. Indexing...`);
 					await this.ragService.indexDocument({
 						uri: file.resource,
-						isPolicyManual: true
-						// Don't pass workspaceId - let ragService use its computed hash
+						isPolicyManual: true,
+						workspaceId: this.ragService.getWorkspaceId()
 					});
 				}
 			}

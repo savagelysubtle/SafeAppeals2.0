@@ -16,12 +16,14 @@ export const IFileOrgContextService = createDecorator<IFileOrgContextService>('f
 export interface IFileOrgContextService {
 	readonly _serviceBrand: undefined;
 	getCaseContext(): Promise<string | null>;
+	getCaseContextSync(): string | null;
+	getCaseConfig(): FileOrgConfig | null;
 	reloadCaseConfig(): Promise<void>;
 }
 
 /**
  * Service to integrate .fileorg.json case configuration into AI context
- * Similar to how .voidrules works
+ * This provides case-specific context loaded from .fileorg.json files in workspace roots
  */
 class FileOrgContextService extends Disposable implements IFileOrgContextService {
 	declare readonly _serviceBrand: undefined;
@@ -39,12 +41,25 @@ class FileOrgContextService extends Disposable implements IFileOrgContextService
 		this.reloadCaseConfig();
 
 		// Watch for changes to .fileorg.json
-		this._register(this.fileService.onDidFilesChange((e: any) => {
-			for (const change of e.changes) {
-				if (change.resource.path.endsWith('.fileorg.json')) {
-					console.log('[FileOrgContextService] Detected .fileorg.json change, reloading...');
-					this.reloadCaseConfig();
+		this._register(this.fileService.onDidFilesChange((e) => {
+			// e may be a FileChangesEvent with .changes array, or may have .rawChanges
+			// Use the contains() method to safely check for file changes
+			try {
+				if (e.contains && typeof e.contains === 'function') {
+					// This is the proper FileChangesEvent interface
+					// Check if any workspace folder has .fileorg.json changed
+					const folders = this.workspaceContextService.getWorkspace().folders;
+					for (const folder of folders) {
+						const configUri = folder.uri.with({ path: folder.uri.path + '/.fileorg.json' });
+						if (e.contains(configUri)) {
+							console.log('[FileOrgContextService] Detected .fileorg.json change, reloading...');
+							this.reloadCaseConfig();
+							break;
+						}
+					}
 				}
+			} catch (err) {
+				// Silently ignore file change events we can't process
 			}
 		}));
 	}
@@ -86,6 +101,10 @@ class FileOrgContextService extends Disposable implements IFileOrgContextService
 		if (!this._caseContext) {
 			await this.reloadCaseConfig();
 		}
+		return this._caseContext;
+	}
+
+	getCaseContextSync(): string | null {
 		return this._caseContext;
 	}
 

@@ -227,7 +227,7 @@ testDoclingExtraction(uri: URI): Promise<{ standard: any; docling: any; doclingE
 interface RAGIndexParams {
     uri: URI;
     isPolicyManual: boolean;
-    workspaceId?: string;
+    workspaceId: string;    // REQUIRED - identifies the micro database
 }
 ```
 
@@ -237,7 +237,7 @@ interface RAGSearchParams {
     query: string;
     scope: RAGStorageScope; // See below
     limit: number;
-    workspaceId?: string;   // Auto-injected by RAGService
+    workspaceId: string;    // REQUIRED - auto-injected by RAGService
 }
 
 // Search scope options
@@ -267,26 +267,36 @@ interface ContextPack {
 
 ## Configuration
 
-### File Paths
+### File Paths (Micro Database Architecture v2.0)
 
-The RAG system uses a **per-workspace isolation** architecture:
+The RAG system uses a **MICRO DATABASE ARCHITECTURE** with **NO global database**. Each workspace has its own completely isolated databases:
+
 ```
 ~/.safe-appeals-navigator/
 ├── databases/
-│   ├── workspace.db           # Global/fallback SQLite database
-│   ├── chroma/               # Global/fallback vector embeddings
-│   └── workspaces/           # Per-workspace isolated data
-│       ├── a1b2c3d4e5f6g7h8/ # Workspace 1 (hash of folder path)
-│       │   ├── workspace.db  # Workspace-specific SQLite
-│       │   └── chroma/       # Workspace-specific vectors
-│       └── i9j0k1l2m3n4o5p6/ # Workspace 2
-│           ├── workspace.db
-│           └── chroma/
-├── models/                    # ML model cache (shared)
-└── logs/                      # System logs
+│   └── workspaces/                    # Per-workspace micro databases ONLY
+│       ├── a1b2c3d4/                  # Workspace 1 (8-char hash)
+│       │   ├── workspace.db           # SQLite: documents, chunks, FTS5
+│       │   ├── emails.db              # Email data (if applicable)
+│       │   └── chroma/
+│       │       └── embeddings.db      # Vector embeddings
+│       ├── e5f6g7h8/                  # Workspace 2
+│       │   ├── workspace.db
+│       │   └── chroma/
+│       │       └── embeddings.db
+│       └── [more workspaces...]
+├── models/                            # ML model cache (shared)
+│   └── Xenova/
+│       ├── all-MiniLM-L6-v2/         # Embedding model (~23MB)
+│       └── ms-marco-MiniLM-L-6-v2/   # Reranker model (~22MB)
+└── logs/                              # System logs
 ```
 
-**Workspace ID:** Each workspace is identified by a 16-character SHA256 hash of its root folder path, ensuring unique isolation.
+**Key Architecture Points:**
+- ✅ **NO global database** - `workspaceId` is **REQUIRED** for all operations
+- ✅ **Workspace ID**: 8-character SHA256 hash of workspace folder path
+- ✅ **Complete isolation**: Documents from one case cannot leak to another
+- ✅ **Independent cleanup**: Each workspace can be backed up/deleted independently
 
 ### Environment Variables
 

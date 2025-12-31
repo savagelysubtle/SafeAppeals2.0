@@ -257,96 +257,26 @@ export class EmailMainService {
 			fs.mkdirSync(replyFolderPath, { recursive: true });
 		}
 
-		// Generate a filename for the reply
+		// Generate a unique filename for the reply (with time to avoid caching issues)
 		const sanitizedSubject = originalEmail.subject
 			.replace(/[<>:"/\\|?*]/g, '_')
 			.replace(/\s+/g, '_')
 			.substring(0, 50);
-		const timestamp = new Date().toISOString().split('T')[0];
+		const now = new Date();
+		const timestamp = `${now.toISOString().split('T')[0]}_${now.getHours().toString().padStart(2, '0')}${now.getMinutes().toString().padStart(2, '0')}`;
 		const replyFilename = `Re-${sanitizedSubject}-${timestamp}.docx`;
 		const replyFilePath = path.join(replyFolderPath, replyFilename);
 
 		// Create DOCX using docx library
-		const { Document, Packer, Paragraph, TextRun, HeadingLevel } = require('docx');
+		// The draftContent already includes all headers, body, and original email info
+		// from formatDraftWithHeaders/generateTemplateFallback, so we just convert it to paragraphs
+		const { Document, Packer, Paragraph } = require('docx');
 
 		const doc = new Document({
 			sections: [{
-				children: [
-					// Header
-					new Paragraph({
-						children: [
-							new TextRun({ text: `To: ${originalEmail.from}`, bold: true })
-						]
-					}),
-					new Paragraph({
-						children: [
-							new TextRun({ text: `From: [Your Name]` })
-						]
-					}),
-					new Paragraph({
-						children: [
-							new TextRun({ text: `Re: ${originalEmail.subject}` })
-						]
-					}),
-					new Paragraph({
-						children: [
-							new TextRun({ text: `Date: ${new Date().toLocaleDateString()}` })
-						]
-					}),
-					new Paragraph({ text: '' }), // Empty line
-					new Paragraph({
-						children: [
-							new TextRun({ text: '─'.repeat(50) })
-						]
-					}),
-					new Paragraph({ text: '' }), // Empty line
-
-					// Draft content
-					...draftContent.split('\n').map(line =>
-						new Paragraph({ text: line })
-					),
-
-					new Paragraph({ text: '' }), // Empty line
-					new Paragraph({
-						children: [
-							new TextRun({ text: '─'.repeat(50) })
-						]
-					}),
-					new Paragraph({ text: '' }), // Empty line
-
-					// Original email header
-					new Paragraph({
-						heading: HeadingLevel.HEADING_2,
-						children: [
-							new TextRun({ text: 'Original Email:', bold: true })
-						]
-					}),
-					new Paragraph({
-						children: [
-							new TextRun({ text: `From: ${originalEmail.from}` })
-						]
-					}),
-					new Paragraph({
-						children: [
-							new TextRun({ text: `Date: ${originalEmail.date.toLocaleString()}` })
-						]
-					}),
-					new Paragraph({
-						children: [
-							new TextRun({ text: `Subject: ${originalEmail.subject}` })
-						]
-					}),
-					new Paragraph({ text: '' }), // Empty line
-
-					// Original email body
-					...originalEmail.bodyText.split('\n').map((line: string) =>
-						new Paragraph({
-							children: [
-								new TextRun({ text: line, italics: true, color: '666666' })
-							]
-						})
-					)
-				]
+				children: draftContent.split('\n').map((line: string) =>
+					new Paragraph({ text: line })
+				)
 			}]
 		});
 

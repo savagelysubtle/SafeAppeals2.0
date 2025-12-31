@@ -227,7 +227,7 @@ testDoclingExtraction(uri: URI): Promise<{ standard: any; docling: any; doclingE
 interface RAGIndexParams {
     uri: URI;
     isPolicyManual: boolean;
-    workspaceId?: string;
+    workspaceId: string;    // REQUIRED - identifies micro database
 }
 ```
 
@@ -237,7 +237,7 @@ interface RAGSearchParams {
     query: string;
     scope: RAGStorageScope; // See below
     limit: number;
-    workspaceId?: string;   // Auto-injected by RAGService
+    workspaceId: string;    // REQUIRED - auto-injected by RAGService
 }
 
 // Search scope options
@@ -267,18 +267,31 @@ interface ContextPack {
 
 ## Configuration
 
-### File Paths
+### File Paths (Micro Database Architecture v2.0)
 
-The RAG system uses the following directory structure:
+The RAG system uses a **MICRO DATABASE ARCHITECTURE** with **NO global database**. Each workspace has completely isolated databases:
+
 ```
 ~/.safe-appeals-navigator/
 ├── databases/
-│   ├── workspace.db          # SQLite database
-│   ├── chroma/              # Vector embeddings
-│   └── workspaces/          # Per-workspace data
-├── models/                  # ML model cache
-└── logs/                    # System logs
+│   └── workspaces/                    # Per-workspace micro databases ONLY
+│       ├── a1b2c3d4/                  # Workspace 1 (8-char hash)
+│       │   ├── workspace.db           # SQLite: documents, chunks, FTS5
+│       │   ├── emails.db              # Email data (if applicable)
+│       │   └── chroma/
+│       │       └── embeddings.db      # Vector embeddings
+│       └── [more workspaces...]
+├── models/                            # ML model cache (shared)
+│   └── Xenova/
+│       ├── all-MiniLM-L6-v2/         # Embedding model
+│       └── ms-marco-MiniLM-L-6-v2/   # Reranker model
+└── logs/                              # System logs
 ```
+
+**Key Points:**
+- ✅ **NO global database** - `workspaceId` is **REQUIRED** for all operations
+- ✅ Documents from one case cannot leak to another
+- ✅ Each workspace can be independently backed up or deleted
 
 ### Environment Variables
 

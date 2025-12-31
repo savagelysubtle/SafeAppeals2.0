@@ -17,7 +17,7 @@ export interface DocumentRecord {
 	checksum?: string;
 	metadata?: string; // JSON string of additional metadata
 	isPolicyManual?: boolean;
-	workspaceId?: string;
+	workspaceId: string; // REQUIRED - each document belongs to exactly one workspace's micro database
 }
 
 export interface ChunkRecord {
@@ -100,13 +100,13 @@ export interface RAGSearchParams {
 	query: string;
 	scope: RAGStorageScope;
 	limit: number;
-	workspaceId?: string; // Optional - automatically provided by RAGService if not specified
+	workspaceId: string; // REQUIRED - each workspace has its own isolated database
 }
 
 export interface RAGIndexParams {
 	uri: URI;
 	isPolicyManual: boolean;
-	workspaceId?: string; // Optional - automatically provided by RAGService if not specified
+	workspaceId: string; // REQUIRED - each workspace has its own isolated database
 	indexScope?: 'policy_manual' | 'case_index'; // Explicit index target
 }
 
@@ -135,21 +135,37 @@ export type RAGStorageScope =
 export type RAGVectorBackend = 'chroma-http' | 'sqlite-vec';
 export type RAGOpenAIModel = 'text-embedding-3-small' | 'text-embedding-3-large';
 
+// ========== MICRO DATABASE ARCHITECTURE ==========
+// Each workspace has its own isolated "micro database" consisting of:
+//   1. SQLite database (workspace.db) - document metadata and chunks
+//   2. Vector database (chroma/embeddings.db) - embeddings for semantic search
+//   3. Email database (emails.db) - email metadata and content
+//
+// This architecture ensures:
+//   - Complete data isolation between cases (no cross-contamination)
+//   - HIPAA/legal confidentiality compliance
+//   - Each case can be independently backed up, migrated, or deleted
+//   - NO global database exists - workspaceId is REQUIRED for ALL operations
+// ================================================
+
 // Main service interface (implemented in electron-main)
 export const IRAGMainService = createDecorator<IRAGMainService>('ragMainService');
 
 export interface IRAGMainService {
 	readonly _serviceBrand: undefined;
 
+	// ALL methods require workspaceId - each workspace has its own isolated MICRO DATABASE
+	// NO global database exists - workspaceId is REQUIRED for all operations
+	// This prevents documents from one case leaking into another case
 	indexDocument(params: RAGIndexParams): Promise<{ success: boolean; message: string }>;
 	search(params: RAGSearchParams): Promise<ContextPack>;
-	getStats(workspaceId?: string): Promise<RAGStats>;
-	deleteDocument(docId: string, workspaceId?: string): Promise<void>;
-	isDocumentIndexed(uri: URI, workspaceId?: string): Promise<boolean>;
-	getDocumentsByType(isPolicyManual: boolean, workspaceId?: string): Promise<any[]>;
+	getStats(workspaceId: string): Promise<RAGStats>;
+	deleteDocument(docId: string, workspaceId: string): Promise<void>;
+	isDocumentIndexed(uri: URI, workspaceId: string): Promise<boolean>;
+	getDocumentsByType(isPolicyManual: boolean, workspaceId: string): Promise<any[]>;
 	initialize(openAIApiKey?: string): Promise<void>;
 	switchWorkspace(workspaceId: string): Promise<void>;
-	clearAllEmbeddings(workspaceId?: string): Promise<{ success: boolean; message: string }>;
+	clearAllEmbeddings(workspaceId: string): Promise<{ success: boolean; message: string }>;
 	testDoclingExtraction(uri: URI): Promise<{ standard: any; docling: any; doclingError?: any }>;
 
 	// Document creation methods (delegated to fileService)

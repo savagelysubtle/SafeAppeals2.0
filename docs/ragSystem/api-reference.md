@@ -53,7 +53,7 @@ interface IRAGMainService extends IRAGService {
 
 ### indexDocument
 
-Indexes a document for search and retrieval.
+Indexes a document for search and retrieval. Uses the **micro database architecture** where each workspace has its own isolated database.
 
 ```typescript
 async indexDocument(params: RAGIndexParams): Promise<IndexResult>
@@ -62,7 +62,9 @@ async indexDocument(params: RAGIndexParams): Promise<IndexResult>
 **Parameters:**
 - `params.uri: URI` - File path to the document
 - `params.isPolicyManual: boolean` - Whether this is a policy/guideline document
-- `params.workspaceId?: string` - Optional workspace association
+- `params.workspaceId: string` - **REQUIRED** - Workspace ID (auto-injected by browser RAGService)
+
+**Note:** When using `IRAGService` from the browser process, `workspaceId` is automatically computed from the active workspace folder. A workspace must be open for RAG operations to work.
 
 **Returns:**
 ```typescript
@@ -171,7 +173,9 @@ async search(params: RAGSearchParams): Promise<ContextPack>
 - `params.query: string` - Search query
 - `params.scope: RAGStorageScope` - Search scope (see below)
 - `params.limit: number` - Maximum results to return
-- `params.workspaceId?: string` - Optional workspace filter (auto-injected by RAGService)
+- `params.workspaceId: string` - **REQUIRED** - Workspace ID (auto-injected by browser RAGService)
+
+**Note:** Searches are scoped to the workspace's micro database. Documents from other workspaces are never included in results.
 
 **Returns:**
 ```typescript
@@ -343,7 +347,7 @@ if (test.docling) {
 
 ### DocumentRecord
 
-Represents a document in the system.
+Represents a document in the system. Each document belongs to a specific workspace's micro database.
 
 ```typescript
 interface DocumentRecord {
@@ -357,7 +361,7 @@ interface DocumentRecord {
   checksum?: string;             // SHA256 checksum
   metadata?: string;             // JSON metadata string
   isPolicyManual?: boolean;      // Document classification
-  workspaceId?: string;          // Workspace association
+  workspaceId: string;           // REQUIRED - Workspace this document belongs to
 }
 ```
 

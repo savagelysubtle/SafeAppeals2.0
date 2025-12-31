@@ -18,6 +18,9 @@ import { IEditorGroup } from '../../../../services/editor/common/editorGroupsSer
 import { IOverlayWebview, IWebviewService } from '../../../../contrib/webview/browser/webview.js';
 import { EmailViewerInput } from './emailViewerInput.js';
 import { IEmailService } from '../../common/emailService.js';
+import { IEmailDraftService } from '../emailDraftService.js';
+import { IEditorService } from '../../../../services/editor/common/editorService.js';
+import { INotificationService, Severity } from '../../../../../platform/notification/common/notification.js';
 
 // SafeAppeals brand colors
 const BRAND_GREEN = '#22c55e';
@@ -37,7 +40,10 @@ export class EmailViewerEditor extends EditorPane {
 		@IThemeService themeService: IThemeService,
 		@IStorageService storageService: IStorageService,
 		@IWebviewService private readonly webviewService: IWebviewService,
-		@IEmailService private readonly emailService: IEmailService
+		@IEmailService private readonly emailService: IEmailService,
+		@IEmailDraftService private readonly emailDraftService: IEmailDraftService,
+		@IEditorService private readonly editorService: IEditorService,
+		@INotificationService private readonly notificationService: INotificationService
 	) {
 		super(EmailViewerEditor.ID, group, telemetryService, themeService, storageService);
 	}
@@ -115,8 +121,7 @@ export class EmailViewerEditor extends EditorPane {
 				case 'draftReply':
 					// Handle draft reply request
 					if (this._currentInput?.getEmail()) {
-						// TODO: Trigger draft service
-						console.log('[EmailViewer] Draft reply requested');
+						await this.handleDraftReply();
 					}
 					break;
 			}
@@ -133,6 +138,50 @@ export class EmailViewerEditor extends EditorPane {
 		}
 
 		this.webview.setHtml(this.getEmailHtml(email));
+	}
+
+	private async handleDraftReply(): Promise<void> {
+		const email = this._currentInput?.getEmail();
+		if (!email) {
+			this.notificationService.notify({
+				severity: Severity.Error,
+				message: 'No email loaded to reply to.'
+			});
+			return;
+		}
+
+		try {
+			// Show progress notification
+			this.notificationService.notify({
+				severity: Severity.Info,
+				message: `Generating draft reply for "${email.subject}"...`
+			});
+
+			// Generate draft using the draft service (which uses RAG for context)
+			const draftResult = await this.emailDraftService.generateDraftReply(email.id);
+
+			// Save the draft as a DOCX file
+			const docxUri = await this.emailDraftService.saveDraftAsDocx(email.id, draftResult.content);
+
+			// Open the generated DOCX in the editor
+			await this.editorService.openEditor({ resource: docxUri });
+
+			// Show success notification with sources if any
+			const sourcesInfo = draftResult.sources.length > 0
+				? ` (referenced: ${draftResult.sources.slice(0, 3).join(', ')})`
+				: '';
+
+			this.notificationService.notify({
+				severity: Severity.Info,
+				message: `Draft reply created successfully!${sourcesInfo}`
+			});
+		} catch (error) {
+			console.error('[EmailViewer] Failed to generate draft reply:', error);
+			this.notificationService.notify({
+				severity: Severity.Error,
+				message: `Failed to generate draft reply: ${error instanceof Error ? error.message : 'Unknown error'}`
+			});
+		}
 	}
 
 	private getLoadingHtml(): string {

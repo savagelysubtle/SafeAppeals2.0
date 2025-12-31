@@ -148,7 +148,8 @@ class IndexAsWorkspaceDocAction extends Action2 {
 				async () => {
 					const result = await ragService.indexDocument({
 						uri,
-						isPolicyManual: false  // ← This makes it a workspace document!
+						isPolicyManual: false,  // ← This makes it a workspace document!
+						workspaceId: ragService.getWorkspaceId()
 					});
 
 					if (result.success) {
@@ -225,7 +226,11 @@ class IndexAsPolicyManualAction extends Action2 {
 					progress.report({ message: 'Extracting content from PDF...' });
 
 					// Start indexing
-					const result = await ragService.indexDocument({ uri, isPolicyManual: true });
+					const result = await ragService.indexDocument({
+						uri,
+						isPolicyManual: true,
+						workspaceId: ragService.getWorkspaceId()
+					});
 
 					if (result.success) {
 						// Extract chunk count from success message if available

@@ -13,6 +13,7 @@ interface EmailCardProps {
 	email: Email;
 	onClick: () => void;
 	onDelete: () => void;
+	onDraftReply: () => void;
 }
 
 // Format date for display
@@ -61,9 +62,10 @@ function getAvatarColor(email: string): string {
 	return colors[Math.abs(hash) % colors.length];
 }
 
-export const EmailCard: React.FC<EmailCardProps> = ({ email, onClick, onDelete }) => {
+export const EmailCard: React.FC<EmailCardProps> = ({ email, onClick, onDelete, onDraftReply }) => {
 	const [confirmDelete, setConfirmDelete] = useState(false);
 	const [isHovered, setIsHovered] = useState(false);
+	const [isDrafting, setIsDrafting] = useState(false);
 
 	const handleDelete = (e: React.MouseEvent) => {
 		e.stopPropagation();
@@ -73,6 +75,17 @@ export const EmailCard: React.FC<EmailCardProps> = ({ email, onClick, onDelete }
 		} else {
 			setConfirmDelete(true);
 			setTimeout(() => setConfirmDelete(false), 3000);
+		}
+	};
+
+	const handleDraftReply = async (e: React.MouseEvent) => {
+		e.stopPropagation();
+		if (isDrafting) return;
+		setIsDrafting(true);
+		try {
+			await onDraftReply();
+		} finally {
+			setIsDrafting(false);
 		}
 	};
 
@@ -153,6 +166,37 @@ export const EmailCard: React.FC<EmailCardProps> = ({ email, onClick, onDelete }
 
 							{/* Action Buttons */}
 							<div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+								{/* Draft Reply Button */}
+								<button
+									onClick={handleDraftReply}
+									disabled={isDrafting}
+									className="w-7 h-7 rounded-lg flex items-center justify-center transition-all"
+									style={{
+										backgroundColor: isDrafting ? BRAND_GREEN : '#1a1a1a',
+										border: `1px solid ${isDrafting ? BRAND_GREEN : '#27272a'}`,
+										color: isDrafting ? '#0a0a0a' : '#a1a1aa',
+										opacity: isDrafting ? 0.7 : 1,
+										cursor: isDrafting ? 'wait' : 'pointer'
+									}}
+									onMouseEnter={(e) => {
+										if (!isDrafting) {
+											e.currentTarget.style.backgroundColor = BRAND_GREEN;
+											e.currentTarget.style.borderColor = BRAND_GREEN;
+											e.currentTarget.style.color = '#0a0a0a';
+										}
+									}}
+									onMouseLeave={(e) => {
+										if (!isDrafting) {
+											e.currentTarget.style.backgroundColor = '#1a1a1a';
+											e.currentTarget.style.borderColor = '#27272a';
+											e.currentTarget.style.color = '#a1a1aa';
+										}
+									}}
+									title={isDrafting ? 'Generating draft...' : 'Draft Reply (AI)'}
+								>
+									<i className={`codicon ${isDrafting ? 'codicon-loading codicon-modifier-spin' : 'codicon-reply'}`} style={{ fontSize: '12px' }} />
+								</button>
+
 								{/* Open Button */}
 								<button
 									onClick={(e) => {
