@@ -278,7 +278,9 @@ export class DOCXViewerEditor extends EditorPane {
 	}
 
 	private handleWebviewMessage(message: any): void {
-		console.log('[DOCX Viewer] Received message from webview:', JSON.stringify(message));
+		// Only log message type to avoid flooding console with large base64 data
+		const msgType = message?.message?.type || message?.type || 'unknown';
+		console.log('[DOCX Viewer] Received message from webview:', msgType);
 
 		const data = message.message || message;
 
@@ -716,7 +718,7 @@ export class DOCXViewerEditor extends EditorPane {
 <html lang="en">
 <head>
 	<meta charset="UTF-8">
-	<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src https: data: blob: vscode-resource:; script-src 'nonce-${nonce}' https://cdnjs.cloudflare.com vscode-resource:; style-src 'unsafe-inline' vscode-resource:; font-src data: vscode-resource:;">
+	<meta http-equiv="Content-Security-Policy" content="default-src 'none'; connect-src blob: data: https: http://127.0.0.1:* vscode-resource:; img-src https: data: blob: vscode-resource:; script-src 'nonce-${nonce}' https://cdnjs.cloudflare.com vscode-resource:; style-src 'unsafe-inline' vscode-resource:; font-src data: vscode-resource:;">
 	<meta name="viewport" content="width=device-width, initial-scale=1.0">
 	<title>DOCX Viewer</title>
 	<link rel="stylesheet" href="${styleUri}">

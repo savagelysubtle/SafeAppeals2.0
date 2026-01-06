@@ -142,6 +142,8 @@
 			document.body.appendChild(tempContainer);
 
 			// Render using docx-preview library
+			// CRITICAL: useBase64URL: true ensures images persist as Base64 data URLs
+			// (Blob URLs are ephemeral and break on save/reload)
 			const options = {
 				className: 'docx',
 				inWrapper: true,
@@ -156,6 +158,7 @@
 				renderFooters: true,
 				renderFootnotes: true,
 				renderEndnotes: true,
+				useBase64URL: true, // CRITICAL: Use Base64 for image persistence
 				debug: false
 			};
 
