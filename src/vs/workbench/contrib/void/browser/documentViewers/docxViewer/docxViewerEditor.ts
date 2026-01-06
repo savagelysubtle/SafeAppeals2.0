@@ -46,7 +46,7 @@ export class DOCXViewerEditor extends EditorPane {
 	private _currentInput?: DOCXViewerInput;
 	private _webviewReady: boolean = false;
 	private _pendingInput?: DOCXViewerInput;
-	private _docxDataCache?: { uri: string; data: string };
+	private _docxDataCache?: { uri: string; data: string; jsonContent?: string };
 	private _isLoading: boolean = false;
 	private _workingCopy?: DOCXWorkingCopy;
 	private _workingCopyDisposable?: IDisposable;
@@ -136,6 +136,7 @@ export class DOCXViewerEditor extends EditorPane {
 				this.webview.postMessage({
 					type: 'loadDOCX',
 					data: input.getContent(),
+					jsonContent: input.getJsonContent(), // Include JSON for image preservation
 					encoding: 'base64',
 					docxUri: currentUri
 				});
@@ -148,6 +149,7 @@ export class DOCXViewerEditor extends EditorPane {
 				this.webview.postMessage({
 					type: 'loadDOCX',
 					data: this._docxDataCache.data,
+					jsonContent: this._docxDataCache.jsonContent, // Include JSON for image preservation
 					encoding: 'base64',
 					docxUri: currentUri
 				});
@@ -303,6 +305,10 @@ export class DOCXViewerEditor extends EditorPane {
 				// Update input content if provided
 				if (this._currentInput && (data.docxData || data.data)) {
 					this._currentInput.setContent(data.docxData || data.data);
+					// Also store JSON content for round-trip image preservation
+					if (data.jsonContent) {
+						this._currentInput.setJsonContent(data.jsonContent);
+					}
 				}
 				break;
 
@@ -321,6 +327,10 @@ export class DOCXViewerEditor extends EditorPane {
 
 			case 'saveRequested':
 				if (this._currentInput && (data.text || data.docxData)) {
+					// Store JSON content for round-trip image preservation
+					if (data.jsonContent) {
+						this._currentInput.setJsonContent(data.jsonContent);
+					}
 					// Await the save and resolve based on actual result
 					this.saveDOCX(this._currentInput.resource, data.text, data.html, data.docxData)
 						.then(() => {
@@ -485,9 +495,11 @@ export class DOCXViewerEditor extends EditorPane {
 			console.log('[DOCX Viewer] Document saved successfully');
 
 			// Update the cache with the newly saved data so navigating away and back shows correct content
+			// Include JSON content from the input for image preservation during round-trip
 			if (docxData) {
-				this._docxDataCache = { uri: uri.toString(), data: docxData };
-				console.log('[DOCX Viewer] Cache updated with saved data');
+				const jsonContent = this._currentInput?.getJsonContent();
+				this._docxDataCache = { uri: uri.toString(), data: docxData, jsonContent };
+				console.log('[DOCX Viewer] Cache updated with saved data', jsonContent ? '(with JSON)' : '(DOCX only)');
 			}
 
 			// Mark working copy as saved

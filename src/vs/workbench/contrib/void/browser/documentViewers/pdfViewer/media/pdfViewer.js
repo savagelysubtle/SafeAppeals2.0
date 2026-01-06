@@ -23,6 +23,45 @@
 	let selectedAnnotationId = null;
 	let currentHighlightColor = 'yellow';
 
+	// Signature state
+	let signatureModal = null;
+	let signatureCanvas = null;
+	let signatureCtx = null;
+	let signatureTextCanvas = null;
+	let signatureTextCtx = null;
+	let isDrawing = false;
+	let lastX = 0;
+	let lastY = 0;
+	let signatureImageData = null;
+	let savedSignatures = [];
+	let isPlacementMode = false;
+	let signatureMode = 'draw'; // 'draw' or 'type'
+	let signatureText = '';
+	let signatureFont = 'signature1';
+	let signatureSize = 40;
+
+	// Drag state for signatures
+	let isDraggingSignature = false;
+	let draggedSignatureElement = null;
+	let draggedAnnotationId = null;
+	let dragStartX = 0;
+	let dragStartY = 0;
+	let dragOffsetX = 0;
+	let dragOffsetY = 0;
+
+	// Resize state for signatures
+	let isResizingSignature = false;
+	let resizedSignatureElement = null;
+	let resizedAnnotationId = null;
+	let resizeStartX = 0;
+	let resizeStartY = 0;
+	let resizeHandle = null; // 'nw', 'ne', 'sw', 'se', 'n', 's', 'e', 'w'
+	let originalBounds = null; // { x, y, width, height }
+
+	// Context menu state
+	let contextMenuElement = null;
+	let contextMenuTargetAnnotationId = null;
+
 	// Get DOM elements
 	const canvas = document.getElementById('pdf-canvas');
 	const ctx = canvas?.getContext('2d');
@@ -49,6 +88,29 @@
 	// Annotation toolbar elements
 	const highlightButtons = document.querySelectorAll('.highlight-btn');
 	const deleteHighlightButton = document.getElementById('delete-highlight');
+
+	// Signature modal elements
+	const addSignatureButton = document.getElementById('add-signature');
+	const signatureModalElement = document.getElementById('signature-modal');
+	const closeSignatureModalBtn = document.getElementById('close-signature-modal');
+	const clearSignatureBtn = document.getElementById('clear-signature');
+	const saveSignatureBtn = document.getElementById('save-signature');
+	const cancelSignatureBtn = document.getElementById('cancel-signature');
+	const doneSignatureBtn = document.getElementById('done-signature');
+	const savedSignaturesList = document.getElementById('saved-signatures-list');
+
+	// Mode toggle elements
+	const drawModeBtn = document.getElementById('draw-mode-btn');
+	const typeModeBtn = document.getElementById('type-mode-btn');
+	const drawModeContainer = document.getElementById('draw-mode-container');
+	const typeModeContainer = document.getElementById('type-mode-container');
+
+	// Text signature elements
+	const signatureTextInput = document.getElementById('signature-text-input');
+	const signatureTextCanvasElement = document.getElementById('signature-text-canvas');
+	const signatureFontSelect = document.getElementById('signature-font-select');
+	const signatureSizeSlider = document.getElementById('signature-size-slider');
+	const signatureSizeValue = document.getElementById('signature-size-value');
 
 	// Sidebar toggle
 	if (toggleSidebarButton) {
@@ -123,6 +185,85 @@
 					});
 				}
 			}
+		});
+	}
+
+	// Signature modal handlers
+	if (addSignatureButton) {
+		addSignatureButton.addEventListener('click', () => {
+			showSignatureModal();
+		});
+	}
+
+	if (closeSignatureModalBtn) {
+		closeSignatureModalBtn.addEventListener('click', () => {
+			hideSignatureModal();
+		});
+	}
+
+	if (cancelSignatureBtn) {
+		cancelSignatureBtn.addEventListener('click', () => {
+			hideSignatureModal();
+		});
+	}
+
+	if (clearSignatureBtn) {
+		clearSignatureBtn.addEventListener('click', () => {
+			clearSignatureCanvas();
+		});
+	}
+
+	// #region agent log
+	console.log('[DEBUG H2-SAVE] saveSignatureBtn element check:', { found: !!saveSignatureBtn });
+	// #endregion
+	if (saveSignatureBtn) {
+		saveSignatureBtn.addEventListener('click', () => {
+			// #region agent log
+			console.log('[DEBUG H1-SAVE] saveSignature click handler fired:', { signatureImageDataExists: !!signatureImageData, signatureImageDataLength: signatureImageData ? signatureImageData.length : 0, signatureMode });
+			// #endregion
+			saveSignature();
+		});
+	}
+
+	if (doneSignatureBtn) {
+		doneSignatureBtn.addEventListener('click', () => {
+			doneSignature();
+		});
+	}
+
+	// Mode toggle handlers
+	if (drawModeBtn) {
+		drawModeBtn.addEventListener('click', () => {
+			setSignatureMode('draw');
+		});
+	}
+
+	if (typeModeBtn) {
+		typeModeBtn.addEventListener('click', () => {
+			setSignatureMode('type');
+		});
+	}
+
+	// Text signature handlers
+	if (signatureTextInput) {
+		signatureTextInput.addEventListener('input', (e) => {
+			signatureText = e.target.value;
+			renderTypedSignature();
+		});
+	}
+
+	if (signatureFontSelect) {
+		signatureFontSelect.addEventListener('change', (e) => {
+			signatureFont = e.target.value;
+			renderTypedSignature();
+		});
+	}
+
+	if (signatureSizeSlider) {
+		signatureSizeSlider.addEventListener('input', (e) => {
+			signatureSize = parseInt(e.target.value);
+			signatureSizeValue.textContent = signatureSize + 'px';
+			renderTypedSignature();
 		});
 	}
 
@@ -254,6 +395,19 @@
 				console.log('[PDF Viewer] Loaded annotations:', annotations.length);
 				renderAnnotations();
 				renderBookmarks();
+				break;
+			case 'savedSignatures':
+				// Receive saved signatures from VSCode persistent storage
+				console.log('[PDF Viewer] Received saved signatures:', message.signatures?.length);
+				renderSavedSignatures(message.signatures || []);
+				break;
+			case 'addSignatureAnnotation':
+				// Add signature annotation directly (bypasses the normal annotation flow)
+				const signatureAnnotation = message.annotation;
+				signatureAnnotation.id = 'sig_' + Date.now(); // Generate ID
+				signatureAnnotation.createdAt = Date.now();
+				annotations.push(signatureAnnotation);
+				renderAnnotations();
 				break;
 		}
 	});
@@ -846,6 +1000,708 @@
 		}
 	});
 
+	// ==================== SIGNATURE FUNCTIONS ====================
+
+	function showSignatureModal() {
+		if (!signatureModalElement) return;
+
+		// Initialize canvas if not done yet
+		if (!signatureCanvas) {
+			signatureCanvas = document.getElementById('signature-canvas');
+			if (signatureCanvas) {
+				signatureCtx = signatureCanvas.getContext('2d');
+				setupSignatureCanvas();
+			}
+		}
+
+		// Load saved signatures from localStorage
+		loadSavedSignatures();
+
+		// Show modal
+		signatureModalElement.style.display = 'flex';
+		signatureModalElement.style.opacity = '1';
+		signatureModalElement.style.pointerEvents = 'auto';
+
+		// Reset to draw mode and clear
+		setSignatureMode('draw');
+		clearSignatureCanvas();
+	}
+
+	function hideSignatureModal() {
+		if (!signatureModalElement) return;
+
+		signatureModalElement.style.display = 'none';
+		signatureModalElement.style.opacity = '0';
+		signatureModalElement.style.pointerEvents = 'none';
+
+		// Exit placement mode if active
+		exitPlacementMode();
+	}
+
+	function setupSignatureCanvas() {
+		if (!signatureCanvas || !signatureCtx) return;
+
+		// Set canvas properties
+		signatureCtx.strokeStyle = '#000000';
+		signatureCtx.lineWidth = 2;
+		signatureCtx.lineCap = 'round';
+		signatureCtx.lineJoin = 'round';
+
+		// Clear canvas initially
+		signatureCtx.fillStyle = 'white';
+		signatureCtx.fillRect(0, 0, signatureCanvas.width, signatureCanvas.height);
+
+		// Mouse events
+		signatureCanvas.addEventListener('mousedown', startSignatureDrawing);
+		signatureCanvas.addEventListener('mousemove', drawSignature);
+		signatureCanvas.addEventListener('mouseup', stopSignatureDrawing);
+		signatureCanvas.addEventListener('mouseout', stopSignatureDrawing);
+
+		// Touch events
+		signatureCanvas.addEventListener('touchstart', handleTouchStart, { passive: false });
+		signatureCanvas.addEventListener('touchmove', handleTouchMove, { passive: false });
+		signatureCanvas.addEventListener('touchend', stopSignatureDrawing);
+
+		// Setup text canvas
+		signatureTextCanvas = signatureTextCanvasElement;
+		if (signatureTextCanvas) {
+			signatureTextCtx = signatureTextCanvas.getContext('2d');
+			signatureTextCtx.fillStyle = 'white';
+			signatureTextCtx.fillRect(0, 0, signatureTextCanvas.width, signatureTextCanvas.height);
+		}
+	}
+
+	function startSignatureDrawing(e) {
+		isDrawing = true;
+		const rect = signatureCanvas.getBoundingClientRect();
+		lastX = e.clientX - rect.left;
+		lastY = e.clientY - rect.top;
+	}
+
+	function drawSignature(e) {
+		if (!isDrawing || !signatureCtx) return;
+
+		const rect = signatureCanvas.getBoundingClientRect();
+		const currentX = e.clientX - rect.left;
+		const currentY = e.clientY - rect.top;
+
+		signatureCtx.beginPath();
+		signatureCtx.moveTo(lastX, lastY);
+		signatureCtx.lineTo(currentX, currentY);
+		signatureCtx.stroke();
+
+		lastX = currentX;
+		lastY = currentY;
+	}
+
+	function stopSignatureDrawing() {
+		isDrawing = false;
+		// CRITICAL FIX: Capture canvas data immediately after drawing completes
+		if (signatureCanvas && signatureMode === 'draw') {
+			signatureImageData = signatureCanvas.toDataURL('image/png');
+			// #region agent log
+			console.log('[DEBUG H1-SAVE] stopSignatureDrawing - captured signature data:', { signatureImageDataLength: signatureImageData ? signatureImageData.length : 0 });
+			// #endregion
+		}
+	}
+
+	function handleTouchStart(e) {
+		e.preventDefault();
+		const touch = e.touches[0];
+		const mouseEvent = new MouseEvent('mousedown', {
+			clientX: touch.clientX,
+			clientY: touch.clientY
+		});
+		signatureCanvas.dispatchEvent(mouseEvent);
+	}
+
+	function handleTouchMove(e) {
+		e.preventDefault();
+		const touch = e.touches[0];
+		const mouseEvent = new MouseEvent('mousemove', {
+			clientX: touch.clientX,
+			clientY: touch.clientY
+		});
+		signatureCanvas.dispatchEvent(mouseEvent);
+	}
+
+	function setSignatureMode(mode) {
+		signatureMode = mode;
+
+		// Update button states
+		if (drawModeBtn && typeModeBtn) {
+			drawModeBtn.classList.toggle('active', mode === 'draw');
+			typeModeBtn.classList.toggle('active', mode === 'type');
+		}
+
+		// Show/hide containers
+		if (drawModeContainer && typeModeContainer) {
+			drawModeContainer.classList.toggle('hidden', mode !== 'draw');
+			typeModeContainer.classList.toggle('hidden', mode !== 'type');
+		}
+
+		// Update instructions
+		const instructions = document.querySelector('.signature-instructions');
+		if (instructions) {
+			instructions.textContent = mode === 'draw'
+				? 'Draw your signature using mouse or touch'
+				: 'Type your name and adjust the style';
+		}
+
+		// Set signature source based on current mode
+		if (mode === 'draw' && signatureCanvas) {
+			signatureImageData = signatureCanvas.toDataURL('image/png');
+		} else if (mode === 'type') {
+			renderTypedSignature();
+		}
+	}
+
+	function renderTypedSignature() {
+		if (!signatureTextCtx || !signatureTextCanvas) return;
+
+		// Clear canvas
+		signatureTextCtx.fillStyle = 'white';
+		signatureTextCtx.fillRect(0, 0, signatureTextCanvas.width, signatureTextCanvas.height);
+
+		if (!signatureText.trim()) {
+			signatureImageData = null;
+			return;
+		}
+
+		// Set up font properties based on selected style
+		let fontFamily = 'cursive';
+		let fontWeight = 'normal';
+		let fontStyle = 'normal';
+
+		switch (signatureFont) {
+			case 'signature1':
+				fontFamily = '"Brush Script MT", cursive';
+				break;
+			case 'signature2':
+				fontFamily = '"Lucida Handwriting", cursive';
+				break;
+			case 'signature3':
+				fontFamily = '"Segoe Script", cursive';
+				break;
+			case 'signature4':
+				fontFamily = '"Edwardian Script ITC", cursive';
+				fontWeight = 'bold';
+				break;
+		}
+
+		// Set font
+		signatureTextCtx.font = `${fontStyle} ${fontWeight} ${signatureSize}px ${fontFamily}`;
+		signatureTextCtx.fillStyle = '#000000';
+		signatureTextCtx.textAlign = 'center';
+		signatureTextCtx.textBaseline = 'middle';
+
+		// Draw text centered on canvas
+		const centerX = signatureTextCanvas.width / 2;
+		const centerY = signatureTextCanvas.height / 2;
+
+		// Add slight random variation for more natural look
+		const randomOffset = (Math.random() - 0.5) * 2;
+		signatureTextCtx.fillText(signatureText, centerX + randomOffset, centerY + randomOffset);
+
+		// Add subtle shadow for depth
+		signatureTextCtx.shadowColor = 'rgba(0, 0, 0, 0.1)';
+		signatureTextCtx.shadowBlur = 1;
+		signatureTextCtx.shadowOffsetX = 1;
+		signatureTextCtx.shadowOffsetY = 1;
+
+		// Redraw text with shadow
+		signatureTextCtx.fillText(signatureText, centerX, centerY);
+
+		// Generate image data
+		signatureImageData = signatureTextCanvas.toDataURL('image/png');
+	}
+
+	function clearSignatureCanvas() {
+		if (signatureMode === 'draw') {
+			if (!signatureCanvas || !signatureCtx) return;
+			signatureCtx.fillStyle = 'white';
+			signatureCtx.fillRect(0, 0, signatureCanvas.width, signatureCanvas.height);
+			signatureImageData = null;
+		} else if (signatureMode === 'type') {
+			if (signatureTextInput) {
+				signatureTextInput.value = '';
+			}
+			signatureText = '';
+			renderTypedSignature();
+		}
+	}
+
+	function saveSignature() {
+		// #region agent log
+		console.log('[DEBUG H1-SAVE] saveSignature function entry:', { signatureImageDataExists: !!signatureImageData, signatureImageDataLength: signatureImageData ? signatureImageData.length : 0, signatureMode });
+		// #endregion
+		if (!signatureImageData) {
+			alert('Please create a signature first');
+			return;
+		}
+
+		// Save via VSCode message passing (persistent storage)
+		const newSignature = {
+			id: Date.now().toString(),
+			dataURL: signatureImageData,
+			createdAt: Date.now()
+		};
+
+		vscode.postMessage({
+			type: 'savePdfSignature',
+			signature: newSignature
+		});
+
+		console.log('[PDF Signature] Saving signature via VSCode storage:', newSignature.id);
+
+		// Show success feedback
+		alert('Signature saved!');
+	}
+
+	function loadSavedSignatures() {
+		// Request signatures from VSCode persistent storage
+		vscode.postMessage({ type: 'loadPdfSignatures' });
+		console.log('[PDF Signature] Requesting saved signatures from VSCode storage');
+	}
+
+	function renderSavedSignatures(signatures) {
+		if (!savedSignaturesList) return;
+
+		savedSignatures = signatures || [];
+		savedSignaturesList.innerHTML = '';
+
+		if (savedSignatures.length === 0) {
+			savedSignaturesList.innerHTML = '<div class="no-saved-signatures">No saved signatures</div>';
+			return;
+		}
+
+		savedSignatures.forEach(sig => {
+			const sigItem = document.createElement('div');
+			sigItem.className = 'saved-signature-item';
+			sigItem.innerHTML = `
+				<img src="${sig.dataURL}" alt="Saved signature" onclick="loadSignature('${sig.id}')">
+				<button onclick="deleteSavedSignature('${sig.id}')" class="delete-saved-signature">×</button>
+			`;
+			savedSignaturesList.appendChild(sigItem);
+		});
+
+		console.log('[PDF Signature] Rendered saved signatures:', signatures.length);
+	}
+
+	// Make functions globally available for onclick handlers
+	window.loadSignature = function(id) {
+		const signature = savedSignatures.find(s => s.id === id);
+		if (signature && signatureCanvas && signatureCtx) {
+			const img = new Image();
+			img.onload = function() {
+				signatureCtx.fillStyle = 'white';
+				signatureCtx.fillRect(0, 0, signatureCanvas.width, signatureCanvas.height);
+				signatureCtx.drawImage(img, 0, 0, signatureCanvas.width, signatureCanvas.height);
+				signatureImageData = signature.dataURL;
+			};
+			img.src = signature.dataURL;
+		}
+	};
+
+	window.deleteSavedSignature = function(id) {
+		// Delete via VSCode message passing
+		vscode.postMessage({
+			type: 'deletePdfSignature',
+			signatureId: id
+		});
+		console.log('[PDF Signature] Deleting signature via VSCode storage:', id);
+	};
+
+	function doneSignature() {
+		if (!signatureImageData) {
+			alert('Please create a signature first');
+			return;
+		}
+
+		// Hide modal and enter placement mode
+		hideSignatureModal();
+		enterPlacementMode();
+	}
+
+	function enterPlacementMode() {
+		isPlacementMode = true;
+		document.body.style.cursor = 'crosshair';
+
+		// Add placement instructions
+		showPlacementInstructions();
+
+		// Listen for clicks on the PDF to place signature
+		document.addEventListener('click', placeSignature);
+	}
+
+	function exitPlacementMode() {
+		isPlacementMode = false;
+		document.body.style.cursor = 'default';
+		hidePlacementInstructions();
+		document.removeEventListener('click', placeSignature);
+	}
+
+	function showPlacementInstructions() {
+		let instructions = document.getElementById('placement-instructions');
+		if (!instructions) {
+			instructions = document.createElement('div');
+			instructions.id = 'placement-instructions';
+			instructions.className = 'placement-instructions';
+			instructions.textContent = 'Click on the PDF to place your signature';
+			document.body.appendChild(instructions);
+		}
+		instructions.style.display = 'block';
+	}
+
+	function hidePlacementInstructions() {
+		const instructions = document.getElementById('placement-instructions');
+		if (instructions) {
+			instructions.style.display = 'none';
+		}
+	}
+
+	function placeSignature(e) {
+		if (!isPlacementMode || !signatureImageData || !loadedPdfUri) return;
+
+		// Check if click is within PDF render container
+		const pdfContainer = document.getElementById('pdf-render-container');
+		const containerRect = pdfContainer.getBoundingClientRect();
+
+		if (e.clientX < containerRect.left || e.clientX > containerRect.right ||
+			e.clientY < containerRect.top || e.clientY > containerRect.bottom) {
+			return; // Click outside PDF area
+		}
+
+		// Calculate position relative to PDF canvas
+		const relativeX = (e.clientX - containerRect.left) / scale;
+		const relativeY = (e.clientY - containerRect.top) / scale;
+
+		// Create signature annotation
+		vscode.postMessage({
+			type: 'addSignatureAnnotation',
+			annotation: {
+				pdfUri: loadedPdfUri,
+				page: currentPage,
+				text: 'Signature',
+				color: 'signature',
+				imageData: signatureImageData,
+				boundingBoxes: [{
+					page: currentPage,
+					x: relativeX - 50, // Center the 100px wide signature
+					y: relativeY - 25, // Center the 50px tall signature
+					width: 100,
+					height: 50
+				}]
+			}
+		});
+
+		// Exit placement mode
+		exitPlacementMode();
+	}
+
+	// ==================== SIGNATURE RESIZE FUNCTIONS ====================
+
+	function startResizingSignature(e, signatureElement, annotationId, handle) {
+		// #region agent log
+		console.log('[DEBUG H5-RESIZE] startResizingSignature called:', { annotationId, handle, hasElement: !!signatureElement });
+		// #endregion
+		isResizingSignature = true;
+		resizedSignatureElement = signatureElement;
+		resizedAnnotationId = annotationId;
+		resizeHandle = handle;
+
+		// Store original bounds
+		const rect = signatureElement.getBoundingClientRect();
+		const containerRect = document.getElementById('pdf-render-container').getBoundingClientRect();
+		originalBounds = {
+			x: rect.left - containerRect.left,
+			y: rect.top - containerRect.top,
+			width: rect.width,
+			height: rect.height
+		};
+
+		resizeStartX = e.clientX;
+		resizeStartY = e.clientY;
+
+		// Add resizing class for visual feedback
+		signatureElement.classList.add('resizing');
+		signatureElement.style.zIndex = '10';
+
+		// Prevent text selection during resize
+		e.preventDefault();
+		document.body.classList.add('dragging');
+	}
+
+	function resizeSignature(e) {
+		if (!isResizingSignature || !resizedSignatureElement || !originalBounds) return;
+		// #region agent log (only log when actively resizing to avoid spam)
+		console.log('[DEBUG H5-RESIZE] resizeSignature executing:', { isResizingSignature, hasElement: !!resizedSignatureElement, hasOriginalBounds: !!originalBounds });
+		// #endregion
+
+		const deltaX = e.clientX - resizeStartX;
+		const deltaY = e.clientY - resizeStartY;
+
+		let newX = originalBounds.x;
+		let newY = originalBounds.y;
+		let newWidth = originalBounds.width;
+		let newHeight = originalBounds.height;
+
+		// Calculate new dimensions based on handle
+		switch (resizeHandle) {
+			case 'nw': // North West
+				newX = originalBounds.x + deltaX;
+				newY = originalBounds.y + deltaY;
+				newWidth = originalBounds.width - deltaX;
+				newHeight = originalBounds.height - deltaY;
+				break;
+			case 'ne': // North East
+				newY = originalBounds.y + deltaY;
+				newWidth = originalBounds.width + deltaX;
+				newHeight = originalBounds.height - deltaY;
+				break;
+			case 'sw': // South West
+				newX = originalBounds.x + deltaX;
+				newWidth = originalBounds.width - deltaX;
+				newHeight = originalBounds.height + deltaY;
+				break;
+			case 'se': // South East
+				newWidth = originalBounds.width + deltaX;
+				newHeight = originalBounds.height + deltaY;
+				break;
+			case 'n': // North
+				newY = originalBounds.y + deltaY;
+				newHeight = originalBounds.height - deltaY;
+				break;
+			case 's': // South
+				newHeight = originalBounds.height + deltaY;
+				break;
+			case 'e': // East
+				newWidth = originalBounds.width + deltaX;
+				break;
+			case 'w': // West
+				newX = originalBounds.x + deltaX;
+				newWidth = originalBounds.width - deltaX;
+				break;
+		}
+
+		// Enforce minimum size
+		const minSize = 20;
+		newWidth = Math.max(minSize, newWidth);
+		newHeight = Math.max(minSize, newHeight);
+
+		// Update element position and size
+		resizedSignatureElement.style.left = newX + 'px';
+		resizedSignatureElement.style.top = newY + 'px';
+		resizedSignatureElement.style.width = newWidth + 'px';
+		resizedSignatureElement.style.height = newHeight + 'px';
+	}
+
+	function stopResizingSignature() {
+		if (!isResizingSignature || !resizedSignatureElement || !resizedAnnotationId || !originalBounds) return;
+
+		// Remove resizing visual feedback
+		resizedSignatureElement.classList.remove('resizing');
+		resizedSignatureElement.style.zIndex = '';
+
+		// Re-enable text selection
+		document.body.classList.remove('dragging');
+
+		// Get final dimensions and convert back to PDF coordinates
+		const containerRect = document.getElementById('pdf-render-container').getBoundingClientRect();
+		const elementRect = resizedSignatureElement.getBoundingClientRect();
+
+		// Convert screen coordinates back to PDF coordinates (unscaled)
+		const pdfX = (elementRect.left - containerRect.left) / scale;
+		const pdfY = (elementRect.top - containerRect.top) / scale;
+		const pdfWidth = elementRect.width / scale;
+		const pdfHeight = elementRect.height / scale;
+
+		// Update the annotation dimensions
+		updateSignatureDimensions(resizedAnnotationId, pdfX, pdfY, pdfWidth, pdfHeight);
+
+		// Reset resize state
+		isResizingSignature = false;
+		resizedSignatureElement = null;
+		resizedAnnotationId = null;
+		resizeHandle = null;
+		originalBounds = null;
+	}
+
+	function updateSignatureDimensions(annotationId, newX, newY, newWidth, newHeight) {
+		// Find the annotation and update its bounding box
+		const annotation = annotations.find(a => a.id === annotationId);
+		if (annotation && annotation.boundingBoxes.length > 0) {
+			const box = annotation.boundingBoxes[0];
+			box.x = newX;
+			box.y = newY;
+			box.width = newWidth;
+			box.height = newHeight;
+
+			// Save the updated annotation to the backend
+			vscode.postMessage({
+				type: 'updateAnnotation',
+				annotationId: annotationId,
+				updates: {
+					boundingBoxes: annotation.boundingBoxes
+				}
+			});
+
+			console.log(`[Signature Resize] Updated dimensions for annotation ${annotationId}: (${newX}, ${newY}, ${newWidth}, ${newHeight})`);
+		}
+	}
+
+	// ==================== CONTEXT MENU FUNCTIONS ====================
+
+	function showSignatureContextMenu(e, annotationId) {
+		e.preventDefault();
+		e.stopPropagation();
+
+		// Remove any existing context menu
+		hideSignatureContextMenu();
+
+		// Create context menu
+		contextMenuElement = document.createElement('div');
+		contextMenuElement.className = 'signature-context-menu';
+		contextMenuElement.style.position = 'absolute';
+		contextMenuElement.style.left = e.clientX + 'px';
+		contextMenuElement.style.top = e.clientY + 'px';
+		contextMenuElement.style.zIndex = '1000';
+
+		const deleteOption = document.createElement('div');
+		deleteOption.className = 'context-menu-item';
+		deleteOption.textContent = 'Delete Signature';
+		deleteOption.addEventListener('click', () => {
+			deleteSignature(annotationId);
+			hideSignatureContextMenu();
+		});
+
+		contextMenuElement.appendChild(deleteOption);
+		document.body.appendChild(contextMenuElement);
+
+		contextMenuTargetAnnotationId = annotationId;
+
+		// Close menu when clicking elsewhere
+		setTimeout(() => {
+			document.addEventListener('click', hideSignatureContextMenu, { once: true });
+		}, 0);
+	}
+
+	function hideSignatureContextMenu() {
+		if (contextMenuElement) {
+			contextMenuElement.remove();
+			contextMenuElement = null;
+			contextMenuTargetAnnotationId = null;
+		}
+	}
+
+	function deleteSignature(annotationId) {
+		vscode.postMessage({
+			type: 'deleteAnnotation',
+			annotationId: annotationId
+		});
+		console.log('[Signature Delete] Requested deletion of annotation:', annotationId);
+	}
+
+	// ==================== SIGNATURE DRAG FUNCTIONS ====================
+
+	function startDraggingSignature(e, signatureElement, annotationId) {
+		isDraggingSignature = true;
+		draggedSignatureElement = signatureElement;
+		draggedAnnotationId = annotationId;
+
+		// Get the current position of the signature
+		const rect = signatureElement.getBoundingClientRect();
+		const containerRect = document.getElementById('pdf-render-container').getBoundingClientRect();
+
+		// Calculate the offset from mouse to element corner
+		dragOffsetX = e.clientX - rect.left;
+		dragOffsetY = e.clientY - rect.top;
+
+		// Store initial position
+		dragStartX = rect.left - containerRect.left;
+		dragStartY = rect.top - containerRect.top;
+
+		// Add dragging class for visual feedback
+		signatureElement.classList.add('dragging');
+		signatureElement.style.cursor = 'grabbing';
+		signatureElement.style.zIndex = '10';
+
+		// Prevent text selection during drag
+		e.preventDefault();
+		document.body.classList.add('dragging');
+	}
+
+	function dragSignature(e) {
+		if (!isDraggingSignature || !draggedSignatureElement) return;
+
+		const containerRect = document.getElementById('pdf-render-container').getBoundingClientRect();
+
+		// Calculate new position relative to container
+		let newLeft = e.clientX - containerRect.left - dragOffsetX;
+		let newTop = e.clientY - containerRect.top - dragOffsetY;
+
+		// Constrain to container bounds
+		const elementRect = draggedSignatureElement.getBoundingClientRect();
+		const maxLeft = containerRect.width - elementRect.width;
+		const maxTop = containerRect.height - elementRect.height;
+
+		newLeft = Math.max(0, Math.min(newLeft, maxLeft));
+		newTop = Math.max(0, Math.min(newTop, maxTop));
+
+		// Update position
+		draggedSignatureElement.style.left = newLeft + 'px';
+		draggedSignatureElement.style.top = newTop + 'px';
+	}
+
+	function stopDraggingSignature() {
+		if (!isDraggingSignature || !draggedSignatureElement || !draggedAnnotationId) return;
+
+		// Remove dragging visual feedback
+		draggedSignatureElement.classList.remove('dragging');
+		draggedSignatureElement.style.cursor = 'pointer';
+		draggedSignatureElement.style.zIndex = '';
+
+		// Re-enable text selection
+		document.body.classList.remove('dragging');
+
+		// Get final position and convert back to PDF coordinates
+		const containerRect = document.getElementById('pdf-render-container').getBoundingClientRect();
+		const elementRect = draggedSignatureElement.getBoundingClientRect();
+
+		// Convert screen coordinates back to PDF coordinates (unscaled)
+		const pdfX = (elementRect.left - containerRect.left) / scale;
+		const pdfY = (elementRect.top - containerRect.top) / scale;
+
+		// Update the annotation position
+		updateSignaturePosition(draggedAnnotationId, pdfX, pdfY);
+
+		// Reset drag state
+		isDraggingSignature = false;
+		draggedSignatureElement = null;
+		draggedAnnotationId = null;
+	}
+
+	function updateSignaturePosition(annotationId, newX, newY) {
+		// Find the annotation and update its bounding box
+		const annotation = annotations.find(a => a.id === annotationId);
+		if (annotation && annotation.boundingBoxes.length > 0) {
+			const box = annotation.boundingBoxes[0];
+			box.x = newX;
+			box.y = newY;
+
+			// Save the updated annotation to the backend
+			vscode.postMessage({
+				type: 'updateAnnotation',
+				annotationId: annotationId,
+				updates: {
+					boundingBoxes: annotation.boundingBoxes
+				}
+			});
+
+			console.log(`[Signature Drag] Updated position for annotation ${annotationId}: (${newX}, ${newY})`);
+		}
+	}
+
 	// ==================== ANNOTATION FUNCTIONS ====================
 
 	// Create a highlight annotation from the current text selection
@@ -947,44 +1803,126 @@
 		pageAnnotations.forEach(annotation => {
 			annotation.boundingBoxes.forEach(box => {
 				if (box.page === currentPage) {
-					const highlight = document.createElement('div');
-					highlight.className = 'pdf-highlight';
-					highlight.dataset.annotationId = annotation.id;
+					// Check if this is a signature annotation (has imageData)
+					if (annotation.imageData && annotation.color === 'signature') {
+						// Create signature container
+						const signatureContainer = document.createElement('div');
+						signatureContainer.className = 'pdf-signature-container';
+						signatureContainer.dataset.annotationId = annotation.id;
+						signatureContainer.style.position = 'absolute';
+						signatureContainer.style.left = (box.x * scale) + 'px';
+						signatureContainer.style.top = (box.y * scale) + 'px';
+						signatureContainer.style.width = (box.width * scale) + 'px';
+						signatureContainer.style.height = (box.height * scale) + 'px';
+						signatureContainer.style.cursor = 'pointer';
+						signatureContainer.style.pointerEvents = 'auto';
 
-					// Position and size (scale to current zoom level)
-					highlight.style.position = 'absolute';
-					highlight.style.left = (box.x * scale) + 'px';
-					highlight.style.top = (box.y * scale) + 'px';
-					highlight.style.width = (box.width * scale) + 'px';
-					highlight.style.height = (box.height * scale) + 'px';
+						// Render signature image inside container
+						const signatureImg = document.createElement('img');
+						signatureImg.className = 'pdf-signature';
+						signatureImg.src = annotation.imageData;
+						signatureImg.style.width = '100%';
+						signatureImg.style.height = '100%';
+						signatureImg.style.borderRadius = '2px';
+						signatureImg.style.pointerEvents = 'none'; // Let container handle events
 
-					// Color
-					const colorMap = {
-						yellow: 'rgba(255, 235, 59, 0.4)',
-						green: 'rgba(76, 175, 80, 0.4)',
-						blue: 'rgba(33, 150, 243, 0.4)',
-						pink: 'rgba(233, 30, 99, 0.4)'
-					};
-					highlight.style.backgroundColor = colorMap[annotation.color] || colorMap.yellow;
-					highlight.style.mixBlendMode = 'multiply';
-					highlight.style.cursor = 'pointer';
-					highlight.style.borderRadius = '2px';
-					// CRITICAL: Enable pointer events on individual highlights
-					// (parent layer has pointer-events: none for text selection to work)
-					highlight.style.pointerEvents = 'auto';
+						signatureContainer.appendChild(signatureImg);
 
-					// Click to select
-					highlight.addEventListener('click', (e) => {
-						e.stopPropagation();
-						selectAnnotation(annotation.id);
-					});
+						// Add resize handles (always created, visibility controlled by CSS)
+						const handles = ['nw', 'ne', 'sw', 'se', 'n', 's', 'e', 'w'];
+						handles.forEach(handle => {
+							const handleElement = document.createElement('div');
+							handleElement.className = `resize-handle resize-handle-${handle}`;
+							handleElement.dataset.handle = handle;
+							handleElement.addEventListener('mousedown', (e) => {
+								e.preventDefault();
+								e.stopPropagation();
+								// #region agent log
+								console.log('[DEBUG H5-RESIZE] resize handle mousedown:', { handle, annotationId: annotation.id });
+								// #endregion
+								startResizingSignature(e, signatureContainer, annotation.id, handle);
+							});
+							signatureContainer.appendChild(handleElement);
+						});
+						// #region agent log
+						console.log('[DEBUG H4-RESIZE] resize handles created:', { annotationId: annotation.id, handleCount: handles.length });
+						// #endregion
 
-					// Show note on hover if present
-					if (annotation.note) {
-						highlight.title = annotation.note;
+						// Add hover selection
+						signatureContainer.addEventListener('mouseenter', () => {
+							if (!isDraggingSignature && !isResizingSignature) {
+								selectAnnotation(annotation.id);
+							}
+						});
+
+						// Add drag functionality to container
+						signatureContainer.addEventListener('mousedown', (e) => {
+							// Don't start drag if clicking on a resize handle
+							if (e.target.classList.contains('resize-handle')) return;
+
+							e.preventDefault();
+							e.stopPropagation();
+							startDraggingSignature(e, signatureContainer, annotation.id);
+						});
+
+						// Right-click context menu
+						signatureContainer.addEventListener('contextmenu', (e) => {
+							e.preventDefault();
+							e.stopPropagation();
+							selectAnnotation(annotation.id);
+							showSignatureContextMenu(e, annotation.id);
+						});
+
+						// Click to select (only if not dragging or resizing)
+						signatureContainer.addEventListener('click', (e) => {
+							if (!isDraggingSignature && !isResizingSignature) {
+								e.stopPropagation();
+								selectAnnotation(annotation.id);
+							}
+						});
+
+						highlightLayer.appendChild(signatureContainer);
+					} else {
+						// Render as regular highlight
+						const highlight = document.createElement('div');
+						highlight.className = 'pdf-highlight';
+						highlight.dataset.annotationId = annotation.id;
+
+						// Position and size (scale to current zoom level)
+						highlight.style.position = 'absolute';
+						highlight.style.left = (box.x * scale) + 'px';
+						highlight.style.top = (box.y * scale) + 'px';
+						highlight.style.width = (box.width * scale) + 'px';
+						highlight.style.height = (box.height * scale) + 'px';
+
+						// Color
+						const colorMap = {
+							yellow: 'rgba(255, 235, 59, 0.4)',
+							green: 'rgba(76, 175, 80, 0.4)',
+							blue: 'rgba(33, 150, 243, 0.4)',
+							pink: 'rgba(233, 30, 99, 0.4)'
+						};
+						highlight.style.backgroundColor = colorMap[annotation.color] || colorMap.yellow;
+						highlight.style.mixBlendMode = 'multiply';
+						highlight.style.cursor = 'pointer';
+						highlight.style.borderRadius = '2px';
+						// CRITICAL: Enable pointer events on individual highlights
+						// (parent layer has pointer-events: none for text selection to work)
+						highlight.style.pointerEvents = 'auto';
+
+						// Click to select
+						highlight.addEventListener('click', (e) => {
+							e.stopPropagation();
+							selectAnnotation(annotation.id);
+						});
+
+						// Show note on hover if present
+						if (annotation.note) {
+							highlight.title = annotation.note;
+						}
+
+						highlightLayer.appendChild(highlight);
 					}
-
-					highlightLayer.appendChild(highlight);
 				}
 			});
 		});
@@ -993,7 +1931,7 @@
 	// Select an annotation (for editing/deletion)
 	function selectAnnotation(annotationId) {
 		// Deselect previous
-		document.querySelectorAll('.pdf-highlight.selected').forEach(el => {
+		document.querySelectorAll('.pdf-highlight.selected, .pdf-signature-container.selected').forEach(el => {
 			el.classList.remove('selected');
 			el.style.outline = 'none';
 		});
@@ -1001,7 +1939,7 @@
 		selectedAnnotationId = annotationId;
 
 		// Highlight selected annotation
-		document.querySelectorAll(`.pdf-highlight[data-annotation-id="${annotationId}"]`).forEach(el => {
+		document.querySelectorAll(`.pdf-highlight[data-annotation-id="${annotationId}"], .pdf-signature-container[data-annotation-id="${annotationId}"]`).forEach(el => {
 			el.classList.add('selected');
 			el.style.outline = '2px solid var(--vscode-focusBorder, #007acc)';
 		});
@@ -1066,15 +2004,35 @@
 		});
 	}
 
-	// Click anywhere to deselect (except on highlights or annotation toolbar)
+	// Global mouse event handlers for signature dragging and resizing
+	document.addEventListener('mousemove', (e) => {
+		if (isDraggingSignature && draggedSignatureElement) {
+			dragSignature(e);
+		} else if (isResizingSignature && resizedSignatureElement) {
+			resizeSignature(e);
+		}
+	});
+
+	document.addEventListener('mouseup', () => {
+		if (isDraggingSignature) {
+			stopDraggingSignature();
+		} else if (isResizingSignature) {
+			stopResizingSignature();
+		}
+	});
+
+	// Click anywhere to deselect (except on highlights, signatures, resize handles, the delete button, or highlight buttons)
 	document.addEventListener('click', (e) => {
-		// Don't deselect if clicking on a highlight, the delete button, or highlight buttons
+		// Don't deselect if clicking on a highlight, signature, resize handle, the delete button, or highlight buttons
 		if (!e.target.closest('.pdf-highlight') &&
+			!e.target.closest('.pdf-signature-container') &&
+			!e.target.closest('.resize-handle') &&
 			!e.target.closest('#delete-highlight') &&
 			!e.target.closest('.highlight-btn') &&
-			!e.target.closest('#annotation-toolbar')) {
+			!e.target.closest('#annotation-toolbar') &&
+			!e.target.closest('.signature-context-menu')) {
 			selectedAnnotationId = null;
-			document.querySelectorAll('.pdf-highlight.selected').forEach(el => {
+			document.querySelectorAll('.pdf-highlight.selected, .pdf-signature-container.selected').forEach(el => {
 				el.classList.remove('selected');
 				el.style.outline = 'none';
 			});

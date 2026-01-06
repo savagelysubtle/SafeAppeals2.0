@@ -321,6 +321,13 @@ export class PDFViewerEditor extends EditorPane {
 				console.log('[PDF Viewer] Deleted annotation and sent update');
 				break;
 			}
+			case 'addSignatureAnnotation': {
+				// Add a signature annotation
+				const annotation = data.annotation as Omit<PDFAnnotation, 'id' | 'createdAt'>;
+				const created = this.pdfAnnotationService.addAnnotation(annotation);
+				console.log('[PDF Viewer] Added signature annotation:', created.id);
+				break;
+			}
 			case 'getAnnotations':
 				// Webview requesting annotations
 				this.sendAnnotationsToWebview();
@@ -331,7 +338,105 @@ export class PDFViewerEditor extends EditorPane {
 				// This is much more efficient than rendering pages to images
 				this.printPdf();
 				break;
+
+			case 'savePdfSignature': {
+				// Save a signature to persistent storage for reuse
+				const signature = data.signature as { id: string; dataURL: string; createdAt: number };
+				this.saveSignatureToStorage(signature);
+				break;
+			}
+
+			case 'loadPdfSignatures':
+				// Load all saved signatures from persistent storage
+				this.sendSavedSignaturesToWebview();
+				break;
+
+			case 'deletePdfSignature': {
+				// Delete a saved signature from storage
+				this.deleteSignatureFromStorage(data.signatureId);
+				break;
+			}
 		}
+	}
+
+	private static readonly SIGNATURES_STORAGE_KEY = 'void.pdfSavedSignatures';
+
+	private saveSignatureToStorage(signature: { id: string; dataURL: string; createdAt: number }): void {
+		const stored = this.storageService.get(PDFViewerEditor.SIGNATURES_STORAGE_KEY, -1 /* StorageScope.WORKSPACE */);
+		let signatures: Array<{ id: string; dataURL: string; createdAt: number }> = [];
+
+		if (stored) {
+			try {
+				signatures = JSON.parse(stored);
+			} catch (e) {
+				console.error('[PDF Viewer] Failed to parse saved signatures:', e);
+			}
+		}
+
+		// Add new signature
+		signatures.push(signature);
+
+		// Save back to storage
+		this.storageService.store(
+			PDFViewerEditor.SIGNATURES_STORAGE_KEY,
+			JSON.stringify(signatures),
+			-1 /* StorageScope.WORKSPACE */,
+			0 /* StorageTarget.USER */
+		);
+
+		console.log('[PDF Viewer] Saved signature:', signature.id);
+
+		// Send updated list to webview
+		this.sendSavedSignaturesToWebview();
+	}
+
+	private deleteSignatureFromStorage(signatureId: string): void {
+		const stored = this.storageService.get(PDFViewerEditor.SIGNATURES_STORAGE_KEY, -1 /* StorageScope.WORKSPACE */);
+		let signatures: Array<{ id: string; dataURL: string; createdAt: number }> = [];
+
+		if (stored) {
+			try {
+				signatures = JSON.parse(stored);
+			} catch (e) {
+				console.error('[PDF Viewer] Failed to parse saved signatures:', e);
+			}
+		}
+
+		// Remove signature
+		signatures = signatures.filter(s => s.id !== signatureId);
+
+		// Save back to storage
+		this.storageService.store(
+			PDFViewerEditor.SIGNATURES_STORAGE_KEY,
+			JSON.stringify(signatures),
+			-1 /* StorageScope.WORKSPACE */,
+			0 /* StorageTarget.USER */
+		);
+
+		console.log('[PDF Viewer] Deleted signature:', signatureId);
+
+		// Send updated list to webview
+		this.sendSavedSignaturesToWebview();
+	}
+
+	private sendSavedSignaturesToWebview(): void {
+		const stored = this.storageService.get(PDFViewerEditor.SIGNATURES_STORAGE_KEY, -1 /* StorageScope.WORKSPACE */);
+		let signatures: Array<{ id: string; dataURL: string; createdAt: number }> = [];
+
+		if (stored) {
+			try {
+				signatures = JSON.parse(stored);
+			} catch (e) {
+				console.error('[PDF Viewer] Failed to parse saved signatures:', e);
+			}
+		}
+
+		this.webview?.postMessage({
+			type: 'savedSignatures',
+			signatures
+		});
+
+		console.log('[PDF Viewer] Sent saved signatures to webview:', signatures.length);
 	}
 
 	private async printPdf(): Promise<void> {
@@ -483,11 +588,13 @@ export class PDFViewerEditor extends EditorPane {
 						<span id="page-info">Page <span id="current-page">1</span> of <span id="total-pages">1</span></span>
 						<button id="next-page">Next</button>
 						<span class="controls-separator"></span>
-					<button id="zoom-in">Zoom In</button>
-					<button id="zoom-out">Zoom Out</button>
-					<span class="controls-separator"></span>
-					<button id="print-btn" title="Print (Ctrl+P)">🖨️ Print</button>
-					<span class="controls-separator"></span>
+						<button id="zoom-in">Zoom In</button>
+						<button id="zoom-out">Zoom Out</button>
+						<span class="controls-separator"></span>
+						<button id="print-btn" title="Print (Ctrl+P)">🖨️ Print</button>
+						<span class="controls-separator"></span>
+						<button id="add-signature" title="Add Signature">✍️ Signature</button>
+						<span class="controls-separator"></span>
 					<div id="annotation-toolbar">
 							<button class="highlight-btn" data-color="yellow" title="Yellow Highlight" style="background-color: rgba(255, 235, 59, 0.7);">🖍️</button>
 							<button class="highlight-btn" data-color="green" title="Green Highlight" style="background-color: rgba(76, 175, 80, 0.7);">🖍️</button>
@@ -504,6 +611,66 @@ export class PDFViewerEditor extends EditorPane {
 					</div>
 				</div>
 			</div>
+
+			<!-- Signature Modal -->
+			<div id="signature-modal" class="signature-modal">
+				<div class="signature-modal-content">
+					<div class="signature-modal-header">
+						<h3>Draw Your Signature</h3>
+						<button id="close-signature-modal" class="close-modal-btn">×</button>
+					</div>
+				<div class="signature-modal-body">
+					<div class="signature-mode-toggle">
+						<button id="draw-mode-btn" class="mode-btn active">✏️ Draw</button>
+						<button id="type-mode-btn" class="mode-btn">✍️ Type</button>
+					</div>
+
+					<div id="draw-mode-container" class="signature-mode-container">
+						<div class="signature-canvas-container">
+							<canvas id="signature-canvas" width="400" height="200"></canvas>
+							<div class="signature-instructions">Draw your signature using mouse or touch</div>
+						</div>
+					</div>
+
+					<div id="type-mode-container" class="signature-mode-container hidden">
+						<div class="signature-text-container">
+							<input type="text" id="signature-text-input" placeholder="Type your name" maxlength="50" class="signature-text-input">
+							<div class="signature-text-preview">
+								<canvas id="signature-text-canvas" width="400" height="200"></canvas>
+							</div>
+							<div class="signature-font-controls">
+								<label>Style:
+									<select id="signature-font-select" class="signature-font-select">
+										<option value="signature1">Classic Script</option>
+										<option value="signature2">Elegant Cursive</option>
+										<option value="signature3">Modern Script</option>
+										<option value="signature4">Bold Signature</option>
+									</select>
+								</label>
+								<label>Size:
+									<input type="range" id="signature-size-slider" min="20" max="80" value="40" class="signature-size-slider">
+									<span id="signature-size-value">40px</span>
+								</label>
+							</div>
+						</div>
+					</div>
+
+					<div class="signature-actions">
+						<button id="clear-signature" class="signature-btn">Clear</button>
+						<button id="save-signature" class="signature-btn primary">Save Signature</button>
+					</div>
+						<div class="saved-signatures">
+							<h4>Saved Signatures</h4>
+							<div id="saved-signatures-list"></div>
+						</div>
+					</div>
+					<div class="signature-modal-footer">
+						<button id="cancel-signature" class="signature-btn">Cancel</button>
+						<button id="done-signature" class="signature-btn primary">Done</button>
+					</div>
+				</div>
+			</div>
+
 			<script nonce="${nonce}">
 				window.PDF_WORKER_URI = '${pdfWorkerCdnUri}';
 				console.log('[PDF Viewer HTML] Worker URI set:', window.PDF_WORKER_URI);

@@ -216,6 +216,7 @@ body {
 #pdf-render-container {
 	position: relative;
 	display: inline-block;
+	overflow: visible; /* Allow resize handles to extend outside */
 	/* Ensure crisp rendering */
 	image-rendering: -webkit-optimize-contrast;
 	image-rendering: crisp-edges;
@@ -256,14 +257,7 @@ body {
 	word-spacing: normal;
 }
 
-/* SVG Highlight Layer - between canvas and text layer */
-#pdf-highlight-layer {
-	position: absolute;
-	left: 0;
-	top: 0;
-	pointer-events: none;
-	z-index: 2;
-}
+/* SVG Highlight Layer - see main definition below in PDF Highlight Layer section */
 
 /* Improve selection visibility and precision */
 #pdf-text-layer ::selection {
@@ -327,6 +321,19 @@ body {
 #pdf-controls button:disabled {
 	opacity: 0.5;
 	cursor: not-allowed;
+}
+
+/* Signature button specific styling */
+#add-signature {
+	background-color: var(--vscode-button-secondaryBackground);
+	color: var(--vscode-button-secondaryForeground);
+	font-weight: 500;
+	min-width: 80px;
+}
+
+#add-signature:hover {
+	background-color: var(--vscode-button-secondaryHoverBackground);
+	box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
 }
 
 #page-info {
@@ -500,7 +507,8 @@ body {
 	left: 0;
 	top: 0;
 	pointer-events: auto;
-	z-index: 1;
+	z-index: 5;
+	overflow: visible; /* CRITICAL: Allow resize handles to extend outside */
 }
 
 .pdf-highlight {
@@ -516,6 +524,533 @@ body {
 
 .pdf-highlight.selected {
 	outline: 2px solid var(--vscode-focusBorder, #007acc);
+}
+
+/* Signature Modal Styles */
+
+/* Mode Toggle */
+.signature-mode-toggle {
+	display: flex;
+	margin-bottom: 16px;
+	border-radius: 6px;
+	overflow: hidden;
+	border: 1px solid var(--vscode-input-border);
+}
+
+.mode-btn {
+	flex: 1;
+	padding: 8px 16px;
+	background-color: var(--vscode-input-background);
+	color: var(--vscode-input-foreground);
+	border: none;
+	cursor: pointer;
+	font-size: 13px;
+	font-weight: 500;
+	transition: all 0.2s ease;
+}
+
+.mode-btn:hover {
+	background-color: var(--vscode-list-hoverBackground);
+}
+
+.mode-btn.active {
+	background-color: var(--vscode-button-background);
+	color: var(--vscode-button-foreground);
+	font-weight: 600;
+}
+
+.mode-btn:first-child {
+	border-right: 1px solid var(--vscode-input-border);
+}
+
+.mode-btn.active:first-child {
+	border-right-color: var(--vscode-button-background);
+}
+
+/* Mode Containers */
+.signature-mode-container.hidden {
+	display: none;
+}
+
+.signature-mode-container {
+	animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+	from { opacity: 0; transform: translateY(10px); }
+	to { opacity: 1; transform: translateY(0); }
+}
+
+/* Text Signature Styles */
+.signature-text-container {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 16px;
+}
+
+.signature-text-input {
+	width: 100%;
+	max-width: 300px;
+	padding: 8px 12px;
+	border: 1px solid var(--vscode-input-border);
+	border-radius: 4px;
+	background-color: var(--vscode-input-background);
+	color: var(--vscode-input-foreground);
+	font-size: 14px;
+	font-family: var(--vscode-font-family);
+	text-align: center;
+}
+
+.signature-text-input:focus {
+	outline: none;
+	border-color: var(--vscode-focusBorder);
+	box-shadow: 0 0 0 2px var(--vscode-focusBorder, rgba(0, 120, 215, 0.3));
+}
+
+.signature-text-preview {
+	border: 2px solid var(--vscode-input-border);
+	border-radius: 4px;
+	background-color: white;
+	box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+#signature-text-canvas {
+	display: block;
+	background-color: white;
+}
+
+/* Font Controls */
+.signature-font-controls {
+	display: flex;
+	gap: 16px;
+	align-items: center;
+	flex-wrap: wrap;
+	justify-content: center;
+}
+
+.signature-font-controls label {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	font-size: 12px;
+	color: var(--vscode-foreground);
+	font-weight: 500;
+}
+
+.signature-font-select {
+	padding: 4px 8px;
+	border: 1px solid var(--vscode-input-border);
+	border-radius: 3px;
+	background-color: var(--vscode-input-background);
+	color: var(--vscode-input-foreground);
+	font-size: 12px;
+	min-width: 120px;
+}
+
+.signature-font-select:focus {
+	outline: none;
+	border-color: var(--vscode-focusBorder);
+}
+
+.signature-size-slider {
+	width: 80px;
+	margin: 0 8px;
+}
+
+.signature-size-value {
+	font-size: 11px;
+	color: var(--vscode-descriptionForeground);
+	min-width: 35px;
+	text-align: center;
+}
+
+/* Signature Modal Styles */
+.signature-modal {
+	display: none;
+	position: fixed;
+	top: 0;
+	left: 0;
+	width: 100vw;
+	height: 100vh;
+	background-color: rgba(0, 0, 0, 0.5);
+	z-index: 10000;
+	justify-content: center;
+	align-items: center;
+	opacity: 0;
+	pointer-events: none;
+	transition: opacity 0.2s ease;
+}
+
+.signature-modal-content {
+	background-color: var(--vscode-editor-background);
+	border: 1px solid var(--vscode-editorWidget-border);
+	border-radius: 6px;
+	box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+	max-width: 500px;
+	width: 90%;
+	max-height: 80vh;
+	overflow: hidden;
+	display: flex;
+	flex-direction: column;
+}
+
+.signature-modal-header {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	padding: 16px 20px;
+	border-bottom: 1px solid var(--vscode-editorWidget-border);
+	background-color: var(--vscode-editorWidget-background);
+}
+
+.signature-modal-header h3 {
+	margin: 0;
+	color: var(--vscode-foreground);
+	font-size: 16px;
+	font-weight: 600;
+}
+
+.close-modal-btn {
+	background: none;
+	border: none;
+	color: var(--vscode-foreground);
+	font-size: 24px;
+	cursor: pointer;
+	padding: 0;
+	width: 24px;
+	height: 24px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	border-radius: 3px;
+	transition: background-color 0.2s ease;
+}
+
+.close-modal-btn:hover {
+	background-color: var(--vscode-list-hoverBackground);
+}
+
+.signature-modal-body {
+	padding: 20px;
+	flex: 1;
+	overflow-y: auto;
+}
+
+.signature-canvas-container {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	margin-bottom: 16px;
+}
+
+#signature-canvas {
+	border: 2px solid var(--vscode-input-border);
+	border-radius: 4px;
+	background-color: white;
+	cursor: crosshair;
+	box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.signature-instructions {
+	margin-top: 8px;
+	font-size: 12px;
+	color: var(--vscode-descriptionForeground);
+	text-align: center;
+}
+
+.signature-actions {
+	display: flex;
+	gap: 8px;
+	justify-content: center;
+	margin-bottom: 16px;
+}
+
+.signature-btn {
+	padding: 6px 12px;
+	background-color: var(--vscode-button-secondaryBackground);
+	color: var(--vscode-button-secondaryForeground);
+	border: 1px solid var(--vscode-button-border);
+	border-radius: 3px;
+	cursor: pointer;
+	font-size: 13px;
+	transition: all 0.2s ease;
+}
+
+.signature-btn:hover {
+	background-color: var(--vscode-button-secondaryHoverBackground);
+}
+
+.signature-btn.primary {
+	background-color: var(--vscode-button-background);
+	color: var(--vscode-button-foreground);
+}
+
+.signature-btn.primary:hover {
+	background-color: var(--vscode-button-hoverBackground);
+}
+
+.saved-signatures {
+	margin-top: 16px;
+}
+
+.saved-signatures h4 {
+	margin: 0 0 8px 0;
+	font-size: 14px;
+	color: var(--vscode-foreground);
+	font-weight: 600;
+}
+
+#saved-signatures-list {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+}
+
+.saved-signature-item {
+	position: relative;
+	border: 1px solid var(--vscode-input-border);
+	border-radius: 4px;
+	padding: 4px;
+	background-color: var(--vscode-input-background);
+}
+
+.saved-signature-item img {
+	width: 80px;
+	height: 40px;
+	cursor: pointer;
+	border-radius: 2px;
+	transition: transform 0.2s ease;
+}
+
+.saved-signature-item img:hover {
+	transform: scale(1.05);
+}
+
+.delete-saved-signature {
+	position: absolute;
+	top: -4px;
+	right: -4px;
+	width: 16px;
+	height: 16px;
+	border-radius: 50%;
+	background-color: var(--vscode-errorForeground, #f48771);
+	color: white;
+	border: none;
+	cursor: pointer;
+	font-size: 10px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	opacity: 0;
+	transition: opacity 0.2s ease;
+}
+
+.saved-signature-item:hover .delete-saved-signature {
+	opacity: 1;
+}
+
+.no-saved-signatures {
+	padding: 16px;
+	text-align: center;
+	color: var(--vscode-descriptionForeground);
+	font-size: 12px;
+	font-style: italic;
+}
+
+.signature-modal-footer {
+	display: flex;
+	justify-content: flex-end;
+	gap: 8px;
+	padding: 16px 20px;
+	border-top: 1px solid var(--vscode-editorWidget-border);
+	background-color: var(--vscode-editorWidget-background);
+}
+
+/* Placement Instructions */
+.placement-instructions {
+	position: fixed;
+	top: 20px;
+	left: 50%;
+	transform: translateX(-50%);
+	background-color: var(--vscode-notificationsInfoIcon-foreground, #3794ff);
+	color: white;
+	padding: 8px 16px;
+	border-radius: 4px;
+	font-size: 13px;
+	font-weight: 500;
+	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+	z-index: 10001;
+	pointer-events: none;
+}
+
+/* Signature Image Styles */
+.pdf-signature {
+	position: absolute;
+	cursor: pointer;
+	border-radius: 2px;
+	transition: outline 0.15s ease;
+	box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+.pdf-signature:hover {
+	outline: 1px solid rgba(0, 0, 0, 0.3);
+}
+
+.pdf-signature.selected {
+	outline: 2px solid var(--vscode-focusBorder, #007acc);
+}
+
+/* Signature container and resize styles */
+.pdf-signature-container {
+	position: absolute;
+	border: 1px solid transparent;
+	transition: border-color 0.15s ease;
+	overflow: visible; /* CRITICAL: Allow resize handles to extend outside container */
+}
+
+.pdf-signature-container:hover {
+	border-color: rgba(0, 120, 215, 0.7);
+	box-shadow: 0 0 8px rgba(0, 120, 215, 0.3);
+}
+
+.pdf-signature-container.selected {
+	border-color: var(--vscode-focusBorder, #007acc);
+}
+
+.pdf-signature-container.dragging {
+	opacity: 0.8;
+	transform: rotate(2deg);
+	box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+	z-index: 10 !important;
+}
+
+.pdf-signature-container.resizing {
+	opacity: 0.9;
+	box-shadow: 0 2px 8px rgba(0, 120, 215, 0.4);
+	z-index: 10 !important;
+}
+
+.pdf-signature-container:hover {
+	cursor: grab;
+}
+
+.pdf-signature-container.dragging {
+	cursor: grabbing !important;
+}
+
+/* Resize handles */
+.resize-handle {
+	position: absolute;
+	width: 12px;
+	height: 12px;
+	background-color: var(--vscode-focusBorder, #007acc);
+	border: 2px solid white;
+	border-radius: 50%;
+	pointer-events: auto !important;
+	z-index: 100;
+	opacity: 0;
+	transition: all 0.15s ease;
+	box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+	cursor: pointer;
+}
+
+.pdf-signature-container:hover .resize-handle,
+.pdf-signature-container.selected .resize-handle {
+	opacity: 1;
+}
+
+.resize-handle:hover {
+	background-color: var(--vscode-errorForeground, #f48771);
+	transform: scale(1.3);
+	box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+/* Corner handles */
+.resize-handle-nw {
+	top: -6px;
+	left: -6px;
+	cursor: nw-resize;
+}
+
+.resize-handle-ne {
+	top: -6px;
+	right: -6px;
+	cursor: ne-resize;
+}
+
+.resize-handle-sw {
+	bottom: -6px;
+	left: -6px;
+	cursor: sw-resize;
+}
+
+.resize-handle-se {
+	bottom: -6px;
+	right: -6px;
+	cursor: se-resize;
+}
+
+/* Edge handles */
+.resize-handle-n {
+	top: -6px;
+	left: 50%;
+	transform: translateX(-50%);
+	cursor: n-resize;
+}
+
+.resize-handle-s {
+	bottom: -6px;
+	left: 50%;
+	transform: translateX(-50%);
+	cursor: s-resize;
+}
+
+.resize-handle-e {
+	top: 50%;
+	right: -6px;
+	transform: translateY(-50%);
+	cursor: e-resize;
+}
+
+.resize-handle-w {
+	top: 50%;
+	left: -6px;
+	transform: translateY(-50%);
+	cursor: w-resize;
+}
+
+/* Context menu */
+.signature-context-menu {
+	position: fixed;
+	background-color: var(--vscode-menu-background);
+	border: 1px solid var(--vscode-menu-border);
+	border-radius: 4px;
+	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+	padding: 4px 0;
+	min-width: 150px;
+	z-index: 10000;
+	font-size: 13px;
+}
+
+.context-menu-item {
+	padding: 6px 12px;
+	color: var(--vscode-menu-foreground);
+	cursor: pointer;
+	transition: background-color 0.1s ease;
+}
+
+.context-menu-item:hover {
+	background-color: var(--vscode-menu-selectionBackground);
+	color: var(--vscode-menu-selectionForeground);
+}
+
+/* Prevent text selection during drag */
+body.dragging {
+	user-select: none;
+	-webkit-user-select: none;
+	-moz-user-select: none;
+	-ms-user-select: none;
 }
 
 /* Print Styles */

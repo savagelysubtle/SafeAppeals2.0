@@ -85,6 +85,17 @@ class DocxRibbon {
 		});
 	}
 
+	// Helper to find all node types in a JSON structure
+	findNodeTypes(json, types = new Set()) {
+		if (json && json.type) {
+			types.add(json.type);
+		}
+		if (json && json.content && Array.isArray(json.content)) {
+			json.content.forEach(child => this.findNodeTypes(child, types));
+		}
+		return Array.from(types);
+	}
+
 	// Update ribbon state based on editor selection
 	updateState() {
 		if (!this.editor || !this.editor.editor) return;
@@ -368,9 +379,150 @@ class DocxRibbon {
 		}
 
 		if (e.insertImageBtn) {
+			// Create a hidden file input for image selection
+			const imageInput = document.createElement('input');
+			imageInput.type = 'file';
+			imageInput.accept = 'image/*';
+			imageInput.style.display = 'none';
+			document.body.appendChild(imageInput);
+
+			// Helper to resize image before insertion using pica for memory efficiency
+			const resizeImage = async (file, maxWidth, maxHeight) => {
+				// Get pica from global (loaded via webpack bundle)
+				const PicaLib = window.Pica;
+
+				// Create image from file
+				const img = new Image();
+				const objectUrl = URL.createObjectURL(file);
+
+				try {
+					await new Promise((resolve, reject) => {
+						img.onload = resolve;
+						img.onerror = reject;
+						img.src = objectUrl;
+					});
+
+					console.log('[DocxRibbon] Original image:', img.width, 'x', img.height, 'file:', Math.round(file.size/1024), 'KB');
+
+					// Calculate target dimensions
+					let width = img.width;
+					let height = img.height;
+
+					if (width > maxWidth || height > maxHeight) {
+						const ratio = Math.min(maxWidth / width, maxHeight / height);
+						width = Math.round(width * ratio);
+						height = Math.round(height * ratio);
+					}
+
+					// Create source canvas
+					const srcCanvas = document.createElement('canvas');
+					srcCanvas.width = img.width;
+					srcCanvas.height = img.height;
+					srcCanvas.getContext('2d').drawImage(img, 0, 0);
+
+					// Create destination canvas
+					const destCanvas = document.createElement('canvas');
+					destCanvas.width = width;
+					destCanvas.height = height;
+
+					let resizedBase64;
+
+					// Use pica if available for high-quality memory-efficient resize
+					let usedPica = false;
+					if (PicaLib) {
+						try {
+							const pica = new PicaLib();
+							await pica.resize(srcCanvas, destCanvas, {
+								unsharpAmount: 80,
+								unsharpRadius: 0.6,
+								unsharpThreshold: 2
+							});
+
+							// CRITICAL: Use canvas.toDataURL directly instead of pica.toBlob
+							// pica.toBlob + FileReader was causing issues in webview context
+							resizedBase64 = destCanvas.toDataURL('image/jpeg', 0.85);
+							usedPica = true;
+
+							console.log('[DocxRibbon] ✅ Pica resize complete:', width, 'x', height, 'size:', Math.round(resizedBase64.length/1024), 'KB');
+						} catch (picaErr) {
+							console.warn('[DocxRibbon] Pica resize failed:', picaErr);
+						}
+					}
+
+					// Fallback to canvas resize if pica not available or failed
+					if (!usedPica) {
+						console.warn('[DocxRibbon] Using canvas fallback');
+						destCanvas.getContext('2d').drawImage(srcCanvas, 0, 0, width, height);
+						resizedBase64 = destCanvas.toDataURL('image/jpeg', 0.85);
+					}
+
+					// Verify we have a proper base64 data URL
+					if (!resizedBase64 || !resizedBase64.startsWith('data:image')) {
+						throw new Error('Failed to generate base64 image');
+					}
+
+					// CRITICAL: Cleanup to free memory
+					URL.revokeObjectURL(objectUrl);
+					srcCanvas.width = 0;
+					srcCanvas.height = 0;
+					destCanvas.width = 0;
+					destCanvas.height = 0;
+
+					return resizedBase64;
+				} catch (err) {
+					URL.revokeObjectURL(objectUrl);
+					throw err;
+				}
+			};
+
+			imageInput.addEventListener('change', async (event) => {
+				const file = event.target.files?.[0];
+				if (!file) return;
+
+				console.log('[DocxRibbon] Image selected:', file.name, Math.round(file.size/1024), 'KB');
+
+				try {
+					// Resize to fit within page (max 600px width, 800px height for letter page)
+					const maxWidth = 600;
+					const maxHeight = 800;
+					const resizedBase64 = await resizeImage(file, maxWidth, maxHeight);
+
+					if (resizedBase64 && this.editor?.editor) {
+						// Check if setImage command exists
+						const hasSetImage = !!this.editor.editor.commands.setImage;
+						console.log('[DocxRibbon] setImage command available:', hasSetImage);
+
+						// Get state before insertion
+						const beforeJson = this.editor.editor.getJSON();
+						console.log('[DocxRibbon] State BEFORE insertion - node types:', this.findNodeTypes(beforeJson));
+
+						// Insert image
+						const result = this.editor.editor.chain().focus().setImage({ src: resizedBase64 }).run();
+						console.log('[DocxRibbon] setImage chain result:', result);
+
+						// Get state after insertion
+						const afterJson = this.editor.editor.getJSON();
+						console.log('[DocxRibbon] State AFTER insertion - node types:', this.findNodeTypes(afterJson));
+
+						// Check if image node exists in schema
+						const schema = this.editor.editor.schema;
+						const imageNodeType = schema.nodes.image;
+						console.log('[DocxRibbon] Image in schema:', !!imageNodeType, 'group:', imageNodeType?.spec?.group);
+
+						this.callbacks.onModification?.();
+						console.log('[DocxRibbon] ✅ Image inserted successfully');
+					}
+				} catch (err) {
+					console.error('[DocxRibbon] Image processing failed:', err);
+				}
+
+				// Reset input so same file can be selected again
+				imageInput.value = '';
+			});
+
 			e.insertImageBtn.addEventListener('click', () => {
 				console.log('[DocxRibbon] Image insertion requested');
-				alert('Image insertion coming soon');
+				imageInput.click();
 			});
 		}
 

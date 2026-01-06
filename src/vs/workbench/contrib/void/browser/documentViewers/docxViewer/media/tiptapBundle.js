@@ -192,6 +192,332 @@
 
 			// NOTE: HorizontalRule is already included in StarterKit, don't add separately
 
+			// Add Table extensions
+			const Table = window.TiptapTable;
+			const TableRow = window.TiptapTableRow;
+			const TableCell = window.TiptapTableCell;
+			const TableHeader = window.TiptapTableHeader;
+			if (Table && TableRow && TableCell && TableHeader) {
+				extensions.push(Table.configure({
+					resizable: true,
+					HTMLAttributes: {
+						class: 'docx-table',
+					},
+				}));
+				extensions.push(TableRow);
+				extensions.push(TableCell);
+				extensions.push(TableHeader);
+				console.log('[TiptapDocxEditor] ✅ Table extensions added');
+			} else {
+				console.warn('[TiptapDocxEditor] ❌ Table extensions MISSING');
+			}
+
+		// Add lightweight Image extension with manual resize handles
+			// This is MUCH more memory efficient than tiptap-extension-resize-image
+			// CRITICAL: Image is a Node, not an Extension - must use Node.create()
+			const TiptapNode = window.TiptapNode;
+			if (TiptapNode) {
+				const LightweightImage = TiptapNode.create({
+					name: 'image',
+					group: 'block',
+					atom: true,  // Image is an atomic node (not editable content inside)
+					draggable: false,  // DISABLED - dragging large base64 images causes memory issues
+					selectable: true,
+
+					addAttributes() {
+						return {
+							src: {
+								default: null,
+								parseHTML: element => element.getAttribute('src'),
+							},
+							alt: {
+								default: null,
+								parseHTML: element => element.getAttribute('alt'),
+							},
+							title: {
+								default: null,
+								parseHTML: element => element.getAttribute('title'),
+							},
+							width: {
+								default: null,
+								parseHTML: element => {
+									// Try to get width from various sources
+									const widthAttr = element.getAttribute('width');
+									if (widthAttr) return parseInt(widthAttr, 10);
+
+									// Try to get from style
+									const style = element.getAttribute('style') || '';
+									const widthMatch = style.match(/width:\s*(\d+)px/);
+									if (widthMatch) return parseInt(widthMatch[1], 10);
+
+									// Try computed width if available
+									if (element.offsetWidth) return element.offsetWidth;
+
+									return null;
+								},
+							},
+							height: {
+								default: null,
+								parseHTML: element => {
+									// Try to get height from various sources
+									const heightAttr = element.getAttribute('height');
+									if (heightAttr) return parseInt(heightAttr, 10);
+
+									// Try to get from style
+									const style = element.getAttribute('style') || '';
+									const heightMatch = style.match(/height:\s*(\d+)px/);
+									if (heightMatch) return parseInt(heightMatch[1], 10);
+
+									// Try computed height if available
+									if (element.offsetHeight) return element.offsetHeight;
+
+									return null;
+								},
+							},
+						};
+					},
+
+					parseHTML() {
+						return [{
+							tag: 'img[src]',
+						}];
+					},
+
+					renderHTML({ HTMLAttributes }) {
+						const style = [];
+						if (HTMLAttributes.width) {
+							style.push(`width: ${HTMLAttributes.width}px`);
+						}
+						if (HTMLAttributes.height) {
+							style.push(`height: ${HTMLAttributes.height}px`);
+						}
+						if (style.length === 0) {
+							style.push('max-width: 100%');
+						}
+
+						return ['img', {
+							...HTMLAttributes,
+							class: 'docx-image',
+							style: style.join('; '),
+						}];
+					},
+
+					addCommands() {
+						return {
+							setImage: (options) => ({ commands }) => {
+								return commands.insertContent({
+									type: this.name,
+									attrs: options,
+								});
+							},
+							// Command to update image size
+							updateImageSize: (attrs) => ({ tr, state, dispatch }) => {
+								const { selection } = state;
+								const node = state.doc.nodeAt(selection.from);
+								if (node && node.type.name === 'image') {
+									if (dispatch) {
+										tr.setNodeMarkup(selection.from, undefined, {
+											...node.attrs,
+											...attrs,
+										});
+										dispatch(tr);
+									}
+									return true;
+								}
+								return false;
+							},
+						};
+					},
+
+					// Custom NodeView with resize handles
+					addNodeView() {
+						return ({ node: initialNode, getPos, editor }) => {
+							// Keep track of current node (updated when ProseMirror updates us)
+							let currentNode = initialNode;
+
+							// Create wrapper container
+							const container = document.createElement('div');
+							container.className = 'docx-image-container';
+							container.style.cssText = 'position: relative; display: inline-block; line-height: 0;';
+
+							// Create image element
+							const img = document.createElement('img');
+							img.src = currentNode.attrs.src || '';
+							img.alt = currentNode.attrs.alt || '';
+							img.className = 'docx-image';
+							if (currentNode.attrs.width) {
+								img.style.width = `${currentNode.attrs.width}px`;
+							}
+							if (currentNode.attrs.height) {
+								img.style.height = `${currentNode.attrs.height}px`;
+							}
+							if (!currentNode.attrs.width && !currentNode.attrs.height) {
+								img.style.maxWidth = '100%';
+							}
+
+							console.log('[Image NodeView] Created with attrs:', JSON.stringify({
+								width: currentNode.attrs.width,
+								height: currentNode.attrs.height,
+								srcLength: currentNode.attrs.src?.length
+							}));
+
+							container.appendChild(img);
+
+							// Create resize handle (bottom-right corner)
+							const resizeHandle = document.createElement('div');
+							resizeHandle.className = 'docx-image-resize-handle';
+							resizeHandle.style.cssText = `
+								position: absolute;
+								bottom: 0;
+								right: 0;
+								width: 12px;
+								height: 12px;
+								background: var(--vscode-focusBorder, #007acc);
+								cursor: nwse-resize;
+								opacity: 0;
+								transition: opacity 0.15s;
+								border-radius: 2px;
+							`;
+							container.appendChild(resizeHandle);
+
+							// Show/hide resize handle on hover
+							container.addEventListener('mouseenter', () => {
+								resizeHandle.style.opacity = '1';
+							});
+							container.addEventListener('mouseleave', () => {
+								if (!container.classList.contains('resizing')) {
+									resizeHandle.style.opacity = '0';
+								}
+							});
+
+							// Resize functionality
+							let startX, startY, startWidth, startHeight;
+							let aspectRatio = 1;
+
+							const onMouseDown = (e) => {
+								e.preventDefault();
+								e.stopPropagation();
+
+								startX = e.clientX;
+								startY = e.clientY;
+								startWidth = img.offsetWidth;
+								startHeight = img.offsetHeight;
+								aspectRatio = startWidth / startHeight;
+
+								container.classList.add('resizing');
+								resizeHandle.style.opacity = '1';
+
+								document.addEventListener('mousemove', onMouseMove);
+								document.addEventListener('mouseup', onMouseUp);
+							};
+
+							const onMouseMove = (e) => {
+								const dx = e.clientX - startX;
+								// Keep aspect ratio
+								const newWidth = Math.max(50, startWidth + dx);
+								const newHeight = Math.round(newWidth / aspectRatio);
+
+								img.style.width = `${newWidth}px`;
+								img.style.height = `${newHeight}px`;
+							};
+
+							const onMouseUp = () => {
+								document.removeEventListener('mousemove', onMouseMove);
+								document.removeEventListener('mouseup', onMouseUp);
+
+								container.classList.remove('resizing');
+								resizeHandle.style.opacity = '0';
+
+								// Update node attributes with new size
+								const newWidth = Math.round(img.offsetWidth);
+								const newHeight = Math.round(img.offsetHeight);
+
+								console.log('[Image NodeView] Resize complete:', {
+									newWidth,
+									newHeight,
+									currentAttrs: { width: currentNode.attrs.width, height: currentNode.attrs.height }
+								});
+
+								if (typeof getPos === 'function') {
+									const pos = getPos();
+									if (pos !== undefined) {
+										// Use currentNode.attrs to preserve current src
+										const newAttrs = {
+											...currentNode.attrs,
+											width: newWidth,
+											height: newHeight,
+										};
+										console.log('[Image NodeView] Setting new attrs:', JSON.stringify({
+											width: newAttrs.width,
+											height: newAttrs.height,
+											srcLength: newAttrs.src?.length
+										}));
+
+										editor.chain().focus().command(({ tr }) => {
+											tr.setNodeMarkup(pos, undefined, newAttrs);
+											return true;
+										}).run();
+
+										// Verify the update by checking the document
+										setTimeout(() => {
+											const json = editor.getJSON();
+											const findImages = (node) => {
+												const results = [];
+												if (node.type === 'image') {
+													results.push({ width: node.attrs?.width, height: node.attrs?.height, srcLen: node.attrs?.src?.length });
+												}
+												if (node.content) {
+													node.content.forEach(child => results.push(...findImages(child)));
+												}
+												return results;
+											};
+											console.log('[Image NodeView] Images in doc after resize:', JSON.stringify(findImages(json)));
+										}, 100);
+									}
+								}
+							};
+
+							resizeHandle.addEventListener('mousedown', onMouseDown);
+
+							return {
+								dom: container,
+								update: (updatedNode) => {
+									if (updatedNode.type.name !== 'image') {
+										return false;
+									}
+									// Update our reference to the current node
+									currentNode = updatedNode;
+
+									console.log('[Image NodeView] Update received:', JSON.stringify({
+										width: updatedNode.attrs.width,
+										height: updatedNode.attrs.height,
+										srcLength: updatedNode.attrs.src?.length
+									}));
+
+									img.src = updatedNode.attrs.src || '';
+									img.alt = updatedNode.attrs.alt || '';
+									if (updatedNode.attrs.width) {
+										img.style.width = `${updatedNode.attrs.width}px`;
+									}
+									if (updatedNode.attrs.height) {
+										img.style.height = `${updatedNode.attrs.height}px`;
+									}
+									return true;
+								},
+								destroy: () => {
+									resizeHandle.removeEventListener('mousedown', onMouseDown);
+								},
+							};
+						};
+					},
+				});
+
+				extensions.push(LightweightImage);
+				console.log('[TiptapDocxEditor] ✅ Lightweight Image extension added (with resize handles)');
+			} else {
+				console.warn('[TiptapDocxEditor] ❌ TiptapNode not available for Image - images will not work!');
+			}
+
 			// Add @adalat-ai/page-extension - CRITICAL FOR PAGE BREAKS
 			// NOTE: The extension uses ReactNodeViewRenderer which requires a React context.
 			// Since we use vanilla Editor (not useEditor + EditorContent), we must create
@@ -410,6 +736,20 @@
 					breakPages: false,
 				});
 
+				// Debug: Check for images in the rendered HTML
+				const images = tempDiv.querySelectorAll('img');
+				console.log('[TiptapDocxEditor] Found', images.length, 'images in DOCX HTML');
+				images.forEach((img, i) => {
+					console.log(`[TiptapDocxEditor] Image ${i}:`, {
+						src: img.src?.substring(0, 50) + '...',
+						width: img.getAttribute('width'),
+						height: img.getAttribute('height'),
+						style: img.getAttribute('style'),
+						naturalWidth: img.naturalWidth,
+						naturalHeight: img.naturalHeight
+					});
+				});
+
 				const html = tempDiv.innerHTML;
 				this.loadFromHTML(html);
 				console.log('[TiptapDocxEditor] DOCX loaded');
@@ -507,6 +847,18 @@
 			try {
 				const { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType } = window.DocxLib;
 				const json = this.editor.getJSON();
+
+				// Debug: Log the full JSON structure to see all node types
+				console.log('[TiptapDocxEditor] Full JSON content:', JSON.stringify(json, null, 2).substring(0, 2000));
+
+				// Debug: Find all unique node types in the content
+				const findNodeTypes = (node, types = new Set()) => {
+					if (node.type) types.add(node.type);
+					if (node.content) node.content.forEach(child => findNodeTypes(child, types));
+					return types;
+				};
+				console.log('[TiptapDocxEditor] Node types found:', [...findNodeTypes(json)]);
+
 				const docxContent = this.convertTiptapToDocx(json, { Paragraph, TextRun, HeadingLevel, AlignmentType });
 
 				// Create DOCX document
@@ -552,7 +904,7 @@
 			}
 
 			for (const node of json.content) {
-				const converted = this.convertNodeToDocx(node, docxClasses);
+				const converted = this.convertNodeToDocx(node, docxClasses, 0);
 				if (converted) {
 					paragraphs.push(...converted);
 				}
@@ -564,9 +916,12 @@
 		/**
 		 * Convert a single Tiptap node to DOCX
 		 */
-		convertNodeToDocx(node, docxClasses) {
+		convertNodeToDocx(node, docxClasses, depth = 0) {
 			const { Paragraph, TextRun, HeadingLevel, AlignmentType } = docxClasses;
 			const paragraphs = [];
+
+			// Debug logging for all nodes
+			console.log('[TiptapDocxEditor] Converting node:', ' '.repeat(depth * 2) + node.type, node.attrs ? 'hasAttrs' : '');
 
 			switch (node.type) {
 				case 'paragraph': {
@@ -601,7 +956,7 @@
 						for (const item of node.content) {
 							if (item.type === 'listItem' && item.content) {
 								for (const childNode of item.content) {
-									const converted = this.convertNodeToDocx(childNode, docxClasses);
+									const converted = this.convertNodeToDocx(childNode, docxClasses, depth + 1);
 									if (converted) {
 										paragraphs.push(...converted);
 									}
@@ -612,10 +967,80 @@
 					break;
 				}
 
+			case 'image':
+				case 'imageResize': {
+					// Handle image nodes (both standard and resizable)
+					try {
+						const src = node.attrs?.src;
+						console.log('[TiptapDocxEditor] Processing image node:', node.type, 'src length:', src?.length);
+
+						if (src && src.startsWith('data:image')) {
+							// Extract base64 image data and determine type
+							const mimeMatch = src.match(/^data:(image\/\w+);base64,/);
+							const mimeType = mimeMatch ? mimeMatch[1] : 'image/png';
+							const base64Data = src.split(',')[1];
+							const imageBuffer = Uint8Array.from(atob(base64Data), c => c.charCodeAt(0));
+
+							// Get image dimensions from attributes
+							let width = node.attrs?.width;
+							let height = node.attrs?.height;
+
+							// Default dimensions if not found
+							width = width ? parseInt(width) : 400;
+							height = height ? parseInt(height) : Math.round(width * 0.75);
+
+							// Import ImageRun from docx library
+							const { ImageRun } = window.DocxLib;
+
+							if (!ImageRun) {
+								console.error('[TiptapDocxEditor] ImageRun not available in DocxLib');
+								break;
+							}
+
+							// Determine image type for docx
+							let imageType;
+							if (mimeType.includes('jpeg') || mimeType.includes('jpg')) {
+								imageType = 'jpg';
+							} else if (mimeType.includes('png')) {
+								imageType = 'png';
+							} else if (mimeType.includes('gif')) {
+								imageType = 'gif';
+							} else if (mimeType.includes('bmp')) {
+								imageType = 'bmp';
+							} else {
+								imageType = 'png'; // default
+							}
+
+							console.log('[TiptapDocxEditor] Image type detected:', imageType, 'mime:', mimeType);
+
+							// Create image paragraph with proper type
+							const imageRun = new ImageRun({
+								data: imageBuffer,
+								type: imageType,
+								transformation: {
+									width: width,
+									height: height,
+								},
+							});
+
+							paragraphs.push(new Paragraph({
+								children: [imageRun],
+							}));
+
+							console.log('[TiptapDocxEditor] ✅ Image added to DOCX:', { width, height, type: imageType, bufferSize: imageBuffer.length });
+						} else {
+							console.warn('[TiptapDocxEditor] Image skipped - not base64 or no src');
+						}
+					} catch (error) {
+						console.error('[TiptapDocxEditor] Failed to convert image:', error);
+					}
+					break;
+				}
+
 				default:
 					if (node.content) {
 						for (const childNode of node.content) {
-							const converted = this.convertNodeToDocx(childNode, docxClasses);
+							const converted = this.convertNodeToDocx(childNode, docxClasses, depth + 1);
 							if (converted) {
 								paragraphs.push(...converted);
 							}
