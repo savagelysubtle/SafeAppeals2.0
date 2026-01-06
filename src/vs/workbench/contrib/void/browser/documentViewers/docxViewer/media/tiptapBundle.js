@@ -736,19 +736,27 @@
 					breakPages: false,
 				});
 
-				// Debug: Check for images in the rendered HTML
+				// Process images: Convert Base64 src to Blob URLs
 				const images = tempDiv.querySelectorAll('img');
 				console.log('[TiptapDocxEditor] Found', images.length, 'images in DOCX HTML');
-				images.forEach((img, i) => {
-					console.log(`[TiptapDocxEditor] Image ${i}:`, {
-						src: img.src?.substring(0, 50) + '...',
-						width: img.getAttribute('width'),
-						height: img.getAttribute('height'),
-						style: img.getAttribute('style'),
-						naturalWidth: img.naturalWidth,
-						naturalHeight: img.naturalHeight
-					});
+
+				const imagePromises = Array.from(images).map(async (img, i) => {
+					const src = img.getAttribute('src');
+					if (src && src.startsWith('data:image')) {
+						try {
+							const res = await fetch(src);
+							const blob = await res.blob();
+							const blobUrl = URL.createObjectURL(blob);
+							img.setAttribute('src', blobUrl);
+							img.setAttribute('data-original-src', 'blob'); // Marker
+							console.log(`[TiptapDocxEditor] Converted image ${i} to Blob URL:`, blobUrl);
+						} catch (e) {
+							console.error(`[TiptapDocxEditor] Failed to convert image ${i} to Blob:`, e);
+						}
+					}
 				});
+
+				await Promise.all(imagePromises);
 
 				const html = tempDiv.innerHTML;
 				this.loadFromHTML(html);
@@ -833,6 +841,90 @@
 			return this.editor ? this.editor.getJSON() : null;
 		}
 
+		/**
+		 * Get JSON with all Blob URLs converted back to Base64 for persistence
+		 */
+		async getHydratedJSON() {
+			if (!this.editor) return null;
+			const json = this.editor.getJSON();
+
+			// Helper to process nodes recursively
+			const processNode = async (node) => {
+				if (node.type === 'image' || node.type === 'imageResize') {
+					const src = node.attrs?.src;
+					if (src && src.startsWith('blob:')) {
+						try {
+							const response = await fetch(src);
+							const blob = await response.blob();
+							const reader = new FileReader();
+							const base64 = await new Promise((resolve, reject) => {
+								reader.onloadend = () => resolve(reader.result);
+								reader.onerror = reject;
+								reader.readAsDataURL(blob);
+							});
+							node.attrs.src = base64;
+							// Remove our internal flags if any
+							delete node.attrs['data-original-src'];
+						} catch (e) {
+							console.warn('[TiptapDocxEditor] Failed to hydrate image:', src, e);
+						}
+					}
+				}
+
+				if (node.content) {
+					await Promise.all(node.content.map(processNode));
+				}
+			};
+
+			await processNode(json);
+			return json;
+		}
+
+		/**
+		 * Load JSON content, converting Base64 images to Blob URLs for memory efficiency
+		 */
+		async loadFromJSON(json) {
+			if (!this.editor) return;
+
+			console.log('[TiptapDocxEditor] Loading from JSON with Blob optimization');
+
+			// Clone json to avoid mutating the input
+			const jsonClone = JSON.parse(JSON.stringify(json));
+
+			const processNode = async (node) => {
+				if (node.type === 'image' || node.type === 'imageResize') {
+					const src = node.attrs?.src;
+					if (src && src.startsWith('data:image')) {
+						try {
+							// Convert Base64 to Blob
+							const res = await fetch(src);
+							const blob = await res.blob();
+							const blobUrl = URL.createObjectURL(blob);
+							node.attrs.src = blobUrl;
+							console.log('[TiptapDocxEditor] Converted JSON image to Blob URL:', blobUrl);
+						} catch (e) {
+							console.warn('[TiptapDocxEditor] Failed to convert JSON image to Blob:', e);
+						}
+					}
+				}
+
+				if (node.content) {
+					await Promise.all(node.content.map(processNode));
+				}
+			};
+
+			await processNode(jsonClone);
+
+			this.editor.commands.setContent(jsonClone);
+
+			// Trigger pagination check
+			setTimeout(() => {
+				if (this.editor) {
+					this.editor.view.dispatch(this.editor.state.tr.setMeta('splitPage', true));
+				}
+			}, 200);
+		}
+
 		async saveToDocx() {
 			if (!this.editor) {
 				throw new Error('Editor not initialized');
@@ -859,7 +951,7 @@
 				};
 				console.log('[TiptapDocxEditor] Node types found:', [...findNodeTypes(json)]);
 
-				const docxContent = this.convertTiptapToDocx(json, { Paragraph, TextRun, HeadingLevel, AlignmentType });
+				const docxContent = await this.convertTiptapToDocx(json, { Paragraph, TextRun, HeadingLevel, AlignmentType });
 
 				// Create DOCX document
 				const doc = new Document({
@@ -896,7 +988,7 @@
 		/**
 		 * Convert Tiptap JSON to DOCX paragraphs
 		 */
-		convertTiptapToDocx(json, docxClasses) {
+		async convertTiptapToDocx(json, docxClasses) {
 			const paragraphs = [];
 
 			if (!json.content) {
@@ -904,7 +996,7 @@
 			}
 
 			for (const node of json.content) {
-				const converted = this.convertNodeToDocx(node, docxClasses, 0);
+				const converted = await this.convertNodeToDocx(node, docxClasses, 0);
 				if (converted) {
 					paragraphs.push(...converted);
 				}
@@ -916,7 +1008,7 @@
 		/**
 		 * Convert a single Tiptap node to DOCX
 		 */
-		convertNodeToDocx(node, docxClasses, depth = 0) {
+		async convertNodeToDocx(node, docxClasses, depth = 0) {
 			const { Paragraph, TextRun, HeadingLevel, AlignmentType } = docxClasses;
 			const paragraphs = [];
 
@@ -956,7 +1048,7 @@
 						for (const item of node.content) {
 							if (item.type === 'listItem' && item.content) {
 								for (const childNode of item.content) {
-									const converted = this.convertNodeToDocx(childNode, docxClasses, depth + 1);
+									const converted = await this.convertNodeToDocx(childNode, docxClasses, depth + 1);
 									if (converted) {
 										paragraphs.push(...converted);
 									}
@@ -971,16 +1063,34 @@
 				case 'imageResize': {
 					// Handle image nodes (both standard and resizable)
 					try {
-						const src = node.attrs?.src;
-						console.log('[TiptapDocxEditor] Processing image node:', node.type, 'src length:', src?.length);
+						let src = node.attrs?.src;
+						console.log('[TiptapDocxEditor] Processing image node:', node.type, 'src:', src ? (src.length > 50 ? src.substring(0, 50) + '...' : src) : 'null');
 
-						if (src && src.startsWith('data:image')) {
+						let imageBuffer;
+						let mimeType;
+
+						if (src && src.startsWith('blob:')) {
+							// Fetch blob and convert to array buffer
+							try {
+								console.log('[TiptapDocxEditor] Fetching Blob URL:', src);
+								const response = await fetch(src);
+								const blob = await response.blob();
+								const arrayBuffer = await blob.arrayBuffer();
+								imageBuffer = new Uint8Array(arrayBuffer);
+								mimeType = blob.type || 'image/png';
+								console.log('[TiptapDocxEditor] Blob fetched, size:', imageBuffer.length, 'type:', mimeType);
+							} catch (e) {
+								console.error('[TiptapDocxEditor] Failed to fetch blob:', e);
+							}
+						} else if (src && src.startsWith('data:image')) {
 							// Extract base64 image data and determine type
 							const mimeMatch = src.match(/^data:(image\/\w+);base64,/);
-							const mimeType = mimeMatch ? mimeMatch[1] : 'image/png';
+							mimeType = mimeMatch ? mimeMatch[1] : 'image/png';
 							const base64Data = src.split(',')[1];
-							const imageBuffer = Uint8Array.from(atob(base64Data), c => c.charCodeAt(0));
+							imageBuffer = Uint8Array.from(atob(base64Data), c => c.charCodeAt(0));
+						}
 
+						if (imageBuffer) {
 							// Get image dimensions from attributes
 							let width = node.attrs?.width;
 							let height = node.attrs?.height;
@@ -1029,7 +1139,7 @@
 
 							console.log('[TiptapDocxEditor] ✅ Image added to DOCX:', { width, height, type: imageType, bufferSize: imageBuffer.length });
 						} else {
-							console.warn('[TiptapDocxEditor] Image skipped - not base64 or no src');
+							console.warn('[TiptapDocxEditor] Image skipped - not blob/base64 or no src');
 						}
 					} catch (error) {
 						console.error('[TiptapDocxEditor] Failed to convert image:', error);
@@ -1040,7 +1150,7 @@
 				default:
 					if (node.content) {
 						for (const childNode of node.content) {
-							const converted = this.convertNodeToDocx(childNode, docxClasses, depth + 1);
+							const converted = await this.convertNodeToDocx(childNode, docxClasses, depth + 1);
 							if (converted) {
 								paragraphs.push(...converted);
 							}
