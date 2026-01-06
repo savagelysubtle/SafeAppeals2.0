@@ -56,14 +56,8 @@
 
 	async function sendContentUpdate() {
 		if (!tiptapEditor) return;
-		// #region agent log
-		fetch('http://127.0.0.1:7242/ingest/46b90235-167b-46c3-ba20-4e094ee4fbac',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'docxViewerTiptap.js:sendContentUpdate:start',message:'Starting content update',data:{},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H3'})}).catch(()=>{});
-		// #endregion
 		try {
 			const blob = await tiptapEditor.saveToDocx();
-			// #region agent log
-			fetch('http://127.0.0.1:7242/ingest/46b90235-167b-46c3-ba20-4e094ee4fbac',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'docxViewerTiptap.js:sendContentUpdate:blobCreated',message:'DOCX blob created',data:{blobSize:blob?.size||0,blobSizeKB:Math.round((blob?.size||0)/1024)},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H5'})}).catch(()=>{});
-			// #endregion
 			const arrayBuffer = await blob.arrayBuffer();
 			const uint8Array = new Uint8Array(arrayBuffer);
 			let binaryString = '';
@@ -84,9 +78,6 @@
 				jsonContent = JSON.stringify(tiptapEditor.getJSON());
 			}
 
-			// #region agent log
-			fetch('http://127.0.0.1:7242/ingest/46b90235-167b-46c3-ba20-4e094ee4fbac',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'docxViewerTiptap.js:sendContentUpdate:posting',message:'Posting contentChanged',data:{base64SizeKB:Math.round(base64.length/1024)},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H3'})}).catch(()=>{});
-			// #endregion
 			vscode.postMessage({
 				type: 'contentChanged',
 				docxData: base64,
@@ -94,9 +85,6 @@
 				data: base64 // support both
 			});
 		} catch (e) {
-			// #region agent log
-			fetch('http://127.0.0.1:7242/ingest/46b90235-167b-46c3-ba20-4e094ee4fbac',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'docxViewerTiptap.js:sendContentUpdate:error',message:'Content update failed',data:{error:e?.message||String(e)},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H5'})}).catch(()=>{});
-			// #endregion
 			console.error("[DOCX Webview] Failed to serialize content for update:", e);
 		}
 	}
@@ -505,14 +493,22 @@
 			const text = tiptapEditor.getText();
 			const html = tiptapEditor.getHTML();
 
-			// Get JSON content for round-trip preservation (images are preserved in JSON)
-			const json = tiptapEditor.getJSON();
+			// Get JSON content for round-trip preservation
+			// CRITICAL: Use getHydratedJSON() to ensure images are saved as Base64, not Blob URLs
+			let jsonContent = null;
+			try {
+				const json = await tiptapEditor.getHydratedJSON();
+				jsonContent = JSON.stringify(json);
+				console.log('[DOCX Webview] Hydrated JSON for save, size:', Math.round(jsonContent.length / 1024), 'KB');
+			} catch (e) {
+				console.error('[DOCX Webview] Failed to hydrate JSON for save:', e);
+			}
 
 			// Send to host
 			vscode.postMessage({
 				type: 'saveRequested',
 				docxData: base64,
-				jsonContent: null, // Disable JSON persistence to force DOCX reload (avoids Blob URL issues)
+				jsonContent: jsonContent, // JSON with Base64 images for round-trip preservation
 				text: text,
 				html: html,
 				docxUri: docxUri,

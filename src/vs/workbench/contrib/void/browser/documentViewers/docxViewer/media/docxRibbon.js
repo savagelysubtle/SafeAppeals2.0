@@ -386,8 +386,9 @@ class DocxRibbon {
 			imageInput.style.display = 'none';
 			document.body.appendChild(imageInput);
 
-			// Helper to resize image before insertion using pica for memory efficiency
-			const resizeImage = async (file, maxWidth, maxHeight) => {
+			// Helper to resize image and return BASE64 DATA URL for persistence
+			// Previously returned blob URLs which don't persist across saves
+			const resizeImageToBase64 = async (file, maxWidth, maxHeight) => {
 				// Get pica from global (loaded via webpack bundle)
 				const PicaLib = window.Pica;
 
@@ -425,7 +426,7 @@ class DocxRibbon {
 					destCanvas.width = width;
 					destCanvas.height = height;
 
-					let resizedBase64;
+					let base64DataUrl;
 
 					// Use pica if available for high-quality memory-efficient resize
 					let usedPica = false;
@@ -438,12 +439,14 @@ class DocxRibbon {
 								unsharpThreshold: 2
 							});
 
-							// Use toBlob instead of toDataURL for memory efficiency
-							const blob = await pica.toBlob(destCanvas, 'image/jpeg', 0.85);
-							resizedBase64 = URL.createObjectURL(blob);
+							// Convert to base64 DATA URL for persistence (not blob URL!)
+							// Use JPEG for photos (smaller), PNG for images with transparency
+							const mimeType = file.type === 'image/png' ? 'image/png' : 'image/jpeg';
+							const quality = mimeType === 'image/jpeg' ? 0.85 : undefined;
+							base64DataUrl = destCanvas.toDataURL(mimeType, quality);
 							usedPica = true;
 
-							console.log('[DocxRibbon] ✅ Pica resize complete:', width, 'x', height, 'Blob URL:', resizedBase64);
+							console.log('[DocxRibbon] ✅ Pica resize complete:', width, 'x', height, 'base64 size:', Math.round(base64DataUrl.length/1024), 'KB');
 						} catch (picaErr) {
 							console.warn('[DocxRibbon] Pica resize failed:', picaErr);
 						}
@@ -454,14 +457,15 @@ class DocxRibbon {
 						console.warn('[DocxRibbon] Using canvas fallback');
 						destCanvas.getContext('2d').drawImage(srcCanvas, 0, 0, width, height);
 
-						// Use canvas.toBlob wrapper for Promise support
-						const blob = await new Promise(resolve => destCanvas.toBlob(resolve, 'image/jpeg', 0.85));
-						resizedBase64 = URL.createObjectURL(blob);
+						// Convert to base64 DATA URL for persistence
+						const mimeType = file.type === 'image/png' ? 'image/png' : 'image/jpeg';
+						const quality = mimeType === 'image/jpeg' ? 0.85 : undefined;
+						base64DataUrl = destCanvas.toDataURL(mimeType, quality);
 					}
 
-					// Verify we have a proper Blob URL
-					if (!resizedBase64 || !resizedBase64.startsWith('blob:')) {
-						throw new Error('Failed to generate blob image');
+					// Verify we have a proper base64 data URL
+					if (!base64DataUrl || !base64DataUrl.startsWith('data:image')) {
+						throw new Error('Failed to generate base64 image');
 					}
 
 					// CRITICAL: Cleanup to free memory
@@ -471,7 +475,7 @@ class DocxRibbon {
 					destCanvas.width = 0;
 					destCanvas.height = 0;
 
-					return resizedBase64;
+					return base64DataUrl;
 				} catch (err) {
 					URL.revokeObjectURL(objectUrl);
 					throw err;
@@ -482,28 +486,39 @@ class DocxRibbon {
 				const file = event.target.files?.[0];
 				if (!file) return;
 
+				const MAX_FILE_SIZE_MB = 10; // Maximum file size to prevent memory issues
+
 				console.log('[DocxRibbon] Image selected:', file.name, Math.round(file.size/1024), 'KB');
+
+				// CRITICAL: Reject very large files to prevent memory explosion
+				if (file.size > MAX_FILE_SIZE_MB * 1024 * 1024) {
+					console.error('[DocxRibbon] ❌ Image too large:', Math.round(file.size / 1024 / 1024), 'MB');
+					alert(`Image too large (${Math.round(file.size / 1024 / 1024)}MB). Maximum size is ${MAX_FILE_SIZE_MB}MB.`);
+					imageInput.value = '';
+					return;
+				}
 
 				try {
 					// Resize to fit within page (max 600px width, 800px height for letter page)
 					const maxWidth = 600;
 					const maxHeight = 800;
-					const resizedBase64 = await resizeImage(file, maxWidth, maxHeight);
+					const base64DataUrl = await resizeImageToBase64(file, maxWidth, maxHeight);
 
-					if (resizedBase64 && this.editor?.editor) {
+					if (base64DataUrl && this.editor?.editor) {
 						// Check if setImage command exists
 						const hasSetImage = !!this.editor.editor.commands.setImage;
 						console.log('[DocxRibbon] setImage command available:', hasSetImage);
 
-						// Insert image
-						const result = this.editor.editor.chain().focus().setImage({ src: resizedBase64 }).run();
+						// Insert image with base64 data URL (persists across saves)
+						const result = this.editor.editor.chain().focus().setImage({ src: base64DataUrl }).run();
 						console.log('[DocxRibbon] setImage chain result:', result);
 
 						this.callbacks.onModification?.();
-						console.log('[DocxRibbon] ✅ Image inserted successfully');
+						console.log('[DocxRibbon] ✅ Image inserted successfully (base64 for persistence)');
 					}
 				} catch (err) {
 					console.error('[DocxRibbon] Image processing failed:', err);
+					alert('Failed to process image: ' + err.message);
 				}
 
 				// Reset input so same file can be selected again
@@ -516,19 +531,45 @@ class DocxRibbon {
 			});
 		}
 
-		if (e.insertLinkBtn) {
-			e.insertLinkBtn.addEventListener('click', () => {
-				if (this.editor?.editor) {
-					const url = prompt('Enter URL:');
-					if (url) {
-						try {
-							this.editor.editor.chain().focus().setLink({ href: url }).run();
+			if (e.insertLinkBtn) {
+				e.insertLinkBtn.addEventListener('click', () => {
+					console.log('[DocxRibbon] Insert Link button clicked');
+					if (this.editor?.editor) {
+						// Capture current selection
+						const { from, to } = this.editor.editor.state.selection;
+					const previousUrl = this.editor.editor.getAttributes('link').href;
+
+					this.showInputModal('Insert Link', previousUrl || '', (url) => {
+						// Focus back first
+						this.editor.editor.commands.focus();
+
+						// Restore selection if needed (focus usually restores it, but just in case)
+						if (from !== to) {
+							this.editor.editor.commands.setTextSelection({ from, to });
+						}
+
+						if (url) {
+							try {
+								// Ensure protocol
+								if (!/^https?:\/\//i.test(url) && !/^mailto:/i.test(url) && !url.startsWith('/')) {
+									url = 'https://' + url;
+								}
+
+								console.log('[DocxRibbon] Setting link:', url, 'Selection:', from, to);
+								const result = this.editor.editor.chain().setLink({ href: url }).run();
+								console.log('[DocxRibbon] setLink result:', result);
+
+								this.callbacks.onModification?.();
+								this.updateState();
+							} catch (err) {
+								console.warn('[DocxRibbon] Link extension error:', err);
+							}
+						} else if (previousUrl) {
+							this.editor.editor.chain().unsetLink().run();
 							this.callbacks.onModification?.();
 							this.updateState();
-						} catch (err) {
-							console.warn('[DocxRibbon] Link extension not available');
 						}
-					}
+					});
 				}
 			});
 		}
@@ -584,6 +625,93 @@ class DocxRibbon {
 				this.callbacks.onOrientationChange?.('landscape');
 			});
 		}
+	}
+
+	// Simple modal for text input (replaces native prompt)
+	showInputModal(title, initialValue, callback) {
+		// Create modal elements
+		const overlay = document.createElement('div');
+		overlay.className = 'margins-dialog'; // Reuse existing styling
+
+		const content = document.createElement('div');
+		content.className = 'dialog-content';
+
+		const titleEl = document.createElement('h3');
+		titleEl.textContent = title;
+
+		const inputGroup = document.createElement('div');
+		inputGroup.style.marginBottom = '16px';
+
+		const input = document.createElement('input');
+		input.type = 'text';
+		input.value = initialValue || '';
+		input.style.width = '100%';
+		input.style.padding = '8px';
+		input.style.backgroundColor = 'var(--vscode-input-background)';
+		input.style.color = 'var(--vscode-input-foreground)';
+		input.style.border = '1px solid var(--vscode-input-border)';
+		input.style.borderRadius = '4px';
+		input.style.boxSizing = 'border-box';
+		input.placeholder = 'https://example.com';
+
+		inputGroup.appendChild(input);
+
+		const btnGroup = document.createElement('div');
+		btnGroup.style.display = 'flex';
+		btnGroup.style.justifyContent = 'flex-end';
+		btnGroup.style.gap = '8px';
+
+		const cancelBtn = document.createElement('button');
+		cancelBtn.textContent = 'Cancel';
+		cancelBtn.id = 'cancel-input';
+		// Reuse cancel style from CSS if available, or set inline
+		cancelBtn.style.backgroundColor = 'var(--vscode-button-secondaryBackground)';
+		cancelBtn.style.color = 'var(--vscode-button-secondaryForeground)';
+
+		const okBtn = document.createElement('button');
+		okBtn.textContent = 'OK';
+
+		btnGroup.appendChild(cancelBtn);
+		btnGroup.appendChild(okBtn);
+
+		content.appendChild(titleEl);
+		content.appendChild(inputGroup);
+		content.appendChild(btnGroup);
+		overlay.appendChild(content);
+		document.body.appendChild(overlay);
+
+		// Focus input
+		setTimeout(() => input.focus(), 50);
+
+		const close = () => {
+			if (document.body.contains(overlay)) {
+				document.body.removeChild(overlay);
+			}
+		};
+
+		cancelBtn.onclick = close;
+
+		const submit = () => {
+			callback(input.value);
+			close();
+		};
+
+		okBtn.onclick = submit;
+
+		input.onkeydown = (e) => {
+			if (e.key === 'Enter') {
+				submit();
+			} else if (e.key === 'Escape') {
+				close();
+			}
+		};
+
+		// Close on click outside
+		overlay.onclick = (e) => {
+			if (e.target === overlay) {
+				close();
+			}
+		};
 	}
 }
 

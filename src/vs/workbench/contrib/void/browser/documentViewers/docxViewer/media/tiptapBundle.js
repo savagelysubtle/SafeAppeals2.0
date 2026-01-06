@@ -54,7 +54,7 @@
 		}
 
 		initialize() {
-			console.log('[TiptapDocxEditor] Initializing');
+			console.log('[TiptapDocxEditor] Initializing - Version 2.1 (Inline Image Support)');
 			console.log('[TiptapDocxEditor] Available globals:', Object.keys(window).filter(k =>
 				k.toLowerCase().includes('tiptap') || k === 'Editor' || k === 'StarterKit'
 			));
@@ -120,6 +120,7 @@
 			// Check if @adalat-ai/page-extension is available
 			const PageExtension = window.TiptapPageExtension;
 			const PageDocument = window.TiptapPageDocument;
+			const Extension = window.TiptapExtension || window.Tiptap?.Extension || window.Extension; // Get base Extension class
 
 			// Try to get StarterKit from bundled global
 			const StarterKit = window.TiptapStarterKit || window.Tiptap?.StarterKit || window.StarterKit;
@@ -190,6 +191,295 @@
 				console.warn('[TiptapDocxEditor] ❌ Color extension MISSING');
 			}
 
+			// ============================================
+			// IMAGE PROCESSING UTILITIES
+			// ============================================
+
+			/**
+			 * Extract image dimensions from binary header WITHOUT full decoding
+			 * Performance: < 0.05ms (vs 10-100ms for new Image().onload)
+			 * Supports: PNG, JPEG, GIF
+			 * From Perplexity research on OOXML image handling
+			 */
+			this.getImageDimensionsFromBinary = (data) => {
+				if (!(data instanceof Uint8Array)) {
+					console.warn('[TiptapDocxEditor] getImageDimensionsFromBinary: Expected Uint8Array');
+					return null;
+				}
+				if (data.length < 24) return null; // Need at least 24 bytes for headers
+
+				const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
+
+				// PNG: Signature (8 bytes) + IHDR Chunk
+				// Signature: 89 50 4E 47 0D 0A 1A 0A
+				if (view.getUint32(0) === 0x89504e47 && view.getUint32(4) === 0x0d0a1a0a) {
+					return {
+						type: 'png',
+						width: view.getUint32(16, false), // Big-endian
+						height: view.getUint32(20, false),
+					};
+				}
+
+				// GIF: Signature (3 bytes "GIF") + Version (3 bytes "89a")
+				if ((view.getUint32(0, false) >>> 8) === 0x474946) {
+					return {
+						type: 'gif',
+						width: view.getUint16(6, true), // Little-endian
+						height: view.getUint16(8, true),
+					};
+				}
+
+				// JPEG: Start of Image (FF D8)
+				if (view.getUint16(0, false) === 0xffd8) {
+					let offset = 2;
+					while (offset < view.byteLength - 8) {
+						if (view.getUint8(offset) !== 0xff) {
+							offset++;
+							continue;
+						}
+						const marker = view.getUint8(offset + 1);
+						// SOF0-SOF15, except C4 (DHT), C8 (JPG), CC (DAC)
+						if (marker >= 0xc0 && marker <= 0xcf && marker !== 0xc4 && marker !== 0xc8 && marker !== 0xcc) {
+							const height = view.getUint16(offset + 5, false);
+							const width = view.getUint16(offset + 7, false);
+							return { type: 'jpg', width, height };
+						}
+						offset += 2;
+						if (offset + 2 > view.byteLength) break;
+						const length = view.getUint16(offset, false);
+						offset += length;
+					}
+				}
+
+				return null; // Unknown format
+			};
+
+			/**
+			 * Extract dimensions from a Base64 data URL without full image decode
+			 * Handles data:image/* and data:application/octet-stream (used by docx-preview)
+			 */
+			this.getImageDimensionsFromBase64 = (dataUrl) => {
+				if (!dataUrl || !dataUrl.startsWith('data:')) return null;
+				try {
+					const base64 = dataUrl.split(',')[1];
+					if (!base64) return null;
+					const binaryString = atob(base64);
+					// Only need first ~1KB for header parsing
+					const len = Math.min(binaryString.length, 1024);
+					const bytes = new Uint8Array(len);
+					for (let i = 0; i < len; i++) {
+						bytes[i] = binaryString.charCodeAt(i);
+					}
+					return this.getImageDimensionsFromBinary(bytes);
+				} catch (e) {
+					console.warn('[TiptapDocxEditor] Failed to parse image dimensions:', e);
+					return null;
+				}
+			};
+
+			// Memory-efficient image resizing with strict limits
+			// Returns base64 data URL for persistence
+			// CRITICAL: Size limits to prevent memory explosion
+			const MAX_IMAGE_WIDTH = 800;  // Max width in pixels
+			const MAX_IMAGE_HEIGHT = 1000; // Max height in pixels
+			const MAX_FILE_SIZE_MB = 10;   // Max file size (reject larger)
+			const SMALL_IMAGE_THRESHOLD = 100 * 1024; // 100KB - small images don't need resize
+
+			const resizeAndConvertToBase64 = async (file) => {
+				return new Promise(async (resolve, reject) => {
+					try {
+						console.log('[TiptapDocxEditor] Processing image:', file.name, Math.round(file.size / 1024), 'KB');
+
+						// CRITICAL: Reject very large files to prevent memory explosion
+						if (file.size > MAX_FILE_SIZE_MB * 1024 * 1024) {
+							console.error('[TiptapDocxEditor] ❌ Image too large, rejecting:', Math.round(file.size / 1024 / 1024), 'MB', '(max:', MAX_FILE_SIZE_MB, 'MB)');
+							reject(new Error(`Image too large (${Math.round(file.size / 1024 / 1024)}MB). Maximum size is ${MAX_FILE_SIZE_MB}MB.`));
+							return;
+						}
+
+						// For small images, just convert directly
+						if (file.size < SMALL_IMAGE_THRESHOLD) {
+							const reader = new FileReader();
+							reader.onloadend = () => resolve(reader.result);
+							reader.onerror = reject;
+							reader.readAsDataURL(file);
+							return;
+						}
+
+						// For larger images, resize to prevent memory issues
+						const img = new Image();
+						const objectUrl = URL.createObjectURL(file);
+
+						img.onload = () => {
+							try {
+								let width = img.width;
+								let height = img.height;
+
+								console.log('[TiptapDocxEditor] Original dimensions:', width, 'x', height);
+
+								// Calculate target dimensions
+								if (width > MAX_IMAGE_WIDTH || height > MAX_IMAGE_HEIGHT) {
+									const ratio = Math.min(MAX_IMAGE_WIDTH / width, MAX_IMAGE_HEIGHT / height);
+									width = Math.round(width * ratio);
+									height = Math.round(height * ratio);
+									console.log('[TiptapDocxEditor] Resizing to:', width, 'x', height);
+								}
+
+								// Create canvas with target size only (not source size!)
+								const canvas = document.createElement('canvas');
+								canvas.width = width;
+								canvas.height = height;
+
+								const ctx = canvas.getContext('2d');
+								// Use better quality settings
+								ctx.imageSmoothingEnabled = true;
+								ctx.imageSmoothingQuality = 'high';
+								ctx.drawImage(img, 0, 0, width, height);
+
+								// Convert to JPEG for photos (much smaller), PNG for transparency
+								const isPNG = file.type === 'image/png';
+								const mimeType = isPNG ? 'image/png' : 'image/jpeg';
+								const quality = isPNG ? undefined : 0.85;
+
+								const base64 = canvas.toDataURL(mimeType, quality);
+
+								// CRITICAL: Cleanup immediately to free memory
+								URL.revokeObjectURL(objectUrl);
+								canvas.width = 0;
+								canvas.height = 0;
+
+								console.log('[TiptapDocxEditor] ✅ Image processed, base64 size:', Math.round(base64.length / 1024), 'KB');
+								resolve(base64);
+							} catch (e) {
+								URL.revokeObjectURL(objectUrl);
+								reject(e);
+							}
+						};
+
+						img.onerror = () => {
+							URL.revokeObjectURL(objectUrl);
+							reject(new Error('Failed to load image'));
+						};
+
+						img.src = objectUrl;
+					} catch (e) {
+						reject(e);
+					}
+				});
+			};
+
+			// Add FileHandler for Drag & Drop and Paste using editorProps
+			// NOTE: ProseMirror Plugin class is not available in our bundle, so we use
+			// Tiptap's editorProps which gets passed directly to ProseMirror
+			const FileHandler = Extension.create({
+				name: 'fileHandler',
+
+				addOptions() {
+					return {
+						allowedMimeTypes: ['image/png', 'image/jpeg', 'image/gif', 'image/webp'],
+					};
+				},
+
+				// Use editorProps instead of addProseMirrorPlugins
+				// This works without needing the Plugin class
+				addKeyboardShortcuts() {
+					return {};
+				},
+
+				onCreate() {
+					// Set up paste handler via DOM event
+					const editor = this.editor;
+					const element = editor.view.dom;
+
+					const handlePaste = async (event) => {
+						const items = Array.from(event.clipboardData?.items || []);
+						const imageItems = items.filter(item => item.type.indexOf('image') === 0);
+
+						if (imageItems.length === 0) return;
+
+						event.preventDefault();
+						event.stopPropagation();
+
+						for (const item of imageItems) {
+							const file = item.getAsFile();
+							if (!file) continue;
+
+							try {
+								const base64 = await resizeAndConvertToBase64(file);
+								editor.chain().focus().setImage({ src: base64 }).run();
+							} catch (e) {
+								console.error('[TiptapDocxEditor] Paste image failed:', e);
+							}
+						}
+					};
+
+					const handleDrop = async (event) => {
+						if (!event.dataTransfer?.files?.length) return;
+
+						const files = Array.from(event.dataTransfer.files);
+						const imageFiles = files.filter(f => f.type.indexOf('image') === 0);
+
+						if (imageFiles.length === 0) return;
+
+						event.preventDefault();
+						event.stopPropagation();
+
+						for (const file of imageFiles) {
+							try {
+								const base64 = await resizeAndConvertToBase64(file);
+
+								// Get drop position
+								const coordinates = editor.view.posAtCoords({
+									left: event.clientX,
+									top: event.clientY
+								});
+
+								if (coordinates) {
+									editor.chain()
+										.focus()
+										.setTextSelection(coordinates.pos)
+										.setImage({ src: base64 })
+										.run();
+								} else {
+									editor.chain().focus().setImage({ src: base64 }).run();
+								}
+							} catch (e) {
+								console.error('[TiptapDocxEditor] Drop image failed:', e);
+							}
+						}
+					};
+
+					// Attach handlers
+					element.addEventListener('paste', handlePaste, true);
+					element.addEventListener('drop', handleDrop, true);
+
+					// Store for cleanup
+					this.storage.pasteHandler = handlePaste;
+					this.storage.dropHandler = handleDrop;
+
+					console.log('[TiptapDocxEditor] ✅ FileHandler DOM events attached');
+				},
+
+				onDestroy() {
+					const element = this.editor.view.dom;
+					if (this.storage.pasteHandler) {
+						element.removeEventListener('paste', this.storage.pasteHandler, true);
+					}
+					if (this.storage.dropHandler) {
+						element.removeEventListener('drop', this.storage.dropHandler, true);
+					}
+				},
+
+				addStorage() {
+					return {
+						pasteHandler: null,
+						dropHandler: null,
+					};
+				},
+			});
+			extensions.push(FileHandler);
+			console.log('[TiptapDocxEditor] ✅ FileHandler extension added (DOM-based paste/drop)');
+
 			// NOTE: HorizontalRule is already included in StarterKit, don't add separately
 
 			// Add Table extensions
@@ -212,14 +502,16 @@
 				console.warn('[TiptapDocxEditor] ❌ Table extensions MISSING');
 			}
 
-		// Add lightweight Image extension with manual resize handles
+			// Add lightweight Image extension with manual resize handles
 			// This is MUCH more memory efficient than tiptap-extension-resize-image
 			// CRITICAL: Image is a Node, not an Extension - must use Node.create()
 			const TiptapNode = window.TiptapNode;
 			if (TiptapNode) {
 				const LightweightImage = TiptapNode.create({
 					name: 'image',
-					group: 'block',
+					// Change to inline to support images inside paragraphs (common in docx-preview output)
+					inline: true,
+					group: 'inline',
 					atom: true,  // Image is an atomic node (not editable content inside)
 					draggable: false,  // DISABLED - dragging large base64 images causes memory issues
 					selectable: true,
@@ -241,39 +533,48 @@
 							width: {
 								default: null,
 								parseHTML: element => {
-									// Try to get width from various sources
 									const widthAttr = element.getAttribute('width');
 									if (widthAttr) return parseInt(widthAttr, 10);
-
-									// Try to get from style
 									const style = element.getAttribute('style') || '';
 									const widthMatch = style.match(/width:\s*(\d+)px/);
 									if (widthMatch) return parseInt(widthMatch[1], 10);
-
-									// Try computed width if available
 									if (element.offsetWidth) return element.offsetWidth;
-
 									return null;
 								},
 							},
 							height: {
 								default: null,
 								parseHTML: element => {
-									// Try to get height from various sources
 									const heightAttr = element.getAttribute('height');
 									if (heightAttr) return parseInt(heightAttr, 10);
-
-									// Try to get from style
 									const style = element.getAttribute('style') || '';
 									const heightMatch = style.match(/height:\s*(\d+)px/);
 									if (heightMatch) return parseInt(heightMatch[1], 10);
-
-									// Try computed height if available
 									if (element.offsetHeight) return element.offsetHeight;
-
 									return null;
 								},
 							},
+							// Floating Image Attributes
+							wrapType: {
+								default: 'inline', // inline, square, tight, front, behind
+								parseHTML: element => element.dataset.wrapType || 'inline',
+								renderHTML: attributes => ({ 'data-wrap-type': attributes.wrapType }),
+							},
+							floatSide: {
+								default: null, // left, right, center
+								parseHTML: element => element.dataset.floatSide,
+								renderHTML: attributes => ({ 'data-float-side': attributes.floatSide }),
+							},
+							behindDoc: {
+								default: false,
+								parseHTML: element => element.dataset.behind === 'true',
+								renderHTML: attributes => ({ 'data-behind': attributes.behindDoc }),
+							},
+							margin: {
+								default: 0,
+								parseHTML: element => parseInt(element.dataset.margin || '0', 10),
+								renderHTML: attributes => ({ 'data-margin': attributes.margin }),
+							}
 						};
 					},
 
@@ -310,8 +611,8 @@
 									attrs: options,
 								});
 							},
-							// Command to update image size
-							updateImageSize: (attrs) => ({ tr, state, dispatch }) => {
+							// Command to update image size and other attributes
+							updateImageAttrs: (attrs) => ({ tr, state, dispatch }) => {
 								const { selection } = state;
 								const node = state.doc.nodeAt(selection.from);
 								if (node && node.type.name === 'image') {
@@ -325,6 +626,18 @@
 									return true;
 								}
 								return false;
+							},
+							setWrapType: (type) => ({ chain }) => {
+								return chain().updateImageAttrs({ wrapType: type }).run();
+							},
+							setFloatSide: (side) => ({ chain }) => {
+								return chain().updateImageAttrs({ floatSide: side }).run();
+							},
+							setImageMargin: (margin) => ({ chain }) => {
+								return chain().updateImageAttrs({ margin: margin }).run();
+							},
+							setBehindDoc: (behind) => ({ chain }) => {
+								return chain().updateImageAttrs({ behindDoc: behind }).run();
 							},
 						};
 					},
@@ -727,6 +1040,8 @@
 
 			try {
 				// Use docx-preview to convert to HTML
+				// CRITICAL: useBase64URL: true ensures images are Base64 data URLs that persist
+				// (Blob URLs are ephemeral and break on save/reload - this was causing the image loss bug)
 				const tempDiv = document.createElement('div');
 				await window.docx.renderAsync(arrayBuffer, tempDiv, undefined, {
 					className: 'docx',
@@ -734,32 +1049,150 @@
 					ignoreWidth: false,
 					ignoreHeight: false,
 					breakPages: false,
+					useBase64URL: true, // CRITICAL: Use Base64 for persistence (not Blob URLs)
 				});
 
-				// Process images: Convert Base64 src to Blob URLs
+				// Log images found (DO NOT convert to Blob URLs - that was causing the bug!)
+				// Base64 data URLs from docx-preview are persistent and work correctly
 				const images = tempDiv.querySelectorAll('img');
-				console.log('[TiptapDocxEditor] Found', images.length, 'images in DOCX HTML');
+				console.log('[TiptapDocxEditor] Found', images.length, 'images in DOCX HTML (kept as Base64 for persistence)');
 
-				const imagePromises = Array.from(images).map(async (img, i) => {
+				// Extract dimensions from parent div and apply to images for persistence
+				// docx-preview puts dimensions on the wrapper div (e.g., style="width: 72pt; height: 153.75pt;")
+				images.forEach((img, i) => {
 					const src = img.getAttribute('src');
-					if (src && src.startsWith('data:image')) {
-						try {
-							const res = await fetch(src);
-							const blob = await res.blob();
-							const blobUrl = URL.createObjectURL(blob);
-							img.setAttribute('src', blobUrl);
-							img.setAttribute('data-original-src', 'blob'); // Marker
-							console.log(`[TiptapDocxEditor] Converted image ${i} to Blob URL:`, blobUrl);
-						} catch (e) {
-							console.error(`[TiptapDocxEditor] Failed to convert image ${i} to Blob:`, e);
+					if (src) {
+						const isDataUrl = src.startsWith('data:');
+						const sizeKB = Math.round(src.length / 1024);
+						console.log(`[TiptapDocxEditor] Image ${i}: ${isDataUrl ? 'Data URL' : 'URL'}, size: ${sizeKB}KB`);
+
+						// Try to extract dimensions from parent div's style
+						const parent = img.parentElement;
+						if (parent) {
+							const style = parent.getAttribute('style') || '';
+							// Parse width: XXpt or width: XXpx
+							const widthMatch = style.match(/width:\s*([\d.]+)(pt|px)/);
+							const heightMatch = style.match(/height:\s*([\d.]+)(pt|px)/);
+
+							if (widthMatch && heightMatch) {
+								let width = parseFloat(widthMatch[1]);
+								let height = parseFloat(heightMatch[1]);
+								const widthUnit = widthMatch[2];
+								const heightUnit = heightMatch[2];
+
+								// Convert pt to px (1pt = 1.333px)
+								if (widthUnit === 'pt') width = Math.round(width * 1.333);
+								if (heightUnit === 'pt') height = Math.round(height * 1.333);
+
+								// Set as attributes on the img for Tiptap to pick up
+								img.setAttribute('width', width);
+								img.setAttribute('height', height);
+								console.log(`[TiptapDocxEditor] Image ${i}: Extracted dimensions ${width}x${height}px from parent style`);
+							}
 						}
 					}
 				});
 
-				await Promise.all(imagePromises);
+				// FLATTEN HTML: Extract strictly valid content to avoid wrapper-induced drops
+				// docx-preview wraps content in nested divs/sections which Tiptap's schema might reject,
+				// causing it to drop everything inside (including images).
+				// We will extract Paragraphs, Tables, and Images and construct a flat sequence.
 
-				const html = tempDiv.innerHTML;
+				console.log('[TiptapDocxEditor] Flattening HTML structure for Tiptap ingestion');
+				const contentAccumulator = document.createElement('div');
+
+				// Recursive function to extract content
+				const extractContent = (element) => {
+					// If it's a valid block type, clone it and append
+					const tagName = element.tagName;
+
+					// Headings & Paragraphs
+					if (/^H[1-6]$/.test(tagName) || tagName === 'P') {
+						// Ensure images inside are preserved (they should be since we clone)
+						if (element.querySelector('img')) {
+							console.log('[TiptapDocxEditor] Preserving block with image:', tagName);
+						}
+						contentAccumulator.appendChild(element.cloneNode(true));
+						return;
+					}
+
+					// Tables
+					if (tagName === 'TABLE') {
+						contentAccumulator.appendChild(element.cloneNode(true));
+						return;
+					}
+
+					// Lists
+					if (tagName === 'UL' || tagName === 'OL') {
+						contentAccumulator.appendChild(element.cloneNode(true));
+						return;
+					}
+
+					// Orphan Images (wrap in P)
+					if (tagName === 'IMG') {
+						console.log('[TiptapDocxEditor] Wrapping orphan image in paragraph');
+						const p = document.createElement('p');
+						p.appendChild(element.cloneNode(true));
+						contentAccumulator.appendChild(p);
+						return;
+					}
+
+					// For containers (DIV, SECTION, ARTICLE, etc.), traverse children
+					if (element.children.length > 0) {
+						Array.from(element.children).forEach(extractContent);
+					} else {
+						// Text nodes?
+						// If it's a leaf node but not one of the above, check for text
+						// (Usually text is inside P, but just in case)
+					}
+				};
+
+				// Start extraction from the root wrapper generated by docx-preview
+				if (tempDiv.children.length > 0) {
+					Array.from(tempDiv.children).forEach(extractContent);
+				} else {
+					// Fallback if no children (maybe just text?)
+					contentAccumulator.innerHTML = tempDiv.innerHTML;
+				}
+
+				const html = contentAccumulator.innerHTML;
+				console.log(`[TiptapDocxEditor] Flattened content length: ${html.length}`);
+
+				// Debug: Check if images exist in the HTML string before loading
+				const imgCount = (html.match(/<img/g) || []).length;
+				console.log(`[TiptapDocxEditor] HTML string to load contains ${imgCount} <img> tags`);
+				if (imgCount > 0) {
+					// Log first image tag full details
+					const imgTagMatch = html.match(/<img[^>]*>/);
+					if (imgTagMatch) {
+						console.log('[TiptapDocxEditor] First image tag:', imgTagMatch[0]);
+						// Find the parent tag of the first image in the string
+						const imgIndex = html.indexOf(imgTagMatch[0]);
+						const htmlBefore = html.substring(Math.max(0, imgIndex - 100), imgIndex);
+						console.log('[TiptapDocxEditor] Context before first image:', htmlBefore);
+					}
+				}
+
 				this.loadFromHTML(html);
+
+				// Verify images in model immediately after load
+				setTimeout(() => {
+					if (this.editor) {
+						const json = this.editor.getJSON();
+						let imageCount = 0;
+						const countImages = (node) => {
+							if (node.type === 'image') imageCount++;
+							if (node.content) node.content.forEach(countImages);
+						};
+						countImages(json);
+						console.log(`[TiptapDocxEditor] Post-load verification: Found ${imageCount} image nodes in Tiptap model`);
+						if (imageCount === 0 && images.length > 0) {
+							console.error('[TiptapDocxEditor] CRITICAL: Images were found in HTML but dropped by Tiptap schema validation!');
+							console.log('[TiptapDocxEditor] First dropped image src:', images[0]?.getAttribute('src'));
+						}
+					}
+				}, 500);
+
 				console.log('[TiptapDocxEditor] DOCX loaded');
 
 			} catch (error) {
@@ -843,19 +1276,40 @@
 
 		/**
 		 * Get JSON with all Blob URLs converted back to Base64 for persistence
+		 * Uses SEQUENTIAL processing to avoid memory spikes with many images
 		 */
 		async getHydratedJSON() {
 			if (!this.editor) return null;
 			const json = this.editor.getJSON();
 
-			// Helper to process nodes recursively
+			// Track statistics
+			let blobCount = 0;
+			let convertedCount = 0;
+			let failedCount = 0;
+
+			// Helper to process nodes recursively - SEQUENTIAL to avoid memory spikes
 			const processNode = async (node) => {
 				if (node.type === 'image' || node.type === 'imageResize') {
 					const src = node.attrs?.src;
 					if (src && src.startsWith('blob:')) {
+						blobCount++;
 						try {
 							const response = await fetch(src);
+							if (!response.ok) {
+								throw new Error(`Blob fetch failed: ${response.status}`);
+							}
 							const blob = await response.blob();
+
+							// Check blob size to prevent memory explosion
+							if (blob.size > 10 * 1024 * 1024) { // > 10MB
+								console.warn('[TiptapDocxEditor] Blob too large, skipping:', Math.round(blob.size / 1024 / 1024), 'MB');
+								failedCount++;
+								// Set a placeholder to indicate missing image
+								node.attrs.src = '';
+								node.attrs.alt = '[Image too large]';
+								return;
+							}
+
 							const reader = new FileReader();
 							const base64 = await new Promise((resolve, reject) => {
 								reader.onloadend = () => resolve(reader.result);
@@ -865,55 +1319,68 @@
 							node.attrs.src = base64;
 							// Remove our internal flags if any
 							delete node.attrs['data-original-src'];
+							convertedCount++;
+							console.log('[TiptapDocxEditor] Hydrated blob to base64, size:', Math.round(base64.length / 1024), 'KB');
 						} catch (e) {
-							console.warn('[TiptapDocxEditor] Failed to hydrate image:', src, e);
+							console.warn('[TiptapDocxEditor] Failed to hydrate image (blob may be invalid):', src.substring(0, 50), e.message);
+							failedCount++;
+							// Clear invalid blob URL to prevent save errors
+							node.attrs.src = '';
+							node.attrs.alt = '[Image lost - blob expired]';
 						}
 					}
 				}
 
+				// SEQUENTIAL processing to avoid memory spikes
 				if (node.content) {
-					await Promise.all(node.content.map(processNode));
+					for (const child of node.content) {
+						await processNode(child);
+					}
 				}
 			};
 
 			await processNode(json);
+
+			console.log('[TiptapDocxEditor] Hydration complete:', { blobCount, convertedCount, failedCount });
 			return json;
 		}
 
 		/**
-		 * Load JSON content, converting Base64 images to Blob URLs for memory efficiency
+		 * Load JSON content - keep Base64 images as-is (no more Blob URL conversion!)
+		 * CRITICAL FIX: Converting Base64 to Blob URLs was causing memory explosion and image loss
+		 * because Blob URLs are ephemeral and get invalidated on reload/save.
 		 */
 		async loadFromJSON(json) {
 			if (!this.editor) return;
 
-			console.log('[TiptapDocxEditor] Loading from JSON with Blob optimization');
+			console.log('[TiptapDocxEditor] Loading from JSON (keeping Base64 images as-is)');
 
 			// Clone json to avoid mutating the input
 			const jsonClone = JSON.parse(JSON.stringify(json));
 
-			const processNode = async (node) => {
+			// Count images for diagnostics
+			let imageCount = 0;
+			const countImages = (node) => {
 				if (node.type === 'image' || node.type === 'imageResize') {
+					imageCount++;
 					const src = node.attrs?.src;
-					if (src && src.startsWith('data:image')) {
-						try {
-							// Convert Base64 to Blob
-							const res = await fetch(src);
-							const blob = await res.blob();
-							const blobUrl = URL.createObjectURL(blob);
-							node.attrs.src = blobUrl;
-							console.log('[TiptapDocxEditor] Converted JSON image to Blob URL:', blobUrl);
-						} catch (e) {
-							console.warn('[TiptapDocxEditor] Failed to convert JSON image to Blob:', e);
-						}
+					if (src) {
+						console.log('[TiptapDocxEditor] Image found:', src.startsWith('data:') ? 'Data URL' : src.startsWith('blob:') ? 'Blob' : 'URL', 'length:', src.length);
 					}
 				}
-
 				if (node.content) {
-					await Promise.all(node.content.map(processNode));
+					node.content.forEach(countImages);
 				}
 			};
+			countImages(jsonClone);
+			console.log('[TiptapDocxEditor] Total images in JSON:', imageCount);
 
-			await processNode(jsonClone);
+			// CRITICAL: Do NOT convert Base64 to Blob URLs!
+			// Base64 data URLs persist correctly and don't cause memory issues on reload.
+			// The old code was converting to Blob URLs which:
+			// 1. Get invalidated when the webview reloads
+			// 2. Cause memory explosion during save when trying to re-fetch invalid blobs
+			// 3. Lead to images being lost
 
 			this.editor.commands.setContent(jsonClone);
 
@@ -938,10 +1405,13 @@
 
 			try {
 				const { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType } = window.DocxLib;
+
+				// CRITICAL: Ensure we have the latest JSON state
+				// Depending on how Tiptap updates, we might need to force a sync or just getJSON
 				const json = this.editor.getJSON();
 
 				// Debug: Log the full JSON structure to see all node types
-				console.log('[TiptapDocxEditor] Full JSON content:', JSON.stringify(json, null, 2).substring(0, 2000));
+				console.log('[TiptapDocxEditor] Full JSON content length:', JSON.stringify(json).length);
 
 				// Debug: Find all unique node types in the content
 				const findNodeTypes = (node, types = new Set()) => {
@@ -949,7 +1419,20 @@
 					if (node.content) node.content.forEach(child => findNodeTypes(child, types));
 					return types;
 				};
-				console.log('[TiptapDocxEditor] Node types found:', [...findNodeTypes(json)]);
+				const nodeTypes = [...findNodeTypes(json)];
+				console.log('[TiptapDocxEditor] Node types found:', nodeTypes);
+
+				// Validate image nodes specifically
+				const imageNodes = [];
+				const findImages = (node) => {
+					if (node.type === 'image') imageNodes.push(node);
+					if (node.content) node.content.forEach(child => findImages(child));
+				};
+				findImages(json);
+				console.log(`[TiptapDocxEditor] Found ${imageNodes.length} image nodes in JSON state`);
+				imageNodes.forEach((img, i) => {
+					console.log(`[TiptapDocxEditor] Image ${i}: src starts with ${img.attrs?.src?.substring(0, 30)}...`);
+				});
 
 				const docxContent = await this.convertTiptapToDocx(json, { Paragraph, TextRun, HeadingLevel, AlignmentType });
 
@@ -995,7 +1478,24 @@
 				return paragraphs;
 			}
 
-			for (const node of json.content) {
+			const { Paragraph, PageBreak } = window.DocxLib;
+
+			// Check if we are using PageDocument structure (top-level pages)
+			const isPageStructure = json.content.some(n => n.type === 'page');
+
+			for (let i = 0; i < json.content.length; i++) {
+				const node = json.content[i];
+
+				// Handle Page Breaks for PageDocument structure
+				if (isPageStructure && i > 0 && node.type === 'page') {
+					console.log('[TiptapDocxEditor] Inserting Page Break between pages');
+					if (PageBreak) {
+						paragraphs.push(new Paragraph({
+							children: [new PageBreak()],
+						}));
+					}
+				}
+
 				const converted = await this.convertNodeToDocx(node, docxClasses, 0);
 				if (converted) {
 					paragraphs.push(...converted);
@@ -1003,6 +1503,214 @@
 			}
 
 			return paragraphs;
+		}
+
+		/**
+		 * Process an image node to create an ImageRun
+		 * CRITICAL: Includes size limits to prevent memory explosion
+		 */
+		async processImageNode(node) {
+			const MAX_IMAGE_BUFFER_SIZE = 10 * 1024 * 1024; // 10MB max per image
+
+			try {
+				let src = node.attrs?.src;
+				console.log('[TiptapDocxEditor] Processing image node:', node.type, 'src type:', src ? src.substring(0, 30) : 'null');
+
+				// Check if this is any kind of data URL (image/* or application/octet-stream)
+				const isDataUrl = src && src.startsWith('data:');
+				const isBlobUrl = src && src.startsWith('blob:');
+
+				// Early check for data URL size (base64 is ~33% larger than binary)
+				if (isDataUrl && src.length > MAX_IMAGE_BUFFER_SIZE * 1.4) {
+					console.warn('[TiptapDocxEditor] Image data URL too large, skipping:', Math.round(src.length / 1024 / 1024), 'MB');
+					return null;
+				}
+
+				let imageBuffer;
+				let mimeType;
+
+				if (isBlobUrl) {
+					// Fetch blob and convert to array buffer
+					try {
+						console.log('[TiptapDocxEditor] Fetching Blob URL');
+						const response = await fetch(src);
+						if (!response.ok) {
+							throw new Error(`Blob fetch failed: ${response.status}`);
+						}
+						const blob = await response.blob();
+
+						// Size check before loading into memory
+						if (blob.size > MAX_IMAGE_BUFFER_SIZE) {
+							console.warn('[TiptapDocxEditor] Blob too large, skipping:', Math.round(blob.size / 1024 / 1024), 'MB');
+							return null;
+						}
+
+						const arrayBuffer = await blob.arrayBuffer();
+						imageBuffer = new Uint8Array(arrayBuffer);
+						mimeType = blob.type || 'image/png';
+						console.log('[TiptapDocxEditor] Blob fetched, size:', imageBuffer.length, 'type:', mimeType);
+					} catch (e) {
+						console.error('[TiptapDocxEditor] Failed to fetch blob (may be expired):', e.message);
+						return null; // Don't let expired blob URLs crash the save
+					}
+				} else if (isDataUrl) {
+					// Extract base64 image data from ANY data URL type
+					// Handles: data:image/png;base64,... AND data:application/octet-stream;base64,...
+					const base64Data = src.split(',')[1];
+					if (!base64Data) {
+						console.warn('[TiptapDocxEditor] Data URL has no base64 content');
+						return null;
+					}
+
+					// Try to extract MIME type from data URL, fall back to detecting from binary
+					const mimeMatch = src.match(/^data:([^;,]+)/);
+					const declaredMime = mimeMatch ? mimeMatch[1] : null;
+
+					// Check base64 size (binary will be ~75% of base64 length)
+					const estimatedSize = base64Data.length * 0.75;
+					if (estimatedSize > MAX_IMAGE_BUFFER_SIZE) {
+						console.warn('[TiptapDocxEditor] Base64 image too large, skipping:', Math.round(estimatedSize / 1024 / 1024), 'MB');
+						return null;
+					}
+
+					imageBuffer = Uint8Array.from(atob(base64Data), c => c.charCodeAt(0));
+
+					// Detect actual image type from binary header (more reliable than MIME declaration)
+					if (imageBuffer[0] === 0x89 && imageBuffer[1] === 0x50) {
+						mimeType = 'image/png';
+					} else if (imageBuffer[0] === 0xFF && imageBuffer[1] === 0xD8) {
+						mimeType = 'image/jpeg';
+					} else if (imageBuffer[0] === 0x47 && imageBuffer[1] === 0x49) {
+						mimeType = 'image/gif';
+					} else if (imageBuffer[0] === 0x52 && imageBuffer[1] === 0x49) {
+						mimeType = 'image/webp';
+					} else if (declaredMime && declaredMime.startsWith('image/')) {
+						mimeType = declaredMime;
+					} else {
+						// Default to PNG for unknown binary
+						mimeType = 'image/png';
+					}
+
+					console.log('[TiptapDocxEditor] Base64 decoded, size:', imageBuffer.length, 'detected type:', mimeType);
+				}
+
+				if (imageBuffer) {
+					// Get image dimensions from attributes OR extract from binary header
+					let width = node.attrs?.width ? parseInt(node.attrs.width) : null;
+					let height = node.attrs?.height ? parseInt(node.attrs.height) : null;
+
+					// If dimensions missing, extract from image binary header (fast, no decode needed)
+					if (!width || !height) {
+						const dims = this.getImageDimensionsFromBinary(imageBuffer);
+						if (dims) {
+							console.log('[TiptapDocxEditor] Extracted dimensions from header:', dims.width, 'x', dims.height);
+							width = width || dims.width;
+							height = height || dims.height;
+						}
+					}
+
+					// Final fallback if still no dimensions
+					width = width || 400;
+					height = height || Math.round(width * 0.75);
+
+					// Import ImageRun from docx library
+					const {
+						ImageRun,
+						TextWrappingType,
+						TextWrappingSide,
+						HorizontalPositionRelativeFrom,
+						VerticalPositionRelativeFrom,
+						HorizontalPositionAlign,
+						VerticalPositionAlign
+					} = window.DocxLib;
+
+					if (!ImageRun) {
+						console.error('[TiptapDocxEditor] ImageRun not available in DocxLib');
+						return null;
+					}
+
+					// Determine image type for docx
+					let imageType;
+					if (mimeType.includes('jpeg') || mimeType.includes('jpg')) {
+						imageType = 'jpg';
+					} else if (mimeType.includes('png')) {
+						imageType = 'png';
+					} else if (mimeType.includes('gif')) {
+						imageType = 'gif';
+					} else if (mimeType.includes('bmp')) {
+						imageType = 'bmp';
+					} else {
+						imageType = 'png'; // default
+					}
+
+					console.log('[TiptapDocxEditor] Image type detected:', imageType, 'mime:', mimeType);
+
+					// Configure Floating Options
+					let floating = undefined;
+					const wrapType = node.attrs?.wrapType || 'inline';
+
+					if (wrapType !== 'inline') {
+						const floatSide = node.attrs?.floatSide || 'left';
+						const margin = node.attrs?.margin || 0;
+						const behindDoc = node.attrs?.behindDoc || false;
+
+						// Map wrap types
+						let docxWrapType = TextWrappingType.SQUARE;
+						if (wrapType === 'tight') docxWrapType = TextWrappingType.TIGHT;
+						if (wrapType === 'through') docxWrapType = TextWrappingType.THROUGH;
+						if (wrapType === 'topAndBottom') docxWrapType = TextWrappingType.TOP_AND_BOTTOM;
+						if (wrapType === 'none' || wrapType === 'behind' || wrapType === 'front') docxWrapType = TextWrappingType.NONE;
+
+						// Map align
+						let align = HorizontalPositionAlign.LEFT;
+						if (floatSide === 'right') align = HorizontalPositionAlign.RIGHT;
+						if (floatSide === 'center') align = HorizontalPositionAlign.CENTER;
+
+						floating = {
+							horizontalPosition: {
+								relative: HorizontalPositionRelativeFrom.COLUMN,
+								align: align
+							},
+							verticalPosition: {
+								relative: VerticalPositionRelativeFrom.PARAGRAPH,
+								align: VerticalPositionAlign.TOP
+							},
+							wrap: {
+								type: docxWrapType,
+								side: TextWrappingSide.BOTH // Default to both sides
+							},
+							margins: {
+								top: margin,
+								bottom: margin,
+								left: margin,
+								right: margin
+							},
+							behindDocument: behindDoc
+						};
+						console.log('[TiptapDocxEditor] Configuring floating image:', floating);
+					}
+
+					// Create image run
+					const imageRun = new ImageRun({
+						data: imageBuffer,
+						type: imageType,
+						transformation: {
+							width: width,
+							height: height,
+						},
+						floating: floating // will be undefined if inline
+					});
+
+					console.log('[TiptapDocxEditor] ✅ ImageRun created:', { width, height, type: imageType, bufferSize: imageBuffer.length, floating: !!floating });
+					return imageRun;
+				} else {
+					console.warn('[TiptapDocxEditor] Image skipped - not blob/base64 or no src. Src:', src ? src.substring(0, 50) : 'undefined');
+					return null;
+				}
+			} catch (error) {
+				console.error('[TiptapDocxEditor] Failed to convert image:', error);
+				return null;
+			}
 		}
 
 		/**
@@ -1017,15 +1725,74 @@
 
 			switch (node.type) {
 				case 'paragraph': {
-					const runs = this.extractTextRuns(node, TextRun);
+					// Handle inline content (text AND images)
+					const children = [];
+					if (node.content) {
+						for (const child of node.content) {
+							if (child.type === 'text') {
+								// Extract text run logic inline to avoid helper limitation
+								const marks = child.marks || [];
+								children.push(new TextRun({
+									text: child.text || '',
+									bold: marks.some(m => m.type === 'bold'),
+									italics: marks.some(m => m.type === 'italic'),
+									underline: marks.some(m => m.type === 'underline') ? {} : undefined,
+									strike: marks.some(m => m.type === 'strike'),
+								}));
+							} else if (child.type === 'image' || child.type === 'imageResize') {
+								const imageRun = await this.processImageNode(child);
+								if (imageRun) {
+									children.push(imageRun);
+								}
+							} else if (child.type === 'hardBreak') {
+								// Handle Hard Break (Shift+Enter)
+								children.push(new TextRun({ text: "", break: 1 }));
+							}
+						}
+					}
+
+					// Default empty text run if no children
+					if (children.length === 0) {
+						children.push(new TextRun({ text: '' }));
+					}
+
+					// Check for alignment
+					let alignment = undefined;
+					if (node.attrs && node.attrs.textAlign) {
+						if (node.attrs.textAlign === 'center') alignment = AlignmentType.CENTER;
+						else if (node.attrs.textAlign === 'right') alignment = AlignmentType.RIGHT;
+						else if (node.attrs.textAlign === 'justify') alignment = AlignmentType.JUSTIFIED;
+					}
+
 					paragraphs.push(new Paragraph({
-						children: runs,
+						children: children,
+						alignment: alignment
 					}));
 					break;
 				}
 
 				case 'heading': {
-					const runs = this.extractTextRuns(node, TextRun);
+					// Headings usually just contain text, but could contain inline images
+					const children = [];
+					if (node.content) {
+						for (const child of node.content) {
+							if (child.type === 'text') {
+								const marks = child.marks || [];
+								children.push(new TextRun({
+									text: child.text || '',
+									bold: marks.some(m => m.type === 'bold'),
+									italics: marks.some(m => m.type === 'italic'),
+									underline: marks.some(m => m.type === 'underline') ? {} : undefined,
+									strike: marks.some(m => m.type === 'strike'),
+								}));
+							}
+						}
+					}
+					// If empty heading
+					if (children.length === 0) {
+						children.push(new TextRun({ text: '' }));
+					}
+
 					const level = node.attrs?.level || 1;
 					const headingLevels = [
 						HeadingLevel.HEADING_1,
@@ -1036,11 +1803,12 @@
 						HeadingLevel.HEADING_6,
 					];
 					paragraphs.push(new Paragraph({
-						children: runs,
+						children: children,
 						heading: headingLevels[level - 1] || HeadingLevel.HEADING_1,
 					}));
 					break;
 				}
+
 
 				case 'bulletList':
 				case 'orderedList': {
@@ -1059,90 +1827,17 @@
 					break;
 				}
 
-			case 'image':
+				case 'image':
 				case 'imageResize': {
-					// Handle image nodes (both standard and resizable)
-					try {
-						let src = node.attrs?.src;
-						console.log('[TiptapDocxEditor] Processing image node:', node.type, 'src:', src ? (src.length > 50 ? src.substring(0, 50) + '...' : src) : 'null');
-
-						let imageBuffer;
-						let mimeType;
-
-						if (src && src.startsWith('blob:')) {
-							// Fetch blob and convert to array buffer
-							try {
-								console.log('[TiptapDocxEditor] Fetching Blob URL:', src);
-								const response = await fetch(src);
-								const blob = await response.blob();
-								const arrayBuffer = await blob.arrayBuffer();
-								imageBuffer = new Uint8Array(arrayBuffer);
-								mimeType = blob.type || 'image/png';
-								console.log('[TiptapDocxEditor] Blob fetched, size:', imageBuffer.length, 'type:', mimeType);
-							} catch (e) {
-								console.error('[TiptapDocxEditor] Failed to fetch blob:', e);
-							}
-						} else if (src && src.startsWith('data:image')) {
-							// Extract base64 image data and determine type
-							const mimeMatch = src.match(/^data:(image\/\w+);base64,/);
-							mimeType = mimeMatch ? mimeMatch[1] : 'image/png';
-							const base64Data = src.split(',')[1];
-							imageBuffer = Uint8Array.from(atob(base64Data), c => c.charCodeAt(0));
-						}
-
-						if (imageBuffer) {
-							// Get image dimensions from attributes
-							let width = node.attrs?.width;
-							let height = node.attrs?.height;
-
-							// Default dimensions if not found
-							width = width ? parseInt(width) : 400;
-							height = height ? parseInt(height) : Math.round(width * 0.75);
-
-							// Import ImageRun from docx library
-							const { ImageRun } = window.DocxLib;
-
-							if (!ImageRun) {
-								console.error('[TiptapDocxEditor] ImageRun not available in DocxLib');
-								break;
-							}
-
-							// Determine image type for docx
-							let imageType;
-							if (mimeType.includes('jpeg') || mimeType.includes('jpg')) {
-								imageType = 'jpg';
-							} else if (mimeType.includes('png')) {
-								imageType = 'png';
-							} else if (mimeType.includes('gif')) {
-								imageType = 'gif';
-							} else if (mimeType.includes('bmp')) {
-								imageType = 'bmp';
-							} else {
-								imageType = 'png'; // default
-							}
-
-							console.log('[TiptapDocxEditor] Image type detected:', imageType, 'mime:', mimeType);
-
-							// Create image paragraph with proper type
-							const imageRun = new ImageRun({
-								data: imageBuffer,
-								type: imageType,
-								transformation: {
-									width: width,
-									height: height,
-								},
-							});
-
-							paragraphs.push(new Paragraph({
-								children: [imageRun],
-							}));
-
-							console.log('[TiptapDocxEditor] ✅ Image added to DOCX:', { width, height, type: imageType, bufferSize: imageBuffer.length });
-						} else {
-							console.warn('[TiptapDocxEditor] Image skipped - not blob/base64 or no src');
-						}
-					} catch (error) {
-						console.error('[TiptapDocxEditor] Failed to convert image:', error);
+					// Handle BLOCK level images (if any remain)
+					const imageRun = await this.processImageNode(node);
+					if (imageRun) {
+						// Wrap block image in a paragraph
+						const { Paragraph } = window.DocxLib;
+						paragraphs.push(new Paragraph({
+							children: [imageRun],
+						}));
+						console.log('[TiptapDocxEditor] ✅ Block Image added to DOCX');
 					}
 					break;
 				}
