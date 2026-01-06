@@ -73,8 +73,16 @@
 			const base64 = btoa(binaryString);
 
 			// Get JSON content for round-trip image preservation
-			const json = tiptapEditor.getJSON();
-			const jsonContent = JSON.stringify(json);
+			// Use getHydratedJSON to ensure images are saved as Base64, not ephemeral Blob URLs
+			let jsonContent = null;
+			try {
+				const json = await tiptapEditor.getHydratedJSON();
+				jsonContent = JSON.stringify(json);
+			} catch (e) {
+				console.error('[DOCX Webview] Failed to hydrate JSON:', e);
+				// Fallback to basic JSON (might contain blob urls which is bad, but better than crash)
+				jsonContent = JSON.stringify(tiptapEditor.getJSON());
+			}
 
 			// #region agent log
 			fetch('http://127.0.0.1:7242/ingest/46b90235-167b-46c3-ba20-4e094ee4fbac',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'docxViewerTiptap.js:sendContentUpdate:posting',message:'Posting contentChanged',data:{base64SizeKB:Math.round(base64.length/1024)},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H3'})}).catch(()=>{});
@@ -432,7 +440,8 @@
 				console.log('[DOCX Webview] Loading from JSON content (preserves images)');
 				const json = JSON.parse(message.jsonContent);
 				if (tiptapEditor && tiptapEditor.editor) {
-					tiptapEditor.editor.commands.setContent(json);
+					// Use loadFromJSON to handle Base64 -> Blob conversion for memory optimization
+					await tiptapEditor.loadFromJSON(json);
 					tiptapEditor.editor.setEditable(true);
 					console.log('[DOCX Webview] Loaded from JSON, editor editable:', tiptapEditor.editor.isEditable);
 				}
@@ -503,7 +512,7 @@
 			vscode.postMessage({
 				type: 'saveRequested',
 				docxData: base64,
-				jsonContent: JSON.stringify(json), // JSON preserves images unlike DOCX round-trip
+				jsonContent: null, // Disable JSON persistence to force DOCX reload (avoids Blob URL issues)
 				text: text,
 				html: html,
 				docxUri: docxUri,

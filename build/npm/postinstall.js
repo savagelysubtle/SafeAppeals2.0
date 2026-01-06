@@ -82,7 +82,7 @@ function setNpmrcConfig(dir, env) {
 
 	for (const line of lines) {
 		const trimmedLine = line.trim();
-		if (trimmedLine && !trimmedLine.startsWith('#')) {
+		if (trimmedLine && !trimmedLine.startsWith('#') && !trimmedLine.startsWith(';')) {
 			const [key, value] = trimmedLine.split('=');
 			env[`npm_config_${key}`] = value.replace(/^"(.*)"$/, '$1');
 		}

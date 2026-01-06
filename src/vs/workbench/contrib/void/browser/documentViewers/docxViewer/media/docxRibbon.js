@@ -438,12 +438,12 @@ class DocxRibbon {
 								unsharpThreshold: 2
 							});
 
-							// CRITICAL: Use canvas.toDataURL directly instead of pica.toBlob
-							// pica.toBlob + FileReader was causing issues in webview context
-							resizedBase64 = destCanvas.toDataURL('image/jpeg', 0.85);
+							// Use toBlob instead of toDataURL for memory efficiency
+							const blob = await pica.toBlob(destCanvas, 'image/jpeg', 0.85);
+							resizedBase64 = URL.createObjectURL(blob);
 							usedPica = true;
 
-							console.log('[DocxRibbon] ✅ Pica resize complete:', width, 'x', height, 'size:', Math.round(resizedBase64.length/1024), 'KB');
+							console.log('[DocxRibbon] ✅ Pica resize complete:', width, 'x', height, 'Blob URL:', resizedBase64);
 						} catch (picaErr) {
 							console.warn('[DocxRibbon] Pica resize failed:', picaErr);
 						}
@@ -453,12 +453,15 @@ class DocxRibbon {
 					if (!usedPica) {
 						console.warn('[DocxRibbon] Using canvas fallback');
 						destCanvas.getContext('2d').drawImage(srcCanvas, 0, 0, width, height);
-						resizedBase64 = destCanvas.toDataURL('image/jpeg', 0.85);
+
+						// Use canvas.toBlob wrapper for Promise support
+						const blob = await new Promise(resolve => destCanvas.toBlob(resolve, 'image/jpeg', 0.85));
+						resizedBase64 = URL.createObjectURL(blob);
 					}
 
-					// Verify we have a proper base64 data URL
-					if (!resizedBase64 || !resizedBase64.startsWith('data:image')) {
-						throw new Error('Failed to generate base64 image');
+					// Verify we have a proper Blob URL
+					if (!resizedBase64 || !resizedBase64.startsWith('blob:')) {
+						throw new Error('Failed to generate blob image');
 					}
 
 					// CRITICAL: Cleanup to free memory
@@ -492,22 +495,9 @@ class DocxRibbon {
 						const hasSetImage = !!this.editor.editor.commands.setImage;
 						console.log('[DocxRibbon] setImage command available:', hasSetImage);
 
-						// Get state before insertion
-						const beforeJson = this.editor.editor.getJSON();
-						console.log('[DocxRibbon] State BEFORE insertion - node types:', this.findNodeTypes(beforeJson));
-
 						// Insert image
 						const result = this.editor.editor.chain().focus().setImage({ src: resizedBase64 }).run();
 						console.log('[DocxRibbon] setImage chain result:', result);
-
-						// Get state after insertion
-						const afterJson = this.editor.editor.getJSON();
-						console.log('[DocxRibbon] State AFTER insertion - node types:', this.findNodeTypes(afterJson));
-
-						// Check if image node exists in schema
-						const schema = this.editor.editor.schema;
-						const imageNodeType = schema.nodes.image;
-						console.log('[DocxRibbon] Image in schema:', !!imageNodeType, 'group:', imageNodeType?.spec?.group);
 
 						this.callbacks.onModification?.();
 						console.log('[DocxRibbon] ✅ Image inserted successfully');
