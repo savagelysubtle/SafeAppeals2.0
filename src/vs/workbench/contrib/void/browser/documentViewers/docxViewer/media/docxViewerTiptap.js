@@ -56,8 +56,14 @@
 
 	async function sendContentUpdate() {
 		if (!tiptapEditor) return;
+		// #region agent log
+		fetch('http://127.0.0.1:7242/ingest/46b90235-167b-46c3-ba20-4e094ee4fbac',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'docxViewerTiptap.js:sendContentUpdate:start',message:'Starting content update',data:{},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H3'})}).catch(()=>{});
+		// #endregion
 		try {
 			const blob = await tiptapEditor.saveToDocx();
+			// #region agent log
+			fetch('http://127.0.0.1:7242/ingest/46b90235-167b-46c3-ba20-4e094ee4fbac',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'docxViewerTiptap.js:sendContentUpdate:blobCreated',message:'DOCX blob created',data:{blobSize:blob?.size||0,blobSizeKB:Math.round((blob?.size||0)/1024)},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H5'})}).catch(()=>{});
+			// #endregion
 			const arrayBuffer = await blob.arrayBuffer();
 			const uint8Array = new Uint8Array(arrayBuffer);
 			let binaryString = '';
@@ -65,12 +71,24 @@
 				binaryString += String.fromCharCode(uint8Array[i]);
 			}
 			const base64 = btoa(binaryString);
+
+			// Get JSON content for round-trip image preservation
+			const json = tiptapEditor.getJSON();
+			const jsonContent = JSON.stringify(json);
+
+			// #region agent log
+			fetch('http://127.0.0.1:7242/ingest/46b90235-167b-46c3-ba20-4e094ee4fbac',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'docxViewerTiptap.js:sendContentUpdate:posting',message:'Posting contentChanged',data:{base64SizeKB:Math.round(base64.length/1024)},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H3'})}).catch(()=>{});
+			// #endregion
 			vscode.postMessage({
 				type: 'contentChanged',
 				docxData: base64,
+				jsonContent: jsonContent, // JSON preserves images for round-trip
 				data: base64 // support both
 			});
 		} catch (e) {
+			// #region agent log
+			fetch('http://127.0.0.1:7242/ingest/46b90235-167b-46c3-ba20-4e094ee4fbac',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'docxViewerTiptap.js:sendContentUpdate:error',message:'Content update failed',data:{error:e?.message||String(e)},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H5'})}).catch(()=>{});
+			// #endregion
 			console.error("[DOCX Webview] Failed to serialize content for update:", e);
 		}
 	}
@@ -409,31 +427,42 @@
 		updateStatus('Loading document...');
 
 		try {
-			// Decode base64 data
-			const binaryString = atob(message.data);
-			const bytes = new Uint8Array(binaryString.length);
-			for (let i = 0; i < binaryString.length; i++) {
-				bytes[i] = binaryString.charCodeAt(i);
+			// Check if we have JSON content (preserves images for round-trip)
+			if (message.jsonContent) {
+				console.log('[DOCX Webview] Loading from JSON content (preserves images)');
+				const json = JSON.parse(message.jsonContent);
+				if (tiptapEditor && tiptapEditor.editor) {
+					tiptapEditor.editor.commands.setContent(json);
+					tiptapEditor.editor.setEditable(true);
+					console.log('[DOCX Webview] Loaded from JSON, editor editable:', tiptapEditor.editor.isEditable);
+				}
+			} else {
+				// Decode base64 data and load from DOCX
+				const binaryString = atob(message.data);
+				const bytes = new Uint8Array(binaryString.length);
+				for (let i = 0; i < binaryString.length; i++) {
+					bytes[i] = binaryString.charCodeAt(i);
+				}
+
+				// Load into Tiptap
+				await tiptapEditor.loadFromDocx(bytes.buffer);
+
+				// Ensure editor is editable after loading content
+				if (tiptapEditor && tiptapEditor.editor) {
+					tiptapEditor.editor.setEditable(true);
+					console.log('[DOCX Webview] Editor confirmed editable after load:', tiptapEditor.editor.isEditable);
+				}
 			}
 
-		// Load into Tiptap
-		await tiptapEditor.loadFromDocx(bytes.buffer);
+			docxUri = message.docxUri;
+			contentModified = false;
+			updateStatus('Document loaded');
+			console.log('[DOCX Webview] DOCX loaded successfully');
 
-		// Ensure editor is editable after loading content
-		if (tiptapEditor && tiptapEditor.editor) {
-			tiptapEditor.editor.setEditable(true);
-			console.log('[DOCX Webview] Editor confirmed editable after load:', tiptapEditor.editor.isEditable);
-		}
-
-		docxUri = message.docxUri;
-		contentModified = false;
-		updateStatus('Document loaded');
-		console.log('[DOCX Webview] DOCX loaded successfully');
-
-		// Update counts after a short delay to let DOM settle
-		setTimeout(() => {
-			updatePageCount();
-		}, 100);
+			// Update counts after a short delay to let DOM settle
+			setTimeout(() => {
+				updatePageCount();
+			}, 100);
 
 		} catch (error) {
 			console.error('[DOCX Webview] Failed to load DOCX:', error);
@@ -467,10 +496,14 @@
 			const text = tiptapEditor.getText();
 			const html = tiptapEditor.getHTML();
 
+			// Get JSON content for round-trip preservation (images are preserved in JSON)
+			const json = tiptapEditor.getJSON();
+
 			// Send to host
 			vscode.postMessage({
 				type: 'saveRequested',
 				docxData: base64,
+				jsonContent: JSON.stringify(json), // JSON preserves images unlike DOCX round-trip
 				text: text,
 				html: html,
 				docxUri: docxUri,

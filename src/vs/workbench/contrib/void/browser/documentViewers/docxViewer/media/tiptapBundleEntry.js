@@ -9,10 +9,10 @@ import ReactDOM from 'react-dom';
 import * as ReactDOMClient from 'react-dom/client';
 
 // Import docx library (will be bundled)
-import { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType, PageBreak } from 'docx';
+import { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType, PageBreak, ImageRun } from 'docx';
 
 // Import Tiptap core
-import { Editor, Extension } from '@tiptap/core';
+import { Editor, Extension, Node } from '@tiptap/core';
 import StarterKit from '@tiptap/starter-kit';
 
 // Import @tiptap/react for ReactNodeViewRenderer support
@@ -26,6 +26,18 @@ import Link from '@tiptap/extension-link';
 import FontFamily from '@tiptap/extension-font-family';
 import TextStyle from '@tiptap/extension-text-style';
 import Color from '@tiptap/extension-color';
+
+// Import Table extensions (separate packages in Tiptap v2.x)
+import Table from '@tiptap/extension-table';
+import TableRow from '@tiptap/extension-table-row';
+import TableCell from '@tiptap/extension-table-cell';
+import TableHeader from '@tiptap/extension-table-header';
+
+// Import pica for memory-efficient image resizing
+import Pica from 'pica';
+
+// NOTE: We no longer use tiptap-extension-resize-image due to memory issues
+// Instead, we use a custom lightweight extension with CSS resize in tiptapBundle.js
 
 // Import Pagination extension (@adalat-ai/page-extension)
 // This replaces the previous hugs7 extension and provides automatic page management
@@ -52,12 +64,14 @@ window.DocxLib = {
 	TextRun,
 	HeadingLevel,
 	AlignmentType,
-	PageBreak
+	PageBreak,
+	ImageRun
 };
 
 // Export Tiptap core
 window.TiptapEditor = Editor;
 window.TiptapExtension = Extension;
+window.TiptapNode = Node;  // Required for creating custom Node-based extensions (e.g., Image)
 window.TiptapStarterKit = StarterKit;
 
 // Export additional extensions
@@ -68,6 +82,15 @@ window.TiptapFontFamily = FontFamily;
 window.TiptapTextStyle = TextStyle;
 window.TiptapColor = Color;
 // Note: HorizontalRule is already in StarterKit, no need to export separately
+
+// Export Table extensions
+window.TiptapTable = Table;
+window.TiptapTableRow = TableRow;
+window.TiptapTableCell = TableCell;
+window.TiptapTableHeader = TableHeader;
+
+// Export pica for efficient image resizing
+window.Pica = Pica;
 
 // Export pagination extensions
 // New @adalat-ai/page-extension exports

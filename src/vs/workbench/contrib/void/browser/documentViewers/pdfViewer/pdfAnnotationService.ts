@@ -19,6 +19,7 @@ export interface PDFAnnotation {
 	color: string; // e.g., 'yellow', 'green', 'red', 'blue'
 	boundingBoxes: Array<{ page: number; x: number; y: number; width: number; height: number }>;
 	note?: string; // Optional AI-generated or user note
+	imageData?: string; // Base64 PNG data for signature images
 	createdAt: number;
 }
 

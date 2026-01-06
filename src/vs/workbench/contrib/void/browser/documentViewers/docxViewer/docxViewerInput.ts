@@ -22,6 +22,7 @@ export class DOCXViewerInput extends EditorInput {
 
 	selection: DOCXSelection | null = null;
 	private _content?: string; // Base64 encoded content
+	private _jsonContent?: string; // JSON content for round-trip image preservation
 	private _workingCopy?: { isDirty(): boolean };
 
 	constructor(
@@ -42,6 +43,14 @@ export class DOCXViewerInput extends EditorInput {
 
 	hasContent(): boolean {
 		return !!this._content;
+	}
+
+	setJsonContent(jsonContent: string): void {
+		this._jsonContent = jsonContent;
+	}
+
+	getJsonContent(): string | undefined {
+		return this._jsonContent;
 	}
 
 	/**

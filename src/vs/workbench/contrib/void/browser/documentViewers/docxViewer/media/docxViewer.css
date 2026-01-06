@@ -1795,3 +1795,180 @@ body[data-vscode-theme-kind="vscode-dark"] #docx-container {
 		display: none;
 	}
 }
+
+/* ============================================
+   IMAGE RESIZE HANDLES
+   ============================================ */
+
+/* Image wrapper with resize handles */
+.tiptap-editor .image-wrapper,
+.ProseMirror .image-wrapper {
+	position: relative;
+	display: inline-block;
+	max-width: 100%;
+	line-height: 0;
+}
+
+/* Images remain responsive */
+.tiptap-editor img,
+.ProseMirror img {
+	max-width: 100%;
+	height: auto;
+	display: block;
+	cursor: pointer;
+	border: 2px solid transparent;
+	transition: border-color 0.1s ease;
+}
+
+/* Selected image border */
+.tiptap-editor img.ProseMirror-selectednode,
+.ProseMirror img.ProseMirror-selectednode {
+	border-color: var(--vscode-focusBorder);
+}
+
+/* Resize handle container */
+.tiptap-editor .resize-handle,
+.ProseMirror .resize-handle {
+	position: absolute;
+	width: 10px;
+	height: 10px;
+	background-color: var(--vscode-button-background);
+	border: 1px solid var(--vscode-button-foreground);
+	border-radius: 2px;
+	opacity: 0;
+	transition: opacity 0.2s ease;
+	z-index: 10;
+}
+
+/* Show resize handles when image is selected */
+.tiptap-editor img.ProseMirror-selectednode ~ .resize-handle,
+.ProseMirror img.ProseMirror-selectednode ~ .resize-handle,
+.tiptap-editor .image-wrapper:hover .resize-handle,
+.ProseMirror .image-wrapper:hover .resize-handle {
+	opacity: 1;
+}
+
+/* Corner resize handles */
+.resize-handle.top-left {
+	top: -5px;
+	left: -5px;
+	cursor: nw-resize;
+}
+
+.resize-handle.top-right {
+	top: -5px;
+	right: -5px;
+	cursor: ne-resize;
+}
+
+.resize-handle.bottom-left {
+	bottom: -5px;
+	left: -5px;
+	cursor: sw-resize;
+}
+
+.resize-handle.bottom-right {
+	bottom: -5px;
+	right: -5px;
+	cursor: se-resize;
+}
+
+/* Side resize handles (optional) */
+.resize-handle.top {
+	top: -5px;
+	left: 50%;
+	transform: translateX(-50%);
+	cursor: n-resize;
+}
+
+.resize-handle.bottom {
+	bottom: -5px;
+	left: 50%;
+	transform: translateX(-50%);
+	cursor: s-resize;
+}
+
+.resize-handle.left {
+	top: 50%;
+	left: -5px;
+	transform: translateY(-50%);
+	cursor: w-resize;
+}
+
+.resize-handle.right {
+	top: 50%;
+	right: -5px;
+	transform: translateY(-50%);
+	cursor: e-resize;
+}
+
+/* ============================================
+   LIGHTWEIGHT IMAGE STYLES - NodeView with Resize Handles
+   Memory-efficient alternative to canvas-based resize
+   ============================================ */
+
+/* Image container (NodeView wrapper) */
+.ProseMirror .docx-image-container,
+.tiptap-editor .docx-image-container {
+	position: relative;
+	display: inline-block;
+	margin: 8px 0;
+	line-height: 0;
+}
+
+/* The actual image */
+.ProseMirror img.docx-image,
+.tiptap-editor img.docx-image {
+	display: block;
+	max-width: 100%;
+	height: auto;
+	border: 2px solid transparent;
+	border-radius: 2px;
+	transition: border-color 0.15s ease, box-shadow 0.15s ease;
+	cursor: default;
+	user-select: none;
+}
+
+/* Image selection state */
+.ProseMirror .docx-image-container.ProseMirror-selectednode img.docx-image,
+.ProseMirror img.docx-image:focus,
+.tiptap-editor img.docx-image:focus {
+	border-color: var(--vscode-focusBorder, #0066cc);
+	box-shadow: 0 0 0 2px rgba(0, 102, 204, 0.2);
+	outline: none;
+}
+
+/* Image hover state - subtle border */
+.ProseMirror .docx-image-container:hover img.docx-image,
+.tiptap-editor .docx-image-container:hover img.docx-image {
+	border-color: var(--vscode-focusBorder, #0066cc);
+}
+
+/* Resize handle styling (inline styles in JS, but can override here) */
+.ProseMirror .docx-image-resize-handle,
+.tiptap-editor .docx-image-resize-handle {
+	position: absolute;
+	bottom: 4px;
+	right: 4px;
+	width: 12px;
+	height: 12px;
+	background: var(--vscode-focusBorder, #007acc);
+	cursor: nwse-resize;
+	border-radius: 2px;
+	opacity: 0;
+	transition: opacity 0.15s ease;
+	z-index: 10;
+}
+
+/* Show resize handle on container hover */
+.ProseMirror .docx-image-container:hover .docx-image-resize-handle,
+.tiptap-editor .docx-image-container:hover .docx-image-resize-handle {
+	opacity: 0.8;
+}
+
+/* Keep handle visible during resize */
+.ProseMirror .docx-image-container.resizing .docx-image-resize-handle,
+.tiptap-editor .docx-image-container.resizing .docx-image-resize-handle {
+	opacity: 1;
+}
+

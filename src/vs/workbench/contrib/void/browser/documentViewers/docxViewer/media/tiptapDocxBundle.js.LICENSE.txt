@@ -1,3 +1,16 @@
+/*
+object-assign
+(c) Sindre Sorhus
+@license MIT
+*/
+
+/*!
+
+pica
+https://github.com/nodeca/pica
+
+*/
+
 /*! http://mths.be/fromcodepoint v0.1.0 by @mathias */
 
 /**
