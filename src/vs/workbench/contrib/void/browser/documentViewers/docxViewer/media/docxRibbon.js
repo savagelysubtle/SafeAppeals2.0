@@ -540,14 +540,6 @@ class DocxRibbon {
 					const previousUrl = this.editor.editor.getAttributes('link').href;
 
 					this.showInputModal('Insert Link', previousUrl || '', (url) => {
-						// Focus back first
-						this.editor.editor.commands.focus();
-
-						// Restore selection if needed (focus usually restores it, but just in case)
-						if (from !== to) {
-							this.editor.editor.commands.setTextSelection({ from, to });
-						}
-
 						if (url) {
 							try {
 								// Ensure protocol
@@ -555,8 +547,16 @@ class DocxRibbon {
 									url = 'https://' + url;
 								}
 
-								console.log('[DocxRibbon] Setting link:', url, 'Selection:', from, to);
-								const result = this.editor.editor.chain().setLink({ href: url }).run();
+								console.log('[DocxRibbon] Setting link:', url, 'Selection:', from, '->', to);
+
+								// Chain all operations together - focus, restore selection, apply link
+								const result = this.editor.editor
+									.chain()
+									.focus()
+									.setTextSelection({ from, to })
+									.setLink({ href: url })
+									.run();
+
 								console.log('[DocxRibbon] setLink result:', result);
 
 								this.callbacks.onModification?.();
@@ -565,7 +565,13 @@ class DocxRibbon {
 								console.warn('[DocxRibbon] Link extension error:', err);
 							}
 						} else if (previousUrl) {
-							this.editor.editor.chain().unsetLink().run();
+							// Unset link - also needs chained focus + selection
+							this.editor.editor
+								.chain()
+								.focus()
+								.setTextSelection({ from, to })
+								.unsetLink()
+								.run();
 							this.callbacks.onModification?.();
 							this.updateState();
 						}

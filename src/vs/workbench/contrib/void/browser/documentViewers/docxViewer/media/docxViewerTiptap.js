@@ -391,6 +391,28 @@
 				console.log('[DOCX Webview] Tiptap editor initialized and set to editable:', tiptapEditor.editor.isEditable);
 			}
 
+			// Intercept link clicks and send to host (webview sandbox blocks popups)
+			const editorContainer = document.getElementById('docx-container');
+			if (editorContainer) {
+				editorContainer.addEventListener('click', (e) => {
+					// Check if clicked element is a link or inside a link
+					const link = e.target.closest('a[href]');
+					if (link) {
+						const href = link.getAttribute('href');
+						if (href && (href.startsWith('http://') || href.startsWith('https://') || href.startsWith('mailto:'))) {
+							e.preventDefault();
+							e.stopPropagation();
+							console.log('[DOCX Webview] Link clicked, sending to host:', href);
+							vscode.postMessage({
+								type: 'openLink',
+								url: href
+							});
+						}
+					}
+				}, true); // Use capture phase to intercept before Tiptap's handler
+				console.log('[DOCX Webview] Link click interceptor installed');
+			}
+
 			// Initialize ruler
 			initializeRuler();
 

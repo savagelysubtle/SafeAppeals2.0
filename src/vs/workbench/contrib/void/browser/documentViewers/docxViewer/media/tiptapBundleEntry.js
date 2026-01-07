@@ -9,7 +9,7 @@ import ReactDOM from 'react-dom';
 import * as ReactDOMClient from 'react-dom/client';
 
 // Import docx library (will be bundled)
-import { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType, PageBreak, ImageRun } from 'docx';
+import { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType, PageBreak, ImageRun, ExternalHyperlink } from 'docx';
 
 // Import Tiptap core
 import { Editor, Extension, Node } from '@tiptap/core';
@@ -65,7 +65,8 @@ window.DocxLib = {
 	HeadingLevel,
 	AlignmentType,
 	PageBreak,
-	ImageRun
+	ImageRun,
+	ExternalHyperlink
 };
 
 // Export Tiptap core

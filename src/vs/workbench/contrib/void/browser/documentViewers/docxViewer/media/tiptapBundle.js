@@ -1404,7 +1404,7 @@
 			}
 
 			try {
-				const { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType } = window.DocxLib;
+				const { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType, ExternalHyperlink } = window.DocxLib;
 
 				// CRITICAL: Ensure we have the latest JSON state
 				// Depending on how Tiptap updates, we might need to force a sync or just getJSON
@@ -1434,7 +1434,7 @@
 					console.log(`[TiptapDocxEditor] Image ${i}: src starts with ${img.attrs?.src?.substring(0, 30)}...`);
 				});
 
-				const docxContent = await this.convertTiptapToDocx(json, { Paragraph, TextRun, HeadingLevel, AlignmentType });
+				const docxContent = await this.convertTiptapToDocx(json, { Paragraph, TextRun, HeadingLevel, AlignmentType, ExternalHyperlink });
 
 				// Create DOCX document
 				const doc = new Document({
@@ -1717,7 +1717,7 @@
 		 * Convert a single Tiptap node to DOCX
 		 */
 		async convertNodeToDocx(node, docxClasses, depth = 0) {
-			const { Paragraph, TextRun, HeadingLevel, AlignmentType } = docxClasses;
+			const { Paragraph, TextRun, HeadingLevel, AlignmentType, ExternalHyperlink } = docxClasses;
 			const paragraphs = [];
 
 			// Debug logging for all nodes
@@ -1732,13 +1732,30 @@
 							if (child.type === 'text') {
 								// Extract text run logic inline to avoid helper limitation
 								const marks = child.marks || [];
-								children.push(new TextRun({
+								const linkMark = marks.find(m => m.type === 'link');
+
+								// Create the TextRun with formatting
+								const textRun = new TextRun({
 									text: child.text || '',
 									bold: marks.some(m => m.type === 'bold'),
 									italics: marks.some(m => m.type === 'italic'),
-									underline: marks.some(m => m.type === 'underline') ? {} : undefined,
+									// Links should be underlined and blue by default
+									underline: (marks.some(m => m.type === 'underline') || linkMark) ? {} : undefined,
 									strike: marks.some(m => m.type === 'strike'),
-								}));
+									// Add blue color for links
+									color: linkMark ? '0066CC' : undefined,
+								});
+
+								// If this text has a link mark, wrap it in ExternalHyperlink
+								if (linkMark && linkMark.attrs?.href && ExternalHyperlink) {
+									console.log('[TiptapDocxEditor] Creating hyperlink:', linkMark.attrs.href);
+									children.push(new ExternalHyperlink({
+										children: [textRun],
+										link: linkMark.attrs.href,
+									}));
+								} else {
+									children.push(textRun);
+								}
 							} else if (child.type === 'image' || child.type === 'imageResize') {
 								const imageRun = await this.processImageNode(child);
 								if (imageRun) {
@@ -1778,13 +1795,25 @@
 						for (const child of node.content) {
 							if (child.type === 'text') {
 								const marks = child.marks || [];
-								children.push(new TextRun({
+								const linkMark = marks.find(m => m.type === 'link');
+
+								const textRun = new TextRun({
 									text: child.text || '',
 									bold: marks.some(m => m.type === 'bold'),
 									italics: marks.some(m => m.type === 'italic'),
-									underline: marks.some(m => m.type === 'underline') ? {} : undefined,
+									underline: (marks.some(m => m.type === 'underline') || linkMark) ? {} : undefined,
 									strike: marks.some(m => m.type === 'strike'),
-								}));
+									color: linkMark ? '0066CC' : undefined,
+								});
+
+								if (linkMark && linkMark.attrs?.href && ExternalHyperlink) {
+									children.push(new ExternalHyperlink({
+										children: [textRun],
+										link: linkMark.attrs.href,
+									}));
+								} else {
+									children.push(textRun);
+								}
 							}
 						}
 					}
@@ -1858,8 +1887,11 @@
 
 		/**
 		 * Extract text runs with formatting from a node
+		 * @param {Object} node - The Tiptap node
+		 * @param {Function} TextRun - The TextRun class from docx library
+		 * @param {Function} ExternalHyperlink - The ExternalHyperlink class from docx library (optional)
 		 */
-		extractTextRuns(node, TextRun) {
+		extractTextRuns(node, TextRun, ExternalHyperlink = null) {
 			const runs = [];
 
 			if (!node.content) {
@@ -1871,16 +1903,28 @@
 					const marks = inline.marks || [];
 					const isBold = marks.some(m => m.type === 'bold');
 					const isItalic = marks.some(m => m.type === 'italic');
-					const isUnderline = marks.some(m => m.type === 'underline');
 					const isStrike = marks.some(m => m.type === 'strike');
+					const linkMark = marks.find(m => m.type === 'link');
+					const isUnderline = marks.some(m => m.type === 'underline') || !!linkMark;
 
-					runs.push(new TextRun({
+					const textRun = new TextRun({
 						text: inline.text || '',
 						bold: isBold,
 						italics: isItalic,
 						underline: isUnderline ? {} : undefined,
 						strike: isStrike,
-					}));
+						color: linkMark ? '0066CC' : undefined,
+					});
+
+					// Wrap in hyperlink if link mark exists and ExternalHyperlink is available
+					if (linkMark && linkMark.attrs?.href && ExternalHyperlink) {
+						runs.push(new ExternalHyperlink({
+							children: [textRun],
+							link: linkMark.attrs.href,
+						}));
+					} else {
+						runs.push(textRun);
+					}
 				}
 			}
 

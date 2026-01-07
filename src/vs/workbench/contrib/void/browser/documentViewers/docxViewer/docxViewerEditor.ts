@@ -377,6 +377,14 @@ export class DOCXViewerEditor extends EditorPane {
 					});
 				}
 				break;
+
+			case 'openLink':
+				// Open links in system browser (webview sandbox blocks popups)
+				if (data.url) {
+					console.log('[DOCX Viewer] Opening link in system browser:', data.url);
+					this.openerService.open(URI.parse(data.url), { openExternal: true });
+				}
+				break;
 		}
 	}
 
@@ -722,6 +730,48 @@ export class DOCXViewerEditor extends EditorPane {
 	<meta name="viewport" content="width=device-width, initial-scale=1.0">
 	<title>DOCX Viewer</title>
 	<link rel="stylesheet" href="${styleUri}">
+	<style>
+		/* Inline fallback styles for when external CSS fails to load */
+		/* Link styling - MAXIMUM SPECIFICITY to override * { color: #333 !important } */
+		/* Target all possible link locations in Tiptap/ProseMirror */
+		a,
+		a[href],
+		.tiptap-editor a,
+		.tiptap-editor a[href],
+		.ProseMirror a,
+		.ProseMirror a[href],
+		.tiptap-editor a.docx-link,
+		.ProseMirror a.docx-link,
+		.Page a,
+		.Page a[href],
+		.PageContent a,
+		.PageContent a[href],
+		[data-page] a,
+		[data-page] a[href],
+		p a,
+		span a,
+		.tiptap-editor p a,
+		.tiptap-editor span a,
+		.ProseMirror p a,
+		.ProseMirror span a {
+			color: #0066cc !important;
+			text-decoration: underline !important;
+			cursor: pointer !important;
+		}
+		/* Also target the text inside links */
+		a *,
+		a[href] *,
+		.tiptap-editor a *,
+		.ProseMirror a * {
+			color: inherit !important;
+		}
+		a:hover,
+		a[href]:hover,
+		.tiptap-editor a:hover,
+		.ProseMirror a:hover {
+			color: #0044aa !important;
+		}
+	</style>
 </head>
 <body>
 	<!-- ============================================
