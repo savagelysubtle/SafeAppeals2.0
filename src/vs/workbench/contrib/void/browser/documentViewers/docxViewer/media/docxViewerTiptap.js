@@ -286,13 +286,13 @@
 		console.log('[DOCX Webview] Initializing Tiptap editor');
 
 		try {
-		// Initialize Ribbon
-		if (window.DocxRibbon) {
-			ribbon = new window.DocxRibbon({
-				onSave: handleSaveRequest,
-				onPrint: handlePrint,
-				onExportPDF: handleExportPDF,
-				onModification: trackModification,
+			// Initialize Ribbon
+			if (window.DocxRibbon) {
+				ribbon = new window.DocxRibbon({
+					onSave: handleSaveRequest,
+					onPrint: handlePrint,
+					onExportPDF: handleExportPDF,
+					onModification: trackModification,
 					onPageSizeChange: (pageSize) => {
 						console.log('[DOCX Webview] Page size changed to:', pageSize);
 						const marginPreset = marginPresetSelect ? marginPresetSelect.value : 'normal';
@@ -809,7 +809,7 @@
 
 		// Ctrl+Y / Ctrl+Shift+Z - Redo
 		if (((e.ctrlKey || e.metaKey) && e.key === 'y') ||
-		    ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'z')) {
+			((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'z')) {
 			e.preventDefault();
 			if (tiptapEditor && tiptapEditor.editor) {
 				tiptapEditor.editor.chain().focus().redo().run();
@@ -883,10 +883,10 @@
 		const hasPageExtension = typeof window.TiptapPageExtension !== 'undefined';
 		const hasRibbon = typeof window.DocxRibbon !== 'undefined';
 
-        // Debug loaded font extensions
-        const hasTextStyle = typeof window.TiptapTextStyle !== 'undefined';
-        const hasFontFamily = typeof window.TiptapFontFamily !== 'undefined';
-        const hasColor = typeof window.TiptapColor !== 'undefined';
+		// Debug loaded font extensions
+		const hasTextStyle = typeof window.TiptapTextStyle !== 'undefined';
+		const hasFontFamily = typeof window.TiptapFontFamily !== 'undefined';
+		const hasColor = typeof window.TiptapColor !== 'undefined';
 
 		console.log('[DOCX Webview] Checking dependencies (attempt', waitAttempts + '):', {
 			docx: hasDocx,
@@ -895,9 +895,9 @@
 			TiptapStarterKit: hasStarterKit,
 			TiptapPageExtension: hasPageExtension,
 			DocxRibbon: hasRibbon,
-            TiptapTextStyle: hasTextStyle,
-            TiptapFontFamily: hasFontFamily,
-            TiptapColor: hasColor
+			TiptapTextStyle: hasTextStyle,
+			TiptapFontFamily: hasFontFamily,
+			TiptapColor: hasColor
 		});
 
 		if (hasTiptapEditor && hasDocx && hasEditor && hasStarterKit && hasPageExtension && hasRibbon) {
