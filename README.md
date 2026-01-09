@@ -120,6 +120,8 @@ Build a searchable knowledge base of policy manuals and reference documents.
 
 Organize your project files intelligently with the File Organizer.
 
+https://github.com/savagelysubtle/SafeAppeals2.0/raw/main/videos/organize-using-ai-chat.mp4
+
 - **Classification**: Categorize files as "Your Side" or "Their Side"
 - **AI-Powered**: Automatic naming suggestions and tag recommendations
 - **Rule Engine**: Apply naming patterns like `{Side}_{Category}_{Date}_{Description}`
