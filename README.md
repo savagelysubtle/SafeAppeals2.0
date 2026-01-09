@@ -19,7 +19,7 @@ _Support this project: [paypal.me/safeappealnavigator](https://paypal.me/safeapp
   <p><strong>One AI-native workspace for your entire project.</strong></p>
 </div>
 
-<video src="https://github.com/savagelysubtle/SafeAppeals2.0/raw/main/videos/adding-event-to-timeline.mp4" controls width="100%"></video>
+<video src="videos/adding-event-to-timeline.mp4" controls style="max-width: 100%;"></video>
 
 ---
 
@@ -122,7 +122,7 @@ Build a searchable knowledge base of policy manuals and reference documents.
 
 Organize your project files intelligently with the File Organizer.
 
-<video src="https://github.com/savagelysubtle/SafeAppeals2.0/raw/main/videos/organize-using-ai-chat.mp4" controls width="100%"></video>
+<video src="videos/organize-using-ai-chat.mp4" controls style="max-width: 100%;"></video>
 
 - **Classification**: Categorize files as "Your Side" or "Their Side"
 - **AI-Powered**: Automatic naming suggestions and tag recommendations
