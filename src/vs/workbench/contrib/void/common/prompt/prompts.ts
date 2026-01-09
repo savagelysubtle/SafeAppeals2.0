@@ -12,10 +12,32 @@ import { RawToolParamsObj } from '../sendLLMMessageTypes.js';
 import { approvalTypeOfBuiltinToolName, BuiltinToolCallParams, BuiltinToolName, BuiltinToolResultType, ToolName } from '../tools/toolsServiceTypes.js';
 import { ChatMode } from '../voidSettingsTypes.js';
 import { getSystemPrompt } from './systemPrompt.js';
-import { EDIT_DOCUMENT_DESCRIPTION } from './toolSchemas.js';
 
 // Triple backtick wrapper used throughout the prompts for code blocks
 export const tripleTick = ['```', '```']
+
+// EDIT_DOCUMENT_DESCRIPTION from toolSchemas.ts
+export const EDIT_DOCUMENT_DESCRIPTION = `Edit DOCX/XLSX files using JSON operations array.
+
+**VALID OPERATION TYPES:**
+
+DOCX operations: insert_text, replace_text, format_text, insert_table, insert_page_break, set_margins
+XLSX operations: set_cell_value, set_cell_formula, format_cell, insert_row, insert_column, delete_row, delete_column
+
+**EXAMPLES:**
+
+Create welcome message in DOCX:
+[{"type": "insert_text", "position": 0, "text": "Welcome\\n\\nThis document was created by your AI assistant."}]
+
+Replace content in DOCX:
+[{"type": "replace_text", "search": "old text", "replace": "new text", "all": true}]
+
+Create spreadsheet headers in XLSX:
+[
+  {"type": "set_cell_value", "sheet": 0, "cell": "A1", "value": "Date"},
+  {"type": "set_cell_value", "sheet": 0, "cell": "B1", "value": "Provider"},
+  {"type": "format_cell", "sheet": 0, "cell": "A1", "format": {"bold": true}}
+]`;
 
 // Maximum limits for directory structure information
 export const MAX_DIRSTR_CHARS_TOTAL_BEGINNING = 20_000
@@ -178,7 +200,7 @@ export const builtinTools: {
 
 	read_file: {
 		name: 'read_file',
-		description: `Reads and extracts text content from files. Supports text files (.txt, .md, .json, .csv, .log) and documents (.pdf, .docx, .xlsx).
+		description: `Reads and extracts text content from files. Supports text files (.txt, .md, .json, .csv, .log, .pdf, .docx, .xlsx).
 
 **INTELLIGENT FILE READING:**
 
@@ -216,25 +238,33 @@ Unknown file size? Call read_file WITHOUT start_line/end_line to see file length
 
 **BEST PRACTICES:**
 
-✅ GOOD: Efficient token usage
+✅ EFFICIENT: Targeted token usage
 \`\`\`
 Step 1: read_file(policy_manual.pdf) [no line params] → See it's 5,000 lines
 Step 2: search_in_file("appeal deadline") → Find lines 234-289 relevant
 Step 3: read_file(policy_manual.pdf, start_line=234, end_line=289) → ~2,000 tokens
 \`\`\`
 
-❌ BAD: Wasteful token usage
+⚠️ CAUTION: Reading entire large files (like manuals) consumes context budget rapidly. Only read full files when necessary or small.
 \`\`\`
-read_file(policy_manual.pdf) [entire file] → 25,000 tokens consumed unnecessarily
+read_file(policy_manual.pdf) [entire file] → 25,000 tokens consumed
 \`\`\`
 
 **PARALLEL READING:**
-Reading multiple files for comparison? Execute reads in parallel:
-\`\`\`
-[Parallel execution]
-read_file(medical_report_1.pdf)
-read_file(medical_report_2.pdf)
-read_file(denial_letter.pdf)
+Reading multiple files for comparison? Execute reads in parallel for efficiency:
+
+\`\`\`xml
+<function_calls>
+<invoke name="read_file">
+<parameter name="uri">/cases/medical_report_1.pdf</parameter>
+</invoke>
+<invoke name="read_file">
+<parameter name="uri">/cases/medical_report_2.pdf</parameter>
+</invoke>
+<invoke name="read_file">
+<parameter name="uri">/cases/denial_letter.pdf</parameter>
+</invoke>
+</function_calls>
 \`\`\`
 
 **PAGINATION:**
@@ -245,6 +275,7 @@ Your context window is limited. Before reading, consider:
 - Do I need the ENTIRE file or just specific sections?
 - Can I use search_in_file or rag_search first to narrow down?
 - Is this file critical to the current task?`,
+
 		params: {
 			...uriParam('file'),
 			start_line: { description: 'Optional. Start reading from this line number (1-indexed). Omit to read from beginning.' },
@@ -257,7 +288,7 @@ Your context window is limited. Before reading, consider:
 		name: 'ls_dir',
 		description: `Lists all files and folders in the given URI.`,
 		params: {
-			uri: { description: `Optional. The FULL path to the ${'folder'}. Leave this as empty or "" to search all folders.` },
+			uri: { description: `Optional.The FULL path to the ${'folder'}.Leave this as empty or "" to search all folders.` },
 			...paginationParam,
 		},
 	},
@@ -352,6 +383,17 @@ Your context window is limited. Before reading, consider:
 			new_content: { description: `New file contents as string.` }
 		},
 	},
+
+	edit_document: {
+		name: 'edit_document',
+		description: EDIT_DOCUMENT_DESCRIPTION,
+		params: {
+			...uriParam('document'),
+			operations: { description: `JSON array of operations. See valid types and examples above.` }
+		}
+	},
+
+	// --- Terminal Tools ---
 
 	run_command: {
 		name: 'run_command',
@@ -474,8 +516,7 @@ Returns chunks with:
 - Similarity scores
 
 **CITATION FORMAT FOR MEDICAL EVIDENCE:**
-"The IME evaluation by Dr. [Name] dated [Date] states: '[Verbatim Quote]'
-(Source: [Filename], Page [X])"
+"Dr. [Name] ([Specialty]) report dated [Date], Page [X]: '[Verbatim Quote]'"
 
 **COST:** ~2,000 tokens per search. Budget carefully when reviewing extensive medical records.`,
 		params: {
@@ -515,15 +556,6 @@ Returns combined results from both policy manuals and case files, with source ty
 		name: 'rag_get_stats',
 		description: `Gets statistics about indexed documents: shows which policy manuals and case documents are available, number of chunks per document, and total indexed content. **ALWAYS use this FIRST before searching** to understand what's available and avoid unnecessary indexing.`,
 		params: {}
-	},
-
-	edit_document: {
-		name: 'edit_document',
-		description: EDIT_DOCUMENT_DESCRIPTION,
-		params: {
-			...uriParam('document'),
-			operations: { description: `JSON array of operations. See valid types and examples above.` }
-		}
 	},
 
 	// --- Web Search tools
@@ -760,10 +792,13 @@ const toolCallDefinitionsXMLString = (tools: InternalToolInfo[]) => {
 }
 
 export const reParsedToolXMLString = (toolName: ToolName, toolParams: RawToolParamsObj) => {
-	const params = Object.keys(toolParams).map(paramName => `<${paramName}>${toolParams[paramName]}</${paramName}>`).join('\n')
+	const params = Object.keys(toolParams).map(paramName => `<parameter name="${paramName}">${toolParams[paramName]}</parameter>`).join('\n')
 	return `\
-    <${toolName}>${!params ? '' : `\n${params}`}
-    </${toolName}>`
+    <function_calls>
+    <invoke name="${toolName}">
+    ${params}
+    </invoke>
+    </function_calls>`
 		.replace('\t', '  ')
 }
 
@@ -799,12 +834,53 @@ const systemToolsXMLPrompt = (chatMode: ChatMode, mcpTools: InternalToolInfo[] |
     - Parameters use <parameter name="param_name">value</parameter>
     - You CAN add explanatory text before/after <function_calls>
     - Multiple <invoke> blocks in one <function_calls> execute in parallel
-    - All parameters are REQUIRED unless noted otherwise`)
+    - All parameters are REQUIRED unless noted otherwise
+
+    **Few-Shot Examples (Follow these exactly):**
+
+    Example 1: Reading a file
+    <function_calls>
+    <invoke name="read_file">
+    <parameter name="uri">/users/docs/report.pdf</parameter>
+    </invoke>
+    </function_calls>
+
+    Example 2: Adding a timeline event
+    <function_calls>
+    <invoke name="timeline_add_event">
+    <parameter name="date">2024-03-15</parameter>
+    <parameter name="title">Medical Exam</parameter>
+    <parameter name="category">medical</parameter>
+    <parameter name="description">Dr. Smith evaluation</parameter>
+    </invoke>
+    </function_calls>
+
+    Example 3: Parallel Research (RAG + Reading)
+    <function_calls>
+    <invoke name="rag_search_policy">
+    <parameter name="query">appeal deadline</parameter>
+    <parameter name="limit">5</parameter>
+    </invoke>
+    <invoke name="read_file">
+    <parameter name="uri">/users/case/denial_letter.pdf</parameter>
+    </invoke>
+    </function_calls>
+
+    Example 4: Document Editing (Template Update)
+    <function_calls>
+    <invoke name="edit_document">
+    <parameter name="uri">/users/case/Appeal_Letter.docx</parameter>
+    <parameter name="operations">[
+      {"op": "replace", "search": "[INSERT DATE]", "replace": "October 12, 2024"},
+      {"op": "replace", "search": "[CLAIM NUMBER]", "replace": "WCB-2024-55555"}
+    ]</parameter>
+    </invoke>
+    </function_calls>`)
 
 	return `\
-    ${toolXMLDefinitions}
+    ${toolCallXMLGuidelines}
 
-    ${toolCallXMLGuidelines}`
+    ${toolXMLDefinitions}`
 }
 
 // ======================================================== chat (drafting, research, case_manager) ========================================================
@@ -1102,10 +1178,10 @@ export const chat_userMessageContent = async (
 		// Build a clear header that tells the agent NOT to re-read these files
 		let header: string
 		if (hasPDFExcerpts) {
-			header = `ATTACHED FILES & SELECTIONS (ALREADY IN CONTEXT - DO NOT USE read_file ON THESE)
+			header = `ATTACHED FILES & SELECTIONS (ALREADY IN CONTEXT)
 The user has attached the following files/selections. Their FULL CONTENTS are included below.
-⚠️ DO NOT call read_file, search_in_file, or any file-reading tools on these paths - they are ALREADY loaded here.
-Only use file tools for OTHER files not listed in this section.`
+✅ You have immediate access to these files. Simply refer to them in your response.
+Use file tools only for files NOT listed in this section.`
 		} else {
 			const parts: string[] = []
 			if (fileCount > 0) parts.push(`${fileCount} file(s)`)
@@ -1114,10 +1190,10 @@ Only use file tools for OTHER files not listed in this section.`
 			if (imageCount > 0) parts.push(`${imageCount} image(s)`)
 			const summary = parts.length > 0 ? parts.join(', ') : 'selections'
 
-			header = `ATTACHED FILES & SELECTIONS (ALREADY IN CONTEXT - DO NOT USE read_file ON THESE)
+			header = `ATTACHED FILES & SELECTIONS (ALREADY IN CONTEXT)
 The user has attached ${summary}. Their FULL CONTENTS are included below.
-⚠️ DO NOT call read_file, search_in_file, or any file-reading tools on these paths - they are ALREADY loaded here.
-Only use file tools for OTHER files not listed in this section.`
+✅ You have immediate access to these files. Simply refer to them in your response.
+Use file tools only for files NOT listed in this section.`
 		}
 
 		str += `\n---\n${header}\n${selnsStr}`;
@@ -1172,7 +1248,6 @@ ORIGINAL_FILE
 ${tripleTick[0]}
 ${originalCode}
 ${tripleTick[1]}`
-
 
 
 
@@ -1240,16 +1315,21 @@ export const defaultQuickEditFimTags: QuickEditFimTagsType = {
 // this should probably be longer
 export const ctrlKStream_systemMessage = ({ quickEditFIMTags: { preTag, midTag, sufTag } }: { quickEditFIMTags: QuickEditFimTagsType }) => {
 	return `\
-You are a FIM (fill-in-the-middle) coding assistant. Your task is to fill in the middle SELECTION marked by <${midTag}> tags.
+You are a smart editing assistant using FIM (Fill-In-The-Middle).
+Your goal is to update the SELECTION marked by <${midTag}> tags based on the user's INSTRUCTIONS.
 
-The user will give you INSTRUCTIONS, as well as code that comes BEFORE the SELECTION, indicated with <${preTag}>...before</${preTag}>, and code that comes AFTER the SELECTION, indicated with <${sufTag}>...after</${sufTag}>.
-The user will also give you the existing original SELECTION that will be be replaced by the SELECTION that you output, for additional context.
+**Context:**
+- <${preTag}>: Preceding context
+- <${sufTag}>: Following context
+- ORIGINAL SELECTION: Content to be replaced
 
-Instructions:
-1. Your OUTPUT should be a SINGLE PIECE OF CODE of the form <${midTag}>...new_code</${midTag}>. Do NOT output any text or explanations before or after this.
-2. You may ONLY CHANGE the original SELECTION, and NOT the content in the <${preTag}>...</${preTag}> or <${sufTag}>...</${sufTag}> tags.
-3. Make sure all brackets in the new selection are balanced the same as in the original selection.
-4. Be careful not to duplicate or remove variables, comments, or other syntax by mistake.
+**Instructions:**
+1. **Transform**: Apply the user's instructions to the original selection.
+2. **Output**: Return strictly the new content within <${midTag}> tags.
+3. **Integrity**: Ensure the result flows seamlessly with the surrounding text or code.
+   - Maintain correct indentation and formatting.
+   - For text: Ensure grammatical continuity.
+   - For code: Ensure syntax validity.
 `
 }
 
@@ -1289,209 +1369,20 @@ ${tripleTick[1]}).`
 
 
 
-
-
-
-
-/*
-// ======================================================== ai search/replace ========================================================
-
-
-export const aiRegex_computeReplacementsForFile_systemMessage = `\
-You are a "search and replace" coding assistant.
-
-You are given a FILE that the user is editing, and your job is to search for all occurences of a SEARCH_CLAUSE, and change them according to a REPLACE_CLAUSE.
-
-The SEARCH_CLAUSE may be a string, regex, or high-level description of what the user is searching for.
-
-The REPLACE_CLAUSE will always be a high-level description of what the user wants to replace.
-
-The user's request may be "fuzzy" or not well-specified, and it is your job to interpret all of the changes they want to make for them. For example, the user may ask you to search and replace all instances of a variable, but this may involve changing parameters, function names, types, and so on to agree with the change they want to make. Feel free to make all of the changes you *think* that the user wants to make, but also make sure not to make unnessecary or unrelated changes.
-
-## Instructions
-
-1. If you do not want to make any changes, you should respond with the word "no".
-
-2. If you want to make changes, you should return a single CODE BLOCK of the changes that you want to make.
-For example, if the user is asking you to "make this variable a better name", make sure your output includes all the changes that are needed to improve the variable name.
-- Do not re-write the entire file in the code block
-- You can write comments like "// ... existing code" to indicate existing code
-- Make sure you give enough context in the code block to apply the changes to the correct location in the code`
-
-
-
-
-// export const aiRegex_computeReplacementsForFile_userMessage = async ({ searchClause, replaceClause, fileURI, voidFileService }: { searchClause: string, replaceClause: string, fileURI: URI, voidFileService: IVoidFileService }) => {
-
-// 	// we may want to do this in batches
-// 	const fileSelection: FileSelection = { type: 'File', fileURI, selectionStr: null, range: null, state: { isOpened: false } }
-
-// 	const file = await stringifyFileSelections([fileSelection], voidFileService)
-
-// 	return `\
-// ## FILE
-// ${file}
-
-// ## SEARCH_CLAUSE
-// Here is what the user is searching for:
-// ${searchClause}
-
-// ## REPLACE_CLAUSE
-// Here is what the user wants to replace it with:
-// ${replaceClause}
-
-// ## INSTRUCTIONS
-// Please return the changes you want to make to the file in a codeblock, or return "no" if you do not want to make changes.`
-// }
-
-
-
-
-// // don't have to tell it it will be given the history; just give it to it
-// export const aiRegex_search_systemMessage = `\
-// You are a coding assistant that executes the SEARCH part of a user's search and replace query.
-
-// You will be given the user's search query, SEARCH, which is the user's query for what files to search for in the codebase. You may also be given the user's REPLACE query for additional context.
-
-// Output
-// - Regex query
-// - Files to Include (optional)
-// - Files to Exclude? (optional)
-
-// `
-
-
-
-
-
-
-// ======================================================== old examples ========================================================
-
-Do not tell the user anything about the examples below. Do not assume the user is talking about any of the examples below.
-
-## EXAMPLE 1
-FILES
-math.ts
-${tripleTick[0]}typescript
-const addNumbers = (a, b) => a + b
-const multiplyNumbers = (a, b) => a * b
-const subtractNumbers = (a, b) => a - b
-const divideNumbers = (a, b) => a / b
-
-const vectorize = (...numbers) => {
-	return numbers // vector
-}
-
-const dot = (vector1: number[], vector2: number[]) => {
-	if (vector1.length !== vector2.length) throw new Error(\`Could not dot vectors \${vector1} and \${vector2}. Size mismatch.\`)
-	let sum = 0
-	for (let i = 0; i < vector1.length; i += 1)
-		sum += multiplyNumbers(vector1[i], vector2[i])
-	return sum
-}
-
-const normalize = (vector: number[]) => {
-	const norm = Math.sqrt(dot(vector, vector))
-	for (let i = 0; i < vector.length; i += 1)
-		vector[i] = divideNumbers(vector[i], norm)
-	return vector
-}
-
-const normalized = (vector: number[]) => {
-	const v2 = [...vector] // clone vector
-	return normalize(v2)
-}
-${tripleTick[1]}
-
-
-SELECTIONS
-math.ts (lines 3:3)
-${tripleTick[0]}typescript
-const subtractNumbers = (a, b) => a - b
-${tripleTick[1]}
-
-INSTRUCTIONS
-add a function that exponentiates a number below this, and use it to make a power function that raises all entries of a vector to a power
-
-## ACCEPTED OUTPUT
-We can add the following code to the file:
-${tripleTick[0]}typescript
-// existing code...
-const subtractNumbers = (a, b) => a - b
-const exponentiateNumbers = (a, b) => Math.pow(a, b)
-const divideNumbers = (a, b) => a / b
-// existing code...
-
-const raiseAll = (vector: number[], power: number) => {
-	for (let i = 0; i < vector.length; i += 1)
-		vector[i] = exponentiateNumbers(vector[i], power)
-	return vector
-}
-${tripleTick[1]}
-
-
-## EXAMPLE 2
-FILES
-fib.ts
-${tripleTick[0]}typescript
-
-const dfs = (root) => {
-	if (!root) return;
-	console.log(root.val);
-	dfs(root.left);
-	dfs(root.right);
-}
-const fib = (n) => {
-	if (n < 1) return 1
-	return fib(n - 1) + fib(n - 2)
-}
-${tripleTick[1]}
-
-SELECTIONS
-fib.ts (lines 10:10)
-${tripleTick[0]}typescript
-	return fib(n - 1) + fib(n - 2)
-${tripleTick[1]}
-
-INSTRUCTIONS
-memoize results
-
-## ACCEPTED OUTPUT
-To implement memoization in your Fibonacci function, you can use a JavaScript object to store previously computed results. This will help avoid redundant calculations and improve performance. Here's how you can modify your function:
-${tripleTick[0]}typescript
-// existing code...
-const fib = (n, memo = {}) => {
-	if (n < 1) return 1;
-	if (memo[n]) return memo[n]; // Check if result is already computed
-	memo[n] = fib(n - 1, memo) + fib(n - 2, memo); // Store result in memo
-	return memo[n];
-}
-${tripleTick[1]}
-Explanation:
-Memoization Object: A memo object is used to store the results of Fibonacci calculations for each n.
-Check Memo: Before computing fib(n), the function checks if the result is already in memo. If it is, it returns the stored result.
-Store Result: After computing fib(n), the result is stored in memo for future reference.
-
-## END EXAMPLES
-
-*/
-
-
 // ======================================================== scm ========================================================================
 
 export const gitCommitMessage_systemMessage = `
-You are an expert software engineer AI assistant responsible for writing clear and concise Git commit messages that summarize the **purpose** and **intent** of the change. Try to keep your commit messages to one sentence. If necessary, you can use two sentences.
+You are an intelligent version control assistant responsible for writing clear and concise Git commit messages that summarize the **purpose** and **intent** of the change.
 
-You always respond with:
-- The commit message wrapped in <output> tags
-- A brief explanation of the reasoning behind the message, wrapped in <reasoning> tags
+**Guidelines:**
+1. **Concise**: Aim for a single sentence. Use two only if necessary.
+2. **Intent-Focused**: Explain *why* the change was made, not just *what* changed.
+3. **Format**:
+   <output>Correct formatting in appeal letter template</output>
+   <reasoning>This commit fixes indentation issues in the appeal letter to ensure professional presentation.</reasoning>
 
-Example format:
-<output>Fix login bug and improve error handling</output>
-<reasoning>This commit updates the login handler to fix a redirect issue and improves frontend error messages for failed logins.</reasoning>
-
-Do not include anything else outside of these tags.
-Never include quotes, markdown, commentary, or explanations outside of <output> and <reasoning>.`.trim()
+**Output Requirement:**
+Provide ONLY the <output> and <reasoning> tags. No other text.`.trim()
 
 
 /**

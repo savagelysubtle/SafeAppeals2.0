@@ -166,61 +166,247 @@ export const XLSX_OPERATION_SCHEMA = {
 	]
 };
 
-// Human-readable description of operations for the LLM
-export const EDIT_DOCUMENT_DESCRIPTION = `Edit DOCX/XLSX files using JSON operations array.
 
-**VALID OPERATION TYPES:**
+// --- Tool Validation Schemas (for ToolSchemaValidator) ---
 
-DOCX operations: insert_text, replace_text, format_text, insert_table, insert_page_break, set_margins
-XLSX operations: set_cell_value, set_cell_formula, format_cell, insert_row, insert_column, delete_row, delete_column
-
-**EXAMPLES:**
-
-Create welcome message in DOCX:
-[{"type": "insert_text", "position": 0, "text": "Welcome\\n\\nThis document was created by your AI assistant."}]
-
-Replace content in DOCX:
-[{"type": "replace_text", "search": "old text", "replace": "new text", "all": true}]
-
-Create spreadsheet headers in XLSX:
-[
-  {"type": "set_cell_value", "sheet": 0, "cell": "A1", "value": "Date"},
-  {"type": "set_cell_value", "sheet": 0, "cell": "B1", "value": "Provider"},
-  {"type": "format_cell", "sheet": 0, "cell": "A1", "format": {"bold": true}}
-]`;
-
-export const getToolSchemaDescription = (toolName: string): string => {
-	switch (toolName) {
-		case 'edit_document':
-			return EDIT_DOCUMENT_DESCRIPTION;
-		case 'read_file':
-			return 'Returns file contents. Extracts text from PDF/DOCX/XLSX.';
-		case 'edit_file':
-			return 'Edit text files (.ts, .py, .js, .md, .txt, .json, etc.) with search/replace blocks. For DOCX/XLSX use edit_document.';
-		case 'rewrite_file':
-			return 'Completely replace text file contents. For DOCX/XLSX use edit_document.';
-		case 'create_file_or_folder':
-			return 'Create file or folder. For DOCX/XLSX creates valid empty document. Path ending with / creates folder.';
-		case 'rag_search_policy':
-			return 'Search indexed policy manuals for rules, eligibility, procedures. Returns relevant sections with citations.';
-		case 'rag_search_workspace':
-			return 'Search indexed case documents (medical reports, decisions, correspondence) for case-specific information.';
-		case 'rag_search_all':
-			return 'Search BOTH policy manuals AND case documents simultaneously for comprehensive results.';
-		case 'timeline_add_event':
-			return 'Add a new event to the case timeline with date, title, category, and optional document links.';
-		case 'timeline_update_event':
-			return 'Update an existing timeline event. Use timeline_get_events first to find event IDs.';
-		case 'timeline_delete_event':
-			return 'Delete an event from the timeline by event ID.';
-		case 'timeline_get_events':
-			return 'Query timeline events with optional filters (category, date range, deadline status).';
-		case 'timeline_link_document':
-			return 'Link a document to an existing timeline event for traceability.';
-		case 'timeline_get_deadlines':
-			return 'Get upcoming and overdue deadlines from the timeline.';
-		default:
-			return '';
+export const READ_FILE_SCHEMA = {
+	toolName: 'read_file',
+	params: {
+		uri: { type: 'uri', required: true },
+		start_line: { type: 'number', required: false },
+		end_line: { type: 'number', required: false },
+		page_number: { type: 'page_number', required: false }
 	}
-};
+}
 
+export const LS_DIR_SCHEMA = {
+	toolName: 'ls_dir',
+	params: {
+		uri: { type: 'optional_uri', required: false }, // Optional per prompts.ts
+		page_number: { type: 'page_number', required: false }
+	}
+}
+
+export const GET_DIR_TREE_SCHEMA = {
+	toolName: 'get_dir_tree',
+	params: {
+		uri: { type: 'uri', required: true }
+	}
+}
+
+export const SEARCH_PATHNAMES_ONLY_SCHEMA = {
+	toolName: 'search_pathnames_only',
+	params: {
+		query: { type: 'string', required: true },
+		include_pattern: { type: 'optional_string', required: false },
+		page_number: { type: 'page_number', required: false }
+	}
+}
+
+export const SEARCH_FOR_FILES_SCHEMA = {
+	toolName: 'search_for_files',
+	params: {
+		query: { type: 'string', required: true },
+		search_in_folder: { type: 'optional_uri', required: false },
+		is_regex: { type: 'boolean', required: false },
+		page_number: { type: 'page_number', required: false }
+	}
+}
+
+export const SEARCH_IN_FILE_SCHEMA = {
+	toolName: 'search_in_file',
+	params: {
+		uri: { type: 'uri', required: true },
+		query: { type: 'string', required: true },
+		is_regex: { type: 'boolean', required: false }
+	}
+}
+
+export const READ_LINT_ERRORS_SCHEMA = {
+	toolName: 'read_lint_errors',
+	params: {
+		uri: { type: 'uri', required: true }
+	}
+}
+
+export const CREATE_FILE_OR_FOLDER_SCHEMA = {
+	toolName: 'create_file_or_folder',
+	params: {
+		uri: { type: 'uri', required: true }
+		// is_folder inferred from path ending with /
+	}
+}
+
+export const DELETE_FILE_OR_FOLDER_SCHEMA = {
+	toolName: 'delete_file_or_folder',
+	params: {
+		uri: { type: 'uri', required: true },
+		is_recursive: { type: 'boolean', required: false }
+	}
+}
+
+export const EDIT_FILE_SCHEMA = {
+	toolName: 'edit_file',
+	params: {
+		uri: { type: 'uri', required: true },
+		search_replace_blocks: { type: 'string', required: true }
+	}
+}
+
+export const REWRITE_FILE_SCHEMA = {
+	toolName: 'rewrite_file',
+	params: {
+		uri: { type: 'uri', required: true },
+		new_content: { type: 'string', required: true }
+	}
+}
+
+export const RUN_COMMAND_SCHEMA = {
+	toolName: 'run_command',
+	params: {
+		command: { type: 'string', required: true },
+		cwd: { type: 'optional_string', required: false }
+	}
+}
+
+export const RUN_PERSISTENT_COMMAND_SCHEMA = {
+	toolName: 'run_persistent_command',
+	params: {
+		command: { type: 'string', required: true },
+		persistent_terminal_id: { type: 'string', required: true }
+	}
+}
+
+export const OPEN_PERSISTENT_TERMINAL_SCHEMA = {
+	toolName: 'open_persistent_terminal',
+	params: {
+		cwd: { type: 'optional_string', required: false }
+	}
+}
+
+export const KILL_PERSISTENT_TERMINAL_SCHEMA = {
+	toolName: 'kill_persistent_terminal',
+	params: {
+		persistent_terminal_id: { type: 'string', required: true }
+	}
+}
+
+export const RAG_INDEX_DOCUMENT_SCHEMA = {
+	toolName: 'rag_index_document',
+	params: {
+		uri: { type: 'uri', required: true },
+		is_policy_manual: { type: 'boolean', required: false }
+	}
+}
+
+export const RAG_SEARCH_POLICY_SCHEMA = {
+	toolName: 'rag_search_policy',
+	params: {
+		query: { type: 'string', required: true },
+		limit: { type: 'number', required: false }
+	}
+}
+
+export const RAG_SEARCH_WORKSPACE_SCHEMA = {
+	toolName: 'rag_search_workspace',
+	params: {
+		query: { type: 'string', required: true },
+		limit: { type: 'number', required: false }
+	}
+}
+
+export const RAG_SEARCH_ALL_SCHEMA = {
+	toolName: 'rag_search_all',
+	params: {
+		query: { type: 'string', required: true },
+		limit: { type: 'number', required: false }
+	}
+}
+
+export const RAG_GET_STATS_SCHEMA = {
+	toolName: 'rag_get_stats',
+	params: {}
+}
+
+export const EDIT_DOCUMENT_SCHEMA = {
+	toolName: 'edit_document',
+	params: {
+		uri: { type: 'uri', required: true },
+		operations: { type: 'string', required: true } // Passed as JSON string to be parsed
+	}
+}
+
+export const WEB_SEARCH_SCHEMA = {
+	toolName: 'web_search',
+	params: {
+		query: { type: 'string', required: true },
+		count: { type: 'number', required: false },
+		offset: { type: 'number', required: false }
+	}
+}
+
+export const MULTI_LINK_SEARCH_SCHEMA = {
+	toolName: 'multi_link_search',
+	params: {
+		queries: { type: 'string', required: true }, // Expecting JSON array string or comma-separated? Prompts says array. Usually tools service handles parsing. Assuming array of strings.
+		count: { type: 'number', required: false }
+	}
+}
+
+export const TIMELINE_ADD_EVENT_SCHEMA = {
+	toolName: 'timeline_add_event',
+	params: {
+		date: { type: 'string', required: true },
+		title: { type: 'string', required: true },
+		description: { type: 'optional_string', required: false },
+		category: { type: 'string', required: true },
+		is_deadline: { type: 'boolean', required: false },
+		linked_documents: { type: 'string', required: false } // JSON array string of URIs
+	}
+}
+
+export const TIMELINE_UPDATE_EVENT_SCHEMA = {
+	toolName: 'timeline_update_event',
+	params: {
+		event_id: { type: 'string', required: true },
+		date: { type: 'optional_string', required: false },
+		title: { type: 'optional_string', required: false },
+		description: { type: 'optional_string', required: false },
+		category: { type: 'optional_string', required: false },
+		is_deadline: { type: 'boolean', required: false },
+		is_complete: { type: 'boolean', required: false }
+	}
+}
+
+export const TIMELINE_DELETE_EVENT_SCHEMA = {
+	toolName: 'timeline_delete_event',
+	params: {
+		event_id: { type: 'string', required: true }
+	}
+}
+
+export const TIMELINE_GET_EVENTS_SCHEMA = {
+	toolName: 'timeline_get_events',
+	params: {
+		category: { type: 'optional_string', required: false },
+		start_date: { type: 'optional_string', required: false },
+		end_date: { type: 'optional_string', required: false },
+		is_deadline: { type: 'boolean', required: false },
+		limit: { type: 'number', required: false }
+	}
+}
+
+export const TIMELINE_LINK_DOCUMENT_SCHEMA = {
+	toolName: 'timeline_link_document',
+	params: {
+		event_id: { type: 'string', required: true },
+		document_uri: { type: 'uri', required: true }
+	}
+}
+
+export const TIMELINE_GET_DEADLINES_SCHEMA = {
+	toolName: 'timeline_get_deadlines',
+	params: {
+		days_ahead: { type: 'number', required: false }
+	}
+}

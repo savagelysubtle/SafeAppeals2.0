@@ -71,7 +71,7 @@ const VoidIcon = () => {
 	// Get the image URI using FileAccess.asBrowserUri - this resolves to a browser-accessible URI
 	const imageUri = useMemo(() => {
 		try {
-			return FileAccess.asBrowserUri('vs/workbench/browser/media/slice_of_void.png').toString(true);
+			return FileAccess.asBrowserUri('vs/workbench/browser/media/logo_cube_noshadow.png').toString(true);
 		} catch (e) {
 			console.error('[VoidIcon] Failed to get image URI:', e);
 			return '';
