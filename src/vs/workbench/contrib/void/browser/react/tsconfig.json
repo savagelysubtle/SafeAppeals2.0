@@ -6,20 +6,23 @@
 	"compilerOptions": {
 		"strict": true,
 		"exactOptionalPropertyTypes": false,
+		"skipLibCheck": true,
 
 		"jsx": "react-jsx",
 		"moduleResolution": "NodeNext",
 		"module": "NodeNext",
 		"esModuleInterop": true,
+		"types": ["react", "react-dom"]
 	},
 	"include": [
 		// this is just for type checking, so src/ is the correct dir
 		"./src/**/*.ts",
 		"./src/**/*.tsx"
 	],
+	"exclude": ["node_modules"],
 	"plugins": [
-      {
-        "name": "next"
-      }
-    ]
+		{
+			"name": "next"
+		}
+	]
 }

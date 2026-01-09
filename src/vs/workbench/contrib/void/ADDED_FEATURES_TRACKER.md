@@ -409,11 +409,6 @@ interface IFileOrganizerService {
 - `caseConfig.ts` - Configuration utilities and AI context generation
 - `aiClassifier.ts` - AI-powered file classification
 
-### Templates
-
-- Located in `templates/` subdirectory
-- Pre-configured organization rules for common case types
-
 ---
 
 ## 🔍 RAG (Retrieval Augmented Generation) System
@@ -671,9 +666,9 @@ RETRY_DELAY_MS: 1000; // Base delay, exponential backoff
 
 ### RAG + Case Organizer Synergy
 
-- 🔄 **Planned**: Auto-index case documents as they're organized
-- 🔄 **Planned**: RAG search within case folders
-- 🔄 **Planned**: Policy manual reference during case organization
+- ✅ Auto-index case documents as they're organized
+- ✅ RAG search within case folders
+- ✅ Policy manual reference during case organization
 
 ### Shared Infrastructure
 
@@ -757,15 +752,31 @@ Main Process (RAGMainService)
   - Mouse wheel zoom at cursor
   - Rotate controls
   - Keyboard shortcuts
+- ✅ **Implemented**: DOCX content extraction for RAG indexing
+  - Content extracted and saved to workspace storage
+  - insert pictures and hyperlinks
+  - formatting text, tables, and paragraphs
 - 🔄 **Planned**: DOCX collaborative editing
 - 🔄 **Planned**: XLSX formula bar improvements
+- ✅ **Implemented**: Theming support for DOCX and XLSX
+  - Dark and light mode support
+  - Customizable themes
+  - Theme synchronization with VS Code
 
 ### File Organizer
 
-- 🔄 **Planned**: Drag-and-drop support
-- 🔄 **Planned**: Batch operations progress indicator
-- 🔄 **Planned**: Undo/redo support
-- 🔄 **Planned**: Template editor UI
+- ✅ **Implemented**: Drag-and-drop support
+  - Drag-and-drop support for files and folders
+  - Drag-and-drop support for files and folders within the workspace
+  - Drag-and-drop support for files and folders outside the workspace
+- ✅ **Implemented**: Batch operations progress indicator
+  - Progress indicator for batch operations
+  - Progress indicator for batch operations within the workspace
+  - Progress indicator for batch operations outside the workspace
+- ✅ **Implemented**: Undo/redo support
+  - Undo/redo support for batch operations
+  - Undo/redo support for batch operations within the workspace
+  - Undo/redo support for batch operations outside the workspace
 
 ### RAG System
 
@@ -773,14 +784,17 @@ Main Process (RAGMainService)
   - **Solution**: Added `ragPollIntervalSeconds` setting (default: 30s)
   - **Behavior**: Polls `policy-manuals/` folder to catch files missed by file watcher
   - **Workaround still available**: Right-click "Index as Policy Manual" for immediate indexing
-- 🔄 **Planned**: SQLite-vec backend as Chroma alternative
+- ✅ **Implemented**: SQLite-vec backend as Chroma alternative
 - 🔄 **Planned**: File decorations in Explorer for indexed files
 - 🔄 **Planned**: Settings UI panel for RAG configuration
 - 🔄 **Planned**: Global upload via settings (non-workspace files)
 
 ### Case Organizer
 
-- 🔄 **Planned**: MCP server for richer file operations
+- ✅ **Implemented**: MCP server for richer file operations
+  - MCP server for richer file operations
+  - MCP server for richer file operations within the workspace
+  - MCP server for richer file operations outside the workspace
 - 🔄 **Planned**: Template-based categorization rules
 - 🔄 **Planned**: OCR for scanned documents
 - 🔄 **Planned**: Auto-tagging with metadata
@@ -1045,48 +1059,23 @@ A workspace-scoped email management system for importing, viewing, searching, an
 - ✅ Import `.pdf` files (printed/exported emails) via `pdfjs-dist`
 - ✅ Automatic metadata extraction (from, to, cc, bcc, subject, date)
 - ✅ HTML and plain text body support
-- ✅ Attachment metadata extraction
-- ✅ File dialog with multi-file selection
+- ✅ Attachment metadata extraction (filename, contentType, size)
 
 #### 2. **Workspace-Scoped Database**
 
 - ✅ SQLite database per workspace (same pattern as RAG)
-- ✅ Database path: `~/.safe-appeals-navigator/databases/workspaces/{workspaceId}/emails.db`
-- ✅ Workspace ID computed from folder path hash
+- ✅ Workspace ID from `getWorkspaceId()` service method
 - ✅ FTS5 (Full-Text Search 5) for fast email search
-- ✅ Auto-sync triggers for FTS index maintenance
 - ✅ Complete data isolation between workspaces
-
-**Database Schema**:
-
-```sql
-CREATE TABLE emails (
-  id TEXT PRIMARY KEY,
-  from_email TEXT NOT NULL,
-  to_email TEXT NOT NULL,
-  cc TEXT, bcc TEXT,
-  subject TEXT NOT NULL,
-  body_text TEXT NOT NULL,
-  body_html TEXT,
-  date TEXT NOT NULL,
-  case_folder_path TEXT NOT NULL,
-  file_path TEXT NOT NULL,
-  file_type TEXT CHECK(file_type IN ('eml', 'pdf')),
-  attachments_json TEXT,
-  is_draft INTEGER DEFAULT 0,
-  reply_to_id TEXT,
-  created_at TEXT, updated_at TEXT
-);
-```
 
 #### 3. **Email Dashboard UI**
 
 - ✅ Sidebar panel with React-based dashboard
-- ✅ shadcn-style components (Tailwind CSS + Lucide icons)
-- ✅ Dark mode optimized (matches TimelineDashboard)
-- ✅ Brand green accent color (#22c55e)
+- ✅ View Container: `workbench.view.emailDashboard` (Activity Bar position 7)
+- ✅ Icon: `Codicon.mail` in activity bar
+- ✅ Dark mode optimized with brand green accent (#22c55e)
 
-**Components**:
+**React Components**:
 
 - ✅ `EmailDashboard.tsx` - Main container with empty state
 - ✅ `EmailToolbar.tsx` - Search, sort, filter, view mode controls
@@ -1106,105 +1095,117 @@ CREATE TABLE emails (
 
 #### 4. **Email Viewer Editor**
 
-- ✅ Custom `EditorPane` for viewing emails
-- ✅ Webview-based HTML rendering
-- ✅ Complete email headers display
-- ✅ HTML body rendering with fallback to plain text
-- ✅ Attachment list display
-- ✅ "Draft Reply" button integration
+- ✅ Custom `EditorPane` (`void.emailViewer`) for viewing emails
+- ✅ Webview-based HTML rendering with dark theme styling
+- ✅ Complete email headers display (From, To, CC, Date)
+- ✅ HTML body rendering with fallback to plain text (`<pre>` wrapped)
+- ✅ Attachment list display with paperclip icons
+- ✅ "Draft Reply" button with envelope icon (brand green)
 - ✅ Editor input serialization for session restore
-- ✅ Exclusive registration for `.eml` files
+- ✅ **Exclusive registration** for `.eml` files (`RegisteredEditorPriority.exclusive`)
+- ✅ Loading spinner animation while parsing
+- ✅ Error state handling with user-friendly message
+
+**Editor Input Features**:
+
+- ✅ `EmailViewerInput` with TYPE_ID `void.emailViewerInput`
+- ✅ Email subject as tab name, sender as description
+- ✅ Read-only capabilities (no save/revert)
+- ✅ JSON serialization/deserialization for session persistence
 
 #### 5. **AI-Assisted Draft Replies**
 
-- ✅ `EmailDraftService` for draft generation
+- ✅ `IEmailDraftService` for draft generation
 - ✅ RAG integration for case document context
-- ✅ Automatic search query building from email content
-- ✅ Three tone options: professional, friendly, formal
-- ✅ Progress events during generation
-- ✅ DOCX output with original message quoted
-- ✅ Draft saved to `{caseFolderPath}/replies/` directory
-
-**Draft Template Structure**:
-
-```
-To: {original sender}
-Subject: Re: {original subject}
-Date: {current date}
-
-{Draft content}
-
---- Original Message ---
-From: {sender}
-To: {recipients}
-Subject: {subject}
-Date: {original date}
-
-{quoted original body}
-```
+- ✅ DOCX output via `createReplyDocument()` IPC call
+- ✅ Automatic editor opening after draft creation
+- ✅ Success notification with source attribution
+- ✅ Error handling with user-friendly messages
 
 #### 6. **Commands & Keybindings**
 
-- ✅ **Keybinding**: `Ctrl+Shift+E` to open Email Dashboard
-- ✅ **Command**: "SafeAppeals: Open Email Dashboard" (F1 palette)
-- ✅ **Activity Bar**: Mail icon (Codicon.mail) in sidebar
-- ✅ **Explorer Context Menu**: Integration point for future email operations
+- ✅ **Keybinding**: `Ctrl+Cmd+Shift+E` to open Email Dashboard
+- ✅ **Command**: "Open Email Dashboard" (F1 palette, category: SafeAppeals)
+- ✅ **Activity Bar**: Mail icon (Codicon.mail) in sidebar (position 7)
+- ✅ **Explorer Context Menu**: Group `8_void`, order 3
 
 ### Architecture
 
 ```
 Browser Process:
-├── EmailService (IPC client)
-├── EmailDraftService (RAG + LLM drafting)
-├── EmailDashboardPane (ViewPane host)
-├── EmailViewerEditor (EditorPane)
-└── React Components (email-dashboard-tsx/)
+├── IEmailService (browser/emailService.ts - IPC client)
+├── IEmailDraftService (browser/emailDraftService.ts - RAG + LLM)
+├── EmailDashboardPane (emailDashboard/emailDashboardPane.ts)
+├── EmailViewerEditor (emailViewers/emailViewerEditor.ts)
+├── EmailViewerInput (emailViewers/emailViewerInput.ts)
+├── EmailViewerInputSerializer (emailViewers/emailViewerInputSerializer.ts)
+└── React Components (react/src/email-dashboard-tsx/)
 
 IPC Channel (void-channel-email):
-├── parseEmailFile
-├── getEmails
-├── getEmailById
-├── searchEmails
-├── deleteEmail
-├── getStats
-└── createReplyDocument
+├── parseEmail(filePath) → Email
+├── getEmails(caseFolderPath?) → Email[]
+├── getEmailById(id) → Email | null
+├── searchEmails(query, caseFolderPath?) → Email[]
+├── deleteEmail(emailId) → void
+├── getStats() → { totalEmails, draftCount, caseFolders }
+├── getWorkspaceId() → string
+└── createReplyDocument(emailId, draftContent) → URI
 
 Electron Main:
-├── EmailMainChannel (IPC handler)
-├── EmailMainService (orchestrator)
-└── EmailIndexService (SQLite + FTS5)
+├── emailMainChannel.ts (IPC handler)
+├── email/emailMainService.ts (orchestrator)
+└── email/emailIndexService.ts (SQLite + FTS5)
 ```
 
 ### Files
 
 **Common**:
 
-- `common/emailService.ts` - Interface definitions and types
+- `common/emailService.ts` - `IEmailService` interface, `Email` and `EmailAttachment` types
 
 **Browser**:
 
 - `browser/emailService.ts` - IPC client implementation
-- `browser/emailDraftService.ts` - AI draft generation
-- `browser/emailDashboard/emailDashboard.contribution.ts` - View registration
-- `browser/emailDashboard/emailDashboardPane.ts` - ViewPane host
-- `browser/emailViewers/emailViewer.contribution.ts` - Editor registration
-- `browser/emailViewers/emailViewerEditor.ts` - Custom editor pane
-- `browser/emailViewers/emailViewerInput.ts` - Editor input
-- `browser/emailViewers/emailViewerInputSerializer.ts` - Serialization
+- `browser/emailDraftService.ts` - AI draft generation with RAG context
+- `browser/emailDashboard/emailDashboard.contribution.ts` - View container & action registration
+- `browser/emailDashboard/emailDashboardPane.ts` - ViewPane with React mount
+- `browser/emailViewers/emailViewer.contribution.ts` - EditorPane & EML resolver registration
+- `browser/emailViewers/emailViewerEditor.ts` - Custom editor pane with webview
+- `browser/emailViewers/emailViewerInput.ts` - Editor input with email data
+- `browser/emailViewers/emailViewerInputSerializer.ts` - JSON serialization
 
 **React Components**:
 
-- `browser/react/src/email-dashboard-tsx/index.tsx` - Mount function
+- `browser/react/src/email-dashboard-tsx/index.tsx` - `mountEmailDashboard()` function
 - `browser/react/src/email-dashboard-tsx/EmailDashboard.tsx` - Main container
-- `browser/react/src/email-dashboard-tsx/EmailToolbar.tsx` - Toolbar
+- `browser/react/src/email-dashboard-tsx/EmailToolbar.tsx` - Toolbar controls
 - `browser/react/src/email-dashboard-tsx/EmailCard.tsx` - Email cards
 - `browser/react/src/email-dashboard-tsx/EmailFilters.tsx` - Filter panel
 
 **Electron Main**:
 
-- `electron-main/emailMainChannel.ts` - IPC channel
-- `electron-main/email/emailMainService.ts` - Main service
-- `electron-main/email/emailIndexService.ts` - SQLite operations
+- `electron-main/emailMainChannel.ts` - IPC channel handler
+- `electron-main/email/emailMainService.ts` - Main service orchestration
+- `electron-main/email/emailIndexService.ts` - SQLite database operations
+
+### Service Interface
+
+```typescript
+interface IEmailService {
+	parseEmail(filePath: URI): Promise<Email>;
+	getEmails(caseFolderPath?: URI): Promise<Email[]>;
+	getEmailById(id: string): Promise<Email | null>;
+	searchEmails(query: string, caseFolderPath?: URI): Promise<Email[]>;
+	deleteEmail(emailId: string): Promise<void>;
+	getStats(): Promise<{
+		totalEmails: number;
+		draftCount: number;
+		caseFolders: string[];
+	}>;
+	getWorkspaceId(): string;
+	createReplyDocument(emailId: string, draftContent: string): Promise<URI>;
+}
+```
 
 ### Dependencies
 
@@ -1212,16 +1213,6 @@ Electron Main:
 - `pdfjs-dist` - PDF text extraction (shared with RAG)
 - `docx` - DOCX draft reply generation
 - `@vscode/sqlite3` - Database operations
-
-### Documentation
-
-Full documentation available at `docs/email-dashboard/`:
-
-- `README.md` - Overview and quick start
-- `user-guide.md` - End-user documentation
-- `architecture.md` - Technical design
-- `api-reference.md` - Service interfaces
-- `developer-guide.md` - Extension guide
 
 ---
 
@@ -1373,13 +1364,6 @@ interface ITimelineService {
 - ✅ Left panel: Case Summary + Deadline Warnings (fixed width)
 - ✅ Right panel: Timeline/Calendar view + Toolbar (flexible width)
 - ✅ Improved visibility for timeline events
-
-### Pending (Phase 2)
-
-- 🔄 Document linking UI (picker modal, clickable links)
-- 🔄 Drag-and-drop event creation
-- 🔄 Zoom/scroll controls (year/month/week view)
-- 🔄 Case config integration (auto-import injuryDate)
 
 ### Plan Document
 
