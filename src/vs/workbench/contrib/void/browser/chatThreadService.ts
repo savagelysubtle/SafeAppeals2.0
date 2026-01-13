@@ -965,6 +965,25 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 				fullTextPreview: info.fullText.substring(0, 100)
 			})
 
+				// ⚠️ VALIDATION: Warn if LLM claims to have done something without a tool call
+				// This helps detect when the LLM is "hallucinating" actions instead of using tools
+				if (!toolCall) {
+					const claimedActionPatterns = [
+						"I've edited", "I've rewritten", "I've updated", "I've created", "I've modified",
+						"I have edited", "I have rewritten", "I have updated", "I have created", "I have modified",
+						"I've now edited", "I've now rewritten", "I've now updated", "I've now created",
+						"I've completely rewritten", "I've successfully", "The file has been",
+						"I made the changes", "Changes have been applied", "I updated the file"
+					]
+					const lowerText = info.fullText.toLowerCase()
+					const claimedAction = claimedActionPatterns.find(pattern => lowerText.includes(pattern.toLowerCase()))
+					if (claimedAction) {
+						console.warn(`[ChatThreadService] ⚠️ LLM CLAIMS ACTION WITHOUT TOOL CALL! Pattern: "${claimedAction}"`)
+						console.warn('[ChatThreadService] Response text:', info.fullText.substring(0, 300))
+						console.warn('[ChatThreadService] This may indicate a tool calling failure - the LLM described an action but did not actually call the tool.')
+					}
+				}
+
 				this._addMessageToThread(threadId, { role: 'assistant', displayContent: info.fullText, reasoning: info.fullReasoning, anthropicReasoning: info.anthropicReasoning })
 
 				this._setStreamState(threadId, { isRunning: 'idle', interrupt: 'not_needed' }) // just decorative for clarity

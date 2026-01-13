@@ -480,6 +480,7 @@ const _sendOpenAICompatibleChat = async ({ messages, onText, onFinalMessage, onE
 		model: modelName,
 		messages: messages as any,
 		stream: true,
+		temperature: 0.2, // Low temperature for reliable tool calling (0.1-0.3 recommended)
 		...nativeToolsObj,
 		...additionalOpenAIPayload
 		// max_completion_tokens: maxTokens,
@@ -697,11 +698,17 @@ const sendAnthropicChat = async ({ messages, providerName, onText, onFinalMessag
 		console.log('[sendAnthropicChat] SKIPPING XML extraction because specialToolFormat is:', specialToolFormat)
 	}
 
+	// When extended thinking is enabled, temperature MUST be 1 (or omitted)
+	// See: https://docs.claude.com/en/docs/build-with-claude/extended-thinking
+	const hasThinking = 'thinking' in includeInPayload && (includeInPayload as any).thinking?.type === 'enabled'
+	const temperature = hasThinking ? 1 : 0.2  // 0.2 improves tool calling when thinking is off
+
 	const requestPayload = {
 		system: separateSystemMessage ?? undefined,
 		messages: messages as AnthropicLLMChatMessage[],
 		model: modelName,
 		max_tokens: maxTokens ?? 4_096, // anthropic requires this
+		temperature,
 		...includeInPayload,
 		...nativeToolsObj,
 	}
@@ -1033,6 +1040,7 @@ const sendGeminiChat = async ({
 			systemInstruction: separateSystemMessage,
 			thinkingConfig: thinkingConfig,
 			tools: toolConfig,
+			temperature: 0.2, // Low temperature for reliable tool calling (0.1-0.3 recommended)
 		},
 		contents: messages as GeminiLLMChatMessage[],
 	})

@@ -5,10 +5,13 @@
 
 import { Emitter, Event } from '../../../../base/common/event.js';
 import { Disposable } from '../../../../base/common/lifecycle.js';
+import { IEnvironmentService } from '../../../../platform/environment/common/environment.js';
 import { InstantiationType, registerSingleton } from '../../../../platform/instantiation/common/extensions.js';
 import { createDecorator } from '../../../../platform/instantiation/common/instantiation.js';
 import { INativeHostService } from '../../../../platform/native/common/native.js';
+import { INotificationService, Severity } from '../../../../platform/notification/common/notification.js';
 import { IStorageService, StorageScope, StorageTarget } from '../../../../platform/storage/common/storage.js';
+import { IMetricsService } from '../common/metricsService.js';
 import {
 	CloudApiError,
 	CloudAuthChangeEvent,
@@ -21,7 +24,6 @@ import {
 	CreditPack,
 } from '../common/voidCloudTypes.js';
 import { IVoidSettingsService } from '../common/voidSettingsService.js';
-import { IMetricsService } from '../common/metricsService.js';
 
 // Storage keys
 const CLOUD_SESSION_KEY = 'void.cloud.session';
@@ -90,17 +92,48 @@ export const IVoidCloudService = createDecorator<IVoidCloudService>('voidCloudSe
 // REQUEST/RESPONSE TYPES
 // ============================================
 
+/**
+ * Tool definition for cloud LLM requests (OpenAI/LiteLLM compatible format)
+ */
+export interface CloudTool {
+	type: 'function';
+	function: {
+		name: string;
+		description: string;
+		parameters: {
+			type: 'object';
+			properties: { [paramName: string]: { type: string; description: string } };
+			required?: string[];
+		};
+	};
+}
+
 export interface CloudRequestParams {
 	model: string;
 	messages: { role: 'system' | 'user' | 'assistant'; content: string }[];
 	maxTokens?: number;
 	temperature?: number;
 	stream?: boolean;
+	tools?: CloudTool[];
+	toolChoice?: 'auto' | 'required' | 'none';
 	onText?: (text: string) => void;
+}
+
+/**
+ * Native tool call from cloud API (OpenAI/LiteLLM format)
+ */
+export interface CloudToolCall {
+	id: string;
+	type: 'function';
+	function: {
+		name: string;
+		arguments: string; // JSON string of parameters
+	};
 }
 
 export interface CloudRequestResponse {
 	content: string;
+	toolCalls?: CloudToolCall[];
 	usage: {
 		inputTokens: number;
 		outputTokens: number;
@@ -143,6 +176,8 @@ class VoidCloudService extends Disposable implements IVoidCloudService {
 		@IVoidSettingsService private readonly settingsService: IVoidSettingsService,
 		@INativeHostService private readonly nativeHostService: INativeHostService,
 		@IMetricsService private readonly metricsService: IMetricsService,
+		@IEnvironmentService private readonly environmentService: IEnvironmentService,
+		@INotificationService private readonly notificationService: INotificationService,
 	) {
 		super();
 		this._loadStoredSession();
@@ -521,12 +556,20 @@ class VoidCloudService extends Disposable implements IVoidCloudService {
 
 		try {
 			// Build the OAuth URL
-			// The API server handles the OAuth flow and redirects to safe-appeals-navigator://auth/callback
 			const apiUrl = this.apiUrl;
 
-			// Use 'safe-appeals-navigator' protocol for SafeAppeals app (matches product.json)
-			const urlProtocol = 'safe-appeals-navigator';
-			const redirectUri = encodeURIComponent(`${urlProtocol}://auth/callback`);
+			let redirectUri: string;
+
+			if (!this.environmentService.isBuilt) {
+				// DEV MODE: Redirect to /auth/dev-callback which shows a web page with the code
+				// User can copy the code and paste it using the paste command
+				redirectUri = encodeURIComponent(`${apiUrl}/auth/dev-callback`);
+				console.log(`[VoidCloudService] DEV MODE - Using dev-callback redirect`);
+			} else {
+				// PRODUCTION: Use custom protocol handler
+				redirectUri = encodeURIComponent('safe-appeals-navigator://auth/callback');
+				console.log(`[VoidCloudService] PRODUCTION - Using protocol handler`);
+			}
 
 			// Build auth URL - this goes through our API which handles Supabase OAuth
 			const authUrl = `${apiUrl}/auth/google?redirect_uri=${redirectUri}`;
@@ -534,8 +577,17 @@ class VoidCloudService extends Disposable implements IVoidCloudService {
 			// Open in default browser using native host service
 			await this.nativeHostService.openExternal(authUrl);
 
-			// The flow continues when the URL handler receives the callback
-			// See voidCloudUrlHandler.ts
+			// In dev mode, show instructions
+			if (!this.environmentService.isBuilt) {
+				this.notificationService.notify({
+					severity: Severity.Info,
+					message: 'DEV MODE: After Google sign-in, you\'ll see a page with your auth code. ' +
+						'Copy the code, then use Ctrl+Shift+P → "SafeAppeals Cloud: Paste Auth Callback URL (Dev)"',
+				});
+			}
+
+			// The flow continues when the URL handler receives the callback (production)
+			// or when user pastes the code (dev)
 
 		} catch (error) {
 			this._setAuthState('error', null, error instanceof Error ? error.message : 'Sign in failed');
@@ -721,8 +773,25 @@ class VoidCloudService extends Disposable implements IVoidCloudService {
 		}
 
 		console.log('[VoidCloudService] Making API request to /llm/chat...');
+		console.log('[VoidCloudService] Tools included:', params.tools?.length ?? 0, 'toolChoice:', params.toolChoice ?? 'auto');
+
+		// Build request body with optional tools
+		const requestBody: Record<string, unknown> = {
+			model: params.model,
+			messages: params.messages,
+			max_tokens: params.maxTokens,
+			temperature: params.temperature,
+			stream: false, // TODO: Implement streaming
+		};
+
+		// Add native tool calling if tools are provided
+		if (params.tools && params.tools.length > 0) {
+			requestBody.tools = params.tools;
+			requestBody.tool_choice = params.toolChoice ?? 'auto';
+		}
+
 		const response = await this._apiRequest<{
-			choices: { message: { content: string } }[];
+			choices: { message: { content: string; tool_calls?: Array<{ id: string; type: string; function: { name: string; arguments: string } }> } }[];
 			usage: {
 				prompt_tokens: number;
 				completion_tokens: number;
@@ -734,17 +803,25 @@ class VoidCloudService extends Disposable implements IVoidCloudService {
 			};
 		}>('/llm/chat', {
 			method: 'POST',
-			body: JSON.stringify({
-				model: params.model,
-				messages: params.messages,
-				max_tokens: params.maxTokens,
-				temperature: params.temperature,
-				stream: false, // TODO: Implement streaming
-			}),
+			body: JSON.stringify(requestBody),
 		}, 0, LLM_REQUEST_TIMEOUT_MS, abortSignal);
+
+		// Extract tool calls from native API response
+		const rawToolCalls = response.choices?.[0]?.message?.tool_calls;
+		const toolCalls: CloudToolCall[] | undefined = rawToolCalls?.map(tc => ({
+			id: tc.id,
+			type: 'function' as const,
+			function: {
+				name: tc.function.name,
+				arguments: tc.function.arguments
+			}
+		}));
 
 		console.log('[VoidCloudService] API response received:', {
 			hasContent: !!response.choices?.[0]?.message?.content,
+			hasToolCalls: !!toolCalls && toolCalls.length > 0,
+			toolCallCount: toolCalls?.length ?? 0,
+			toolNames: toolCalls?.map(tc => tc.function.name) ?? [],
 			usage: response.usage,
 			voidUsage: response.void_usage,
 		});
@@ -756,6 +833,7 @@ class VoidCloudService extends Disposable implements IVoidCloudService {
 
 		return {
 			content: response.choices[0]?.message?.content || '',
+			toolCalls,
 			usage: {
 				inputTokens: response.usage.prompt_tokens,
 				outputTokens: response.usage.completion_tokens,

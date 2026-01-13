@@ -83,6 +83,24 @@ export interface CloudChatRequest {
 	maxTokens?: number
 	temperature?: number
 	stream?: boolean
+	tools?: CloudTool[]
+	toolChoice?: 'auto' | 'required' | 'none'
+}
+
+/**
+ * Tool definition for cloud LLM requests (OpenAI/LiteLLM compatible format)
+ */
+export interface CloudTool {
+	type: 'function'
+	function: {
+		name: string
+		description: string
+		parameters: {
+			type: 'object'
+			properties: { [paramName: string]: { type: string; description: string } }
+			required?: string[]
+		}
+	}
 }
 
 export interface CloudChatMessage {
