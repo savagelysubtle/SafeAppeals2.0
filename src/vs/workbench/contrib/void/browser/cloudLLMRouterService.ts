@@ -16,13 +16,94 @@ import { Disposable } from '../../../../base/common/lifecycle.js';
 import { generateUuid } from '../../../../base/common/uuid.js';
 import { InstantiationType, registerSingleton } from '../../../../platform/instantiation/common/extensions.js';
 import { createDecorator } from '../../../../platform/instantiation/common/instantiation.js';
-import { availableTools } from '../common/prompt/prompts.js';
+import { availableTools, InternalToolInfo } from '../common/prompt/prompts.js';
 import { ILLMMessageService } from '../common/sendLLMMessageService.js';
 import { OnFinalMessage, OnText, RawToolCallObj, RawToolParamsObj, ServiceSendLLMMessageParams, SingleToolCall } from '../common/sendLLMMessageTypes.js';
 import { ToolName, ToolParamName } from '../common/tools/toolsServiceTypes.js';
 import { IVoidSettingsService } from '../common/voidSettingsService.js';
 import { ChatMode, ProviderName } from '../common/voidSettingsTypes.js';
-import { IVoidCloudService } from './voidCloudService.js';
+import { CloudTool, CloudToolCall, IVoidCloudService } from './voidCloudService.js';
+
+// ============================================
+// TOOL FORMAT CONVERSION
+// ============================================
+
+/**
+ * Convert native cloud tool calls to internal RawToolCallObj format
+ * This parses the JSON arguments and creates the format expected by chatThreadService
+ */
+function parseNativeToolCalls(
+	cloudToolCalls: CloudToolCall[],
+	toolOfToolName: { [name: string]: InternalToolInfo | undefined }
+): RawToolCallObj | null {
+	if (!cloudToolCalls || cloudToolCalls.length === 0) {
+		return null;
+	}
+
+	const toolCalls: SingleToolCall[] = cloudToolCalls.map(tc => {
+		const toolDef = toolOfToolName[tc.function.name];
+		let parsedArgs: RawToolParamsObj = {};
+
+		try {
+			parsedArgs = JSON.parse(tc.function.arguments || '{}');
+		} catch (e) {
+			console.warn('[CloudToolParser] Failed to parse tool arguments:', tc.function.arguments);
+		}
+
+		const doneParams = toolDef
+			? Object.keys(parsedArgs).filter(p => p in toolDef.params) as ToolParamName<ToolName>[]
+			: Object.keys(parsedArgs) as ToolParamName<ToolName>[];
+
+		return {
+			id: tc.id,
+			name: tc.function.name as ToolName,
+			rawParams: parsedArgs,
+			doneParams,
+			isDone: true
+		};
+	});
+
+	console.log('[CloudToolParser] ✅ Parsed', toolCalls.length, 'native tool calls:', toolCalls.map(t => t.name));
+
+	// Return single or multiple format
+	if (toolCalls.length === 1) {
+		return toolCalls[0];
+	}
+	return { toolCalls, format: 'antml' };
+}
+
+/**
+ * Convert internal tool definitions to OpenAI/LiteLLM compatible format
+ * This enables native tool calling through the cloud API
+ */
+function convertToCloudTools(tools: InternalToolInfo[]): CloudTool[] {
+	return tools.map(tool => {
+		const properties: { [paramName: string]: { type: string; description: string } } = {};
+		const required: string[] = [];
+
+		for (const [paramName, paramInfo] of Object.entries(tool.params)) {
+			properties[paramName] = {
+				type: 'string',
+				description: paramInfo.description
+			};
+			// Mark all params as required (matching non-cloud behavior)
+			required.push(paramName);
+		}
+
+		return {
+			type: 'function' as const,
+			function: {
+				name: tool.name,
+				description: tool.description,
+				parameters: {
+					type: 'object' as const,
+					properties,
+					required
+				}
+			}
+		};
+	});
+}
 
 // ============================================
 // BROWSER-SIDE XML TOOL PARSER FOR CLOUD RESPONSES
@@ -293,7 +374,7 @@ class CloudLLMRouterService extends Disposable implements ICloudLLMRouterService
 	}
 
 	private _sendViaCloud(params: ServiceSendLLMMessageParams): string | null {
-		const { modelSelection, messages, onText, onFinalMessage, onError, messagesType, chatMode } = params;
+		const { modelSelection, messages, separateSystemMessage, onText, onFinalMessage, onError, messagesType, chatMode } = params;
 
 		if (!modelSelection) {
 			onError({ message: 'No model selected', fullError: null });
@@ -304,6 +385,11 @@ class CloudLLMRouterService extends Disposable implements ICloudLLMRouterService
 		if (messagesType !== 'chatMessages') {
 			console.log('[CloudLLMRouter] Non-chat message type, falling back to provider:', messagesType);
 			return this.llmMessageService.sendLLMMessage(params);
+		}
+
+		// Log if system message is missing (critical for tool definitions!)
+		if (!separateSystemMessage) {
+			console.warn('[CloudLLMRouter] ⚠️ No separateSystemMessage provided - tool definitions may be missing!');
 		}
 
 		// Check if cloud is available (online + signed in)
@@ -323,38 +409,98 @@ class CloudLLMRouterService extends Disposable implements ICloudLLMRouterService
 			originalModel: modelSelection.modelName,
 			cloudModel,
 			messageCount: (messages as any[])?.length ?? 0,
+			hasSystemMessage: !!separateSystemMessage,
+			systemMessageLength: separateSystemMessage?.length ?? 0,
 			apiUrl: this.settingsService.state.globalSettings.voidCloudApiUrl,
 			chatMode,
 		});
 
-		// Convert messages to cloud format
-		const cloudMessages = this._convertMessages(messages as any[]);
-		console.log('[CloudLLMRouter] Sending request now...');
+		// Convert messages to cloud format, prepending system message
+		const conversationMessages = this._convertMessages(messages as any[]);
+
+		// CRITICAL: Include system message with tool definitions at the start
+		const cloudMessages: { role: 'system' | 'user' | 'assistant'; content: string }[] = [];
+		if (separateSystemMessage) {
+			cloudMessages.push({ role: 'system', content: separateSystemMessage });
+		}
+		cloudMessages.push(...conversationMessages);
+
+		// Get available tools for this chat mode and convert to cloud format
+		const internalTools = availableTools(chatMode ?? null, undefined);
+		const cloudTools = internalTools && internalTools.length > 0
+			? convertToCloudTools(internalTools)
+			: undefined;
+
+		console.log('[CloudLLMRouter] Sending request now...', {
+			totalMessages: cloudMessages.length,
+			hasSystemMessage: cloudMessages[0]?.role === 'system',
+			systemMessagePreview: cloudMessages[0]?.role === 'system' ? cloudMessages[0].content.substring(0, 200) + '...' : 'NONE',
+			toolCount: cloudTools?.length ?? 0,
+			toolNames: cloudTools?.slice(0, 5).map(t => t.function.name) ?? []
+		});
 
 		// Wrap callbacks with XML tool parsing for chat modes that support tools
+		// This handles both native tool responses AND XML fallback for compatibility
 		const { wrappedOnText, wrappedOnFinalMessage } = wrapWithXMLParsing(onText, onFinalMessage, chatMode ?? null);
 
+		// Determine temperature based on model
+		// When extended thinking is enabled (globally in LiteLLM), temperature MUST be 1
+		// See: https://docs.claude.com/en/docs/build-with-claude/extended-thinking
+		// Since thinking is enabled for all Claude models in our cloud config, use temp=1 for all Claude
+		const modelLower = cloudModel.toLowerCase();
+		const isClaudeModel = modelLower.includes('claude') || modelLower.includes('opus') || modelLower.includes('sonnet') || modelLower.includes('haiku');
+		// Claude with thinking enabled requires temperature=1
+		// Other models (GPT, Gemini) can use 0.2 for better tool calling
+		const temperature = isClaudeModel ? 1 : 0.2;
+
+		console.log('[CloudLLMRouter] Temperature:', { cloudModel, isClaudeModel, temperature });
+
 		// Send via cloud service
-		// Temperature 0.5: Balance between creativity (1.0) and determinism (0.0)
-		// Lower temperature encourages tool use adherence per Anthropic best practices
 		this.cloudService.sendCloudRequest({
 			model: cloudModel,
 			messages: cloudMessages,
-			temperature: 0.5,
+			temperature,
+			tools: cloudTools,
+			toolChoice: cloudTools ? 'auto' : undefined, // Let model decide when to use tools
 			stream: false, // TODO: Implement streaming
 			onText: wrappedOnText ? (text) => wrappedOnText({ fullText: text, fullReasoning: '' }) : undefined,
 		}).then((response) => {
-			// Call final message callback with XML parsing applied
-			wrappedOnFinalMessage({
-				fullText: response.content,
-				fullReasoning: '',
-				anthropicReasoning: null,
-			});
+			// Build tool lookup for parsing
+			const toolOfToolName: { [name: string]: InternalToolInfo | undefined } = {};
+			if (internalTools) {
+				for (const t of internalTools) { toolOfToolName[t.name] = t; }
+			}
+
+			// Check for native tool calls FIRST (from API response)
+			let nativeToolCall: RawToolCallObj | null = null;
+			if (response.toolCalls && response.toolCalls.length > 0) {
+				console.log('[CloudLLMRouter] 🔧 Native tool calls received from API:', response.toolCalls.length);
+				nativeToolCall = parseNativeToolCalls(response.toolCalls, toolOfToolName);
+			}
+
+			if (nativeToolCall) {
+				// Use native tool calls - bypass XML parsing
+				console.log('[CloudLLMRouter] ✅ Using native tool calls');
+				onFinalMessage({
+					fullText: response.content,
+					fullReasoning: '',
+					anthropicReasoning: null,
+					toolCall: nativeToolCall,
+				});
+			} else {
+				// Fall back to XML parsing (for compatibility or if no native tools)
+				wrappedOnFinalMessage({
+					fullText: response.content,
+					fullReasoning: '',
+					anthropicReasoning: null,
+				});
+			}
 
 			console.log('[CloudLLMRouter] Cloud request completed:', {
 				creditsUsed: response.creditsUsed,
 				creditsRemaining: response.creditsRemaining,
 				tokensUsed: response.usage.totalTokens,
+				hasNativeToolCalls: !!nativeToolCall,
 			});
 		}).catch((error) => {
 			const message = error instanceof Error ? error.message : 'Cloud request failed';

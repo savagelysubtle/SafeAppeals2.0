@@ -196,17 +196,32 @@ User attaches: /src/app.ts (with full contents in message)
 	// ====================
 	// SECTION 4: PARALLEL TOOL CALLING STRATEGY
 	// ====================
-	const parallelToolStrategy = getParallelToolStrategy(mode)
+	// Generic parallel example ensuring the model understands the core concept regardless of mode
+	const genericParallelExample = `<parallel_workflow_example>
+**Visualizing Parallel vs. Sequential Workflow:**
+
+✅ **Efficient (Parallel):**
+User: "Summarize these 3 medical reports."
+Agent:
+<function_calls>
+<invoke name="read_file"><parameter name="uri">report1.pdf</parameter></invoke>
+<invoke name="read_file"><parameter name="uri">report2.pdf</parameter></invoke>
+<invoke name="read_file"><parameter name="uri">report3.pdf</parameter></invoke>
+</function_calls>
+(All 3 files read in ONE turn → 3x faster)
+</parallel_workflow_example>`
+
+	const parallelToolStrategy = `${genericParallelExample}\n\n${getParallelToolStrategy(mode)}`
 
 	// ====================
 	// SECTION 5: POLICY VERIFICATION WORKFLOW
 	// ====================
 	const policyVerificationWorkflow = `<policy_verification_workflow>
-**Mandatory Process for Workers' Compensation Guidance:**
+	** Mandatory Process for Workers' Compensation Guidance:**
 
 Before providing ANY guidance on WC rules, procedures, eligibility, timelines, or benefits:
 
-**Step 1: Check Available Resources**
+** Step 1: Check Available Resources **
 \`\`\`
 rag_get_stats → Review what policy manuals and case documents are indexed
 \`\`\`
@@ -853,14 +868,18 @@ function getModeSpecificWorkflow(mode: ChatMode, persistentTerminalIDs: string[]
 		return `<mode_workflow__case_manager>
 **Your Role:** Proactive case workflow manager with document creation authority
 
-**🚨 MANDATORY RAG-FIRST APPROACH 🚨**
-**EVERY case question requires RAG retrieval - NO EXCEPTIONS!**
-**When the user asks ANY question, you MUST retrieve relevant information using RAG tools FIRST!**
+**🚨 MANDATORY RAG & WEB FIRST APPROACH 🚨**
+**EVERY case question requires evidence retrieval - NO EXCEPTIONS!**
+**When the user asks ANY question, you MUST retrieve relevant information using RAG or Web tools FIRST!**
 
-**RAG Usage Rules:**
+**RAG & Web Usage Rules:**
 - **ALWAYS start with rag_get_stats** to see what documents are indexed
 - **Use rag_search_policy** for regulatory/procedural questions (appeal rules, deadlines, benefit calculations)
 - **Use rag_search_workspace** for case-specific questions (medical findings, claim status, decision history)
+- **Use web_search / multi_link_search** for:
+  - Recent legal updates (e.g., "2025 workers comp rate changes")
+  - Specific form lookups or external agency rules not in local policy
+  - Verifying jurisdictional laws if local policy is ambiguous
 - **Multiple parallel searches** for comprehensive coverage (2-4 searches simultaneously)
 - **Ground responses in evidence** - retrieve and cite current, indexed documents
 
@@ -897,6 +916,10 @@ When you need information, OUTPUT the searches immediately:
 <invoke name="rag_search_policy">
 <parameter name="query">applicable rules and procedures</parameter>
 <parameter name="limit">8</parameter>
+</invoke>
+<invoke name="web_search">
+<parameter name="query">current year COLA rates workers comp</parameter>
+<parameter name="count">3</parameter>
 </invoke>
 </function_calls>
 
@@ -976,11 +999,12 @@ Use for:
 **EVERY question requires RAG retrieval - NO EXCEPTIONS!**
 **When the user asks ANY question, you MUST call rag_search_policy and/or rag_search_workspace FIRST!**
 
-**RAG Usage Rules:**
+**RAG & Web Usage Rules:**
 - **Evidence-Based Responses** - always retrieve current, indexed information
 - **Start with rag_get_stats** to understand what's available in the knowledge base
 - **Use rag_search_policy** for regulatory/procedural questions (rules, deadlines, eligibility)
 - **Use rag_search_workspace** for case-specific questions (medical findings, claim details)
+- **Use web_search** for recent legal updates, specific form lookups, or topics missing from local indexes
 - **Multiple searches are encouraged** - cast a wide net for comprehensive coverage
 - **Parallel searches are optimal** - execute 2-4 searches simultaneously for speed
 
@@ -993,19 +1017,19 @@ When a user asks a research question, your FIRST response must include tool call
 
 **Turn 1 (Your first response - MUST include both parts):**
 1. **Reasoning (Optional)**: Briefly explain what you need to find.
-2. **Action (Required)**: Execute the search tools immediately.
+2. **Action (Required)**: Execute the search tools (RAG or Web) immediately.
 
 **Example of a PERFECT first response:**
-The user is asking about permanent disability rating appeals. I need to find the specific appeal deadlines and documentation requirements in the policy manual.
+The user is asking about permanent disability rating appeals and recent 2025 updates.
 
 <function_calls>
 <invoke name="rag_search_policy">
 <parameter name="query">permanent disability rating appeal deadline</parameter>
 <parameter name="limit">8</parameter>
 </invoke>
-<invoke name="rag_search_policy">
-<parameter name="query">appeal requirements medical evidence</parameter>
-<parameter name="limit">5</parameter>
+<invoke name="web_search">
+<parameter name="query">California workers compensation permanent disability rating updates 2025</parameter>
+<parameter name="count">5</parameter>
 </invoke>
 </function_calls>
 
@@ -1356,6 +1380,7 @@ Case manager mode uses parallel execution for READING, sequential for WRITING.
 **✅ PARALLELIZABLE** (information gathering):
 - Reading multiple files (policy documents AND case files)
 - Multiple rag searches for comprehensive coverage
+- Web searches (web_search, multi_link_search)
 - Verification reads after document creation
 - Directory listings
 - File searches

@@ -140,6 +140,7 @@ import './documentFileCreation.contribution.js';
 
 // Void Cloud service, URL handler, and auth provider
 import './voidCloudService.js';
+import './voidCloudActions.js';
 import { VoidCloudUrlHandler } from './voidCloudUrlHandler.js';
 import { SafeAppealsCloudAuthProvider } from './voidCloudAuthProvider.js';
 

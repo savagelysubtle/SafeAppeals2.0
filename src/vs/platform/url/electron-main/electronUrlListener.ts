@@ -49,10 +49,14 @@ export class ElectronURLListener extends Disposable {
 		}
 
 		// Windows: install as protocol handler
-		if (isWindows) {
-			const windowsParameters = environmentMainService.isBuilt ? [] : [`"${environmentMainService.appRoot}"`];
+		// Only register in production mode - in dev mode, we use manual URL paste to avoid
+		// launching new instances that conflict with the running dev instance
+		if (isWindows && environmentMainService.isBuilt) {
+			const windowsParameters: string[] = [];
 			windowsParameters.push('--open-url', '--');
 			app.setAsDefaultProtocolClient(productService.urlProtocol, process.execPath, windowsParameters);
+		} else if (isWindows) {
+			logService.info('[ElectronURLListener] Dev mode: Skipping protocol registration to avoid launching new instances');
 		}
 
 		// macOS: listen to `open-url` events from here on to handle
