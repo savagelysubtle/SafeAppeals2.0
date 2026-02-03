@@ -143,6 +143,8 @@ prebuild-install/**/*
 # other node modules
 
 **/docs/**
+# Keep googleapis API folders (docs, drive, etc. are API names, not documentation)
+!googleapis/**/docs/**
 **/example/**
 **/examples/**
 **/test/**

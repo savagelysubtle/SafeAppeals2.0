@@ -1,4 +1,4 @@
-# Quick Reference Cheatsheet
+# Quick Reference Cheat sheet
 
 > **📚 For complete documentation, see [complete-cheatsheet.md](./complete-cheatsheet.md)**
 
@@ -154,6 +154,7 @@ For OCR to work during development, add the tools to your PATH:
 > **Note**: The installer automatically adds these to PATH when users select "Install OCR dependencies" during installation.
 
 ### What Gets Bundled
+
 ![1769497244446](image/cheatsheet/1769497244446.png)![1769497248241](image/cheatsheet/1769497248241.png)
 | Tool | Purpose | Directory |
 |------|---------|-----------|
