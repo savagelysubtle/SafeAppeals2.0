@@ -571,9 +571,27 @@ export class FileConverterMainService implements IFileConverterMainService {
 
 				// Check if output file was created - this is the real success indicator
 				// Python may exit with code 1 due to internal error handling even when conversion works
+
 				if (fs.existsSync(output)) {
 					const stats = fs.statSync(output);
-					if (stats.size > 0) {
+
+					// Handle directory outputs (e.g., pdf2images outputs multiple files to a directory)
+					if (stats.isDirectory()) {
+						const files = fs.readdirSync(output).filter(f => {
+							const filePath = path.join(output, f);
+							return fs.statSync(filePath).isFile();
+						});
+						if (files.length > 0) {
+							console.log('[FileConverterMainService] Directory output created successfully:', output, 'files:', files.length);
+							resolve({
+								success: true,
+								output_path: output,
+								duration
+							});
+							return;
+						}
+					} else if (stats.size > 0) {
+						// Single file output
 						console.log('[FileConverterMainService] Output file created successfully:', output, 'size:', stats.size);
 						resolve({
 							success: true,

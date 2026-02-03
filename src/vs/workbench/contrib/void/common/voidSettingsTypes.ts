@@ -466,10 +466,10 @@ export type GlobalSettings = {
 	ragVectorBackend: RAGVectorBackend;
 	ragOpenAIModel: RAGOpenAIModel;
 	ragChromaUrl?: string;
-	ragAutoIndexPolicyFolder: boolean;
-	ragAutoIndexCaseFiles: boolean; // Auto-index all workspace documents (except policy folder) as case files
-	ragPolicyFolderName: string;
-	ragWatchPolicyFolder: boolean;
+	ragAutoIndexCoreReferences: boolean;
+	ragAutoIndexCaseFiles: boolean; // Auto-index all workspace documents (except core references folder) as case files
+	ragCoreReferencesFolderName: string;
+	ragWatchCoreReferencesFolder: boolean;
 	ragShowIndexedBadge: boolean;
 	ragPollIntervalSeconds: number;  // Polling interval in seconds (0 = disabled, fallback for file copy detection)
 	// RAG Enhancement Settings (Phase 1-6)
@@ -507,6 +507,22 @@ export type GlobalSettings = {
 	// File Converter settings
 	fileConverterEnabled: boolean;                // Enable file converter feature
 	fileConverterPythonPath: string;              // Path to Python executable (empty = use system Python)
+	// OCR settings for scanned PDF extraction
+	ocrEnableAutoOCR: boolean;                    // Enable automatic OCR for scanned PDFs
+	ocrLanguage: string;                          // Tesseract OCR language code (e.g., 'eng', 'fra', 'deu')
+	ocrScannedThreshold: number;                  // Chars/page threshold for scanned PDF detection (default: 50)
+	// DocuSign e-signature settings
+	docuSign?: {
+		integrationKey: string;                     // User's custom Integration Key (Client ID)
+		environment: 'demo' | 'production';         // DocuSign environment
+		accountId?: string;                         // Optional: saved account ID
+		useCustomKey?: boolean;                     // If true, use user's custom key instead of bundled
+		// JWT Grant authentication fields
+		userId?: string;                            // User ID (GUID) for JWT impersonation
+		privateKeyConfigured?: boolean;             // Whether private key is stored via safeStorage
+		authMode?: 'jwt' | 'oauth';                 // Authentication mode (jwt is recommended)
+		consentStatus?: 'unknown' | 'granted' | 'required' | 'error'; // JWT consent status
+	};
 }
 
 export const defaultGlobalSettings: GlobalSettings = {
@@ -535,16 +551,16 @@ export const defaultGlobalSettings: GlobalSettings = {
 	ragVectorBackend: 'chroma-http',
 	ragOpenAIModel: 'text-embedding-3-small',
 	ragChromaUrl: 'http://localhost:8000',
-	ragAutoIndexPolicyFolder: true,
+	ragAutoIndexCoreReferences: true,
 	ragAutoIndexCaseFiles: true, // Auto-index workspace documents as case files on startup
-	ragPolicyFolderName: 'policy-manuals',
-	ragWatchPolicyFolder: true,
+	ragCoreReferencesFolderName: 'core_references',
+	ragWatchCoreReferencesFolder: true,
 	ragShowIndexedBadge: true,
 	ragPollIntervalSeconds: 30,  // Poll every 30 seconds as fallback for file copy detection
 	// RAG Enhancement Defaults (Research-backed values from docs/RAG_ENHANCEMENT_RESEARCH.md)
 	ragUseHybridSearch: true,              // Enable BM25 + vector hybrid search for better recall
 	ragRRFConstant: 20,                    // k=20 optimized for medical/legal precision (NOT 60!)
-	ragBM25K1: 0.8,                        // Domain-specific TF saturation for policy manuals
+	ragBM25K1: 0.8,                        // Domain-specific TF saturation for core references
 	ragBM25B: 0.5,                         // Reduced length normalization for structured documents
 	ragUseReranking: true,                 // Enable cross-encoder for 20%+ accuracy improvement
 	ragRerankModel: 'ms-marco-MiniLM',     // Best speed/accuracy trade-off (~90MB, fast inference)
@@ -576,6 +592,17 @@ export const defaultGlobalSettings: GlobalSettings = {
 	// File Converter defaults
 	fileConverterEnabled: true,                   // Enabled by default
 	fileConverterPythonPath: '',                  // Empty = use system Python
+	// OCR defaults
+	ocrEnableAutoOCR: true,                       // Enabled by default for scanned PDF support
+	ocrLanguage: 'eng',                           // Default to English
+	ocrScannedThreshold: 50,                      // 50 chars/page threshold for scanned detection
+	// DocuSign defaults
+	docuSign: {
+		integrationKey: '',                         // User must configure their Integration Key
+		environment: 'demo',                        // Start with demo for testing
+		authMode: 'jwt',                            // Use JWT Grant flow (recommended for desktop)
+		consentStatus: 'unknown',                   // Consent not yet determined
+	},
 }
 
 export type GlobalSettingName = keyof GlobalSettings

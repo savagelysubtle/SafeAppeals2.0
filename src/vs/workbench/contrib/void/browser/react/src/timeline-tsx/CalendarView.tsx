@@ -3,15 +3,28 @@
  *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
  *--------------------------------------------------------------------------------------*/
 
-import React, { useState, useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
-  TimelineEvent,
-  EVENT_CATEGORY_COLORS,
-  formatTimelineDate
+    EVENT_CATEGORY_COLORS,
+    TimelineEvent
 } from '../../../../common/timeline/timelineTypes.js';
 
-// SafeAppeals brand colors
-const BRAND_GREEN = '#22c55e';
+// Reusable style objects with VSCode CSS variables
+const containerStyle: React.CSSProperties = {
+  backgroundColor: 'var(--vscode-editor-background)',
+  color: 'var(--vscode-editor-foreground)',
+};
+
+const buttonSecondaryStyle: React.CSSProperties = {
+  backgroundColor: 'var(--vscode-button-secondaryBackground)',
+  color: 'var(--vscode-button-secondaryForeground)',
+  border: 'none',
+  borderRadius: '8px',
+};
+
+const textMutedStyle: React.CSSProperties = {
+  color: 'var(--vscode-descriptionForeground)',
+};
 
 type CalendarViewMode = 'month' | 'week';
 
@@ -121,8 +134,8 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
       <div
         className="grid grid-cols-7"
         style={{
-          backgroundColor: '#0a0a0a',
-          border: '1px solid #27272a',
+          backgroundColor: 'var(--vscode-editor-background)',
+          border: '1px solid var(--vscode-panel-border)',
           borderRadius: '8px',
           overflow: 'hidden'
         }}
@@ -133,10 +146,10 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
             key={day}
             className="text-center text-xs font-semibold py-2"
             style={{
-              backgroundColor: '#0f0f0f',
-              color: '#71717a',
-              borderBottom: '1px solid #27272a',
-              borderRight: '1px solid #1f1f1f'
+              backgroundColor: 'var(--vscode-sideBar-background)',
+              color: 'var(--vscode-descriptionForeground)',
+              borderBottom: '1px solid var(--vscode-panel-border)',
+              borderRight: '1px solid var(--vscode-panel-border)'
             }}
           >
             {day}
@@ -151,9 +164,9 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                 key={`empty-${idx}`}
                 className="min-h-[80px]"
                 style={{
-                  backgroundColor: '#0a0a0a',
-                  borderRight: '1px solid #1f1f1f',
-                  borderBottom: '1px solid #1f1f1f'
+                  backgroundColor: 'var(--vscode-editor-background)',
+                  borderRight: '1px solid var(--vscode-panel-border)',
+                  borderBottom: '1px solid var(--vscode-panel-border)'
                 }}
               />
             );
@@ -167,12 +180,12 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
           return (
             <div
               key={dateKey}
-              className="min-h-[80px] p-1 cursor-pointer transition-colors hover:bg-[#1a1a1a]"
+              className="min-h-[80px] p-1 cursor-pointer transition-colors"
               style={{
-                backgroundColor: isToday ? `${BRAND_GREEN}10` : '#0f0f0f',
-                borderRight: '1px solid #1f1f1f',
-                borderBottom: '1px solid #1f1f1f',
-                borderLeft: isToday ? `2px solid ${BRAND_GREEN}` : 'none'
+                backgroundColor: isToday ? 'var(--vscode-button-secondaryBackground)' : 'var(--vscode-sideBar-background)',
+                borderRight: '1px solid var(--vscode-panel-border)',
+                borderBottom: '1px solid var(--vscode-panel-border)',
+                borderLeft: isToday ? '2px solid var(--vscode-button-background)' : 'none'
               }}
               onClick={() => onAddEvent(cellDate)}
             >
@@ -181,8 +194,8 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                 <span
                   className={`text-xs font-medium ${isToday ? 'px-1.5 py-0.5 rounded-full' : ''}`}
                   style={{
-                    color: isToday ? '#0a0a0a' : '#a1a1aa',
-                    backgroundColor: isToday ? BRAND_GREEN : 'transparent'
+                    color: isToday ? 'var(--vscode-button-foreground)' : 'var(--vscode-descriptionForeground)',
+                    backgroundColor: isToday ? 'var(--vscode-button-background)' : 'transparent'
                   }}
                 >
                   {day}
@@ -190,7 +203,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                 {dayEvents.length > 0 && (
                   <span
                     className="text-xs px-1 rounded"
-                    style={{ backgroundColor: `${BRAND_GREEN}20`, color: BRAND_GREEN }}
+                    style={{ backgroundColor: 'var(--vscode-button-secondaryBackground)', color: 'var(--vscode-button-background)' }}
                   >
                     {dayEvents.length}
                   </span>
@@ -218,7 +231,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                   </div>
                 ))}
                 {dayEvents.length > 3 && (
-                  <div className="text-xs px-1" style={{ color: '#71717a' }}>
+                  <div className="text-xs px-1" style={textMutedStyle}>
                     +{dayEvents.length - 3} more
                   </div>
                 )}
@@ -248,8 +261,8 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
       <div
         className="grid grid-cols-7"
         style={{
-          backgroundColor: '#0a0a0a',
-          border: '1px solid #27272a',
+          backgroundColor: 'var(--vscode-editor-background)',
+          border: '1px solid var(--vscode-panel-border)',
           borderRadius: '8px',
           overflow: 'hidden'
         }}
@@ -262,19 +275,19 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
               key={toDateString(day)}
               className="text-center py-2"
               style={{
-                backgroundColor: isToday ? `${BRAND_GREEN}15` : '#0f0f0f',
-                borderBottom: isToday ? `2px solid ${BRAND_GREEN}` : '1px solid #27272a',
-                borderRight: '1px solid #1f1f1f'
+                backgroundColor: isToday ? 'var(--vscode-button-secondaryBackground)' : 'var(--vscode-sideBar-background)',
+                borderBottom: isToday ? '2px solid var(--vscode-button-background)' : '1px solid var(--vscode-panel-border)',
+                borderRight: '1px solid var(--vscode-panel-border)'
               }}
             >
-              <div className="text-xs font-semibold" style={{ color: '#71717a' }}>
+              <div className="text-xs font-semibold" style={textMutedStyle}>
                 {day.toLocaleDateString('en-US', { weekday: 'short' })}
               </div>
               <div
                 className={`text-lg font-bold ${isToday ? 'inline-flex items-center justify-center w-8 h-8 rounded-full' : ''}`}
                 style={{
-                  color: isToday ? '#0a0a0a' : '#fafafa',
-                  backgroundColor: isToday ? BRAND_GREEN : 'transparent'
+                  color: isToday ? 'var(--vscode-button-foreground)' : 'var(--vscode-editor-foreground)',
+                  backgroundColor: isToday ? 'var(--vscode-button-background)' : 'transparent'
                 }}
               >
                 {day.getDate()}
@@ -292,10 +305,10 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
           return (
             <div
               key={`events-${dateKey}`}
-              className="min-h-[300px] p-2 cursor-pointer hover:bg-[#1a1a1a] transition-colors"
+              className="min-h-[300px] p-2 cursor-pointer transition-colors"
               style={{
-                backgroundColor: isToday ? `${BRAND_GREEN}05` : '#0f0f0f',
-                borderRight: '1px solid #1f1f1f'
+                backgroundColor: isToday ? 'var(--vscode-button-secondaryBackground)' : 'var(--vscode-sideBar-background)',
+                borderRight: '1px solid var(--vscode-panel-border)'
               }}
               onClick={() => onAddEvent(day)}
             >
@@ -307,7 +320,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                     style={{
                       backgroundColor: `${EVENT_CATEGORY_COLORS[event.category]}15`,
                       border: `1px solid ${EVENT_CATEGORY_COLORS[event.category]}30`,
-                      color: '#fafafa'
+                      color: 'var(--vscode-editor-foreground)'
                     }}
                     onClick={(e) => {
                       e.stopPropagation();
@@ -316,7 +329,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                   >
                     <div className="font-medium truncate">{event.title}</div>
                     {event.description && (
-                      <div className="text-xs mt-1 truncate" style={{ color: '#a1a1aa' }}>
+                      <div className="text-xs mt-1 truncate" style={textMutedStyle}>
                         {event.description}
                       </div>
                     )}
@@ -336,56 +349,53 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
     : `Week of ${currentDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`;
 
   return (
-    <div className="flex flex-col h-full" style={{ backgroundColor: '#0a0a0a' }}>
+    <div className="flex flex-col h-full" style={containerStyle}>
       {/* Calendar Header */}
       <div
         className="flex items-center justify-between p-3"
-        style={{ borderBottom: `1px solid ${BRAND_GREEN}20` }}
+        style={{ borderBottom: '1px solid var(--vscode-panel-border)' }}
       >
         {/* Navigation */}
         <div className="flex items-center gap-2">
           <button
             onClick={goToPrevious}
             className="w-8 h-8 rounded-lg flex items-center justify-center transition-colors"
-            style={{ backgroundColor: '#1a1a1a', color: '#a1a1aa' }}
-            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#27272a'}
-            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#1a1a1a'}
+            style={buttonSecondaryStyle}
           >
             <i className="codicon codicon-chevron-left" />
           </button>
           <button
             onClick={goToToday}
             className="px-3 py-1.5 rounded-lg text-xs font-medium transition-colors"
-            style={{ backgroundColor: `${BRAND_GREEN}15`, color: BRAND_GREEN }}
-            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = `${BRAND_GREEN}25`}
-            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = `${BRAND_GREEN}15`}
+            style={{
+              backgroundColor: 'var(--vscode-button-background)',
+              color: 'var(--vscode-button-foreground)',
+            }}
           >
             Today
           </button>
           <button
             onClick={goToNext}
             className="w-8 h-8 rounded-lg flex items-center justify-center transition-colors"
-            style={{ backgroundColor: '#1a1a1a', color: '#a1a1aa' }}
-            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#27272a'}
-            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#1a1a1a'}
+            style={buttonSecondaryStyle}
           >
             <i className="codicon codicon-chevron-right" />
           </button>
         </div>
 
         {/* Current period label */}
-        <h2 className="text-lg font-semibold" style={{ color: '#fafafa' }}>
+        <h2 className="text-lg font-semibold" style={{ color: 'var(--vscode-editor-foreground)' }}>
           {headerLabel}
         </h2>
 
         {/* View mode toggle */}
-        <div className="flex items-center gap-1 p-1 rounded-lg" style={{ backgroundColor: '#1a1a1a' }}>
+        <div className="flex items-center gap-1 p-1 rounded-lg" style={buttonSecondaryStyle}>
           <button
             onClick={() => setViewMode('month')}
             className="px-3 py-1.5 rounded-md text-xs font-medium transition-all"
             style={{
-              backgroundColor: viewMode === 'month' ? BRAND_GREEN : 'transparent',
-              color: viewMode === 'month' ? '#0a0a0a' : '#71717a'
+              backgroundColor: viewMode === 'month' ? 'var(--vscode-button-background)' : 'transparent',
+              color: viewMode === 'month' ? 'var(--vscode-button-foreground)' : 'var(--vscode-descriptionForeground)'
             }}
           >
             Month
@@ -394,8 +404,8 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
             onClick={() => setViewMode('week')}
             className="px-3 py-1.5 rounded-md text-xs font-medium transition-all"
             style={{
-              backgroundColor: viewMode === 'week' ? BRAND_GREEN : 'transparent',
-              color: viewMode === 'week' ? '#0a0a0a' : '#71717a'
+              backgroundColor: viewMode === 'week' ? 'var(--vscode-button-background)' : 'transparent',
+              color: viewMode === 'week' ? 'var(--vscode-button-foreground)' : 'var(--vscode-descriptionForeground)'
             }}
           >
             Week
@@ -404,7 +414,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
       </div>
 
       {/* Calendar Grid */}
-      <div className="flex-1 overflow-auto p-2">
+      <div className="flex-1 overflow-auto p-2 void-scrollbar">
         {viewMode === 'month' ? renderMonthView() : renderWeekView()}
       </div>
     </div>

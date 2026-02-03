@@ -6,9 +6,10 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useAccessor } from '../util/services.js';
 import { DocketInbox } from './DocketInbox.js';
-import { DocketInspector } from './DocketInspector.js';
-import { FilingCabinet } from './FilingCabinet.js';
-import { DocketItem } from '../../../fileOrganizer/types.js';
+import { DocketInspector, ReviewMessage } from './DocketInspector.js';
+import { FilingCabinet, TemplateType } from './FilingCabinet.js';
+import { OrganizerConfigPanel } from './OrganizerConfigPanel.js';
+import { DocketItem, FolderTemplate, OrganizerConfig, DEFAULT_ORGANIZER_CONFIG } from '../../../fileOrganizer/types.js';
 import { CaseInfo } from '../../../fileOrganizer/caseConfig.js';
 
 export const DocketDashboard: React.FC = () => {
@@ -19,6 +20,12 @@ export const DocketDashboard: React.FC = () => {
 	const [caseInfo, setCaseInfo] = useState<CaseInfo | null>(null);
 	const [isScanning, setIsScanning] = useState(false);
 	const [error, setError] = useState<string | null>(null);
+	const [selectedTemplate, setSelectedTemplate] = useState<TemplateType | string>('legal');
+	const [isConfigOpen, setIsConfigOpen] = useState(false);
+	const [organizerConfig, setOrganizerConfig] = useState<OrganizerConfig>(DEFAULT_ORGANIZER_CONFIG);
+	const [customTemplates, setCustomTemplates] = useState<FolderTemplate[]>([]);
+	// Review messages per item (keyed by item URI string)
+	const [reviewMessagesOfItem, setReviewMessagesOfItem] = useState<Record<string, ReviewMessage[]>>({});
 	const hasInitialized = useRef(false);
 
 	// Service Access
@@ -73,8 +80,37 @@ export const DocketDashboard: React.FC = () => {
 					console.warn('No case info found:', e);
 				}
 
-				// Auto-detect "To Sort" folder using service method (no dynamic imports!)
-				const inboxPathResult = fileOrganizerService.autoDetectInbox();
+				// Load Organizer Config (custom templates, inbox path, etc.)
+				try {
+					const config = await fileOrganizerService.loadOrganizerConfig?.();
+					if (config) {
+						setOrganizerConfig(config);
+						if (config.customTemplates?.length) {
+							setCustomTemplates(config.customTemplates);
+						}
+						if (config.selectedTemplateId) {
+							setSelectedTemplate(config.selectedTemplateId as TemplateType);
+						}
+					}
+				} catch (e) {
+					console.warn('No organizer config found:', e);
+				}
+
+				// Use custom inbox path if configured, otherwise auto-detect
+				let inboxPathResult: string | null = null;
+				try {
+					const loadedConfig = await fileOrganizerService.loadOrganizerConfig?.();
+					if (loadedConfig?.customInboxPath) {
+						inboxPathResult = loadedConfig.customInboxPath;
+					}
+				} catch {
+					// Ignore - will auto-detect
+				}
+
+				if (!inboxPathResult) {
+					inboxPathResult = fileOrganizerService.autoDetectInbox();
+				}
+
 				if (inboxPathResult) {
 					setInboxPath(inboxPathResult);
 					// Scan once on init
@@ -138,6 +174,92 @@ export const DocketDashboard: React.FC = () => {
 		));
 	}, [selectedItemId]);
 
+	// Manual folder selection (override AI suggestion)
+	const handleFolderSelect = useCallback((folderPath: string) => {
+		if (!selectedItemId) return;
+		console.log('[DocketDashboard] Manual folder selection:', folderPath);
+		setDocketItems(prev => prev.map(item =>
+			item.uri.toString() === selectedItemId
+				? { ...item, suggestedFolder: folderPath, classificationMethod: 'manual' as const }
+				: item
+		));
+	}, [selectedItemId]);
+
+	// Resubmit with feedback for reclassification
+	const handleResubmitWithFeedback = useCallback(async (item: DocketItem, feedback: string) => {
+		if (!fileOrganizerService) return;
+
+		const id = item.uri.toString();
+
+		// Add user message to review chat
+		const userMessage: ReviewMessage = {
+			id: `user-${Date.now()}`,
+			role: 'user',
+			content: feedback,
+			timestamp: new Date().toISOString(),
+			action: 'feedback',
+		};
+
+		setReviewMessagesOfItem(prev => ({
+			...prev,
+			[id]: [...(prev[id] || []), userMessage],
+		}));
+
+		// Set status to analyzing
+		setDocketItems(prev => prev.map(i =>
+			i.uri.toString() === id ? { ...i, docketStatus: 'analyzing' as const } : i
+		));
+
+		try {
+			// Reclassify with feedback context
+			const classifiedItem = await fileOrganizerService.classifySingleFileWithFeedback?.(
+				item,
+				caseInfo,
+				selectedTemplate,
+				feedback
+			) || await fileOrganizerService.classifySingleFile(item, caseInfo, selectedTemplate);
+
+			// Add AI response message
+			const aiMessage: ReviewMessage = {
+				id: `ai-${Date.now()}`,
+				role: 'ai',
+				content: `Updated classification: ${classifiedItem.suggestedFolder || 'Unknown'}. ${
+					classifiedItem.classification === 'TheirSide' ? 'Placed in Their Side.' :
+					classifiedItem.classification === 'YourSide' ? 'Placed in Your Side.' : ''
+				}`,
+				timestamp: new Date().toISOString(),
+			};
+
+			setReviewMessagesOfItem(prev => ({
+				...prev,
+				[id]: [...(prev[id] || []), aiMessage],
+			}));
+
+			setDocketItems(prev => prev.map(i =>
+				i.uri.toString() === id ? classifiedItem : i
+			));
+		} catch (err) {
+			console.error('Reclassification with feedback failed:', err);
+
+			// Add error message
+			const errorMessage: ReviewMessage = {
+				id: `ai-${Date.now()}`,
+				role: 'ai',
+				content: 'Sorry, reclassification failed. Please try again or select folder manually.',
+				timestamp: new Date().toISOString(),
+			};
+
+			setReviewMessagesOfItem(prev => ({
+				...prev,
+				[id]: [...(prev[id] || []), errorMessage],
+			}));
+
+			setDocketItems(prev => prev.map(i =>
+				i.uri.toString() === id ? { ...i, docketStatus: 'error' as const } : i
+			));
+		}
+	}, [fileOrganizerService, caseInfo, selectedTemplate]);
+
 	// Process (Move) File
 	const handleProcessItem = useCallback(async (item: DocketItem) => {
 		if (!fileOrganizerService || !item.suggestedFolder) return;
@@ -169,7 +291,8 @@ export const DocketDashboard: React.FC = () => {
 		));
 
 		try {
-			const classifiedItem = await fileOrganizerService.classifySingleFile(item, caseInfo);
+			// Pass the selected template to the classifier
+			const classifiedItem = await fileOrganizerService.classifySingleFile(item, caseInfo, selectedTemplate);
 			setDocketItems(prev => prev.map(i =>
 				i.uri.toString() === id ? classifiedItem : i
 			));
@@ -179,13 +302,49 @@ export const DocketDashboard: React.FC = () => {
 				i.uri.toString() === id ? { ...i, docketStatus: 'error' as const } : i
 			));
 		}
-	}, [fileOrganizerService, caseInfo]);
+	}, [fileOrganizerService, caseInfo, selectedTemplate]);
 
 	// Derived State
 	const selectedItem = useMemo(() =>
 		docketItems.find(i => i.uri.toString() === selectedItemId),
 		[docketItems, selectedItemId]
 	);
+
+	// Config handlers
+	const handleSaveConfig = useCallback(async (newConfig: OrganizerConfig) => {
+		setOrganizerConfig(newConfig);
+		// Apply custom inbox path if set
+		if (newConfig.customInboxPath && newConfig.customInboxPath !== inboxPath) {
+			setInboxPath(newConfig.customInboxPath);
+		}
+		// Persist to service
+		if (fileOrganizerService) {
+			try {
+				await fileOrganizerService.saveOrganizerConfig?.(newConfig);
+			} catch (e) {
+				console.warn('Failed to save organizer config:', e);
+			}
+		}
+	}, [inboxPath, fileOrganizerService]);
+
+	const handleSaveCustomTemplates = useCallback(async (templates: FolderTemplate[]) => {
+		setCustomTemplates(templates);
+		// Update config with new templates
+		const newConfig = {
+			...organizerConfig,
+			customTemplates: templates,
+			updatedAt: new Date().toISOString(),
+		};
+		setOrganizerConfig(newConfig);
+		// Persist to service
+		if (fileOrganizerService) {
+			try {
+				await fileOrganizerService.saveOrganizerConfig?.(newConfig);
+			} catch (e) {
+				console.warn('Failed to save custom templates:', e);
+			}
+		}
+	}, [organizerConfig, fileOrganizerService]);
 
 	// ============ INLINE STYLES (bypasses build system prefixing) ============
 	const containerStyle: React.CSSProperties = {
@@ -247,7 +406,7 @@ export const DocketDashboard: React.FC = () => {
 					)}
 				</div>
 				<div style={{ display: 'flex', gap: '6px' }}>
-					<button style={buttonStyle} onClick={() => alert('Config coming soon')}>
+					<button style={buttonStyle} onClick={() => setIsConfigOpen(true)} title="Open Settings">
 						⚙️
 					</button>
 				</div>
@@ -281,10 +440,27 @@ export const DocketDashboard: React.FC = () => {
 				onUpdate={handleUpdateItem}
 				onProcess={handleProcessItem}
 				onAnalyze={handleAnalyzeItem}
+				onResubmitWithFeedback={handleResubmitWithFeedback}
+				reviewMessages={selectedItem ? reviewMessagesOfItem[selectedItem.uri.toString()] || [] : []}
 			/>
 
 			<FilingCabinet
 				destinationFolder={selectedItem?.suggestedFolder}
+				selectedTemplate={selectedTemplate}
+				onTemplateChange={setSelectedTemplate}
+				customTemplates={customTemplates}
+				onFolderSelect={handleFolderSelect}
+				canSelectFolder={!!selectedItem}
+			/>
+
+			{/* Config Panel (Modal) */}
+			<OrganizerConfigPanel
+				isOpen={isConfigOpen}
+				onClose={() => setIsConfigOpen(false)}
+				config={organizerConfig}
+				onSaveConfig={handleSaveConfig}
+				customTemplates={customTemplates}
+				onSaveCustomTemplates={handleSaveCustomTemplates}
 			/>
 		</div>
 	);

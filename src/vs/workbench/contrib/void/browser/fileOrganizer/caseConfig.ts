@@ -8,64 +8,26 @@
  * This file is automatically loaded into AI context for better file organization
  */
 
-export interface CaseParty {
-	name: string;
-	lawyers?: string[];
-	doctors?: string[];
-	advocate?: string[];
-	caseManager?: string[];
-	reviewOfficer?: string[];
-	employerRepresentative?: string[];
-}
+// Re-export types from the central types file
+export {
+	CaseParty,
+	WCBInfo,
+	TribunalInfo,
+	CaseKeywords,
+	CaseInfo,
+	FileOrgConfig,
+	LegacyFileOrgConfig,
+	LegacyProjectInfo,
+	LegacyParties,
+	normalizeConfig,
+} from './types.js';
+
+import { CaseInfo, FileOrgConfig, normalizeConfig } from './types.js';
 
 export interface Entity {
 	name: string;
 	type: 'lawyer' | 'doctor' | 'adjudicator' | 'employer' | 'claimant' | 'caseManager' | 'reviewOfficer' | 'advocate';
 	side: 'YourSide' | 'TheirSide' | 'Neutral';
-}
-
-export interface WCBInfo {
-	adjudicators?: string[];
-	references?: string[];
-}
-
-export interface CaseParties {
-	claimant?: CaseParty;
-	employer?: CaseParty;
-	wcb?: WCBInfo;
-}
-
-export interface CaseKeywords {
-	yourSide: string[];
-	theirSide: string[];
-	medical: string[];
-	legal: string[];
-	evidence: string[];
-}
-
-export interface CaseInfo {
-	caseNumber?: string;
-	claimantName?: string;
-	injuryDate?: string;
-	caseType: string;
-	description?: string;
-	parties?: CaseParties;
-	keywords: CaseKeywords;
-}
-
-export interface OrganizationSettings {
-	selectedTemplate: string;
-	preserveOriginalNames: boolean;
-	createBackup: boolean;
-	targetFolder: string;
-}
-
-export interface FileOrgConfig {
-	version: '1.0';
-	caseInfo: CaseInfo;
-	organizationSettings: OrganizationSettings;
-	createdAt: string;
-	updatedAt: string;
 }
 
 export const DEFAULT_CASE_CONFIG: FileOrgConfig = {
@@ -93,9 +55,21 @@ export const DEFAULT_CASE_CONFIG: FileOrgConfig = {
 /**
  * Generate AI context string from case config
  * This will be included in the AI's system prompt
+ * Handles both legacy and current schema formats
  */
-export function generateAIContextString(config: FileOrgConfig): string {
+export function generateAIContextString(rawConfig: unknown): string {
+	// Normalize the config to handle any schema version
+	const config = normalizeConfig(rawConfig);
+	if (!config) {
+		return '# Case Information\n\nNo valid case configuration found.\n';
+	}
+
 	const { caseInfo, organizationSettings } = config;
+
+	// Handle case where caseInfo might not exist (for research/business configs)
+	if (!caseInfo) {
+		return '# Project Configuration\n\nNo case information configured. This may be a research or business workspace.\n';
+	}
 
 	let context = `# Case Information\n\n`;
 
@@ -119,7 +93,7 @@ export function generateAIContextString(config: FileOrgConfig): string {
 		context += `\n## Parties Involved\n\n`;
 
 		if (caseInfo.parties.claimant) {
-			context += `### Claimant\n`;
+			context += `### Claimant/Your Side\n`;
 			context += `- Name: ${caseInfo.parties.claimant.name}\n`;
 			if (caseInfo.parties.claimant.lawyers?.length) {
 				context += `- Lawyers: ${caseInfo.parties.claimant.lawyers.join(', ')}\n`;
@@ -141,6 +115,9 @@ export function generateAIContextString(config: FileOrgConfig): string {
 			if (caseInfo.parties.employer.doctors?.length) {
 				context += `- IME Doctors: ${caseInfo.parties.employer.doctors.join(', ')}\n`;
 			}
+			if (caseInfo.parties.employer.medicalAdvisors?.length) {
+				context += `- Medical Advisors: ${caseInfo.parties.employer.medicalAdvisors.join(', ')}\n`;
+			}
 			if (caseInfo.parties.employer.caseManager?.length) {
 				context += `- Case Manager: ${caseInfo.parties.employer.caseManager.join(', ')}\n`;
 			}
@@ -150,10 +127,16 @@ export function generateAIContextString(config: FileOrgConfig): string {
 			if (caseInfo.parties.employer.employerRepresentative?.length) {
 				context += `- Employer Representative: ${caseInfo.parties.employer.employerRepresentative.join(', ')}\n`;
 			}
+			if (caseInfo.parties.employer.officials?.length) {
+				context += `- Officials: ${caseInfo.parties.employer.officials.join(', ')}\n`;
+			}
 		}
 
 		if (caseInfo.parties.wcb) {
 			context += `\n### WCB/Board\n`;
+			if (caseInfo.parties.wcb.organization) {
+				context += `- Organization: ${caseInfo.parties.wcb.organization}\n`;
+			}
 			if (caseInfo.parties.wcb.adjudicators?.length) {
 				context += `- Adjudicators: ${caseInfo.parties.wcb.adjudicators.join(', ')}\n`;
 			}
@@ -161,15 +144,31 @@ export function generateAIContextString(config: FileOrgConfig): string {
 				context += `- Reference Numbers: ${caseInfo.parties.wcb.references.join(', ')}\n`;
 			}
 		}
+
+		if (caseInfo.parties.tribunal) {
+			context += `\n### Tribunal/Appeal Board\n`;
+			if (caseInfo.parties.tribunal.name) {
+				context += `- Name: ${caseInfo.parties.tribunal.name}\n`;
+			}
+			if (caseInfo.parties.tribunal.references?.length) {
+				context += `- Reference Numbers: ${caseInfo.parties.tribunal.references.join(', ')}\n`;
+			}
+			if (caseInfo.parties.tribunal.adjudicators?.length) {
+				context += `- Adjudicators: ${caseInfo.parties.tribunal.adjudicators.join(', ')}\n`;
+			}
+		}
 	}
 
 	// Keywords for classification
 	context += `\n## Classification Keywords\n\n`;
-	context += `**Your Side:** ${caseInfo.keywords.yourSide.join(', ')}\n`;
-	context += `**Their Side:** ${caseInfo.keywords.theirSide.join(', ')}\n`;
-	context += `**Medical:** ${caseInfo.keywords.medical.join(', ')}\n`;
-	context += `**Legal:** ${caseInfo.keywords.legal.join(', ')}\n`;
-	context += `**Evidence:** ${caseInfo.keywords.evidence.join(', ')}\n`;
+	context += `**Your Side:** ${caseInfo.keywords.yourSide?.join(', ') || ''}\n`;
+	context += `**Their Side:** ${caseInfo.keywords.theirSide?.join(', ') || ''}\n`;
+	context += `**Medical:** ${caseInfo.keywords.medical?.join(', ') || ''}\n`;
+	context += `**Legal:** ${caseInfo.keywords.legal?.join(', ') || ''}\n`;
+	context += `**Evidence:** ${caseInfo.keywords.evidence?.join(', ') || ''}\n`;
+	if (caseInfo.keywords.documents?.length) {
+		context += `**Documents:** ${caseInfo.keywords.documents.join(', ')}\n`;
+	}
 
 	// Organization settings
 	context += `\n## Organization Settings\n\n`;
@@ -196,6 +195,11 @@ export function classifyFileUsingCaseConfig(filename: string, config: FileOrgCon
 	category?: 'Medical' | 'Legal' | 'Evidence';
 } {
 	const result: { side?: 'YourSide' | 'TheirSide'; category?: 'Medical' | 'Legal' | 'Evidence' } = {};
+
+	// Handle case where caseInfo might not exist
+	if (!config.caseInfo) {
+		return result;
+	}
 
 	// Check side classification
 	if (matchesKeywords(filename, config.caseInfo.keywords.yourSide)) {

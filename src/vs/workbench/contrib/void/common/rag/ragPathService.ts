@@ -17,6 +17,7 @@ export interface IRAGPathService {
 	getWorkspaceChromaDir(workspaceId: string): string;
 	getWorkspaceSqlitePath(workspaceId: string): string;
 	getEmailSqlitePath(workspaceId: string): string;
+	getChatThreadsSqlitePath(workspaceId: string): string;
 
 	// Shared paths (models, logs - not case-specific data)
 	getLogsDir(): string;
@@ -61,6 +62,13 @@ export class RAGPathService implements IRAGPathService {
 			throw new Error('workspaceId is REQUIRED for getEmailSqlitePath - no global database allowed');
 		}
 		return join(this.getBaseDir(), 'databases', 'workspaces', workspaceId, 'emails.db');
+	}
+
+	getChatThreadsSqlitePath(workspaceId: string): string {
+		if (!workspaceId || workspaceId === 'undefined' || workspaceId === 'null') {
+			throw new Error('workspaceId is REQUIRED for getChatThreadsSqlitePath - no global database allowed');
+		}
+		return join(this.getBaseDir(), 'databases', 'workspaces', workspaceId, 'threads.db');
 	}
 
 	getLogsDir(): string {

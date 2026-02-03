@@ -7,11 +7,9 @@
 ### Complete Build (Production Windows)
 
 ```bash
-# Using bun (faster) ⚡ - includes Python environment for file converter
-bun gulp setup-python && bun buildreact && bun compile-build-ci && bun gulp bundle-vscode && bun gulp vscode-win32-x64-ci && bun gulp vscode-win32-x64-inno-updater && bun gulp vscode-win32-x64-user-setup
 
 # Using npm (legacy)
-npm run gulp setup-python && npm run buildreact && npm run compile-build-ci && npm run gulp bundle-vscode && npm run gulp vscode-win32-x64-ci && npm run gulp vscode-win32-x64-inno-updater && npm run gulp vscode-win32-x64-user-setup
+bun run gulp setup-python && bun run buildreact && bun run compile-build-ci && bun run gulp bundle-vscode && bun run gulp vscode-win32-x64-ci && bun run gulp vscode-win32-x64-inno-updater && bun run gulp vscode-win32-x64-user-setup
 ```
 
 > **📝 Note**: `setup-python` prepares the Python virtual environment (`python/.venv`) which is bundled into the production build. The venv contains dependencies for the Transmutation Codex file converter.
@@ -127,6 +125,66 @@ bun run install       # Install dependencies (10x faster than npm!)
 bun run add <pkg>     # Add a package
 bun run remove <pkg>  # Remove a package
 ```
+
+## 🔍 OCR Dependencies (Installer Build)
+
+Before building the Windows installer with OCR support, download the bundled dependencies:
+
+```powershell
+# Download all OCR dependencies (run from repo root)
+cd build/win32/tools && .\download-tesseract.ps1 && .\download-poppler.ps1
+
+# Or run individually:
+.\download-tesseract.ps1   # Downloads Tesseract OCR v5.4.0.20240606 + license
+.\download-poppler.ps1     # Downloads Poppler v24.08.0
+```
+
+### Development Environment Setup
+
+For OCR to work during development, add the tools to your PATH:
+
+```powershell
+# Add Poppler and Tesseract to PATH permanently (run once)
+[Environment]::SetEnvironmentVariable("PATH", "$env:PATH;D:\Coding\SafeAppeals2.0\build\win32\tools\poppler;D:\Coding\SafeAppeals2.0\build\win32\tools\tesseract", "User")
+[Environment]::SetEnvironmentVariable("TESSDATA_PREFIX", "D:\Coding\SafeAppeals2.0\build\win32\tools\tesseract\tessdata", "User")
+
+# Restart your terminal/IDE for changes to take effect
+```
+
+> **Note**: The installer automatically adds these to PATH when users select "Install OCR dependencies" during installation.
+
+### What Gets Bundled
+![1769497244446](image/cheatsheet/1769497244446.png)![1769497248241](image/cheatsheet/1769497248241.png)
+| Tool | Purpose | Directory |
+|------|---------|-----------|
+| **Tesseract** | OCR text extraction from images | `build/win32/tools/tesseract/` |
+| **Poppler** | PDF to image conversion | `build/win32/tools/poppler/` |
+
+### Requirements
+
+- **7-Zip**: Required to extract Tesseract (script installs via winget if missing)
+- **winget**: Required for 7-Zip auto-install
+
+### Python OCR Dependencies
+
+```bash
+# Sync Python venv with OCR packages (from python/ directory)
+cd python && uv sync
+```
+
+Packages included: `pdf2image`, `Pillow`, `pytesseract`, `ocrmypdf`
+
+### Full Production Build with OCR
+
+```powershell
+# 1. Download OCR tools
+cd build/win32/tools && .\download-tesseract.ps1 && .\download-poppler.ps1 && cd ../../..
+
+# 2. Build installer (standard production build)
+bun run gulp setup-python && bun run buildreact && bun run compile-build-ci && bun run gulp bundle-vscode && bun run gulp vscode-win32-x64-ci && bun run gulp vscode-win32-x64-inno-updater && bun run gulp vscode-win32-x64-user-setup
+```
+
+> **Note**: During installation, users can optionally select "Install OCR dependencies" to add Tesseract/Poppler to PATH and install Ghostscript via winget.
 
 ---
 

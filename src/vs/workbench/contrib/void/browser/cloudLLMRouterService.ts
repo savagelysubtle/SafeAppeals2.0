@@ -465,6 +465,13 @@ class CloudLLMRouterService extends Disposable implements ICloudLLMRouterService
 			stream: false, // TODO: Implement streaming
 			onText: wrappedOnText ? (text) => wrappedOnText({ fullText: text, fullReasoning: '' }) : undefined,
 		}).then((response) => {
+			// DEBUG: Log the actual response content
+			console.log('[CloudLLMRouter] Response content:', {
+				contentLength: response.content?.length ?? 0,
+				contentPreview: response.content?.substring(0, 500) ?? 'NO CONTENT',
+				contentFull: response.content?.length < 2000 ? response.content : '(truncated)',
+			});
+
 			// Build tool lookup for parsing
 			const toolOfToolName: { [name: string]: InternalToolInfo | undefined } = {};
 			if (internalTools) {

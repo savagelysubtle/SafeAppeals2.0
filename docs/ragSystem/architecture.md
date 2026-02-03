@@ -65,10 +65,12 @@ The RAG (Retrieval-Augmented Generation) system is a sophisticated document inde
   - SQLite database operations
   - FTS5 search index management
   - Schema migrations
+  - Chunk retrieval for integrity verification
 - **Key Features**:
   - Hierarchical chunking with parent/child relationships
   - Automatic document deduplication via checksums
   - Full-text search with BM25 ranking
+  - Public `getChunksByDocId()` for integrity checks
 
 #### RAGFileService
 - **Purpose**: Document content extraction
@@ -100,11 +102,13 @@ The RAG (Retrieval-Augmented Generation) system is a sophisticated document inde
   - SQLite-based vector persistence
   - Cosine similarity calculations
   - Memory/disk caching
+  - Embedding existence verification
 - **Features**:
   - Offline embeddings (no API required)
   - Persistent storage across restarts
   - Batch processing for performance
   - MMR (Maximal Marginal Relevance) diversity
+  - `hasDocumentEmbeddings()` for integrity verification
 
 #### LocalEmbeddingService
 - **Purpose**: Text-to-vector conversion
@@ -470,6 +474,51 @@ When a workspace is opened:
 2. New/unindexed files are automatically indexed as case files
 3. Policy manual folder is indexed separately with `isPolicyManual: true`
 
+### Indexing Integrity Verification
+
+The system performs a **3-layer integrity check** before considering a document "indexed":
+
+```
+isDocumentIndexed(uri)
+        ↓
+┌───────────────────────────────────────────────────────────────┐
+│ Step 1: SQLite Document Check                                  │
+│ • Does document record exist in documents table?               │
+│ • If NO → Document NOT indexed                                 │
+└───────────────────────────────────────────────────────────────┘
+        ↓ (if YES)
+┌───────────────────────────────────────────────────────────────┐
+│ Step 2: SQLite Chunk Count                                     │
+│ • How many chunks exist in chunks table for this docId?       │
+└───────────────────────────────────────────────────────────────┘
+        ↓
+┌───────────────────────────────────────────────────────────────┐
+│ Step 3: Embedding Verification                                 │
+│ • Call vectorAdapter.hasDocumentEmbeddings(docId)             │
+│ • Count embeddings matching this docId                        │
+│ • Compare with SQLite chunk count (within 10% tolerance)      │
+└───────────────────────────────────────────────────────────────┘
+        ↓
+┌───────────────────────────────────────────────────────────────┐
+│ Result:                                                        │
+│ • FULLY INDEXED: SQLite + Embeddings match                    │
+│ • INTEGRITY MISMATCH: Counts don't match → Re-index           │
+│ • PARTIAL INDEX: SQLite exists, no embeddings → Re-index      │
+│ • NOT INDEXED: No SQLite record                               │
+└───────────────────────────────────────────────────────────────┘
+```
+
+**Why This Matters:**
+- Prevents documents from appearing "indexed" when embeddings failed to save
+- Detects partial index failures (e.g., process crash during embedding generation)
+- Ensures search actually works for all indexed documents
+- Automatically repairs integrity mismatches by triggering re-indexing
+
+**Log Messages:**
+- `INTEGRITY MISMATCH`: SQLite has N chunks but only M embeddings
+- `PARTIAL INDEX`: Document exists in SQLite but has no embeddings
+- These conditions automatically trigger re-indexing to repair the data
+
 ## 🔒 Security Architecture
 
 ### Data Isolation
@@ -651,6 +700,6 @@ RAG_MODEL_CACHE=/custom/models
 
 ---
 
-*Architecture documentation last updated: December 2025*
+*Architecture documentation last updated: January 2026*
 
 

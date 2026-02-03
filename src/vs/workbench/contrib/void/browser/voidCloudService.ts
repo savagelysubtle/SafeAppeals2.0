@@ -62,12 +62,15 @@ export interface IVoidCloudService {
 	// Network status
 	readonly onNetworkChange: Event<CloudNetworkChangeEvent>;
 
+	// Google Calendar integration (tokens from OAuth)
+	readonly onGoogleCalendarTokensAvailable: Event<{ accessToken: string; refreshToken: string }>;
+
 	// Auth methods
 	signInWithGoogle(): Promise<void>;
 	signOut(): Promise<void>;
 	refreshSession(): Promise<boolean>;
 	exchangeCodeForSession(code: string): Promise<void>;
-	handleImplicitFlowTokens(accessToken: string, refreshToken: string): Promise<void>;
+	handleImplicitFlowTokens(accessToken: string, refreshToken: string, googleProviderToken?: string, googleProviderRefreshToken?: string): Promise<void>;
 	handleAuthError(error: string): void;
 
 	// Credit methods
@@ -170,6 +173,9 @@ class VoidCloudService extends Disposable implements IVoidCloudService {
 
 	private readonly _onNetworkChange = this._register(new Emitter<CloudNetworkChangeEvent>());
 	readonly onNetworkChange = this._onNetworkChange.event;
+
+	private readonly _onGoogleCalendarTokensAvailable = this._register(new Emitter<{ accessToken: string; refreshToken: string }>());
+	readonly onGoogleCalendarTokensAvailable = this._onGoogleCalendarTokensAvailable.event;
 
 	constructor(
 		@IStorageService private readonly storageService: IStorageService,
@@ -603,6 +609,9 @@ class VoidCloudService extends Disposable implements IVoidCloudService {
 				refreshToken: string;
 				expiresAt: number;
 				user: CloudUser;
+				// Google provider tokens for Calendar API access
+				googleProviderToken?: string;
+				googleProviderRefreshToken?: string;
 			}>('/auth/callback', {
 				method: 'POST',
 				body: JSON.stringify({ code }),
@@ -614,12 +623,24 @@ class VoidCloudService extends Disposable implements IVoidCloudService {
 				refreshToken: response.refreshToken,
 				expiresAt: response.expiresAt,
 				user: response.user,
+				// Include Google provider tokens if available (for Calendar API)
+				googleProviderToken: response.googleProviderToken,
+				googleProviderRefreshToken: response.googleProviderRefreshToken,
 			};
 
 			this._setAuthState('signed_in', session);
 
 			// Fetch initial balance
 			this.fetchBalance().catch(console.error);
+
+			// If Google provider tokens are available, auto-connect Calendar
+			if (session.googleProviderToken) {
+				console.log('[VoidCloudService] Google Calendar tokens received, auto-connecting...');
+				this._onGoogleCalendarTokensAvailable.fire({
+					accessToken: session.googleProviderToken,
+					refreshToken: session.googleProviderRefreshToken || '',
+				});
+			}
 
 		} catch (error) {
 			const message = error instanceof Error ? error.message : 'Failed to exchange code';
@@ -632,7 +653,12 @@ class VoidCloudService extends Disposable implements IVoidCloudService {
 		this._setAuthState('error', null, error);
 	}
 
-	async handleImplicitFlowTokens(accessToken: string, refreshToken: string): Promise<void> {
+	async handleImplicitFlowTokens(
+		accessToken: string,
+		refreshToken: string,
+		googleProviderToken?: string,
+		googleProviderRefreshToken?: string
+	): Promise<void> {
 		try {
 			// For implicit flow, we have the tokens directly
 			// We need to get user info from the API
@@ -667,12 +693,24 @@ class VoidCloudService extends Disposable implements IVoidCloudService {
 					avatarUrl: user.avatarUrl,
 					createdAt: user.createdAt,
 				},
+				// Include Google provider tokens if available (for Calendar API)
+				googleProviderToken,
+				googleProviderRefreshToken,
 			};
 
 			this._setAuthState('signed_in', session);
 
 			// Fetch initial balance
 			this.fetchBalance().catch(console.error);
+
+			// If Google provider tokens are available, auto-connect Calendar
+			if (googleProviderToken) {
+				console.log('[VoidCloudService] Google Calendar tokens received (implicit flow), auto-connecting...');
+				this._onGoogleCalendarTokensAvailable.fire({
+					accessToken: googleProviderToken,
+					refreshToken: googleProviderRefreshToken || '',
+				});
+			}
 
 		} catch (error) {
 			const message = error instanceof Error ? error.message : 'Failed to handle tokens';

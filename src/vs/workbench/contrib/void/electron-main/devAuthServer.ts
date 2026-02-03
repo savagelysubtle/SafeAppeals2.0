@@ -25,9 +25,9 @@
 import * as http from 'http';
 import { Emitter, Event } from '../../../../base/common/event.js';
 import { Disposable } from '../../../../base/common/lifecycle.js';
-import { ILogService } from '../../../../platform/log/common/log.js';
-import { createDecorator } from '../../../../platform/instantiation/common/instantiation.js';
 import { InstantiationType, registerSingleton } from '../../../../platform/instantiation/common/extensions.js';
+import { createDecorator } from '../../../../platform/instantiation/common/instantiation.js';
+import { ILogService } from '../../../../platform/log/common/log.js';
 
 export interface DevAuthCallbackEvent {
 	code?: string;
@@ -65,7 +65,7 @@ export const IDevAuthServerService = createDecorator<IDevAuthServerService>('dev
 const DEV_AUTH_SERVER_PORT = 47294; // Random port unlikely to conflict
 const CALLBACK_PATH = '/auth/callback';
 
-class DevAuthServerService extends Disposable implements IDevAuthServerService {
+export class DevAuthServerService extends Disposable implements IDevAuthServerService {
 	readonly _serviceBrand: undefined;
 
 	private _server: http.Server | null = null;

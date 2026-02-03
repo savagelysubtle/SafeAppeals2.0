@@ -21,7 +21,7 @@ interface IRAGService {
   // Document operations
   indexDocument(params: RAGIndexParams): Promise<IndexResult>;
   deleteDocument(uriOrDocId: URI | string): Promise<void>;
-  isDocumentIndexed(uri: URI): Promise<boolean>;
+  isDocumentIndexed(uri: URI): Promise<boolean>;  // Checks SQLite + embeddings integrity
   getDocumentsByType(isPolicyManual: boolean): Promise<DocumentRecord[]>;
 
   // Search operations
@@ -33,6 +33,51 @@ interface IRAGService {
   clearAllEmbeddings(): Promise<ClearResult>;
   testDoclingExtraction(uri: URI): Promise<ExtractionTestResult>;
 }
+```
+
+### VectorAdapter
+
+Interface for vector embedding storage backends. All implementations must support embedding existence verification.
+
+```typescript
+interface VectorAdapter {
+  initialize(): Promise<void>;
+  ensureCollections(scope: RAGStorageScope): Promise<void>;
+  add(chunks: ChunkRecord[], metadatas: Array<Record<string, any>>): Promise<void>;
+  query(text: string, n: number, scope: RAGStorageScope): Promise<QueryResult[]>;
+  deleteByDocId(docId: string): Promise<void>;
+  clearAll(): Promise<void>;
+  
+  // Integrity verification (added v2.1)
+  hasDocumentEmbeddings(docId: string): Promise<{ hasEmbeddings: boolean; count: number }>;
+}
+```
+
+#### hasDocumentEmbeddings
+
+Checks if vector embeddings exist for a document. Used for indexing integrity verification.
+
+```typescript
+async hasDocumentEmbeddings(docId: string): Promise<{ hasEmbeddings: boolean; count: number }>
+```
+
+**Parameters:**
+- `docId: string` - The document ID to check
+
+**Returns:**
+```typescript
+{
+  hasEmbeddings: boolean;  // true if at least one embedding exists
+  count: number;           // Number of embeddings found for this document
+}
+```
+
+**Example:**
+```typescript
+const { hasEmbeddings, count } = await vectorAdapter.hasDocumentEmbeddings('abc123');
+console.log(`Document has ${count} embeddings: ${hasEmbeddings}`);
+
+// Used internally by isDocumentIndexed() for integrity checks
 ```
 
 ### IRAGMainService
@@ -121,11 +166,29 @@ await ragService.deleteDocument('abc123_sha256_prefix');
 
 ### isDocumentIndexed
 
-Checks if a document has been indexed.
+Checks if a document has been **fully indexed** with both SQLite metadata AND vector embeddings.
 
 ```typescript
 async isDocumentIndexed(uri: URI): Promise<boolean>
 ```
+
+**Integrity Verification:**
+
+This method performs a comprehensive 3-step integrity check:
+
+1. **SQLite Document Check** - Verifies document record exists in database
+2. **Chunk Count Check** - Counts how many chunks exist for the document
+3. **Embedding Verification** - Verifies vector embeddings exist and match chunk count
+
+Returns `true` only if ALL conditions are met:
+- Document record exists in SQLite
+- Vector embeddings exist for the document
+- Embedding count matches chunk count (within 10% tolerance for parent chunks)
+
+Returns `false` with automatic re-indexing trigger if:
+- `INTEGRITY MISMATCH`: SQLite has chunks but embeddings are incomplete
+- `PARTIAL INDEX`: SQLite record exists but no embeddings (e.g., embedding generation failed)
+- Document not found in SQLite
 
 **Example:**
 ```typescript
@@ -134,8 +197,22 @@ const indexed = await ragService.isDocumentIndexed(
 );
 
 if (!indexed) {
-  console.log('Document needs indexing');
+  console.log('Document needs indexing (or re-indexing due to integrity issue)');
 }
+```
+
+**Log Output Examples:**
+```
+// Fully indexed
+Document /docs/policy.pdf is fully indexed (45 chunks, 47 embeddings)
+
+// Integrity mismatch (will trigger re-index)
+INTEGRITY MISMATCH: Document /docs/policy.pdf has 45 chunks in SQLite but only 12 embeddings
+Document will be re-indexed to repair the mismatch
+
+// Partial index (will trigger re-index)
+PARTIAL INDEX: Document /docs/policy.pdf exists in SQLite but has no embeddings
+Document will be re-indexed to add embeddings
 ```
 
 ### getDocumentsByType
@@ -560,6 +637,6 @@ class LegalSearchService {
 
 ---
 
-*API Reference last updated: December 2025*
+*API Reference last updated: January 2026*
 
 

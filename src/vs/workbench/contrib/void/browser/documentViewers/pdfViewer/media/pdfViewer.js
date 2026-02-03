@@ -99,6 +99,9 @@
 	const doneSignatureBtn = document.getElementById('done-signature');
 	const savedSignaturesList = document.getElementById('saved-signatures-list');
 
+	// DocuSign button
+	const sendDocuSignButton = document.getElementById('send-docusign');
+
 	// Mode toggle elements
 	const drawModeBtn = document.getElementById('draw-mode-btn');
 	const typeModeBtn = document.getElementById('type-mode-btn');
@@ -192,6 +195,14 @@
 	if (addSignatureButton) {
 		addSignatureButton.addEventListener('click', () => {
 			showSignatureModal();
+		});
+	}
+
+	// DocuSign send handler
+	if (sendDocuSignButton) {
+		sendDocuSignButton.addEventListener('click', () => {
+			console.log('[PDF Viewer] DocuSign button clicked');
+			vscode.postMessage({ type: 'sendForDocuSign' });
 		});
 	}
 
@@ -1289,11 +1300,11 @@
 	}
 
 	// Make functions globally available for onclick handlers
-	window.loadSignature = function(id) {
+	window.loadSignature = function (id) {
 		const signature = savedSignatures.find(s => s.id === id);
 		if (signature && signatureCanvas && signatureCtx) {
 			const img = new Image();
-			img.onload = function() {
+			img.onload = function () {
 				signatureCtx.fillStyle = 'white';
 				signatureCtx.fillRect(0, 0, signatureCanvas.width, signatureCanvas.height);
 				signatureCtx.drawImage(img, 0, 0, signatureCanvas.width, signatureCanvas.height);
@@ -1303,7 +1314,7 @@
 		}
 	};
 
-	window.deleteSavedSignature = function(id) {
+	window.deleteSavedSignature = function (id) {
 		// Delete via VSCode message passing
 		vscode.postMessage({
 			type: 'deletePdfSignature',

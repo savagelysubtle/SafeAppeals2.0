@@ -142,8 +142,8 @@ export class QueryProcessor {
 
 		// Determine scope based on keyword presence
 		if (hasPolicyKeyword && !hasCaseKeyword) {
-			this.logService.info('Query routed to: policy_manual');
-			return 'policy_manual';
+			this.logService.info('Query routed to: core_references');
+			return 'core_references';
 		}
 
 		if (hasCaseKeyword && !hasPolicyKeyword) {

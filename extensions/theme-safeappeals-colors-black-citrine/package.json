@@ -1,0 +1,21 @@
+﻿{
+	"name": "theme-safeappeals-colors-black-citrine",
+	"displayName": "Black & Citrine",
+	"description": "Raven black with citrine yellow accents - Sunny optimism",
+	"version": "1.0.0",
+	"publisher": "safeappeals",
+	"license": "MIT",
+	"engines": {
+		"vscode": "*"
+	},
+	"categories": ["Themes"],
+	"contributes": {
+		"themes": [
+			{
+				"label": "Black & Citrine",
+				"uiTheme": "vs-dark",
+				"path": "./themes/black-citrine-color-theme.json"
+			}
+		]
+	}
+}

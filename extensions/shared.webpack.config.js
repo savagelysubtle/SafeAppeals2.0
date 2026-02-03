@@ -17,6 +17,7 @@ const { DefinePlugin, optimize } = require('webpack');
 const tsLoaderOptions = {
 	compilerOptions: {
 		'sourceMap': true,
+		'skipLibCheck': true,
 	},
 	onlyCompileBundledFiles: true,
 };

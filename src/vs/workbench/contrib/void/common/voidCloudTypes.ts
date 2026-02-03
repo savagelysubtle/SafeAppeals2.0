@@ -29,6 +29,9 @@ export interface CloudSession {
 	refreshToken: string
 	expiresAt: number // Unix timestamp
 	user: CloudUser
+	// Google provider tokens (for Calendar API access)
+	googleProviderToken?: string
+	googleProviderRefreshToken?: string
 }
 
 export interface CloudAuthState {

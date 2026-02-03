@@ -3,26 +3,60 @@
  *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
  *--------------------------------------------------------------------------------------*/
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useAccessor } from '../util/services.js';
 
-// SafeAppeals brand colors
-const BRAND_GREEN = '#22c55e';
-
-// File icons based on extension
-const FILE_ICONS: Record<string, { icon: string; color: string }> = {
-  pdf: { icon: 'file-pdf', color: '#ef4444' },
-  doc: { icon: 'file-text', color: '#3b82f6' },
-  docx: { icon: 'file-text', color: '#3b82f6' },
-  txt: { icon: 'file-text', color: '#6b7280' },
-  jpg: { icon: 'file-media', color: '#f59e0b' },
-  jpeg: { icon: 'file-media', color: '#f59e0b' },
-  png: { icon: 'file-media', color: '#f59e0b' },
-  gif: { icon: 'file-media', color: '#f59e0b' },
-  default: { icon: 'file', color: '#64748b' }
+// Reusable style objects with VSCode CSS variables
+const modalStyle: React.CSSProperties = {
+  backgroundColor: 'var(--vscode-sideBar-background)',
+  border: '1px solid var(--vscode-panel-border)',
+  borderRadius: '12px',
 };
 
-function getFileIcon(filename: string): { icon: string; color: string } {
+const inputStyle: React.CSSProperties = {
+  backgroundColor: 'var(--vscode-input-background)',
+  color: 'var(--vscode-input-foreground)',
+  border: '1px solid var(--vscode-input-border)',
+  borderRadius: '8px',
+};
+
+const buttonPrimaryStyle: React.CSSProperties = {
+  backgroundColor: 'var(--vscode-button-background)',
+  color: 'var(--vscode-button-foreground)',
+  border: 'none',
+  borderRadius: '8px',
+  cursor: 'pointer',
+};
+
+const buttonSecondaryStyle: React.CSSProperties = {
+  backgroundColor: 'var(--vscode-button-secondaryBackground)',
+  color: 'var(--vscode-button-secondaryForeground)',
+  border: '1px solid var(--vscode-panel-border)',
+  borderRadius: '8px',
+};
+
+const textPrimaryStyle: React.CSSProperties = {
+  color: 'var(--vscode-editor-foreground)',
+};
+
+const textMutedStyle: React.CSSProperties = {
+  color: 'var(--vscode-descriptionForeground)',
+};
+
+// File icons based on extension - using VSCode semantic colors
+const FILE_ICONS: Record<string, { icon: string; colorVar: string }> = {
+  pdf: { icon: 'file-pdf', colorVar: 'var(--vscode-charts-red)' },
+  doc: { icon: 'file-text', colorVar: 'var(--vscode-charts-blue)' },
+  docx: { icon: 'file-text', colorVar: 'var(--vscode-charts-blue)' },
+  txt: { icon: 'file-text', colorVar: 'var(--vscode-descriptionForeground)' },
+  jpg: { icon: 'file-media', colorVar: 'var(--vscode-charts-orange)' },
+  jpeg: { icon: 'file-media', colorVar: 'var(--vscode-charts-orange)' },
+  png: { icon: 'file-media', colorVar: 'var(--vscode-charts-orange)' },
+  gif: { icon: 'file-media', colorVar: 'var(--vscode-charts-orange)' },
+  default: { icon: 'file', colorVar: 'var(--vscode-descriptionForeground)' }
+};
+
+function getFileIcon(filename: string): { icon: string; colorVar: string } {
   const ext = filename.split('.').pop()?.toLowerCase() || '';
   return FILE_ICONS[ext] || FILE_ICONS.default;
 }
@@ -147,32 +181,30 @@ export const DocumentPicker: React.FC<DocumentPickerProps> = ({
       <div
         className="w-full max-w-lg rounded-xl shadow-2xl"
         style={{
-          backgroundColor: '#0f0f0f',
-          border: `1px solid ${BRAND_GREEN}30`,
+          ...modalStyle,
           maxHeight: '80vh',
           display: 'flex',
           flexDirection: 'column',
-          boxShadow: `0 25px 50px -12px rgba(0, 0, 0, 0.8), 0 0 0 1px ${BRAND_GREEN}10`
         }}
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}
         <div
           className="flex items-center justify-between px-5 py-4"
-          style={{ borderBottom: `1px solid ${BRAND_GREEN}20` }}
+          style={{ borderBottom: '1px solid var(--vscode-panel-border)' }}
         >
           <div className="flex items-center gap-3">
             <div
               className="w-9 h-9 rounded-lg flex items-center justify-center"
-              style={{ backgroundColor: `${BRAND_GREEN}15` }}
+              style={{ backgroundColor: 'var(--vscode-button-secondaryBackground)' }}
             >
-              <i className="codicon codicon-file-symlink-file" style={{ color: BRAND_GREEN, fontSize: '16px' }} />
+              <i className="codicon codicon-file-symlink-file" style={{ color: 'var(--vscode-button-background)', fontSize: '16px' }} />
             </div>
             <div>
-              <h2 className="text-base font-semibold" style={{ color: '#fafafa' }}>
+              <h2 className="text-base font-semibold" style={textPrimaryStyle}>
                 Link Documents
               </h2>
-              <p className="text-xs" style={{ color: '#71717a' }}>
+              <p className="text-xs" style={textMutedStyle}>
                 {linkedDocuments.length} linked • {workspaceFiles.length} available
               </p>
             </div>
@@ -180,20 +212,18 @@ export const DocumentPicker: React.FC<DocumentPickerProps> = ({
           <button
             onClick={onClose}
             className="w-8 h-8 rounded-lg flex items-center justify-center transition-colors"
-            style={{ color: '#71717a' }}
-            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#1f1f1f'}
-            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+            style={buttonSecondaryStyle}
           >
             <i className="codicon codicon-close" />
           </button>
         </div>
 
         {/* Search */}
-        <div className="px-4 py-3" style={{ borderBottom: '1px solid #27272a' }}>
+        <div className="px-4 py-3" style={{ borderBottom: '1px solid var(--vscode-panel-border)' }}>
           <div className="relative">
             <i
               className="codicon codicon-search absolute left-3 top-1/2 -translate-y-1/2"
-              style={{ color: '#71717a', fontSize: '14px' }}
+              style={textMutedStyle}
             />
             <input
               type="text"
@@ -201,44 +231,35 @@ export const DocumentPicker: React.FC<DocumentPickerProps> = ({
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search documents..."
               className="w-full pl-9 pr-4 py-2 rounded-lg text-sm"
-              style={{
-                backgroundColor: '#1a1a1a',
-                border: '1px solid #27272a',
-                color: '#fafafa',
-                outline: 'none'
-              }}
-              onFocus={(e) => e.currentTarget.style.borderColor = BRAND_GREEN}
-              onBlur={(e) => e.currentTarget.style.borderColor = '#27272a'}
+              style={inputStyle}
             />
           </div>
         </div>
 
         {/* Linked Documents Section */}
         {linkedDocuments.length > 0 && (
-          <div className="px-4 py-3" style={{ borderBottom: '1px solid #27272a' }}>
-            <div className="text-xs font-semibold uppercase tracking-wide mb-2" style={{ color: BRAND_GREEN }}>
+          <div className="px-4 py-3" style={{ borderBottom: '1px solid var(--vscode-panel-border)' }}>
+            <div className="text-xs font-semibold uppercase tracking-wide mb-2" style={{ color: 'var(--vscode-button-background)' }}>
               Linked Documents
             </div>
             <div className="space-y-1">
               {linkedDocuments.map(uri => {
                 const fileName = getFileName(uri);
-                const { icon, color } = getFileIcon(fileName);
+                const { icon, colorVar } = getFileIcon(fileName);
                 return (
                   <div
                     key={uri}
                     className="flex items-center justify-between px-3 py-2 rounded-lg"
-                    style={{ backgroundColor: `${BRAND_GREEN}10`, border: `1px solid ${BRAND_GREEN}30` }}
+                    style={{ backgroundColor: 'var(--vscode-button-secondaryBackground)', border: '1px solid var(--vscode-panel-border)' }}
                   >
                     <div className="flex items-center gap-2 min-w-0">
-                      <i className={`codicon codicon-${icon}`} style={{ color, fontSize: '14px' }} />
-                      <span className="text-sm truncate" style={{ color: '#fafafa' }}>{fileName}</span>
+                      <i className={`codicon codicon-${icon}`} style={{ color: colorVar, fontSize: '14px' }} />
+                      <span className="text-sm truncate" style={textPrimaryStyle}>{fileName}</span>
                     </div>
                     <button
                       onClick={() => onUnlink(uri)}
                       className="text-xs px-2 py-1 rounded transition-colors"
-                      style={{ color: '#ef4444' }}
-                      onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#ef444420'}
-                      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                      style={{ color: 'var(--vscode-errorForeground)' }}
                     >
                       Unlink
                     </button>
@@ -250,8 +271,8 @@ export const DocumentPicker: React.FC<DocumentPickerProps> = ({
         )}
 
         {/* File List */}
-        <div className="flex-1 overflow-y-auto px-4 py-3">
-          <div className="text-xs font-semibold uppercase tracking-wide mb-2" style={{ color: '#52525b' }}>
+        <div className="flex-1 overflow-y-auto px-4 py-3 void-scrollbar">
+          <div className="text-xs font-semibold uppercase tracking-wide mb-2" style={{ color: 'var(--vscode-disabledForeground)' }}>
             Workspace Documents
           </div>
 
@@ -259,17 +280,17 @@ export const DocumentPicker: React.FC<DocumentPickerProps> = ({
             <div className="flex items-center justify-center py-8">
               <div
                 className="rounded-full h-6 w-6 border-2 animate-spin"
-                style={{ borderColor: `${BRAND_GREEN} transparent ${BRAND_GREEN} transparent` }}
+                style={{ borderColor: 'var(--vscode-button-background) transparent var(--vscode-button-background) transparent' }}
               />
             </div>
           ) : filteredFiles.length === 0 ? (
-            <div className="text-center py-8" style={{ color: '#71717a' }}>
+            <div className="text-center py-8" style={textMutedStyle}>
               {searchQuery ? 'No matching documents found' : 'No documents in workspace'}
             </div>
           ) : (
             <div className="space-y-1">
               {filteredFiles.map(file => {
-                const { icon, color } = getFileIcon(file.name);
+                const { icon, colorVar } = getFileIcon(file.name);
                 const linked = isLinked(file.uri);
                 return (
                   <button
@@ -277,28 +298,22 @@ export const DocumentPicker: React.FC<DocumentPickerProps> = ({
                     onClick={() => linked ? onUnlink(file.uri) : onLink(file.uri)}
                     className="w-full flex items-center justify-between px-3 py-2 rounded-lg text-left transition-all"
                     style={{
-                      backgroundColor: linked ? `${BRAND_GREEN}10` : 'transparent',
-                      border: linked ? `1px solid ${BRAND_GREEN}30` : '1px solid transparent'
-                    }}
-                    onMouseEnter={(e) => {
-                      if (!linked) e.currentTarget.style.backgroundColor = '#1a1a1a';
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.backgroundColor = linked ? `${BRAND_GREEN}10` : 'transparent';
+                      backgroundColor: linked ? 'var(--vscode-button-secondaryBackground)' : 'transparent',
+                      border: linked ? '1px solid var(--vscode-panel-border)' : '1px solid transparent'
                     }}
                   >
                     <div className="flex items-center gap-2 min-w-0">
-                      <i className={`codicon codicon-${icon}`} style={{ color, fontSize: '14px' }} />
+                      <i className={`codicon codicon-${icon}`} style={{ color: colorVar, fontSize: '14px' }} />
                       <div className="min-w-0">
-                        <div className="text-sm truncate" style={{ color: '#fafafa' }}>{file.name}</div>
-                        <div className="text-xs truncate" style={{ color: '#52525b' }}>{file.path}</div>
+                        <div className="text-sm truncate" style={textPrimaryStyle}>{file.name}</div>
+                        <div className="text-xs truncate" style={{ color: 'var(--vscode-disabledForeground)' }}>{file.path}</div>
                       </div>
                     </div>
                     <div className="flex-shrink-0 ml-2">
                       {linked ? (
-                        <i className="codicon codicon-check" style={{ color: BRAND_GREEN, fontSize: '14px' }} />
+                        <i className="codicon codicon-check" style={{ color: 'var(--vscode-button-background)', fontSize: '14px' }} />
                       ) : (
-                        <i className="codicon codicon-add" style={{ color: '#71717a', fontSize: '14px' }} />
+                        <i className="codicon codicon-add" style={textMutedStyle} />
                       )}
                     </div>
                   </button>
@@ -311,17 +326,12 @@ export const DocumentPicker: React.FC<DocumentPickerProps> = ({
         {/* Footer */}
         <div
           className="px-5 py-4 flex justify-end"
-          style={{ borderTop: '1px solid #27272a' }}
+          style={{ borderTop: '1px solid var(--vscode-panel-border)' }}
         >
           <button
             onClick={onClose}
             className="px-4 py-2 rounded-lg font-medium text-sm transition-colors"
-            style={{
-              backgroundColor: BRAND_GREEN,
-              color: '#0a0a0a'
-            }}
-            onMouseEnter={(e) => e.currentTarget.style.opacity = '0.9'}
-            onMouseLeave={(e) => e.currentTarget.style.opacity = '1'}
+            style={buttonPrimaryStyle}
           >
             Done
           </button>

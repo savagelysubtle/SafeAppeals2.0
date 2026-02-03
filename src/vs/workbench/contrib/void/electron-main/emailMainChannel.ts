@@ -55,6 +55,86 @@ export class EmailMainChannel implements IServerChannel {
 				return this.emailMainService.createReplyDocument(workspaceId, emailId, draftContent, replyFolderPath);
 			}
 
+			case 'toggleStar': {
+				const { workspaceId, emailId } = args;
+				return this.emailMainService.toggleStar(workspaceId, emailId);
+			}
+
+			case 'updateClassification': {
+				const { workspaceId, emailId, category, priority, extractedDeadline } = args;
+				return this.emailMainService.updateClassification(workspaceId, emailId, {
+					category,
+					priority,
+					extractedDeadline: extractedDeadline ? new Date(extractedDeadline) : undefined
+				});
+			}
+
+			case 'getEmailsByCategory': {
+				const { workspaceId, category } = args;
+				return this.emailMainService.getEmailsByCategory(workspaceId, category);
+			}
+
+			case 'getEmailsByPriority': {
+				const { workspaceId, priority } = args;
+				return this.emailMainService.getEmailsByPriority(workspaceId, priority);
+			}
+
+			case 'setReminder': {
+				const { workspaceId, emailId, reminderDate } = args;
+				return this.emailMainService.setReminder(
+					workspaceId,
+					emailId,
+					reminderDate ? new Date(reminderDate) : null
+				);
+			}
+
+			case 'getUnclassifiedEmails': {
+				const { workspaceId, limit } = args;
+				return this.emailMainService.getUnclassifiedEmails(workspaceId, limit);
+			}
+
+			// Draft management handlers
+			case 'saveDraft': {
+				const { workspaceId, emailId, content } = args;
+				return this.emailMainService.saveDraft(workspaceId, emailId, content);
+			}
+
+			case 'getDraft': {
+				const { workspaceId, emailId } = args;
+				return this.emailMainService.getDraft(workspaceId, emailId);
+			}
+
+			case 'getDraftVersions': {
+				const { workspaceId, emailId } = args;
+				return this.emailMainService.getDraftVersions(workspaceId, emailId);
+			}
+
+			case 'updateDraftStatus': {
+				const { workspaceId, draftId, status } = args;
+				return this.emailMainService.updateDraftStatus(workspaceId, draftId, status);
+			}
+
+			// Threading handlers
+			case 'getThreads': {
+				const { workspaceId } = args;
+				return this.emailMainService.getThreads(workspaceId);
+			}
+
+			case 'getThreadById': {
+				const { workspaceId, threadId } = args;
+				return this.emailMainService.getThreadById(workspaceId, threadId);
+			}
+
+			case 'getEmailsInThread': {
+				const { workspaceId, threadId } = args;
+				return this.emailMainService.getEmailsInThread(workspaceId, threadId);
+			}
+
+			case 'updateThreadStatus': {
+				const { workspaceId, threadId, status } = args;
+				return this.emailMainService.updateThreadStatus(workspaceId, threadId, status);
+			}
+
 			default:
 				throw new Error(`Call not found: ${command}`);
 		}

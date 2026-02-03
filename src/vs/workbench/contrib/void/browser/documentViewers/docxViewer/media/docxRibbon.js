@@ -43,7 +43,10 @@ class DocxRibbon {
 			pageSizeSelect: document.getElementById('page-size-select'),
 			marginPresetSelect: document.getElementById('margin-preset-select'),
 			orientationPortraitBtn: document.getElementById('orientation-portrait-btn'),
-			orientationLandscapeBtn: document.getElementById('orientation-landscape-btn')
+			orientationLandscapeBtn: document.getElementById('orientation-landscape-btn'),
+
+			// Signature (DocuSign)
+			sendSignatureBtn: document.getElementById('send-signature-btn')
 		};
 
 		this.initialize();
@@ -151,6 +154,14 @@ class DocxRibbon {
 		if (e.saveBtn) e.saveBtn.addEventListener('click', () => this.callbacks.onSave?.());
 		if (e.printBtn) e.printBtn.addEventListener('click', () => this.callbacks.onPrint?.());
 		if (e.exportPdfBtn) e.exportPdfBtn.addEventListener('click', () => this.callbacks.onExportPDF?.());
+
+		// Signature (DocuSign)
+		if (e.sendSignatureBtn) {
+			e.sendSignatureBtn.addEventListener('click', () => {
+				console.log('[DocxRibbon] Send for Signature clicked');
+				this.callbacks.onSendForSignature?.();
+			});
+		}
 
 		// Undo/Redo
 		if (e.undoBtn) {
@@ -403,7 +414,7 @@ class DocxRibbon {
 						img.src = objectUrl;
 					});
 
-					console.log('[DocxRibbon] Original image:', img.width, 'x', img.height, 'file:', Math.round(file.size/1024), 'KB');
+					console.log('[DocxRibbon] Original image:', img.width, 'x', img.height, 'file:', Math.round(file.size / 1024), 'KB');
 
 					// Calculate target dimensions
 					let width = img.width;
@@ -446,7 +457,7 @@ class DocxRibbon {
 							base64DataUrl = destCanvas.toDataURL(mimeType, quality);
 							usedPica = true;
 
-							console.log('[DocxRibbon] ✅ Pica resize complete:', width, 'x', height, 'base64 size:', Math.round(base64DataUrl.length/1024), 'KB');
+							console.log('[DocxRibbon] ✅ Pica resize complete:', width, 'x', height, 'base64 size:', Math.round(base64DataUrl.length / 1024), 'KB');
 						} catch (picaErr) {
 							console.warn('[DocxRibbon] Pica resize failed:', picaErr);
 						}
@@ -488,7 +499,7 @@ class DocxRibbon {
 
 				const MAX_FILE_SIZE_MB = 10; // Maximum file size to prevent memory issues
 
-				console.log('[DocxRibbon] Image selected:', file.name, Math.round(file.size/1024), 'KB');
+				console.log('[DocxRibbon] Image selected:', file.name, Math.round(file.size / 1024), 'KB');
 
 				// CRITICAL: Reject very large files to prevent memory explosion
 				if (file.size > MAX_FILE_SIZE_MB * 1024 * 1024) {
@@ -531,12 +542,12 @@ class DocxRibbon {
 			});
 		}
 
-			if (e.insertLinkBtn) {
-				e.insertLinkBtn.addEventListener('click', () => {
-					console.log('[DocxRibbon] Insert Link button clicked');
-					if (this.editor?.editor) {
-						// Capture current selection
-						const { from, to } = this.editor.editor.state.selection;
+		if (e.insertLinkBtn) {
+			e.insertLinkBtn.addEventListener('click', () => {
+				console.log('[DocxRibbon] Insert Link button clicked');
+				if (this.editor?.editor) {
+					// Capture current selection
+					const { from, to } = this.editor.editor.state.selection;
 					const previousUrl = this.editor.editor.getAttributes('link').href;
 
 					this.showInputModal('Insert Link', previousUrl || '', (url) => {

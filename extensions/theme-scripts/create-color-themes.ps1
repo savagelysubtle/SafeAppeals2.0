@@ -1,14 +1,3 @@
-[10:52:46] Error: D:/Coding/SafeAppeals2.0/src/vs/workbench/contrib/void/browser/emailWorkspaceService.ts(67,33): Property 'emailDashboardEnabled' does not exist on type 'GlobalSettings'.
-[10:52:46] Error: D:/Coding/SafeAppeals2.0/src/vs/workbench/contrib/void/browser/emailWorkspaceService.ts(68,37): Property 'emailAutoParseEnabled' does not exist on type 'GlobalSettings'.
-[10:52:46] Finished compilation with 2 errors after 25 ms
-[10:52:48] Starting compilation...
-[10:52:48] Error: D:/Coding/SafeAppeals2.0/src/vs/workbench/contrib/void/browser/emailWorkspaceService.ts(67,33): Property 'emailDashboardEnabled' does not exist on type 'GlobalSettings'.
-[10:52:48] Error: D:/Coding/SafeAppeals2.0/src/vs/workbench/contrib/void/browser/emailWorkspaceService.ts(68,37): Property 'emailAutoParseEnabled' does not exist on type 'GlobalSettings'.
-[10:52:48] Finished compilation with 2 errors after 39 ms
-[10:52:50] Starting compilation...
-[10:52:50] Error: D:/Coding/SafeAppeals2.0/src/vs/workbench/contrib/void/browser/emailWorkspaceService.ts(67,33): Property 'emailDashboardEnabled' does not exist on type 'GlobalSettings'.
-[10:52:50] Error: D:/Coding/SafeAppeals2.0/src/vs/workbench/contrib/void/browser/emailWorkspaceService.ts(68,37): Property 'emailAutoParseEnabled' does not exist on type 'GlobalSettings'.
-[10:52:50] Finished compilation with 2 errors after 7 ms
 # Create Matching Color Themes for Safe Appeals Navigator Icon Themes
 # This script generates color theme extensions that match each icon theme
 
@@ -123,6 +112,210 @@ $themes = @(
         accentDark = '#3949AB'
         statusBar = '#5C6BC0'
         type = 'dark'
+    },
+    # =====================================================
+    # BLACK + JEWEL/METALLIC ACCENT THEMES
+    # True black backgrounds with rich accent colors
+    # =====================================================
+    @{
+        name = 'black-gold'
+        displayName = 'Black & Gold'
+        description = 'Luxurious black with gold accents - Executive elegance'
+        accent = '#FFD700'
+        accentDark = '#DAA520'
+        statusBar = '#DAA520'
+        type = 'dark'
+        trueBlack = $true
+    },
+    @{
+        name = 'black-emerald'
+        displayName = 'Black & Emerald'
+        description = 'Deep black with emerald accents - Rich and regal'
+        accent = '#50C878'
+        accentDark = '#2E8B57'
+        statusBar = '#2E8B57'
+        type = 'dark'
+        trueBlack = $true
+    },
+    @{
+        name = 'black-ruby'
+        displayName = 'Black & Ruby'
+        description = 'Sleek black with ruby red accents - Bold and passionate'
+        accent = '#E0115F'
+        accentDark = '#9B111E'
+        statusBar = '#9B111E'
+        type = 'dark'
+        trueBlack = $true
+    },
+    @{
+        name = 'black-sapphire'
+        displayName = 'Black & Sapphire'
+        description = 'Pure black with sapphire blue accents - Deep and mysterious'
+        accent = '#0F52BA'
+        accentDark = '#082567'
+        statusBar = '#0F52BA'
+        type = 'dark'
+        trueBlack = $true
+    },
+    @{
+        name = 'black-amethyst'
+        displayName = 'Black & Amethyst'
+        description = 'Noir black with amethyst purple accents - Mystical elegance'
+        accent = '#9966CC'
+        accentDark = '#7B4F9D'
+        statusBar = '#7B4F9D'
+        type = 'dark'
+        trueBlack = $true
+    },
+    @{
+        name = 'black-silver'
+        displayName = 'Black & Silver'
+        description = 'Jet black with silver accents - Sleek and modern'
+        accent = '#C0C0C0'
+        accentDark = '#A8A8A8'
+        statusBar = '#808080'
+        type = 'dark'
+        trueBlack = $true
+    },
+    @{
+        name = 'black-platinum'
+        displayName = 'Black & Platinum'
+        description = 'Obsidian black with platinum accents - Premium finish'
+        accent = '#E5E4E2'
+        accentDark = '#B0B0B0'
+        statusBar = '#9E9E9E'
+        type = 'dark'
+        trueBlack = $true
+    },
+    @{
+        name = 'black-copper'
+        displayName = 'Black & Copper'
+        description = 'Coal black with copper accents - Industrial warmth'
+        accent = '#B87333'
+        accentDark = '#8C5828'
+        statusBar = '#8C5828'
+        type = 'dark'
+        trueBlack = $true
+    },
+    @{
+        name = 'black-bronze'
+        displayName = 'Black & Bronze'
+        description = 'Midnight black with bronze accents - Timeless classic'
+        accent = '#CD7F32'
+        accentDark = '#A56727'
+        statusBar = '#A56727'
+        type = 'dark'
+        trueBlack = $true
+    },
+    @{
+        name = 'black-rosegold'
+        displayName = 'Black & Rose Gold'
+        description = 'Void black with rose gold accents - Feminine sophistication'
+        accent = '#B76E79'
+        accentDark = '#8E5A5F'
+        statusBar = '#B76E79'
+        type = 'dark'
+        trueBlack = $true
+    },
+    @{
+        name = 'black-jade'
+        displayName = 'Black & Jade'
+        description = 'Abyss black with jade green accents - Eastern elegance'
+        accent = '#00A86B'
+        accentDark = '#007A4D'
+        statusBar = '#007A4D'
+        type = 'dark'
+        trueBlack = $true
+    },
+    @{
+        name = 'black-crimson'
+        displayName = 'Black & Crimson'
+        description = 'Shadow black with crimson accents - Dark and intense'
+        accent = '#DC143C'
+        accentDark = '#8B0000'
+        statusBar = '#8B0000'
+        type = 'dark'
+        trueBlack = $true
+    },
+    @{
+        name = 'black-topaz'
+        displayName = 'Black & Topaz'
+        description = 'Ink black with topaz orange accents - Warm and inviting'
+        accent = '#FFC87C'
+        accentDark = '#E59400'
+        statusBar = '#E59400'
+        type = 'dark'
+        trueBlack = $true
+    },
+    @{
+        name = 'black-opal'
+        displayName = 'Black & Opal'
+        description = 'Onyx black with opal iridescent accents - Unique and captivating'
+        accent = '#A8C3BC'
+        accentDark = '#6B8E84'
+        statusBar = '#6B8E84'
+        type = 'dark'
+        trueBlack = $true
+    },
+    @{
+        name = 'black-aquamarine'
+        displayName = 'Black & Aquamarine'
+        description = 'Obsidian black with aquamarine accents - Ocean depths'
+        accent = '#7FFFD4'
+        accentDark = '#3CB371'
+        statusBar = '#3CB371'
+        type = 'dark'
+        trueBlack = $true
+    },
+    @{
+        name = 'black-peridot'
+        displayName = 'Black & Peridot'
+        description = 'Charcoal black with peridot lime accents - Fresh and vibrant'
+        accent = '#B4C424'
+        accentDark = '#8AA31A'
+        statusBar = '#8AA31A'
+        type = 'dark'
+        trueBlack = $true
+    },
+    @{
+        name = 'black-garnet'
+        displayName = 'Black & Garnet'
+        description = 'Deep black with garnet burgundy accents - Wine sophistication'
+        accent = '#733635'
+        accentDark = '#582829'
+        statusBar = '#733635'
+        type = 'dark'
+        trueBlack = $true
+    },
+    @{
+        name = 'black-citrine'
+        displayName = 'Black & Citrine'
+        description = 'Raven black with citrine yellow accents - Sunny optimism'
+        accent = '#E4D00A'
+        accentDark = '#B8A600'
+        statusBar = '#B8A600'
+        type = 'dark'
+        trueBlack = $true
+    },
+    @{
+        name = 'black-turquoise'
+        displayName = 'Black & Turquoise'
+        description = 'Pitch black with turquoise accents - Southwest flair'
+        accent = '#40E0D0'
+        accentDark = '#00CED1'
+        statusBar = '#00CED1'
+        type = 'dark'
+        trueBlack = $true
+    },
+    @{
+        name = 'black-tanzanite'
+        displayName = 'Black & Tanzanite'
+        description = 'Velvet black with tanzanite violet accents - Rare beauty'
+        accent = '#4B0082'
+        accentDark = '#310052'
+        statusBar = '#4B0082'
+        type = 'dark'
+        trueBlack = $true
     }
 )
 
@@ -168,35 +361,78 @@ foreach($theme in $themes) {
     $packageJson | Out-File "$themePath\package.json" -Encoding UTF8
 
     # Create color theme JSON
+    # Use true black backgrounds for black-themed variants
+    $isTrueBlack = $theme.trueBlack -eq $true
+
+    if ($isTrueBlack) {
+        $bgEditor = "#000000"
+        $bgSidebar = "#050505"
+        $bgPanel = "#050505"
+        $bgActivityBar = "#000000"
+        $bgTitleBar = "#000000"
+        $bgTitleBarInactive = "#000000"
+        $bgTabActive = "#0A0A0A"
+        $bgTabInactive = "#000000"
+        $bgTabHeader = "#000000"
+        $bgInput = "#0A0A0A"
+        $bgDropdown = "#0A0A0A"
+        $bgWidget = "#0A0A0A"
+        $bgWelcome = "#050505"
+        $bgSectionHeader = "#0A0A0A"
+        $bgLineHighlight = "#0F0F0F"
+        $bgHover = "#0F0F0F"
+        $borderColor = "#1A1A1A"
+        $inputBorder = "#252525"
+    } else {
+        $bgEditor = "#1E1E1E"
+        $bgSidebar = "#1A1A1A"
+        $bgPanel = "#1A1A1A"
+        $bgActivityBar = "#111111"
+        $bgTitleBar = "#121212"
+        $bgTitleBarInactive = "#0B0B0B"
+        $bgTabActive = "#161616"
+        $bgTabInactive = "#101010"
+        $bgTabHeader = "#101010"
+        $bgInput = "#202020"
+        $bgDropdown = "#202020"
+        $bgWidget = "#202020"
+        $bgWelcome = "#151515"
+        $bgSectionHeader = "#202020"
+        $bgLineHighlight = "#2A2A2A"
+        $bgHover = "#2A2A2A"
+        $borderColor = "#1C1C1C"
+        $inputBorder = "#303030"
+    }
+
     $colorThemeJson = @"
 {
 	"name": "$($theme.displayName)",
 	"type": "$($theme.type)",
 	"colors": {
-		"activityBar.background": "#111111",
+		"activityBar.background": "$bgActivityBar",
 		"activityBar.foreground": "#ffffff",
 		"activityBar.activeBorder": "$($theme.accent)",
 		"activityBar.inactiveForeground": "#ffffff66",
-		"activityBar.border": "#1C1C1C",
+		"activityBar.border": "$borderColor",
 		"activityBarBadge.background": "$($theme.accent)",
 		"activityBarBadge.foreground": "#ffffff",
 
 		"statusBar.background": "$($theme.statusBar)",
 		"statusBar.foreground": "#ffffff",
-		"statusBar.border": "#1C1C1C",
+		"statusBar.border": "$borderColor",
 		"statusBar.noFolderBackground": "$($theme.accentDark)",
 		"statusBar.debuggingBackground": "#FF6B6B",
 		"statusBar.debuggingForeground": "#ffffff",
 
-		"titleBar.activeBackground": "#121212",
+		"titleBar.activeBackground": "$bgTitleBar",
 		"titleBar.activeForeground": "#CCCCCC",
-		"titleBar.inactiveBackground": "#0B0B0B",
+		"titleBar.inactiveBackground": "$bgTitleBarInactive",
 		"titleBar.inactiveForeground": "#999999",
-		"titleBar.border": "#1C1C1C",
+		"titleBar.border": "$borderColor",
 
-		"editor.background": "#1E1E1E",
+		"editor.background": "$bgEditor",
 		"editor.foreground": "#D4D4D4",
-		"editor.lineHighlightBackground": "#2A2A2A",
+		"editor.lineHighlightBackground": "$bgLineHighlight",
 		"editor.selectionBackground": "#264F78",
 		"editorCursor.foreground": "$($theme.accent)",
 		"editorLineNumber.foreground": "#858585",
@@ -205,27 +441,27 @@ foreach($theme in $themes) {
 		"editorIndentGuide.activeBackground": "$($theme.accent)",
 		"editorWhitespace.foreground": "#404040",
 
-		"tab.activeBackground": "#161616",
-		"tab.inactiveBackground": "#101010",
+		"tab.activeBackground": "$bgTabActive",
+		"tab.inactiveBackground": "$bgTabInactive",
 		"tab.activeForeground": "#ffffff",
 		"tab.inactiveForeground": "#808080",
 		"tab.activeBorderTop": "$($theme.accent)",
-		"tab.border": "#101010",
-		"tab.hoverBackground": "#1A1A1A",
+		"tab.border": "$bgTabInactive",
+		"tab.hoverBackground": "$bgHover",
 		"tab.unfocusedActiveBorderTop": "$($theme.accentDark)",
-		"editorGroupHeader.tabsBackground": "#101010",
-		"editorGroupHeader.tabsBorder": "#101010",
+		"editorGroupHeader.tabsBackground": "$bgTabHeader",
+		"editorGroupHeader.tabsBorder": "$bgTabHeader",
 
-		"sideBar.background": "#1A1A1A",
+		"sideBar.background": "$bgSidebar",
 		"sideBar.foreground": "#CCCCCC",
-		"sideBar.border": "#1C1C1C",
+		"sideBar.border": "$borderColor",
 		"sideBarTitle.foreground": "#ffffff",
-		"sideBarSectionHeader.background": "#202020",
+		"sideBarSectionHeader.background": "$bgSectionHeader",
 		"sideBarSectionHeader.foreground": "#ffffff",
-		"sideBarSectionHeader.border": "#1C1C1C",
+		"sideBarSectionHeader.border": "$borderColor",
 
-		"panel.background": "#1A1A1A",
-		"panel.border": "#1C1C1C",
+		"panel.background": "$bgPanel",
+		"panel.border": "$borderColor",
 		"panelTitle.activeBorder": "$($theme.accent)",
 		"panelTitle.activeForeground": "#ffffff",
 		"panelTitle.inactiveForeground": "#808080",
@@ -237,8 +473,8 @@ foreach($theme in $themes) {
 		"button.secondaryForeground": "#ffffff",
 		"button.secondaryHoverBackground": "#45494E",
 
-		"input.background": "#202020",
-		"input.border": "#303030",
+		"input.background": "$bgInput",
+		"input.border": "$inputBorder",
 		"input.foreground": "#CCCCCC",
 		"input.placeholderForeground": "#808080",
 		"inputOption.activeBorder": "$($theme.accent)",
@@ -247,21 +483,21 @@ foreach($theme in $themes) {
 		"inputValidation.warningBorder": "#F39C12",
 		"inputValidation.infoBorder": "$($theme.accent)",
 
-		"dropdown.background": "#202020",
-		"dropdown.border": "#303030",
+		"dropdown.background": "$bgDropdown",
+		"dropdown.border": "$inputBorder",
 		"dropdown.foreground": "#CCCCCC",
 
 		"list.activeSelectionBackground": "$($theme.accentDark)66",
 		"list.activeSelectionForeground": "#ffffff",
-		"list.hoverBackground": "#2A2A2A",
+		"list.hoverBackground": "$bgHover",
 		"list.inactiveSelectionBackground": "#37373D",
 		"list.focusOutline": "$($theme.accent)",
 		"list.highlightForeground": "$($theme.accent)",
-		"list.focusBackground": "#2A2A2A",
+		"list.focusBackground": "$bgHover",
 
-		"scrollbarSlider.background": "#79797933",
-		"scrollbarSlider.hoverBackground": "#646464b3",
-		"scrollbarSlider.activeBackground": "#bfbfbf66",
+		"scrollbarSlider.background": "#4a4a4aaa",
+		"scrollbarSlider.hoverBackground": "#646464ee",
+		"scrollbarSlider.activeBackground": "#808080ff",
 
 		"badge.background": "$($theme.accent)",
 		"badge.foreground": "#ffffff",
@@ -269,13 +505,13 @@ foreach($theme in $themes) {
 		"progressBar.background": "$($theme.accent)",
 
 		"notificationCenter.border": "$($theme.accent)",
-		"notificationCenterHeader.background": "#1A1A1A",
-		"notifications.background": "#1A1A1A",
+		"notificationCenterHeader.background": "$bgPanel",
+		"notifications.background": "$bgPanel",
 		"notifications.border": "$($theme.accent)",
 		"notifications.foreground": "#CCCCCC",
 		"notificationLink.foreground": "$($theme.accent)",
 
-		"terminal.background": "#1A1A1A",
+		"terminal.background": "$bgPanel",
 		"terminal.foreground": "#CCCCCC",
 		"terminal.ansiBlack": "#000000",
 		"terminal.ansiRed": "#E74C3C",
@@ -297,22 +533,22 @@ foreach($theme in $themes) {
 		"textLink.foreground": "$($theme.accent)",
 		"textLink.activeForeground": "$($theme.accentDark)",
 		"textPreformat.foreground": "#D4D4D4",
-		"textBlockQuote.background": "#1A1A1A",
-		"textCodeBlock.background": "#1A1A1A",
+		"textBlockQuote.background": "$bgPanel",
+		"textCodeBlock.background": "$bgPanel",
 
 		"widget.shadow": "#00000080",
-		"editorWidget.background": "#202020",
+		"editorWidget.background": "$bgWidget",
 		"editorWidget.foreground": "#CCCCCC",
-		"editorWidget.border": "#303030",
+		"editorWidget.border": "$inputBorder",
 
 		"pickerGroup.border": "$($theme.accent)",
 		"pickerGroup.foreground": "$($theme.accent)",
 
-		"debugToolBar.background": "#202020",
-		"debugToolBar.border": "#303030",
+		"debugToolBar.background": "$bgWidget",
+		"debugToolBar.border": "$inputBorder",
 
-		"welcomePage.tileBackground": "#151515",
-		"welcomePage.tileBorder": "#1C1C1C",
+		"welcomePage.tileBackground": "$bgWelcome",
+		"welcomePage.tileBorder": "$borderColor",
 		"welcomePage.buttonBackground": "$($theme.accent)",
 		"welcomePage.buttonHoverBackground": "$($theme.accentDark)",
 
@@ -451,7 +687,7 @@ MIT License - Copyright (c) 2025 Safe Appeals Navigator
 }
 
 Write-Host ""
-Write-Host "✅ All 12 color theme extensions created!" -ForegroundColor Green
+Write-Host "✅ All $($themes.Count) color theme extensions created!" -ForegroundColor Green
 Write-Host ""
 Write-Host "📋 Next steps:" -ForegroundColor Yellow
 Write-Host "1. Run the product.json registration script (see below)"

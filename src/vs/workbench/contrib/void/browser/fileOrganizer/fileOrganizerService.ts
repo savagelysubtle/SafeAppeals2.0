@@ -11,11 +11,11 @@ import { IWorkspaceContextService } from '../../../../../platform/workspace/comm
 
 import { IFileService } from '../../../../../platform/files/common/files.js';
 import { createDecorator } from '../../../../../platform/instantiation/common/instantiation.js';
-import { ILLMMessageService } from '../../common/sendLLMMessageService.js';
 import { IVoidSettingsService } from '../../common/voidSettingsService.js';
+import { ICloudLLMRouterService } from '../cloudLLMRouterService.js';
 import { AIFileClassifier } from './aiClassifier.js';
-import { CaseInfo, FileOrgConfig } from './caseConfig.js';
-import { DocketItem, FileChange, FileMetadata, ProcessResult, Rule } from './types.js';
+import { CaseInfo, FileOrgConfig, normalizeConfig } from './caseConfig.js';
+import { DocketItem, FileChange, FileMetadata, ProcessResult, Rule, OrganizerConfig, DEFAULT_ORGANIZER_CONFIG } from './types.js';
 
 export const IFileOrganizerService = createDecorator<IFileOrganizerService>('fileOrganizerService');
 
@@ -86,8 +86,15 @@ export interface IFileOrganizerService {
 
 	/**
 	 * Classify a single file with case context using AI
+	 * @param template The template type for classification context ('legal', 'research', 'business')
 	 */
-	classifySingleFile(file: DocketItem, caseInfo: CaseInfo | null): Promise<DocketItem>;
+	classifySingleFile(file: DocketItem, caseInfo: CaseInfo | null, template?: 'legal' | 'research' | 'business'): Promise<DocketItem>;
+
+	/**
+	 * Classify a single file with user feedback for correction
+	 * @param feedback User's explanation of what the AI got wrong
+	 */
+	classifySingleFileWithFeedback(file: DocketItem, caseInfo: CaseInfo | null, template: 'legal' | 'research' | 'business', feedback: string): Promise<DocketItem>;
 
 	/**
 	 * Move a file to its destination
@@ -108,6 +115,22 @@ export interface IFileOrganizerService {
 	 * Open a folder in the OS file explorer
 	 */
 	revealInExplorer(folderPath: string): Promise<void>;
+
+	/**
+	 * Initialize folder structure from a template
+	 * @param template The template type: 'legal', 'research', or 'business'
+	 */
+	initializeFoldersFromTemplate(template: 'legal' | 'research' | 'business'): Promise<void>;
+
+	/**
+	 * Save organizer configuration (custom templates, inbox path, behavior settings)
+	 */
+	saveOrganizerConfig(config: OrganizerConfig): Promise<void>;
+
+	/**
+	 * Load organizer configuration
+	 */
+	loadOrganizerConfig(): Promise<OrganizerConfig | null>;
 }
 
 export class FileOrganizerService implements IFileOrganizerService {
@@ -126,10 +149,10 @@ export class FileOrganizerService implements IFileOrganizerService {
 		@IFileService private readonly fileService: IFileService,
 		@IFileDialogService private readonly fileDialogService: IFileDialogService,
 		@IWorkspaceContextService private readonly contextService: IWorkspaceContextService,
-		@ILLMMessageService llmMessageService: ILLMMessageService,
+		@ICloudLLMRouterService cloudLLMRouterService: ICloudLLMRouterService,
 		@IVoidSettingsService voidSettingsService: IVoidSettingsService
 	) {
-		this.aiClassifier = new AIFileClassifier(llmMessageService, voidSettingsService);
+		this.aiClassifier = new AIFileClassifier(cloudLLMRouterService, voidSettingsService);
 	}
 
 	async selectFiles(): Promise<URI[]> {
@@ -496,8 +519,16 @@ export class FileOrganizerService implements IFileOrganizerService {
 			}
 
 			const content = await this.fileService.readFile(configUri);
-			const config = JSON.parse(content.value.toString()) as FileOrgConfig;
-			console.log('[FileOrganizerService] Case config loaded from:', configUri.toString());
+			const rawConfig = JSON.parse(content.value.toString());
+
+			// Normalize the config to handle legacy schemas and ensure all fields exist
+			const config = normalizeConfig(rawConfig);
+			if (!config) {
+				console.warn('[FileOrganizerService] Invalid case config format, could not normalize');
+				return null;
+			}
+
+			console.log('[FileOrganizerService] Case config loaded and normalized from:', configUri.toString());
 			return config;
 		} catch (error) {
 			console.error('[FileOrganizerService] Error loading case config:', error);
@@ -663,8 +694,8 @@ export class FileOrganizerService implements IFileOrganizerService {
 		}
 	}
 
-	async classifySingleFile(file: DocketItem, caseInfo: CaseInfo | null): Promise<DocketItem> {
-		console.log('[FileOrganizerService] Classifying file with AI:', file.name);
+	async classifySingleFile(file: DocketItem, caseInfo: CaseInfo | null, template: 'legal' | 'research' | 'business' = 'legal'): Promise<DocketItem> {
+		console.log('[FileOrganizerService] Classifying file with AI:', file.name, 'template:', template);
 
 		// Update status to analyzing
 		const analyzingFile: DocketItem = {
@@ -684,7 +715,7 @@ export class FileOrganizerService implements IFileOrganizerService {
 					evidence: []
 				}
 			};
-			const result = await this.aiClassifier.classifyFileWithContext(file, effectiveCaseInfo);
+			const result = await this.aiClassifier.classifyFileWithContext(file, effectiveCaseInfo, template);
 
 			if (!result) {
 				console.warn('[FileOrganizerService] AI classification returned null');
@@ -720,6 +751,76 @@ export class FileOrganizerService implements IFileOrganizerService {
 			return classifiedFile;
 		} catch (error) {
 			console.error('[FileOrganizerService] Error classifying file:', error);
+			return {
+				...analyzingFile,
+				docketStatus: 'error'
+			};
+		}
+	}
+
+	async classifySingleFileWithFeedback(
+		file: DocketItem,
+		caseInfo: CaseInfo | null,
+		template: 'legal' | 'research' | 'business' = 'legal',
+		feedback: string
+	): Promise<DocketItem> {
+		console.log('[FileOrganizerService] Reclassifying with feedback:', file.name, 'Feedback:', feedback);
+
+		// Update status to analyzing
+		const analyzingFile: DocketItem = {
+			...file,
+			docketStatus: 'analyzing'
+		};
+
+		try {
+			// Use AI classifier with feedback context
+			const effectiveCaseInfo: CaseInfo = caseInfo || {
+				caseType: 'Workers Compensation',
+				keywords: {
+					yourSide: [],
+					theirSide: [],
+					medical: [],
+					legal: [],
+					evidence: []
+				}
+			};
+
+			const result = await this.aiClassifier.classifyFileWithFeedback(file, effectiveCaseInfo, template, feedback);
+
+			if (!result) {
+				console.warn('[FileOrganizerService] AI reclassification returned null');
+				return {
+					...analyzingFile,
+					docketStatus: 'error'
+				};
+			}
+
+			// Convert AI result to docket item
+			const classifiedFile: DocketItem = {
+				...analyzingFile,
+				docketStatus: 'ready',
+				aiConfidence: result.confidence,
+				classification: result.side && result.side !== 'Neutral' ? result.side : 'Unknown',
+				classificationMethod: 'ai',
+				entityMatches: result.entityMatches,
+				suggestedTags: result.tags.map(tag => ({
+					id: tag,
+					name: tag,
+					type: 'category' as const
+				})),
+				suggestedFolder: result.suggestedFolder
+			};
+
+			console.log('[FileOrganizerService] Reclassification with feedback complete:', {
+				name: file.name,
+				side: result.side,
+				folder: result.suggestedFolder,
+				feedback: feedback
+			});
+
+			return classifiedFile;
+		} catch (error) {
+			console.error('[FileOrganizerService] Error reclassifying with feedback:', error);
 			return {
 				...analyzingFile,
 				docketStatus: 'error'
@@ -804,6 +905,129 @@ export class FileOrganizerService implements IFileOrganizerService {
 		} catch (error) {
 			console.error('[FileOrganizerService] Failed to reveal folder:', error);
 		}
+	}
+
+	async initializeFoldersFromTemplate(template: 'legal' | 'research' | 'business'): Promise<void> {
+		const workspace = this.contextService.getWorkspace();
+		const workspaceFolder = workspace.folders?.[0]?.uri;
+
+		if (!workspaceFolder) {
+			console.warn('[FileOrganizerService] No workspace folder available for template initialization');
+			return;
+		}
+
+		// Template folder structures matching FilingCabinet.tsx
+		const TEMPLATE_FOLDERS: Record<'legal' | 'research' | 'business', string[]> = {
+			legal: [
+				'01_Your_Side/Medical_Treating',
+				'01_Your_Side/Legal_Representation',
+				'01_Your_Side/Personal_Statements',
+				'02_Their_Side/IME_Reports',
+				'02_Their_Side/Employer_Defense',
+				'02_Their_Side/WCB_Decisions',
+				'03_Correspondence/Incoming',
+				'03_Correspondence/Outgoing',
+				'04_Timeline_Evidence',
+				'05_Appeals',
+				'06_Reference/Templates',
+				'Core_References',
+			],
+			research: [
+				'01_Literature/Primary_Sources',
+				'01_Literature/Secondary_Sources',
+				'01_Literature/References',
+				'02_Data/Raw',
+				'02_Data/Processed',
+				'02_Data/Analysis',
+				'03_Drafts',
+				'04_Final',
+				'05_Notes',
+				'Core_References',
+			],
+			business: [
+				'01_Admin/Contracts',
+				'01_Admin/Invoices',
+				'01_Admin/Licenses',
+				'02_Planning/Requirements',
+				'02_Planning/Proposals',
+				'03_Working',
+				'04_Deliverables',
+				'05_Communications/Internal',
+				'05_Communications/External',
+				'Archive',
+				'Core_References',
+			],
+		};
+
+		const folders = TEMPLATE_FOLDERS[template];
+		console.log(`[FileOrganizerService] Initializing ${template} template folders...`);
+
+		for (const folder of folders) {
+			const folderUri = URI.joinPath(workspaceFolder, folder);
+			try {
+				if (!(await this.fileService.exists(folderUri))) {
+					await this.fileService.createFolder(folderUri);
+					console.log(`[FileOrganizerService] Created folder: ${folder}`);
+				}
+			} catch (error) {
+				console.error(`[FileOrganizerService] Failed to create folder ${folder}:`, error);
+			}
+		}
+
+		console.log(`[FileOrganizerService] ${template} template folders initialized`);
+	}
+
+	// ============================================================================
+	// ORGANIZER CONFIG PERSISTENCE
+	// ============================================================================
+
+	async saveOrganizerConfig(config: OrganizerConfig): Promise<void> {
+		const workspace = this.contextService.getWorkspace();
+		const workspaceFolder = workspace.folders?.[0]?.uri;
+
+		if (!workspaceFolder) {
+			console.warn('[FileOrganizerService] No workspace folder, cannot save organizer config');
+			return;
+		}
+
+		const configUri = URI.joinPath(workspaceFolder, '.fileorg-settings.json');
+		const content = JSON.stringify(config, null, 2);
+
+		try {
+			await this.fileService.writeFile(
+				configUri,
+				VSBuffer.fromString(content)
+			);
+			console.log('[FileOrganizerService] Organizer config saved');
+		} catch (error) {
+			console.error('[FileOrganizerService] Failed to save organizer config:', error);
+			throw error;
+		}
+	}
+
+	async loadOrganizerConfig(): Promise<OrganizerConfig | null> {
+		const workspace = this.contextService.getWorkspace();
+		const workspaceFolder = workspace.folders?.[0]?.uri;
+
+		if (!workspaceFolder) {
+			console.warn('[FileOrganizerService] No workspace folder, cannot load organizer config');
+			return null;
+		}
+
+		const configUri = URI.joinPath(workspaceFolder, '.fileorg-settings.json');
+
+		try {
+			if (await this.fileService.exists(configUri)) {
+				const content = await this.fileService.readFile(configUri);
+				const config = JSON.parse(content.value.toString()) as OrganizerConfig;
+				console.log('[FileOrganizerService] Organizer config loaded');
+				return config;
+			}
+		} catch (error) {
+			console.warn('[FileOrganizerService] Failed to load organizer config:', error);
+		}
+
+		return DEFAULT_ORGANIZER_CONFIG;
 	}
 }
 

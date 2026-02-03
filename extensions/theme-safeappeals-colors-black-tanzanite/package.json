@@ -1,0 +1,21 @@
+﻿{
+	"name": "theme-safeappeals-colors-black-tanzanite",
+	"displayName": "Black & Tanzanite",
+	"description": "Velvet black with tanzanite violet accents - Rare beauty",
+	"version": "1.0.0",
+	"publisher": "safeappeals",
+	"license": "MIT",
+	"engines": {
+		"vscode": "*"
+	},
+	"categories": ["Themes"],
+	"contributes": {
+		"themes": [
+			{
+				"label": "Black & Tanzanite",
+				"uiTheme": "vs-dark",
+				"path": "./themes/black-tanzanite-color-theme.json"
+			}
+		]
+	}
+}

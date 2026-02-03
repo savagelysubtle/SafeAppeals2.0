@@ -3,21 +3,83 @@
  *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
  *--------------------------------------------------------------------------------------*/
 
-import React, { useCallback, useState } from "react";
 import { AlertTriangle, Cloud, LogIn, LogOut, RefreshCw, User, WifiOff } from "lucide-react";
-import { VoidButtonBgDarken } from "../util/inputs.js";
-import { useAccessor, useVoidCloudState } from "../util/services.js";
+import { useCallback, useEffect, useState } from "react";
+import { ProviderName } from "../../../../common/voidSettingsTypes.js";
 import ErrorBoundary from "../sidebar-tsx/ErrorBoundary.js";
+import { VoidButtonBgDarken } from "../util/inputs.js";
+import { useAccessor, useSettingsState, useVoidCloudState } from "../util/services.js";
 
 const LOW_CREDITS_THRESHOLD = 1000;
 
+// Providers supported by SafeAppeals Cloud
+const cloudSupportedProviderNames: ProviderName[] = ['anthropic', 'openAI', 'gemini'];
+
 export const VoidCloudSection = () => {
 	const accessor = useAccessor();
+	const voidSettingsService = accessor.get('IVoidSettingsService');
+	const settingsState = useSettingsState();
 	const { authState, creditBalance, isOnline, signInWithGoogle, signOut, createCheckoutSession, refreshBalance } = useVoidCloudState();
 
 	// Track signing in state locally (for spinner)
 	const [isSigningIn, setIsSigningIn] = useState(false);
 	const [isRefreshing, setIsRefreshing] = useState(false);
+
+	// Check if cloud providers need to be enabled
+	const needsCloudSetup = authState.status === 'signed_in' && (
+		!settingsState.globalSettings.voidCloudEnabled ||
+		cloudSupportedProviderNames.some(pn => !settingsState.globalSettings.voidCloudModeOfProvider[pn]) ||
+		cloudSupportedProviderNames.some(pn => !settingsState.settingsOfProvider[pn]._didFillInProviderSettings) ||
+		cloudSupportedProviderNames.some(pn =>
+			settingsState.settingsOfProvider[pn].models.some(m => m.isHidden)
+		) ||
+		settingsState.modelSelectionOfFeature['Chat'] === null
+	);
+
+	// Auto-enable cloud mode for all supported providers when user is signed in
+	// Runs whenever needsCloudSetup is true
+	useEffect(() => {
+		if (!needsCloudSetup) return;
+
+		// Enable cloud globally
+		if (!settingsState.globalSettings.voidCloudEnabled) {
+			voidSettingsService.setGlobalSetting('voidCloudEnabled', true);
+		}
+
+		// Enable cloud mode for all supported providers
+		const currentCloudModes = settingsState.globalSettings.voidCloudModeOfProvider;
+		const needsCloudModeUpdate = cloudSupportedProviderNames.some(pn => !currentCloudModes[pn]);
+
+		if (needsCloudModeUpdate) {
+			const newCloudModes = { ...currentCloudModes };
+			for (const providerName of cloudSupportedProviderNames) {
+				newCloudModes[providerName] = true;
+			}
+			voidSettingsService.setGlobalSetting('voidCloudModeOfProvider', newCloudModes);
+		}
+
+		// Enable all cloud-supported providers and unhide their models
+		for (const providerName of cloudSupportedProviderNames) {
+			// Unhide (enable) the first hidden model for this provider (one at a time to avoid state issues)
+			const models = settingsState.settingsOfProvider[providerName].models;
+			const firstHiddenModel = models.find(m => m.isHidden);
+			if (firstHiddenModel) {
+				voidSettingsService.toggleModelHidden(providerName, firstHiddenModel.modelName);
+				return; // Return early to let state update, effect will re-run
+			}
+		}
+
+		// Auto-select a default model for Chat if none is selected
+		const defaultCloudModel = { providerName: 'anthropic' as ProviderName, modelName: 'claude-sonnet-4.5' };
+
+		if (settingsState.modelSelectionOfFeature['Chat'] === null) {
+			voidSettingsService.setModelSelectionOfFeature('Chat', defaultCloudModel);
+		}
+		// Also set for Quick Edit (Ctrl+K) if not set
+		if (settingsState.modelSelectionOfFeature['Ctrl+K'] === null) {
+			voidSettingsService.setModelSelectionOfFeature('Ctrl+K', defaultCloudModel);
+		}
+	}, [needsCloudSetup, settingsState, voidSettingsService]);
 
 	const handleSignIn = useCallback(async () => {
 		try {
@@ -52,7 +114,7 @@ export const VoidCloudSection = () => {
 		async (pack: "starter" | "pro") => {
 			try {
 				const nativeHostService = accessor.get("INativeHostService");
-				await nativeHostService.openExternal("https://safeappeals-cloud.vercel.app");
+				await nativeHostService.openExternal("https://safeappeals.com/");
 			} catch (error) {
 				console.error("Buy credits failed:", error);
 			}

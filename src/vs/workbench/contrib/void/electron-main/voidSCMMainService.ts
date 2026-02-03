@@ -21,7 +21,9 @@ const MAX_DIFF_FILES = 10
 
 const git = async (command: string, path: string): Promise<string> => {
 	const { stdout, stderr } = await exec(`${command}`, { cwd: path })
-	if (stderr) {
+	// For diff operations, stderr might contain warnings that aren't fatal errors
+	// Only treat stderr as an error if it's not a diff command or if it contains actual error indicators
+	if (stderr && !command.includes('diff') && !stderr.includes('does not seem to be')) {
 		throw new Error(stderr)
 	}
 	return stdout.trim()
@@ -43,9 +45,16 @@ const getNumStat = async (path: string, useStagedChanges: boolean): Promise<NumS
 }
 
 const getSampledDiff = async (file: string, path: string, useStagedChanges: boolean): Promise<string> => {
-	const staged = useStagedChanges ? '--staged' : ''
-	const diff = await git(`git diff --unified=0 --no-color ${staged} -- "${file}"`, path)
-	return diff.slice(0, MAX_DIFF_LENGTH)
+	try {
+		const staged = useStagedChanges ? '--staged' : ''
+		const diff = await git(`git diff --unified=0 --no-color ${staged} -- "${file}"`, path)
+		return diff.slice(0, MAX_DIFF_LENGTH)
+	} catch (error: any) {
+		// Handle cases where git diff fails (e.g., binary files, LFS issues)
+		// Return empty string for binary files that can't be diffed
+		console.warn(`Failed to get diff for ${file}: ${error.message}`)
+		return `[Binary file or diff unavailable: ${file}]`
+	}
 }
 
 const hasStagedChanges = async (path: string): Promise<boolean> => {

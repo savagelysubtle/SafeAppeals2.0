@@ -1,0 +1,41 @@
+2026-01-26 19:27:30 - 20260126_192730_9bab0e3e - root - INFO - logger._configure_programmatic_logging:343 - Logging configured programmatically. Session ID: 20260126_192730_9bab0e3e. File log: D:\Coding\SafeAppeals2.0\python\logs\python\app_session_20260126_192730_9bab0e3e.log
+2026-01-26 19:27:30 - 20260126_192730_9bab0e3e - aichemist_codex.electron_bridge - INFO - electron_bridge.main:40 - Electron bridge starting
+2026-01-26 19:27:30 - 20260126_192730_9bab0e3e - aichemist_codex.electron_bridge - DEBUG - argument_parser.validate:62 - Validating arguments for mode: convert
+2026-01-26 19:27:30 - 20260126_192730_9bab0e3e - aichemist_codex.electron_bridge - DEBUG - argument_parser._validate_convert:84 - Validating convert mode arguments
+2026-01-26 19:27:30 - 20260126_192730_9bab0e3e - aichemist_codex.electron_bridge - DEBUG - base.validate_file_exists:150 - Validating file exists: d:\Coding\test3\YourSide_BACKUP_2026-01-19\Chiropractor First Report.PDF
+2026-01-26 19:27:30 - 20260126_192730_9bab0e3e - aichemist_codex.electron_bridge - DEBUG - base.validate_file_exists:160 - File validation passed: d:\Coding\test3\YourSide_BACKUP_2026-01-19\Chiropractor First Report.PDF
+2026-01-26 19:27:30 - 20260126_192730_9bab0e3e - aichemist_codex.electron_bridge - DEBUG - base.validate_output_directory:178 - Validating output directory: C:\Users\Steve\AppData\Local\Temp\ocr-4e721ffa
+2026-01-26 19:27:30 - 20260126_192730_9bab0e3e - aichemist_codex.electron_bridge - DEBUG - base.validate_output_directory:188 - Output directory is writable: C:\Users\Steve\AppData\Local\Temp\ocr-4e721ffa
+2026-01-26 19:27:30 - 20260126_192730_9bab0e3e - aichemist_codex.electron_bridge - DEBUG - argument_parser.validate:74 - Argument validation passed
+2026-01-26 19:27:30 - 20260126_192730_9bab0e3e - aichemist_codex.electron_bridge - INFO - electron_bridge.main:45 - Bridge mode: convert, type: pdf2images
+2026-01-26 19:27:30 - 20260126_192730_9bab0e3e - aichemist_codex.electron_bridge - DEBUG - progress_reporter.report:55 - Reporting progress: 0/100 - Initializing conversion...
+2026-01-26 19:27:30 - 20260126_192730_9bab0e3e - aichemist_codex.electron_bridge - DEBUG - base.send_json_message:49 - Sending PROGRESS message: {"current": 0, "total": 100, "message": "Initializing conversion...", "type": "single_progress", "filename": ""}...
+2026-01-26 19:27:30 - 20260126_192730_9bab0e3e - aichemist_codex.electron_bridge - ERROR - conversion_handler.handle_conversion:415 - [BRIDGE_004] Unexpected error: [Errno 22] Invalid argument
+Traceback (most recent call last):
+  File "D:\Coding\SafeAppeals2.0\python\transmutation_codex\adapters\bridges\conversion_handler.py", line 391, in handle_conversion
+    handle_single_conversion(args, reporter)
+    ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^
+  File "D:\Coding\SafeAppeals2.0\python\transmutation_codex\adapters\bridges\conversion_handler.py", line 37, in handle_single_conversion
+    reporter.start_operation(100, "Initializing conversion...")
+    ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Coding\SafeAppeals2.0\python\transmutation_codex\adapters\bridges\progress_reporter.py", line 144, in start_operation
+    self.report(0, total_steps, message)
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Coding\SafeAppeals2.0\python\transmutation_codex\adapters\bridges\progress_reporter.py", line 56, in report
+    send_progress(current, total, message, progress_type, filename or self.current_file)
+    ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Coding\SafeAppeals2.0\python\transmutation_codex\adapters\bridges\base.py", line 79, in send_progress
+    send_json_message("PROGRESS", {
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^
+        "current": current,
+        ^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+        "filename": filename
+        ^^^^^^^^^^^^^^^^^^^^
+    })
+    ^^
+  File "D:\Coding\SafeAppeals2.0\python\transmutation_codex\adapters\bridges\base.py", line 50, in send_json_message
+    print(f"{message_type}:{json_str}", flush=True)
+    ~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+OSError: [Errno 22] Invalid argument
+2026-01-26 19:27:30 - 20260126_192730_9bab0e3e - aichemist_codex.electron_bridge - INFO - electron_bridge.main:50 - Electron bridge exiting with code 1

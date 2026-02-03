@@ -1,0 +1,23 @@
+2026-01-26 22:59:05 - 20260126_225905_9fe08231 - root - INFO - logger._configure_programmatic_logging:343 - Logging configured programmatically. Session ID: 20260126_225905_9fe08231. File log: D:\Coding\SafeAppeals2.0\python\logs\python\app_session_20260126_225905_9fe08231.log
+2026-01-26 22:59:05 - 20260126_225905_9fe08231 - aichemist_codex.electron_bridge - INFO - electron_bridge.main:40 - Electron bridge starting
+2026-01-26 22:59:05 - 20260126_225905_9fe08231 - aichemist_codex.electron_bridge - DEBUG - argument_parser.validate:62 - Validating arguments for mode: convert
+2026-01-26 22:59:05 - 20260126_225905_9fe08231 - aichemist_codex.electron_bridge - DEBUG - argument_parser._validate_convert:84 - Validating convert mode arguments
+2026-01-26 22:59:05 - 20260126_225905_9fe08231 - aichemist_codex.electron_bridge - DEBUG - base.validate_file_exists:150 - Validating file exists: C:\Users\Steve\AppData\Local\Temp\ocr-11ab485d\page_%03d.png
+2026-01-26 22:59:05 - 20260126_225905_9fe08231 - aichemist_codex.electron_bridge - ERROR - base.validate_file_exists:158 - [VALIDATION_002] Input file is not a file: C:\Users\Steve\AppData\Local\Temp\ocr-11ab485d\page_%03d.png
+2026-01-26 22:59:05 - 20260126_225905_9fe08231 - aichemist_codex.electron_bridge - ERROR - electron_bridge.main:58 - [BRIDGE_004] Bridge error: Input file is not a file: C:\Users\Steve\AppData\Local\Temp\ocr-11ab485d\page_%03d.png
+Traceback (most recent call last):
+  File "D:\Coding\SafeAppeals2.0\python\transmutation_codex\adapters\bridges\electron_bridge.py", line 43, in main
+    args = parse_legacy_arguments()
+  File "D:\Coding\SafeAppeals2.0\python\transmutation_codex\adapters\bridges\argument_parser.py", line 467, in parse_legacy_arguments
+    bridge_args.validate()
+    ~~~~~~~~~~~~~~~~~~~~^^
+  File "D:\Coding\SafeAppeals2.0\python\transmutation_codex\adapters\bridges\argument_parser.py", line 65, in validate
+    self._validate_convert()
+    ~~~~~~~~~~~~~~~~~~~~~~^^
+  File "D:\Coding\SafeAppeals2.0\python\transmutation_codex\adapters\bridges\argument_parser.py", line 96, in _validate_convert
+    validate_file_exists(self.input_path, "Input file")
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Coding\SafeAppeals2.0\python\transmutation_codex\adapters\bridges\base.py", line 159, in validate_file_exists
+    raise BridgeValidationError(f"{file_description} is not a file: {file_path}")
+transmutation_codex.adapters.bridges.base.BridgeValidationError: Input file is not a file: C:\Users\Steve\AppData\Local\Temp\ocr-11ab485d\page_%03d.png
+2026-01-26 22:59:05 - 20260126_225905_9fe08231 - aichemist_codex.electron_bridge - DEBUG - base.send_json_message:49 - Sending ERROR message: {"error": "Bridge error: Input file is not a file: C:\\Users\\Steve\\AppData\\Local\\Temp\\ocr-11ab485d\\page_%03d.png", "type": "bridge_error", "error_code": "BRIDGE_004"}...

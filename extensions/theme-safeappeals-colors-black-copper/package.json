@@ -1,0 +1,21 @@
+﻿{
+	"name": "theme-safeappeals-colors-black-copper",
+	"displayName": "Black & Copper",
+	"description": "Coal black with copper accents - Industrial warmth",
+	"version": "1.0.0",
+	"publisher": "safeappeals",
+	"license": "MIT",
+	"engines": {
+		"vscode": "*"
+	},
+	"categories": ["Themes"],
+	"contributes": {
+		"themes": [
+			{
+				"label": "Black & Copper",
+				"uiTheme": "vs-dark",
+				"path": "./themes/black-copper-color-theme.json"
+			}
+		]
+	}
+}

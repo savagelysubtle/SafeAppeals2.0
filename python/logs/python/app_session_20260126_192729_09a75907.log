@@ -1,0 +1,61 @@
+2026-01-26 19:27:29 - 20260126_192729_09a75907 - root - INFO - logger._configure_programmatic_logging:343 - Logging configured programmatically. Session ID: 20260126_192729_09a75907. File log: D:\Coding\SafeAppeals2.0\python\logs\python\app_session_20260126_192729_09a75907.log
+2026-01-26 19:27:30 - 20260126_192729_09a75907 - aichemist_codex.electron_bridge - INFO - electron_bridge.main:40 - Electron bridge starting
+2026-01-26 19:27:30 - 20260126_192729_09a75907 - aichemist_codex.electron_bridge - DEBUG - argument_parser.validate:62 - Validating arguments for mode: convert
+2026-01-26 19:27:30 - 20260126_192729_09a75907 - aichemist_codex.electron_bridge - DEBUG - argument_parser._validate_convert:84 - Validating convert mode arguments
+2026-01-26 19:27:30 - 20260126_192729_09a75907 - aichemist_codex.electron_bridge - DEBUG - base.validate_file_exists:150 - Validating file exists: d:\Coding\test3\YourSide_BACKUP_2026-01-19\C18 Cast IronFrame and lid.pdf
+2026-01-26 19:27:30 - 20260126_192729_09a75907 - aichemist_codex.electron_bridge - DEBUG - base.validate_file_exists:160 - File validation passed: d:\Coding\test3\YourSide_BACKUP_2026-01-19\C18 Cast IronFrame and lid.pdf
+2026-01-26 19:27:30 - 20260126_192729_09a75907 - aichemist_codex.electron_bridge - DEBUG - base.validate_output_directory:178 - Validating output directory: C:\Users\Steve\AppData\Local\Temp\ocr-39b28bd6
+2026-01-26 19:27:30 - 20260126_192729_09a75907 - aichemist_codex.electron_bridge - DEBUG - base.validate_output_directory:188 - Output directory is writable: C:\Users\Steve\AppData\Local\Temp\ocr-39b28bd6
+2026-01-26 19:27:30 - 20260126_192729_09a75907 - aichemist_codex.electron_bridge - DEBUG - argument_parser.validate:74 - Argument validation passed
+2026-01-26 19:27:30 - 20260126_192729_09a75907 - aichemist_codex.electron_bridge - INFO - electron_bridge.main:45 - Bridge mode: convert, type: pdf2images
+2026-01-26 19:27:30 - 20260126_192729_09a75907 - aichemist_codex.electron_bridge - DEBUG - progress_reporter.report:55 - Reporting progress: 0/100 - Initializing conversion...
+2026-01-26 19:27:30 - 20260126_192729_09a75907 - aichemist_codex.electron_bridge - DEBUG - base.send_json_message:49 - Sending PROGRESS message: {"current": 0, "total": 100, "message": "Initializing conversion...", "type": "single_progress", "filename": ""}...
+2026-01-26 19:27:30 - 20260126_192729_09a75907 - aichemist_codex.electron_bridge - DEBUG - progress_reporter.report:55 - Reporting progress: 10/100 - Loading converter...
+2026-01-26 19:27:30 - 20260126_192729_09a75907 - aichemist_codex.electron_bridge - DEBUG - base.send_json_message:49 - Sending PROGRESS message: {"current": 10, "total": 100, "message": "Loading converter...", "type": "single_progress", "filename": ""}...
+2026-01-26 19:27:30 - 20260126_192729_09a75907 - aichemist_codex.electron_bridge - DEBUG - conversion_handler.handle_single_conversion:41 - Importing plugins to trigger auto-registration
+2026-01-26 19:27:30 - 20260126_192729_09a75907 - aichemist_codex.converters.md2html - DEBUG - to_html.<module>:38 - Markdown library available
+2026-01-26 19:27:30 - 20260126_192729_09a75907 - aichemist_codex.plugins - DEBUG - __init__.<module>:20 - Markdown to HTML converter loaded
+2026-01-26 19:27:30 - 20260126_192729_09a75907 - aichemist_codex.plugins - DEBUG - __init__.<module>:29 - Markdown to PDF converter loaded
+2026-01-26 19:27:30 - 20260126_192729_09a75907 - aichemist_codex.plugins - DEBUG - __init__.<module>:38 - Markdown to DOCX converter loaded
+2026-01-26 19:27:30 - 20260126_192729_09a75907 - aichemist_codex.plugins - WARNING - __init__.<module>:55 - PDF to Markdown converters not available: No module named 'ocrmypdf'
+2026-01-26 19:27:30 - 20260126_192729_09a75907 - aichemist_codex.plugins - WARNING - __init__.<module>:64 - PDF to HTML converter not available: No module named 'ocrmypdf'
+2026-01-26 19:27:30 - 20260126_192729_09a75907 - aichemist_codex.plugins - WARNING - __init__.<module>:73 - PDF to Editable converter not available: No module named 'ocrmypdf'
+2026-01-26 19:27:30 - 20260126_192729_09a75907 - aichemist_codex.plugins - DEBUG - __init__.<module>:81 - DOCX to Markdown converter loaded
+2026-01-26 19:27:30 - 20260126_192729_09a75907 - aichemist_codex.plugins - DEBUG - __init__.<module>:90 - DOCX to PDF converter loaded
+2026-01-26 19:27:30 - 20260126_192729_09a75907 - aichemist_codex.plugins - DEBUG - __init__.<module>:100 - HTML to PDF converter loaded
+2026-01-26 19:27:30 - 20260126_192729_09a75907 - aichemist_codex.plugins - WARNING - __init__.<module>:112 - TXT to PDF converter not available: No module named 'reportlab'
+2026-01-26 19:27:30 - 20260126_192729_09a75907 - aichemist_codex.plugins - DEBUG - __init__.<module>:125 - Excel converters loaded
+2026-01-26 19:27:30 - 20260126_192729_09a75907 - aichemist_codex.plugins - DEBUG - __init__.<module>:136 - CSV converters loaded
+2026-01-26 19:27:30 - 20260126_192729_09a75907 - aichemist_codex.plugins - DEBUG - __init__.<module>:150 - PowerPoint converters loaded
+2026-01-26 19:27:30 - 20260126_192729_09a75907 - aichemist_codex.plugins - DEBUG - __init__.<module>:162 - Image converters loaded
+2026-01-26 19:27:30 - 20260126_192729_09a75907 - aichemist_codex.plugins - WARNING - __init__.<module>:174 - PDF to Excel converter not available: No module named 'ocrmypdf'
+2026-01-26 19:27:30 - 20260126_192729_09a75907 - aichemist_codex.plugins - WARNING - __init__.<module>:184 - PDF to Images converter not available: No module named 'ocrmypdf'
+2026-01-26 19:27:30 - 20260126_192729_09a75907 - aichemist_codex.plugins - WARNING - __init__.<module>:199 - Advanced PDF operations not available: No module named 'ocrmypdf'
+2026-01-26 19:27:30 - 20260126_192729_09a75907 - aichemist_codex.plugins - DEBUG - __init__.<module>:211 - EPUB converters loaded
+2026-01-26 19:27:30 - 20260126_192729_09a75907 - aichemist_codex.plugins - ERROR - __init__.<module>:227 - EPUB creation converters failed: name 'Document' is not defined
+Traceback (most recent call last):
+  File "D:\Coding\SafeAppeals2.0\python\transmutation_codex\plugins\__init__.py", line 219, in <module>
+    from .docx.to_epub import convert_docx_to_epub
+  File "D:\Coding\SafeAppeals2.0\python\transmutation_codex\plugins\docx\to_epub.py", line 248, in <module>
+    def _docx_to_html(doc: Document) -> str:
+                           ^^^^^^^^
+NameError: name 'Document' is not defined
+2026-01-26 19:27:30 - 20260126_192729_09a75907 - aichemist_codex.plugins - INFO - __init__.<module>:229 - Plugin package initialized - all converters registered
+2026-01-26 19:27:30 - 20260126_192729_09a75907 - aichemist_codex.electron_bridge - DEBUG - conversion_handler.handle_single_conversion:44 - Successfully imported plugins
+2026-01-26 19:27:30 - 20260126_192729_09a75907 - aichemist_codex.electron_bridge - DEBUG - conversion_handler.handle_single_conversion:54 - Parsing conversion type: pdf2images
+2026-01-26 19:27:30 - 20260126_192729_09a75907 - aichemist_codex.electron_bridge - DEBUG - conversion_handler.handle_single_conversion:64 - Parsed conversion: pdf -> images
+2026-01-26 19:27:30 - 20260126_192729_09a75907 - aichemist_codex.electron_bridge - DEBUG - progress_reporter.report:55 - Reporting progress: 20/100 - Finding converter for pdf2images...
+2026-01-26 19:27:30 - 20260126_192729_09a75907 - aichemist_codex.electron_bridge - DEBUG - base.send_json_message:49 - Sending PROGRESS message: {"current": 20, "total": 100, "message": "Finding converter for pdf2images...", "type": "single_progress", "filename": ""}...
+2026-01-26 19:27:30 - 20260126_192729_09a75907 - aichemist_codex.electron_bridge - DEBUG - conversion_handler.handle_single_conversion:68 - Looking up converter in registry: pdf -> images
+2026-01-26 19:27:30 - 20260126_192729_09a75907 - aichemist_codex.electron_bridge - ERROR - conversion_handler.handle_single_conversion:79 - [BRIDGE_003] No converter found for 'pdf2images'. Available: md2docx, md2html, md2pdf, docx2epub, docx2md, docx2pdf, html2pdf, xlsx2csv, xlsx2html, xlsx2md, xlsx2pdf, csv2pdf, csv2xlsx, pptx2html, pptx2images, pptx2md, pptx2pdf, image2image, image2pdf, image2text, epub2docx, epub2html, epub2md, epub2pdf
+2026-01-26 19:27:30 - 20260126_192729_09a75907 - aichemist_codex.electron_bridge - ERROR - conversion_handler.handle_conversion:411 - [BRIDGE_004] Conversion error: No converter found for 'pdf2images'. Available: md2docx, md2html, md2pdf, docx2epub, docx2md, docx2pdf, html2pdf, xlsx2csv, xlsx2html, xlsx2md, xlsx2pdf, csv2pdf, csv2xlsx, pptx2html, pptx2images, pptx2md, pptx2pdf, image2image, image2pdf, image2text, epub2docx, epub2html, epub2md, epub2pdf
+Traceback (most recent call last):
+  File "D:\Coding\SafeAppeals2.0\python\transmutation_codex\adapters\bridges\conversion_handler.py", line 391, in handle_conversion
+    handle_single_conversion(args, reporter)
+    ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^
+  File "D:\Coding\SafeAppeals2.0\python\transmutation_codex\adapters\bridges\conversion_handler.py", line 83, in handle_single_conversion
+    raise BridgeConversionError(
+    ...<2 lines>...
+    )
+transmutation_codex.adapters.bridges.base.BridgeConversionError: No converter found for 'pdf2images'. Available: md2docx, md2html, md2pdf, docx2epub, docx2md, docx2pdf, html2pdf, xlsx2csv, xlsx2html, xlsx2md, xlsx2pdf, csv2pdf, csv2xlsx, pptx2html, pptx2images, pptx2md, pptx2pdf, image2image, image2pdf, image2text, epub2docx, epub2html, epub2md, epub2pdf
+2026-01-26 19:27:30 - 20260126_192729_09a75907 - aichemist_codex.electron_bridge - INFO - electron_bridge.main:50 - Electron bridge exiting with code 1

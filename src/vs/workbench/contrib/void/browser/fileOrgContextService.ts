@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------*/
 
 import { Disposable } from '../../../../base/common/lifecycle.js';
+import { Emitter, Event } from '../../../../base/common/event.js';
 import { URI } from '../../../../base/common/uri.js';
 import { IFileService } from '../../../../platform/files/common/files.js';
 import { createDecorator } from '../../../../platform/instantiation/common/instantiation.js';
@@ -19,6 +20,10 @@ export interface IFileOrgContextService {
 	getCaseContextSync(): string | null;
 	getCaseConfig(): FileOrgConfig | null;
 	reloadCaseConfig(): Promise<void>;
+	/**
+	 * Event fired when the case config changes (file saved or external modification)
+	 */
+	readonly onDidConfigChange: Event<FileOrgConfig | null>;
 }
 
 /**
@@ -30,6 +35,9 @@ class FileOrgContextService extends Disposable implements IFileOrgContextService
 
 	private _caseConfig: FileOrgConfig | null = null;
 	private _caseContext: string | null = null;
+
+	private readonly _onDidConfigChange = this._register(new Emitter<FileOrgConfig | null>());
+	readonly onDidConfigChange: Event<FileOrgConfig | null> = this._onDidConfigChange.event;
 
 	constructor(
 		@IFileService private readonly fileService: IFileService,
@@ -86,14 +94,47 @@ class FileOrgContextService extends Disposable implements IFileOrgContextService
 			}
 
 			const content = await this.fileService.readFile(configUri);
-			this._caseConfig = JSON.parse(content.value.toString()) as FileOrgConfig;
+			const parsedConfig = JSON.parse(content.value.toString());
+
+			// Validate the config has the expected structure
+			if (!parsedConfig || typeof parsedConfig !== 'object') {
+				console.warn('[FileOrgContextService] Invalid config format - not an object');
+				this._caseConfig = null;
+				this._caseContext = null;
+				return;
+			}
+
+			// Check for required caseInfo property
+			if (!parsedConfig.caseInfo || typeof parsedConfig.caseInfo !== 'object') {
+				console.warn('[FileOrgContextService] Config missing caseInfo property');
+				this._caseConfig = null;
+				this._caseContext = null;
+				return;
+			}
+
+			// Ensure keywords exist with defaults
+			if (!parsedConfig.caseInfo.keywords) {
+				parsedConfig.caseInfo.keywords = {
+					yourSide: [],
+					theirSide: [],
+					medical: [],
+					legal: [],
+					evidence: []
+				};
+			}
+
+			this._caseConfig = parsedConfig as FileOrgConfig;
 			this._caseContext = generateAIContextString(this._caseConfig);
 
 			console.log('[FileOrgContextService] Case config loaded from:', configUri.toString());
+
+			// Fire event to notify listeners of config change
+			this._onDidConfigChange.fire(this._caseConfig);
 		} catch (error) {
 			console.error('[FileOrgContextService] Error loading case config:', error);
 			this._caseConfig = null;
 			this._caseContext = null;
+			this._onDidConfigChange.fire(null);
 		}
 	}
 

@@ -1,6 +1,6 @@
 {
-	"nameShort": "Safe Appeals Navigator",
-	"nameLong": "Safe Appeals Navigator",
+	"nameShort": "Safe Appeals",
+	"nameLong": "Safe Appeals",
 	"voidVersion": "1.4.9",
 	"voidRelease": "0044",
 	"commit": "21c8d8ea1e46d97c5639a7cabda6c0e063cc8dd5",
@@ -61,8 +61,8 @@
 		"terminal.integrated.enable": false
 	},
 	"linkProtectionTrustedDomains": [
-		"https://safeappealsnavigator.com",
-		"https://safeappealsnavigator.dev",
+		"https://safeappeals.com",
+		"https://safeappeals.dev",
 		"https://github.com/savagelysubtle/SafeAppeals2.0",
 		"https://ollama.com"
 	]

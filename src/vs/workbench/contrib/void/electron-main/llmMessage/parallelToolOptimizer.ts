@@ -80,8 +80,8 @@ const TOOL_DEPENDENCIES: Record<string, ToolDependencyInfo> = {
 	},
 
 	// RAG operations
-	rag_search_policy: {
-		name: 'rag_search_policy',
+	rag_search_reference: {
+		name: 'rag_search_reference',
 		category: 'rag',
 		isParallelizable: true,
 		requiresSequential: [],
@@ -210,7 +210,7 @@ export function getParallelToolPrompt(mode: ChatMode): string {
 Research tasks benefit tremendously from parallel tool execution.
 
 **✅ Execute These in Parallel:**
-- Multiple rag_search_policy calls (different queries)
+- Multiple rag_search_reference calls (different queries)
 - Multiple rag_search_workspace calls
 - Multiple read_file calls (reading different files)
 - Any combination of read operations that don't depend on each other
@@ -218,9 +218,9 @@ Research tasks benefit tremendously from parallel tool execution.
 **Example Pattern:**
 \`\`\`
 [Parallel batch 1: Execute simultaneously]
-rag_search_policy({query: "appeal deadline requirements"})
-rag_search_policy({query: "medical evidence standards"})
-rag_search_policy({query: "permanent disability procedures"})
+rag_search_reference({query: "appeal deadline requirements"})
+rag_search_reference({query: "medical evidence standards"})
+rag_search_reference({query: "permanent disability procedures"})
 
 [Wait for results, analyze]
 
@@ -241,7 +241,7 @@ read_file({uri: "/policies/medical_evidence.pdf", start_line: 12, end_line: 67})
 Parallelize reads, sequentialize writes for safety.
 
 **✅ Parallel (Information Gathering):**
-- read_file + rag_search_policy
+- read_file + rag_search_reference
 - Multiple read_file calls
 - rag_get_stats + get_dir_tree
 
@@ -254,7 +254,7 @@ Parallelize reads, sequentialize writes for safety.
 \`\`\`
 [Parallel: Gather context]
 read_file({uri: "/case/medical_report.pdf"})
-rag_search_policy({query: "appeal procedures"})
+rag_search_reference({query: "appeal procedures"})
 
 [Sequential: Take action]
 create_file_or_folder({uri: "/case/Appeal_Letter.docx"})
@@ -272,7 +272,7 @@ edit_document({uri: "/case/Appeal_Letter.docx", operations: [...]})
 Front-load research in parallel, draft sequentially.
 
 **✅ Parallel (Research Phase):**
-- rag_search_policy (multiple queries)
+- rag_search_reference (multiple queries)
 - read_file (templates + examples)
 
 **❌ Sequential (Creation Phase):**
@@ -283,7 +283,7 @@ Front-load research in parallel, draft sequentially.
 **Example Pattern:**
 \`\`\`
 [Parallel: Research citations and templates]
-rag_search_policy({query: "appeal format requirements"})
+rag_search_reference({query: "appeal format requirements"})
 read_file({uri: "/templates/appeal_template.docx"})
 
 [Sequential: Draft document]

@@ -10,11 +10,11 @@ import { createRequire } from 'module';
 import { URI } from '../../../../../base/common/uri.js';
 import { ILogService } from '../../../../../platform/log/common/log.js';
 import { IRAGPathService } from '../../common/rag/ragPathService.js';
-import { ChunkRecord, DocumentRecord, ExtractedContent, RAGStats, RAGStorageScope, SearchResult } from '../../common/rag/ragServiceTypes.js';
+import { ChunkRecord, DocumentRecord, ExtractedContent, OCRCacheEntry, RAGStats, RAGStorageScope, SearchResult } from '../../common/rag/ragServiceTypes.js';
 
 export interface IndexDocumentParams {
 	uri: URI;
-	isPolicyManual: boolean;
+	isCoreReference: boolean;
 	workspaceId: string; // REQUIRED - each workspace has its own isolated micro database
 	content: string;
 	metadata: ExtractedContent['metadata'];
@@ -39,7 +39,7 @@ interface DocumentStructure {
 
 export class RAGIndexService {
 	private db: Database | null = null;
-	private static readonly CURRENT_SCHEMA_VERSION = 2; // Increment when schema changes
+	private static readonly CURRENT_SCHEMA_VERSION = 3; // Increment when schema changes (v3 = OCR cache)
 	private readonly workspaceId: string; // REQUIRED - no global database allowed
 
 	constructor(
@@ -201,6 +201,36 @@ export class RAGIndexService {
 
 	this.logService.info('Created FTS5 virtual table and triggers for keyword search');
 
+		// Create OCR cache table for scanned PDF text extraction
+		const createOCRCacheTable = `
+			CREATE TABLE IF NOT EXISTS ocr_cache (
+				id TEXT PRIMARY KEY,
+				filepath TEXT NOT NULL,
+				ocr_text TEXT NOT NULL,
+				page_count INTEGER,
+				language TEXT DEFAULT 'eng',
+				created_at TEXT NOT NULL,
+				file_modified_at TEXT
+			)
+		`;
+
+		await new Promise<void>((resolve, reject) => {
+			this.db!.exec(createOCRCacheTable, (err) => {
+				if (err) reject(err);
+				else resolve();
+			});
+		});
+
+		// Create index for OCR cache filepath lookups
+		await new Promise<void>((resolve, reject) => {
+			this.db!.exec('CREATE INDEX IF NOT EXISTS idx_ocr_cache_filepath ON ocr_cache(filepath)', (err) => {
+				if (err) reject(err);
+				else resolve();
+			});
+		});
+
+		this.logService.info('Created OCR cache table for scanned PDF support');
+
 		// Check current schema version and migrate if needed
 		const currentVersion = await this.getSchemaVersion();
 		this.logService.info(`Current schema version: ${currentVersion}`);
@@ -335,8 +365,51 @@ private async migrateSchema(fromVersion: number): Promise<void> {
 			this.logService.info('Schema migration to v2 complete');
 		}
 
+		// Migration from v2 to v3: Add OCR cache table
+		if (fromVersion < 3) {
+			this.logService.info('Migrating to schema v3: Adding OCR cache table');
+
+			// Create OCR cache table
+			const createOCRCacheTable = `
+				CREATE TABLE IF NOT EXISTS ocr_cache (
+					id TEXT PRIMARY KEY,
+					filepath TEXT NOT NULL,
+					ocr_text TEXT NOT NULL,
+					page_count INTEGER,
+					language TEXT DEFAULT 'eng',
+					created_at TEXT NOT NULL,
+					file_modified_at TEXT
+				)
+			`;
+
+			await new Promise<void>((resolve, reject) => {
+				this.db!.exec(createOCRCacheTable, (err) => {
+					if (err) reject(err);
+					else resolve();
+				});
+			});
+
+			// Create index for filepath lookups
+			await new Promise<void>((resolve, reject) => {
+				this.db!.exec('CREATE INDEX IF NOT EXISTS idx_ocr_cache_filepath ON ocr_cache(filepath)', (err) => {
+					if (err) reject(err);
+					else resolve();
+				});
+			});
+
+			// Update schema version
+			await new Promise<void>((resolve, reject) => {
+				this.db!.run('UPDATE schema_version SET version = 3', (err) => {
+					if (err) reject(err);
+					else resolve();
+				});
+			});
+
+			this.logService.info('Schema migration to v3 complete (OCR cache table added)');
+		}
+
 		// Future migrations go here
-		// if (fromVersion < 3) { ... }
+		// if (fromVersion < 4) { ... }
 
 	} catch (error) {
 		this.logService.error('Schema migration failed:', error);
@@ -404,7 +477,7 @@ private async checkColumnExists(tableName: string, columnName: string): Promise<
 			lastIndexed: now,
 			checksum,
 			metadata: JSON.stringify(params.metadata),
-			isPolicyManual: params.isPolicyManual,
+			isCoreReference: params.isCoreReference,
 			workspaceId: params.workspaceId
 		};
 
@@ -459,7 +532,7 @@ private async checkColumnExists(tableName: string, columnName: string): Promise<
 		});
 	}
 
-	private async getChunksByDocId(docId: string): Promise<ChunkRecord[]> {
+	async getChunksByDocId(docId: string): Promise<ChunkRecord[]> {
 		if (!this.db) return [];
 
 		return new Promise((resolve, reject) => {
@@ -538,7 +611,7 @@ private async checkColumnExists(tableName: string, columnName: string): Promise<
 					document.lastIndexed,
 					document.checksum,
 					document.metadata,
-					document.isPolicyManual ? 1 : 0,
+					document.isCoreReference ? 1 : 0,
 					document.workspaceId
 				],
 				(err) => {
@@ -1061,7 +1134,7 @@ private async checkColumnExists(tableName: string, columnName: string): Promise<
 				c.chunk_index as chunkIndex,
 				d.filename,
 				d.filetype,
-				d.is_policy_manual as isPolicyManual
+				d.is_policy_manual as isCoreReference
 			FROM chunks c
 			JOIN documents d ON c.doc_id = d.id
 			WHERE c.chunk_id IN (${placeholders})
@@ -1104,7 +1177,7 @@ private async checkColumnExists(tableName: string, columnName: string): Promise<
 						filename: row.filename,
 						filetype: row.filetype,
 						chunkIndex: row.chunkIndex,
-						isPolicyManual: row.isPolicyManual === 1
+						isCoreReference: row.isPolicyManual === 1
 					}
 					};
 				});
@@ -1219,13 +1292,13 @@ private async checkColumnExists(tableName: string, columnName: string): Promise<
 		});
 	}
 
-	async getDocumentsByType(isPolicyManual: boolean): Promise<DocumentRecord[]> {
+	async getDocumentsByType(isCoreReference: boolean): Promise<DocumentRecord[]> {
 		if (!this.db) return [];
 
 		return new Promise((resolve, reject) => {
 			this.db!.all(
 				'SELECT * FROM documents WHERE is_policy_manual = ?',
-				[isPolicyManual ? 1 : 0],
+				[isCoreReference ? 1 : 0],
 				(err, rows) => {
 					if (err) reject(err);
 					else resolve(rows as DocumentRecord[]);
@@ -1325,5 +1398,342 @@ private async checkColumnExists(tableName: string, columnName: string): Promise<
 			default:
 				return '';
 		}
+	}
+
+	// ========== OCR CACHE METHODS ==========
+
+	/**
+	 * Get cached OCR text for a file by its hash
+	 * @param fileHash SHA256 hash of the file content
+	 * @returns OCRCacheEntry if found, null otherwise
+	 */
+	async getOCRCache(fileHash: string): Promise<OCRCacheEntry | null> {
+		if (!this.db) {
+			this.logService.warn('Database not initialized when checking OCR cache');
+			return null;
+		}
+
+		return new Promise((resolve, reject) => {
+			this.db!.get(
+				'SELECT id, filepath, ocr_text, page_count, language, created_at, file_modified_at FROM ocr_cache WHERE id = ?',
+				[fileHash],
+				(err, row: any) => {
+					if (err) {
+						this.logService.error(`Error querying OCR cache: ${err}`);
+						reject(err);
+					} else if (row) {
+						resolve({
+							id: row.id,
+							filepath: row.filepath,
+							ocrText: row.ocr_text,
+							pageCount: row.page_count,
+							language: row.language,
+							createdAt: row.created_at,
+							fileModifiedAt: row.file_modified_at
+						});
+					} else {
+						resolve(null);
+					}
+				}
+			);
+		});
+	}
+
+	/**
+	 * Get cached OCR text for a file by its filepath
+	 * @param filepath Path to the file
+	 * @returns OCRCacheEntry if found, null otherwise
+	 */
+	async getOCRCacheByPath(filepath: string): Promise<OCRCacheEntry | null> {
+		if (!this.db) {
+			this.logService.warn('Database not initialized when checking OCR cache by path');
+			return null;
+		}
+
+		return new Promise((resolve, reject) => {
+			this.db!.get(
+				'SELECT id, filepath, ocr_text, page_count, language, created_at, file_modified_at FROM ocr_cache WHERE filepath = ?',
+				[filepath],
+				(err, row: any) => {
+					if (err) {
+						this.logService.error(`Error querying OCR cache by path: ${err}`);
+						reject(err);
+					} else if (row) {
+						resolve({
+							id: row.id,
+							filepath: row.filepath,
+							ocrText: row.ocr_text,
+							pageCount: row.page_count,
+							language: row.language,
+							createdAt: row.created_at,
+							fileModifiedAt: row.file_modified_at
+						});
+					} else {
+						resolve(null);
+					}
+				}
+			);
+		});
+	}
+
+	/**
+	 * Store OCR text in cache
+	 * @param entry OCR cache entry to store
+	 */
+	async setOCRCache(entry: OCRCacheEntry): Promise<void> {
+		if (!this.db) throw new Error('Database not initialized');
+
+		this.logService.info(`[OCR Cache] Storing OCR text for: ${entry.filepath} (${entry.pageCount} pages, ${entry.language})`);
+
+		return new Promise((resolve, reject) => {
+			this.db!.run(
+				`INSERT OR REPLACE INTO ocr_cache (id, filepath, ocr_text, page_count, language, created_at, file_modified_at)
+				 VALUES (?, ?, ?, ?, ?, ?, ?)`,
+				[
+					entry.id,
+					entry.filepath,
+					entry.ocrText,
+					entry.pageCount,
+					entry.language,
+					entry.createdAt,
+					entry.fileModifiedAt
+				],
+				(err) => {
+					if (err) {
+						this.logService.error(`Error storing OCR cache: ${err}`);
+						reject(err);
+					} else {
+						this.logService.info(`[OCR Cache] Successfully cached OCR text (${entry.ocrText.length} chars)`);
+						resolve();
+					}
+				}
+			);
+		});
+	}
+
+	/**
+	 * Invalidate (delete) OCR cache entry by file hash
+	 * @param fileHash SHA256 hash of the file content
+	 */
+	async invalidateOCRCache(fileHash: string): Promise<void> {
+		if (!this.db) throw new Error('Database not initialized');
+
+		this.logService.info(`[OCR Cache] Invalidating cache for hash: ${fileHash}`);
+
+		return new Promise((resolve, reject) => {
+			this.db!.run('DELETE FROM ocr_cache WHERE id = ?', [fileHash], (err) => {
+				if (err) {
+					this.logService.error(`Error invalidating OCR cache: ${err}`);
+					reject(err);
+				} else {
+					resolve();
+				}
+			});
+		});
+	}
+
+	/**
+	 * Invalidate (delete) OCR cache entry by filepath
+	 * @param filepath Path to the file
+	 */
+	async invalidateOCRCacheByPath(filepath: string): Promise<void> {
+		if (!this.db) throw new Error('Database not initialized');
+
+		this.logService.info(`[OCR Cache] Invalidating cache for path: ${filepath}`);
+
+		return new Promise((resolve, reject) => {
+			this.db!.run('DELETE FROM ocr_cache WHERE filepath = ?', [filepath], (err) => {
+				if (err) {
+					this.logService.error(`Error invalidating OCR cache by path: ${err}`);
+					reject(err);
+				} else {
+					resolve();
+				}
+			});
+		});
+	}
+
+	/**
+	 * Clear all OCR cache entries
+	 */
+	async clearOCRCache(): Promise<void> {
+		if (!this.db) throw new Error('Database not initialized');
+
+		this.logService.info('[OCR Cache] Clearing all OCR cache entries');
+
+		return new Promise((resolve, reject) => {
+			this.db!.run('DELETE FROM ocr_cache', (err) => {
+				if (err) {
+					this.logService.error(`Error clearing OCR cache: ${err}`);
+					reject(err);
+				} else {
+					this.logService.info('[OCR Cache] All OCR cache entries cleared');
+					resolve();
+				}
+			});
+		});
+	}
+
+	/**
+	 * Calculate SHA256 hash of file content for OCR cache key
+	 * @param filepath Path to the file
+	 * @returns SHA256 hash string
+	 */
+	calculateFileHash(filepath: string): string {
+		try {
+			const content = readFileSync(filepath);
+			return createHash('sha256').update(content).digest('hex');
+		} catch (error) {
+			this.logService.error(`Error calculating file hash for ${filepath}:`, error);
+			throw error;
+		}
+	}
+
+	// ========== INTEGRITY & CLEANUP METHODS ==========
+
+	/**
+	 * Find orphaned chunks (chunks whose parent document no longer exists)
+	 * @returns Array of orphaned chunk IDs
+	 */
+	async findOrphanedChunks(): Promise<string[]> {
+		if (!this.db) return [];
+
+		return new Promise((resolve, reject) => {
+			this.db!.all(
+				`SELECT c.chunk_id FROM chunks c
+				 LEFT JOIN documents d ON c.doc_id = d.id
+				 WHERE d.id IS NULL`,
+				(err, rows: any[]) => {
+					if (err) {
+						this.logService.error('Error finding orphaned chunks:', err);
+						reject(err);
+					} else {
+						const orphanedIds = rows.map(r => r.chunk_id);
+						this.logService.info(`Found ${orphanedIds.length} orphaned chunks`);
+						resolve(orphanedIds);
+					}
+				}
+			);
+		});
+	}
+
+	/**
+	 * Find documents that reference non-existent files
+	 * @returns Array of document records with missing files
+	 */
+	async findMissingFileDocuments(): Promise<DocumentRecord[]> {
+		if (!this.db) return [];
+
+		const fs = await import('fs');
+		const documents = await new Promise<DocumentRecord[]>((resolve, reject) => {
+			this.db!.all('SELECT * FROM documents', (err, rows) => {
+				if (err) reject(err);
+				else resolve(rows as DocumentRecord[]);
+			});
+		});
+
+		const missingDocs: DocumentRecord[] = [];
+		for (const doc of documents) {
+			try {
+				if (!fs.existsSync(doc.filepath)) {
+					missingDocs.push(doc);
+				}
+			} catch {
+				// If we can't check, assume it's missing
+				missingDocs.push(doc);
+			}
+		}
+
+		this.logService.info(`Found ${missingDocs.length} documents with missing files`);
+		return missingDocs;
+	}
+
+	/**
+	 * Clean up orphaned chunks (chunks with no parent document)
+	 * @returns Number of chunks deleted
+	 */
+	async cleanupOrphanedChunks(): Promise<number> {
+		if (!this.db) return 0;
+
+		const orphanedIds = await this.findOrphanedChunks();
+		if (orphanedIds.length === 0) return 0;
+
+		this.logService.info(`Cleaning up ${orphanedIds.length} orphaned chunks`);
+
+		return new Promise((resolve, reject) => {
+			const placeholders = orphanedIds.map(() => '?').join(',');
+			this.db!.run(
+				`DELETE FROM chunks WHERE chunk_id IN (${placeholders})`,
+				orphanedIds,
+				function(err) {
+					if (err) {
+						reject(err);
+					} else {
+						resolve(this.changes);
+					}
+				}
+			);
+		});
+	}
+
+	/**
+	 * Clean up documents that reference files that no longer exist
+	 * @returns Number of documents deleted
+	 */
+	async cleanupMissingFileDocuments(): Promise<number> {
+		const missingDocs = await this.findMissingFileDocuments();
+		if (missingDocs.length === 0) return 0;
+
+		this.logService.info(`Cleaning up ${missingDocs.length} documents with missing files`);
+
+		let deletedCount = 0;
+		for (const doc of missingDocs) {
+			await this.deleteDocument(doc.id);
+			deletedCount++;
+		}
+
+		return deletedCount;
+	}
+
+	/**
+	 * Run full integrity scan and cleanup
+	 * @returns Summary of actions taken
+	 */
+	async runIntegrityScan(): Promise<{
+		orphanedChunksDeleted: number;
+		missingFileDocsDeleted: number;
+		errors: string[];
+	}> {
+		this.logService.info('[RAG Integrity] Starting integrity scan for workspace: ' + this.workspaceId);
+
+		const result = {
+			orphanedChunksDeleted: 0,
+			missingFileDocsDeleted: 0,
+			errors: [] as string[]
+		};
+
+		try {
+			// Step 1: Clean up documents with missing files
+			// This will also cascade-delete their chunks via foreign key
+			result.missingFileDocsDeleted = await this.cleanupMissingFileDocuments();
+			this.logService.info(`[RAG Integrity] Removed ${result.missingFileDocsDeleted} docs with missing files`);
+		} catch (error) {
+			const msg = `Failed to clean missing file documents: ${error}`;
+			this.logService.error(msg);
+			result.errors.push(msg);
+		}
+
+		try {
+			// Step 2: Clean up any remaining orphaned chunks
+			result.orphanedChunksDeleted = await this.cleanupOrphanedChunks();
+			this.logService.info(`[RAG Integrity] Removed ${result.orphanedChunksDeleted} orphaned chunks`);
+		} catch (error) {
+			const msg = `Failed to clean orphaned chunks: ${error}`;
+			this.logService.error(msg);
+			result.errors.push(msg);
+		}
+
+		this.logService.info(`[RAG Integrity] Scan complete. Docs: ${result.missingFileDocsDeleted}, Chunks: ${result.orphanedChunksDeleted}, Errors: ${result.errors.length}`);
+		return result;
 	}
 }

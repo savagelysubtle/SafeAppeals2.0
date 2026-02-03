@@ -1,0 +1,21 @@
+﻿{
+	"name": "theme-safeappeals-colors-black-gold",
+	"displayName": "Black & Gold",
+	"description": "Luxurious black with gold accents - Executive elegance",
+	"version": "1.0.0",
+	"publisher": "safeappeals",
+	"license": "MIT",
+	"engines": {
+		"vscode": "*"
+	},
+	"categories": ["Themes"],
+	"contributes": {
+		"themes": [
+			{
+				"label": "Black & Gold",
+				"uiTheme": "vs-dark",
+				"path": "./themes/black-gold-color-theme.json"
+			}
+		]
+	}
+}

@@ -6,8 +6,27 @@
 import React from 'react';
 import { JurisdictionConfig } from '../../../../common/timeline/timelineTypes.js';
 
-// SafeAppeals brand colors
-const BRAND_GREEN = '#22c55e';
+// Reusable style objects with VSCode CSS variables
+const modalStyle: React.CSSProperties = {
+  backgroundColor: 'var(--vscode-sideBar-background)',
+  border: '1px solid var(--vscode-panel-border)',
+  borderRadius: '12px',
+};
+
+const buttonSecondaryStyle: React.CSSProperties = {
+  backgroundColor: 'var(--vscode-button-secondaryBackground)',
+  color: 'var(--vscode-button-secondaryForeground)',
+  border: '1px solid var(--vscode-panel-border)',
+  borderRadius: '8px',
+};
+
+const textPrimaryStyle: React.CSSProperties = {
+  color: 'var(--vscode-editor-foreground)',
+};
+
+const textMutedStyle: React.CSSProperties = {
+  color: 'var(--vscode-descriptionForeground)',
+};
 
 interface JurisdictionSelectorProps {
   jurisdictions: JurisdictionConfig[];
@@ -52,33 +71,31 @@ export const JurisdictionSelector: React.FC<JurisdictionSelectorProps> = ({
       onClick={onClose}
     >
       <div
-        className="w-full max-w-sm rounded-xl shadow-2xl"
+        className="w-full max-w-sm rounded-xl shadow-2xl void-scrollbar"
         style={{
-          backgroundColor: '#0f0f0f',
-          border: `1px solid ${BRAND_GREEN}30`,
+          ...modalStyle,
           maxHeight: '80vh',
           overflowY: 'auto',
-          boxShadow: `0 25px 50px -12px rgba(0, 0, 0, 0.8), 0 0 0 1px ${BRAND_GREEN}10`
         }}
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}
         <div
           className="flex items-center justify-between px-5 py-4 rounded-t-xl"
-          style={{ borderBottom: `1px solid ${BRAND_GREEN}20` }}
+          style={{ borderBottom: '1px solid var(--vscode-panel-border)' }}
         >
           <div className="flex items-center gap-3">
             <div
               className="w-9 h-9 rounded-lg flex items-center justify-center"
-              style={{ backgroundColor: `${BRAND_GREEN}15` }}
+              style={{ backgroundColor: 'var(--vscode-button-secondaryBackground)' }}
             >
-              <i className="codicon codicon-law" style={{ color: BRAND_GREEN, fontSize: '16px' }} />
+              <i className="codicon codicon-law" style={{ color: 'var(--vscode-button-background)', fontSize: '16px' }} />
             </div>
             <div>
-              <h2 className="text-base font-semibold" style={{ color: '#fafafa' }}>
+              <h2 className="text-base font-semibold" style={textPrimaryStyle}>
                 Select Jurisdiction
               </h2>
-              <p className="text-xs" style={{ color: '#71717a' }}>
+              <p className="text-xs" style={textMutedStyle}>
                 Workers' compensation board rules
               </p>
             </div>
@@ -86,9 +103,7 @@ export const JurisdictionSelector: React.FC<JurisdictionSelectorProps> = ({
           <button
             onClick={onClose}
             className="w-8 h-8 rounded-lg flex items-center justify-center transition-colors"
-            style={{ color: '#71717a' }}
-            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#1f1f1f'}
-            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+            style={buttonSecondaryStyle}
           >
             <i className="codicon codicon-close" />
           </button>
@@ -101,7 +116,7 @@ export const JurisdictionSelector: React.FC<JurisdictionSelectorProps> = ({
               {/* Country Header */}
               <div
                 className="px-3 py-2 text-xs font-semibold uppercase tracking-wide"
-                style={{ color: '#52525b' }}
+                style={{ color: 'var(--vscode-disabledForeground)' }}
               >
                 {country}
               </div>
@@ -119,28 +134,20 @@ export const JurisdictionSelector: React.FC<JurisdictionSelectorProps> = ({
                       }}
                       className="w-full text-left px-3 py-2.5 rounded-lg text-sm transition-all flex items-center justify-between"
                       style={{
-                        backgroundColor: isSelected ? `${BRAND_GREEN}20` : 'transparent',
-                        color: isSelected ? BRAND_GREEN : '#e4e4e7',
-                        border: isSelected ? `1px solid ${BRAND_GREEN}40` : '1px solid transparent'
-                      }}
-                      onMouseEnter={(e) => {
-                        if (!isSelected) {
-                          e.currentTarget.style.backgroundColor = '#1a1a1a';
-                        }
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.backgroundColor = isSelected ? `${BRAND_GREEN}20` : 'transparent';
+                        backgroundColor: isSelected ? 'var(--vscode-button-secondaryBackground)' : 'transparent',
+                        color: isSelected ? 'var(--vscode-button-background)' : 'var(--vscode-foreground)',
+                        border: isSelected ? '1px solid var(--vscode-panel-border)' : '1px solid transparent'
                       }}
                     >
                       <div className="flex items-center gap-2">
                         {isSelected && (
-                          <i className="codicon codicon-check" style={{ color: BRAND_GREEN, fontSize: '14px' }} />
+                          <i className="codicon codicon-check" style={{ color: 'var(--vscode-button-background)', fontSize: '14px' }} />
                         )}
                         <span>{j.name}</span>
                       </div>
                       <span
                         className="text-xs px-2 py-0.5 rounded"
-                        style={{ backgroundColor: '#27272a', color: '#71717a' }}
+                        style={buttonSecondaryStyle}
                       >
                         {j.statuteOfLimitationsDays} days
                       </span>

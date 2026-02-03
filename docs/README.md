@@ -94,6 +94,43 @@ LLM-powered conversational AI with extended thinking and tool calling.
 - Context window tracking and management
 - Agent loop with tool execution and checkpoints
 
+#### [Storage & Database System](./storage/)
+
+Per-workspace micro database architecture for complete data isolation.
+
+**Components:**
+
+- [Main README](./storage/README.md) - Complete path reference for dev vs production
+
+**Key Features:**
+
+- Per-workspace SQLite databases (no global storage)
+- Development path: `%APPDATA%\code-oss-dev\User\.safe-appeals-navigator\`
+- Production path: `%APPDATA%\Void\User\.safe-appeals-navigator\`
+- Workspace hash-based isolation
+- Databases: `threads.db`, `workspace.db`, `emails.db`, `chroma/`
+
+#### [Time Tracker](./timeTracker/)
+
+Professional legal time tracking with UTBMS codes and LEDES export.
+
+**Components:**
+
+- [Main README](./timeTracker/README.md) - Overview and architecture
+- [User Guide](./timeTracker/user-guide.md) - Complete usage instructions
+- [Developer Guide](./timeTracker/developer-guide.md) - Technical implementation details
+- [API Reference](./timeTracker/api-reference.md) - TypeScript interfaces and services
+
+**Key Features:**
+
+- 6-minute billing increments with configurable rounding
+- UTBMS task and activity codes (litigation + workers' comp)
+- Matter/case tracking with billing rates
+- LEDES 1998B export for legal billing
+- CSV/JSON export for reporting
+- Per-workspace SQLite storage
+- Live timer in status bar and sidebar
+
 #### [RAG System](./ragSystem/)
 
 Research-Augmented Generation system for enhanced AI responses.
@@ -173,7 +210,6 @@ Research data, matrices, and analysis files.
 ### For New Developers
 
 1. **Development Setup:**
-
    - **[Quick Start Guide](./development/DOCLING_QUICKSTART.md)** - Get up and running in 5 minutes
    - **[Local Models Setup](./development/DOCLING_LOCAL_MODELS.md)** - Configure offline ML models
    - **[Bun Migration](./development/BUN_MIGRATION_PLAN.md)** - Upgrade to faster builds
@@ -186,7 +222,6 @@ Research data, matrices, and analysis files.
 ### For Legal Case Management
 
 1. **Case Configuration:**
-
    - **[File Organization Guide](./features/FILE_ORG_CASE_CONFIG.md)** - Set up case-specific organization
    - Create `.fileorg.json` in your workspace root
 
@@ -199,7 +234,6 @@ Research data, matrices, and analysis files.
 ### For Feature Customization
 
 1. **Theming:**
-
    - **[App Theming Guide](./features/APP_THEMING_GUIDE.md)** - Customize SafeAppeals appearance
 
 2. **Document Processing:**
@@ -209,20 +243,22 @@ Research data, matrices, and analysis files.
 
 ### Folder Structure
 
-| Folder                                           | Purpose                                          | Audience       |
-| ------------------------------------------------ | ------------------------------------------------ | -------------- |
-| **[SafeAppealsCloud/](./SafeAppealsCloud/)**     | Cloud backend, pricing, billing, deployment      | DevOps/Admins  |
-| **[chat/](./chat/)**                             | Chat system, LLM integration, agent loop         | Developers     |
-| **[models/](./modelsSystem/)**                   | AI model configuration and capabilities          | Developers     |
-| **[tools/](./tools/)**                           | AI tool calling and execution system             | Developers     |
-| **[development/](./development/)**               | Setup guides, migration plans, installation docs | Developers     |
-| **[technical-research/](./technicalResearch/)**  | Research, analysis, implementation details       | Technical team |
-| **[features/](./features/)**                     | User features, configuration, customization      | All users      |
-| **[data-analysis/](./dataAnalysis/)**            | Research data, matrices, analysis files          | Administrators |
-| **[fileOrganizer/](./fileOrganizer/)**           | File organization system documentation           | All users      |
-| **[ragSystem/](./ragSystem/)**                   | RAG system operational docs                      | Technical team |
-| **[timeline/](./timeline/)**                     | Timeline feature documentation                   | All users      |
-| **[images/](./images/)**                         | Documentation screenshots and diagrams           | All users      |
+| Folder                                          | Purpose                                          | Audience       |
+| ----------------------------------------------- | ------------------------------------------------ | -------------- |
+| **[SafeAppealsCloud/](./SafeAppealsCloud/)**    | Cloud backend, pricing, billing, deployment      | DevOps/Admins  |
+| **[chat/](./chat/)**                            | Chat system, LLM integration, agent loop         | Developers     |
+| **[models/](./modelsSystem/)**                  | AI model configuration and capabilities          | Developers     |
+| **[tools/](./tools/)**                          | AI tool calling and execution system             | Developers     |
+| **[development/](./development/)**              | Setup guides, migration plans, installation docs | Developers     |
+| **[technical-research/](./technicalResearch/)** | Research, analysis, implementation details       | Technical team |
+| **[features/](./features/)**                    | User features, configuration, customization      | All users      |
+| **[data-analysis/](./dataAnalysis/)**           | Research data, matrices, analysis files          | Administrators |
+| **[fileOrganizer/](./fileOrganizer/)**          | File organization system documentation           | All users      |
+| **[storage/](./storage/)**                      | Database paths, dev vs prod locations            | Developers     |
+| **[ragSystem/](./ragSystem/)**                  | RAG system operational docs                      | Technical team |
+| **[timeTracker/](./timeTracker/)**              | Legal time tracking extension                    | All users      |
+| **[timeline/](./timeline/)**                    | Timeline feature documentation                   | All users      |
+| **[images/](./images/)**                        | Documentation screenshots and diagrams           | All users      |
 
 ### File Types
 
@@ -311,13 +347,11 @@ Research data, matrices, and analysis files.
 ### Adding New Documentation
 
 1. **Choose appropriate location:**
-
    - Feature-specific: Create subfolder under `docs/`
    - General development: Add to main `docs/` directory
    - Component updates: Update existing documentation
 
 2. **Update this README:**
-
    - Add entry to Documentation Index
    - Include brief description
    - Add appropriate icons/categories

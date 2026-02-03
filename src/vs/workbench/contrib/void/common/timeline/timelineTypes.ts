@@ -61,6 +61,8 @@ export interface TimelineEvent {
 	tags?: string[];
 	createdAt: string;
 	updatedAt: string;
+	// Calendar sync - optional, defaults to isDeadline value if undefined
+	syncToCalendar?: boolean;
 }
 
 // ============================================================================
@@ -318,6 +320,27 @@ export interface ITimelineService {
 	 * Export timeline to PDF
 	 */
 	exportToPDF(): Promise<Uint8Array>;
+
+	/**
+	 * Export timeline to iCalendar (.ics) format
+	 * Only includes events with syncToCalendar enabled (or isDeadline if not set)
+	 */
+	exportToIcs(): Promise<string>;
+
+	/**
+	 * Get events that should be synced to calendar
+	 */
+	getEventsForCalendar(): TimelineEvent[];
+
+	/**
+	 * Toggle the syncToCalendar flag for an event
+	 */
+	toggleSyncToCalendar(eventId: string): Promise<void>;
+
+	/**
+	 * Get count of events that will be exported to calendar
+	 */
+	getCalendarEventCount(): number;
 
 	// ---- Jurisdictions ----
 

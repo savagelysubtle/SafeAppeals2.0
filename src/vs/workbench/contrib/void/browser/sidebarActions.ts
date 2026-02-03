@@ -6,32 +6,32 @@
 import { KeyCode, KeyMod } from '../../../../base/common/keyCodes.js';
 
 
-import { Action2, MenuId, registerAction2 } from '../../../../platform/actions/common/actions.js';
 import { ServicesAccessor } from '../../../../editor/browser/editorExtensions.js';
+import { Action2, MenuId, registerAction2 } from '../../../../platform/actions/common/actions.js';
 
-import { KeybindingWeight } from '../../../../platform/keybinding/common/keybindingsRegistry.js';
 import { ContextKeyExpr } from '../../../../platform/contextkey/common/contextkey.js';
+import { KeybindingWeight } from '../../../../platform/keybinding/common/keybindingsRegistry.js';
 
 import { ICodeEditorService } from '../../../../editor/browser/services/codeEditorService.js';
 import { IRange } from '../../../../editor/common/core/range.js';
-import { VOID_VIEW_CONTAINER_ID, VOID_VIEW_ID } from './sidebarPane.js';
-import { IMetricsService } from '../common/metricsService.js';
-import { ICommandService } from '../../../../platform/commands/common/commands.js';
-import { VOID_TOGGLE_SETTINGS_ACTION_ID } from './voidSettingsPane.js';
-import { VOID_CTRL_L_ACTION_ID } from './actionIDs.js';
 import { localize2 } from '../../../../nls.js';
-import { IChatThreadService } from './chatThreadService.js';
-import { IViewsService } from '../../../services/views/common/viewsService.js';
-import { caseOrganizerInit_defaultPrompt } from '../common/prompt/prompts.js';
-import { IVoidSettingsService } from '../common/voidSettingsService.js';
-import { IEditorService } from '../../../services/editor/common/editorService.js';
-import { IDocumentViewerService } from '../common/documentViewerService.js';
-import { PDFViewerInput } from './documentViewers/pdfViewer/pdfViewerInput.js';
-import { IRAGService } from '../common/rag/ragService.js';
-import { RAGContextService } from '../common/rag/ragContextService.js';
+import { ICommandService } from '../../../../platform/commands/common/commands.js';
 import { INotificationService } from '../../../../platform/notification/common/notification.js';
+import { IEditorService } from '../../../services/editor/common/editorService.js';
+import { IViewsService } from '../../../services/views/common/viewsService.js';
+import { IDocumentViewerService } from '../common/documentViewerService.js';
+import { IMetricsService } from '../common/metricsService.js';
+import { caseOrganizerInit_defaultPrompt } from '../common/prompt/prompts.js';
+import { RAGContextService } from '../common/rag/ragContextService.js';
+import { IRAGService } from '../common/rag/ragService.js';
+import { IVoidSettingsService } from '../common/voidSettingsService.js';
+import { VOID_CTRL_L_ACTION_ID } from './actionIDs.js';
+import { IChatThreadService } from './chatThreadService.js';
 import { DOCXViewerInput } from './documentViewers/docxViewer/docxViewerInput.js';
+import { PDFViewerInput } from './documentViewers/pdfViewer/pdfViewerInput.js';
 import { XLSXViewerInput } from './documentViewers/xlsxViewer/xlsxViewerInput.js';
+import { VOID_VIEW_CONTAINER_ID, VOID_VIEW_ID } from './sidebarPane.js';
+import { VOID_TOGGLE_SETTINGS_ACTION_ID } from './voidSettingsPane.js';
 
 // ---------- Register commands and keybindings ----------
 
@@ -173,7 +173,7 @@ registerAction2(class extends Action2 {
 					notificationService.info('Indexing PDF...');
 					const indexResult = await ragService.indexDocument({
 						uri: pdfInput.resource,
-						isPolicyManual: true,
+						isCoreReference: true,
 						workspaceId: ragService.getWorkspaceId()
 					});
 
@@ -201,7 +201,7 @@ registerAction2(class extends Action2 {
 				// Search RAG for relevant chunks (increased limit for better diversity)
 				const ragResults = await ragService.search({
 					query: searchQuery,
-					scope: 'policy_manual',
+					scope: 'core_references',
 					limit: 10,  // Increased to allow MMR to select diverse chunks
 					workspaceId: ragService.getWorkspaceId()
 				});
@@ -256,18 +256,51 @@ registerAction2(class extends Action2 {
 					await commandService.executeCommand(VOID_OPEN_SIDEBAR_ACTION_ID);
 				}
 
-				// Add DOCX file reference
-				chatThreadService.addNewStagingSelection({
-					type: 'File',
-					uri: docxInput.resource,
-					language: 'docx',
-					state: {
-						wasAddedAsCurrentFile: false
-					}
-				});
+				const hasSelection = !!(docxInput.selection && docxInput.selection.text);
+				const fileName = docxInput.resource.fsPath.split(/[\\/]/).pop() || 'document.docx';
+
+				if (hasSelection && docxInput.selection!.text) {
+					// User has selected specific text - add it with context
+					const selectedText = docxInput.selection!.text;
+
+					const formattedContext = `## DOCX Selection
+**File:** ${fileName}
+
+\`\`\`
+${selectedText}
+\`\`\``;
+
+					chatThreadService.addNewStagingSelection({
+						type: 'File',
+						uri: docxInput.resource,
+						language: 'docx',
+						state: {
+							wasAddedAsCurrentFile: false,
+							ragContext: formattedContext
+						}
+					});
+
+					const preview = selectedText.length > 50
+						? selectedText.substring(0, 50) + '...'
+						: selectedText;
+					notificationService.info(`DOCX selection added to chat: "${preview}"`);
+
+				} else {
+					// No selection - add the whole file reference
+					chatThreadService.addNewStagingSelection({
+						type: 'File',
+						uri: docxInput.resource,
+						language: 'docx',
+						state: {
+							wasAddedAsCurrentFile: false
+						}
+					});
+
+					notificationService.info(`DOCX file added to chat: ${fileName}`);
+				}
 
 				metricsService.capture('Add DOCX to Chat', {
-					hasSelection: false
+					hasSelection
 				});
 
 			} catch (error) {
@@ -533,6 +566,40 @@ registerAction2(class extends Action2 {
 	}
 })
 
+
+// Skip Onboarding - Emergency command to bypass onboarding screen
+const VOID_SKIP_ONBOARDING_ACTION_ID = 'void.skipOnboarding'
+registerAction2(class extends Action2 {
+	constructor() {
+		super({
+			id: VOID_SKIP_ONBOARDING_ACTION_ID,
+			title: localize2('voidSkipOnboarding', 'SafeAppeals: Skip Onboarding'),
+			f1: true,
+		});
+	}
+	async run(accessor: ServicesAccessor): Promise<void> {
+		const voidSettingsService = accessor.get(IVoidSettingsService)
+		voidSettingsService.setGlobalSetting('isOnboardingComplete', true)
+		console.log('[SafeAppeals] Onboarding skipped. Please reload the window.')
+	}
+})
+
+// Reset Onboarding - Command to redo onboarding
+const VOID_RESET_ONBOARDING_ACTION_ID = 'void.resetOnboarding'
+registerAction2(class extends Action2 {
+	constructor() {
+		super({
+			id: VOID_RESET_ONBOARDING_ACTION_ID,
+			title: localize2('voidResetOnboarding', 'SafeAppeals: Reset Onboarding'),
+			f1: true,
+		});
+	}
+	async run(accessor: ServicesAccessor): Promise<void> {
+		const voidSettingsService = accessor.get(IVoidSettingsService)
+		voidSettingsService.setGlobalSetting('isOnboardingComplete', false)
+		console.log('[SafeAppeals] Onboarding reset. Please reload the window.')
+	}
+})
 
 // export class TabSwitchListener extends Disposable {
 

@@ -466,6 +466,7 @@ type InputBox2Props = {
 	onFocus?: (e: React.FocusEvent<HTMLTextAreaElement>) => void;
 	onBlur?: (e: React.FocusEvent<HTMLTextAreaElement>) => void;
 	onChangeHeight?: (newHeight: number) => void;
+	onPaste?: (e: React.ClipboardEvent<HTMLTextAreaElement>) => void;
 };
 export const VoidInputBox2 = forwardRef<HTMLTextAreaElement, InputBox2Props>(
 	function X(
@@ -480,6 +481,7 @@ export const VoidInputBox2 = forwardRef<HTMLTextAreaElement, InputBox2Props>(
 			onFocus,
 			onBlur,
 			onChangeText,
+			onPaste,
 		},
 		ref
 	) {
@@ -957,6 +959,7 @@ export const VoidInputBox2 = forwardRef<HTMLTextAreaElement, InputBox2Props>(
 						},
 						[onKeyDown, onMenuKeyDown, multiline]
 					)}
+					onPaste={onPaste}
 					rows={1}
 					placeholder={placeholder}
 				/>

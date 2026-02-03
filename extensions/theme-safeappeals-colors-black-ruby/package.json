@@ -1,0 +1,21 @@
+﻿{
+	"name": "theme-safeappeals-colors-black-ruby",
+	"displayName": "Black & Ruby",
+	"description": "Sleek black with ruby red accents - Bold and passionate",
+	"version": "1.0.0",
+	"publisher": "safeappeals",
+	"license": "MIT",
+	"engines": {
+		"vscode": "*"
+	},
+	"categories": ["Themes"],
+	"contributes": {
+		"themes": [
+			{
+				"label": "Black & Ruby",
+				"uiTheme": "vs-dark",
+				"path": "./themes/black-ruby-color-theme.json"
+			}
+		]
+	}
+}

@@ -3,17 +3,275 @@
  *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
  *--------------------------------------------------------------------------------------*/
 
-import { readFileSync } from 'fs';
+import { createHash } from 'crypto';
+import { readFileSync, statSync } from 'fs';
 import { normalize } from 'path';
+import * as os from 'os';
+import * as path from 'path';
 import { URI } from '../../../../../base/common/uri.js';
 import { ILogService } from '../../../../../platform/log/common/log.js';
-import { ExtractedContent } from '../../common/rag/ragServiceTypes.js';
+import { ExtractedContent, OCRCacheEntry } from '../../common/rag/ragServiceTypes.js';
+import { RAGIndexService } from './ragIndexService.js';
+import { FileConverterMainService } from '../fileConverterChannel.js';
+
+// Threshold for detecting scanned PDFs (characters per page)
+const SCANNED_PDF_THRESHOLD = 50;
 
 export class RAGFileService {
 	public useDoclingForPdf = true; // Use Docling by default for enhanced PDF extraction
 	public useHybridPdfExtraction = true; // Use hybrid extraction (PDF.js metadata + Docling content)
 
+	// OCR settings
+	public enableAutoOCR = true;           // Enable automatic OCR for scanned PDFs
+	public ocrLanguage = 'eng';            // OCR language (Tesseract language code)
+	public ocrScannedThreshold = SCANNED_PDF_THRESHOLD; // Chars/page threshold for scanned detection
+
+	// Optional dependencies for OCR
+	private indexService: RAGIndexService | null = null;
+	private fileConverter: FileConverterMainService | null = null;
+
 	constructor(@ILogService private readonly logService: ILogService) { }
+
+	/**
+	 * Set the file converter service for OCR
+	 * This is a global service, not workspace-specific
+	 */
+	setFileConverter(fileConverter: FileConverterMainService): void {
+		this.fileConverter = fileConverter;
+		this.logService.info('[RAGFileService] File converter set for OCR support');
+	}
+
+	/**
+	 * Set the current workspace's index service for OCR caching
+	 * This is workspace-specific and changes when workspace switches
+	 */
+	setIndexService(indexService: RAGIndexService | null): void {
+		this.indexService = indexService;
+		if (indexService) {
+			this.logService.info('[RAGFileService] Index service set for OCR caching');
+		}
+	}
+
+	/**
+	 * Check if a PDF appears to be scanned (image-based) rather than text-based
+	 * @param text Extracted text content
+	 * @param pageCount Number of pages in the document
+	 * @returns True if the PDF appears to be scanned
+	 */
+	private isScannedPDF(text: string, pageCount: number): boolean {
+		if (!pageCount || pageCount === 0) return false;
+
+		const charsPerPage = text.length / pageCount;
+		const isScanned = charsPerPage < this.ocrScannedThreshold;
+
+		if (isScanned) {
+			this.logService.info(`[PDF] Scanned PDF detected: ${charsPerPage.toFixed(1)} chars/page (threshold: ${this.ocrScannedThreshold})`);
+		}
+
+		return isScanned;
+	}
+
+	/**
+	 * Calculate SHA256 hash of file content for OCR cache key
+	 */
+	private calculateFileHash(filepath: string): string {
+		const content = readFileSync(filepath);
+		return createHash('sha256').update(content).digest('hex');
+	}
+
+	/**
+	 * Extract text from a scanned PDF using OCR
+	 * This method:
+	 * 1. Checks the OCR cache for existing results
+	 * 2. If not cached, converts PDF pages to images
+	 * 3. Runs OCR on each image
+	 * 4. Combines and caches the result
+	 *
+	 * @param uri The URI of the PDF file
+	 * @param filepath The filesystem path to the PDF
+	 * @param pageCount Number of pages in the PDF
+	 * @returns ExtractedContent with OCR text, or null if OCR failed
+	 */
+	async extractWithOCR(uri: URI, filepath: string, pageCount: number): Promise<ExtractedContent | null> {
+		// Check if file converter is available (required for OCR)
+		if (!this.fileConverter) {
+			this.logService.warn('[OCR] File converter not set - skipping OCR extraction');
+			return null;
+		}
+
+		const startTime = Date.now();
+		this.logService.info(`[OCR] ========== OCR EXTRACTION START ==========`);
+		this.logService.info(`[OCR] File: ${filepath}`);
+		this.logService.info(`[OCR] Pages: ${pageCount}`);
+		this.logService.info(`[OCR] Language: ${this.ocrLanguage}`);
+		this.logService.info(`[OCR] Caching: ${this.indexService ? 'enabled' : 'disabled (no workspace context)'}`);
+
+		try {
+			// Step 1: Calculate file hash and check cache (if indexService available)
+			const fileHash = this.calculateFileHash(filepath);
+			this.logService.info(`[OCR] File hash: ${fileHash.substring(0, 16)}...`);
+
+			// Check cache only if indexService is available
+			if (this.indexService) {
+				const cachedResult = await this.indexService.getOCRCache(fileHash);
+				if (cachedResult) {
+					// Only use cache if it has actual content (skip empty/failed OCR results)
+					if (cachedResult.ocrText.length > 0) {
+						this.logService.info(`[OCR] Cache HIT - returning cached OCR text (${cachedResult.ocrText.length} chars)`);
+						return {
+							text: cachedResult.ocrText,
+							metadata: {
+								pageCount: cachedResult.pageCount,
+								wordCount: this.countWords(cachedResult.ocrText),
+								language: cachedResult.language
+							},
+							wasOCR: true,
+							ocrLanguage: cachedResult.language
+						};
+					} else {
+						this.logService.info(`[OCR] Cache contains empty result - re-running OCR`);
+						// Delete the bad cache entry
+						await this.indexService.invalidateOCRCache(fileHash);
+					}
+				}
+			}
+
+			this.logService.info(`[OCR] Cache MISS - performing OCR extraction`);
+
+			// Step 2: Create temp directory for image files
+			const tempDir = path.join(os.tmpdir(), `ocr-${fileHash.substring(0, 8)}`);
+			const fs = await import('fs');
+			if (!fs.existsSync(tempDir)) {
+				fs.mkdirSync(tempDir, { recursive: true });
+			}
+			this.logService.info(`[OCR] Temp directory: ${tempDir}`);
+
+			// Step 3: Convert PDF to images using Python converter
+			// Pass the temp directory - Python will create page_001.png, page_002.png, etc. inside it
+			this.logService.info(`[OCR] Converting PDF to images...`);
+
+			const pdf2imagesResult = await this.fileConverter.convert(
+				filepath,
+				tempDir,  // Pass directory, not pattern - Python handles naming
+				'pdf2images',
+				{ dpi: 300, format: 'png', output_prefix: 'page' }
+			);
+
+			if (!pdf2imagesResult.success) {
+				this.logService.error(`[OCR] PDF to images conversion failed: ${pdf2imagesResult.error}`);
+				// Clean up temp directory
+				this.cleanupTempDir(tempDir);
+				return null;
+			}
+
+			this.logService.info(`[OCR] PDF converted to images successfully`);
+
+			// Step 4: Find all generated image files
+			// Python creates files like page_001.png, page_002.png in the temp directory
+			const imageFiles = fs.readdirSync(tempDir)
+				.filter((f: string) => f.endsWith('.png') && !fs.statSync(path.join(tempDir, f)).isDirectory())
+				.sort()
+				.map((f: string) => path.join(tempDir, f));
+
+			this.logService.info(`[OCR] Found ${imageFiles.length} page images`);
+
+			// Step 5: OCR each image
+			const ocrTexts: string[] = [];
+			for (let i = 0; i < imageFiles.length; i++) {
+				const imageFile = imageFiles[i];
+				const outputTextFile = imageFile.replace('.png', '.txt');
+
+				this.logService.info(`[OCR] Processing page ${i + 1}/${imageFiles.length}...`);
+
+				const ocrResult = await this.fileConverter.convert(
+					imageFile,
+					outputTextFile,
+					'image2text',
+					{ language: this.ocrLanguage }
+				);
+
+				if (ocrResult.success && fs.existsSync(outputTextFile)) {
+					const pageText = fs.readFileSync(outputTextFile, 'utf-8');
+					ocrTexts.push(pageText.trim());
+					this.logService.info(`[OCR] Page ${i + 1}: ${pageText.length} chars extracted`);
+				} else {
+					this.logService.warn(`[OCR] Page ${i + 1} OCR failed: ${ocrResult.error}`);
+					ocrTexts.push(''); // Empty placeholder for failed page
+				}
+			}
+
+			// Step 6: Combine OCR results
+			const fullOcrText = ocrTexts.join('\n\n--- Page Break ---\n\n');
+			this.logService.info(`[OCR] Total OCR text: ${fullOcrText.length} chars`);
+
+			// Step 7: Cache the result (if indexService available and result has content)
+			if (this.indexService) {
+				if (fullOcrText.length > 0) {
+					const fileStats = statSync(filepath);
+					const cacheEntry: OCRCacheEntry = {
+						id: fileHash,
+						filepath: filepath,
+						ocrText: fullOcrText,
+						pageCount: imageFiles.length,
+						language: this.ocrLanguage,
+						createdAt: new Date().toISOString(),
+						fileModifiedAt: fileStats.mtime.toISOString()
+					};
+
+					await this.indexService.setOCRCache(cacheEntry);
+					this.logService.info(`[OCR] Result cached successfully`);
+				} else {
+					this.logService.info(`[OCR] Skipping cache (empty OCR result - may indicate OCR failure)`);
+				}
+			} else {
+				this.logService.info(`[OCR] Skipping cache (no workspace context)`);
+			}
+
+			// Step 8: Clean up temp directory
+			this.cleanupTempDir(tempDir);
+
+			const totalTime = Date.now() - startTime;
+			this.logService.info(`[OCR] ========== OCR EXTRACTION COMPLETE ==========`);
+			this.logService.info(`[OCR] Total time: ${totalTime}ms (${(totalTime / 1000 / imageFiles.length).toFixed(2)}s per page)`);
+			this.logService.info(`[OCR] Characters extracted: ${fullOcrText.length.toLocaleString()}`);
+
+			return {
+				text: fullOcrText,
+				metadata: {
+					pageCount: imageFiles.length,
+					wordCount: this.countWords(fullOcrText),
+					language: this.ocrLanguage
+				},
+				wasOCR: true,
+				ocrLanguage: this.ocrLanguage
+			};
+
+		} catch (error) {
+			const errorMsg = error instanceof Error ? error.message : String(error);
+			this.logService.error(`[OCR] OCR extraction failed: ${errorMsg}`);
+			this.logService.error('[OCR] Error details:', error);
+			return null;
+		}
+	}
+
+	/**
+	 * Clean up temporary directory used for OCR
+	 */
+	private async cleanupTempDir(tempDir: string): Promise<void> {
+		try {
+			const fs = await import('fs');
+			if (fs.existsSync(tempDir)) {
+				const files = fs.readdirSync(tempDir);
+				for (const file of files) {
+					fs.unlinkSync(path.join(tempDir, file));
+				}
+				fs.rmdirSync(tempDir);
+				this.logService.info(`[OCR] Cleaned up temp directory: ${tempDir}`);
+			}
+		} catch (error) {
+			this.logService.warn(`[OCR] Failed to cleanup temp directory ${tempDir}:`, error);
+		}
+	}
 
 	async extractContent(uri: URI): Promise<ExtractedContent> {
 		const filepath = this.getFilePath(uri);
@@ -238,6 +496,21 @@ export class RAGFileService {
 			this.logService.info(`[PDF.js] Words extracted: ${metadata.wordCount.toLocaleString()}`);
 			this.logService.info(`[PDF.js] Pages processed: ${metadata.pageCount}`);
 			this.logService.info(`[PDF.js] Characters per second: ${Math.round(charCount / (totalTime / 1000)).toLocaleString()}`);
+
+			// Check if this appears to be a scanned PDF
+			if (this.enableAutoOCR && this.isScannedPDF(fullText, metadata.pageCount || 1)) {
+				this.logService.info(`[PDF.js] Scanned PDF detected - attempting OCR extraction`);
+
+				// Try OCR extraction
+				const ocrResult = await this.extractWithOCR(uri, filepath, metadata.pageCount || 1);
+				if (ocrResult) {
+					this.logService.info(`[PDF.js] OCR extraction successful - using OCR text`);
+					return ocrResult;
+				} else {
+					this.logService.warn(`[PDF.js] OCR extraction failed - using sparse text extraction`);
+				}
+			}
+
 			this.logService.info(`[PDF.js] ========== STANDARD EXTRACTION COMPLETE ==========`);
 
 			return {
@@ -357,12 +630,25 @@ export class RAGFileService {
 				to_formats: ['md']
 			});
 
-			const text = result.document.md_content || result.document.text_content || '';
+			let text = result.document.md_content || result.document.text_content || '';
 			const doclingDoc = result.document.json_content;
 
 			const contentTime = Date.now() - contentStartTime;
 			this.logService.info(`[Hybrid PDF] ✓ Content extracted in ${contentTime}ms`);
 			this.logService.info(`[Hybrid PDF]   - Characters: ${text.length.toLocaleString()}`);
+
+			// Check if this appears to be a scanned PDF (very little or no text)
+			if (this.enableAutoOCR && this.isScannedPDF(text, metadata.pageCount || 1)) {
+				this.logService.info(`[Hybrid PDF] Scanned PDF detected - attempting OCR extraction`);
+
+				const ocrResult = await this.extractWithOCR(uri, filepath, metadata.pageCount || 1);
+				if (ocrResult) {
+					this.logService.info(`[Hybrid PDF] OCR extraction successful - using OCR text`);
+					return ocrResult;
+				} else {
+					this.logService.warn(`[Hybrid PDF] OCR extraction failed - using sparse Docling text`);
+				}
+			}
 
 			// Detect tables
 			let tableCount = 0;

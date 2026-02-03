@@ -13,6 +13,7 @@ import { IRAGPathService } from '../../common/rag/ragPathService.js';
 import { LocalCrossEncoderReranker } from '../../common/rag/ragReranker.js';
 import { ContextPack, IRAGMainService, RAGIndexParams, RAGSearchParams, RAGStats } from '../../common/rag/ragServiceTypes.js';
 import { VectorAdapter } from '../../common/rag/ragVectorAdapter.js';
+import { FileConverterMainService } from '../fileConverterChannel.js';
 import { RAGFileService } from './ragFileService.js';
 import { RAGIndexService } from './ragIndexService.js';
 import { WorkspaceRAGManager } from './ragWorkspaceManager.js';
@@ -44,6 +45,15 @@ export class RAGMainService implements IRAGMainService {
 	) {
 		this.fileService = new RAGFileService(logService);
 		this.workspaceManager = new WorkspaceRAGManager(logService, pathService);
+	}
+
+	/**
+	 * Set file converter service for OCR capabilities
+	 * Must be called after both RAGMainService and FileConverterMainService are created
+	 */
+	setFileConverterService(fileConverter: FileConverterMainService): void {
+		this.fileService.setFileConverter(fileConverter);
+		this.logService.info('RAG: File converter service set for OCR support');
 	}
 
 	async initialize(openAIApiKey?: string): Promise<void> {
@@ -126,6 +136,10 @@ export class RAGMainService implements IRAGMainService {
 
 		this.logService.info(`RAG: Accessing micro database for workspace: ${workspaceId}`);
 		const instance = await this.workspaceManager.getOrCreateWorkspace(workspaceId);
+
+		// Wire up the index service to file service for OCR caching
+		this.fileService.setIndexService(instance.indexService);
+
 		return {
 			vectorAdapter: instance.vectorAdapter,
 			indexService: instance.indexService,
@@ -188,7 +202,7 @@ export class RAGMainService implements IRAGMainService {
 			this.logService.info('Chunking document...');
 			const result = await indexService.indexDocument({
 				uri: params.uri,
-				isPolicyManual: params.isPolicyManual,
+				isCoreReference: params.isCoreReference,
 				workspaceId: params.workspaceId,
 				content: extractedContent.text,
 				metadata: extractedContent.metadata
@@ -219,7 +233,7 @@ export class RAGMainService implements IRAGMainService {
 					const batchMetadatas = batchChunks.map(chunk => ({
 						docId: result.docId,
 						chunkId: chunk.chunkId,
-						isPolicyManual: params.isPolicyManual,
+						isCoreReference: params.isCoreReference,
 						filename,
 						chunkIndex: chunk.chunkIndex
 					}));
@@ -468,22 +482,55 @@ export class RAGMainService implements IRAGMainService {
 		}
 
 		try {
-			const { indexService } = await this.getWorkspaceInstance(workspaceId);
+			const { indexService, vectorAdapter } = await this.getWorkspaceInstance(workspaceId);
 			const docId = indexService.generateDocumentId(uri);
 			this.logService.info(`Checking if document is indexed: ${uri.fsPath} (docId: ${docId}, workspace: ${workspaceId})`);
 
+			// Step 1: Check if document exists in SQLite
 			const doc = await indexService.getDocumentById(docId);
-			const isIndexed = doc !== null;
+			const hasDocRecord = doc !== null;
 
-			this.logService.info(`Document ${uri.fsPath} is ${isIndexed ? 'already indexed' : 'not indexed'}`);
-			return isIndexed;
+			if (!hasDocRecord) {
+				this.logService.info(`Document ${uri.fsPath} is not indexed (no SQLite record)`);
+				return false;
+			}
+
+			// Step 2: Get chunk count from SQLite
+			const chunks = await indexService.getChunksByDocId(docId);
+			const sqliteChunkCount = chunks.length;
+
+			// Step 3: Check if embeddings exist in vector store
+			const { hasEmbeddings, count: embeddingCount } = await vectorAdapter.hasDocumentEmbeddings(docId);
+
+			// Step 4: Verify integrity - both SQLite and embeddings should have matching data
+			if (hasDocRecord && hasEmbeddings) {
+				// Check if counts match (allow for some variance due to parent chunks)
+				const countsMatch = embeddingCount >= sqliteChunkCount * 0.9; // Allow 10% variance
+				if (countsMatch) {
+					this.logService.info(`Document ${uri.fsPath} is fully indexed (${sqliteChunkCount} chunks, ${embeddingCount} embeddings)`);
+					return true;
+				} else {
+					// Integrity mismatch - SQLite has chunks but embeddings are incomplete
+					this.logService.warn(`INTEGRITY MISMATCH: Document ${uri.fsPath} has ${sqliteChunkCount} chunks in SQLite but only ${embeddingCount} embeddings`);
+					this.logService.warn(`Document will be re-indexed to repair the mismatch`);
+					return false;
+				}
+			} else if (hasDocRecord && !hasEmbeddings) {
+				// SQLite has record but no embeddings - partial index, needs re-indexing
+				this.logService.warn(`PARTIAL INDEX: Document ${uri.fsPath} exists in SQLite but has no embeddings`);
+				this.logService.warn(`Document will be re-indexed to add embeddings`);
+				return false;
+			}
+
+			this.logService.info(`Document ${uri.fsPath} is not indexed`);
+			return false;
 		} catch (error) {
 			this.logService.error(`Failed to check if document is indexed:`, error);
 			return false;
 		}
 	}
 
-	async getDocumentsByType(isPolicyManual: boolean, workspaceId: string): Promise<any[]> {
+	async getDocumentsByType(isCoreReference: boolean, workspaceId: string): Promise<any[]> {
 		if (!this.initialized) {
 			await this.initialize();
 		}
@@ -495,7 +542,7 @@ export class RAGMainService implements IRAGMainService {
 
 		try {
 			const { indexService } = await this.getWorkspaceInstance(workspaceId);
-			return await indexService.getDocumentsByType(isPolicyManual);
+			return await indexService.getDocumentsByType(isCoreReference);
 		} catch (error) {
 			this.logService.error(`Failed to get documents by type:`, error);
 			return [];

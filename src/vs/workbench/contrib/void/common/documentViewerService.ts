@@ -9,9 +9,28 @@ import { registerSingleton, InstantiationType } from '../../../../platform/insta
 
 export const IDocumentViewerService = createDecorator<IDocumentViewerService>('documentViewerService');
 
+/**
+ * Metadata about a document (page count, etc.)
+ */
+export interface DocumentMetadata {
+	pageCount: number;
+	title?: string;
+	author?: string;
+	wordCount?: number;
+}
+
+/**
+ * Result of content extraction, including OCR status
+ */
+export interface ContentExtractionResult {
+	text: string;
+	wasOCR?: boolean;
+	ocrLanguage?: string;
+}
+
 export interface DocumentContentExtractor {
 	/**
-	 * Extract text content from entire document
+	 * Extract text content from entire document (may be limited for large docs)
 	 */
 	extractContent(uri: URI): Promise<string>;
 
@@ -19,15 +38,44 @@ export interface DocumentContentExtractor {
 	 * Extract text content from specific page range (for PDFs)
 	 */
 	extractContentRange?(uri: URI, startPage: number, endPage: number): Promise<string>;
+
+	/**
+	 * Extract ALL text content from document (for chat file drops)
+	 * Unlike extractContent, this extracts all pages without limitations
+	 */
+	extractFullContent?(uri: URI): Promise<string>;
+
+	/**
+	 * Extract ALL text content with OCR status information
+	 * Returns both the text and whether OCR was used (for scanned PDFs)
+	 */
+	extractFullContentWithOCRInfo?(uri: URI): Promise<ContentExtractionResult>;
+
+	/**
+	 * Get document metadata (page count, etc.) without extracting full content
+	 */
+	getMetadata?(uri: URI): Promise<DocumentMetadata>;
 }
 
 export interface IDocumentViewerService {
 	_serviceBrand: undefined;
 
 	/**
-	 * Extract text for AI (whole document)
+	 * Extract text for AI (may be limited for large documents)
 	 */
 	getTextContent(uri: URI): Promise<string | null>;
+
+	/**
+	 * Extract ALL text for AI (used for chat file drops)
+	 * This extracts complete content without page limitations
+	 */
+	getFullTextContent(uri: URI): Promise<string | null>;
+
+	/**
+	 * Extract ALL text with OCR status information
+	 * Returns both text and whether OCR was used (for scanned PDFs)
+	 */
+	getFullTextContentWithOCRInfo(uri: URI): Promise<ContentExtractionResult | null>;
 
 	/**
 	 * Extract text for specific pages (for Ctrl+K selection)
@@ -35,9 +83,19 @@ export interface IDocumentViewerService {
 	getTextContentRange(uri: URI, startPage: number, endPage: number): Promise<string | null>;
 
 	/**
+	 * Get document metadata (page count, etc.) without extracting full content
+	 */
+	getDocumentMetadata(uri: URI): Promise<DocumentMetadata | null>;
+
+	/**
 	 * Check if file is viewable document
 	 */
 	isDocumentFile(uri: URI): boolean;
+
+	/**
+	 * Check if file is a PDF document
+	 */
+	isPDFFile(uri: URI): boolean;
 
 	/**
 	 * Register extractors for specific file extensions
@@ -65,6 +123,11 @@ export class DocumentViewerService implements IDocumentViewerService {
 		return this.extractorOfExtension.has(ext);
 	}
 
+	isPDFFile(uri: URI): boolean {
+		const ext = this.getFileExtension(uri);
+		return ext === 'pdf';
+	}
+
 	async getTextContent(uri: URI): Promise<string | null> {
 		const ext = this.getFileExtension(uri);
 		const extractor = this.extractorOfExtension.get(ext);
@@ -77,6 +140,53 @@ export class DocumentViewerService implements IDocumentViewerService {
 			return await extractor.extractContent(uri);
 		} catch (error) {
 			console.error(`Failed to extract content from ${uri.toString()}:`, error);
+			return null;
+		}
+	}
+
+	async getFullTextContent(uri: URI): Promise<string | null> {
+		const ext = this.getFileExtension(uri);
+		const extractor = this.extractorOfExtension.get(ext);
+
+		if (!extractor) {
+			return null;
+		}
+
+		try {
+			// Use extractFullContent if available, otherwise fall back to extractContent
+			if (extractor.extractFullContent) {
+				return await extractor.extractFullContent(uri);
+			}
+			return await extractor.extractContent(uri);
+		} catch (error) {
+			console.error(`Failed to extract full content from ${uri.toString()}:`, error);
+			return null;
+		}
+	}
+
+	async getFullTextContentWithOCRInfo(uri: URI): Promise<ContentExtractionResult | null> {
+		const ext = this.getFileExtension(uri);
+		const extractor = this.extractorOfExtension.get(ext);
+
+		if (!extractor) {
+			return null;
+		}
+
+		try {
+			// Use extractFullContentWithOCRInfo if available
+			if (extractor.extractFullContentWithOCRInfo) {
+				return await extractor.extractFullContentWithOCRInfo(uri);
+			}
+			// Fall back to extractFullContent without OCR info
+			if (extractor.extractFullContent) {
+				const text = await extractor.extractFullContent(uri);
+				return { text, wasOCR: false };
+			}
+			// Final fallback to extractContent
+			const text = await extractor.extractContent(uri);
+			return { text, wasOCR: false };
+		} catch (error) {
+			console.error(`Failed to extract full content with OCR info from ${uri.toString()}:`, error);
 			return null;
 		}
 	}
@@ -94,6 +204,22 @@ export class DocumentViewerService implements IDocumentViewerService {
 			return await extractor.extractContentRange(uri, startPage, endPage);
 		} catch (error) {
 			console.error(`Failed to extract content range from ${uri.toString()}:`, error);
+			return null;
+		}
+	}
+
+	async getDocumentMetadata(uri: URI): Promise<DocumentMetadata | null> {
+		const ext = this.getFileExtension(uri);
+		const extractor = this.extractorOfExtension.get(ext);
+
+		if (!extractor || !extractor.getMetadata) {
+			return null;
+		}
+
+		try {
+			return await extractor.getMetadata(uri);
+		} catch (error) {
+			console.error(`Failed to get metadata from ${uri.toString()}:`, error);
 			return null;
 		}
 	}

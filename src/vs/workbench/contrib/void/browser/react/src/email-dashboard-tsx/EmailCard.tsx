@@ -3,17 +3,53 @@
  *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
  *--------------------------------------------------------------------------------------*/
 
-import React, { useState } from 'react';
-import { Email } from '../../../../common/emailService.js';
+import React, { useState, useCallback } from 'react';
+import { Email, EmailCategory, EmailPriority, DraftStatus } from '../../../../common/emailService.js';
+import { useAccessor } from '../util/services.js';
+import { ReminderPicker } from './ReminderPicker.js';
+import { DraftEditor } from './DraftEditor.js';
 
-// SafeAppeals brand colors
-const BRAND_GREEN = '#22c55e';
+// ============================================================================
+// REUSABLE STYLES - VSCode Theme Variables
+// ============================================================================
+
+const cardStyle: React.CSSProperties = {
+	backgroundColor: 'var(--vscode-input-background)',
+	border: '1px solid var(--vscode-panel-border)',
+	borderRadius: '12px',
+};
+
+const cardHoverStyle: React.CSSProperties = {
+	...cardStyle,
+	border: '1px solid var(--vscode-focusBorder)',
+};
+
+const buttonSecondaryStyle: React.CSSProperties = {
+	backgroundColor: 'var(--vscode-button-secondaryBackground)',
+	border: '1px solid var(--vscode-panel-border)',
+	color: 'var(--vscode-descriptionForeground)',
+	borderRadius: '8px',
+	cursor: 'pointer',
+};
+
+const textPrimaryStyle: React.CSSProperties = {
+	color: 'var(--vscode-editor-foreground)',
+};
+
+const textSecondaryStyle: React.CSSProperties = {
+	color: 'var(--vscode-descriptionForeground)',
+};
+
+type EmailViewMode = 'list' | 'compact';
 
 interface EmailCardProps {
 	email: Email;
+	viewMode?: EmailViewMode;
 	onClick: () => void;
 	onDelete: () => void;
-	onDraftReply: () => void;
+	onDraftReply: () => Promise<string>;  // Returns generated content
+	onToggleStar: () => Promise<boolean>;
+	onSetReminder: (date: Date | null) => Promise<void>;
 }
 
 // Format date for display
@@ -62,10 +98,150 @@ function getAvatarColor(email: string): string {
 	return colors[Math.abs(hash) % colors.length];
 }
 
-export const EmailCard: React.FC<EmailCardProps> = ({ email, onClick, onDelete, onDraftReply }) => {
+// Category badge configuration
+interface CategoryConfig {
+	icon: string;
+	label: string;
+	bgColor: string;
+	textColor: string;
+	borderColor: string;
+}
+
+function getCategoryConfig(category: EmailCategory | undefined): CategoryConfig | null {
+	if (!category) return null;
+
+	const configs: Record<EmailCategory, CategoryConfig> = {
+		'deadline': {
+			icon: '⚠️',
+			label: 'Deadline',
+			bgColor: 'var(--vscode-inputValidation-errorBackground)',
+			textColor: 'var(--vscode-charts-red)',
+			borderColor: 'var(--vscode-inputValidation-errorBorder)',
+		},
+		'info-request': {
+			icon: '📋',
+			label: 'Info Request',
+			bgColor: 'var(--vscode-inputValidation-infoBackground)',
+			textColor: 'var(--vscode-charts-blue)',
+			borderColor: 'var(--vscode-inputValidation-infoBorder)',
+		},
+		'decision': {
+			icon: '📜',
+			label: 'Decision',
+			bgColor: 'var(--vscode-inputValidation-warningBackground)',
+			textColor: 'var(--vscode-charts-orange)',
+			borderColor: 'var(--vscode-inputValidation-warningBorder)',
+		},
+		'scheduling': {
+			icon: '📅',
+			label: 'Scheduling',
+			bgColor: 'var(--vscode-inputValidation-infoBackground)',
+			textColor: 'var(--vscode-charts-purple)',
+			borderColor: 'var(--vscode-inputValidation-infoBorder)',
+		},
+		'evidence': {
+			icon: '📁',
+			label: 'Evidence',
+			bgColor: 'var(--vscode-inputValidation-infoBackground)',
+			textColor: 'var(--vscode-charts-green)',
+			borderColor: 'var(--vscode-inputValidation-infoBorder)',
+		},
+		'general': {
+			icon: '💬',
+			label: 'General',
+			bgColor: 'var(--vscode-button-secondaryBackground)',
+			textColor: 'var(--vscode-descriptionForeground)',
+			borderColor: 'var(--vscode-panel-border)',
+		},
+	};
+
+	return configs[category];
+}
+
+// Priority badge configuration
+interface PriorityConfig {
+	icon: string;
+	label: string;
+	color: string;
+}
+
+function getPriorityConfig(priority: EmailPriority | undefined): PriorityConfig | null {
+	if (!priority) return null;
+
+	const configs: Record<EmailPriority, PriorityConfig> = {
+		'urgent': { icon: '🔴', label: 'Urgent', color: 'var(--vscode-charts-red)' },
+		'normal': { icon: '🟡', label: 'Normal', color: 'var(--vscode-charts-yellow)' },
+		'low': { icon: '🟢', label: 'Low', color: 'var(--vscode-charts-green)' },
+	};
+
+	return configs[priority];
+}
+
+// Get draft status icon/color for mini indicator
+function getDraftStatusIndicator(status: DraftStatus | undefined): { icon: string; color: string; label: string } | null {
+	if (!status) return null;
+
+	const indicators: Record<DraftStatus, { icon: string; color: string; label: string }> = {
+		'draft': { icon: '✏️', color: 'var(--vscode-descriptionForeground)', label: 'Draft' },
+		'reviewed': { icon: '👀', color: 'var(--vscode-charts-blue)', label: 'Reviewed' },
+		'ready': { icon: '✅', color: 'var(--vscode-charts-green)', label: 'Ready to Send' },
+		'sent': { icon: '📤', color: 'var(--vscode-charts-purple)', label: 'Sent' },
+	};
+
+	return indicators[status];
+}
+
+export const EmailCard: React.FC<EmailCardProps> = ({ email, viewMode = 'list', onClick, onDelete, onDraftReply, onToggleStar, onSetReminder }) => {
+	const accessor = useAccessor();
 	const [confirmDelete, setConfirmDelete] = useState(false);
 	const [isHovered, setIsHovered] = useState(false);
 	const [isDrafting, setIsDrafting] = useState(false);
+	const [isAddingToTimeline, setIsAddingToTimeline] = useState(false);
+	const [isStarred, setIsStarred] = useState(email.isStarred ?? false);
+	const [isTogglingStarred, setIsTogglingStarred] = useState(false);
+	const [reminderDate, setReminderDate] = useState<Date | undefined>(email.reminderDate);
+	const [showReminderPicker, setShowReminderPicker] = useState(false);
+	const [showDraftEditor, setShowDraftEditor] = useState(false);
+	const [draftContent, setDraftContent] = useState<string | undefined>(undefined);
+	const [isLoadingDraft, setIsLoadingDraft] = useState(false);
+	const [draftStatus, setDraftStatus] = useState<DraftStatus | undefined>(undefined);
+	const isCompact = viewMode === 'compact';
+
+	const handleAddToTimeline = useCallback(async (e: React.MouseEvent) => {
+		e.stopPropagation();
+		if (isAddingToTimeline) return;
+		setIsAddingToTimeline(true);
+		try {
+			const timelineService = accessor.get('ITimelineService');
+			const notificationService = accessor.get('INotificationService');
+
+			// Create a timeline event from the email
+			const emailDate = new Date(email.date);
+			const description = `Email from ${email.from}${email.bodyText ? `: ${email.bodyText.substring(0, 150)}...` : ''}`;
+
+			await timelineService.addEvent({
+				title: email.subject || 'Email',
+				date: emailDate.toISOString(),
+				description: description,
+				category: 'correspondence',
+				linkedDocuments: email.filePath ? [email.filePath] : [],
+				isDeadline: false,
+				tags: ['email'],
+			});
+
+			notificationService.info('Email added to timeline');
+		} catch (error) {
+			console.error('Failed to add email to timeline:', error);
+			try {
+				const notificationService = accessor.get('INotificationService');
+				notificationService.error(`Failed to add to timeline: ${error instanceof Error ? error.message : 'Unknown error'}`);
+			} catch {
+				// Notification service unavailable
+			}
+		} finally {
+			setIsAddingToTimeline(false);
+		}
+	}, [accessor, email, isAddingToTimeline]);
 
 	const handleDelete = (e: React.MouseEvent) => {
 		e.stopPropagation();
@@ -83,9 +259,103 @@ export const EmailCard: React.FC<EmailCardProps> = ({ email, onClick, onDelete, 
 		if (isDrafting) return;
 		setIsDrafting(true);
 		try {
-			await onDraftReply();
+			// Generate AI reply and get the content
+			const generatedContent = await onDraftReply();
+
+			// Open the inline DraftEditor with the generated content
+			if (generatedContent) {
+				setDraftContent(generatedContent);
+				setShowDraftEditor(true);
+			} else {
+				// If no content returned, still open editor to load from service
+				setShowDraftEditor(true);
+				// Load from draft service
+				try {
+					const emailDraftService = accessor.get('IEmailDraftService');
+					const draft = await emailDraftService.getDraft(email.id);
+					if (draft) {
+						setDraftContent(draft.content);
+					}
+				} catch (loadError) {
+					console.error('[EmailCard] Failed to load draft after generation:', loadError);
+				}
+			}
 		} finally {
 			setIsDrafting(false);
+		}
+	};
+
+	const handleToggleStar = async (e: React.MouseEvent) => {
+		e.stopPropagation();
+		if (isTogglingStarred) return;
+
+		// Optimistic update
+		const previousState = isStarred;
+		setIsStarred(!isStarred);
+		setIsTogglingStarred(true);
+
+		try {
+			const newState = await onToggleStar();
+			setIsStarred(newState);
+		} catch {
+			// Revert on error
+			setIsStarred(previousState);
+		} finally {
+			setIsTogglingStarred(false);
+		}
+	};
+
+	const handleReminderClick = (e: React.MouseEvent) => {
+		e.stopPropagation();
+		setShowReminderPicker(true);
+	};
+
+	const handleSetReminder = async (date: Date | null) => {
+		const previousDate = reminderDate;
+		setReminderDate(date ?? undefined);
+
+		try {
+			await onSetReminder(date);
+		} catch {
+			// Revert on error
+			setReminderDate(previousDate);
+		}
+	};
+
+	const handleToggleDraftEditor = async (e: React.MouseEvent) => {
+		e.stopPropagation();
+
+		if (showDraftEditor) {
+			// Close the editor
+			setShowDraftEditor(false);
+		} else {
+			// Open the editor - load existing draft if available
+			setIsLoadingDraft(true);
+			try {
+				const emailDraftService = accessor.get('IEmailDraftService');
+				const draft = await emailDraftService.getDraft(email.id);
+
+				if (draft) {
+					setDraftContent(draft.content);
+					setDraftStatus(draft.status);
+				} else {
+					// No draft exists, start with empty content
+					setDraftContent('<p></p>');
+					setDraftStatus(undefined);
+				}
+
+				setShowDraftEditor(true);
+			} catch (error) {
+				console.error('[EmailCard] Failed to load draft:', error);
+				try {
+					const notificationService = accessor.get('INotificationService');
+					notificationService.error(`Failed to load draft: ${error instanceof Error ? error.message : 'Unknown error'}`);
+				} catch {
+					// Notification service unavailable
+				}
+			} finally {
+				setIsLoadingDraft(false);
+			}
 		}
 	};
 
@@ -93,23 +363,325 @@ export const EmailCard: React.FC<EmailCardProps> = ({ email, onClick, onDelete, 
 	const initials = getInitials(email.from);
 	const fromName = email.from.split('<')[0].trim() || email.from;
 
+	// ============================================================================
+	// COMPACT VIEW - Single row, minimal info
+	// ============================================================================
+	if (isCompact) {
+		return (
+			<div
+				className="rounded-lg transition-all duration-200 cursor-pointer group"
+				style={{
+					...cardStyle,
+					borderRadius: '8px',
+					border: isHovered ? '1px solid var(--vscode-focusBorder)' : '1px solid var(--vscode-panel-border)',
+				}}
+				onClick={onClick}
+				onMouseEnter={() => setIsHovered(true)}
+				onMouseLeave={() => setIsHovered(false)}
+			>
+				<div className="px-3 py-2 flex items-center gap-3">
+					{/* Star Button - Always visible */}
+					<button
+						onClick={handleToggleStar}
+						disabled={isTogglingStarred}
+						className="flex items-center justify-center transition-all"
+						style={{
+							background: 'none',
+							border: 'none',
+							cursor: isTogglingStarred ? 'wait' : 'pointer',
+							padding: '2px',
+							flexShrink: 0,
+						}}
+						title={isStarred ? 'Unstar email' : 'Star email'}
+					>
+						<i
+							className={`codicon ${isStarred ? 'codicon-star-full' : 'codicon-star-empty'}`}
+							style={{
+								color: isStarred ? 'var(--vscode-charts-yellow)' : 'var(--vscode-descriptionForeground)',
+								fontSize: '14px',
+								opacity: isTogglingStarred ? 0.5 : 1,
+							}}
+						/>
+					</button>
+
+					{/* Reminder Button - Always visible */}
+					<div style={{ position: 'relative', flexShrink: 0 }}>
+						<button
+							onClick={handleReminderClick}
+							className="flex items-center justify-center transition-all"
+							style={{
+								background: 'none',
+								border: 'none',
+								cursor: 'pointer',
+								padding: '2px',
+							}}
+							title={reminderDate ? `Reminder: ${reminderDate.toLocaleDateString()}` : 'Set reminder'}
+						>
+							<i
+								className={`codicon ${reminderDate ? 'codicon-bell-dot' : 'codicon-bell'}`}
+								style={{
+									color: reminderDate ? 'var(--vscode-charts-blue)' : 'var(--vscode-descriptionForeground)',
+									fontSize: '14px',
+								}}
+							/>
+						</button>
+						{showReminderPicker && (
+							<ReminderPicker
+								currentDate={reminderDate}
+								onSetReminder={handleSetReminder}
+								onClose={() => setShowReminderPicker(false)}
+							/>
+						)}
+					</div>
+
+					{/* File Type Icon */}
+					<i
+						className={`codicon ${email.fileType === 'eml' ? 'codicon-mail' : 'codicon-file-pdf'}`}
+						style={{
+							color: email.fileType === 'eml' ? 'var(--vscode-charts-blue)' : 'var(--vscode-charts-red)',
+							fontSize: '14px',
+							flexShrink: 0,
+						}}
+					/>
+
+					{/* From */}
+					<span
+						className="font-medium text-sm truncate"
+						style={{ ...textPrimaryStyle, minWidth: '120px', maxWidth: '150px' }}
+					>
+						{fromName}
+					</span>
+
+					{/* Badges */}
+					<div className="flex items-center gap-1 flex-shrink-0">
+						{email.isDraft && (
+							<span
+								className="inline-flex items-center rounded px-1.5 py-0.5 text-xs font-medium"
+								style={{
+									backgroundColor: 'var(--vscode-inputValidation-warningBackground)',
+									color: 'var(--vscode-charts-yellow)',
+								}}
+							>
+								Draft
+							</span>
+						)}
+						{/* Draft Status Indicator */}
+						{draftStatus && getDraftStatusIndicator(draftStatus) && (() => {
+							const indicator = getDraftStatusIndicator(draftStatus)!;
+							return (
+								<span
+									className="inline-flex items-center rounded px-1.5 py-0.5 text-xs"
+									style={{
+										backgroundColor: 'var(--vscode-button-secondaryBackground)',
+										color: indicator.color,
+										border: '1px solid var(--vscode-panel-border)',
+									}}
+									title={indicator.label}
+								>
+									{indicator.icon}
+								</span>
+							);
+						})()}
+						{email.attachments.length > 0 && (
+							<i
+								className="codicon codicon-file-symlink-file"
+								style={{ ...textSecondaryStyle, fontSize: '11px' }}
+								title={`${email.attachments.length} attachment${email.attachments.length !== 1 ? 's' : ''}`}
+							/>
+						)}
+						{/* Category Badge */}
+						{email.category && getCategoryConfig(email.category) && (() => {
+							const config = getCategoryConfig(email.category)!;
+							return (
+								<span
+									className="inline-flex items-center rounded px-1.5 py-0.5 text-xs"
+									style={{
+										backgroundColor: config.bgColor,
+										color: config.textColor,
+										border: `1px solid ${config.borderColor}`,
+									}}
+									title={config.label}
+								>
+									{config.icon}
+								</span>
+							);
+						})()}
+						{/* Priority indicator */}
+						{email.priority && email.priority !== 'normal' && getPriorityConfig(email.priority) && (() => {
+							const config = getPriorityConfig(email.priority)!;
+							return (
+								<span
+									title={`${config.label} priority`}
+									style={{ fontSize: '10px' }}
+								>
+									{config.icon}
+								</span>
+							);
+						})()}
+					</div>
+
+					{/* Subject */}
+					<span
+						className="text-sm truncate flex-1"
+						style={textSecondaryStyle}
+					>
+						{email.subject}
+					</span>
+
+					{/* Date */}
+					<span
+						className="text-xs whitespace-nowrap flex-shrink-0"
+						style={textSecondaryStyle}
+					>
+						{formatEmailDate(email.date)}
+					</span>
+
+					{/* Compact Action Buttons - with text labels */}
+					<div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
+						<button
+							onClick={handleToggleDraftEditor}
+							disabled={isLoadingDraft}
+							className="px-2 py-1 rounded flex items-center gap-1 text-xs transition-all"
+							style={{
+								backgroundColor: showDraftEditor ? 'var(--vscode-button-background)' : 'var(--vscode-button-secondaryBackground)',
+								color: showDraftEditor ? 'var(--vscode-button-foreground)' : 'var(--vscode-descriptionForeground)',
+								border: '1px solid var(--vscode-panel-border)',
+								cursor: isLoadingDraft ? 'wait' : 'pointer',
+							}}
+						>
+							<i className={`codicon ${isLoadingDraft ? 'codicon-loading codicon-modifier-spin' : showDraftEditor ? 'codicon-chevron-up' : 'codicon-edit'}`} />
+							<span>{isLoadingDraft ? 'Loading...' : showDraftEditor ? 'Close' : 'Draft'}</span>
+						</button>
+						<button
+							onClick={handleDraftReply}
+							disabled={isDrafting}
+							className="px-2 py-1 rounded flex items-center gap-1 text-xs transition-all"
+							style={{
+								backgroundColor: isDrafting ? 'var(--vscode-button-background)' : 'var(--vscode-button-secondaryBackground)',
+								color: isDrafting ? 'var(--vscode-button-foreground)' : 'var(--vscode-descriptionForeground)',
+								border: '1px solid var(--vscode-panel-border)',
+								cursor: isDrafting ? 'wait' : 'pointer',
+							}}
+						>
+							<i className={`codicon ${isDrafting ? 'codicon-loading codicon-modifier-spin' : 'codicon-reply'}`} />
+							<span>{isDrafting ? 'Drafting...' : 'Reply'}</span>
+						</button>
+						<button
+							onClick={(e) => {
+								e.stopPropagation();
+								onClick();
+							}}
+							className="px-2 py-1 rounded flex items-center gap-1 text-xs transition-all"
+							style={{
+								backgroundColor: 'var(--vscode-button-secondaryBackground)',
+								color: 'var(--vscode-descriptionForeground)',
+								border: '1px solid var(--vscode-panel-border)',
+							}}
+						>
+							<i className="codicon codicon-go-to-file" />
+							<span>Open</span>
+						</button>
+						<button
+							onClick={handleAddToTimeline}
+							disabled={isAddingToTimeline}
+							className="px-2 py-1 rounded flex items-center gap-1 text-xs transition-all"
+							style={{
+								backgroundColor: isAddingToTimeline ? 'var(--vscode-button-background)' : 'var(--vscode-button-secondaryBackground)',
+								color: isAddingToTimeline ? 'var(--vscode-button-foreground)' : 'var(--vscode-descriptionForeground)',
+								border: '1px solid var(--vscode-panel-border)',
+								cursor: isAddingToTimeline ? 'wait' : 'pointer',
+							}}
+						>
+							<i className={`codicon ${isAddingToTimeline ? 'codicon-loading codicon-modifier-spin' : 'codicon-calendar'}`} />
+							<span>{isAddingToTimeline ? 'Adding...' : 'Timeline'}</span>
+						</button>
+						<button
+							onClick={handleDelete}
+							className="px-2 py-1 rounded flex items-center gap-1 text-xs transition-all"
+							style={{
+								backgroundColor: confirmDelete ? 'var(--vscode-charts-red)' : 'var(--vscode-button-secondaryBackground)',
+								color: confirmDelete ? 'var(--vscode-editor-foreground)' : 'var(--vscode-descriptionForeground)',
+								border: confirmDelete ? '1px solid var(--vscode-charts-red)' : '1px solid var(--vscode-panel-border)',
+							}}
+						>
+							<i className={`codicon ${confirmDelete ? 'codicon-check' : 'codicon-trash'}`} />
+							<span>{confirmDelete ? 'Confirm' : 'Delete'}</span>
+						</button>
+					</div>
+				</div>
+			</div>
+		);
+	}
+
+	// ============================================================================
+	// LIST VIEW - Full card with preview
+	// ============================================================================
 	return (
 		<div
 			className="rounded-xl transition-all duration-200 cursor-pointer group"
-			style={{
-				backgroundColor: '#111111',
-				border: `1px solid ${isHovered ? BRAND_GREEN : '#27272a'}`,
-				boxShadow: isHovered ? `0 4px 12px ${BRAND_GREEN}10` : 'none'
-			}}
+			style={isHovered ? cardHoverStyle : cardStyle}
 			onClick={onClick}
 			onMouseEnter={() => setIsHovered(true)}
 			onMouseLeave={() => setIsHovered(false)}
 		>
 			<div className="p-4 flex items-start gap-4">
-				{/* Avatar */}
+				{/* Star Button - Always visible */}
+				<button
+					onClick={handleToggleStar}
+					disabled={isTogglingStarred}
+					className="flex items-center justify-center transition-all flex-shrink-0 mt-1"
+					style={{
+						background: 'none',
+						border: 'none',
+						cursor: isTogglingStarred ? 'wait' : 'pointer',
+						padding: '4px',
+					}}
+					title={isStarred ? 'Unstar email' : 'Star email'}
+				>
+					<i
+						className={`codicon ${isStarred ? 'codicon-star-full' : 'codicon-star-empty'}`}
+						style={{
+							color: isStarred ? 'var(--vscode-charts-yellow)' : 'var(--vscode-descriptionForeground)',
+							fontSize: '16px',
+							opacity: isTogglingStarred ? 0.5 : 1,
+						}}
+					/>
+				</button>
+
+				{/* Reminder Button - Always visible */}
+				<div style={{ position: 'relative', flexShrink: 0 }} className="mt-1">
+					<button
+						onClick={handleReminderClick}
+						className="flex items-center justify-center transition-all"
+						style={{
+							background: 'none',
+							border: 'none',
+							cursor: 'pointer',
+							padding: '4px',
+						}}
+						title={reminderDate ? `Reminder: ${reminderDate.toLocaleDateString()}` : 'Set reminder'}
+					>
+						<i
+							className={`codicon ${reminderDate ? 'codicon-bell-dot' : 'codicon-bell'}`}
+							style={{
+								color: reminderDate ? 'var(--vscode-charts-blue)' : 'var(--vscode-descriptionForeground)',
+								fontSize: '16px',
+							}}
+						/>
+					</button>
+					{showReminderPicker && (
+						<ReminderPicker
+							currentDate={reminderDate}
+							onSetReminder={handleSetReminder}
+							onClose={() => setShowReminderPicker(false)}
+						/>
+					)}
+				</div>
+
+				{/* Avatar - keep colorful for distinction */}
 				<div
 					className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 text-sm font-semibold"
-					style={{ backgroundColor: avatarColor, color: '#fafafa' }}
+					style={{ backgroundColor: avatarColor, color: 'var(--vscode-button-foreground)' }}
 				>
 					{initials}
 				</div>
@@ -120,39 +692,57 @@ export const EmailCard: React.FC<EmailCardProps> = ({ email, onClick, onDelete, 
 						<div className="flex-1 min-w-0">
 							{/* From + Date Row */}
 							<div className="flex items-center gap-2 mb-1">
-								<span className="font-semibold text-sm truncate" style={{ color: '#fafafa' }}>
+								<span className="font-semibold text-sm truncate" style={textPrimaryStyle}>
 									{fromName}
 								</span>
 								{email.isDraft && (
 									<span
 										className="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-semibold"
 										style={{
-											backgroundColor: '#f59e0b20',
-											color: '#f59e0b',
-											border: '1px solid #f59e0b30'
+											backgroundColor: 'var(--vscode-inputValidation-warningBackground)',
+											color: 'var(--vscode-charts-yellow)',
+											border: '1px solid var(--vscode-inputValidation-warningBorder)'
 										}}
 									>
 										Draft
 									</span>
 								)}
+								{/* Draft Status Indicator */}
+								{draftStatus && getDraftStatusIndicator(draftStatus) && (() => {
+									const indicator = getDraftStatusIndicator(draftStatus)!;
+									return (
+										<span
+											className="inline-flex items-center rounded px-1.5 py-0.5 text-xs gap-1"
+											style={{
+												backgroundColor: 'var(--vscode-button-secondaryBackground)',
+												color: indicator.color,
+												border: '1px solid var(--vscode-panel-border)',
+											}}
+											title={indicator.label}
+										>
+											<span>{indicator.icon}</span>
+											<span style={{ fontSize: '10px' }}>{indicator.label}</span>
+										</span>
+									);
+								})()}
 								{email.attachments.length > 0 && (
 									<i
 										className="codicon codicon-file-symlink-file"
-										style={{ color: '#71717a', fontSize: '12px' }}
+										style={{ ...textSecondaryStyle, fontSize: '12px' }}
 										title={`${email.attachments.length} attachment${email.attachments.length !== 1 ? 's' : ''}`}
 									/>
 								)}
 							</div>
 
 							{/* Subject */}
-							<h3 className="font-medium text-sm mb-1 truncate" style={{ color: '#e4e4e7' }}>
+							<h3 className="font-medium text-sm mb-1 truncate" style={textPrimaryStyle}>
 								{email.subject}
 							</h3>
 
 							{/* Preview */}
 							<p
 								className="text-xs line-clamp-2"
-								style={{ color: '#71717a' }}
+								style={textSecondaryStyle}
 							>
 								{email.bodyText.substring(0, 150)}...
 							</p>
@@ -160,41 +750,66 @@ export const EmailCard: React.FC<EmailCardProps> = ({ email, onClick, onDelete, 
 
 						{/* Right Side - Date & Actions */}
 						<div className="flex flex-col items-end gap-2">
-							<span className="text-xs whitespace-nowrap" style={{ color: '#71717a' }}>
+							<span className="text-xs whitespace-nowrap" style={textSecondaryStyle}>
 								{formatEmailDate(email.date)}
 							</span>
 
-							{/* Action Buttons */}
-							<div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-								{/* Draft Reply Button */}
+							{/* Action Buttons - with text labels */}
+							<div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+								{/* Draft Editor Toggle Button */}
+								<button
+									onClick={handleToggleDraftEditor}
+									disabled={isLoadingDraft}
+									className="px-3 py-1.5 rounded-lg flex items-center gap-1.5 text-xs font-medium transition-all"
+									style={{
+										backgroundColor: showDraftEditor ? 'var(--vscode-button-background)' : 'var(--vscode-button-secondaryBackground)',
+										border: '1px solid var(--vscode-panel-border)',
+										color: showDraftEditor ? 'var(--vscode-button-foreground)' : 'var(--vscode-descriptionForeground)',
+										cursor: isLoadingDraft ? 'wait' : 'pointer'
+									}}
+									onMouseEnter={(e) => {
+										if (!isLoadingDraft && !showDraftEditor) {
+											e.currentTarget.style.backgroundColor = 'var(--vscode-button-background)';
+											e.currentTarget.style.color = 'var(--vscode-button-foreground)';
+										}
+									}}
+									onMouseLeave={(e) => {
+										if (!isLoadingDraft && !showDraftEditor) {
+											e.currentTarget.style.backgroundColor = 'var(--vscode-button-secondaryBackground)';
+											e.currentTarget.style.color = 'var(--vscode-descriptionForeground)';
+										}
+									}}
+								>
+									<i className={`codicon ${isLoadingDraft ? 'codicon-loading codicon-modifier-spin' : showDraftEditor ? 'codicon-chevron-up' : 'codicon-edit'}`} />
+									<span>{isLoadingDraft ? 'Loading...' : showDraftEditor ? 'Close Draft' : 'Draft'}</span>
+								</button>
+
+								{/* AI Reply Button */}
 								<button
 									onClick={handleDraftReply}
 									disabled={isDrafting}
-									className="w-7 h-7 rounded-lg flex items-center justify-center transition-all"
+									className="px-3 py-1.5 rounded-lg flex items-center gap-1.5 text-xs font-medium transition-all"
 									style={{
-										backgroundColor: isDrafting ? BRAND_GREEN : '#1a1a1a',
-										border: `1px solid ${isDrafting ? BRAND_GREEN : '#27272a'}`,
-										color: isDrafting ? '#0a0a0a' : '#a1a1aa',
-										opacity: isDrafting ? 0.7 : 1,
+										backgroundColor: isDrafting ? 'var(--vscode-button-background)' : 'var(--vscode-button-secondaryBackground)',
+										border: '1px solid var(--vscode-panel-border)',
+										color: isDrafting ? 'var(--vscode-button-foreground)' : 'var(--vscode-descriptionForeground)',
 										cursor: isDrafting ? 'wait' : 'pointer'
 									}}
 									onMouseEnter={(e) => {
 										if (!isDrafting) {
-											e.currentTarget.style.backgroundColor = BRAND_GREEN;
-											e.currentTarget.style.borderColor = BRAND_GREEN;
-											e.currentTarget.style.color = '#0a0a0a';
+											e.currentTarget.style.backgroundColor = 'var(--vscode-button-background)';
+											e.currentTarget.style.color = 'var(--vscode-button-foreground)';
 										}
 									}}
 									onMouseLeave={(e) => {
 										if (!isDrafting) {
-											e.currentTarget.style.backgroundColor = '#1a1a1a';
-											e.currentTarget.style.borderColor = '#27272a';
-											e.currentTarget.style.color = '#a1a1aa';
+											e.currentTarget.style.backgroundColor = 'var(--vscode-button-secondaryBackground)';
+											e.currentTarget.style.color = 'var(--vscode-descriptionForeground)';
 										}
 									}}
-									title={isDrafting ? 'Generating draft...' : 'Draft Reply (AI)'}
 								>
-									<i className={`codicon ${isDrafting ? 'codicon-loading codicon-modifier-spin' : 'codicon-reply'}`} style={{ fontSize: '12px' }} />
+									<i className={`codicon ${isDrafting ? 'codicon-loading codicon-modifier-spin' : 'codicon-reply'}`} />
+									<span>{isDrafting ? 'Drafting...' : 'AI Reply'}</span>
 								</button>
 
 								{/* Open Button */}
@@ -203,53 +818,77 @@ export const EmailCard: React.FC<EmailCardProps> = ({ email, onClick, onDelete, 
 										e.stopPropagation();
 										onClick();
 									}}
-									className="w-7 h-7 rounded-lg flex items-center justify-center transition-all"
+									className="px-3 py-1.5 rounded-lg flex items-center gap-1.5 text-xs font-medium transition-all"
 									style={{
-										backgroundColor: '#1a1a1a',
-										border: '1px solid #27272a',
-										color: '#a1a1aa'
+										backgroundColor: 'var(--vscode-button-secondaryBackground)',
+										border: '1px solid var(--vscode-panel-border)',
+										color: 'var(--vscode-descriptionForeground)',
 									}}
 									onMouseEnter={(e) => {
-										e.currentTarget.style.backgroundColor = BRAND_GREEN;
-										e.currentTarget.style.borderColor = BRAND_GREEN;
-										e.currentTarget.style.color = '#0a0a0a';
+										e.currentTarget.style.backgroundColor = 'var(--vscode-button-background)';
+										e.currentTarget.style.color = 'var(--vscode-button-foreground)';
 									}}
 									onMouseLeave={(e) => {
-										e.currentTarget.style.backgroundColor = '#1a1a1a';
-										e.currentTarget.style.borderColor = '#27272a';
-										e.currentTarget.style.color = '#a1a1aa';
+										e.currentTarget.style.backgroundColor = 'var(--vscode-button-secondaryBackground)';
+										e.currentTarget.style.color = 'var(--vscode-descriptionForeground)';
 									}}
-									title="Open email"
 								>
-									<i className="codicon codicon-go-to-file" style={{ fontSize: '12px' }} />
+									<i className="codicon codicon-go-to-file" />
+									<span>Open</span>
+								</button>
+
+								{/* Add to Timeline Button */}
+								<button
+									onClick={handleAddToTimeline}
+									disabled={isAddingToTimeline}
+									className="px-3 py-1.5 rounded-lg flex items-center gap-1.5 text-xs font-medium transition-all"
+									style={{
+										backgroundColor: isAddingToTimeline ? 'var(--vscode-button-background)' : 'var(--vscode-button-secondaryBackground)',
+										border: '1px solid var(--vscode-panel-border)',
+										color: isAddingToTimeline ? 'var(--vscode-button-foreground)' : 'var(--vscode-descriptionForeground)',
+										cursor: isAddingToTimeline ? 'wait' : 'pointer'
+									}}
+									onMouseEnter={(e) => {
+										if (!isAddingToTimeline) {
+											e.currentTarget.style.backgroundColor = 'var(--vscode-button-background)';
+											e.currentTarget.style.color = 'var(--vscode-button-foreground)';
+										}
+									}}
+									onMouseLeave={(e) => {
+										if (!isAddingToTimeline) {
+											e.currentTarget.style.backgroundColor = 'var(--vscode-button-secondaryBackground)';
+											e.currentTarget.style.color = 'var(--vscode-descriptionForeground)';
+										}
+									}}
+								>
+									<i className={`codicon ${isAddingToTimeline ? 'codicon-loading codicon-modifier-spin' : 'codicon-calendar'}`} />
+									<span>{isAddingToTimeline ? 'Adding...' : 'Timeline'}</span>
 								</button>
 
 								{/* Delete Button */}
 								<button
 									onClick={handleDelete}
-									className="w-7 h-7 rounded-lg flex items-center justify-center transition-all"
+									className="px-3 py-1.5 rounded-lg flex items-center gap-1.5 text-xs font-medium transition-all"
 									style={{
-										backgroundColor: confirmDelete ? '#ef4444' : '#1a1a1a',
-										border: `1px solid ${confirmDelete ? '#ef4444' : '#27272a'}`,
-										color: confirmDelete ? '#fafafa' : '#a1a1aa'
+										backgroundColor: confirmDelete ? 'var(--vscode-charts-red)' : 'var(--vscode-button-secondaryBackground)',
+										border: confirmDelete ? '1px solid var(--vscode-charts-red)' : '1px solid var(--vscode-panel-border)',
+										color: confirmDelete ? 'var(--vscode-editor-foreground)' : 'var(--vscode-descriptionForeground)'
 									}}
 									onMouseEnter={(e) => {
 										if (!confirmDelete) {
-											e.currentTarget.style.backgroundColor = '#ef444420';
-											e.currentTarget.style.borderColor = '#ef4444';
-											e.currentTarget.style.color = '#ef4444';
+											e.currentTarget.style.backgroundColor = 'var(--vscode-inputValidation-errorBackground)';
+											e.currentTarget.style.color = 'var(--vscode-charts-red)';
 										}
 									}}
 									onMouseLeave={(e) => {
 										if (!confirmDelete) {
-											e.currentTarget.style.backgroundColor = '#1a1a1a';
-											e.currentTarget.style.borderColor = '#27272a';
-											e.currentTarget.style.color = '#a1a1aa';
+											e.currentTarget.style.backgroundColor = 'var(--vscode-button-secondaryBackground)';
+											e.currentTarget.style.color = 'var(--vscode-descriptionForeground)';
 										}
 									}}
-									title={confirmDelete ? 'Click again to confirm' : 'Delete email'}
 								>
-									<i className={`codicon ${confirmDelete ? 'codicon-check' : 'codicon-trash'}`} style={{ fontSize: '12px' }} />
+									<i className={`codicon ${confirmDelete ? 'codicon-check' : 'codicon-trash'}`} />
+									<span>{confirmDelete ? 'Confirm?' : 'Delete'}</span>
 								</button>
 							</div>
 						</div>
@@ -257,16 +896,23 @@ export const EmailCard: React.FC<EmailCardProps> = ({ email, onClick, onDelete, 
 				</div>
 			</div>
 
-			{/* File Type Badge */}
+			{/* File Type Badge & Category/Priority */}
 			<div
 				className="px-4 pb-3 flex items-center gap-2"
-				style={{ borderTop: '1px solid #1f1f1f' }}
+				style={{ borderTop: '1px solid var(--vscode-panel-border)' }}
 			>
 				<span
 					className="inline-flex items-center rounded px-2 py-0.5 text-xs"
 					style={{
-						backgroundColor: email.fileType === 'eml' ? '#3b82f620' : '#ef444420',
-						color: email.fileType === 'eml' ? '#3b82f6' : '#ef4444'
+						backgroundColor: email.fileType === 'eml'
+							? 'var(--vscode-inputValidation-infoBackground)'
+							: 'var(--vscode-inputValidation-errorBackground)',
+						color: email.fileType === 'eml'
+							? 'var(--vscode-charts-blue)'
+							: 'var(--vscode-charts-red)',
+						border: email.fileType === 'eml'
+							? '1px solid var(--vscode-inputValidation-infoBorder)'
+							: '1px solid var(--vscode-inputValidation-errorBorder)'
 					}}
 				>
 					<i
@@ -275,10 +921,112 @@ export const EmailCard: React.FC<EmailCardProps> = ({ email, onClick, onDelete, 
 					/>
 					{email.fileType.toUpperCase()}
 				</span>
-				<span className="text-xs truncate" style={{ color: '#52525b' }}>
+
+				{/* Category Badge */}
+				{email.category && getCategoryConfig(email.category) && (() => {
+					const config = getCategoryConfig(email.category)!;
+					return (
+						<span
+							className="inline-flex items-center rounded px-2 py-0.5 text-xs gap-1"
+							style={{
+								backgroundColor: config.bgColor,
+								color: config.textColor,
+								border: `1px solid ${config.borderColor}`,
+							}}
+						>
+							<span>{config.icon}</span>
+							<span>{config.label}</span>
+						</span>
+					);
+				})()}
+
+				{/* Priority Badge */}
+				{email.priority && getPriorityConfig(email.priority) && (() => {
+					const config = getPriorityConfig(email.priority)!;
+					return (
+						<span
+							className="inline-flex items-center rounded px-2 py-0.5 text-xs gap-1"
+							style={{
+								backgroundColor: email.priority === 'urgent'
+									? 'var(--vscode-inputValidation-errorBackground)'
+									: email.priority === 'low'
+										? 'var(--vscode-inputValidation-infoBackground)'
+										: 'var(--vscode-button-secondaryBackground)',
+								color: config.color,
+								border: `1px solid ${email.priority === 'urgent'
+									? 'var(--vscode-inputValidation-errorBorder)'
+									: email.priority === 'low'
+										? 'var(--vscode-inputValidation-infoBorder)'
+										: 'var(--vscode-panel-border)'}`,
+							}}
+						>
+							<span>{config.icon}</span>
+							<span>{config.label}</span>
+						</span>
+					);
+				})()}
+
+				<span className="text-xs truncate" style={textSecondaryStyle}>
 					{email.caseFolderPath.split('/').pop()}
 				</span>
 			</div>
+
+			{/* Draft Editor Section - Expandable */}
+			{showDraftEditor && draftContent !== undefined && (
+				<div
+					style={{
+						borderTop: '1px solid var(--vscode-panel-border)',
+						backgroundColor: 'var(--vscode-editor-background)',
+						padding: '12px',
+					}}
+				>
+					<div
+						style={{
+							display: 'flex',
+							alignItems: 'center',
+							gap: '8px',
+							marginBottom: '8px',
+							paddingBottom: '8px',
+							borderBottom: '1px solid var(--vscode-panel-border)',
+						}}
+					>
+						<i
+							className="codicon codicon-edit"
+							style={{ color: 'var(--vscode-charts-blue)', fontSize: '14px' }}
+						/>
+						<span
+							style={{
+								fontSize: '12px',
+								fontWeight: '600',
+								color: 'var(--vscode-editor-foreground)',
+							}}
+						>
+							Reply Draft
+						</span>
+						<button
+							onClick={handleToggleDraftEditor}
+							style={{
+								marginLeft: 'auto',
+								background: 'none',
+								border: 'none',
+								cursor: 'pointer',
+								padding: '4px',
+								display: 'flex',
+								alignItems: 'center',
+								color: 'var(--vscode-descriptionForeground)',
+							}}
+							title="Collapse draft editor"
+						>
+							<i className="codicon codicon-chevron-up" style={{ fontSize: '14px' }} />
+						</button>
+					</div>
+					<DraftEditor
+						emailId={email.id}
+						initialContent={draftContent}
+						onClose={() => setShowDraftEditor(false)}
+					/>
+				</div>
+			)}
 		</div>
 	);
 };

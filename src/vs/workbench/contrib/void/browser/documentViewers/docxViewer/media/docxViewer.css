@@ -26,6 +26,16 @@
 	--ribbon-tab-active: #ffffff;
 	--ribbon-tab-hover: #e5e5e5;
 
+	/* Enhanced ribbon styling */
+	--ribbon-section-bg: rgba(0, 0, 0, 0.02);
+	--ribbon-section-bg-dark: rgba(255, 255, 255, 0.03);
+	--ribbon-separator: rgba(0, 0, 0, 0.08);
+	--ribbon-separator-dark: rgba(255, 255, 255, 0.08);
+	--ribbon-btn-hover-bg: rgba(0, 0, 0, 0.06);
+	--ribbon-btn-hover-bg-dark: rgba(255, 255, 255, 0.08);
+	--ribbon-btn-active-bg: rgba(0, 0, 0, 0.10);
+	--ribbon-btn-active-bg-dark: rgba(255, 255, 255, 0.12);
+
 	/* Ruler colors */
 	--ruler-bg: #ffffff;
 	--ruler-border: #c0c0c0;
@@ -1274,6 +1284,7 @@ body[data-vscode-theme-kind="vscode-dark"] #docx-container {
 	background-color: var(--ribbon-bg);
 	border-bottom: 1px solid var(--ribbon-border);
 	flex-shrink: 0;
+	box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
 }
 
 /* Dark mode ribbon */
@@ -1281,51 +1292,86 @@ body.vscode-dark #docx-ribbon-container,
 body[data-vscode-theme-kind="vscode-dark"] #docx-ribbon-container {
 	background-color: var(--ribbon-bg-dark);
 	border-bottom-color: var(--vscode-panel-border);
+	box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
 }
 
 /* Ribbon Tab Bar */
 .ribbon-tabs {
 	display: flex;
-	gap: 0;
-	padding: 0 8px;
-	background-color: var(--vscode-editorGroupHeader-tabsBackground);
-	border-bottom: 1px solid var(--vscode-panel-border);
+	gap: 2px;
+	padding: 4px 12px 0;
+	background: linear-gradient(to bottom,
+		var(--vscode-editorGroupHeader-tabsBackground) 0%,
+		var(--ribbon-bg) 100%);
+	border-bottom: none;
+}
+
+/* Dark mode tab bar */
+body.vscode-dark .ribbon-tabs,
+body[data-vscode-theme-kind="vscode-dark"] .ribbon-tabs {
+	background: linear-gradient(to bottom,
+		var(--vscode-editorGroupHeader-tabsBackground) 0%,
+		var(--ribbon-bg-dark) 100%);
 }
 
 .ribbon-tab {
-	padding: 8px 16px;
+	padding: 7px 16px 6px;
 	background: transparent;
 	border: none;
-	border-bottom: 2px solid transparent;
+	border-radius: 4px 4px 0 0;
 	color: var(--vscode-foreground);
-	font-size: 12px;
+	font-size: 13px;
 	font-family: var(--vscode-font-family);
 	cursor: pointer;
-	transition: all 0.15s ease;
-	text-transform: uppercase;
-	font-weight: 500;
-	letter-spacing: 0.5px;
+	transition: background-color 0.15s ease, color 0.15s ease;
+	text-transform: none;
+	font-weight: 400;
+	letter-spacing: 0;
+	position: relative;
 }
 
 .ribbon-tab:hover {
-	background-color: var(--vscode-list-hoverBackground);
+	background-color: var(--ribbon-tab-hover);
+}
+
+body.vscode-dark .ribbon-tab:hover,
+body[data-vscode-theme-kind="vscode-dark"] .ribbon-tab:hover {
+	background-color: rgba(255, 255, 255, 0.06);
 }
 
 .ribbon-tab.active {
 	background-color: var(--vscode-editor-background);
-	border-bottom-color: var(--vscode-focusBorder);
-	color: var(--vscode-focusBorder);
+	color: var(--vscode-foreground);
+	font-weight: 500;
+}
+
+/* Active tab top accent line */
+.ribbon-tab.active::before {
+	content: '';
+	position: absolute;
+	top: 0;
+	left: 4px;
+	right: 4px;
+	height: 2px;
+	background-color: var(--vscode-focusBorder);
+	border-radius: 0 0 2px 2px;
 }
 
 /* Ribbon Content Panels */
 .ribbon-panel {
 	display: none;
-	padding: 8px 12px;
-	gap: 4px;
+	padding: 8px 16px 10px;
+	gap: 8px;
 	flex-wrap: wrap;
-	align-items: center;
+	align-items: stretch;
 	background-color: var(--vscode-editor-background);
-	min-height: 60px;
+	min-height: 70px;
+	border-top: 1px solid var(--ribbon-border);
+}
+
+body.vscode-dark .ribbon-panel,
+body[data-vscode-theme-kind="vscode-dark"] .ribbon-panel {
+	border-top-color: var(--vscode-panel-border);
 }
 
 .ribbon-panel.active {
@@ -1337,27 +1383,66 @@ body[data-vscode-theme-kind="vscode-dark"] #docx-ribbon-container {
 	display: flex;
 	flex-direction: column;
 	align-items: center;
-	padding: 4px 12px;
-	border-right: 1px solid var(--vscode-panel-border);
+	justify-content: space-between;
+	padding: 6px 14px 4px;
 	gap: 4px;
+	position: relative;
+	background-color: var(--ribbon-section-bg);
+	border-radius: 4px;
+	margin-right: 4px;
+}
+
+body.vscode-dark .ribbon-section,
+body[data-vscode-theme-kind="vscode-dark"] .ribbon-section {
+	background-color: var(--ribbon-section-bg-dark);
+}
+
+/* Vertical separator between sections */
+.ribbon-section::after {
+	content: '';
+	position: absolute;
+	right: -4px;
+	top: 15%;
+	height: 70%;
+	width: 1px;
+	background: linear-gradient(to bottom,
+		transparent 0%,
+		var(--ribbon-separator) 30%,
+		var(--ribbon-separator) 70%,
+		transparent 100%);
+}
+
+body.vscode-dark .ribbon-section::after,
+body[data-vscode-theme-kind="vscode-dark"] .ribbon-section::after {
+	background: linear-gradient(to bottom,
+		transparent 0%,
+		var(--ribbon-separator-dark) 30%,
+		var(--ribbon-separator-dark) 70%,
+		transparent 100%);
 }
 
 .ribbon-section:last-child {
-	border-right: none;
+	margin-right: 0;
+}
+
+.ribbon-section:last-child::after {
+	display: none;
 }
 
 .ribbon-section-label {
-	font-size: 9px;
+	font-size: 10px;
 	color: var(--vscode-descriptionForeground);
 	text-transform: uppercase;
-	letter-spacing: 0.5px;
+	letter-spacing: 0.3px;
 	margin-top: 4px;
+	opacity: 0.8;
+	font-weight: 500;
 }
 
 .ribbon-section-content {
 	display: flex;
 	align-items: center;
-	gap: 2px;
+	gap: 3px;
 }
 
 /* Ribbon Buttons */
@@ -1366,83 +1451,125 @@ body[data-vscode-theme-kind="vscode-dark"] #docx-ribbon-container {
 	flex-direction: column;
 	align-items: center;
 	justify-content: center;
-	padding: 4px 8px;
-	min-width: 32px;
-	min-height: 32px;
+	padding: 5px 10px;
+	min-width: 36px;
+	min-height: 38px;
 	background: transparent;
 	border: 1px solid transparent;
-	border-radius: 3px;
+	border-radius: 4px;
 	color: var(--vscode-foreground);
 	cursor: pointer;
 	font-size: 11px;
-	transition: all 0.1s ease;
+	transition: background-color 0.12s ease, border-color 0.12s ease, box-shadow 0.12s ease;
 }
 
 .ribbon-btn:hover {
-	background-color: var(--vscode-list-hoverBackground);
-	border-color: var(--vscode-panel-border);
+	background-color: var(--ribbon-btn-hover-bg);
+	border-color: var(--ribbon-separator);
 }
 
-.ribbon-btn:active,
+body.vscode-dark .ribbon-btn:hover,
+body[data-vscode-theme-kind="vscode-dark"] .ribbon-btn:hover {
+	background-color: var(--ribbon-btn-hover-bg-dark);
+	border-color: var(--ribbon-separator-dark);
+}
+
+.ribbon-btn:active {
+	background-color: var(--ribbon-btn-active-bg);
+	box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.08);
+}
+
+body.vscode-dark .ribbon-btn:active,
+body[data-vscode-theme-kind="vscode-dark"] .ribbon-btn:active {
+	background-color: var(--ribbon-btn-active-bg-dark);
+	box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.15);
+}
+
 .ribbon-btn.active {
 	background-color: var(--vscode-list-activeSelectionBackground);
 	color: var(--vscode-list-activeSelectionForeground);
+	border-color: var(--vscode-focusBorder);
 }
 
 .ribbon-btn-icon {
-	font-size: 16px;
+	font-size: 18px;
 	line-height: 1;
+	margin-bottom: 1px;
 }
 
 .ribbon-btn-label {
-	font-size: 9px;
+	font-size: 10px;
 	margin-top: 2px;
+	opacity: 0.9;
 }
 
 /* Small format buttons (B, I, U, etc.) */
 .ribbon-btn-small {
-	padding: 4px 6px;
-	min-width: 28px;
-	min-height: 28px;
-	font-weight: bold;
+	padding: 5px 7px;
+	min-width: 30px;
+	min-height: 30px;
+	font-weight: 600;
 	font-size: 13px;
+	flex-direction: row;
+}
+
+/* Formatting button specific styles */
+.ribbon-btn-small strong,
+.ribbon-btn-small em,
+.ribbon-btn-small u,
+.ribbon-btn-small s {
+	font-size: 14px;
 }
 
 /* Ribbon Dropdowns */
 .ribbon-select {
-	padding: 4px 24px 4px 8px;
+	height: 28px;
+	padding: 0 28px 0 10px;
 	background-color: var(--vscode-dropdown-background);
 	color: var(--vscode-dropdown-foreground);
-	border: 1px solid var(--vscode-dropdown-border);
-	border-radius: 3px;
-	font-size: 11px;
+	border: 1px solid var(--vscode-widget-border, var(--vscode-dropdown-border));
+	border-radius: 4px;
+	font-size: 12px;
 	font-family: var(--vscode-font-family);
 	cursor: pointer;
-	min-width: 80px;
+	min-width: 85px;
 	appearance: none;
 	background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 10 10"><path fill="%23666" d="M5 7L1 3h8z"/></svg>');
 	background-repeat: no-repeat;
-	background-position: right 6px center;
+	background-position: right 8px center;
+	transition: border-color 0.12s ease, background-color 0.12s ease;
+}
+
+body.vscode-dark .ribbon-select,
+body[data-vscode-theme-kind="vscode-dark"] .ribbon-select {
+	background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 10 10"><path fill="%23999" d="M5 7L1 3h8z"/></svg>');
 }
 
 .ribbon-select:hover {
-	background-color: var(--vscode-list-hoverBackground);
+	border-color: var(--vscode-focusBorder);
+	background-color: var(--vscode-dropdown-background);
 }
 
 .ribbon-select:focus {
-	outline: 1px solid var(--vscode-focusBorder);
-	outline-offset: -1px;
+	outline: none;
+	border-color: var(--vscode-focusBorder);
+	box-shadow: 0 0 0 1px var(--vscode-focusBorder);
 }
 
 /* Color picker in ribbon */
 .ribbon-color-picker {
-	width: 28px;
+	width: 30px;
 	height: 28px;
-	padding: 2px;
-	border: 1px solid var(--vscode-panel-border);
-	border-radius: 3px;
+	padding: 3px;
+	border: 1px solid var(--vscode-widget-border, var(--vscode-panel-border));
+	border-radius: 4px;
 	cursor: pointer;
 	background: transparent;
+	transition: border-color 0.12s ease;
+}
+
+.ribbon-color-picker:hover {
+	border-color: var(--vscode-focusBorder);
 }
 
 .ribbon-color-picker::-webkit-color-swatch-wrapper {
@@ -1451,7 +1578,7 @@ body[data-vscode-theme-kind="vscode-dark"] #docx-ribbon-container {
 
 .ribbon-color-picker::-webkit-color-swatch {
 	border: none;
-	border-radius: 2px;
+	border-radius: 3px;
 }
 
 /* ============================================
@@ -1970,4 +2097,205 @@ body[data-vscode-theme-kind="vscode-dark"] #docx-container {
 .ProseMirror .docx-image-container.resizing .docx-image-resize-handle,
 .tiptap-editor .docx-image-container.resizing .docx-image-resize-handle {
 	opacity: 1;
+}
+
+/* ============================================
+   SELECTION TOOLTIP - Ctrl+L / Ctrl+K Actions
+   ============================================ */
+
+.docx-selection-tooltip {
+	position: fixed;
+	z-index: 10000;
+	display: flex;
+	gap: 4px;
+	padding: 4px;
+	background: var(--vscode-editor-background, #1e1e1e);
+	border: 1px solid var(--vscode-widget-border, #454545);
+	border-radius: 4px;
+	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+	font-family: var(--vscode-font-family, 'Segoe UI', sans-serif);
+	font-size: 12px;
+}
+
+.docx-selection-tooltip button {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding: 6px 10px;
+	background: transparent;
+	border: none;
+	border-radius: 3px;
+	cursor: pointer;
+	color: var(--vscode-foreground, #cccccc);
+	white-space: nowrap;
+	transition: background-color 0.1s ease;
+}
+
+.docx-selection-tooltip button:hover {
+	background: var(--vscode-list-hoverBackground, #2a2d2e);
+}
+
+.docx-selection-tooltip button:active {
+	background: var(--vscode-list-activeSelectionBackground, #094771);
+}
+
+.docx-selection-tooltip kbd {
+	padding: 2px 5px;
+	background: var(--vscode-keybindingLabel-background, #464647);
+	border: 1px solid var(--vscode-keybindingLabel-border, #5a5a5c);
+	border-radius: 3px;
+	font-size: 10px;
+	font-family: var(--vscode-editor-font-family, monospace);
+	color: var(--vscode-keybindingLabel-foreground, #cccccc);
+}
+
+/* ============================================
+   INLINE EDIT POPUP - Ctrl+K Quick Edit
+   ============================================ */
+
+.docx-inline-edit-popup {
+	position: fixed;
+	z-index: 10001;
+	display: flex;
+	flex-direction: column;
+	width: 400px;
+	max-width: calc(100vw - 40px);
+	background: var(--vscode-editor-background, #1e1e1e);
+	border: 1px solid var(--vscode-focusBorder, #007acc);
+	border-radius: 6px;
+	box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+	font-family: var(--vscode-font-family, 'Segoe UI', sans-serif);
+	font-size: 13px;
+	overflow: hidden;
+}
+
+.docx-inline-edit-popup .inline-edit-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	padding: 8px 12px;
+	background: var(--vscode-editorGroupHeader-tabsBackground, #252526);
+	border-bottom: 1px solid var(--vscode-widget-border, #454545);
+}
+
+.docx-inline-edit-popup .inline-edit-title {
+	font-weight: 600;
+	color: var(--vscode-foreground, #cccccc);
+}
+
+.docx-inline-edit-popup .inline-edit-close {
+	background: transparent;
+	border: none;
+	color: var(--vscode-foreground, #cccccc);
+	font-size: 18px;
+	cursor: pointer;
+	padding: 0 4px;
+	line-height: 1;
+	border-radius: 3px;
+}
+
+.docx-inline-edit-popup .inline-edit-close:hover {
+	background: var(--vscode-toolbar-hoverBackground, #5a5a5a);
+}
+
+/* Model selector */
+.docx-inline-edit-popup .inline-edit-model-selector {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 8px 12px;
+	background: var(--vscode-editorGroupHeader-tabsBackground, #252526);
+	border-bottom: 1px solid var(--vscode-widget-border, #454545);
+}
+
+.docx-inline-edit-popup .inline-edit-model-selector label {
+	font-size: 12px;
+	color: var(--vscode-descriptionForeground, #8b8b8b);
+	white-space: nowrap;
+}
+
+.docx-inline-edit-popup .inline-edit-model-select {
+	flex: 1;
+	padding: 4px 8px;
+	background: var(--vscode-dropdown-background, #3c3c3c);
+	color: var(--vscode-dropdown-foreground, #cccccc);
+	border: 1px solid var(--vscode-dropdown-border, #454545);
+	border-radius: 3px;
+	font-size: 12px;
+	font-family: var(--vscode-font-family, 'Segoe UI', sans-serif);
+	cursor: pointer;
+	outline: none;
+	min-width: 0;
+}
+
+.docx-inline-edit-popup .inline-edit-model-select:focus {
+	border-color: var(--vscode-focusBorder, #007acc);
+}
+
+.docx-inline-edit-popup .inline-edit-model-select:disabled {
+	opacity: 0.6;
+	cursor: not-allowed;
+}
+
+.docx-inline-edit-popup .inline-edit-selection-preview {
+	padding: 8px 12px;
+	background: var(--vscode-textBlockQuote-background, #2d2d2d);
+	color: var(--vscode-descriptionForeground, #8b8b8b);
+	font-size: 12px;
+	font-style: italic;
+	max-height: 60px;
+	overflow-y: auto;
+	border-bottom: 1px solid var(--vscode-widget-border, #454545);
+}
+
+.docx-inline-edit-popup .inline-edit-input {
+	padding: 10px 12px;
+	background: var(--vscode-input-background, #3c3c3c);
+	color: var(--vscode-input-foreground, #cccccc);
+	border: none;
+	border-bottom: 1px solid var(--vscode-widget-border, #454545);
+	font-family: var(--vscode-font-family, 'Segoe UI', sans-serif);
+	font-size: 13px;
+	resize: none;
+	outline: none;
+}
+
+.docx-inline-edit-popup .inline-edit-input:focus {
+	background: var(--vscode-inputOption-activeBackground, #094771);
+}
+
+.docx-inline-edit-popup .inline-edit-input::placeholder {
+	color: var(--vscode-input-placeholderForeground, #8b8b8b);
+}
+
+.docx-inline-edit-popup .inline-edit-footer {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	padding: 8px 12px;
+	background: var(--vscode-editorGroupHeader-tabsBackground, #252526);
+}
+
+.docx-inline-edit-popup .inline-edit-hint {
+	font-size: 11px;
+	color: var(--vscode-descriptionForeground, #8b8b8b);
+}
+
+.docx-inline-edit-popup .inline-edit-submit {
+	padding: 6px 14px;
+	background: var(--vscode-button-background, #0e639c);
+	color: var(--vscode-button-foreground, #ffffff);
+	border: none;
+	border-radius: 3px;
+	cursor: pointer;
+	font-size: 12px;
+	font-weight: 500;
+}
+
+.docx-inline-edit-popup .inline-edit-submit:hover {
+	background: var(--vscode-button-hoverBackground, #1177bb);
+}
+
+.docx-inline-edit-popup .inline-edit-submit:active {
+	background: var(--vscode-button-background, #0e639c);
 }

@@ -13,6 +13,7 @@ import { FileAccess } from '../../../../../../base/common/network.js';
 import { URI } from '../../../../../../base/common/uri.js';
 import { generateUuid } from '../../../../../../base/common/uuid.js';
 import { IChannel } from '../../../../../../base/parts/ipc/common/ipc.js';
+import { ICommandService } from '../../../../../../platform/commands/common/commands.js';
 import { IFileDialogService } from '../../../../../../platform/dialogs/common/dialogs.js';
 import { IEditorOptions } from '../../../../../../platform/editor/common/editor.js';
 import { IFileService } from '../../../../../../platform/files/common/files.js';
@@ -30,6 +31,11 @@ import { IWorkingCopyService } from '../../../../../services/workingCopy/common/
 import { IOverlayWebview, IWebviewService } from '../../../../webview/browser/webview.js';
 import { asWebviewUri } from '../../../../webview/common/webview.js';
 // import { createTrustedTypesPolicy } from '../../../../../../base/browser/trustedTypes.js';
+import { INotificationService, Severity } from '../../../../../../platform/notification/common/notification.js';
+import { ICloudLLMRouterService } from '../../../browser/cloudLLMRouterService.js';
+import { IVoidSettingsService } from '../../../common/voidSettingsService.js';
+import { ModelSelection, ProviderName } from '../../../common/voidSettingsTypes.js';
+import { IDocuSignService } from '../../docuSign/docuSignService.js';
 import { DOCXSelection, DOCXViewerInput } from './docxViewerInput.js';
 import { DOCXWorkingCopy } from './docxWorkingCopy.js';
 
@@ -65,7 +71,12 @@ export class DOCXViewerEditor extends EditorPane {
 		@IOpenerService private readonly openerService: IOpenerService,
 		@INativeWorkbenchEnvironmentService private readonly environmentService: INativeWorkbenchEnvironmentService,
 		@IFileDialogService private readonly fileDialogService: IFileDialogService,
-		@IMainProcessService mainProcessService: IMainProcessService
+		@IMainProcessService mainProcessService: IMainProcessService,
+		@ICommandService private readonly commandService: ICommandService,
+		@ICloudLLMRouterService private readonly cloudLLMRouterService: ICloudLLMRouterService,
+		@IVoidSettingsService private readonly voidSettingsService: IVoidSettingsService,
+		@INotificationService private readonly notificationService: INotificationService,
+		@IDocuSignService private readonly docuSignService: IDocuSignService
 	) {
 		super(DOCXViewerEditor.ID, group, telemetryService, themeService, storageService);
 		this.documentExportChannel = mainProcessService.getChannel('void-channel-document-export');
@@ -115,6 +126,13 @@ export class DOCXViewerEditor extends EditorPane {
 			// Set up message handlers
 			this._register(this.webview.onMessage(message => {
 				this.handleWebviewMessage(message);
+			}));
+
+			// Listen for settings changes to update model dropdown
+			this._register(this.voidSettingsService.onDidChangeState(() => {
+				if (this._webviewReady) {
+					this.sendAvailableModels();
+				}
 			}));
 
 			// Load webview HTML
@@ -289,6 +307,9 @@ export class DOCXViewerEditor extends EditorPane {
 				console.log('[DOCX Viewer] Webview ready');
 				this._webviewReady = true;
 
+				// Send available models to the webview
+				this.sendAvailableModels();
+
 				// If there's a pending input, load it now
 				if (this._pendingInput) {
 					console.log('[DOCX Viewer] Processing pending input');
@@ -385,6 +406,246 @@ export class DOCXViewerEditor extends EditorPane {
 					this.openerService.open(URI.parse(data.url), { openExternal: true });
 				}
 				break;
+
+			case 'executeCommand':
+				// Execute VS Code command from webview (e.g., Ctrl+L, Ctrl+K from tooltip)
+				if (data.command) {
+					console.log('[DOCX Viewer] Executing command:', data.command);
+					this.commandService.executeCommand(data.command);
+				}
+				break;
+
+			case 'inlineEditRequest':
+				// Handle inline edit request from Ctrl+K popup
+				if (data.selection && data.instructions) {
+					console.log('[DOCX Viewer] Inline edit request:', {
+						textLength: data.selection.text?.length,
+						instructions: data.instructions,
+						modelSelection: data.modelSelection
+					});
+					this.handleInlineEditRequest(data.selection, data.instructions, data.modelSelection);
+				}
+				break;
+
+			case 'sendForSignature':
+				// Handle DocuSign send for signature request
+				if (data.docxData) {
+					console.log('[DOCX Viewer] Send for Signature request:', {
+						docxUri: data.docxUri,
+						filename: data.filename
+					});
+					this.handleSendForSignature(data.docxData, data.docxUri, data.filename);
+				}
+				break;
+		}
+	}
+
+	/**
+	 * Send available models to the webview for the inline edit dropdown
+	 */
+	private async sendAvailableModels(): Promise<void> {
+		if (!this.webview) return;
+
+		// Wait for settings to be initialized
+		await this.voidSettingsService.waitForInitState;
+
+		const state = this.voidSettingsService.state;
+		const models = state._modelOptions || [];
+
+		// Find the default model (the one selected for Ctrl+K)
+		const defaultSelection = state.modelSelectionOfFeature['Ctrl+K'];
+		let defaultIndex = 0;
+
+		if (defaultSelection) {
+			const idx = models.findIndex(
+				m => m.selection.providerName === defaultSelection.providerName &&
+					m.selection.modelName === defaultSelection.modelName
+			);
+			if (idx >= 0) {
+				defaultIndex = idx;
+			}
+		}
+
+		console.log('[DOCX Viewer] Sending available models:', models.length, 'default index:', defaultIndex);
+
+		this.webview.postMessage({
+			type: 'updateModels',
+			models: models,
+			defaultIndex: defaultIndex
+		});
+	}
+
+	/**
+	 * Handle inline edit request from webview Ctrl+K popup
+	 */
+	private async handleInlineEditRequest(
+		selection: DOCXSelection,
+		instructions: string,
+		requestedModelSelection?: { providerName: string; modelName: string } | null
+	): Promise<void> {
+		const input = this._currentInput;
+		if (!input) return;
+
+		// Use the requested model (cast to ModelSelection), or fall back to Ctrl+K default
+		const modelSelection: ModelSelection | null = requestedModelSelection
+			? { providerName: requestedModelSelection.providerName as ProviderName, modelName: requestedModelSelection.modelName }
+			: this.voidSettingsService.state.modelSelectionOfFeature['Ctrl+K'];
+		if (!modelSelection) {
+			this.notificationService.error('Please configure a model for Quick Edit in settings');
+			return;
+		}
+
+		// Show loading state in webview
+		if (this.webview) {
+			this.webview.postMessage({
+				type: 'inlineEditStarted',
+				message: 'Processing edit request...'
+			});
+		}
+
+		const systemMessage = `You are an expert document editor. Your task is to edit text according to user instructions.
+You will receive selected text and editing instructions. Return ONLY the edited text, with no explanations, no markdown formatting, no code blocks.
+Preserve the original formatting style (capitalization, punctuation patterns) unless explicitly asked to change it.`;
+
+		const userMessage = `Edit the following text according to my instructions.
+
+SELECTED TEXT:
+${selection.text}
+
+INSTRUCTIONS:
+${instructions}
+
+Return ONLY the edited text, nothing else.`;
+
+		let editedText = '';
+
+		// Get model options from settings
+		const ctrlKOptions = this.voidSettingsService.state.optionsOfModelSelection['Ctrl+K'];
+		const providerOptions = ctrlKOptions?.[modelSelection.providerName];
+		const modelSelectionOptions = providerOptions?.[modelSelection.modelName];
+		const overridesOfModel = this.voidSettingsService.state.overridesOfModel;
+
+		try {
+			await new Promise<void>((resolve, reject) => {
+				const requestId = this.cloudLLMRouterService.sendLLMMessage({
+					messagesType: 'chatMessages',
+					messages: [
+						{ role: 'user', content: userMessage }
+					],
+					separateSystemMessage: systemMessage,
+					chatMode: null,
+					modelSelection,
+					modelSelectionOptions,
+					overridesOfModel,
+					logging: {
+						loggingName: 'DOCX Inline Edit'
+					},
+					onText: ({ fullText }) => {
+						editedText = fullText;
+						// Stream progress to webview
+						if (this.webview) {
+							this.webview.postMessage({
+								type: 'inlineEditProgress',
+								text: fullText
+							});
+						}
+					},
+					onFinalMessage: ({ fullText }) => {
+						editedText = fullText.trim();
+						console.log('[DOCX Inline Edit] LLM response:', editedText.substring(0, 100) + '...');
+						resolve();
+					},
+					onError: ({ message }) => {
+						console.error('[DOCX Inline Edit] LLM error:', message);
+						reject(new Error(message));
+					},
+					onAbort: () => {
+						reject(new Error('Edit cancelled'));
+					}
+				});
+
+				if (!requestId) {
+					reject(new Error('Failed to start LLM request'));
+				}
+			});
+
+			// Send the edited text back to the webview to apply
+			if (this.webview && editedText) {
+				this.webview.postMessage({
+					type: 'applyInlineEdit',
+					originalText: selection.text,
+					editedText: editedText
+				});
+				this.notificationService.info('Edit applied successfully');
+			}
+
+		} catch (error) {
+			console.error('[DOCX Inline Edit] Error:', error);
+			this.notificationService.error('Edit failed: ' + (error as Error).message);
+			if (this.webview) {
+				this.webview.postMessage({
+					type: 'inlineEditError',
+					message: (error as Error).message
+				});
+			}
+		}
+	}
+
+	/**
+	 * Handle Send for Signature request from webview - initiates DocuSign workflow
+	 */
+	private async handleSendForSignature(docxBase64: string, docxUri: string, filename: string): Promise<void> {
+		console.log('[DOCX Viewer] Handling Send for Signature request');
+
+		// Check if DocuSign service is configured and signed in
+		if (!this.docuSignService.isSignedIn()) {
+			// Show sign-in required notification
+			this.notificationService.notify({
+				severity: Severity.Warning,
+				message: 'Please sign in to DocuSign first. Go to Settings > DocuSign to configure.',
+			});
+
+			// Post message back to webview to show dialog
+			if (this.webview) {
+				this.webview.postMessage({
+					type: 'docuSignAuthRequired',
+					message: 'Please sign in to DocuSign to send documents for signature.'
+				});
+			}
+			return;
+		}
+
+		// For MVP, we'll show a simple dialog for recipient info via the command palette
+		// In a future iteration, this would open the RecipientDialog React component
+		try {
+			// Show status in webview
+			if (this.webview) {
+				this.webview.postMessage({
+					type: 'docuSignStatus',
+					status: 'preparing',
+					message: 'Preparing document for signature...'
+				});
+			}
+
+			// For now, execute the command which will show a quick pick for recipient info
+			// This command will be registered in void.contribution.ts
+			await this.commandService.executeCommand('void.docusign.sendForSignature', {
+				documentBase64: docxBase64,
+				documentUri: docxUri,
+				filename: filename
+			});
+
+		} catch (error) {
+			console.error('[DOCX Viewer] Send for Signature error:', error);
+			this.notificationService.error('Failed to send for signature: ' + (error as Error).message);
+
+			if (this.webview) {
+				this.webview.postMessage({
+					type: 'docuSignStatus',
+					status: 'error',
+					message: (error as Error).message
+				});
+			}
 		}
 	}
 
@@ -594,13 +855,13 @@ export class DOCXViewerEditor extends EditorPane {
 				clearTimeout(this._pendingSaveTimeout);
 			}
 
-			// Set new timeout (5 seconds for active saves)
+			// Set new timeout (30 seconds for active saves - large documents with images need more time)
 			this._pendingSaveTimeout = setTimeout(() => {
-				console.warn('[DOCX Viewer] Save timeout after 5 seconds');
+				console.warn('[DOCX Viewer] Save timeout after 30 seconds');
 				this._saveCompleteResolver = undefined;
 				this._pendingSaveTimeout = undefined;
 				resolve(false);
-			}, 5000);
+			}, 30000);
 
 			// Store the resolve function to be called when save completes
 			this._saveCompleteResolver = (success: boolean) => {
@@ -879,6 +1140,17 @@ export class DOCXViewerEditor extends EditorPane {
 					</select>
 				</div>
 				<span class="ribbon-section-label">Styles</span>
+			</div>
+
+			<!-- Signature Section (DocuSign) -->
+			<div class="ribbon-section">
+				<div class="ribbon-section-content">
+					<button class="ribbon-btn" id="send-signature-btn" title="Send for e-Signature via DocuSign">
+						<span class="ribbon-btn-icon">✍️</span>
+						<span class="ribbon-btn-label">Send for Signature</span>
+					</button>
+				</div>
+				<span class="ribbon-section-label">Signature</span>
 			</div>
 		</div>
 

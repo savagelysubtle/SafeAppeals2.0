@@ -17,8 +17,13 @@ dependencies = [
     "markdown-pdf>=1.0",
     "pdfkit>=1.0.0",
 
-    # OCR support (optional, requires tesseract)
+    # Image processing (required for pdf2images and OCR)
+    "Pillow>=10.0.0",
+    "pdf2image>=1.16.0",
+
+    # OCR support (requires tesseract system dependency)
     "pytesseract>=0.3.10",
+    "ocrmypdf>=16.0.0",
 ]
 
 [project.optional-dependencies]

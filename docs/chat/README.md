@@ -68,6 +68,7 @@ The SafeAppeals chat system is a sophisticated conversational AI interface that 
 | [Chat Modes](./chat-modes.md)             | Agent, gather, normal, case-specific modes  |
 | [Bug Fixes](./bug-fixes.md)               | Known issues and their solutions            |
 | [API Reference](./api-reference.md)       | Service interfaces and types                |
+| [Per-Workspace Storage](./per-workspace-storage.md) | Workspace-isolated chat thread storage      |
 
 ## Quick Start
 
@@ -138,3 +139,5 @@ When using models with extended thinking (Claude Opus 4.5, Sonnet 4.5):
 - [Models System](../modelsSystem/README.md) - Provider configuration, capabilities
 - [Tools System](../tools/README.md) - Tool definitions, execution
 - [RAG System](../ragSystem/README.md) - Context gathering, embeddings
+- [Storage & Databases](../storage/README.md) - Complete database path reference (dev vs prod)
+- [Per-Workspace Storage](per-workspace-storage.md) - Chat-specific thread storage details

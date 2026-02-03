@@ -14,6 +14,7 @@ import { IMainProcessService } from '../../../../../platform/ipc/common/mainProc
 import { INotificationService, Severity } from '../../../../../platform/notification/common/notification.js';
 import { IWorkspaceContextService } from '../../../../../platform/workspace/common/workspace.js';
 
+import { generateIcsContent, getCalendarEventCount, shouldSyncToCalendar } from '../../common/timeline/icsGenerator.js';
 import {
 	CaseTimeline,
 	DEFAULT_CASE_TIMELINE,
@@ -61,6 +62,25 @@ export class TimelineService extends Disposable implements ITimelineService {
 
 		// Auto-load timeline when workspace opens
 		this.initializeTimeline();
+
+		// Watch for external changes to .timeline.json
+		this._register(this.fileService.onDidFilesChange(async (e) => {
+			const timelineUri = this.getTimelineUri();
+			if (!timelineUri) return;
+
+			try {
+				// Check if our timeline file was modified
+				if (e.contains && typeof e.contains === 'function') {
+					if (e.contains(timelineUri)) {
+						console.log('[TimelineService] Detected external change to .timeline.json, reloading...');
+						await this.loadTimeline();
+					}
+				}
+			} catch (err) {
+				// Silently ignore file change events we can't process
+				console.warn('[TimelineService] Error processing file change event:', err);
+			}
+		}));
 	}
 
 	private async initializeTimeline(): Promise<void> {
@@ -128,7 +148,8 @@ export class TimelineService extends Disposable implements ITimelineService {
 			const timeline = JSON.parse(content.value.toString()) as CaseTimeline;
 			this._timeline = timeline;
 			console.log('[TimelineService] Timeline loaded from:', timelineUri.toString());
-			this._onDidChangeTimeline.fire(this._timeline);
+			// Don't fire event on load - caller handles state updates
+			// Firing here causes re-render loops when subscription triggers setTimeline
 			return this._timeline;
 		} catch (error) {
 			console.error('[TimelineService] Error loading timeline:', error);
@@ -750,6 +771,75 @@ export class TimelineService extends Disposable implements ITimelineService {
 			bytes[i] = binaryString.charCodeAt(i);
 		}
 		return bytes;
+	}
+
+	// ============================================================================
+	// Calendar Export (.ics)
+	// ============================================================================
+
+	/**
+	 * Get events that should be synced to calendar
+	 * Uses syncToCalendar if set, otherwise defaults to isDeadline
+	 */
+	getEventsForCalendar(): TimelineEvent[] {
+		if (!this._timeline) {
+			return [];
+		}
+		return this._timeline.events.filter(shouldSyncToCalendar);
+	}
+
+	/**
+	 * Get count of events that will be exported to calendar
+	 */
+	getCalendarEventCount(): number {
+		if (!this._timeline) {
+			return 0;
+		}
+		return getCalendarEventCount(this._timeline.events);
+	}
+
+	/**
+	 * Toggle the syncToCalendar flag for an event
+	 */
+	async toggleSyncToCalendar(eventId: string): Promise<void> {
+		if (!this._timeline) {
+			throw new Error('No timeline loaded');
+		}
+
+		const event = this._timeline.events.find(e => e.id === eventId);
+		if (!event) {
+			throw new Error(`Event not found: ${eventId}`);
+		}
+
+		// Determine current state (use isDeadline as default if syncToCalendar not set)
+		const currentState = event.syncToCalendar ?? event.isDeadline;
+
+		// Toggle it
+		await this.updateEvent(eventId, { syncToCalendar: !currentState });
+		console.log('[TimelineService] Toggled syncToCalendar for event:', eventId, '→', !currentState);
+	}
+
+	/**
+	 * Export timeline to iCalendar (.ics) format
+	 * Only includes events with syncToCalendar enabled
+	 */
+	async exportToIcs(): Promise<string> {
+		if (!this._timeline) {
+			throw new Error('No timeline to export');
+		}
+
+		// Get workspace ID for unique event UIDs
+		const workspaceId = this.contextService.getWorkspace().id;
+
+		// Generate the .ics content
+		const icsContent = generateIcsContent(
+			this._timeline.events,
+			this._timeline,
+			workspaceId
+		);
+
+		console.log('[TimelineService] Generated .ics with', this.getCalendarEventCount(), 'events');
+		return icsContent;
 	}
 
 	// ============================================================================

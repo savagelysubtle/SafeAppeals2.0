@@ -80,6 +80,8 @@ export type StagingSelectionItem = {
 	state: {
 		wasAddedAsCurrentFile: boolean;
 		ragContext?: string; // RAG-generated context for PDFs
+		isVirtualFile?: boolean; // True if this is a virtual file (like folder trees)
+		virtualContent?: string; // Content for virtual files
 	};
 } | {
 	type: 'CodeSelection';

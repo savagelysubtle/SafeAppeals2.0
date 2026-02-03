@@ -9,6 +9,7 @@
 	let grid = null;
 	let workbook = null;
 	let contentModified = false;
+	let ribbonController = null;
 
 	// Debounce timer for content change notifications
 	let contentChangeDebounceTimer = null;
@@ -158,26 +159,60 @@
 				};
 				grid = new x_spreadsheet("#x-spreadsheet-demo", options);
 
-			// Initialize Ribbon Controller using the new class
-			// @ts-ignore
-			const ribbonController = new window.XlsxRibbonController(grid, {
-				onContentChanged: notifyContentChanged,
-				onSaveRequested: saveSpreadsheet,
-				onPrintRequested: handlePrint,
-				onExportPDFRequested: handleExportPDF
-			});
-			ribbonController.init();
+				// Initialize Ribbon Controller using the new class
+				// @ts-ignore
+				ribbonController = new window.XlsxRibbonController(grid, {
+					onContentChanged: notifyContentChanged,
+					onSaveRequested: saveSpreadsheet,
+					onPrintRequested: handlePrint,
+					onExportPDFRequested: handleExportPDF
+				});
+				ribbonController.init();
 
 				// Handle change events (debounced)
 				grid.change((cdata) => {
 					// Notify host that content changed (debounced)
 					notifyContentChanged();
+
+					// Clear stale _formula property if cell value no longer starts with "="
+					if (ribbonController && grid && grid.sheet) {
+						try {
+							const range = grid.sheet.selector.range;
+							const { sri, sci } = range;
+							const sheetData = grid.sheet.data;
+							const rows = sheetData.rows;
+							if (rows._ && rows._[sri] && rows._[sri].cells && rows._[sri].cells[sci]) {
+								const cell = rows._[sri].cells[sci];
+								// If cell text doesn't start with "=", clear the _formula property
+								if (cell && cell._formula && cell.text && !cell.text.startsWith('=')) {
+									console.log('[XLSX] Clearing stale _formula from cell', sri, sci);
+									delete cell._formula;
+								}
+							}
+						} catch (e) {
+							// Ignore errors during formula cleanup
+						}
+
+						// Defer formula evaluation to let x-spreadsheet finish processing
+						setTimeout(() => {
+							ribbonController.evaluateCurrentCellFormula();
+							ribbonController.updateRibbonState();
+						}, 50);
+					}
 				});
 			}
 
 			// Load data into grid
 			grid.loadData(data);
 			console.log("[XLSX Webview] XLSX loaded successfully");
+
+			// Re-evaluate all formulas after loading
+			// This ensures formulas are computed even if x-spreadsheet didn't evaluate them
+			setTimeout(() => {
+				if (ribbonController && typeof ribbonController.reEvaluateAllFormulas === 'function') {
+					ribbonController.reEvaluateAllFormulas();
+				}
+			}, 200);
 
 		} catch (error) {
 			console.error("[XLSX Webview] Failed to load XLSX:", error);
@@ -552,7 +587,71 @@
 	}
 
 	/**
-	 * Insert a formula into the selected cell
+	 * Evaluate a basic formula (SUM, AVERAGE, COUNT, MIN, MAX)
+	 * This is a fallback in case x-spreadsheet's formula engine doesn't work
+	 * @param {string} formulaText - The formula text (e.g., "=SUM(A1:A3)")
+	 * @returns {number|string} The evaluated result or error message
+	 */
+	function evaluateBasicFormula(formulaText) {
+		if (!formulaText.startsWith('=')) return formulaText;
+
+		const formula = formulaText.substring(1).toUpperCase();
+
+		// Parse formula: FUNCTION(RANGE)
+		const match = formula.match(/^(SUM|AVERAGE|COUNT|MIN|MAX)\(([A-Z]+\d+):([A-Z]+\d+)\)$/);
+		if (!match) return formulaText; // Can't parse, return as-is
+
+		const func = match[1];
+		const startRef = match[2];
+		const endRef = match[3];
+
+		// @ts-ignore
+		const startCell = XLSX.utils.decode_cell(startRef);
+		// @ts-ignore
+		const endCell = XLSX.utils.decode_cell(endRef);
+
+		// Collect values from range
+		const values = [];
+		const sheetData = grid.sheet.data;
+		const rows = sheetData.rows;
+
+		for (let r = startCell.r; r <= endCell.r; r++) {
+			for (let c = startCell.c; c <= endCell.c; c++) {
+				let cellValue = null;
+				if (rows._ && rows._[r] && rows._[r].cells && rows._[r].cells[c]) {
+					const text = rows._[r].cells[c].text;
+					if (text !== undefined && text !== '' && !isNaN(parseFloat(text))) {
+						cellValue = parseFloat(text);
+					}
+				}
+				if (cellValue !== null) {
+					values.push(cellValue);
+				}
+			}
+		}
+
+		if (values.length === 0) return 0;
+
+		// Calculate result
+		switch (func) {
+			case 'SUM':
+				return values.reduce((a, b) => a + b, 0);
+			case 'AVERAGE':
+				return values.reduce((a, b) => a + b, 0) / values.length;
+			case 'COUNT':
+				return values.length;
+			case 'MIN':
+				return Math.min(...values);
+			case 'MAX':
+				return Math.max(...values);
+			default:
+				return '#ERROR';
+		}
+	}
+
+	/**
+	 * Insert a formula into the selected cell (legacy function, kept for compatibility)
+	 * The XlsxRibbonController now handles formula insertion via buttons
 	 */
 	function insertFormula(formulaName) {
 		if (!grid) return;
@@ -568,13 +667,23 @@
 		const startCell = XLSX.utils.encode_cell({ r: sri, c: sci });
 		// @ts-ignore
 		const endCell = XLSX.utils.encode_cell({ r: eri, c: eci });
-		const rangeRef = sri === eri && sci === eci ? startCell : `${startCell}:${endCell}`;
 
-		// Create the formula
-		const formula = `=${formulaName}(${rangeRef})`;
+		// Determine target cell (one row below selection for range, same cell for single)
+		let targetRow, targetCol;
+		let formula;
 
-		// Insert into the currently selected cell
-		grid.sheet.data.setCellText(ri, ci, formula, "finished");
+		if (sri === eri && sci === eci) {
+			targetRow = sri;
+			targetCol = sci;
+			formula = `=${formulaName}()`;
+		} else {
+			targetRow = eri + 1;
+			targetCol = sci;
+			formula = `=${formulaName}(${startCell}:${endCell})`;
+		}
+
+		// Insert the formula
+		grid.sheet.data.setCellText(targetRow, targetCol, formula, "finished");
 		grid.reRender();
 
 		// Update formula bar
@@ -587,7 +696,8 @@
 		// Notify host of change (debounced)
 		notifyContentChanged();
 
-		console.log(`[XLSX Webview] Inserted formula: ${formula} at cell ${XLSX.utils.encode_cell({ r: ri, c: ci })}`);
+		// @ts-ignore
+		console.log(`[XLSX Webview] Inserted formula: ${formula} at cell ${XLSX.utils.encode_cell({ r: targetRow, c: targetCol })}`);
 	}
 
 	// ==========================================
@@ -596,6 +706,7 @@
 
 	/**
 	 * SheetJS to x-spreadsheet
+	 * Converts a SheetJS workbook to x-spreadsheet format, preserving formulas
 	 */
 	function stox(wb) {
 		const out = [];
@@ -617,8 +728,23 @@
 					o.rows[R] = o.rows[R] || { cells: {} };
 					o.rows[R].cells[C] = o.rows[R].cells[C] || {};
 
-					// Value
-					o.rows[R].cells[C].text = (cell.w || cell.v || "").toString();
+					// Preserve formula if present (cell.f contains the formula)
+					if (cell.f) {
+						// Store the formula with '=' prefix
+						const formula = cell.f.startsWith('=') ? cell.f : '=' + cell.f;
+						o.rows[R].cells[C]._formula = formula;
+
+						// If there's a cached value, display it; otherwise show the formula
+						// x-spreadsheet will try to evaluate it
+						if (cell.v !== undefined) {
+							o.rows[R].cells[C].text = cell.v.toString();
+						} else {
+							// Try x-spreadsheet's formula evaluation
+							o.rows[R].cells[C].text = formula;
+						}
+					} else {
+						o.rows[R].cells[C].text = (cell.w || cell.v || "").toString();
+					}
 
 					// Merges
 					if (ws["!merges"]) {
@@ -655,6 +781,7 @@
 
 	/**
 	 * x-spreadsheet to SheetJS
+	 * Converts x-spreadsheet data to SheetJS workbook format, preserving formulas
 	 */
 	function xtos(sdata) {
 		// @ts-ignore
@@ -670,7 +797,7 @@
 				Object.keys(row.cells).forEach(function (k) {
 					const idx = parseInt(k);
 					const cell = row.cells[k];
-					if (cell.text === undefined) return;
+					if (cell.text === undefined && !cell._formula) return;
 
 					range.s.r = Math.min(range.s.r, ri);
 					range.s.c = Math.min(range.s.c, idx);
@@ -680,16 +807,37 @@
 					// @ts-ignore
 					const cell_ref = XLSX.utils.encode_cell({ c: idx, r: ri });
 
-					// Determine type
-					let type = "s";
-					let val = cell.text;
+					const text = (cell.text || '').toString();
 
-					if (!isNaN(parseFloat(val)) && isFinite(val)) {
-						type = "n";
-						val = parseFloat(val);
+					// Check if this cell has a stored formula (from our manual evaluation)
+					if (cell._formula && cell._formula.startsWith('=')) {
+						// Store the formula - SheetJS uses 'f' property for formulas
+						// Remove the leading '=' as SheetJS stores formulas without it
+						ws[cell_ref] = {
+							f: cell._formula.substring(1),  // Formula without '='
+							v: parseFloat(text) || 0,  // Store the computed value too
+							t: 'n'  // Numeric result
+						};
 					}
+					// Check if the text itself is a formula (x-spreadsheet native formula)
+					else if (text.startsWith('=')) {
+						// Store as formula
+						ws[cell_ref] = {
+							f: text.substring(1),  // Formula without '='
+							t: 'n'  // Assume numeric result for formula cells
+						};
+					} else {
+						// Determine type for regular values
+						let type = "s";
+						let val = text;
 
-					ws[cell_ref] = { v: val, t: type };
+						if (!isNaN(parseFloat(val)) && isFinite(val)) {
+							type = "n";
+							val = parseFloat(val);
+						}
+
+						ws[cell_ref] = { v: val, t: type };
+					}
 
 					// Handle merges
 					if (cell.merge) {

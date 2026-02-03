@@ -51,6 +51,7 @@ const validateStr = (argName: string, value: unknown) => {
 const validateURI = (uriStr: unknown) => {
 	if (uriStr === null) throw new Error(`Invalid LLM output: uri was null.`)
 	if (typeof uriStr !== 'string') throw new Error(`Invalid LLM output format: Provided uri must be a string, but it's a(n) ${typeof uriStr}. Full value: ${JSON.stringify(uriStr)}.`)
+	if (uriStr.trim() === '') throw new Error(`Invalid LLM output: uri was an empty string.`)
 
 	// Check if it's already a full URI with scheme (e.g., vscode-remote://, file://, etc.)
 	// Look for :// pattern which indicates a scheme is present
@@ -169,10 +170,22 @@ const validateStringArray = (arr: unknown): string[] => {
 
 const validateDateString = (dateStr: unknown): string => {
 	const str = validateStr('date', dateStr)
-	// Try to parse as date to validate
+	// Enforce ISO 8601 format: YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS (with optional timezone)
+	const iso8601Pattern = /^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}(:\d{2})?(\.\d{1,3})?(Z|[+-]\d{2}:?\d{2})?)?$/
+	if (!iso8601Pattern.test(str)) {
+		throw new Error(`Invalid LLM output: date string "${str}" is not in ISO 8601 format. Use YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS.`)
+	}
 	const date = new Date(str)
 	if (isNaN(date.getTime())) {
-		throw new Error(`Invalid LLM output: date string "${str}" is not a valid date format. Use ISO 8601 (YYYY-MM-DD or full ISO datetime).`)
+		throw new Error(`Invalid LLM output: date string "${str}" is not a valid date.`)
+	}
+	// Validate the date components are realistic (month 1-12, day 1-31, etc.)
+	const [_year, month, day] = str.split('T')[0].split('-').map(Number)
+	if (month < 1 || month > 12) {
+		throw new Error(`Invalid LLM output: date string "${str}" has invalid month ${month}. Must be 1-12.`)
+	}
+	if (day < 1 || day > 31) {
+		throw new Error(`Invalid LLM output: date string "${str}" has invalid day ${day}. Must be 1-31.`)
 	}
 	return date.toISOString()
 }
@@ -243,6 +256,7 @@ export class ToolsService implements IToolsService {
 			ls_dir: (params: RawToolParamsObj) => {
 				const { uri: uriStr, page_number: pageNumberUnknown } = params
 
+				// URI is required per type signature. Schema says optional but LLM should provide "." for current directory.
 				const uri = validateURI(uriStr)
 				const pageNumber = validatePageNum(pageNumberUnknown)
 				return { uri, pageNumber }
@@ -255,7 +269,7 @@ export class ToolsService implements IToolsService {
 			search_pathnames_only: (params: RawToolParamsObj) => {
 				const {
 					query: queryUnknown,
-					search_in_folder: includeUnknown,
+					include_pattern: includeUnknown,
 					page_number: pageNumberUnknown
 				} = params
 
@@ -362,12 +376,12 @@ export class ToolsService implements IToolsService {
 
 			// --- RAG tools
 			rag_index_document: (params: RawToolParamsObj) => {
-				const { uri: uriStr, is_policy_manual: isPolicyManualUnknown } = params;
+				const { uri: uriStr, is_core_reference: isCoreReferenceUnknown } = params;
 				const uri = validateURI(uriStr);
-				const isPolicyManual = validateBoolean(isPolicyManualUnknown, { default: false });
-				return { uri, isPolicyManual };
+				const isCoreReference = validateBoolean(isCoreReferenceUnknown, { default: false });
+				return { uri, isCoreReference };
 			},
-			rag_search_policy: (params: RawToolParamsObj) => {
+			rag_search_reference: (params: RawToolParamsObj) => {
 				const { query: queryUnknown, limit: limitUnknown } = params;
 				const query = validateStr('query', queryUnknown);
 				const limit = validateNumber(limitUnknown, { default: 8 }) || 8;  // Increased default for MMR diversity
@@ -445,11 +459,92 @@ export class ToolsService implements IToolsService {
 					throw new Error(`Invalid LLM output: operations must be a JSON array. Received: ${typeof operationsUnknown}. Example: [{"type": "insert_text", "position": 0, "text": "Hello"}]`);
 				}
 
-				// Validate each operation has required fields
+				// Validate each operation has required fields based on operation type
 				const operations = operationsArray.map((op: any, index: number) => {
 					if (!op.type) {
 						console.error(`[edit_document] Invalid operation at index ${index}: missing type field`, op);
 						throw new Error(`Invalid operation at index ${index}: missing "type" field. Each operation must have {"type": "...", ...}`);
+					}
+
+					// Per-operation type validation
+					switch (op.type) {
+						case 'insert_text':
+							if (typeof op.position !== 'number') {
+								throw new Error(`Invalid operation at index ${index}: "insert_text" requires "position" (number).`);
+							}
+							if (typeof op.text !== 'string') {
+								throw new Error(`Invalid operation at index ${index}: "insert_text" requires "text" (string).`);
+							}
+							break;
+						case 'replace_text':
+							if (typeof op.search !== 'string') {
+								throw new Error(`Invalid operation at index ${index}: "replace_text" requires "search" (string).`);
+							}
+							if (typeof op.replace !== 'string') {
+								throw new Error(`Invalid operation at index ${index}: "replace_text" requires "replace" (string).`);
+							}
+							break;
+						case 'format_text':
+							if (!op.range || typeof op.range.start !== 'number' || typeof op.range.end !== 'number') {
+								throw new Error(`Invalid operation at index ${index}: "format_text" requires "range" with "start" and "end" numbers.`);
+							}
+							if (!op.format || typeof op.format !== 'object') {
+								throw new Error(`Invalid operation at index ${index}: "format_text" requires "format" object.`);
+							}
+							break;
+						case 'insert_table':
+							if (typeof op.position !== 'number') {
+								throw new Error(`Invalid operation at index ${index}: "insert_table" requires "position" (number).`);
+							}
+							if (typeof op.rows !== 'number' || op.rows < 1) {
+								throw new Error(`Invalid operation at index ${index}: "insert_table" requires "rows" (positive number).`);
+							}
+							if (typeof op.cols !== 'number' || op.cols < 1) {
+								throw new Error(`Invalid operation at index ${index}: "insert_table" requires "cols" (positive number).`);
+							}
+							break;
+						case 'insert_page_break':
+							if (typeof op.position !== 'number') {
+								throw new Error(`Invalid operation at index ${index}: "insert_page_break" requires "position" (number).`);
+							}
+							break;
+						case 'set_margins':
+							if (!op.margins || typeof op.margins !== 'object') {
+								throw new Error(`Invalid operation at index ${index}: "set_margins" requires "margins" object with top/right/bottom/left.`);
+							}
+							break;
+						// XLSX operations
+						case 'set_cell_value':
+						case 'set_cell_formula':
+						case 'format_cell':
+							if (op.sheet === undefined) {
+								throw new Error(`Invalid operation at index ${index}: "${op.type}" requires "sheet" (number or string).`);
+							}
+							if (typeof op.cell !== 'string') {
+								throw new Error(`Invalid operation at index ${index}: "${op.type}" requires "cell" (string like "A1").`);
+							}
+							break;
+						case 'insert_row':
+						case 'delete_row':
+							if (op.sheet === undefined) {
+								throw new Error(`Invalid operation at index ${index}: "${op.type}" requires "sheet".`);
+							}
+							if (typeof op.rowIndex !== 'number') {
+								throw new Error(`Invalid operation at index ${index}: "${op.type}" requires "rowIndex" (number).`);
+							}
+							break;
+						case 'insert_column':
+						case 'delete_column':
+							if (op.sheet === undefined) {
+								throw new Error(`Invalid operation at index ${index}: "${op.type}" requires "sheet".`);
+							}
+							if (typeof op.colIndex !== 'number') {
+								throw new Error(`Invalid operation at index ${index}: "${op.type}" requires "colIndex" (number).`);
+							}
+							break;
+						default:
+							console.warn(`[edit_document] Unknown operation type at index ${index}: "${op.type}"`);
+							// Don't throw - allow unknown types to pass through for forward compatibility
 					}
 					return op;
 				});
@@ -724,7 +819,7 @@ export class ToolsService implements IToolsService {
 			},
 
 			// --- RAG tools
-			rag_index_document: async ({ uri, isPolicyManual }) => {
+			rag_index_document: async ({ uri, isCoreReference }: { uri: URI, isCoreReference: boolean }) => {
 				try {
 					// CRITICAL: Check if document is already indexed to avoid duplicate costs
 					const isAlreadyIndexed = await this.ragService.isDocumentIndexed(uri);
@@ -741,7 +836,7 @@ export class ToolsService implements IToolsService {
 					// Document not indexed yet, proceed with indexing
 					const result = await this.ragService.indexDocument({
 						uri,
-						isPolicyManual,
+						isCoreReference,
 						workspaceId: this.ragService.getWorkspaceId()
 					});
 					return { result };
@@ -749,11 +844,11 @@ export class ToolsService implements IToolsService {
 					return { result: { success: false, message: `Failed to index document: ${error.message}` } };
 				}
 			},
-			rag_search_policy: async ({ query, limit }) => {
+			rag_search_reference: async ({ query, limit }) => {
 				try {
 					const contextPack = await this.ragService.search({
 						query,
-						scope: 'policy_manual',
+						scope: 'core_references',
 						limit,
 						workspaceId: this.ragService.getWorkspaceId()
 					});
@@ -774,7 +869,7 @@ export class ToolsService implements IToolsService {
 				try {
 					const contextPack = await this.ragService.search({
 						query,
-						scope: 'case_index', // Search case files only (not policy manuals)
+						scope: 'case_index', // Search case files only (not core references)
 						limit,
 						workspaceId: this.ragService.getWorkspaceId()
 					});
@@ -783,7 +878,7 @@ export class ToolsService implements IToolsService {
 
 					// Add helpful metadata about the search
 					const enhancedResult = contextPack.totalResults === 0
-						? `No relevant case documents found for query: "${query}"\n\nTry:\n- Using different search terms\n- Checking if documents are indexed with rag_get_stats\n- Use rag_search_policy to search policy manuals instead`
+						? `No relevant case documents found for query: "${query}"\n\nTry:\n- Using different search terms\n- Checking if documents are indexed with rag_get_stats\n- Use rag_search_reference to search core references instead`
 						: `Found ${contextPack.totalResults} relevant case file chunks (after MMR re-ranking and filtering):\n\n${formatted}`;
 
 					return { result: { contextPack: enhancedResult } };
@@ -795,7 +890,7 @@ export class ToolsService implements IToolsService {
 				try {
 					const contextPack = await this.ragService.search({
 						query,
-						scope: 'workspace_all', // Search BOTH policy manuals AND case files
+						scope: 'workspace_all', // Search BOTH core references AND case files
 						limit,
 						workspaceId: this.ragService.getWorkspaceId()
 					});
@@ -805,7 +900,7 @@ export class ToolsService implements IToolsService {
 					// Add helpful metadata about the search
 					const enhancedResult = contextPack.totalResults === 0
 						? `No relevant documents found for query: "${query}"\n\nTry:\n- Using different search terms\n- Checking if documents are indexed with rag_get_stats`
-						: `Found ${contextPack.totalResults} relevant chunks from ALL sources (policy manuals + case files):\n\n${formatted}`;
+						: `Found ${contextPack.totalResults} relevant chunks from ALL sources (core references + case files):\n\n${formatted}`;
 
 					return { result: { contextPack: enhancedResult } };
 				} catch (error) {
@@ -830,7 +925,7 @@ export class ToolsService implements IToolsService {
 ${stats.documents.map(d => `  • ${d.filetype}: ${d.typeCount} files (${(d.totalSize / 1024 / 1024).toFixed(2)} MB)`).join('\n')}
 
 💡 Search Tips:
-- Use rag_search_policy for policy manual queries (regulations, procedures, rules)
+- Use rag_search_reference for core reference queries (regulations, procedures, rules)
 - Use rag_search_workspace for case file queries (medical reports, IME evals, correspondence)
 - Use rag_search_all to search BOTH sources at once
 - Be specific with search terms for better results
@@ -839,10 +934,10 @@ ${stats.documents.map(d => `  • ${d.filetype}: ${d.typeCount} files (${(d.tota
 
 No documents indexed yet. To get started:
 1. Use rag_index_document to index PDFs or documents
-2. For policy manuals: set is_policy_manual to true
-3. For workspace docs: set is_policy_manual to false
+2. For core references: set is_core_reference to true
+3. For workspace docs: set is_core_reference to false
 
-Example: rag_index_document with uri="/path/to/document.pdf" and is_policy_manual=true`;
+Example: rag_index_document with uri="/path/to/document.pdf" and is_core_reference=true`;
 
 					return { result: { stats: statsStr } };
 				} catch (error) {
@@ -1049,7 +1144,10 @@ Example: rag_index_document with uri="/path/to/document.pdf" and is_policy_manua
 		// given to the LLM after the call for successful tool calls
 		this.stringOfResult = {
 			read_file: (params, result) => {
-				return `${params.uri.fsPath}\n\`\`\`\n${result.fileContents}\n\`\`\`${nextPageStr(result.hasNextPage)}${result.hasNextPage ? `\nMore info because truncated: this file has ${result.totalNumLines} lines, or ${result.totalFileLen} characters.` : ''}`
+				// Escape nested backticks in file content to prevent markdown parsing issues
+				// Replace ``` with escaped version using zero-width space
+				const escapedContent = result.fileContents.replace(/```/g, '`\u200B`\u200B`')
+				return `${params.uri.fsPath}\n\`\`\`\n${escapedContent}\n\`\`\`${nextPageStr(result.hasNextPage)}${result.hasNextPage ? `\nMore info because truncated: this file has ${result.totalNumLines} lines, or ${result.totalFileLen} characters.` : ''}`
 			},
 			ls_dir: (params, result) => {
 				const dirTreeStr = stringifyDirectoryTree1Deep(params, result)
@@ -1146,7 +1244,7 @@ Example: rag_index_document with uri="/path/to/document.pdf" and is_policy_manua
 					return `Failed to index document: ${params.uri.fsPath}\n${result.message}`;
 				}
 			},
-			rag_search_policy: (_params, result) => {
+			rag_search_reference: (_params, result) => {
 				return result.contextPack;
 			},
 			rag_search_workspace: (_params, result) => {

@@ -8,13 +8,42 @@ import { IChannel } from '../../../../base/parts/ipc/common/ipc.js';
 import { InstantiationType, registerSingleton } from '../../../../platform/instantiation/common/extensions.js';
 import { IMainProcessService } from '../../../../platform/ipc/common/mainProcessService.js';
 import { IWorkspaceContextService } from '../../../../platform/workspace/common/workspace.js';
-import { Email, IEmailService } from '../common/emailService.js';
+import { Email, EmailCategory, EmailClassification, EmailPriority, IEmailService } from '../common/emailService.js';
+import { IEmailClassifierService } from './emailClassifier.js';
+
+// Helper type for date conversion from IPC (dates come as strings, enums as string|null)
+type EmailWithStringDates = Omit<Email, 'date' | 'extractedDeadline' | 'classifiedAt' | 'reminderDate' | 'category' | 'priority' | 'references'> & {
+	date: string;
+	extractedDeadline?: string | null;
+	classifiedAt?: string | null;
+	reminderDate?: string | null;
+	category?: string | null;
+	priority?: string | null;
+	references?: string[] | null;
+};
+
+/**
+ * Convert email with string dates to proper Date objects
+ */
+function convertEmailDates(email: EmailWithStringDates): Email {
+	return {
+		...email,
+		date: new Date(email.date),
+		extractedDeadline: email.extractedDeadline ? new Date(email.extractedDeadline) : undefined,
+		classifiedAt: email.classifiedAt ? new Date(email.classifiedAt) : undefined,
+		reminderDate: email.reminderDate ? new Date(email.reminderDate) : undefined,
+		category: email.category as EmailCategory | undefined,
+		priority: (email.priority || 'normal') as EmailPriority,
+		references: email.references || undefined
+	};
+}
 
 export class EmailService implements IEmailService {
 	readonly _serviceBrand: undefined;
 
 	private readonly channel: IChannel;
 	private readonly workspaceId: string;
+	private classifierService: IEmailClassifierService | undefined;
 
 	constructor(
 		@IMainProcessService private readonly mainProcessService: IMainProcessService,
@@ -22,6 +51,13 @@ export class EmailService implements IEmailService {
 	) {
 		this.channel = this.mainProcessService.getChannel('void-channel-email');
 		this.workspaceId = this.computeWorkspaceId();
+	}
+
+	/**
+	 * Set the classifier service (called by contribution to avoid circular dependency)
+	 */
+	setClassifierService(classifier: IEmailClassifierService): void {
+		this.classifierService = classifier;
 	}
 
 	/**
@@ -60,34 +96,67 @@ export class EmailService implements IEmailService {
 		// Assumes structure like: workspace/cases/case-name/correspondence/email.eml
 		const caseFolderPath = this.inferCaseFolderPath(filePath.fsPath);
 
-		const result = await this.channel.call<Email & { date: string }>('parseEmailFile', {
+		const result = await this.channel.call<EmailWithStringDates>('parseEmailFile', {
 			filePath: filePath.toJSON(),
 			caseFolderPath,
 			workspaceId: this.workspaceId
 		});
 
-		// Convert date string back to Date object
-		return {
-			...result,
-			date: new Date(result.date)
-		};
+		const email = convertEmailDates(result);
+
+		// Auto-classify the email if classifier is available and email isn't already classified
+		if (this.classifierService && !email.category) {
+			try {
+				await this.classifyEmailAsync(email);
+			} catch {
+				// Classification failure shouldn't block email import
+				// Email imported without classification
+			}
+		}
+
+		return email;
+	}
+
+	/**
+	 * Classify email asynchronously and update the database
+	 */
+	private async classifyEmailAsync(email: Email): Promise<void> {
+		if (!this.classifierService) {
+			return;
+		}
+
+		if (!this.classifierService.isClassificationAvailable()) {
+			// Skipping classification - no LLM model configured
+			return;
+		}
+
+		const classification = await this.classifierService.classifyEmail(
+			email.subject,
+			email.bodyText,
+			email.from
+		);
+
+		// Update the email in database with classification
+		await this.updateClassification(email.id, classification);
+
+		// Update the local email object
+		email.category = classification.category;
+		email.priority = classification.priority;
+		email.extractedDeadline = classification.extractedDeadline;
+		email.classifiedAt = new Date();
 	}
 
 	async getEmails(caseFolderPath?: URI): Promise<Email[]> {
-		const results = await this.channel.call<Array<Email & { date: string }>>('getEmails', {
+		const results = await this.channel.call<EmailWithStringDates[]>('getEmails', {
 			workspaceId: this.workspaceId,
 			caseFolderPath: caseFolderPath?.fsPath
 		});
 
-		// Convert date strings back to Date objects
-		return results.map((email) => ({
-			...email,
-			date: new Date(email.date)
-		}));
+		return results.map(convertEmailDates);
 	}
 
 	async getEmailById(id: string): Promise<Email | null> {
-		const result = await this.channel.call<(Email & { date: string }) | null>('getEmailById', {
+		const result = await this.channel.call<EmailWithStringDates | null>('getEmailById', {
 			workspaceId: this.workspaceId,
 			emailId: id
 		});
@@ -96,10 +165,7 @@ export class EmailService implements IEmailService {
 			return null;
 		}
 
-		return {
-			...result,
-			date: new Date(result.date)
-		};
+		return convertEmailDates(result);
 	}
 
 	async createReplyDocument(emailId: string, draftContent: string): Promise<URI> {
@@ -131,16 +197,13 @@ export class EmailService implements IEmailService {
 	 * Search emails using full-text search
 	 */
 	async searchEmails(query: string, caseFolderPath?: URI): Promise<Email[]> {
-		const results = await this.channel.call<Array<Email & { date: string }>>('searchEmails', {
+		const results = await this.channel.call<EmailWithStringDates[]>('searchEmails', {
 			workspaceId: this.workspaceId,
 			query,
 			caseFolderPath: caseFolderPath?.fsPath
 		});
 
-		return results.map((email) => ({
-			...email,
-			date: new Date(email.date)
-		}));
+		return results.map(convertEmailDates);
 	}
 
 	/**
@@ -160,6 +223,79 @@ export class EmailService implements IEmailService {
 		return this.channel.call<{ totalEmails: number; draftCount: number; caseFolders: string[] }>('getStats', {
 			workspaceId: this.workspaceId
 		});
+	}
+
+	/**
+	 * Toggle the starred state of an email
+	 * Returns the new starred state
+	 */
+	async toggleStar(emailId: string): Promise<boolean> {
+		return this.channel.call<boolean>('toggleStar', {
+			workspaceId: this.workspaceId,
+			emailId
+		});
+	}
+
+	/**
+	 * Update email classification (category, priority, extracted deadline)
+	 */
+	async updateClassification(emailId: string, classification: EmailClassification): Promise<void> {
+		await this.channel.call('updateClassification', {
+			workspaceId: this.workspaceId,
+			emailId,
+			category: classification.category,
+			priority: classification.priority,
+			extractedDeadline: classification.extractedDeadline?.toISOString()
+		});
+	}
+
+	/**
+	 * Get emails filtered by category
+	 */
+	async getEmailsByCategory(category: EmailCategory): Promise<Email[]> {
+		const results = await this.channel.call<EmailWithStringDates[]>('getEmailsByCategory', {
+			workspaceId: this.workspaceId,
+			category
+		});
+
+		return results.map(convertEmailDates);
+	}
+
+	/**
+	 * Get emails filtered by priority
+	 */
+	async getEmailsByPriority(priority: EmailPriority): Promise<Email[]> {
+		const results = await this.channel.call<EmailWithStringDates[]>('getEmailsByPriority', {
+			workspaceId: this.workspaceId,
+			priority
+		});
+
+		return results.map(convertEmailDates);
+	}
+
+	/**
+	 * Set a reminder date for an email
+	 * Pass null to clear the reminder
+	 */
+	async setReminder(emailId: string, reminderDate: Date | null): Promise<void> {
+		await this.channel.call('setReminder', {
+			workspaceId: this.workspaceId,
+			emailId,
+			reminderDate: reminderDate?.toISOString() ?? null
+		});
+	}
+
+	/**
+	 * Get emails that haven't been classified yet
+	 * Used by background classifier to process missed emails
+	 */
+	async getUnclassifiedEmails(limit: number = 10): Promise<Email[]> {
+		const results = await this.channel.call<EmailWithStringDates[]>('getUnclassifiedEmails', {
+			workspaceId: this.workspaceId,
+			limit
+		});
+
+		return results.map(convertEmailDates);
 	}
 
 	/**

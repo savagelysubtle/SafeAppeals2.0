@@ -12,7 +12,10 @@ Requires-Dist: ebooklib>=0.18
 Requires-Dist: markdown>=3.5
 Requires-Dist: markdown-pdf>=1.0
 Requires-Dist: pdfkit>=1.0.0
+Requires-Dist: Pillow>=10.0.0
+Requires-Dist: pdf2image>=1.16.0
 Requires-Dist: pytesseract>=0.3.10
+Requires-Dist: ocrmypdf>=16.0.0
 Provides-Extra: dev
 Requires-Dist: ruff>=0.1.0; extra == "dev"
 Requires-Dist: pytest>=7.0.0; extra == "dev"

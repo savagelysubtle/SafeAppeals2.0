@@ -13,8 +13,37 @@ import {
 import { NotificationCenter } from "./NotificationCenter.js";
 import type { DisplayMode, TimelineViewMode } from "./TimelineDashboard.js";
 
-// SafeAppeals brand colors
-const BRAND_GREEN = "#22c55e";
+// Reusable style objects with VSCode CSS variables
+const toolbarStyle: React.CSSProperties = {
+	backgroundColor: "var(--vscode-sideBar-background)",
+	borderBottom: "1px solid var(--vscode-panel-border)",
+};
+
+const buttonPrimaryStyle: React.CSSProperties = {
+	backgroundColor: "var(--vscode-button-background)",
+	color: "var(--vscode-button-foreground)",
+	border: "none",
+	borderRadius: "8px",
+	cursor: "pointer",
+};
+
+const buttonSecondaryStyle: React.CSSProperties = {
+	backgroundColor: "var(--vscode-button-secondaryBackground)",
+	color: "var(--vscode-button-secondaryForeground)",
+	border: "1px solid var(--vscode-panel-border)",
+	borderRadius: "8px",
+};
+
+const selectStyle: React.CSSProperties = {
+	backgroundColor: "var(--vscode-input-background)",
+	color: "var(--vscode-input-foreground)",
+	border: "1px solid var(--vscode-input-border)",
+	borderRadius: "8px",
+};
+
+const textMutedStyle: React.CSSProperties = {
+	color: "var(--vscode-descriptionForeground)",
+};
 
 // View mode labels
 const VIEW_MODE_LABELS: Record<
@@ -30,6 +59,20 @@ const VIEW_MODE_LABELS: Record<
 interface TimelineToolbarProps {
 	onAddEvent: () => void;
 	onExport: () => void;
+	onExportIcs?: () => void;
+	calendarEventCount?: number;
+	// Google Calendar integration
+	googleCalendarConnected?: boolean;
+	onConnectGoogleCalendar?: () => void;
+	onDisconnectGoogleCalendar?: () => void;
+	onSyncToGoogleCalendar?: () => void;
+	isSyncing?: boolean;
+	// Outlook Calendar integration
+	outlookCalendarConnected?: boolean;
+	onConnectOutlookCalendar?: () => void;
+	onDisconnectOutlookCalendar?: () => void;
+	onSyncToOutlookCalendar?: () => void;
+	isOutlookSyncing?: boolean;
 	onSyncFromCase: () => void;
 	filterCategory: EventCategory | "all";
 	onFilterChange: (category: EventCategory | "all") => void;
@@ -49,6 +92,18 @@ interface TimelineToolbarProps {
 export const TimelineToolbar: React.FC<TimelineToolbarProps> = ({
 	onAddEvent,
 	onExport,
+	onExportIcs,
+	calendarEventCount = 0,
+	googleCalendarConnected = false,
+	onConnectGoogleCalendar,
+	onDisconnectGoogleCalendar,
+	onSyncToGoogleCalendar,
+	isSyncing = false,
+	outlookCalendarConnected = false,
+	onConnectOutlookCalendar,
+	onDisconnectOutlookCalendar,
+	onSyncToOutlookCalendar,
+	isOutlookSyncing = false,
 	onSyncFromCase,
 	filterCategory,
 	onFilterChange,
@@ -77,48 +132,40 @@ export const TimelineToolbar: React.FC<TimelineToolbarProps> = ({
 	];
 
 	return (
-		<div
-			className="p-3 flex flex-wrap items-center gap-3"
-			style={{
-				backgroundColor: "#0f0f0f",
-				borderBottom: `1px solid ${BRAND_GREEN}20`,
-			}}
-		>
-			{/* Add Event Button - Green accent */}
+		<div className="p-3 flex flex-wrap items-center gap-3" style={toolbarStyle}>
+			{/* Add Event Button - Primary */}
 			<button
 				onClick={onAddEvent}
 				className="px-4 py-2 rounded-lg font-semibold flex items-center gap-2 transition-all"
-				style={{
-					backgroundColor: BRAND_GREEN,
-					color: "#0a0a0a",
-					boxShadow: `0 2px 8px ${BRAND_GREEN}30`,
-				}}
-				onMouseEnter={(e) =>
-					(e.currentTarget.style.backgroundColor = "#16a34a")
-				}
-				onMouseLeave={(e) =>
-					(e.currentTarget.style.backgroundColor = BRAND_GREEN)
-				}
+				style={buttonPrimaryStyle}
 			>
 				<i className="codicon codicon-add" />
 				<span>Add Event</span>
 			</button>
 
 			{/* Divider */}
-			<div className="w-px h-6" style={{ backgroundColor: "#27272a" }} />
+			<div
+				className="w-px h-6"
+				style={{ backgroundColor: "var(--vscode-panel-border)" }}
+			/>
 
 			{/* Display Mode Toggle (Timeline/Calendar) */}
 			<div
 				className="flex items-center gap-1 p-1 rounded-lg"
-				style={{ backgroundColor: "#1a1a1a", border: "1px solid #27272a" }}
+				style={buttonSecondaryStyle}
 			>
 				<button
 					onClick={() => onDisplayModeChange("timeline")}
 					className="px-2.5 py-1 rounded-md text-xs font-medium transition-all flex items-center gap-1.5"
 					style={{
 						backgroundColor:
-							displayMode === "timeline" ? BRAND_GREEN : "transparent",
-						color: displayMode === "timeline" ? "#0a0a0a" : "#71717a",
+							displayMode === "timeline"
+								? "var(--vscode-button-background)"
+								: "transparent",
+						color:
+							displayMode === "timeline"
+								? "var(--vscode-button-foreground)"
+								: "var(--vscode-descriptionForeground)",
 					}}
 					title="Timeline View"
 				>
@@ -133,8 +180,13 @@ export const TimelineToolbar: React.FC<TimelineToolbarProps> = ({
 					className="px-2.5 py-1 rounded-md text-xs font-medium transition-all flex items-center gap-1.5"
 					style={{
 						backgroundColor:
-							displayMode === "calendar" ? BRAND_GREEN : "transparent",
-						color: displayMode === "calendar" ? "#0a0a0a" : "#71717a",
+							displayMode === "calendar"
+								? "var(--vscode-button-background)"
+								: "transparent",
+						color:
+							displayMode === "calendar"
+								? "var(--vscode-button-foreground)"
+								: "var(--vscode-descriptionForeground)",
 					}}
 					title="Calendar View"
 				>
@@ -147,14 +199,17 @@ export const TimelineToolbar: React.FC<TimelineToolbarProps> = ({
 			</div>
 
 			{/* Divider */}
-			<div className="w-px h-6" style={{ backgroundColor: "#27272a" }} />
+			<div
+				className="w-px h-6"
+				style={{ backgroundColor: "var(--vscode-panel-border)" }}
+			/>
 
 			{/* View Mode Selector (Zoom Controls) - Only show in timeline mode */}
 			{displayMode === "timeline" && (
 				<>
 					<div
 						className="flex items-center gap-1 p-1 rounded-lg"
-						style={{ backgroundColor: "#1a1a1a", border: "1px solid #27272a" }}
+						style={buttonSecondaryStyle}
 					>
 						{(Object.keys(VIEW_MODE_LABELS) as TimelineViewMode[]).map(
 							(mode) => (
@@ -164,17 +219,25 @@ export const TimelineToolbar: React.FC<TimelineToolbarProps> = ({
 									className="px-2.5 py-1 rounded-md text-xs font-medium transition-all"
 									style={{
 										backgroundColor:
-											viewMode === mode ? BRAND_GREEN : "transparent",
-										color: viewMode === mode ? "#0a0a0a" : "#71717a",
+											viewMode === mode
+												? "var(--vscode-button-background)"
+												: "transparent",
+										color:
+											viewMode === mode
+												? "var(--vscode-button-foreground)"
+												: "var(--vscode-descriptionForeground)",
 									}}
 									title={VIEW_MODE_LABELS[mode].label}
 								>
 									{VIEW_MODE_LABELS[mode].label}
 								</button>
-							)
+							),
 						)}
 					</div>
-					<div className="w-px h-6" style={{ backgroundColor: "#27272a" }} />
+					<div
+						className="w-px h-6"
+						style={{ backgroundColor: "var(--vscode-panel-border)" }}
+					/>
 				</>
 			)}
 
@@ -183,7 +246,7 @@ export const TimelineToolbar: React.FC<TimelineToolbarProps> = ({
 				<>
 					{/* Category Filter */}
 					<div className="flex items-center gap-2">
-						<label className="text-sm" style={{ color: "#71717a" }}>
+						<label className="text-sm" style={textMutedStyle}>
 							Filter:
 						</label>
 						<select
@@ -192,11 +255,7 @@ export const TimelineToolbar: React.FC<TimelineToolbarProps> = ({
 								onFilterChange(e.target.value as EventCategory | "all")
 							}
 							className="px-3 py-1.5 rounded-lg text-sm outline-none cursor-pointer"
-							style={{
-								backgroundColor: "#1a1a1a",
-								color: "#fafafa",
-								border: "1px solid #27272a",
-							}}
+							style={selectStyle}
 						>
 							{categories.map((cat) => (
 								<option key={cat} value={cat}>
@@ -213,21 +272,23 @@ export const TimelineToolbar: React.FC<TimelineToolbarProps> = ({
 						<div
 							className="relative w-8 h-5 rounded-full transition-colors cursor-pointer"
 							style={{
-								backgroundColor: showDeadlinesOnly ? BRAND_GREEN : "#27272a",
+								backgroundColor: showDeadlinesOnly
+									? "var(--vscode-button-background)"
+									: "var(--vscode-panel-border)",
 							}}
 							onClick={() => onShowDeadlinesChange(!showDeadlinesOnly)}
 						>
 							<div
 								className="absolute top-0.5 w-4 h-4 rounded-full transition-transform"
 								style={{
-									backgroundColor: "#fafafa",
+									backgroundColor: "var(--vscode-editor-foreground)",
 									transform: showDeadlinesOnly
 										? "translateX(14px)"
 										: "translateX(2px)",
 								}}
 							/>
 						</div>
-						<span className="text-sm" style={{ color: "#a1a1aa" }}>
+						<span className="text-sm" style={textMutedStyle}>
 							Deadlines only
 						</span>
 					</label>
@@ -237,46 +298,192 @@ export const TimelineToolbar: React.FC<TimelineToolbarProps> = ({
 			{/* Spacer */}
 			<div className="flex-1" />
 
-			{/* Export Button */}
+			{/* Export PDF Button */}
 			<button
 				onClick={onExport}
 				className="text-xs px-3 py-1.5 rounded-lg flex items-center gap-2 transition-all cursor-pointer"
-				style={{
-					backgroundColor: "#1a1a1a",
-					color: "#a1a1aa",
-					border: "1px solid #27272a",
-				}}
-				onMouseEnter={(e) => {
-					e.currentTarget.style.backgroundColor = "#27272a";
-					e.currentTarget.style.color = "#fafafa";
-				}}
-				onMouseLeave={(e) => {
-					e.currentTarget.style.backgroundColor = "#1a1a1a";
-					e.currentTarget.style.color = "#a1a1aa";
-				}}
+				style={buttonSecondaryStyle}
 				title="Export timeline to PDF"
 			>
 				<i className="codicon codicon-file-pdf" style={{ fontSize: "12px" }} />
 				<span>Export PDF</span>
 			</button>
 
+			{/* Export ICS Button */}
+			{onExportIcs && (
+				<button
+					onClick={onExportIcs}
+					disabled={calendarEventCount === 0}
+					className="text-xs px-3 py-1.5 rounded-lg flex items-center gap-2 transition-all cursor-pointer"
+					style={{
+						...buttonSecondaryStyle,
+						opacity: calendarEventCount === 0 ? 0.5 : 1,
+						cursor: calendarEventCount === 0 ? "not-allowed" : "pointer",
+					}}
+					title={
+						calendarEventCount === 0
+							? "No events marked for calendar sync"
+							: `Export ${calendarEventCount} event${calendarEventCount !== 1 ? "s" : ""} to calendar (.ics)`
+					}
+				>
+					<i
+						className="codicon codicon-calendar"
+						style={{ fontSize: "12px" }}
+					/>
+					<span>
+						Export .ics
+						{calendarEventCount > 0 ? ` (${calendarEventCount})` : ""}
+					</span>
+				</button>
+			)}
+
+			{/* Google Calendar Integration */}
+			{!googleCalendarConnected && onConnectGoogleCalendar && (
+				<button
+					onClick={onConnectGoogleCalendar}
+					className="text-xs px-3 py-1.5 rounded-lg flex items-center gap-2 transition-all cursor-pointer"
+					style={{
+						...buttonSecondaryStyle,
+						borderColor: "var(--vscode-charts-blue)",
+					}}
+					title="Connect to Google Calendar for live sync"
+				>
+					<i
+						className="codicon codicon-plug"
+						style={{ fontSize: "12px", color: "var(--vscode-charts-blue)" }}
+					/>
+					<span>Connect Google</span>
+				</button>
+			)}
+
+			{googleCalendarConnected && (
+				<div className="flex items-center gap-1">
+					{/* Sync Now Button */}
+					{onSyncToGoogleCalendar && (
+						<button
+							onClick={onSyncToGoogleCalendar}
+							disabled={isSyncing || calendarEventCount === 0}
+							className="text-xs px-3 py-1.5 rounded-lg flex items-center gap-2 transition-all cursor-pointer"
+							style={{
+								...buttonSecondaryStyle,
+								borderColor: "var(--vscode-charts-green)",
+								opacity: isSyncing || calendarEventCount === 0 ? 0.5 : 1,
+								cursor:
+									isSyncing || calendarEventCount === 0
+										? "not-allowed"
+										: "pointer",
+							}}
+							title={
+								isSyncing
+									? "Syncing..."
+									: calendarEventCount === 0
+										? "No events to sync"
+										: `Sync ${calendarEventCount} event${calendarEventCount !== 1 ? "s" : ""} to Google Calendar`
+							}
+						>
+							<i
+								className={`codicon ${isSyncing ? "codicon-sync codicon-modifier-spin" : "codicon-cloud-upload"}`}
+								style={{
+									fontSize: "12px",
+									color: "var(--vscode-charts-green)",
+								}}
+							/>
+							<span>{isSyncing ? "Syncing..." : "Google"}</span>
+						</button>
+					)}
+					{/* Disconnect Button */}
+					{onDisconnectGoogleCalendar && (
+						<button
+							onClick={onDisconnectGoogleCalendar}
+							className="text-xs px-2 py-1.5 rounded-lg flex items-center transition-all cursor-pointer"
+							style={{
+								...buttonSecondaryStyle,
+								color: "var(--vscode-errorForeground)",
+							}}
+							title="Disconnect Google Calendar"
+						>
+							<span>Disconnect</span>
+						</button>
+					)}
+				</div>
+			)}
+
+			{/* Outlook Calendar Integration */}
+			{!outlookCalendarConnected && onConnectOutlookCalendar && (
+				<button
+					onClick={onConnectOutlookCalendar}
+					className="text-xs px-3 py-1.5 rounded-lg flex items-center gap-2 transition-all cursor-pointer"
+					style={{
+						...buttonSecondaryStyle,
+						borderColor: "var(--vscode-charts-orange)",
+					}}
+					title="Connect to Outlook Calendar for live sync"
+				>
+					<i
+						className="codicon codicon-plug"
+						style={{ fontSize: "12px", color: "var(--vscode-charts-orange)" }}
+					/>
+					<span>Connect Outlook</span>
+				</button>
+			)}
+
+			{outlookCalendarConnected && (
+				<div className="flex items-center gap-1">
+					{/* Sync Now Button */}
+					{onSyncToOutlookCalendar && (
+						<button
+							onClick={onSyncToOutlookCalendar}
+							disabled={isOutlookSyncing || calendarEventCount === 0}
+							className="text-xs px-3 py-1.5 rounded-lg flex items-center gap-2 transition-all cursor-pointer"
+							style={{
+								...buttonSecondaryStyle,
+								borderColor: "var(--vscode-charts-orange)",
+								opacity: isOutlookSyncing || calendarEventCount === 0 ? 0.5 : 1,
+								cursor:
+									isOutlookSyncing || calendarEventCount === 0
+										? "not-allowed"
+										: "pointer",
+							}}
+							title={
+								isOutlookSyncing
+									? "Syncing..."
+									: calendarEventCount === 0
+										? "No events to sync"
+										: `Sync ${calendarEventCount} event${calendarEventCount !== 1 ? "s" : ""} to Outlook Calendar`
+							}
+						>
+							<i
+								className={`codicon ${isOutlookSyncing ? "codicon-sync codicon-modifier-spin" : "codicon-cloud-upload"}`}
+								style={{
+									fontSize: "12px",
+									color: "var(--vscode-charts-orange)",
+								}}
+							/>
+							<span>{isOutlookSyncing ? "Syncing..." : "Outlook"}</span>
+						</button>
+					)}
+					{/* Disconnect Button */}
+					{onDisconnectOutlookCalendar && (
+						<button
+							onClick={onDisconnectOutlookCalendar}
+							className="text-xs px-2 py-1.5 rounded-lg flex items-center transition-all cursor-pointer"
+							style={{
+								...buttonSecondaryStyle,
+								color: "var(--vscode-errorForeground)",
+							}}
+							title="Disconnect Outlook Calendar"
+						>
+							<span>Disconnect</span>
+						</button>
+					)}
+				</div>
+			)}
+
 			{/* Sync from Case Button */}
 			<button
 				onClick={onSyncFromCase}
 				className="text-xs px-3 py-1.5 rounded-lg flex items-center gap-2 transition-all cursor-pointer"
-				style={{
-					backgroundColor: "#1a1a1a",
-					color: "#a1a1aa",
-					border: "1px solid #27272a",
-				}}
-				onMouseEnter={(e) => {
-					e.currentTarget.style.backgroundColor = "#27272a";
-					e.currentTarget.style.color = "#fafafa";
-				}}
-				onMouseLeave={(e) => {
-					e.currentTarget.style.backgroundColor = "#1a1a1a";
-					e.currentTarget.style.color = "#a1a1aa";
-				}}
+				style={buttonSecondaryStyle}
 				title="Sync timeline with case configuration"
 			>
 				<i className="codicon codicon-sync" style={{ fontSize: "12px" }} />
@@ -288,17 +495,8 @@ export const TimelineToolbar: React.FC<TimelineToolbarProps> = ({
 				onClick={onJurisdictionClick}
 				className="text-xs px-3 py-1.5 rounded-lg flex items-center gap-2 transition-all cursor-pointer"
 				style={{
-					backgroundColor: `${BRAND_GREEN}15`,
-					color: BRAND_GREEN,
-					border: `1px solid ${BRAND_GREEN}30`,
-				}}
-				onMouseEnter={(e) => {
-					e.currentTarget.style.backgroundColor = `${BRAND_GREEN}25`;
-					e.currentTarget.style.borderColor = BRAND_GREEN;
-				}}
-				onMouseLeave={(e) => {
-					e.currentTarget.style.backgroundColor = `${BRAND_GREEN}15`;
-					e.currentTarget.style.borderColor = `${BRAND_GREEN}30`;
+					...buttonPrimaryStyle,
+					padding: "6px 12px",
 				}}
 			>
 				<i className="codicon codicon-law" style={{ fontSize: "12px" }} />
@@ -316,45 +514,18 @@ export const TimelineToolbar: React.FC<TimelineToolbarProps> = ({
 			{onOpenNotificationSettings && (
 				<button
 					onClick={onOpenNotificationSettings}
-					className="p-2 rounded-lg transition-colors flex items-center justify-center"
-					style={{
-						backgroundColor: "#1a1a1a",
-						border: "1px solid #27272a",
-						minWidth: "36px",
-						minHeight: "36px",
-					}}
-					onMouseEnter={(e) =>
-						(e.currentTarget.style.backgroundColor = "#27272a")
-					}
-					onMouseLeave={(e) =>
-						(e.currentTarget.style.backgroundColor = "#1a1a1a")
-					}
+					className="text-xs px-3 py-1.5 rounded-lg transition-colors flex items-center gap-2 cursor-pointer"
+					style={buttonSecondaryStyle}
 					title="Notification Settings"
 				>
-					<svg
-						width="16"
-						height="16"
-						viewBox="0 0 16 16"
-						fill="none"
-						stroke="#71717a"
-						strokeWidth="1.5"
-						strokeLinecap="round"
-						strokeLinejoin="round"
-					>
-						<circle cx="8" cy="8" r="2" />
-						<path d="M13.5 8a5.5 5.5 0 0 0-.15-1.28l1.45-1.12-1-1.73-1.73.5a5.5 5.5 0 0 0-1.1-.64L10.5 2h-2l-.47 1.73a5.5 5.5 0 0 0-1.1.64l-1.73-.5-1 1.73 1.45 1.12a5.5 5.5 0 0 0 0 2.56l-1.45 1.12 1 1.73 1.73-.5c.32.26.7.48 1.1.64L8.5 14h2l.47-1.73c.4-.16.78-.38 1.1-.64l1.73.5 1-1.73-1.45-1.12c.1-.42.15-.85.15-1.28z" />
-					</svg>
+					<span>Alert Settings</span>
 				</button>
 			)}
 
 			{/* Event Count */}
 			<span
 				className="text-sm px-3 py-1 rounded-lg"
-				style={{
-					backgroundColor: "#1a1a1a",
-					color: "#71717a",
-					border: "1px solid #27272a",
-				}}
+				style={buttonSecondaryStyle}
 			>
 				{eventCount} event{eventCount !== 1 ? "s" : ""}
 			</span>

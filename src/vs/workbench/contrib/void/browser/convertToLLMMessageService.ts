@@ -448,7 +448,16 @@ const prepareOpenAIOrAnthropicMessages = ({
 	// A COMPLETE HACK: last message is system message for context purposes
 
 	const sysMsgParts: string[] = []
-	if (aiInstructions) sysMsgParts.push(`GUIDELINES (from the user's .fileorg.json file):\n${aiInstructions}`)
+	if (aiInstructions) sysMsgParts.push(`<case_configuration_context>
+**🚨 CASE CONFIGURATION - PRIMARY REFERENCE FOR PARTIES & ROLES 🚨**
+
+This case-specific context is loaded from .fileorg.json. Use this as your AUTHORITATIVE SOURCE for:
+- Party identification (who's who)
+- Side classification (Your Side vs Their Side)
+- Document classification guidance
+
+${aiInstructions}
+</case_configuration_context>`)
 	if (systemMessage) sysMsgParts.push(systemMessage)
 	const combinedSystemMessage = sysMsgParts.join('\n\n')
 

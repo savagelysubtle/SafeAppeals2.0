@@ -8,7 +8,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { ILogService } from '../../../../../platform/log/common/log.js';
 import { IRAGPathService } from '../../common/rag/ragPathService.js';
-import { Email, EmailAttachment } from '../../common/emailService.js';
+import { Email, EmailAttachment, EmailCategory, EmailClassification, EmailPriority, EmailDraft, DraftStatus } from '../../common/emailService.js';
 import { EmailIndexService } from './emailIndexService.js';
 
 // Use createRequire for mailparser (CommonJS module)
@@ -30,6 +30,8 @@ interface ParsedMail {
 		size: number;
 	}>;
 	messageId?: string;
+	inReplyTo?: string;
+	references?: string | string[];
 }
 
 /**
@@ -99,6 +101,31 @@ export class EmailMainService {
 			size: att.size
 		}));
 
+		// Parse References header (can be string or array)
+		let references: string[] | undefined;
+		if (parsed.references) {
+			if (Array.isArray(parsed.references)) {
+				references = parsed.references.filter(ref => ref && ref.trim().length > 0);
+			} else if (typeof parsed.references === 'string') {
+				// References is space-separated list of Message-IDs
+				references = parsed.references
+					.split(/\s+/)
+					.map(ref => ref.trim())
+					.filter(ref => ref.length > 0);
+			}
+		}
+
+		// Compute threadId: use the first message ID in the chain
+		// Priority: 1) First ID in References, 2) In-Reply-To, 3) Current Message-ID
+		let threadId: string | undefined;
+		if (references && references.length > 0) {
+			threadId = references[0];
+		} else if (parsed.inReplyTo) {
+			threadId = parsed.inReplyTo;
+		} else if (parsed.messageId) {
+			threadId = parsed.messageId;
+		}
+
 		const email: Email = {
 			id: emailId,
 			from: parsed.from?.text || '',
@@ -112,7 +139,12 @@ export class EmailMainService {
 			caseFolderPath,
 			filePath,
 			fileType: 'eml',
-			attachments
+			attachments,
+			// Threading fields
+			messageId: parsed.messageId,
+			inReplyTo: parsed.inReplyTo,
+			references,
+			threadId
 		};
 
 		// Store in database
@@ -237,6 +269,15 @@ export class EmailMainService {
 	}
 
 	/**
+	 * Toggle the starred state of an email
+	 * Returns the new starred state
+	 */
+	async toggleStar(workspaceId: string, emailId: string): Promise<boolean> {
+		const indexService = await this.workspaceManager.getOrCreateWorkspace(workspaceId);
+		return indexService.toggleStar(emailId);
+	}
+
+	/**
 	 * Create a DOCX reply document for an email
 	 */
 	async createReplyDocument(
@@ -302,6 +343,275 @@ export class EmailMainService {
 
 		this.logService.info(`Email: Created reply document at ${replyFilePath}`);
 		return replyFilePath;
+	}
+
+	/**
+	 * Update email classification (category, priority, extracted deadline)
+	 */
+	async updateClassification(workspaceId: string, emailId: string, classification: EmailClassification): Promise<void> {
+		const indexService = await this.workspaceManager.getOrCreateWorkspace(workspaceId);
+		await indexService.updateClassification(emailId, classification);
+	}
+
+	/**
+	 * Get emails filtered by category
+	 */
+	async getEmailsByCategory(workspaceId: string, category: EmailCategory): Promise<Email[]> {
+		const indexService = await this.workspaceManager.getOrCreateWorkspace(workspaceId);
+		return indexService.getEmailsByCategory(category);
+	}
+
+	/**
+	 * Get emails filtered by priority
+	 */
+	async getEmailsByPriority(workspaceId: string, priority: EmailPriority): Promise<Email[]> {
+		const indexService = await this.workspaceManager.getOrCreateWorkspace(workspaceId);
+		return indexService.getEmailsByPriority(priority);
+	}
+
+	/**
+	 * Set a reminder date for an email
+	 * Pass null to clear the reminder
+	 */
+	async setReminder(workspaceId: string, emailId: string, reminderDate: Date | null): Promise<void> {
+		const indexService = await this.workspaceManager.getOrCreateWorkspace(workspaceId);
+		await indexService.setReminder(emailId, reminderDate);
+	}
+
+	/**
+	 * Get emails that haven't been classified yet
+	 * Used by background classifier to process missed emails
+	 */
+	async getUnclassifiedEmails(workspaceId: string, limit: number = 10): Promise<Email[]> {
+		const indexService = await this.workspaceManager.getOrCreateWorkspace(workspaceId);
+		return indexService.getUnclassifiedEmails(limit);
+	}
+
+	// ========== DRAFT MANAGEMENT METHODS ==========
+
+	/**
+	 * Save a draft for an email, creating a new version
+	 */
+	async saveDraft(workspaceId: string, emailId: string, content: string): Promise<EmailDraft> {
+		const indexService = await this.workspaceManager.getOrCreateWorkspace(workspaceId);
+		return indexService.saveDraft(emailId, content);
+	}
+
+	/**
+	 * Get the latest draft for an email
+	 */
+	async getDraft(workspaceId: string, emailId: string): Promise<EmailDraft | null> {
+		const indexService = await this.workspaceManager.getOrCreateWorkspace(workspaceId);
+		return indexService.getDraft(emailId);
+	}
+
+	/**
+	 * Get all versions of drafts for an email
+	 */
+	async getDraftVersions(workspaceId: string, emailId: string): Promise<EmailDraft[]> {
+		const indexService = await this.workspaceManager.getOrCreateWorkspace(workspaceId);
+		return indexService.getDraftVersions(emailId);
+	}
+
+	/**
+	 * Update the status of a draft
+	 */
+	async updateDraftStatus(workspaceId: string, draftId: string, status: DraftStatus): Promise<void> {
+		const indexService = await this.workspaceManager.getOrCreateWorkspace(workspaceId);
+		await indexService.updateDraftStatus(draftId, status);
+	}
+
+	// ========== THREADING METHODS ==========
+
+	/**
+	 * Get all conversation threads in a workspace
+	 */
+	async getThreads(workspaceId: string): Promise<Array<{
+		threadId: string;
+		subject: string;
+		emails: Email[];
+		latestEmail: Email;
+		participantCount: number;
+		emailCount: number;
+		hasUnread: boolean;
+		latestDate: Date;
+		status: 'needs-reply' | 'awaiting-response' | 'resolved' | 'active';
+	}>> {
+		const indexService = await this.workspaceManager.getOrCreateWorkspace(workspaceId);
+		const threadIds = await indexService.getDistinctThreadIds();
+
+		const threads = await Promise.all(
+			threadIds.map(async (threadId) => {
+				const emails = await indexService.getEmailsByThreadId(threadId);
+				if (emails.length === 0) return null;
+
+				// Sort emails by date (oldest first)
+				emails.sort((a, b) => a.date.getTime() - b.date.getTime());
+
+				// Get unique participants (senders)
+				const uniqueSenders = new Set(emails.map(e => e.from));
+				const participantCount = uniqueSenders.size;
+
+				// Latest email is the last one after sorting
+				const latestEmail = emails[emails.length - 1];
+
+				// Subject from the first email (root of thread)
+				const subject = emails[0].subject;
+
+				// Determine thread status
+				const status = await this.determineThreadStatus(threadId, latestEmail, emails, indexService);
+
+				return {
+					threadId,
+					subject,
+					emails,
+					latestEmail,
+					participantCount,
+					emailCount: emails.length,
+					hasUnread: false, // Placeholder for future unread tracking
+					latestDate: latestEmail.date,
+					status
+				};
+			})
+		);
+
+		// Filter out nulls and sort by latest date (most recent first)
+		return threads
+			.filter((t): t is NonNullable<typeof t> => t !== null)
+			.sort((a, b) => b.latestDate.getTime() - a.latestDate.getTime());
+	}
+
+	/**
+	 * Get a specific thread by ID
+	 */
+	async getThreadById(workspaceId: string, threadId: string): Promise<{
+		threadId: string;
+		subject: string;
+		emails: Email[];
+		latestEmail: Email;
+		participantCount: number;
+		emailCount: number;
+		hasUnread: boolean;
+		latestDate: Date;
+		status: 'needs-reply' | 'awaiting-response' | 'resolved' | 'active';
+	} | null> {
+		const indexService = await this.workspaceManager.getOrCreateWorkspace(workspaceId);
+		const emails = await indexService.getEmailsByThreadId(threadId);
+
+		if (emails.length === 0) return null;
+
+		// Sort emails by date (oldest first)
+		emails.sort((a, b) => a.date.getTime() - b.date.getTime());
+
+		// Get unique participants
+		const uniqueSenders = new Set(emails.map(e => e.from));
+		const participantCount = uniqueSenders.size;
+
+		// Latest email
+		const latestEmail = emails[emails.length - 1];
+
+		// Subject from first email
+		const subject = emails[0].subject;
+
+		// Determine thread status
+		const status = await this.determineThreadStatus(threadId, latestEmail, emails, indexService);
+
+		return {
+			threadId,
+			subject,
+			emails,
+			latestEmail,
+			participantCount,
+			emailCount: emails.length,
+			hasUnread: false,
+			latestDate: latestEmail.date,
+			status
+		};
+	}
+
+	/**
+	 * Get all emails in a thread, sorted by date (oldest first)
+	 */
+	async getEmailsInThread(workspaceId: string, threadId: string): Promise<Email[]> {
+		const indexService = await this.workspaceManager.getOrCreateWorkspace(workspaceId);
+		return indexService.getEmailsByThreadId(threadId);
+	}
+
+	/**
+	 * Determine thread status based on latest email and manual status
+	 */
+	private async determineThreadStatus(
+		threadId: string,
+		latestEmail: Email,
+		allEmails: Email[],
+		indexService: EmailIndexService
+	): Promise<'needs-reply' | 'awaiting-response' | 'resolved' | 'active'> {
+		// Check for manually set thread status first
+		const manualStatus = await indexService.getThreadStatus(threadId);
+		if (manualStatus) {
+			return manualStatus as 'needs-reply' | 'awaiting-response' | 'resolved' | 'active';
+		}
+
+		// Auto-determine based on latest email sender
+		// Need to identify "our" emails vs external emails
+		// Heuristic: Check if latest email is a draft (isDraft flag)
+		// OR if it's from us (we need better logic here - for now use simple heuristic)
+
+		if (latestEmail.isDraft) {
+			// If latest is a draft, we're working on a reply
+			return 'awaiting-response';
+		}
+
+		// Simple heuristic: if email count is 1, it's just active
+		if (allEmails.length === 1) {
+			return 'needs-reply';
+		}
+
+		// For multi-email threads, check if we sent the latest one
+		// Heuristic: check if the latest email's "from" matches any earlier "to" addresses
+		// This is imperfect but works for basic case
+		const ourAddresses = new Set<string>();
+		allEmails.forEach(email => {
+			// Collect addresses we've sent TO (these are likely external)
+			// Our own address would be in FROM when we reply
+			if (email.to) {
+				email.to.split(',').forEach(addr => {
+					ourAddresses.add(addr.trim().toLowerCase());
+				});
+			}
+		});
+
+		const latestFromLower = latestEmail.from.toLowerCase();
+		const isLatestFromUs = !Array.from(ourAddresses).some(addr => latestFromLower.includes(addr));
+
+		if (isLatestFromUs) {
+			// Latest email is from someone else, we need to reply
+			return 'needs-reply';
+		} else {
+			// Latest email is from us, waiting for response
+			return 'awaiting-response';
+		}
+	}
+
+	/**
+	 * Update thread status manually
+	 */
+	async updateThreadStatus(
+		workspaceId: string,
+		threadId: string,
+		status: 'needs-reply' | 'awaiting-response' | 'resolved' | 'active'
+	): Promise<void> {
+		const indexService = await this.workspaceManager.getOrCreateWorkspace(workspaceId);
+		await indexService.updateThreadStatus(threadId, status);
+		this.logService.info(`Email: Updated thread ${threadId} status to ${status}`);
+	}
+
+	/**
+	 * Close all workspace instances
+	 */
+	async closeAll(): Promise<void> {
+		await this.workspaceManager.closeAll();
+		this.logService.info('Email: Closed all workspace instances');
 	}
 }
 

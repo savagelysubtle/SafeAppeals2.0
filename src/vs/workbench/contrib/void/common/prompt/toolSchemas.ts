@@ -295,12 +295,12 @@ export const RAG_INDEX_DOCUMENT_SCHEMA = {
 	toolName: 'rag_index_document',
 	params: {
 		uri: { type: 'uri', required: true },
-		is_policy_manual: { type: 'boolean', required: false }
+		is_core_reference: { type: 'boolean', required: false }
 	}
 }
 
-export const RAG_SEARCH_POLICY_SCHEMA = {
-	toolName: 'rag_search_policy',
+export const RAG_SEARCH_REFERENCE_SCHEMA = {
+	toolName: 'rag_search_reference',
 	params: {
 		query: { type: 'string', required: true },
 		limit: { type: 'number', required: false }

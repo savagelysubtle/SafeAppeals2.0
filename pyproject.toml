@@ -1,5 +1,5 @@
 [project]
-name = "safe-appeals-navigator"
+name = "safe-appeals"
 version = "1.99.3"
 description = "Python dependencies for Safe Appeals Navigator"
 requires-python = ">=3.13"

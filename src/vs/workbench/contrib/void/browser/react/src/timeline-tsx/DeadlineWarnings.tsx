@@ -5,10 +5,18 @@
 
 import React from 'react';
 import {
-  TimelineEvent,
-  formatTimelineDate,
-  daysBetween } from
-'../../../../common/timeline/timelineTypes.js';
+    TimelineEvent,
+    daysBetween
+} from '../../../../common/timeline/timelineTypes.js';
+
+// Reusable style objects with VSCode CSS variables
+const textPrimaryStyle: React.CSSProperties = {
+  color: 'var(--vscode-editor-foreground)',
+};
+
+const textMutedStyle: React.CSSProperties = {
+  color: 'var(--vscode-descriptionForeground)',
+};
 
 interface DeadlineWarningsProps {
   overdueDeadlines: TimelineEvent[];
@@ -26,24 +34,24 @@ export const DeadlineWarnings: React.FC<DeadlineWarningsProps> = ({
   }
 
   return (
-    <div className="p-3 space-y-2" style={{ backgroundColor: '#0a0a0a' }}>
+    <div className="p-3 space-y-2" style={{ backgroundColor: 'var(--vscode-editor-background)' }}>
 			{/* Overdue Deadlines */}
       {overdueDeadlines.length > 0 && (
       <div
           className="rounded-xl p-4"
         style={{
-            backgroundColor: '#1a0a0a',
-            border: '1px solid #ef444430'
+            backgroundColor: 'var(--vscode-inputValidation-errorBackground)',
+            border: '1px solid var(--vscode-inputValidation-errorBorder)'
           }}
         >
           <div className="flex items-center gap-2 mb-3">
             <div
               className="w-8 h-8 rounded-lg flex items-center justify-center"
-              style={{ backgroundColor: '#ef444420' }}
+              style={{ backgroundColor: 'var(--vscode-inputValidation-errorBackground)' }}
             >
-              <i className="codicon codicon-warning" style={{ color: '#ef4444', fontSize: '16px' }} />
+              <i className="codicon codicon-warning" style={{ color: 'var(--vscode-errorForeground)', fontSize: '16px' }} />
             </div>
-            <span className="font-semibold" style={{ color: '#ef4444' }}>
+            <span className="font-semibold" style={{ color: 'var(--vscode-errorForeground)' }}>
 							{overdueDeadlines.length} Overdue Deadline{overdueDeadlines.length !== 1 ? 's' : ''}
 						</span>
 					</div>
@@ -56,14 +64,12 @@ export const DeadlineWarnings: React.FC<DeadlineWarningsProps> = ({
                 onClick={() => onClickEvent(deadline)}
                   className="w-full text-left px-3 py-2 rounded-lg transition-colors"
                   style={{ backgroundColor: 'transparent' }}
-                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#27272a'}
-                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
                 >
                   <div className="flex items-center justify-between">
-                    <span style={{ color: '#fafafa' }}>
+                    <span style={textPrimaryStyle}>
 											{deadline.title}
 										</span>
-                    <span className="text-xs font-medium" style={{ color: '#ef4444' }}>
+                    <span className="text-xs font-medium" style={{ color: 'var(--vscode-errorForeground)' }}>
 											{daysOverdue} day{daysOverdue !== 1 ? 's' : ''} overdue
 										</span>
 									</div>
@@ -71,7 +77,7 @@ export const DeadlineWarnings: React.FC<DeadlineWarningsProps> = ({
               );
           })}
             {overdueDeadlines.length > 3 && (
-              <p className="text-xs pl-3 pt-1" style={{ color: '#71717a' }}>
+              <p className="text-xs pl-3 pt-1" style={textMutedStyle}>
 								+{overdueDeadlines.length - 3} more overdue
 							</p>
             )}
@@ -84,18 +90,18 @@ export const DeadlineWarnings: React.FC<DeadlineWarningsProps> = ({
       <div
           className="rounded-xl p-4"
         style={{
-            backgroundColor: '#1a1505',
-            border: '1px solid #f59e0b30'
+            backgroundColor: 'var(--vscode-inputValidation-warningBackground)',
+            border: '1px solid var(--vscode-inputValidation-warningBorder)'
           }}
         >
           <div className="flex items-center gap-2 mb-3">
             <div
               className="w-8 h-8 rounded-lg flex items-center justify-center"
-              style={{ backgroundColor: '#f59e0b20' }}
+              style={{ backgroundColor: 'var(--vscode-inputValidation-warningBackground)' }}
             >
-              <i className="codicon codicon-clock" style={{ color: '#f59e0b', fontSize: '16px' }} />
+              <i className="codicon codicon-clock" style={{ color: 'var(--vscode-editorWarning-foreground)', fontSize: '16px' }} />
             </div>
-            <span className="font-semibold" style={{ color: '#f59e0b' }}>
+            <span className="font-semibold" style={{ color: 'var(--vscode-editorWarning-foreground)' }}>
 							{upcomingDeadlines.length} Upcoming Deadline{upcomingDeadlines.length !== 1 ? 's' : ''}
 						</span>
 					</div>
@@ -103,9 +109,9 @@ export const DeadlineWarnings: React.FC<DeadlineWarningsProps> = ({
 						{upcomingDeadlines.slice(0, 3).map((deadline) => {
             const daysUntil = daysBetween(new Date(), new Date(deadline.date));
               const getUrgencyColor = () => {
-                if (daysUntil <= 1) return '#ef4444';
-                if (daysUntil <= 3) return '#f59e0b';
-                return '#71717a';
+                if (daysUntil <= 1) return 'var(--vscode-errorForeground)';
+                if (daysUntil <= 3) return 'var(--vscode-editorWarning-foreground)';
+                return 'var(--vscode-descriptionForeground)';
               };
             return (
               <button
@@ -113,11 +119,9 @@ export const DeadlineWarnings: React.FC<DeadlineWarningsProps> = ({
                 onClick={() => onClickEvent(deadline)}
                   className="w-full text-left px-3 py-2 rounded-lg transition-colors"
                   style={{ backgroundColor: 'transparent' }}
-                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#27272a'}
-                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
                 >
                   <div className="flex items-center justify-between">
-                    <span style={{ color: '#fafafa' }}>
+                    <span style={textPrimaryStyle}>
 											{deadline.title}
 										</span>
                     <span className="text-xs font-medium" style={{ color: getUrgencyColor() }}>
@@ -130,7 +134,7 @@ export const DeadlineWarnings: React.FC<DeadlineWarningsProps> = ({
               );
           })}
             {upcomingDeadlines.length > 3 && (
-              <p className="text-xs pl-3 pt-1" style={{ color: '#71717a' }}>
+              <p className="text-xs pl-3 pt-1" style={textMutedStyle}>
 								+{upcomingDeadlines.length - 3} more upcoming
 							</p>
             )}

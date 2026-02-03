@@ -9,7 +9,7 @@ import {
 	EventCategory,
 	TimelineEvent,
 } from "../../../../common/timeline/timelineTypes.js";
-import { useAccessor, useIsDark } from "../util/services.js";
+import { useAccessor } from "../util/services.js";
 import { CalendarView } from "./CalendarView.js";
 import { CaseSummary } from "./CaseSummary.js";
 import { DeadlineWarnings } from "./DeadlineWarnings.js";
@@ -26,20 +26,38 @@ export type TimelineViewMode = "all" | "year" | "month" | "week";
 // Display mode: timeline list vs calendar grid
 export type DisplayMode = "timeline" | "calendar";
 
-// SafeAppeals brand colors
-const BRAND_GREEN = "#22c55e";
+// Reusable style objects with VSCode CSS variables
+const containerStyle: React.CSSProperties = {
+	backgroundColor: "var(--vscode-editor-background)",
+	color: "var(--vscode-editor-foreground)",
+};
+
+const sidebarStyle: React.CSSProperties = {
+	backgroundColor: "var(--vscode-sideBar-background)",
+};
+
+const buttonPrimaryStyle: React.CSSProperties = {
+	backgroundColor: "var(--vscode-button-background)",
+	color: "var(--vscode-button-foreground)",
+	border: "none",
+	borderRadius: "8px",
+	cursor: "pointer",
+};
+
+const descriptionStyle: React.CSSProperties = {
+	color: "var(--vscode-descriptionForeground)",
+};
 
 export const TimelineDashboard: React.FC = () => {
 	const accessor = useAccessor();
 	const timelineService = accessor.get("ITimelineService");
-	const isDark = useIsDark();
 
 	const [timeline, setTimeline] = useState<CaseTimeline | null>(null);
 	const [isLoading, setIsLoading] = useState(true);
 	const [showEventEditor, setShowEventEditor] = useState(false);
 	const [editingEvent, setEditingEvent] = useState<TimelineEvent | null>(null);
 	const [filterCategory, setFilterCategory] = useState<EventCategory | "all">(
-		"all"
+		"all",
 	);
 	const [showDeadlinesOnly, setShowDeadlinesOnly] = useState(false);
 	const [isFirstEventCreation, setIsFirstEventCreation] = useState(false);
@@ -51,6 +69,15 @@ export const TimelineDashboard: React.FC = () => {
 	const [showNotificationSettings, setShowNotificationSettings] =
 		useState(false);
 
+	// Google Calendar integration state
+	const [googleCalendarConnected, setGoogleCalendarConnected] = useState(false);
+	const [isSyncing, setIsSyncing] = useState(false);
+
+	// Outlook Calendar integration state
+	const [outlookCalendarConnected, setOutlookCalendarConnected] =
+		useState(false);
+	const [isOutlookSyncing, setIsOutlookSyncing] = useState(false);
+
 	// Load timeline on mount
 	useEffect(() => {
 		const loadData = async () => {
@@ -58,6 +85,48 @@ export const TimelineDashboard: React.FC = () => {
 			try {
 				const loaded = await timelineService.loadTimeline();
 				setTimeline(loaded);
+
+				// Check if Google/Outlook Calendar is already connected
+				const syncStateService = accessor.get("ICalendarSyncStateService");
+				if (syncStateService) {
+					const syncState = await syncStateService.loadSyncState();
+					if (syncState?.connected && syncState?.provider === "google") {
+						setGoogleCalendarConnected(true);
+
+						// Re-set credentials if we have tokens
+						if (syncState.tokens) {
+							const googleCalendarService = accessor.get(
+								"IGoogleCalendarClientService",
+							);
+							if (googleCalendarService) {
+								await googleCalendarService.setCredentials({
+									accessToken: syncState.tokens.accessToken,
+									refreshToken: syncState.tokens.refreshToken,
+									expiresAt: syncState.tokens.expiresAt,
+								});
+							}
+						}
+					} else if (
+						syncState?.connected &&
+						syncState?.provider === "outlook"
+					) {
+						setOutlookCalendarConnected(true);
+
+						// Re-set credentials if we have tokens
+						if (syncState.tokens) {
+							const outlookCalendarService = accessor.get(
+								"IOutlookCalendarClientService",
+							);
+							if (outlookCalendarService) {
+								await outlookCalendarService.setCredentials({
+									accessToken: syncState.tokens.accessToken,
+									refreshToken: syncState.tokens.refreshToken,
+									expiresAt: syncState.tokens.expiresAt,
+								});
+							}
+						}
+					}
+				}
 			} catch (error) {
 				console.error("[TimelineDashboard] Failed to load timeline:", error);
 			} finally {
@@ -71,8 +140,62 @@ export const TimelineDashboard: React.FC = () => {
 			setTimeline(newTimeline);
 		});
 
-		return () => disposable.dispose();
-	}, [timelineService]);
+		// Subscribe to Void Cloud Google Calendar tokens (auto-connect when signing in)
+		const voidCloudService = accessor.get("IVoidCloudService");
+		let cloudDisposable: { dispose: () => void } | null = null;
+		if (voidCloudService && voidCloudService.onGoogleCalendarTokensAvailable) {
+			cloudDisposable = voidCloudService.onGoogleCalendarTokensAvailable(
+				async (tokens: { accessToken: string; refreshToken: string }) => {
+					console.log(
+						"[TimelineDashboard] Received Google Calendar tokens from Void Cloud",
+					);
+					try {
+						const googleCalendarService = accessor.get(
+							"IGoogleCalendarClientService",
+						);
+						const syncStateService = accessor.get("ICalendarSyncStateService");
+
+						if (googleCalendarService && syncStateService) {
+							// Calculate expiry (Google tokens typically last 1 hour)
+							const expiresAt = new Date(
+								Date.now() + 3600 * 1000,
+							).toISOString();
+
+							// Set credentials
+							await googleCalendarService.setCredentials({
+								accessToken: tokens.accessToken,
+								refreshToken: tokens.refreshToken,
+								expiresAt,
+							});
+
+							// Save to sync state
+							await syncStateService.setProvider("google", {
+								accessToken: tokens.accessToken,
+								refreshToken: tokens.refreshToken,
+								expiresAt,
+							});
+
+							setGoogleCalendarConnected(true);
+							console.log(
+								"[TimelineDashboard] Google Calendar auto-connected via Void Cloud",
+							);
+						}
+					} catch (error) {
+						console.error(
+							"[TimelineDashboard] Failed to auto-connect Google Calendar:",
+							error,
+						);
+					}
+				},
+			);
+		}
+
+		return () => {
+			disposable.dispose();
+			cloudDisposable?.dispose();
+		};
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [timelineService]); // accessor is stable (module-level), don't include to prevent re-render loops
 
 	const handleAddEvent = useCallback(() => {
 		setEditingEvent(null);
@@ -102,12 +225,12 @@ export const TimelineDashboard: React.FC = () => {
 				console.error("[TimelineDashboard] Failed to delete event:", error);
 			}
 		},
-		[timelineService]
+		[timelineService],
 	);
 
 	const handleSaveEvent = useCallback(
 		async (
-			eventData: Omit<TimelineEvent, "id" | "createdAt" | "updatedAt">
+			eventData: Omit<TimelineEvent, "id" | "createdAt" | "updatedAt">,
 		) => {
 			try {
 				if (editingEvent) {
@@ -122,7 +245,7 @@ export const TimelineDashboard: React.FC = () => {
 				console.error("[TimelineDashboard] Failed to save event:", error);
 			}
 		},
-		[timelineService, editingEvent]
+		[timelineService, editingEvent],
 	);
 
 	const handleCancelEdit = useCallback(() => {
@@ -155,7 +278,7 @@ export const TimelineDashboard: React.FC = () => {
 		} catch (error) {
 			console.error(
 				"[TimelineDashboard] Failed to sync from case config:",
-				error
+				error,
 			);
 		}
 	}, [timelineService]);
@@ -167,11 +290,11 @@ export const TimelineDashboard: React.FC = () => {
 			} catch (error) {
 				console.error(
 					"[TimelineDashboard] Failed to change jurisdiction:",
-					error
+					error,
 				);
 			}
 		},
-		[timelineService]
+		[timelineService],
 	);
 
 	const handleJurisdictionClick = useCallback(() => {
@@ -220,6 +343,485 @@ export const TimelineDashboard: React.FC = () => {
 			console.error("[TimelineDashboard] Failed to export timeline:", error);
 		}
 	}, [timelineService, timeline]);
+
+	// Handle .ics calendar export
+	const handleExportIcs = useCallback(async () => {
+		try {
+			const icsContent = await timelineService.exportToIcs();
+
+			// Create a Blob and download as .ics
+			const blob = new Blob([icsContent], {
+				type: "text/calendar;charset=utf-8",
+			});
+			const url = URL.createObjectURL(blob);
+			const a = document.createElement("a");
+			a.href = url;
+
+			// Build filename from case info
+			const rawId = timeline?.caseName || timeline?.caseId || "";
+			const segments = rawId.split(/[/\\]+/).filter((s) => s && s.length > 1);
+			const baseName = segments.length > 0 ? segments[segments.length - 1] : "";
+			const sanitizedName =
+				baseName
+					.replace(/[\\/:*?"<>|]/g, "_")
+					.replace(/\s+/g, "_")
+					.replace(/_+/g, "_")
+					.replace(/^_|_$/g, "")
+					.substring(0, 50) || "export";
+
+			const dateStamp = new Date().toISOString().split("T")[0];
+			a.download = `Timeline_${sanitizedName}_${dateStamp}.ics`;
+			document.body.appendChild(a);
+			a.click();
+			document.body.removeChild(a);
+			URL.revokeObjectURL(url);
+
+			console.log("[TimelineDashboard] Timeline exported as .ics successfully");
+		} catch (error) {
+			console.error("[TimelineDashboard] Failed to export .ics:", error);
+		}
+	}, [timelineService, timeline]);
+
+	// Handle toggling calendar sync for an event
+	const handleToggleSyncToCalendar = useCallback(
+		async (eventId: string) => {
+			try {
+				await timelineService.toggleSyncToCalendar(eventId);
+			} catch (error) {
+				console.error(
+					"[TimelineDashboard] Failed to toggle calendar sync:",
+					error,
+				);
+			}
+		},
+		[timelineService],
+	);
+
+	// Get calendar event count for toolbar display
+	const calendarEventCount = useMemo(() => {
+		return timelineService.getCalendarEventCount();
+	}, [timeline, timelineService]);
+
+	// Google Calendar handlers
+	const handleConnectGoogleCalendar = useCallback(async () => {
+		try {
+			// Get the Google Calendar client service via accessor
+			const googleCalendarService = accessor.get(
+				"IGoogleCalendarClientService",
+			);
+			if (!googleCalendarService) {
+				console.error(
+					"[TimelineDashboard] Google Calendar service not available",
+				);
+				return;
+			}
+
+			// Check if configured
+			const isConfigured = await googleCalendarService.isConfigured();
+			if (!isConfigured) {
+				console.error(
+					"[TimelineDashboard] Google Calendar not configured. Set GOOGLE_CALENDAR_CLIENT_ID and GOOGLE_CALENDAR_CLIENT_SECRET environment variables.",
+				);
+				return;
+			}
+
+			// Start OAuth flow
+			const tokens = await googleCalendarService.startAuth();
+			console.log("[TimelineDashboard] Google Calendar connected successfully");
+
+			// Save tokens to sync state
+			const syncStateService = accessor.get("ICalendarSyncStateService");
+			if (syncStateService) {
+				await syncStateService.setProvider("google", {
+					accessToken: tokens.accessToken,
+					refreshToken: tokens.refreshToken,
+					expiresAt: tokens.expiresAt,
+				});
+			}
+
+			setGoogleCalendarConnected(true);
+		} catch (error) {
+			console.error(
+				"[TimelineDashboard] Failed to connect Google Calendar:",
+				error,
+			);
+		}
+	}, [accessor]);
+
+	const handleDisconnectGoogleCalendar = useCallback(async () => {
+		try {
+			const syncStateService = accessor.get("ICalendarSyncStateService");
+			if (syncStateService) {
+				await syncStateService.clearSyncState();
+			}
+			setGoogleCalendarConnected(false);
+			console.log("[TimelineDashboard] Google Calendar disconnected");
+		} catch (error) {
+			console.error(
+				"[TimelineDashboard] Failed to disconnect Google Calendar:",
+				error,
+			);
+		}
+	}, [accessor]);
+
+	const handleSyncToGoogleCalendar = useCallback(async () => {
+		if (isSyncing) return;
+
+		try {
+			setIsSyncing(true);
+			console.log("[TimelineDashboard] Starting Google Calendar sync...");
+
+			const googleCalendarService = accessor.get(
+				"IGoogleCalendarClientService",
+			);
+			const syncStateService = accessor.get("ICalendarSyncStateService");
+
+			if (!googleCalendarService || !syncStateService) {
+				console.error("[TimelineDashboard] Required services not available");
+				return;
+			}
+
+			// Get sync state
+			const syncState = syncStateService.getSyncState();
+			if (!syncState?.tokens) {
+				console.error("[TimelineDashboard] No tokens available");
+				setGoogleCalendarConnected(false);
+				return;
+			}
+
+			// Set credentials
+			await googleCalendarService.setCredentials({
+				accessToken: syncState.tokens.accessToken,
+				refreshToken: syncState.tokens.refreshToken,
+				expiresAt: syncState.tokens.expiresAt,
+			});
+
+			// Calculate what needs to sync
+			const diff = syncStateService.calculateSyncDiff();
+			console.log("[TimelineDashboard] Sync diff:", diff);
+
+			if (
+				diff.toCreate.length === 0 &&
+				diff.toUpdate.length === 0 &&
+				diff.toDelete.length === 0
+			) {
+				console.log("[TimelineDashboard] Nothing to sync");
+				return;
+			}
+
+			// Get events to sync
+			const eventsToSync = timelineService.getEventsForCalendar();
+			const workspaceId = syncState.workspaceId;
+
+			// Build sync payload
+			const createEvents = diff.toCreate
+				.map((eventId) => {
+					const event = eventsToSync.find((e) => e.id === eventId);
+					if (!event) {
+						console.error(
+							`[TimelineDashboard] Event ${eventId} not found in eventsToSync!`,
+						);
+						console.log(
+							"[TimelineDashboard] Available events:",
+							eventsToSync.map((e) => ({ id: e.id, title: e.title })),
+						);
+						return null;
+					}
+					console.log(`[TimelineDashboard] Creating calendar event:`, {
+						id: event.id,
+						title: event.title,
+						date: event.date,
+					});
+					return {
+						id: event.id,
+						title: event.title,
+						description: event.description,
+						date: event.date,
+						isAllDay: !event.date.includes("T"),
+						reminders: event.reminderDays?.map((d) => d * 24 * 60), // Convert days to minutes
+						workspaceId,
+					};
+				})
+				.filter(Boolean) as {
+				id: string;
+				title: string;
+				description?: string;
+				date: string;
+				isAllDay: boolean;
+				reminders?: number[];
+				workspaceId: string;
+			}[];
+
+			const updateEvents = diff.toUpdate.map((eventId) => {
+				const event = eventsToSync.find((e) => e.id === eventId)!;
+				const syncedState = syncState.syncedEvents[eventId];
+				return {
+					event: {
+						id: event.id,
+						title: event.title,
+						description: event.description,
+						date: event.date,
+						isAllDay: !event.date.includes("T"),
+						reminders: event.reminderDays?.map((d) => d * 24 * 60),
+						workspaceId,
+					},
+					calendarEventId: syncedState.calendarEventId,
+				};
+			});
+
+			const deleteEventIds = diff.toDelete
+				.map((eventId) => {
+					return syncState.syncedEvents[eventId]?.calendarEventId;
+				})
+				.filter(Boolean);
+
+			// Perform sync
+			const results = await googleCalendarService.syncEvents(
+				{
+					create: createEvents,
+					update: updateEvents,
+					delete: deleteEventIds,
+				},
+				syncState.syncedEvents,
+				syncState.settings.calendarId,
+			);
+
+			// Update sync state with results
+			for (const { eventId, calendarEventId } of results.created) {
+				await syncStateService.markEventSynced(eventId, calendarEventId);
+			}
+			for (const { eventId, calendarEventId } of results.updated) {
+				await syncStateService.markEventSynced(eventId, calendarEventId);
+			}
+			for (const calendarEventId of results.deleted) {
+				// Find the event ID by calendar event ID
+				const entry = Object.entries(syncState.syncedEvents).find(
+					([, state]) => state.calendarEventId === calendarEventId,
+				);
+				if (entry) {
+					await syncStateService.markEventDeleted(entry[0]);
+				}
+			}
+
+			console.log(
+				"[TimelineDashboard] Google Calendar sync complete:",
+				results,
+			);
+		} catch (error) {
+			console.error("[TimelineDashboard] Google Calendar sync failed:", error);
+		} finally {
+			setIsSyncing(false);
+		}
+	}, [accessor, timelineService, isSyncing]);
+
+	// Outlook Calendar handlers
+	const handleConnectOutlookCalendar = useCallback(async () => {
+		try {
+			const outlookCalendarService = accessor.get(
+				"IOutlookCalendarClientService",
+			);
+			if (!outlookCalendarService) {
+				console.error(
+					"[TimelineDashboard] Outlook Calendar service not available",
+				);
+				return;
+			}
+
+			// Check if configured
+			const isConfigured = await outlookCalendarService.isConfigured();
+			if (!isConfigured) {
+				console.error(
+					"[TimelineDashboard] Outlook Calendar not configured. Set OUTLOOK_CLIENT_ID environment variable.",
+				);
+				return;
+			}
+
+			// Start OAuth flow
+			const tokens = await outlookCalendarService.startAuth();
+			console.log(
+				"[TimelineDashboard] Outlook Calendar connected successfully",
+			);
+
+			// Save tokens to sync state
+			const syncStateService = accessor.get("ICalendarSyncStateService");
+			if (syncStateService) {
+				await syncStateService.setProvider("outlook", {
+					accessToken: tokens.accessToken,
+					refreshToken: tokens.refreshToken,
+					expiresAt: tokens.expiresAt,
+				});
+			}
+
+			setOutlookCalendarConnected(true);
+		} catch (error) {
+			console.error(
+				"[TimelineDashboard] Failed to connect Outlook Calendar:",
+				error,
+			);
+		}
+	}, [accessor]);
+
+	const handleDisconnectOutlookCalendar = useCallback(async () => {
+		try {
+			const outlookCalendarService = accessor.get(
+				"IOutlookCalendarClientService",
+			);
+			if (outlookCalendarService) {
+				await outlookCalendarService.disconnect();
+			}
+
+			const syncStateService = accessor.get("ICalendarSyncStateService");
+			if (syncStateService) {
+				await syncStateService.clearSyncState();
+			}
+			setOutlookCalendarConnected(false);
+			console.log("[TimelineDashboard] Outlook Calendar disconnected");
+		} catch (error) {
+			console.error(
+				"[TimelineDashboard] Failed to disconnect Outlook Calendar:",
+				error,
+			);
+		}
+	}, [accessor]);
+
+	const handleSyncToOutlookCalendar = useCallback(async () => {
+		if (isOutlookSyncing) return;
+
+		try {
+			setIsOutlookSyncing(true);
+			console.log("[TimelineDashboard] Starting Outlook Calendar sync...");
+
+			const outlookCalendarService = accessor.get(
+				"IOutlookCalendarClientService",
+			);
+			const syncStateService = accessor.get("ICalendarSyncStateService");
+
+			if (!outlookCalendarService || !syncStateService) {
+				console.error("[TimelineDashboard] Required services not available");
+				return;
+			}
+
+			// Get sync state
+			const syncState = syncStateService.getSyncState();
+			if (!syncState?.tokens) {
+				console.error("[TimelineDashboard] No tokens available");
+				setOutlookCalendarConnected(false);
+				return;
+			}
+
+			// Set credentials
+			await outlookCalendarService.setCredentials({
+				accessToken: syncState.tokens.accessToken,
+				refreshToken: syncState.tokens.refreshToken,
+				expiresAt: syncState.tokens.expiresAt,
+			});
+
+			// Calculate what needs to sync
+			const diff = syncStateService.calculateSyncDiff();
+			console.log("[TimelineDashboard] Outlook sync diff:", diff);
+
+			if (
+				diff.toCreate.length === 0 &&
+				diff.toUpdate.length === 0 &&
+				diff.toDelete.length === 0
+			) {
+				console.log("[TimelineDashboard] Nothing to sync");
+				return;
+			}
+
+			// Get events to sync
+			const eventsToSync = timelineService.getEventsForCalendar();
+			const workspaceId = syncState.workspaceId;
+
+			// Build sync payload
+			const createEvents = diff.toCreate
+				.map((eventId) => {
+					const event = eventsToSync.find((e) => e.id === eventId);
+					if (!event) {
+						console.error(
+							`[TimelineDashboard] Event ${eventId} not found in eventsToSync!`,
+						);
+						return null;
+					}
+					return {
+						id: event.id,
+						title: event.title,
+						description: event.description,
+						date: event.date,
+						isAllDay: !event.date.includes("T"),
+						reminders: event.reminderDays?.map((d) => d * 24 * 60),
+						workspaceId,
+					};
+				})
+				.filter(Boolean) as {
+				id: string;
+				title: string;
+				description?: string;
+				date: string;
+				isAllDay: boolean;
+				reminders?: number[];
+				workspaceId: string;
+			}[];
+
+			const updateEvents = diff.toUpdate.map((eventId) => {
+				const event = eventsToSync.find((e) => e.id === eventId)!;
+				const syncedState = syncState.syncedEvents[eventId];
+				return {
+					event: {
+						id: event.id,
+						title: event.title,
+						description: event.description,
+						date: event.date,
+						isAllDay: !event.date.includes("T"),
+						reminders: event.reminderDays?.map((d) => d * 24 * 60),
+						workspaceId,
+					},
+					calendarEventId: syncedState.calendarEventId,
+				};
+			});
+
+			const deleteEventIds = diff.toDelete
+				.map((eventId) => {
+					return syncState.syncedEvents[eventId]?.calendarEventId;
+				})
+				.filter(Boolean);
+
+			// Perform sync
+			const results = await outlookCalendarService.syncEvents(
+				{
+					create: createEvents,
+					update: updateEvents,
+					delete: deleteEventIds,
+				},
+				syncState.settings.calendarId,
+			);
+
+			// Update sync state with results
+			for (const { eventId, calendarEventId } of results.created) {
+				await syncStateService.markEventSynced(eventId, calendarEventId);
+			}
+			for (const { eventId, calendarEventId } of results.updated) {
+				await syncStateService.markEventSynced(eventId, calendarEventId);
+			}
+			for (const calendarEventId of results.deleted) {
+				const entry = Object.entries(syncState.syncedEvents).find(
+					([, state]) => state.calendarEventId === calendarEventId,
+				);
+				if (entry) {
+					await syncStateService.markEventDeleted(entry[0]);
+				}
+			}
+
+			console.log(
+				"[TimelineDashboard] Outlook Calendar sync complete:",
+				results,
+			);
+		} catch (error) {
+			console.error("[TimelineDashboard] Outlook Calendar sync failed:", error);
+		} finally {
+			setIsOutlookSyncing(false);
+		}
+	}, [accessor, timelineService, isOutlookSyncing]);
 
 	// Filter and sort events
 	const filteredEvents = useMemo(() => {
@@ -271,7 +873,7 @@ export const TimelineDashboard: React.FC = () => {
 
 		// Sort by date (ascending)
 		events.sort(
-			(a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
+			(a, b) => new Date(a.date).getTime() - new Date(b.date).getTime(),
 		);
 
 		return events;
@@ -305,7 +907,7 @@ export const TimelineDashboard: React.FC = () => {
 		const today = new Date();
 		const firstEventDate = new Date(filteredEvents[0].date);
 		const lastEventDate = new Date(
-			filteredEvents[filteredEvents.length - 1].date
+			filteredEvents[filteredEvents.length - 1].date,
 		);
 
 		// Show marker if today is between first and last event (with some buffer)
@@ -331,16 +933,17 @@ export const TimelineDashboard: React.FC = () => {
 		return (
 			<div
 				className="flex items-center justify-center h-full p-8"
-				style={{ backgroundColor: "#0a0a0a" }}
+				style={containerStyle}
 			>
 				<div className="text-center">
 					<div
 						className="rounded-full h-10 w-10 border-2 mx-auto mb-4 animate-spin"
 						style={{
-							borderColor: `${BRAND_GREEN} transparent ${BRAND_GREEN} transparent`,
+							borderColor:
+								"var(--vscode-button-background) transparent var(--vscode-button-background) transparent",
 						}}
 					/>
-					<p style={{ color: "#a1a1aa" }}>Loading timeline...</p>
+					<p style={descriptionStyle}>Loading timeline...</p>
 				</div>
 			</div>
 		);
@@ -350,39 +953,33 @@ export const TimelineDashboard: React.FC = () => {
 		return (
 			<div
 				className="flex flex-col items-center justify-center h-full p-8"
-				style={{ backgroundColor: "#0a0a0a" }}
+				style={containerStyle}
 			>
 				<div className="text-center max-w-md">
 					{/* SafeAppeals Logo/Icon */}
 					<div
 						className="w-20 h-20 rounded-2xl mx-auto mb-6 flex items-center justify-center"
 						style={{
-							backgroundColor: `${BRAND_GREEN}15`,
-							border: `2px solid ${BRAND_GREEN}30`,
+							backgroundColor: "var(--vscode-button-secondaryBackground)",
+							border: "2px solid var(--vscode-panel-border)",
 						}}
 					>
-						<svg
-							width="40"
-							height="40"
-							viewBox="0 0 24 24"
-							fill="none"
-							stroke={BRAND_GREEN}
-							strokeWidth="2"
-							strokeLinecap="round"
-							strokeLinejoin="round"
-						>
-							<rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
-							<line x1="16" y1="2" x2="16" y2="6" />
-							<line x1="8" y1="2" x2="8" y2="6" />
-							<line x1="3" y1="10" x2="21" y2="10" />
-							<path d="M9 16l2 2 4-4" />
-						</svg>
+						<i
+							className="codicon codicon-calendar"
+							style={{
+								fontSize: "40px",
+								color: "var(--vscode-button-background)",
+							}}
+						/>
 					</div>
 
-					<h2 className="text-2xl font-bold mb-3" style={{ color: "#fafafa" }}>
+					<h2
+						className="text-2xl font-bold mb-3"
+						style={{ color: "var(--vscode-editor-foreground)" }}
+					>
 						Create Your Case Timeline
 					</h2>
-					<p className="mb-8 text-base" style={{ color: "#a1a1aa" }}>
+					<p className="mb-8 text-base" style={descriptionStyle}>
 						Track important events, deadlines, and documents for your workers'
 						compensation case.
 					</p>
@@ -390,11 +987,7 @@ export const TimelineDashboard: React.FC = () => {
 					<button
 						onClick={handleCreateTimeline}
 						className="px-8 py-3 rounded-lg font-semibold text-base transition-all duration-200 hover:scale-105"
-						style={{
-							backgroundColor: BRAND_GREEN,
-							color: "#0a0a0a",
-							boxShadow: `0 4px 14px ${BRAND_GREEN}40`,
-						}}
+						style={buttonPrimaryStyle}
 					>
 						<span className="flex items-center gap-2">
 							<i className="codicon codicon-add" />
@@ -402,7 +995,10 @@ export const TimelineDashboard: React.FC = () => {
 						</span>
 					</button>
 
-					<p className="mt-6 text-sm" style={{ color: "#71717a" }}>
+					<p
+						className="mt-6 text-sm"
+						style={{ color: "var(--vscode-disabledForeground)" }}
+					>
 						Start by adding your injury date or initial incident
 					</p>
 				</div>
@@ -411,12 +1007,15 @@ export const TimelineDashboard: React.FC = () => {
 	}
 
 	return (
-		<div
-			className="h-full flex flex-row"
-			style={{ backgroundColor: "#0a0a0a" }}
-		>
+		<div className="h-full flex flex-row" style={containerStyle}>
 			{/* Left Panel - Summary & Stats */}
-			<div className="flex flex-col w-[400px] min-w-[350px] border-r border-[#27272a] overflow-y-auto custom-scrollbar bg-[#0f0f0f]">
+			<div
+				className="flex flex-col w-[400px] min-w-[350px] border-r overflow-y-auto void-scrollbar"
+				style={{
+					...sidebarStyle,
+					borderColor: "var(--vscode-panel-border)",
+				}}
+			>
 				{/* Case Summary Dashboard */}
 				<CaseSummary timeline={timeline} onEditEvent={handleEditEvent} />
 
@@ -431,11 +1030,26 @@ export const TimelineDashboard: React.FC = () => {
 			</div>
 
 			{/* Right Panel - Timeline/Calendar Content */}
-			<div className="flex-1 flex flex-col h-full overflow-hidden bg-[#0a0a0a]">
+			<div
+				className="flex-1 flex flex-col h-full overflow-hidden"
+				style={containerStyle}
+			>
 				{/* Toolbar */}
 				<TimelineToolbar
 					onAddEvent={handleAddEvent}
 					onExport={handleExport}
+					onExportIcs={handleExportIcs}
+					calendarEventCount={calendarEventCount}
+					googleCalendarConnected={googleCalendarConnected}
+					onConnectGoogleCalendar={handleConnectGoogleCalendar}
+					onDisconnectGoogleCalendar={handleDisconnectGoogleCalendar}
+					onSyncToGoogleCalendar={handleSyncToGoogleCalendar}
+					isSyncing={isSyncing}
+					outlookCalendarConnected={outlookCalendarConnected}
+					onConnectOutlookCalendar={handleConnectOutlookCalendar}
+					onDisconnectOutlookCalendar={handleDisconnectOutlookCalendar}
+					onSyncToOutlookCalendar={handleSyncToOutlookCalendar}
+					isOutlookSyncing={isOutlookSyncing}
 					onSyncFromCase={handleSyncFromCase}
 					filterCategory={filterCategory}
 					onFilterChange={setFilterCategory}
@@ -460,10 +1074,10 @@ export const TimelineDashboard: React.FC = () => {
 						onAddEvent={handleAddEventWithDate}
 					/>
 				) : (
-					<div className="flex-1 overflow-y-auto p-4">
+					<div className="flex-1 overflow-y-auto p-4 void-scrollbar">
 						{filteredEvents.length === 0 ? (
 							<div className="text-center py-12">
-								<p style={{ color: "#71717a" }}>
+								<p style={{ color: "var(--vscode-disabledForeground)" }}>
 									{timeline.events.length === 0
 										? 'No events yet. Click "Add Event" to get started.'
 										: "No events match the current filter."}
@@ -471,11 +1085,12 @@ export const TimelineDashboard: React.FC = () => {
 							</div>
 						) : (
 							<div className="relative max-w-4xl mx-auto">
-								{/* Timeline line - green accent */}
+								{/* Timeline line - accent */}
 								<div
 									className="absolute left-6 top-0 bottom-0 w-0.5"
 									style={{
-										background: `linear-gradient(to bottom, ${BRAND_GREEN}, ${BRAND_GREEN}40)`,
+										backgroundColor: "var(--vscode-button-background)",
+										opacity: 0.6,
 									}}
 								/>
 
@@ -491,6 +1106,9 @@ export const TimelineDashboard: React.FC = () => {
 												event={event}
 												onEdit={() => handleEditEvent(event)}
 												onDelete={() => handleDeleteEvent(event.id)}
+												onToggleSyncToCalendar={() =>
+													handleToggleSyncToCalendar(event.id)
+												}
 												isFirst={index === 0}
 												isLast={index === filteredEvents.length - 1}
 											/>
@@ -525,7 +1143,7 @@ export const TimelineDashboard: React.FC = () => {
 				<JurisdictionSelector
 					jurisdictions={timelineService.getJurisdictions()}
 					currentJurisdiction={timelineService.getJurisdiction(
-						timeline.jurisdiction
+						timeline.jurisdiction,
 					)}
 					onSelect={handleJurisdictionChange}
 					onClose={() => setShowJurisdictionSelector(false)}

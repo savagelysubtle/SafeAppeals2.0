@@ -20,7 +20,7 @@ export interface IRAGService {
 	getStats(): Promise<RAGStats>;
 	deleteDocument(uriOrDocId: URI | string): Promise<void>;
 	isDocumentIndexed(uri: URI): Promise<boolean>;
-	getDocumentsByType(isPolicyManual: boolean): Promise<any[]>;
+	getDocumentsByType(isCoreReference: boolean): Promise<any[]>;
 	initialize(): Promise<void>;
 	switchWorkspace(workspaceId: string): Promise<void>;
 	clearAllEmbeddings(): Promise<{ success: boolean; message: string }>;
@@ -152,10 +152,10 @@ export class RAGService implements IRAGService {
 		});
 	}
 
-	async getDocumentsByType(isPolicyManual: boolean): Promise<any[]> {
+	async getDocumentsByType(isCoreReference: boolean): Promise<any[]> {
 		const workspaceId = this.getWorkspaceId();
 		return this.channel.call('getDocumentsByType', {
-			isPolicyManual,
+			isCoreReference,
 			workspaceId
 		});
 	}

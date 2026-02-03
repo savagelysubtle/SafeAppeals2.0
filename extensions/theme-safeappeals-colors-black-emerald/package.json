@@ -1,0 +1,21 @@
+﻿{
+	"name": "theme-safeappeals-colors-black-emerald",
+	"displayName": "Black & Emerald",
+	"description": "Deep black with emerald accents - Rich and regal",
+	"version": "1.0.0",
+	"publisher": "safeappeals",
+	"license": "MIT",
+	"engines": {
+		"vscode": "*"
+	},
+	"categories": ["Themes"],
+	"contributes": {
+		"themes": [
+			{
+				"label": "Black & Emerald",
+				"uiTheme": "vs-dark",
+				"path": "./themes/black-emerald-color-theme.json"
+			}
+		]
+	}
+}

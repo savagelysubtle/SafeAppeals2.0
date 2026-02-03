@@ -15,3 +15,5 @@ Other=Other:
 SourceFile=%1 Source File
 OpenWithCodeContextMenu=Open w&ith %1
 UpdatingVisualStudioCode=Updating Visual Studio Code...
+InstallOCRDeps=Install OCR dependencies (Tesseract, Ghostscript for PDF text extraction)
+OCRFeatures=OCR Features:

@@ -30,9 +30,9 @@ export interface IRAGAutoIndexService {
 	isDocumentIndexed(uri: URI): Promise<boolean>;
 
 	/**
-	 * Determine if a file is in the policy folder
+	 * Determine if a file is in the core references folder
 	 */
-	isInPolicyFolder(uri: URI): boolean;
+	isInCoreReferencesFolder(uri: URI): boolean;
 
 	/**
 	 * Determine if a file is a supported document type
@@ -78,11 +78,11 @@ export class RAGAutoIndexService extends Disposable implements IRAGAutoIndexServ
 	}
 
 	/**
-	 * Check if a file is in the policy folder
+	 * Check if a file is in the core references folder
 	 */
-	isInPolicyFolder(uri: URI): boolean {
+	isInCoreReferencesFolder(uri: URI): boolean {
 		const settings = this.settingsService.state.globalSettings;
-		const policyFolderName = settings.ragPolicyFolderName || 'policy-manuals';
+		const coreReferencesFolderName = settings.ragCoreReferencesFolderName || 'core_references';
 
 		const folders = this.workspaceService.getWorkspace().folders;
 		if (folders.length === 0) {
@@ -92,11 +92,11 @@ export class RAGAutoIndexService extends Disposable implements IRAGAutoIndexServ
 		const workspaceRoot = folders[0].uri.fsPath;
 		const filePath = uri.fsPath || uri.path;
 
-		// Check if the file is in the policy folder
-		const policyFolderPath = `${workspaceRoot}/${policyFolderName}`.replace(/\\/g, '/');
+		// Check if the file is in the core references folder
+		const coreReferencesFolderPath = `${workspaceRoot}/${coreReferencesFolderName}`.replace(/\\/g, '/');
 		const normalizedFilePath = filePath.replace(/\\/g, '/');
 
-		return normalizedFilePath.startsWith(policyFolderPath);
+		return normalizedFilePath.startsWith(coreReferencesFolderPath);
 	}
 
 	/**
@@ -153,18 +153,18 @@ export class RAGAutoIndexService extends Disposable implements IRAGAutoIndexServ
 				return;
 			}
 
-			// Determine if it's a policy manual or case file
-			const isPolicyManual = this.isInPolicyFolder(uri);
+			// Determine if it's a core reference or case file
+			const isCoreReference = this.isInCoreReferencesFolder(uri);
 			const workspaceId = this.ragService.getWorkspaceId();
 
-			this.logService.info(`RAGAutoIndexService: Auto-indexing ${isPolicyManual ? 'policy manual' : 'case file'}: ${filePath}`);
+			this.logService.info(`RAGAutoIndexService: Auto-indexing ${isCoreReference ? 'core reference' : 'case file'}: ${filePath}`);
 
 			// Index the document in the background
 			const result = await this.ragService.indexDocument({
 				uri,
-				isPolicyManual,
+				isCoreReference,
 				workspaceId,
-				indexScope: isPolicyManual ? 'policy_manual' : 'case_index'
+				indexScope: isCoreReference ? 'core_references' : 'case_index'
 			});
 
 			if (result.success) {

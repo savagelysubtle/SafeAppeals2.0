@@ -1,0 +1,78 @@
+2026-01-26 22:53:49 - 20260126_225349_d0059757 - root - INFO - logger._configure_programmatic_logging:343 - Logging configured programmatically. Session ID: 20260126_225349_d0059757. File log: D:\Coding\SafeAppeals2.0\python\logs\python\app_session_20260126_225349_d0059757.log
+2026-01-26 22:53:49 - 20260126_225349_d0059757 - aichemist_codex.electron_bridge - INFO - electron_bridge.main:40 - Electron bridge starting
+2026-01-26 22:53:49 - 20260126_225349_d0059757 - aichemist_codex.electron_bridge - DEBUG - argument_parser.validate:62 - Validating arguments for mode: convert
+2026-01-26 22:53:49 - 20260126_225349_d0059757 - aichemist_codex.electron_bridge - DEBUG - argument_parser._validate_convert:84 - Validating convert mode arguments
+2026-01-26 22:53:49 - 20260126_225349_d0059757 - aichemist_codex.electron_bridge - DEBUG - base.validate_file_exists:150 - Validating file exists: d:\Coding\test3\01_Your_Side\01_Submissions\EMGSTUDYSUBMISSION.pdf
+2026-01-26 22:53:49 - 20260126_225349_d0059757 - aichemist_codex.electron_bridge - DEBUG - base.validate_file_exists:160 - File validation passed: d:\Coding\test3\01_Your_Side\01_Submissions\EMGSTUDYSUBMISSION.pdf
+2026-01-26 22:53:49 - 20260126_225349_d0059757 - aichemist_codex.electron_bridge - DEBUG - base.validate_output_directory:178 - Validating output directory: C:\Users\Steve\AppData\Local\Temp\ocr-7f3b23ae
+2026-01-26 22:53:49 - 20260126_225349_d0059757 - aichemist_codex.electron_bridge - DEBUG - base.validate_output_directory:188 - Output directory is writable: C:\Users\Steve\AppData\Local\Temp\ocr-7f3b23ae
+2026-01-26 22:53:49 - 20260126_225349_d0059757 - aichemist_codex.electron_bridge - DEBUG - argument_parser.validate:74 - Argument validation passed
+2026-01-26 22:53:49 - 20260126_225349_d0059757 - aichemist_codex.electron_bridge - INFO - electron_bridge.main:45 - Bridge mode: convert, type: pdf2images
+2026-01-26 22:53:49 - 20260126_225349_d0059757 - aichemist_codex.electron_bridge - DEBUG - progress_reporter.report:55 - Reporting progress: 0/100 - Initializing conversion...
+2026-01-26 22:53:49 - 20260126_225349_d0059757 - aichemist_codex.electron_bridge - DEBUG - base.send_json_message:49 - Sending PROGRESS message: {"current": 0, "total": 100, "message": "Initializing conversion...", "type": "single_progress", "filename": ""}...
+2026-01-26 22:53:49 - 20260126_225349_d0059757 - aichemist_codex.electron_bridge - DEBUG - progress_reporter.report:55 - Reporting progress: 10/100 - Loading converter...
+2026-01-26 22:53:49 - 20260126_225349_d0059757 - aichemist_codex.electron_bridge - DEBUG - base.send_json_message:49 - Sending PROGRESS message: {"current": 10, "total": 100, "message": "Loading converter...", "type": "single_progress", "filename": ""}...
+2026-01-26 22:53:49 - 20260126_225349_d0059757 - aichemist_codex.electron_bridge - DEBUG - conversion_handler.handle_single_conversion:41 - Importing plugins to trigger auto-registration
+2026-01-26 22:53:49 - 20260126_225349_d0059757 - aichemist_codex.converters.md2html - DEBUG - to_html.<module>:38 - Markdown library available
+2026-01-26 22:53:49 - 20260126_225349_d0059757 - aichemist_codex.plugins - DEBUG - __init__.<module>:20 - Markdown to HTML converter loaded
+2026-01-26 22:53:49 - 20260126_225349_d0059757 - aichemist_codex.plugins - DEBUG - __init__.<module>:29 - Markdown to PDF converter loaded
+2026-01-26 22:53:49 - 20260126_225349_d0059757 - aichemist_codex.plugins - DEBUG - __init__.<module>:38 - Markdown to DOCX converter loaded
+2026-01-26 22:53:49 - 20260126_225349_d0059757 - pikepdf._core - INFO - __init__.<module>:13 - pikepdf C++ to Python logger bridge initialized
+2026-01-26 22:53:50 - 20260126_225349_d0059757 - aichemist_codex.converters.pdf2editable - DEBUG - to_editable_pdf._get_bundled_tesseract_path:92 - Could not locate bundled Tesseract: cannot access local variable 'input_path' where it is not associated with a value
+2026-01-26 22:53:50 - 20260126_225349_d0059757 - aichemist_codex.converters.pdf2editable - DEBUG - to_editable_pdf._configure_tesseract_path:153 - Tesseract found in system PATH
+2026-01-26 22:53:50 - 20260126_225349_d0059757 - aichemist_codex.converters.pdf2editable - DEBUG - to_editable_pdf._get_bundled_ghostscript_path:108 - Searching for Ghostscript from app dir: D:\Coding\SafeAppeals2.0\python
+2026-01-26 22:53:50 - 20260126_225349_d0059757 - aichemist_codex.converters.pdf2editable - DEBUG - to_editable_pdf._get_bundled_ghostscript_path:122 - No bundled Ghostscript found in expected locations
+2026-01-26 22:53:50 - 20260126_225349_d0059757 - aichemist_codex.converters.pdf2editable - INFO - to_editable_pdf._configure_ghostscript_path:254 - Found and added Ghostscript to PATH: C:\Program Files\gs\gs10.06.0\bin
+2026-01-26 22:53:50 - 20260126_225349_d0059757 - aichemist_codex.converters.pdf2md.module_init - ERROR - to_markdown.<module>:46 - PyMuPDF4LLM not found. Install with: uv add pymupdf4llm
+2026-01-26 22:53:50 - 20260126_225349_d0059757 - aichemist_codex.converters.pdf2md.module_init - ERROR - to_markdown.<module>:92 - OpenCV not found. Install with: uv add opencv-python numpy
+2026-01-26 22:53:50 - 20260126_225349_d0059757 - aichemist_codex.plugins - DEBUG - __init__.<module>:53 - PDF to Markdown converters loaded
+2026-01-26 22:53:50 - 20260126_225349_d0059757 - aichemist_codex.plugins - DEBUG - __init__.<module>:62 - PDF to HTML converter loaded
+2026-01-26 22:53:50 - 20260126_225349_d0059757 - aichemist_codex.plugins - DEBUG - __init__.<module>:71 - PDF to Editable PDF converter loaded
+2026-01-26 22:53:50 - 20260126_225349_d0059757 - aichemist_codex.plugins - DEBUG - __init__.<module>:81 - DOCX to Markdown converter loaded
+2026-01-26 22:53:50 - 20260126_225349_d0059757 - aichemist_codex.plugins - DEBUG - __init__.<module>:90 - DOCX to PDF converter loaded
+2026-01-26 22:53:50 - 20260126_225349_d0059757 - aichemist_codex.plugins - DEBUG - __init__.<module>:100 - HTML to PDF converter loaded
+2026-01-26 22:53:50 - 20260126_225349_d0059757 - aichemist_codex.plugins - WARNING - __init__.<module>:112 - TXT to PDF converter not available: No module named 'reportlab'
+2026-01-26 22:53:50 - 20260126_225349_d0059757 - aichemist_codex.plugins - DEBUG - __init__.<module>:125 - Excel converters loaded
+2026-01-26 22:53:50 - 20260126_225349_d0059757 - aichemist_codex.plugins - DEBUG - __init__.<module>:136 - CSV converters loaded
+2026-01-26 22:53:50 - 20260126_225349_d0059757 - aichemist_codex.plugins - DEBUG - __init__.<module>:150 - PowerPoint converters loaded
+2026-01-26 22:53:50 - 20260126_225349_d0059757 - aichemist_codex.plugins - DEBUG - __init__.<module>:162 - Image converters loaded
+2026-01-26 22:53:50 - 20260126_225349_d0059757 - aichemist_codex.plugins - DEBUG - __init__.<module>:172 - PDF to Excel converter loaded
+2026-01-26 22:53:50 - 20260126_225349_d0059757 - aichemist_codex.plugins - DEBUG - __init__.<module>:182 - PDF to Images converter loaded
+2026-01-26 22:53:50 - 20260126_225349_d0059757 - aichemist_codex.plugins - DEBUG - __init__.<module>:197 - Advanced PDF operations loaded
+2026-01-26 22:53:50 - 20260126_225349_d0059757 - aichemist_codex.plugins - DEBUG - __init__.<module>:211 - EPUB converters loaded
+2026-01-26 22:53:50 - 20260126_225349_d0059757 - aichemist_codex.plugins - ERROR - __init__.<module>:227 - EPUB creation converters failed: name 'Document' is not defined
+Traceback (most recent call last):
+  File "D:\Coding\SafeAppeals2.0\python\transmutation_codex\plugins\__init__.py", line 219, in <module>
+    from .docx.to_epub import convert_docx_to_epub
+  File "D:\Coding\SafeAppeals2.0\python\transmutation_codex\plugins\docx\to_epub.py", line 248, in <module>
+    def _docx_to_html(doc: Document) -> str:
+                           ^^^^^^^^
+NameError: name 'Document' is not defined
+2026-01-26 22:53:50 - 20260126_225349_d0059757 - aichemist_codex.plugins - INFO - __init__.<module>:229 - Plugin package initialized - all converters registered
+2026-01-26 22:53:50 - 20260126_225349_d0059757 - aichemist_codex.electron_bridge - DEBUG - conversion_handler.handle_single_conversion:44 - Successfully imported plugins
+2026-01-26 22:53:50 - 20260126_225349_d0059757 - aichemist_codex.electron_bridge - DEBUG - conversion_handler.handle_single_conversion:54 - Parsing conversion type: pdf2images
+2026-01-26 22:53:50 - 20260126_225349_d0059757 - aichemist_codex.electron_bridge - DEBUG - conversion_handler.handle_single_conversion:64 - Parsed conversion: pdf -> images
+2026-01-26 22:53:50 - 20260126_225349_d0059757 - aichemist_codex.electron_bridge - DEBUG - progress_reporter.report:55 - Reporting progress: 20/100 - Finding converter for pdf2images...
+2026-01-26 22:53:50 - 20260126_225349_d0059757 - aichemist_codex.electron_bridge - DEBUG - base.send_json_message:49 - Sending PROGRESS message: {"current": 20, "total": 100, "message": "Finding converter for pdf2images...", "type": "single_progress", "filename": ""}...
+2026-01-26 22:53:50 - 20260126_225349_d0059757 - aichemist_codex.electron_bridge - DEBUG - conversion_handler.handle_single_conversion:68 - Looking up converter in registry: pdf -> images
+2026-01-26 22:53:50 - 20260126_225349_d0059757 - aichemist_codex.electron_bridge - INFO - conversion_handler.handle_single_conversion:88 - Using converter: pdf_to_images_convert_pdf_to_images (priority: 10, version: 1.0.0)
+2026-01-26 22:53:50 - 20260126_225349_d0059757 - aichemist_codex.electron_bridge - DEBUG - progress_reporter.report:55 - Reporting progress: 30/100 - Converting EMGSTUDYSUBMISSION.pdf...
+2026-01-26 22:53:50 - 20260126_225349_d0059757 - aichemist_codex.electron_bridge - DEBUG - base.send_json_message:49 - Sending PROGRESS message: {"current": 30, "total": 100, "message": "Converting EMGSTUDYSUBMISSION.pdf...", "type": "single_progress", "filename": "EMGSTUDYSUBMISSION.pdf"}...
+2026-01-26 22:53:50 - 20260126_225349_d0059757 - aichemist_codex.electron_bridge - INFO - conversion_handler.handle_single_conversion:107 - Executing conversion: EMGSTUDYSUBMISSION.pdf -> page_%03d.png
+2026-01-26 22:53:50 - 20260126_225349_d0059757 - aichemist_codex.electron_bridge - DEBUG - conversion_handler.handle_single_conversion:108 - Converter options: {'force_ocr': False, 'include_charts': False, 'preserve_formatting': False, 'include_notes': False, 'include_images': False, 'use_lossless_compression': False, 'reduce_image_resolution': False, 'export_bookmarks': False, 'export_notes': False, 'pdfa': False, 'deskew': False, 'clean': False, 'redo_ocr': False}
+2026-01-26 22:53:50 - 20260126_225349_d0059757 - aichemist_codex.electron_bridge - DEBUG - conversion_handler.handle_single_conversion:115 - Calling converter function
+2026-01-26 22:53:50 - 20260126_225349_d0059757 - aichemist_codex.transmutation_codex.utils.validators - DEBUG - validators.validate_file_path:51 - Validating file path: d:\Coding\test3\01_Your_Side\01_Submissions\EMGSTUDYSUBMISSION.pdf
+2026-01-26 22:53:50 - 20260126_225349_d0059757 - aichemist_codex.transmutation_codex.utils.validators - DEBUG - validators.validate_file_path:89 - File path validation passed: d:\Coding\test3\01_Your_Side\01_Submissions\EMGSTUDYSUBMISSION.pdf
+2026-01-26 22:53:50 - 20260126_225349_d0059757 - aichemist_codex.converters.pdf2images - INFO - to_images.convert_pdf_to_images:108 - Converting PDF to images: d:\Coding\test3\01_Your_Side\01_Submissions\EMGSTUDYSUBMISSION.pdf -> C:\Users\Steve\AppData\Local\Temp\ocr-7f3b23ae\page_%03d.png
+2026-01-26 22:53:51 - 20260126_225349_d0059757 - PIL.PngImagePlugin - DEBUG - PngImagePlugin.call:204 - STREAM b'IHDR' 16 13
+2026-01-26 22:53:51 - 20260126_225349_d0059757 - PIL.PngImagePlugin - DEBUG - PngImagePlugin.call:204 - STREAM b'pHYs' 41 9
+2026-01-26 22:53:51 - 20260126_225349_d0059757 - PIL.PngImagePlugin - DEBUG - PngImagePlugin.call:204 - STREAM b'IDAT' 62 8192
+2026-01-26 22:53:51 - 20260126_225349_d0059757 - aichemist_codex.converters.pdf2images - INFO - to_images.convert_pdf_to_images:211 - Saving page 1/1
+2026-01-26 22:53:51 - 20260126_225349_d0059757 - aichemist_codex.converters.pdf2images - INFO - to_images.convert_pdf_to_images:250 - PDF to images conversion completed: C:\Users\Steve\AppData\Local\Temp\ocr-7f3b23ae\page_%03d.png (1 images)
+2026-01-26 22:53:51 - 20260126_225349_d0059757 - aichemist_codex.electron_bridge - DEBUG - conversion_handler.handle_single_conversion:119 - Converter returned result path: C:\Users\Steve\AppData\Local\Temp\ocr-7f3b23ae\page_%03d.png
+2026-01-26 22:53:51 - 20260126_225349_d0059757 - aichemist_codex.electron_bridge - DEBUG - progress_reporter.report:55 - Reporting progress: 100/100 - Conversion complete in 1.2s
+2026-01-26 22:53:51 - 20260126_225349_d0059757 - aichemist_codex.electron_bridge - DEBUG - base.send_json_message:49 - Sending PROGRESS message: {"current": 100, "total": 100, "message": "Conversion complete in 1.2s", "type": "single_progress", "filename": "EMGSTUDYSUBMISSION.pdf"}...
+2026-01-26 22:53:51 - 20260126_225349_d0059757 - aichemist_codex.electron_bridge - INFO - progress_reporter.report_success:115 - Reporting success: Successfully converted EMGSTUDYSUBMISSION.pdf to page_%03d.png
+2026-01-26 22:53:51 - 20260126_225349_d0059757 - aichemist_codex.electron_bridge - DEBUG - base.send_json_message:49 - Sending RESULT message: {"success": true, "message": "Successfully converted EMGSTUDYSUBMISSION.pdf to page_%03d.png", "input_path": "d:\\Coding\\test3\\01_Your_Side\\01_Submissions\\EMGSTUDYSUBMISSION.pdf", "output_path": "...
+2026-01-26 22:53:51 - 20260126_225349_d0059757 - aichemist_codex.electron_bridge - INFO - conversion_handler.handle_single_conversion:161 - Conversion successful: EMGSTUDYSUBMISSION.pdf -> page_%03d.png in 1.2s
+2026-01-26 22:53:51 - 20260126_225349_d0059757 - aichemist_codex.electron_bridge - INFO - electron_bridge.main:50 - Electron bridge exiting with code 0

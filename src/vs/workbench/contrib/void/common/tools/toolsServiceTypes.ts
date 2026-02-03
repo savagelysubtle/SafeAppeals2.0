@@ -31,7 +31,7 @@ export const approvalTypeOfBuiltinToolName: Partial<{ [T in BuiltinToolName]?: '
 	'kill_persistent_terminal': 'terminal',
 	// RAG tools removed from approval requirement - they are read-only information gathering tools
 	// 'rag_index_document': 'RAG tools',  // Commented out - no approval needed
-	// 'rag_search_policy': 'RAG tools',   // Commented out - no approval needed
+	// 'rag_search_reference': 'RAG tools',   // Commented out - no approval needed
 	// 'rag_search_workspace': 'RAG tools', // Commented out - no approval needed
 	// 'rag_get_stats': 'RAG tools',       // Commented out - no approval needed
 }
@@ -70,8 +70,8 @@ export type BuiltinToolCallParams = {
 	'run_persistent_command': { command: string; persistentTerminalId: string },
 	'kill_persistent_terminal': { persistentTerminalId: string },
 	// --- RAG tools
-	'rag_index_document': { uri: URI, isPolicyManual: boolean },
-	'rag_search_policy': { query: string, limit: number },
+	'rag_index_document': { uri: URI, isCoreReference: boolean },
+	'rag_search_reference': { query: string, limit: number },
 	'rag_search_workspace': { query: string, limit: number },
 	'rag_search_all': { query: string, limit: number },
 	'rag_get_stats': {},
@@ -124,7 +124,7 @@ export type BuiltinToolResultType = {
 	'kill_persistent_terminal': {},
 	// --- RAG tools
 	'rag_index_document': { success: boolean, message: string },
-	'rag_search_policy': { contextPack: string },
+	'rag_search_reference': { contextPack: string },
 	'rag_search_workspace': { contextPack: string },
 	'rag_search_all': { contextPack: string },
 	'rag_get_stats': { stats: string },

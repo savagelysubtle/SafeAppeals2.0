@@ -3,11 +3,19 @@
  *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
  *--------------------------------------------------------------------------------------*/
 
+// eslint-disable @typescript-eslint/no-explicit-any
+
 import { ILogService } from '../../../../../platform/log/common/log.js';
 import { createRequire } from 'module';
 import { LocalEmbeddingService } from './ragLocalEmbeddings.js';
 import { LocalCrossEncoderReranker } from './ragReranker.js';
 import { ChunkRecord, RAGStorageScope } from './ragServiceTypes.js';
+
+// Helper function for backwards compatibility with scope names
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function isCoreReferenceScope(scope: RAGStorageScope): boolean {
+	return scope === 'core_references' || (scope as any) === 'policy_manual';
+}
 
 export interface VectorAdapter {
 	initialize(): Promise<void>;
@@ -16,6 +24,13 @@ export interface VectorAdapter {
 	query(text: string, n: number, scope: RAGStorageScope): Promise<Array<{ id: string; score: number; metadata: Record<string, any> }>>;
 	deleteByDocId(docId: string): Promise<void>;
 	clearAll(): Promise<void>;
+	/**
+	 * Check if embeddings exist for a document
+	 * Used to verify indexing integrity (SQLite + embeddings both present)
+	 * @param docId The document ID to check
+	 * @returns Object with hasEmbeddings flag and count of embeddings found
+	 */
+	hasDocumentEmbeddings(docId: string): Promise<{ hasEmbeddings: boolean; count: number }>;
 }
 
 export interface VectorAdapterConfig {
@@ -277,22 +292,23 @@ export class ChromaPersistentAdapter implements VectorAdapter {
 			this.logService.info(`Searching ${this.embeddings.size} embeddings with threshold ${MIN_SIMILARITY_THRESHOLD}...`);
 
 		// Debug: Count embeddings by scope
-		let policyManualCount = 0;
+		let coreReferenceCount = 0;
 		let workspaceDocsCount = 0;
 		for (const [, data] of this.embeddings.entries()) {
-			const isPolicyManual = data.metadata.isPolicyManual ?? false;
-			if (isPolicyManual) policyManualCount++;
+			const isCoreReference = data.metadata.isCoreReference ?? false;
+			if (isCoreReference) coreReferenceCount++;
 			else workspaceDocsCount++;
 		}
-		this.logService.info(`Embeddings breakdown: ${policyManualCount} policy_manual, ${workspaceDocsCount} case_index`);
+		this.logService.info(`Embeddings breakdown: ${coreReferenceCount} core_references, ${workspaceDocsCount} case_index`);
 		this.logService.info(`Search scope: ${scope}`);
 
 		let scopeMatchCount = 0;
 			for (const [id, data] of this.embeddings.entries()) {
 				// Check scope - handle both old and new scope names for backwards compatibility
-				const isPolicyManual = data.metadata.isPolicyManual ?? false;
-				if (scope === 'policy_manual' && !isPolicyManual) continue;
-				if ((scope === 'case_index' || scope === 'workspace_docs') && isPolicyManual) continue;
+				const isCoreReference = data.metadata.isCoreReference ?? false;
+				const isSearchingCoreReferences = isCoreReferenceScope(scope);
+				if (isSearchingCoreReferences && !isCoreReference) continue;
+				if ((scope === 'case_index' || scope === 'workspace_docs') && isCoreReference) continue;
 				// 'workspace_all' and 'both' include everything
 
 			scopeMatchCount++;
@@ -443,6 +459,29 @@ export class ChromaPersistentAdapter implements VectorAdapter {
 		this.logService.info(`Deleted ${toDelete.length} embeddings for document ${docId}`);
 	}
 
+	/**
+	 * Check if embeddings exist for a document
+	 * Verifies that vector embeddings are present for the given document ID
+	 * This is used to detect indexing integrity issues (SQLite has doc but embeddings missing)
+	 */
+	async hasDocumentEmbeddings(docId: string): Promise<{ hasEmbeddings: boolean; count: number }> {
+		if (!this.initialized) {
+			await this.initialize();
+		}
+
+		let count = 0;
+		for (const [, data] of this.embeddings.entries()) {
+			if (data.metadata.docId === docId) {
+				count++;
+			}
+		}
+
+		const hasEmbeddings = count > 0;
+		this.logService.debug(`hasDocumentEmbeddings(${docId}): ${hasEmbeddings} (${count} embeddings)`);
+
+		return { hasEmbeddings, count };
+	}
+
 	async clearAll(): Promise<void> {
 		this.embeddings.clear();
 
@@ -513,8 +552,8 @@ export class ChromaHttpAdapter implements VectorAdapter {
 
 		const collections = [];
 		// Handle both old and new scope names for backwards compatibility
-		if (scope === 'policy_manual' || scope === 'workspace_all' || scope === 'both') {
-			collections.push('policy_manual');
+		if (isCoreReferenceScope(scope) || scope === 'workspace_all' || scope === 'both') {
+			collections.push('core_references');
 		}
 		if (scope === 'case_index' || scope === 'workspace_docs' || scope === 'workspace_all' || scope === 'both') {
 			collections.push('case_index');
@@ -540,8 +579,8 @@ export class ChromaHttpAdapter implements VectorAdapter {
 
 		if (chunks.length === 0) return;
 
-		const isPolicyManual = metadatas[0]?.isPolicyManual ?? false;
-		const collectionName = isPolicyManual ? 'policy_manual' : 'case_index';
+		const isCoreReference = metadatas[0]?.isCoreReference ?? false;
+		const collectionName = isCoreReference ? 'core_references' : 'case_index';
 		const collection = this.collections.get(collectionName);
 
 		if (!collection) {
@@ -567,8 +606,8 @@ export class ChromaHttpAdapter implements VectorAdapter {
 
 		const collectionNames: string[] = [];
 		// Handle both old and new scope names for backwards compatibility
-		if (scope === 'policy_manual' || scope === 'workspace_all' || scope === 'both') {
-			collectionNames.push('policy_manual');
+		if (isCoreReferenceScope(scope) || scope === 'workspace_all' || scope === 'both') {
+			collectionNames.push('core_references');
 		}
 		if (scope === 'case_index' || scope === 'workspace_docs' || scope === 'workspace_all' || scope === 'both') {
 			collectionNames.push('case_index');
@@ -614,7 +653,7 @@ export class ChromaHttpAdapter implements VectorAdapter {
 			await this.initialize();
 		}
 
-		const collections = ['policy_manual', 'case_index'];
+		const collections = ['core_references', 'case_index'];
 
 		for (const collectionName of collections) {
 			try {
@@ -636,7 +675,7 @@ export class ChromaHttpAdapter implements VectorAdapter {
 			await this.initialize();
 		}
 
-		const collections = ['policy_manual', 'case_index'];
+		const collections = ['core_references', 'case_index'];
 
 		for (const collectionName of collections) {
 			try {
@@ -649,6 +688,37 @@ export class ChromaHttpAdapter implements VectorAdapter {
 				console.warn(`Failed to clear collection ${collectionName}:`, error);
 			}
 		}
+	}
+
+	/**
+	 * Check if embeddings exist for a document in HTTP Chroma server
+	 */
+	async hasDocumentEmbeddings(docId: string): Promise<{ hasEmbeddings: boolean; count: number }> {
+		if (!this.client) {
+			await this.initialize();
+		}
+
+		let totalCount = 0;
+		const collections = ['core_references', 'case_index'];
+
+		for (const collectionName of collections) {
+			try {
+				const collection = this.collections.get(collectionName);
+				if (!collection) continue;
+
+				const results = await collection.get({
+					where: { docId }
+				});
+
+				if (results.ids) {
+					totalCount += results.ids.length;
+				}
+			} catch (error) {
+				console.warn(`Failed to check embeddings in ${collectionName}:`, error);
+			}
+		}
+
+		return { hasEmbeddings: totalCount > 0, count: totalCount };
 	}
 }
 
@@ -675,6 +745,10 @@ export class SQLiteVecAdapter implements VectorAdapter {
 	}
 
 	async clearAll(): Promise<void> {
+		throw new Error('SQLite-vec adapter not implemented yet');
+	}
+
+	async hasDocumentEmbeddings(docId: string): Promise<{ hasEmbeddings: boolean; count: number }> {
 		throw new Error('SQLite-vec adapter not implemented yet');
 	}
 }

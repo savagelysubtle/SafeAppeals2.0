@@ -22,6 +22,7 @@ const NATIVE_MODULES = [
 	'native-watchdog',
 	'@parcel/watcher',
 	'kerberos',
+	'sharp', // Used by @xenova/transformers for image processing in RAG embeddings
 ];
 
 // Read Electron version from package.json
@@ -38,29 +39,135 @@ function log(message) {
 	}
 }
 
+function logError(message) {
+	if (process.stdout.isTTY) {
+		console.error(`\x1b[31m[rebuild-native]\x1b[0m ${message}`);
+	} else {
+		console.error(`[rebuild-native] ${message}`);
+	}
+}
+
+/**
+ * Pre-extract sqlite3 source to work around minizlib/Node.js compatibility issues
+ * Uses system tar instead of the broken npm tar/minizlib
+ */
+function preExtractSqlite3() {
+	const sqlite3Path = path.join(root, 'node_modules', '@vscode', 'sqlite3');
+	if (!fs.existsSync(sqlite3Path)) {
+		return; // sqlite3 not installed
+	}
+
+	const depsPath = path.join(sqlite3Path, 'deps');
+	const tarball = path.join(depsPath, 'sqlite-autoconf-3390400.tar.gz');
+	const extractedDir = path.join(depsPath, 'sqlite-autoconf-3390400');
+
+	if (!fs.existsSync(tarball)) {
+		return; // tarball not found
+	}
+
+	// Check if already extracted in deps
+	const sourceExists = fs.existsSync(extractedDir) && fs.existsSync(path.join(extractedDir, 'sqlite3.c'));
+
+	// Also check if build output location has the file
+	const buildOutputDir = path.join(sqlite3Path, 'build', 'Release', 'obj', 'global_intermediate', 'sqlite-autoconf-3390400');
+	const buildOutputExists = fs.existsSync(path.join(buildOutputDir, 'sqlite3.c'));
+
+	if (sourceExists && buildOutputExists) {
+		log('SQLite source already extracted, skipping');
+		return;
+	}
+
+	// If source exists but build output doesn't, just copy
+	if (sourceExists && !buildOutputExists) {
+		log('Copying SQLite source to build output directory...');
+		fs.mkdirSync(buildOutputDir, { recursive: true });
+		const files = fs.readdirSync(extractedDir);
+		for (const file of files) {
+			const src = path.join(extractedDir, file);
+			const dest = path.join(buildOutputDir, file);
+			if (fs.statSync(src).isDirectory()) {
+				fs.cpSync(src, dest, { recursive: true });
+			} else {
+				fs.copyFileSync(src, dest);
+			}
+		}
+		log('SQLite source copied to build output directory');
+		return;
+	}
+
+	log('Pre-extracting SQLite source using system tar...');
+	try {
+		// Use system tar to extract (works around minizlib issues)
+		cp.execSync(`tar -xzf "${tarball}"`, {
+			cwd: depsPath,
+			stdio: 'pipe'
+		});
+		log('SQLite source extracted successfully');
+
+		// Also copy to build output location (create directory if needed)
+		fs.mkdirSync(buildOutputDir, { recursive: true });
+		// Copy files
+		const files = fs.readdirSync(extractedDir);
+		for (const file of files) {
+			const src = path.join(extractedDir, file);
+			const dest = path.join(buildOutputDir, file);
+			if (fs.statSync(src).isDirectory()) {
+				fs.cpSync(src, dest, { recursive: true });
+			} else {
+				fs.copyFileSync(src, dest);
+			}
+		}
+		log('SQLite source copied to build output directory');
+	} catch (error) {
+		logError(`Failed to extract SQLite source: ${error.message}`);
+		// Non-fatal, continue with rebuild
+	}
+}
+
+/**
+ * Rebuild a single native module using node-gyp
+ */
+function rebuildSingleModule(moduleName, electronVersion) {
+	const modulePath = path.join(root, 'node_modules', moduleName);
+	if (!fs.existsSync(modulePath)) {
+		return false; // Module not installed
+	}
+
+	const bindingGyp = path.join(modulePath, 'binding.gyp');
+	if (!fs.existsSync(bindingGyp)) {
+		return false; // Not a native module
+	}
+
+	log(`Rebuilding ${moduleName}...`);
+	try {
+		cp.execSync(`npx node-gyp rebuild --target=${electronVersion} --arch=x64 --dist-url=https://electronjs.org/headers --runtime=electron`, {
+			cwd: modulePath,
+			stdio: 'pipe',
+			env: {
+				...process.env,
+				npm_config_runtime: 'electron',
+				npm_config_target: electronVersion,
+				npm_config_disturl: 'https://electronjs.org/headers'
+			}
+		});
+		log(`✓ ${moduleName} rebuilt successfully`);
+		return true;
+	} catch (error) {
+		logError(`✗ Failed to rebuild ${moduleName}: ${error.message}`);
+		return false;
+	}
+}
+
 function rebuildNativeModules() {
 	const electronVersion = getElectronVersion();
 	log(`Rebuilding native modules for Electron ${electronVersion}...`);
 
-	// Check if electron-rebuild is available
-	const electronRebuildPath = path.join(root, 'node_modules', '@electron', 'rebuild');
-	const hasElectronRebuild = fs.existsSync(electronRebuildPath);
+	// Pre-extract sqlite3 source to work around minizlib issues
+	preExtractSqlite3();
 
-	if (!hasElectronRebuild) {
-		log('Installing @electron/rebuild...');
-		try {
-			cp.execSync('npm install -g @electron/rebuild', {
-				stdio: 'inherit',
-				cwd: root
-			});
-		} catch (e) {
-			log('Warning: Could not install @electron/rebuild globally');
-		}
-	}
-
+	// Try electron-rebuild first (faster for batch rebuilds)
 	try {
-		// Run electron-rebuild for all native modules
-		log('Running electron-rebuild...');
+		log('Attempting batch rebuild with @electron/rebuild...');
 		cp.execSync(`npx @electron/rebuild --version ${electronVersion}`, {
 			stdio: 'inherit',
 			cwd: root,
@@ -73,10 +180,36 @@ function rebuildNativeModules() {
 			}
 		});
 		log('Native modules rebuilt successfully!');
+		return;
 	} catch (error) {
-		console.error('[rebuild-native] Error rebuilding native modules:', error.message);
-		console.error('[rebuild-native] You may need to install Visual Studio Build Tools with C++ workload');
-		process.exit(1);
+		logError(`Batch rebuild failed: ${error.message}`);
+		log('Falling back to individual module rebuilds...');
+	}
+
+	// Fall back to rebuilding modules individually
+	let successCount = 0;
+	let failCount = 0;
+
+	for (const moduleName of NATIVE_MODULES) {
+		const result = rebuildSingleModule(moduleName, electronVersion);
+		if (result) {
+			successCount++;
+		} else {
+			const modulePath = path.join(root, 'node_modules', moduleName);
+			if (fs.existsSync(modulePath)) {
+				failCount++;
+			}
+		}
+	}
+
+	log(`Rebuild complete: ${successCount} succeeded, ${failCount} failed`);
+
+	if (failCount > 0) {
+		logError('Some native modules failed to build. You may need to:');
+		logError('1. Install Visual Studio Build Tools with C++ workload');
+		logError('2. Run: npx node-gyp install');
+		logError('3. Manually rebuild failing modules');
+		// Don't exit with error - allow development to continue
 	}
 }
 
@@ -86,4 +219,3 @@ if (require.main === module) {
 }
 
 module.exports = { rebuildNativeModules, NATIVE_MODULES };
-

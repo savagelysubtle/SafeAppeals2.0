@@ -5,8 +5,34 @@
 
 import React from 'react';
 
-// SafeAppeals brand colors
-const BRAND_GREEN = '#22c55e';
+// ============================================================================
+// REUSABLE STYLES - VSCode Theme Variables
+// ============================================================================
+
+const panelStyle: React.CSSProperties = {
+	backgroundColor: 'var(--vscode-sideBar-background)',
+	borderBottom: '1px solid var(--vscode-panel-border)',
+};
+
+const selectStyle: React.CSSProperties = {
+	backgroundColor: 'var(--vscode-dropdown-background)',
+	color: 'var(--vscode-dropdown-foreground)',
+	border: '1px solid var(--vscode-dropdown-border)',
+	borderRadius: '8px',
+	cursor: 'pointer',
+};
+
+const buttonSecondaryStyle: React.CSSProperties = {
+	backgroundColor: 'var(--vscode-button-secondaryBackground)',
+	color: 'var(--vscode-button-secondaryForeground)',
+	border: '1px solid var(--vscode-panel-border)',
+	borderRadius: '8px',
+	cursor: 'pointer',
+};
+
+const textSecondaryStyle: React.CSSProperties = {
+	color: 'var(--vscode-descriptionForeground)',
+};
 
 interface EmailFiltersProps {
 	caseFolders: string[];
@@ -34,25 +60,18 @@ export const EmailFilters: React.FC<EmailFiltersProps> = ({
 	return (
 		<div
 			className="px-4 py-3 flex flex-wrap items-center gap-4"
-			style={{
-				backgroundColor: '#0f0f0f',
-				borderBottom: '1px solid #27272a'
-			}}
+			style={panelStyle}
 		>
 			{/* Case Folder Filter */}
 			<div className="flex items-center gap-2">
-				<label className="text-sm font-medium" style={{ color: '#a1a1aa' }}>
+				<label className="text-sm font-medium" style={textSecondaryStyle}>
 					Case Folder:
 				</label>
 				<select
 					value={selectedCaseFolder}
 					onChange={(e) => onCaseFolderChange(e.target.value)}
-					className="px-3 py-1.5 rounded-lg text-sm outline-none cursor-pointer min-w-[200px]"
-					style={{
-						backgroundColor: '#1a1a1a',
-						color: '#fafafa',
-						border: '1px solid #27272a'
-					}}
+					className="px-3 py-1.5 text-sm outline-none min-w-[200px]"
+					style={selectStyle}
 				>
 					<option value="all">All Cases</option>
 					{caseFolders.map((folder) => (
@@ -65,14 +84,14 @@ export const EmailFilters: React.FC<EmailFiltersProps> = ({
 
 			{/* Quick Filters */}
 			<div className="flex items-center gap-2">
-				<span className="text-sm" style={{ color: '#71717a' }}>Quick:</span>
+				<span className="text-sm" style={textSecondaryStyle}>Quick:</span>
 				<button
 					onClick={() => onCaseFolderChange('all')}
 					className="px-3 py-1 rounded-lg text-xs transition-all"
 					style={{
-						backgroundColor: selectedCaseFolder === 'all' ? `${BRAND_GREEN}15` : '#1a1a1a',
-						color: selectedCaseFolder === 'all' ? BRAND_GREEN : '#a1a1aa',
-						border: `1px solid ${selectedCaseFolder === 'all' ? `${BRAND_GREEN}30` : '#27272a'}`
+						backgroundColor: selectedCaseFolder === 'all' ? 'var(--vscode-list-activeSelectionBackground)' : 'var(--vscode-button-secondaryBackground)',
+						color: selectedCaseFolder === 'all' ? 'var(--vscode-list-activeSelectionForeground)' : 'var(--vscode-descriptionForeground)',
+						border: selectedCaseFolder === 'all' ? '1px solid var(--vscode-focusBorder)' : '1px solid var(--vscode-panel-border)'
 					}}
 				>
 					All
@@ -84,18 +103,14 @@ export const EmailFilters: React.FC<EmailFiltersProps> = ({
 				<button
 					onClick={() => onCaseFolderChange('all')}
 					className="ml-auto text-xs px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-all"
-					style={{
-						backgroundColor: '#1a1a1a',
-						color: '#a1a1aa',
-						border: '1px solid #27272a'
-					}}
+					style={buttonSecondaryStyle}
 					onMouseEnter={(e) => {
-						e.currentTarget.style.backgroundColor = '#27272a';
-						e.currentTarget.style.color = '#fafafa';
+						e.currentTarget.style.backgroundColor = 'var(--vscode-list-hoverBackground)';
+						e.currentTarget.style.color = 'var(--vscode-editor-foreground)';
 					}}
 					onMouseLeave={(e) => {
-						e.currentTarget.style.backgroundColor = '#1a1a1a';
-						e.currentTarget.style.color = '#a1a1aa';
+						e.currentTarget.style.backgroundColor = 'var(--vscode-button-secondaryBackground)';
+						e.currentTarget.style.color = 'var(--vscode-button-secondaryForeground)';
 					}}
 				>
 					<i className="codicon codicon-close" style={{ fontSize: '10px' }} />

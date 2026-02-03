@@ -218,7 +218,7 @@ Unknown file size? Call read_file WITHOUT start_line/end_line to see file length
 - Small file (<100 lines): ~500 tokens
 - Medium file (100-1,000 lines): ~5,000 tokens
 - Large file (1,000+ lines): 10,000-50,000 tokens
-- Policy manual (full): 20,000-100,000 tokens
+- Core reference document (full): 20,000-100,000 tokens
 
 **DOCUMENT TYPE HANDLING:**
 
@@ -240,14 +240,14 @@ Unknown file size? Call read_file WITHOUT start_line/end_line to see file length
 
 ✅ EFFICIENT: Targeted token usage
 \`\`\`
-Step 1: read_file(policy_manual.pdf) [no line params] → See it's 5,000 lines
+Step 1: read_file(core_reference.pdf) [no line params] → See it's 5,000 lines
 Step 2: search_in_file("appeal deadline") → Find lines 234-289 relevant
-Step 3: read_file(policy_manual.pdf, start_line=234, end_line=289) → ~2,000 tokens
+Step 3: read_file(core_reference.pdf, start_line=234, end_line=289) → ~2,000 tokens
 \`\`\`
 
 ⚠️ CAUTION: Reading entire large files (like manuals) consumes context budget rapidly. Only read full files when necessary or small.
 \`\`\`
-read_file(policy_manual.pdf) [entire file] → 25,000 tokens consumed
+read_file(core_reference.pdf) [entire file] → 25,000 tokens consumed
 \`\`\`
 
 **PARALLEL READING:**
@@ -397,9 +397,16 @@ Your context window is limited. Before reading, consider:
 
 	run_command: {
 		name: 'run_command',
-		description: `Runs a terminal command and waits for the result (times out after ${MAX_TERMINAL_INACTIVE_TIME}s of inactivity). Use this for installing packages, running tests, or any other terminal command that completes within a reasonable time frame.`,
+		description: `Runs a terminal command and waits for the result (times out after ${MAX_TERMINAL_INACTIVE_TIME}s of inactivity). Use this for:
+- Installing packages (npm install, pip install, etc.)
+- Running tests (pytest, npm test, etc.)
+- **Moving files**: Use \`mv\` (Unix) or \`move\` (Windows) to relocate files between directories
+- **Renaming files**: Use \`mv old_name new_name\` (Unix) or \`ren old_name new_name\` (Windows)
+- **Organizing folders**: Create directories (\`mkdir\`), move multiple files, restructure project layout
+- **Batch file operations**: Use shell wildcards and loops for bulk moves/renames
+- Any other terminal command that completes within a reasonable time frame.`,
 		params: {
-			command: { description: 'The terminal command to run.' },
+			command: { description: 'The terminal command to run. For file operations: use mv/move for moving/renaming, mkdir for creating directories, cp/copy for copying.' },
 			cwd: { description: 'Optional. The current working directory in which to run the command.' },
 		},
 	},
@@ -431,18 +438,31 @@ Your context window is limited. Before reading, consider:
 
 	rag_index_document: {
 		name: 'rag_index_document',
-		description: `Indexes a document (policy manual, medical report, decision, or case correspondence) for RAG search. **CRITICAL: Check if document is already indexed FIRST using the file path and rag_get_stats.** Only index if NOT already indexed to avoid duplicate costs. Use is_policy_manual=true for workers' compensation policy documents.`,
+		description: `Indexes a document for RAG search. **CRITICAL: Check if document is already indexed FIRST using rag_get_stats.** Only index if NOT already indexed to avoid duplicate costs.
+
+**DOCUMENT TYPES:**
+- **Core References** (is_core_reference=true): Policy manuals, regulations, textbooks, authoritative sources
+  - Auto-indexed when placed in the \`core_references/\` folder in workspace root
+  - Searchable via rag_search_reference
+- **Case Documents** (is_core_reference=false): Medical reports, IME evaluations, decisions, correspondence
+  - Workspace files outside the \`core_references/\` folder
+  - Auto-indexed if ragAutoIndexCaseFiles setting is enabled
+  - Searchable via rag_search_workspace
+
+**TIP:** For core references, simply place files in \`core_references/\` folder - they'll be auto-indexed. Use this tool for manual indexing when needed.`,
 		params: {
 			...uriParam('document'),
-			is_policy_manual: { description: 'Set to true for workers compensation policy manuals, false for case documents (medical reports, decisions, correspondence). Defaults to false.' }
+			is_core_reference: { description: 'Set to true for core reference documents (policy manuals, textbooks, authoritative sources), false for case documents (medical reports, decisions, correspondence). Defaults to false.' }
 		}
 	},
 
-	rag_search_policy: {
-		name: 'rag_search_policy',
-		description: `Search indexed policy manuals for workers' compensation rules, eligibility criteria, procedural requirements, benefit calculations, and appeal processes.
+	rag_search_reference: {
+		name: 'rag_search_reference',
+		description: `Search indexed core reference documents for workers' compensation rules, eligibility criteria, procedural requirements, benefit calculations, and appeal processes.
 
 **PURPOSE:** Retrieve authoritative policy guidance to ground responses in verified regulatory standards. This is your PRIMARY source for WC legal/procedural questions.
+
+**SOURCE:** Searches documents from the \`core_references/\` folder (policy manuals, regulations, textbooks) - NOT case-specific documents. For case files, use rag_search_workspace instead.
 
 **WHEN TO USE:**
 - Before answering ANY question about WC rules, procedures, benefits, or requirements
@@ -527,7 +547,7 @@ Returns chunks with:
 
 	rag_search_all: {
 		name: 'rag_search_all',
-		description: `Search BOTH policy manuals AND case-specific documents simultaneously.
+		description: `Search BOTH core reference documents AND case-specific documents simultaneously.
 
 **PURPOSE:** When you need information that may exist in either policy documents or case files, or when you want a comprehensive view across all indexed sources.
 
@@ -538,12 +558,12 @@ Returns chunks with:
 - For initial broad searches before narrowing down with specific tools
 
 **BEST PRACTICES:**
-- Start with rag_search_all for broad queries, then use rag_search_policy or rag_search_workspace for targeted follow-up
+- Start with rag_search_all for broad queries, then use rag_search_reference or rag_search_workspace for targeted follow-up
 - Use when drafting documents that need both policy citations AND case facts
 - Results will indicate which source (policy vs case file) each chunk came from
 
 **OUTPUT FORMAT:**
-Returns combined results from both policy manuals and case files, with source type indicated.
+Returns combined results from both core reference documents and case files, with source type indicated.
 
 **COST:** ~2,500 tokens per search (slightly higher due to dual-source retrieval).`,
 		params: {
@@ -554,7 +574,7 @@ Returns combined results from both policy manuals and case files, with source ty
 
 	rag_get_stats: {
 		name: 'rag_get_stats',
-		description: `Gets statistics about indexed documents: shows which policy manuals and case documents are available, number of chunks per document, and total indexed content. **ALWAYS use this FIRST before searching** to understand what's available and avoid unnecessary indexing.`,
+		description: `Gets statistics about indexed documents: shows which core reference documents and case documents are available, number of chunks per document, and total indexed content. **ALWAYS use this FIRST before searching** to understand what's available and avoid unnecessary indexing.`,
 		params: {}
 	},
 
@@ -720,7 +740,7 @@ export const isABuiltinToolName = (toolName: string): toolName is BuiltinToolNam
 export const availableTools = (chatMode: ChatMode | null, mcpTools: InternalToolInfo[] | undefined) => {
 	// Drafting mode: enable document editing, RAG tools, and timeline tools
 	const builtinToolNames: BuiltinToolName[] | undefined = chatMode === 'drafting'
-		? ['read_file', 'edit_file', 'edit_document', 'create_file_or_folder', 'rag_search_policy', 'rag_search_workspace', 'rag_get_stats', 'web_search', 'multi_link_search', 'timeline_add_event', 'timeline_update_event', 'timeline_delete_event', 'timeline_get_events', 'timeline_link_document', 'timeline_get_deadlines'] as BuiltinToolName[]
+		? ['read_file', 'edit_file', 'edit_document', 'create_file_or_folder', 'rag_search_reference', 'rag_search_workspace', 'rag_get_stats', 'web_search', 'multi_link_search', 'timeline_add_event', 'timeline_update_event', 'timeline_delete_event', 'timeline_get_events', 'timeline_link_document', 'timeline_get_deadlines'] as BuiltinToolName[]
 		: chatMode === 'research' ? (Object.keys(builtinTools) as BuiltinToolName[]).filter(toolName => !(toolName in approvalTypeOfBuiltinToolName))
 			: chatMode === 'case_manager' ? Object.keys(builtinTools) as BuiltinToolName[]
 				: undefined
@@ -766,14 +786,14 @@ const toolCallDefinitionsXMLString = (tools: InternalToolInfo[]) => {
 			example = `\n    <example>\n    <function_calls>\n    <invoke name="edit_file">\n    <parameter name="uri">/case_files/appeal_letter.txt</parameter>\n    <parameter name="search_replace_blocks">\n    <search_replace_block>\n    <search>existing text</search>\n    <replace>new text</replace>\n    </search_replace_block>\n    </parameter>\n    </invoke>\n    </function_calls>\n    </example>\n`
 		} else if (t.name === 'edit_document') {
 			example = `\n    <example>\n    <function_calls>\n    <invoke name="edit_document">\n    <parameter name="uri">/case_files/welcome.docx</parameter>\n    <parameter name="operations">[{"type": "insert_text", "position": 0, "text": "Welcome\\n\\nThis was written by AI."}]</parameter>\n    </invoke>\n    </function_calls>\n    </example>\n`
-		} else if (t.name === 'rag_search_policy') {
-			example = `\n    <example>\n    <function_calls>\n    <invoke name="rag_search_policy">\n    <parameter name="query">appeal deadline workers compensation</parameter>\n    <parameter name="limit">5</parameter>\n    </invoke>\n    </function_calls>\n    </example>\n`
+		} else if (t.name === 'rag_search_reference') {
+			example = `\n    <example>\n    <function_calls>\n    <invoke name="rag_search_reference">\n    <parameter name="query">appeal deadline workers compensation</parameter>\n    <parameter name="limit">5</parameter>\n    </invoke>\n    </function_calls>\n    </example>\n`
 		} else if (t.name === 'rag_search_workspace') {
 			example = `\n    <example>\n    <function_calls>\n    <invoke name="rag_search_workspace">\n    <parameter name="query">medical evaluation lumbar strain</parameter>\n    <parameter name="limit">5</parameter>\n    </invoke>\n    </function_calls>\n    </example>\n`
 		} else if (t.name === 'rag_search_all') {
 			example = `\n    <example>\n    <function_calls>\n    <invoke name="rag_search_all">\n    <parameter name="query">permanent disability rating appeal</parameter>\n    <parameter name="limit">8</parameter>\n    </invoke>\n    </function_calls>\n    </example>\n`
 		} else if (t.name === 'create_file_or_folder') {
-			example = `\n    <example>\n    <function_calls>\n    <invoke name="create_file_or_folder">\n    <parameter name="uri">/case_files/appeal_letter_2024.docx</parameter>\n    <parameter name="type">file</parameter>\n    </invoke>\n    </function_calls>\n    </example>\n`
+			example = `\n    <example>\n    <function_calls>\n    <invoke name="create_file_or_folder">\n    <parameter name="uri">/case_files/appeal_letter_2024.docx</parameter>\n    </invoke>\n    </function_calls>\n    </example>\n`
 		} else if (t.name === 'timeline_add_event') {
 			example = `\n    <example>\n    <function_calls>\n    <invoke name="timeline_add_event">\n    <parameter name="date">2024-01-15</parameter>\n    <parameter name="title">Medical Evaluation - Dr. Smith</parameter>\n    <parameter name="category">medical</parameter>\n    <parameter name="description">Follow-up evaluation for lumbar injury</parameter>\n    <parameter name="is_deadline">false</parameter>\n    </invoke>\n    </function_calls>\n    </example>\n`
 		} else if (t.name === 'timeline_get_events') {
@@ -857,7 +877,7 @@ const systemToolsXMLPrompt = (chatMode: ChatMode, mcpTools: InternalToolInfo[] |
 
     Example 3: Parallel Research (RAG + Reading)
     <function_calls>
-    <invoke name="rag_search_policy">
+    <invoke name="rag_search_reference">
     <parameter name="query">appeal deadline</parameter>
     <parameter name="limit">5</parameter>
     </invoke>
@@ -871,8 +891,8 @@ const systemToolsXMLPrompt = (chatMode: ChatMode, mcpTools: InternalToolInfo[] |
     <invoke name="edit_document">
     <parameter name="uri">/users/case/Appeal_Letter.docx</parameter>
     <parameter name="operations">[
-      {"op": "replace", "search": "[INSERT DATE]", "replace": "October 12, 2024"},
-      {"op": "replace", "search": "[CLAIM NUMBER]", "replace": "WCB-2024-55555"}
+      {"type": "replace_text", "search": "[INSERT DATE]", "replace": "October 12, 2024"},
+      {"type": "replace_text", "search": "[CLAIM NUMBER]", "replace": "WCB-2024-55555"}
     ]</parameter>
     </invoke>
     </function_calls>`)
@@ -995,7 +1015,10 @@ export const readImageAsBase64 = async (
 /**
  * Check if a URI points to an image file by extension
  */
-const isImageFileByExtension = (uri: URI): boolean => {
+const isImageFileByExtension = (uri: URI | undefined): boolean => {
+	if (!uri || !uri.fsPath) {
+		return false
+	}
 	const ext = uri.fsPath.split('.').pop()?.toLowerCase()
 	return ext === 'jpg' || ext === 'jpeg' || ext === 'png' || ext === 'gif' || ext === 'webp'
 }
@@ -1080,6 +1103,17 @@ export const messageOfSelection = async (
 		return str
 	}
 	else if (s.type === 'File') {
+		// Debug: Log file selection processing
+		console.log(`[messageOfSelection] Processing File: ${s.uri.fsPath}`)
+		console.log(`[messageOfSelection] - language: ${s.language}`)
+		console.log(`[messageOfSelection] - hasRagContext: ${!!s.state.ragContext}`)
+		console.log(`[messageOfSelection] - ragContextLength: ${s.state.ragContext?.length ?? 0}`)
+
+		// Check if this is a virtual file (like folder trees)
+		if (s.state.isVirtualFile && s.state.virtualContent) {
+			return `${s.uri.fsPath}:\n${tripleTick[0]}plaintext\n${s.state.virtualContent}\n${tripleTick[1]}`
+		}
+
 		// Check if this is an image file - skip text extraction, images are sent separately as base64
 		if (isImageFileByExtension(s.uri)) {
 			return `${s.uri.fsPath}: [Image attached - sent separately for visual analysis]`
@@ -1087,15 +1121,16 @@ export const messageOfSelection = async (
 
 		// Check if RAG context is available (for PDFs and other documents)
 		if (s.state.ragContext) {
-			// Use pre-generated RAG context instead of extracting full file
-			// Frame it as document excerpts to guide the LLM to focus on content, not structure
-			const str = `${s.uri.fsPath} (relevant excerpts):\n${tripleTick[0]}\n${s.state.ragContext}\n${tripleTick[1]}`
+			console.log(`[messageOfSelection] ✅ Using ragContext for ${s.uri.fsPath} (${s.state.ragContext.length} chars)`)
+			// Use pre-generated content - this is the FULL extracted text, not excerpts
+			// Make it very clear to the LLM that this is complete and it should NOT use read_file
+			const str = `${s.uri.fsPath} [FULL DOCUMENT CONTENT - DO NOT USE read_file]:\n${tripleTick[0]}\n${s.state.ragContext}\n${tripleTick[1]}`
 			return str
 		}
 
 		// Check if this is a binary document (PDF, DOCX, XLSX) without RAG context
 		// These can't be read as text directly - need to indicate the file is attached
-		const ext = s.uri.path.split('.').pop()?.toLowerCase() || ''
+		const ext = s.uri?.path?.split('.').pop()?.toLowerCase() || ''
 		const binaryDocTypes = ['pdf', 'docx', 'doc', 'xlsx', 'xls', 'pptx', 'ppt']
 		if (binaryDocTypes.includes(ext)) {
 			// Binary document without extracted content - tell the agent clearly
@@ -1178,10 +1213,10 @@ export const chat_userMessageContent = async (
 		// Build a clear header that tells the agent NOT to re-read these files
 		let header: string
 		if (hasPDFExcerpts) {
-			header = `ATTACHED FILES & SELECTIONS (ALREADY IN CONTEXT)
-The user has attached the following files/selections. Their FULL CONTENTS are included below.
-✅ You have immediate access to these files. Simply refer to them in your response.
-Use file tools only for files NOT listed in this section.`
+			header = `📄 ATTACHED DOCUMENTS (FULL CONTENT INCLUDED BELOW)
+The following documents have been FULLY EXTRACTED and their COMPLETE TEXT is included below.
+🚫 DO NOT use read_file on these documents - you already have the full content.
+✅ Simply read and analyze the text below. Use file tools ONLY for files NOT listed here.`
 		} else {
 			const parts: string[] = []
 			if (fileCount > 0) parts.push(`${fileCount} file(s)`)
@@ -1190,10 +1225,10 @@ Use file tools only for files NOT listed in this section.`
 			if (imageCount > 0) parts.push(`${imageCount} image(s)`)
 			const summary = parts.length > 0 ? parts.join(', ') : 'selections'
 
-			header = `ATTACHED FILES & SELECTIONS (ALREADY IN CONTEXT)
-The user has attached ${summary}. Their FULL CONTENTS are included below.
-✅ You have immediate access to these files. Simply refer to them in your response.
-Use file tools only for files NOT listed in this section.`
+			header = `📎 ATTACHED FILES & SELECTIONS (FULL CONTENT BELOW)
+The user has attached ${summary}. Their COMPLETE CONTENTS are included below.
+🚫 DO NOT use read_file on these files - you already have the full content.
+✅ Simply read and analyze the content below. Use file tools ONLY for files NOT listed here.`
 		}
 
 		str += `\n---\n${header}\n${selnsStr}`;

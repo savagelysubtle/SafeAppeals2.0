@@ -132,9 +132,15 @@ import { IVoidSCMService } from '../../workbench/contrib/void/common/voidSCMType
 import { IVoidUpdateService } from '../../workbench/contrib/void/common/voidUpdateService.js';
 import { DOCXCreatorChannel } from '../../workbench/contrib/void/electron-main/docxCreatorChannel.js';
 // Email dashboard
-import { EmailMainChannel } from '../../workbench/contrib/void/electron-main/emailMainChannel.js';
-import { EmailMainService } from '../../workbench/contrib/void/electron-main/email/emailMainService.js';
+import { BraveSearchChannel } from '../../workbench/contrib/void/electron-main/braveSearchChannel.js';
+import { CalendarChannel } from '../../workbench/contrib/void/electron-main/calendar/calendarChannel.js';
+import { ChatThreadStorageChannel } from '../../workbench/contrib/void/electron-main/chat/chatThreadStorageChannel.js';
+import { DevAuthServerService } from '../../workbench/contrib/void/electron-main/devAuthServer.js';
+import { DocumentExportChannel } from '../../workbench/contrib/void/electron-main/documentExportChannel.js';
+import { DocuSignChannel } from '../../workbench/contrib/void/electron-main/docuSignChannel.js';
 import { DOCXExtractorChannel } from '../../workbench/contrib/void/electron-main/docxExtractorChannel.js';
+import { EmailMainService } from '../../workbench/contrib/void/electron-main/email/emailMainService.js';
+import { EmailMainChannel } from '../../workbench/contrib/void/electron-main/emailMainChannel.js';
 import { FileConverterChannel, FileConverterMainService } from '../../workbench/contrib/void/electron-main/fileConverterChannel.js';
 import { MCPChannel } from '../../workbench/contrib/void/electron-main/mcpChannel.js';
 import { MetricsMainService } from '../../workbench/contrib/void/electron-main/metricsMainService.js';
@@ -142,12 +148,10 @@ import { PDFExtractorChannel } from '../../workbench/contrib/void/electron-main/
 import { RAGMainChannel } from '../../workbench/contrib/void/electron-main/rag/ragMainChannel.js';
 import { RAGMainService } from '../../workbench/contrib/void/electron-main/rag/ragMainService.js';
 import { LLMMessageChannel } from '../../workbench/contrib/void/electron-main/sendLLMMessageChannel.js';
+import { TimelineExportChannel } from '../../workbench/contrib/void/electron-main/timelineExportChannel.js';
 import { VoidSCMService } from '../../workbench/contrib/void/electron-main/voidSCMMainService.js';
 import { VoidMainUpdateService } from '../../workbench/contrib/void/electron-main/voidUpdateMainService.js';
 import { XLSXExtractorChannel } from '../../workbench/contrib/void/electron-main/xlsxExtractorChannel.js';
-import { BraveSearchChannel } from '../../workbench/contrib/void/electron-main/braveSearchChannel.js';
-import { TimelineExportChannel } from '../../workbench/contrib/void/electron-main/timelineExportChannel.js';
-import { DocumentExportChannel } from '../../workbench/contrib/void/electron-main/documentExportChannel.js';
 /**
  * The main VS Code application. There will only ever be one instance,
  * even if the user starts many instances (e.g. from the command line).
@@ -1297,6 +1301,9 @@ export class CodeApplication extends Disposable {
 		const fileConverterChannel = new FileConverterChannel(fileConverterService);
 		mainProcessElectronServer.registerChannel('void-channel-file-converter', fileConverterChannel);
 
+		// Wire up file converter to RAG service for OCR capabilities
+		(ragMainService as any).setFileConverterService(fileConverterService);
+
 		// Void Brave Search service (for web search tools)
 		const braveSearchChannel = new BraveSearchChannel();
 		mainProcessElectronServer.registerChannel('void-channel-brave-search', braveSearchChannel);
@@ -1304,6 +1311,15 @@ export class CodeApplication extends Disposable {
 		// Void Timeline Export service (for PDF export)
 		const timelineExportChannel = new TimelineExportChannel(this.logService);
 		mainProcessElectronServer.registerChannel('void-channel-timeline-export', timelineExportChannel);
+
+		// Void Calendar Sync service (for Google Calendar integration)
+		const devAuthServerService = new DevAuthServerService(this.logService);
+		const calendarChannel = new CalendarChannel(this.logService, devAuthServerService);
+		mainProcessElectronServer.registerChannel('void-channel-calendar', calendarChannel);
+
+		// Void DocuSign JWT auth channel (for bundled integration key and JWT authentication)
+		const docuSignChannel = new DocuSignChannel(this.environmentMainService.userDataPath);
+		mainProcessElectronServer.registerChannel('void-channel-docusign', docuSignChannel);
 
 		// Void Document Export service (for PDF export from viewers)
 		const documentExportChannel = new DocumentExportChannel(this.logService);
@@ -1314,6 +1330,10 @@ export class CodeApplication extends Disposable {
 		const emailMainService = new EmailMainService(accessor.get(ILogService), ragPathService);
 		const emailMainChannel = new EmailMainChannel(emailMainService);
 		mainProcessElectronServer.registerChannel('void-channel-email', emailMainChannel);
+
+		// Void Chat Thread Storage service
+		const chatThreadStorageChannel = new ChatThreadStorageChannel(accessor.get(ILogService), ragPathService);
+		mainProcessElectronServer.registerChannel('void-channel-chat-threads', chatThreadStorageChannel);
 
 		// Extension Host Debug Broadcasting
 		const electronExtensionHostDebugBroadcastChannel = new ElectronExtensionHostDebugBroadcastChannel(accessor.get(IWindowsMainService));

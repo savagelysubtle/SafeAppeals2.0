@@ -4,50 +4,266 @@
  *--------------------------------------------------------------------------------------*/
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { useAccessor } from "../util/services.js";
+import { useAccessor, useFileOrgConfigListener } from "../util/services.js";
+import {
+	WorkspaceType,
+	WorkspaceTemplate,
+	SectionDefinition,
+	FieldDefinition,
+	getTemplate,
+	getTemplateOptions,
+	getNestedValue,
+	setNestedValue,
+	createConfigFromTemplate,
+	detectWorkspaceType,
+	validateConfig,
+	generateFixPrompt,
+	ValidationResult,
+} from "../util/workspaceTemplates.js";
+
+// ============================================================================
+// TYPES
+// ============================================================================
+
+interface CollapsedSections {
+	[sectionId: string]: boolean;
+}
+
+// ============================================================================
+// REUSABLE COMPONENTS
+// ============================================================================
+
+const inputStyle: React.CSSProperties = {
+	width: "100%",
+	padding: "8px",
+	backgroundColor: "var(--vscode-input-background)",
+	color: "var(--vscode-input-foreground)",
+	border: "1px solid var(--vscode-input-border)",
+	borderRadius: "4px",
+	fontSize: "13px",
+	boxSizing: "border-box",
+};
+
+const labelStyle: React.CSSProperties = {
+	display: "block",
+	marginBottom: "4px",
+	fontSize: "13px",
+	fontWeight: 500,
+};
+
+const descriptionStyle: React.CSSProperties = {
+	marginTop: "4px",
+	fontSize: "11px",
+	color: "var(--vscode-descriptionForeground)",
+};
+
+// Collapsible Section Component
+const CollapsibleSection: React.FC<{
+	section: SectionDefinition;
+	isCollapsed: boolean;
+	onToggle: () => void;
+	children: React.ReactNode;
+}> = ({ section, isCollapsed, onToggle, children }) => (
+	<div
+		style={{
+			borderTop: "1px solid var(--vscode-panel-border)",
+			paddingTop: "16px",
+			marginTop: "16px",
+		}}
+	>
+		<div
+			onClick={onToggle}
+			style={{
+				display: "flex",
+				alignItems: "center",
+				cursor: "pointer",
+				marginBottom: isCollapsed ? "0" : "12px",
+				userSelect: "none",
+			}}
+		>
+			<span style={{ marginRight: "8px", fontSize: "12px" }}>
+				{isCollapsed ? "▶" : "▼"}
+			</span>
+			<span style={{ marginRight: "8px" }}>{section.icon}</span>
+			<span style={{ fontSize: "14px", fontWeight: 600 }}>{section.title}</span>
+		</div>
+		{section.description && !isCollapsed && (
+			<div
+				style={{
+					fontSize: "11px",
+					color: "var(--vscode-descriptionForeground)",
+					marginBottom: "12px",
+					lineHeight: "1.4",
+				}}
+			>
+				{section.description}
+			</div>
+		)}
+		{!isCollapsed && children}
+	</div>
+);
+
+// Dynamic Field Renderer
+const DynamicField: React.FC<{
+	field: FieldDefinition;
+	value: unknown;
+	onChange: (value: unknown) => void;
+	isEditing: boolean;
+}> = ({ field, value, onChange, isEditing }) => {
+	if (!isEditing) {
+		// View mode
+		if (field.type === "array") {
+			const arr = Array.isArray(value) ? value : [];
+			if (arr.length === 0) return null;
+			return (
+				<div style={{ marginBottom: "12px" }}>
+					<div style={{ fontSize: "12px", color: "var(--vscode-descriptionForeground)", marginBottom: "4px" }}>
+						{field.label}
+					</div>
+					<div style={{ fontSize: "14px" }}>{arr.join(", ")}</div>
+				</div>
+			);
+		}
+		if (!value) return null;
+		return (
+			<div style={{ marginBottom: "12px" }}>
+				<div style={{ fontSize: "12px", color: "var(--vscode-descriptionForeground)", marginBottom: "4px" }}>
+					{field.label}
+				</div>
+				<div style={{ fontSize: "14px" }}>{String(value)}</div>
+			</div>
+		);
+	}
+
+	// Edit mode
+	const optionalLabel = !field.required && (
+		<span style={{ fontSize: "11px", color: "var(--vscode-descriptionForeground)", fontWeight: "normal" }}>
+			{" "}(optional)
+		</span>
+	);
+
+	const requiredMarker = field.required && (
+		<span style={{ color: "var(--vscode-errorForeground)" }}> *</span>
+	);
+
+	switch (field.type) {
+		case "text":
+			return (
+				<div style={{ marginBottom: "12px" }}>
+					<label style={labelStyle}>
+						{field.label}{requiredMarker}{optionalLabel}
+					</label>
+					<input
+						type="text"
+						value={String(value || "")}
+						onChange={(e) => onChange(e.target.value)}
+						placeholder={field.placeholder}
+						style={inputStyle}
+					/>
+					{field.description && <div style={descriptionStyle}>{field.description}</div>}
+				</div>
+			);
+
+		case "textarea":
+			return (
+				<div style={{ marginBottom: "12px" }}>
+					<label style={labelStyle}>
+						{field.label}{requiredMarker}{optionalLabel}
+					</label>
+					<textarea
+						value={String(value || "")}
+						onChange={(e) => onChange(e.target.value)}
+						placeholder={field.placeholder}
+						rows={3}
+						style={{ ...inputStyle, resize: "vertical", minHeight: "60px" }}
+					/>
+					{field.description && <div style={descriptionStyle}>{field.description}</div>}
+				</div>
+			);
+
+		case "date":
+			return (
+				<div style={{ marginBottom: "12px" }}>
+					<label style={labelStyle}>
+						{field.label}{requiredMarker}{optionalLabel}
+					</label>
+					<input
+						type="date"
+						value={String(value || "")}
+						onChange={(e) => onChange(e.target.value)}
+						style={inputStyle}
+					/>
+					{field.description && <div style={descriptionStyle}>{field.description}</div>}
+				</div>
+			);
+
+		case "select":
+			return (
+				<div style={{ marginBottom: "12px" }}>
+					<label style={labelStyle}>
+						{field.label}{requiredMarker}{optionalLabel}
+					</label>
+					<select
+						value={String(value || field.options?.[0] || "")}
+						onChange={(e) => onChange(e.target.value)}
+						style={{
+							...inputStyle,
+							backgroundColor: "var(--vscode-dropdown-background)",
+							color: "var(--vscode-dropdown-foreground)",
+							border: "1px solid var(--vscode-dropdown-border)",
+						}}
+					>
+						{field.options?.map((opt) => (
+							<option key={opt} value={opt}>{opt}</option>
+						))}
+					</select>
+					{field.description && <div style={descriptionStyle}>{field.description}</div>}
+				</div>
+			);
+
+		case "array":
+			const arrValue = Array.isArray(value) ? value.join(", ") : "";
+			return (
+				<div style={{ marginBottom: "12px" }}>
+					<label style={labelStyle}>
+						{field.label}{requiredMarker}{optionalLabel}
+					</label>
+					<input
+						type="text"
+						value={arrValue}
+						onChange={(e) => {
+							const arr = e.target.value
+								.split(",")
+								.map((s) => s.trim())
+								.filter(Boolean);
+							onChange(arr);
+						}}
+						placeholder={field.placeholder}
+						style={inputStyle}
+					/>
+					<div style={descriptionStyle}>
+						{field.description || "Separate multiple values with commas"}
+					</div>
+				</div>
+			);
+
+		default:
+			return null;
+	}
+};
+
+// ============================================================================
+// MAIN COMPONENT
+// ============================================================================
 
 export const CaseInfoDashboard: React.FC = () => {
 	const accessor = useAccessor();
-	const [caseConfig, setCaseConfig] = useState<any | null>(null);
-	const [isEditing, setIsEditing] = useState(false);
-	const [loading, setLoading] = useState(true);
 
-	// Form state
-	const [caseNumber, setCaseNumber] = useState("");
-	const [claimantName, setClaimantName] = useState("");
-	const [injuryDate, setInjuryDate] = useState("");
-	const [caseType, setCaseType] = useState("Workers Compensation");
-	const [description, setDescription] = useState("");
-
-	// Parties
-	const [claimantLawyers, setClaimantLawyers] = useState("");
-	const [treatingDoctors, setTreatingDoctors] = useState("");
-	const [advocate, setAdvocate] = useState("");
-	const [employerName, setEmployerName] = useState("");
-	const [defenseLawyers, setDefenseLawyers] = useState("");
-	const [imeDoctors, setImeDoctors] = useState("");
-	const [caseManager, setCaseManager] = useState("");
-	const [reviewOfficer, setReviewOfficer] = useState("");
-	const [employerRepresentative, setEmployerRepresentative] = useState("");
-	const [adjudicators, setAdjudicators] = useState("");
-	const [wcbReferences, setWcbReferences] = useState("");
-
-	// Keywords
-	const [yourSideKeywords, setYourSideKeywords] = useState(
-		"claimant, treating, personal"
-	);
-	const [theirSideKeywords, setTheirSideKeywords] = useState(
-		"employer, wcb, ime, defense"
-	);
-
+	// Services - must be defined before callbacks that use them
 	const fileOrganizerService = useMemo(() => {
 		try {
 			return accessor.get("IFileOrganizerService");
-		} catch (error) {
-			console.error(
-				"[CaseInfoDashboard] Failed to get FileOrganizerService:",
-				error
-			);
+		} catch {
 			return null;
 		}
 	}, [accessor]);
@@ -55,331 +271,236 @@ export const CaseInfoDashboard: React.FC = () => {
 	const workspaceContextService = useMemo(() => {
 		try {
 			return accessor.get("IWorkspaceContextService");
-		} catch (error) {
-			console.error(
-				"[CaseInfoDashboard] Failed to get IWorkspaceContextService:",
-				error
-			);
+		} catch {
 			return null;
 		}
 	}, [accessor]);
 
-	// Load existing case config
+	// State
+	const [config, setConfig] = useState<Record<string, unknown> | null>(null);
+	const [workspaceType, setWorkspaceType] = useState<WorkspaceType>("legal");
+	const [isEditing, setIsEditing] = useState(false);
+	const [loading, setLoading] = useState(true);
+	const [collapsedSections, setCollapsedSections] = useState<CollapsedSections>({});
+	const [formData, setFormData] = useState<Record<string, unknown>>({});
+	const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+	const [externalChangeDetected, setExternalChangeDetected] = useState(false);
+	const [validationResult, setValidationResult] = useState<ValidationResult | null>(null);
+	const [showFixPrompt, setShowFixPrompt] = useState(false);
+
+	// Function to reload config from disk
+	const reloadConfig = useCallback(async () => {
+		if (!fileOrganizerService || !workspaceContextService) return;
+
+		try {
+			const workspace = workspaceContextService.getWorkspace();
+			if (!workspace.folders || workspace.folders.length === 0) return;
+
+			const workspaceFolder = workspace.folders[0].uri;
+			const exists = await fileOrganizerService.caseConfigExists(workspaceFolder);
+
+			if (exists) {
+				const loadedConfig = await fileOrganizerService.loadCaseConfig(workspaceFolder);
+				if (loadedConfig) {
+					setConfig(loadedConfig as Record<string, unknown>);
+					const detectedType = detectWorkspaceType(loadedConfig as Record<string, unknown>);
+					setWorkspaceType(detectedType);
+					if (!isEditing) {
+						setFormData(loadedConfig as Record<string, unknown>);
+					}
+				}
+			}
+		} catch (error) {
+			console.error("[CaseInfoDashboard] Error reloading config:", error);
+		}
+	}, [fileOrganizerService, workspaceContextService, isEditing]);
+
+	// Listen for external config changes (file modified outside of this panel)
+	const configChangeCounter = useFileOrgConfigListener(() => {
+		if (isEditing) {
+			// User is editing - show conflict warning
+			setExternalChangeDetected(true);
+		} else {
+			// Auto-reload when not editing
+			reloadConfig();
+		}
+	});
+
+	// Get template for current workspace type
+	const template = useMemo(() => getTemplate(workspaceType), [workspaceType]);
+
+	// Run validation when config or form data changes
 	useEffect(() => {
-		const loadCaseConfig = async () => {
+		if (config && !isEditing) {
+			const result = validateConfig(config, workspaceType);
+			setValidationResult(result);
+		} else if (formData && Object.keys(formData).length > 0) {
+			const result = validateConfig(formData, workspaceType);
+			setValidationResult(result);
+		}
+	}, [config, formData, workspaceType, isEditing]);
+
+	// Initialize collapsed state from template defaults
+	useEffect(() => {
+		const initialCollapsed: CollapsedSections = {};
+		template.sections.forEach((section) => {
+			if (section.defaultCollapsed) {
+				initialCollapsed[section.id] = true;
+			}
+		});
+		setCollapsedSections(initialCollapsed);
+	}, [template]);
+
+	// Load config on mount
+	useEffect(() => {
+		const loadConfig = async () => {
 			if (!fileOrganizerService || !workspaceContextService) return;
 
 			try {
 				setLoading(true);
 				const workspace = workspaceContextService.getWorkspace();
 				if (!workspace.folders || workspace.folders.length === 0) {
-					console.warn("[CaseInfoDashboard] No workspace folder open");
 					setIsEditing(true);
 					setLoading(false);
 					return;
 				}
+
 				const workspaceFolder = workspace.folders[0].uri;
-				const exists = await fileOrganizerService.caseConfigExists(
-					workspaceFolder
-				);
+				const exists = await fileOrganizerService.caseConfigExists(workspaceFolder);
 
 				if (exists) {
-					const config = await fileOrganizerService.loadCaseConfig(
-						workspaceFolder
-					);
-					if (config) {
-						setCaseConfig(config);
-						populateFormFromConfig(config);
+					const loadedConfig = await fileOrganizerService.loadCaseConfig(workspaceFolder);
+					if (loadedConfig) {
+						setConfig(loadedConfig as Record<string, unknown>);
+						const detectedType = detectWorkspaceType(loadedConfig as Record<string, unknown>);
+						setWorkspaceType(detectedType);
+						setFormData(loadedConfig as Record<string, unknown>);
 					}
 				} else {
-					setIsEditing(true); // Start in edit mode if no config
+					setIsEditing(true);
 				}
 			} catch (error) {
-				console.error("[CaseInfoDashboard] Error loading case config:", error);
+				console.error("[CaseInfoDashboard] Error loading config:", error);
 			} finally {
 				setLoading(false);
 			}
 		};
 
-		loadCaseConfig();
+		loadConfig();
 	}, [fileOrganizerService, workspaceContextService]);
 
-	const populateFormFromConfig = useCallback((config: any) => {
-		setCaseNumber(config.caseInfo.caseNumber || "");
-		setClaimantName(config.caseInfo.claimantName || "");
-		setInjuryDate(config.caseInfo.injuryDate || "");
-		setCaseType(config.caseInfo.caseType || "Workers Compensation");
-		setDescription(config.caseInfo.description || "");
+	// Handle template change
+	const handleTemplateChange = useCallback((newType: WorkspaceType) => {
+		setWorkspaceType(newType);
+		if (!config) {
+			// Create new config from template
+			const newConfig = createConfigFromTemplate(newType);
+			setFormData(newConfig);
+		}
+		setHasUnsavedChanges(true);
+	}, [config]);
 
-		setClaimantLawyers(
-			config.caseInfo.parties?.claimant?.lawyers?.join(", ") || ""
-		);
-		setTreatingDoctors(
-			config.caseInfo.parties?.claimant?.doctors?.join(", ") || ""
-		);
-		setAdvocate(config.caseInfo.parties?.claimant?.advocate?.join(", ") || "");
-		setEmployerName(config.caseInfo.parties?.employer?.name || "");
-		setDefenseLawyers(
-			config.caseInfo.parties?.employer?.lawyers?.join(", ") || ""
-		);
-		setImeDoctors(config.caseInfo.parties?.employer?.doctors?.join(", ") || "");
-		setCaseManager(
-			config.caseInfo.parties?.employer?.caseManager?.join(", ") || ""
-		);
-		setReviewOfficer(
-			config.caseInfo.parties?.employer?.reviewOfficer?.join(", ") || ""
-		);
-		setEmployerRepresentative(
-			config.caseInfo.parties?.employer?.employerRepresentative?.join(", ") ||
-				""
-		);
-		setAdjudicators(
-			config.caseInfo.parties?.wcb?.adjudicators?.join(", ") || ""
-		);
-		setWcbReferences(
-			config.caseInfo.parties?.wcb?.references?.join(", ") || ""
-		);
-
-		setYourSideKeywords(
-			config.caseInfo.keywords?.yourSide?.join(", ") ||
-				"claimant, treating, personal"
-		);
-		setTheirSideKeywords(
-			config.caseInfo.keywords?.theirSide?.join(", ") ||
-				"employer, wcb, ime, defense"
-		);
+	// Toggle section collapse
+	const toggleSection = useCallback((sectionId: string) => {
+		setCollapsedSections((prev) => ({
+			...prev,
+			[sectionId]: !prev[sectionId],
+		}));
 	}, []);
 
+	// Handle field change
+	const handleFieldChange = useCallback((path: string, value: unknown) => {
+		setFormData((prev) => {
+			const newData = { ...prev };
+			setNestedValue(newData, path, value);
+			return newData;
+		});
+		setHasUnsavedChanges(true);
+	}, []);
+
+	// Save config
 	const handleSave = useCallback(async () => {
 		if (!fileOrganizerService || !workspaceContextService) return;
 
-		// Check for workspace folder
 		const workspace = workspaceContextService.getWorkspace();
 		if (!workspace.folders || workspace.folders.length === 0) {
-			alert(
-				"❌ Error: No workspace folder is open.\n\nPlease open a folder first to save case configuration."
-			);
+			alert("No workspace folder open. Please open a folder first.");
 			return;
 		}
+
 		const workspaceFolder = workspace.folders[0].uri;
-
-		// Process names for keyword arrays
-		const advocateNames = advocate
-			? advocate
-					.split(",")
-					.map((s) => s.trim())
-					.filter(Boolean)
-			: [];
-		const caseManagerNames = caseManager
-			? caseManager
-					.split(",")
-					.map((s) => s.trim())
-					.filter(Boolean)
-			: [];
-		const reviewOfficerNames = reviewOfficer
-			? reviewOfficer
-					.split(",")
-					.map((s) => s.trim())
-					.filter(Boolean)
-			: [];
-		const employerRepNames = employerRepresentative
-			? employerRepresentative
-					.split(",")
-					.map((s) => s.trim())
-					.filter(Boolean)
-			: [];
-
-		const config: any = {
-			version: "1.0" as const,
-			caseInfo: {
-				caseNumber: caseNumber || undefined,
-				claimantName: claimantName || undefined,
-				injuryDate: injuryDate || undefined,
-				caseType,
-				description: description || undefined,
-				parties: {
-					claimant: {
-						name: claimantName || "Claimant",
-						lawyers: claimantLawyers
-							? claimantLawyers
-									.split(",")
-									.map((s) => s.trim())
-									.filter(Boolean)
-							: [],
-						doctors: treatingDoctors
-							? treatingDoctors
-									.split(",")
-									.map((s) => s.trim())
-									.filter(Boolean)
-							: [],
-						advocate: advocateNames.length > 0 ? advocateNames : undefined,
-					},
-					employer: employerName
-						? {
-								name: employerName,
-								lawyers: defenseLawyers
-									? defenseLawyers
-											.split(",")
-											.map((s) => s.trim())
-											.filter(Boolean)
-									: [],
-								doctors: imeDoctors
-									? imeDoctors
-											.split(",")
-											.map((s) => s.trim())
-											.filter(Boolean)
-									: [],
-								caseManager:
-									caseManagerNames.length > 0 ? caseManagerNames : undefined,
-								reviewOfficer:
-									reviewOfficerNames.length > 0
-										? reviewOfficerNames
-										: undefined,
-								employerRepresentative:
-									employerRepNames.length > 0 ? employerRepNames : undefined,
-						  }
-						: undefined,
-					wcb:
-						adjudicators || wcbReferences
-							? {
-									adjudicators: adjudicators
-										? adjudicators
-												.split(",")
-												.map((s) => s.trim())
-												.filter(Boolean)
-										: [],
-									references: wcbReferences
-										? wcbReferences
-												.split(",")
-												.map((s) => s.trim())
-												.filter(Boolean)
-										: [],
-							  }
-							: undefined,
-				},
-				keywords: {
-					yourSide: [
-						...new Set([
-							...yourSideKeywords
-								.split(",")
-								.map((s) => s.trim())
-								.filter(Boolean),
-							...advocateNames,
-						]),
-					],
-					theirSide: [
-						...new Set([
-							...theirSideKeywords
-								.split(",")
-								.map((s) => s.trim())
-								.filter(Boolean),
-							...caseManagerNames,
-							...reviewOfficerNames,
-							...employerRepNames,
-						]),
-					],
-					medical: [
-						"medical",
-						"doctor",
-						"physician",
-						"diagnosis",
-						"treatment",
-						"mri",
-						"xray",
-					],
-					legal: ["legal", "court", "decision", "appeal", "ruling", "judgment"],
-					evidence: ["evidence", "study", "research", "expert", "report"],
-				},
-			},
-			organizationSettings: {
-				selectedTemplate: "workers-comp-full",
-				preserveOriginalNames: true,
+		const configToSave = {
+			...formData,
+			version: "1.0",
+			workspaceType,
+			organizationSettings: (formData.organizationSettings as Record<string, unknown>) ?? {
+				selectedTemplate: workspaceType,
+				preserveOriginalNames: false,
 				createBackup: true,
-				targetFolder: "./organized",
+				targetFolder: ".organized",
 			},
-			createdAt: caseConfig?.createdAt || new Date().toISOString(),
 			updatedAt: new Date().toISOString(),
+			createdAt: (formData.createdAt as string) || new Date().toISOString(),
 		};
 
 		try {
-			await fileOrganizerService.saveCaseConfig(workspaceFolder, config);
-			setCaseConfig(config);
+			await fileOrganizerService.saveCaseConfig(workspaceFolder, configToSave as Parameters<typeof fileOrganizerService.saveCaseConfig>[1]);
+			setConfig(configToSave);
 			setIsEditing(false);
-			alert(
-				"✅ Case configuration saved!\n\nFile: .fileorg.json in workspace root\n\nThis case info will be available to the AI when you chat."
-			);
+			setHasUnsavedChanges(false);
+			alert("Configuration saved successfully!");
 		} catch (error) {
-			console.error("[CaseInfoDashboard] Error saving case config:", error);
-			alert("❌ Error saving case configuration. Check console for details.");
+			console.error("[CaseInfoDashboard] Error saving:", error);
+			alert("Error saving configuration. Check console for details.");
 		}
-	}, [
-		fileOrganizerService,
-		workspaceContextService,
-		caseNumber,
-		claimantName,
-		injuryDate,
-		caseType,
-		description,
-		claimantLawyers,
-		treatingDoctors,
-		advocate,
-		employerName,
-		defenseLawyers,
-		imeDoctors,
-		caseManager,
-		reviewOfficer,
-		employerRepresentative,
-		adjudicators,
-		wcbReferences,
-		yourSideKeywords,
-		theirSideKeywords,
-		caseConfig,
-	]);
+	}, [fileOrganizerService, workspaceContextService, formData, workspaceType]);
 
+	// Cancel editing
+	const handleCancel = useCallback(() => {
+		if (config) {
+			setFormData(config);
+			setWorkspaceType(detectWorkspaceType(config));
+		}
+		setIsEditing(false);
+		setHasUnsavedChanges(false);
+	}, [config]);
+
+	// Render loading state
 	if (loading) {
 		return (
-			<div
-				style={{
-					padding: "24px",
-					textAlign: "center",
-				}}
-			>
-				<div
-					style={{
-						fontSize: "14px",
-						color: "var(--vscode-descriptionForeground)",
-					}}
-				>
-					Loading case configuration...
+			<div style={{ padding: "24px", textAlign: "center" }}>
+				<div style={{ fontSize: "14px", color: "var(--vscode-descriptionForeground)" }}>
+					Loading configuration...
 				</div>
 			</div>
 		);
 	}
 
-	if (!isEditing && caseConfig) {
-		// View mode
-		return (
+	// Render view or edit mode
+	return (
+		<div
+			className="void-scrollbar"
+			style={{
+				padding: "24px",
+				maxWidth: "600px",
+				height: "100%",
+				overflowY: "auto",
+				boxSizing: "border-box",
+			}}
+		>
+			{/* Header */}
 			<div
-				className="void-scrollbar"
 				style={{
-					padding: "24px",
-					maxWidth: "600px",
-					height: "100%",
-					overflowY: "auto",
-					boxSizing: "border-box",
+					marginBottom: "24px",
+					display: "flex",
+					justifyContent: "space-between",
+					alignItems: "center",
 				}}
 			>
-				<div
-					style={{
-						marginBottom: "24px",
-						display: "flex",
-						justifyContent: "space-between",
-						alignItems: "center",
-					}}
-				>
-					<h2 style={{ margin: 0, fontSize: "18px", fontWeight: 600 }}>
-						📋 Case Information
-					</h2>
+				<h2 style={{ margin: 0, fontSize: "18px", fontWeight: 600 }}>
+					{template.icon} {isEditing ? "Edit" : ""} {template.name} Configuration
+				</h2>
+				{!isEditing && config && (
 					<button
 						onClick={() => setIsEditing(true)}
 						style={{
@@ -394,927 +515,129 @@ export const CaseInfoDashboard: React.FC = () => {
 					>
 						✏️ Edit
 					</button>
-				</div>
-
-				<div
-					style={{
-						display: "flex",
-						flexDirection: "column",
-						gap: "16px",
-					}}
-				>
-					<div>
-						<div
-							style={{
-								fontSize: "12px",
-								color: "var(--vscode-descriptionForeground)",
-								marginBottom: "4px",
-							}}
-						>
-							Case Number
-						</div>
-						<div style={{ fontSize: "14px" }}>
-							{caseConfig.caseInfo.caseNumber || "N/A"}
-						</div>
-					</div>
-
-					<div>
-						<div
-							style={{
-								fontSize: "12px",
-								color: "var(--vscode-descriptionForeground)",
-								marginBottom: "4px",
-							}}
-						>
-							Claimant
-						</div>
-						<div style={{ fontSize: "14px", fontWeight: 500 }}>
-							{caseConfig.caseInfo.claimantName || "N/A"}
-						</div>
-					</div>
-
-					<div>
-						<div
-							style={{
-								fontSize: "12px",
-								color: "var(--vscode-descriptionForeground)",
-								marginBottom: "4px",
-							}}
-						>
-							Case Type
-						</div>
-						<div style={{ fontSize: "14px" }}>
-							{caseConfig.caseInfo.caseType}
-						</div>
-					</div>
-
-					{caseConfig.caseInfo.injuryDate && (
-						<div>
-							<div
-								style={{
-									fontSize: "12px",
-									color: "var(--vscode-descriptionForeground)",
-									marginBottom: "4px",
-								}}
-							>
-								Injury Date
-							</div>
-							<div style={{ fontSize: "14px" }}>
-								{caseConfig.caseInfo.injuryDate}
-							</div>
-						</div>
-					)}
-
-					{caseConfig.caseInfo.description && (
-						<div>
-							<div
-								style={{
-									fontSize: "12px",
-									color: "var(--vscode-descriptionForeground)",
-									marginBottom: "4px",
-								}}
-							>
-								Description
-							</div>
-							<div style={{ fontSize: "14px" }}>
-								{caseConfig.caseInfo.description}
-							</div>
-						</div>
-					)}
-
-					{caseConfig.caseInfo.parties?.claimant?.advocate?.length > 0 && (
-						<div
-							style={{
-								borderTop: "1px solid var(--vscode-panel-border)",
-								paddingTop: "16px",
-								marginTop: "8px",
-							}}
-						>
-							<div
-								style={{
-									fontSize: "14px",
-									fontWeight: 600,
-									marginBottom: "12px",
-								}}
-							>
-								Your Side
-							</div>
-							<div>
-								<div
-									style={{
-										fontSize: "12px",
-										color: "var(--vscode-descriptionForeground)",
-										marginBottom: "4px",
-									}}
-								>
-									Advocate
-								</div>
-								<div style={{ fontSize: "14px" }}>
-									{caseConfig.caseInfo.parties.claimant.advocate.join(", ")}
-								</div>
-							</div>
-						</div>
-					)}
-
-					{caseConfig.caseInfo.parties?.employer && (
-						<div
-							style={{
-								borderTop: "1px solid var(--vscode-panel-border)",
-								paddingTop: "16px",
-								marginTop: "8px",
-							}}
-						>
-							<div
-								style={{
-									fontSize: "14px",
-									fontWeight: 600,
-									marginBottom: "12px",
-								}}
-							>
-								Their Side
-							</div>
-							{caseConfig.caseInfo.parties.employer.name && (
-								<div style={{ marginBottom: "12px" }}>
-									<div
-										style={{
-											fontSize: "12px",
-											color: "var(--vscode-descriptionForeground)",
-											marginBottom: "4px",
-										}}
-									>
-										Employer
-									</div>
-									<div style={{ fontSize: "14px", fontWeight: 500 }}>
-										{caseConfig.caseInfo.parties.employer.name}
-									</div>
-								</div>
-							)}
-							{caseConfig.caseInfo.parties.employer.caseManager?.length > 0 && (
-								<div style={{ marginBottom: "12px" }}>
-									<div
-										style={{
-											fontSize: "12px",
-											color: "var(--vscode-descriptionForeground)",
-											marginBottom: "4px",
-										}}
-									>
-										Case Manager
-									</div>
-									<div style={{ fontSize: "14px" }}>
-										{caseConfig.caseInfo.parties.employer.caseManager.join(
-											", "
-										)}
-									</div>
-								</div>
-							)}
-							{caseConfig.caseInfo.parties.employer.reviewOfficer?.length >
-								0 && (
-								<div style={{ marginBottom: "12px" }}>
-									<div
-										style={{
-											fontSize: "12px",
-											color: "var(--vscode-descriptionForeground)",
-											marginBottom: "4px",
-										}}
-									>
-										Review Officer
-									</div>
-									<div style={{ fontSize: "14px" }}>
-										{caseConfig.caseInfo.parties.employer.reviewOfficer.join(
-											", "
-										)}
-									</div>
-								</div>
-							)}
-							{caseConfig.caseInfo.parties.employer.employerRepresentative
-								?.length > 0 && (
-								<div>
-									<div
-										style={{
-											fontSize: "12px",
-											color: "var(--vscode-descriptionForeground)",
-											marginBottom: "4px",
-										}}
-									>
-										Employer Representative
-									</div>
-									<div style={{ fontSize: "14px" }}>
-										{caseConfig.caseInfo.parties.employer.employerRepresentative.join(
-											", "
-										)}
-									</div>
-								</div>
-							)}
-						</div>
-					)}
-
-					<div
-						style={{
-							borderTop: "1px solid var(--vscode-panel-border)",
-							paddingTop: "16px",
-							marginTop: "8px",
-						}}
-					>
-						<div
-							style={{
-								fontSize: "14px",
-								fontWeight: 600,
-								marginBottom: "12px",
-							}}
-						>
-							Your Side Keywords
-						</div>
-						<div
-							style={{
-								fontSize: "13px",
-								color: "var(--vscode-descriptionForeground)",
-							}}
-						>
-							{caseConfig.caseInfo.keywords.yourSide.join(", ")}
-						</div>
-					</div>
-
-					<div>
-						<div
-							style={{
-								fontSize: "14px",
-								fontWeight: 600,
-								marginBottom: "12px",
-							}}
-						>
-							Their Side Keywords
-						</div>
-						<div
-							style={{
-								fontSize: "13px",
-								color: "var(--vscode-descriptionForeground)",
-							}}
-						>
-							{caseConfig.caseInfo.keywords.theirSide.join(", ")}
-						</div>
-					</div>
-
-					<div
-						style={{
-							marginTop: "16px",
-							padding: "12px",
-							backgroundColor: "var(--vscode-inputValidation-infoBackground)",
-							border: "1px solid var(--vscode-inputValidation-infoBorder)",
-							borderRadius: "4px",
-							fontSize: "12px",
-						}}
-					>
-						<strong>💡 Tip:</strong> This case information is automatically
-						available to the AI when you chat (Ctrl+L), helping it understand
-						the context of your case.
-					</div>
-				</div>
-			</div>
-		);
-	}
-
-	// Edit mode - simplified form
-	return (
-		<div
-			className="void-scrollbar"
-			style={{
-				padding: "24px",
-				maxWidth: "600px",
-				height: "100%",
-				overflowY: "auto",
-				boxSizing: "border-box",
-			}}
-		>
-			<div style={{ marginBottom: "24px" }}>
-				<h2 style={{ margin: 0, fontSize: "18px", fontWeight: 600 }}>
-					{caseConfig
-						? "✏️ Edit Case Information"
-						: "📋 Setup Case Information"}
-				</h2>
-				<p
-					style={{
-						margin: "8px 0 0 0",
-						fontSize: "13px",
-						color: "var(--vscode-descriptionForeground)",
-					}}
-				>
-					This information will be saved to `.fileorg.json` and automatically
-					provided to the AI.
-				</p>
-
-				{!caseConfig && (
-					<div
-						style={{
-							marginTop: "16px",
-							padding: "12px",
-							backgroundColor: "var(--vscode-inputValidation-infoBackground)",
-							border: "1px solid var(--vscode-inputValidation-infoBorder)",
-							borderRadius: "4px",
-							fontSize: "12px",
-							lineHeight: "1.5",
-						}}
-					>
-						<strong>🎯 What is this?</strong>
-						<br />
-						This helps the AI understand your case. By adding names and
-						keywords, the AI can:
-						<ul style={{ margin: "8px 0 0 0", paddingLeft: "20px" }}>
-							<li>Automatically tag and organize your files</li>
-							<li>Understand context when you chat (Ctrl+L)</li>
-							<li>Identify which side documents belong to</li>
-						</ul>
-						<div style={{ marginTop: "8px" }}>
-							<strong>💡 Tip:</strong> Start with just the claimant name and
-							case number. You can add more details later.
-						</div>
-					</div>
 				)}
 			</div>
 
-			<div
-				style={{
-					display: "flex",
-					flexDirection: "column",
-					gap: "16px",
-				}}
-			>
+			{/* External Change Warning */}
+			{externalChangeDetected && isEditing && (
 				<div
 					style={{
+						marginBottom: "16px",
 						padding: "12px",
-						backgroundColor: "var(--vscode-editor-background)",
-						border: "1px solid var(--vscode-panel-border)",
+						backgroundColor: "var(--vscode-inputValidation-warningBackground)",
+						border: "1px solid var(--vscode-inputValidation-warningBorder)",
 						borderRadius: "4px",
-						marginBottom: "8px",
+						fontSize: "12px",
 					}}
 				>
-					<div
-						style={{ fontSize: "13px", fontWeight: 600, marginBottom: "8px" }}
-					>
-						Basic Information
-					</div>
-					<div
-						style={{
-							fontSize: "11px",
-							color: "var(--vscode-descriptionForeground)",
-							lineHeight: "1.4",
-						}}
-					>
-						Start here! These basic details help identify your case.
-					</div>
-				</div>
-
-				<div>
-					<label
-						style={{
-							display: "block",
-							marginBottom: "4px",
-							fontSize: "13px",
-							fontWeight: 500,
-						}}
-					>
-						Claimant Name{" "}
-						<span style={{ color: "var(--vscode-errorForeground)" }}>*</span>
-					</label>
-					<input
-						type="text"
-						value={claimantName}
-						onChange={(e) => setClaimantName(e.target.value)}
-						placeholder="e.g., John Smith"
-						style={{
-							width: "100%",
-							padding: "8px",
-							backgroundColor: "var(--vscode-input-background)",
-							color: "var(--vscode-input-foreground)",
-							border: "1px solid var(--vscode-input-border)",
-							borderRadius: "4px",
-							fontSize: "13px",
-						}}
-					/>
-					<div
-						style={{
-							marginTop: "4px",
-							fontSize: "11px",
-							color: "var(--vscode-descriptionForeground)",
-						}}
-					>
-						The person filing the claim (you or your client)
-					</div>
-				</div>
-
-				<div>
-					<label
-						style={{
-							display: "block",
-							marginBottom: "4px",
-							fontSize: "13px",
-							fontWeight: 500,
-						}}
-					>
-						Case Number{" "}
-						<span
+					<strong>⚠️ External Change Detected</strong>
+					<p style={{ margin: "8px 0 0 0" }}>
+						The configuration file was modified externally. Your unsaved changes may conflict.
+					</p>
+					<div style={{ marginTop: "8px", display: "flex", gap: "8px" }}>
+						<button
+							onClick={() => {
+								reloadConfig();
+								setExternalChangeDetected(false);
+								setIsEditing(false);
+								setHasUnsavedChanges(false);
+							}}
 							style={{
+								padding: "4px 8px",
+								backgroundColor: "var(--vscode-button-secondaryBackground)",
+								color: "var(--vscode-button-secondaryForeground)",
+								border: "none",
+								borderRadius: "4px",
+								cursor: "pointer",
 								fontSize: "11px",
-								color: "var(--vscode-descriptionForeground)",
-								fontWeight: "normal",
 							}}
 						>
-							(optional)
-						</span>
-					</label>
-					<input
-						type="text"
-						value={caseNumber}
-						onChange={(e) => setCaseNumber(e.target.value)}
-						placeholder="e.g., 39573881 or WCB-2024-12345"
-						style={{
-							width: "100%",
-							padding: "8px",
-							backgroundColor: "var(--vscode-input-background)",
-							color: "var(--vscode-input-foreground)",
-							border: "1px solid var(--vscode-input-border)",
-							borderRadius: "4px",
-							fontSize: "13px",
-						}}
-					/>
-					<div
-						style={{
-							marginTop: "4px",
-							fontSize: "11px",
-							color: "var(--vscode-descriptionForeground)",
-						}}
-					>
-						Your case or claim number from the board/insurer
+							Discard My Changes
+						</button>
+						<button
+							onClick={() => setExternalChangeDetected(false)}
+							style={{
+								padding: "4px 8px",
+								backgroundColor: "transparent",
+								color: "var(--vscode-descriptionForeground)",
+								border: "1px solid var(--vscode-panel-border)",
+								borderRadius: "4px",
+								cursor: "pointer",
+								fontSize: "11px",
+							}}
+						>
+							Keep Editing
+						</button>
 					</div>
 				</div>
+			)}
 
-				<div>
-					<label
-						style={{
-							display: "block",
-							marginBottom: "4px",
-							fontSize: "13px",
-							fontWeight: 500,
-						}}
-					>
-						Case Type
-					</label>
+			{/* Template Selector (only in edit mode or when no config) */}
+			{(isEditing || !config) && (
+				<div style={{ marginBottom: "24px" }}>
+					<label style={labelStyle}>Workspace Type</label>
 					<select
-						value={caseType}
-						onChange={(e) => setCaseType(e.target.value)}
+						value={workspaceType}
+						onChange={(e) => handleTemplateChange(e.target.value as WorkspaceType)}
 						style={{
-							width: "100%",
-							padding: "8px",
+							...inputStyle,
 							backgroundColor: "var(--vscode-dropdown-background)",
 							color: "var(--vscode-dropdown-foreground)",
 							border: "1px solid var(--vscode-dropdown-border)",
-							borderRadius: "4px",
-							fontSize: "13px",
 						}}
 					>
-						<option value="Workers Compensation">Workers Compensation</option>
-						<option value="Personal Injury">Personal Injury</option>
-						<option value="Disability Claim">Disability Claim</option>
-						<option value="Employment Dispute">Employment Dispute</option>
-						<option value="Other">Other</option>
+						{getTemplateOptions().map((opt) => (
+							<option key={opt.id} value={opt.id}>
+								{opt.icon} {opt.name}
+							</option>
+						))}
 					</select>
-					<div
-						style={{
-							marginTop: "4px",
-							fontSize: "11px",
-							color: "var(--vscode-descriptionForeground)",
-						}}
-					>
-						The type of legal case you're working on
-					</div>
+					<div style={descriptionStyle}>{template.description}</div>
 				</div>
+			)}
 
-				<div
-					style={{
-						borderTop: "1px solid var(--vscode-panel-border)",
-						paddingTop: "16px",
-						marginTop: "16px",
-					}}
+			{/* Dynamic Sections */}
+			{template.sections.map((section) => (
+				<CollapsibleSection
+					key={section.id}
+					section={section}
+					isCollapsed={collapsedSections[section.id] || false}
+					onToggle={() => toggleSection(section.id)}
 				>
-					<div style={{ marginBottom: "12px" }}>
-						<div
-							style={{ fontSize: "14px", fontWeight: 600, marginBottom: "4px" }}
-						>
-							Your Side
-						</div>
-						<div
-							style={{
-								fontSize: "11px",
-								color: "var(--vscode-descriptionForeground)",
-								lineHeight: "1.4",
-							}}
-						>
-							People helping you or the claimant (lawyers, advocates, treating
-							doctors, etc.)
-						</div>
-					</div>
-					<div>
-						<label
-							style={{
-								display: "block",
-								marginBottom: "4px",
-								fontSize: "13px",
-								fontWeight: 500,
-							}}
-						>
-							Advocate{" "}
-							<span
-								style={{
-									fontSize: "11px",
-									color: "var(--vscode-descriptionForeground)",
-									fontWeight: "normal",
-								}}
-							>
-								(optional)
-							</span>
-						</label>
-						<input
-							type="text"
-							value={advocate}
-							onChange={(e) => setAdvocate(e.target.value)}
-							placeholder="e.g., Jane Doe, John Smith"
-							style={{
-								width: "100%",
-								padding: "8px",
-								backgroundColor: "var(--vscode-input-background)",
-								color: "var(--vscode-input-foreground)",
-								border: "1px solid var(--vscode-input-border)",
-								borderRadius: "4px",
-								fontSize: "13px",
-							}}
+					{section.fields.map((field) => (
+						<DynamicField
+							key={field.key}
+							field={field}
+							value={getNestedValue(formData, field.key)}
+							onChange={(value) => handleFieldChange(field.key, value)}
+							isEditing={isEditing || !config}
 						/>
-						<div
-							style={{
-								marginTop: "4px",
-								fontSize: "11px",
-								color: "var(--vscode-descriptionForeground)",
-							}}
-						>
-							Separate multiple names with commas. These names will be used to
-							tag files.
-						</div>
-					</div>
-				</div>
+					))}
+				</CollapsibleSection>
+			))}
 
-				<div
-					style={{
-						borderTop: "1px solid var(--vscode-panel-border)",
-						paddingTop: "16px",
-						marginTop: "16px",
-					}}
-				>
-					<div style={{ marginBottom: "12px" }}>
-						<div
-							style={{ fontSize: "14px", fontWeight: 600, marginBottom: "4px" }}
-						>
-							Their Side
-						</div>
-						<div
-							style={{
-								fontSize: "11px",
-								color: "var(--vscode-descriptionForeground)",
-								lineHeight: "1.4",
-							}}
-						>
-							The opposing party: employer, insurer, defense lawyers, WCB staff,
-							etc.
-						</div>
-					</div>
-					<div style={{ marginBottom: "12px" }}>
-						<label
-							style={{
-								display: "block",
-								marginBottom: "4px",
-								fontSize: "13px",
-								fontWeight: 500,
-							}}
-						>
-							Employer Name{" "}
-							<span
-								style={{
-									fontSize: "11px",
-									color: "var(--vscode-descriptionForeground)",
-									fontWeight: "normal",
-								}}
-							>
-								(optional)
-							</span>
-						</label>
-						<input
-							type="text"
-							value={employerName}
-							onChange={(e) => setEmployerName(e.target.value)}
-							placeholder="e.g., ABC Corporation"
-							style={{
-								width: "100%",
-								padding: "8px",
-								backgroundColor: "var(--vscode-input-background)",
-								color: "var(--vscode-input-foreground)",
-								border: "1px solid var(--vscode-input-border)",
-								borderRadius: "4px",
-								fontSize: "13px",
-							}}
-						/>
-						<div
-							style={{
-								marginTop: "4px",
-								fontSize: "11px",
-								color: "var(--vscode-descriptionForeground)",
-							}}
-						>
-							The company or organization name
-						</div>
-					</div>
-					<div style={{ marginBottom: "12px" }}>
-						<label
-							style={{
-								display: "block",
-								marginBottom: "4px",
-								fontSize: "13px",
-								fontWeight: 500,
-							}}
-						>
-							Case Manager{" "}
-							<span
-								style={{
-									fontSize: "11px",
-									color: "var(--vscode-descriptionForeground)",
-									fontWeight: "normal",
-								}}
-							>
-								(optional)
-							</span>
-						</label>
-						<input
-							type="text"
-							value={caseManager}
-							onChange={(e) => setCaseManager(e.target.value)}
-							placeholder="e.g., Sarah Johnson"
-							style={{
-								width: "100%",
-								padding: "8px",
-								backgroundColor: "var(--vscode-input-background)",
-								color: "var(--vscode-input-foreground)",
-								border: "1px solid var(--vscode-input-border)",
-								borderRadius: "4px",
-								fontSize: "13px",
-							}}
-						/>
-						<div
-							style={{
-								marginTop: "4px",
-								fontSize: "11px",
-								color: "var(--vscode-descriptionForeground)",
-							}}
-						>
-							The insurer's case manager handling your claim
-						</div>
-					</div>
-					<div style={{ marginBottom: "12px" }}>
-						<label
-							style={{
-								display: "block",
-								marginBottom: "4px",
-								fontSize: "13px",
-								fontWeight: 500,
-							}}
-						>
-							Review Officer{" "}
-							<span
-								style={{
-									fontSize: "11px",
-									color: "var(--vscode-descriptionForeground)",
-									fontWeight: "normal",
-								}}
-							>
-								(optional)
-							</span>
-						</label>
-						<input
-							type="text"
-							value={reviewOfficer}
-							onChange={(e) => setReviewOfficer(e.target.value)}
-							placeholder="e.g., Michael Brown"
-							style={{
-								width: "100%",
-								padding: "8px",
-								backgroundColor: "var(--vscode-input-background)",
-								color: "var(--vscode-input-foreground)",
-								border: "1px solid var(--vscode-input-border)",
-								borderRadius: "4px",
-								fontSize: "13px",
-							}}
-						/>
-						<div
-							style={{
-								marginTop: "4px",
-								fontSize: "11px",
-								color: "var(--vscode-descriptionForeground)",
-							}}
-						>
-							WCB review officer assigned to your case
-						</div>
-					</div>
-					<div>
-						<label
-							style={{
-								display: "block",
-								marginBottom: "4px",
-								fontSize: "13px",
-								fontWeight: 500,
-							}}
-						>
-							Employer Representative{" "}
-							<span
-								style={{
-									fontSize: "11px",
-									color: "var(--vscode-descriptionForeground)",
-									fontWeight: "normal",
-								}}
-							>
-								(optional)
-							</span>
-						</label>
-						<input
-							type="text"
-							value={employerRepresentative}
-							onChange={(e) => setEmployerRepresentative(e.target.value)}
-							placeholder="e.g., Robert Williams"
-							style={{
-								width: "100%",
-								padding: "8px",
-								backgroundColor: "var(--vscode-input-background)",
-								color: "var(--vscode-input-foreground)",
-								border: "1px solid var(--vscode-input-border)",
-								borderRadius: "4px",
-								fontSize: "13px",
-							}}
-						/>
-						<div
-							style={{
-								marginTop: "4px",
-								fontSize: "11px",
-								color: "var(--vscode-descriptionForeground)",
-							}}
-						>
-							Person representing the employer in your case
-						</div>
-					</div>
-				</div>
-
-				<div
-					style={{
-						borderTop: "1px solid var(--vscode-panel-border)",
-						paddingTop: "16px",
-						marginTop: "16px",
-					}}
-				>
-					<div style={{ marginBottom: "12px" }}>
-						<div
-							style={{ fontSize: "14px", fontWeight: 600, marginBottom: "4px" }}
-						>
-							File Tagging Keywords
-						</div>
-						<div
-							style={{
-								fontSize: "11px",
-								color: "var(--vscode-descriptionForeground)",
-								lineHeight: "1.4",
-							}}
-						>
-							Keywords help the AI automatically tag and organize your files.
-							Names you added above are automatically included.
-						</div>
-					</div>
-
-					<div style={{ marginBottom: "12px" }}>
-						<label
-							style={{
-								display: "block",
-								marginBottom: "4px",
-								fontSize: "13px",
-								fontWeight: 500,
-							}}
-						>
-							Your Side Keywords{" "}
-							<span
-								style={{
-									fontSize: "11px",
-									color: "var(--vscode-descriptionForeground)",
-									fontWeight: "normal",
-								}}
-							>
-								(optional)
-							</span>
-						</label>
-						<input
-							type="text"
-							value={yourSideKeywords}
-							onChange={(e) => setYourSideKeywords(e.target.value)}
-							placeholder="e.g., claimant, treating, personal"
-							style={{
-								width: "100%",
-								padding: "8px",
-								backgroundColor: "var(--vscode-input-background)",
-								color: "var(--vscode-input-foreground)",
-								border: "1px solid var(--vscode-input-border)",
-								borderRadius: "4px",
-								fontSize: "13px",
-							}}
-						/>
-						<div
-							style={{
-								marginTop: "4px",
-								fontSize: "11px",
-								color: "var(--vscode-descriptionForeground)",
-							}}
-						>
-							Words that appear in files from your side. Defaults work for most
-							cases.
-						</div>
-					</div>
-
-					<div>
-						<label
-							style={{
-								display: "block",
-								marginBottom: "4px",
-								fontSize: "13px",
-								fontWeight: 500,
-							}}
-						>
-							Their Side Keywords{" "}
-							<span
-								style={{
-									fontSize: "11px",
-									color: "var(--vscode-descriptionForeground)",
-									fontWeight: "normal",
-								}}
-							>
-								(optional)
-							</span>
-						</label>
-						<input
-							type="text"
-							value={theirSideKeywords}
-							onChange={(e) => setTheirSideKeywords(e.target.value)}
-							placeholder="e.g., employer, wcb, ime, defense"
-							style={{
-								width: "100%",
-								padding: "8px",
-								backgroundColor: "var(--vscode-input-background)",
-								color: "var(--vscode-input-foreground)",
-								border: "1px solid var(--vscode-input-border)",
-								borderRadius: "4px",
-								fontSize: "13px",
-							}}
-						/>
-						<div
-							style={{
-								marginTop: "4px",
-								fontSize: "11px",
-								color: "var(--vscode-descriptionForeground)",
-							}}
-						>
-							Words that appear in files from the opposing side. Defaults work
-							for most cases.
-						</div>
-					</div>
-				</div>
-
-				<div style={{ display: "flex", gap: "12px", marginTop: "16px" }}>
+			{/* Action Buttons */}
+			{(isEditing || !config) && (
+				<div style={{ display: "flex", gap: "12px", marginTop: "24px" }}>
 					<button
 						onClick={handleSave}
-						disabled={!claimantName.trim()}
 						style={{
 							flex: 1,
 							padding: "10px",
-							backgroundColor: claimantName.trim()
-								? "var(--vscode-button-background)"
-								: "var(--vscode-button-secondaryBackground)",
-							color: claimantName.trim()
-								? "var(--vscode-button-foreground)"
-								: "var(--vscode-button-secondaryForeground)",
+							backgroundColor: "var(--vscode-button-background)",
+							color: "var(--vscode-button-foreground)",
 							border: "none",
 							borderRadius: "4px",
-							cursor: claimantName.trim() ? "pointer" : "not-allowed",
+							cursor: "pointer",
 							fontSize: "13px",
 							fontWeight: 500,
-							opacity: claimantName.trim() ? 1 : 0.5,
 						}}
 					>
-						💾 Save Case Info
+						💾 Save Configuration
 					</button>
-					{caseConfig && (
+					{config && (
 						<button
-							onClick={() => {
-								setIsEditing(false);
-								populateFormFromConfig(caseConfig);
-							}}
+							onClick={handleCancel}
 							style={{
 								padding: "10px 20px",
 								backgroundColor: "transparent",
@@ -1329,6 +652,116 @@ export const CaseInfoDashboard: React.FC = () => {
 						</button>
 					)}
 				</div>
+			)}
+
+			{/* Validation Issues */}
+			{validationResult && validationResult.issues.length > 0 && (
+				<div
+					style={{
+						marginTop: "24px",
+						padding: "12px",
+						backgroundColor: validationResult.isValid
+							? "var(--vscode-inputValidation-warningBackground)"
+							: "var(--vscode-inputValidation-errorBackground)",
+						border: `1px solid ${validationResult.isValid
+							? "var(--vscode-inputValidation-warningBorder)"
+							: "var(--vscode-inputValidation-errorBorder)"}`,
+						borderRadius: "4px",
+						fontSize: "12px",
+					}}
+				>
+					<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+						<strong>
+							{validationResult.isValid ? "⚠️ Warnings" : "❌ Validation Issues"} ({validationResult.issues.length})
+						</strong>
+						<button
+							onClick={() => setShowFixPrompt(!showFixPrompt)}
+							style={{
+								padding: "4px 8px",
+								backgroundColor: "var(--vscode-button-secondaryBackground)",
+								color: "var(--vscode-button-secondaryForeground)",
+								border: "none",
+								borderRadius: "4px",
+								cursor: "pointer",
+								fontSize: "11px",
+							}}
+						>
+							{showFixPrompt ? "Hide AI Fix Prompt" : "Get AI Fix Prompt"}
+						</button>
+					</div>
+					<ul style={{ margin: "8px 0 0 0", paddingLeft: "20px" }}>
+						{validationResult.issues.slice(0, 5).map((issue, i) => (
+							<li key={i} style={{ marginBottom: "4px" }}>
+								{issue.severity === 'error' ? '❌' : issue.severity === 'warning' ? '⚠️' : 'ℹ️'} {issue.message}
+							</li>
+						))}
+						{validationResult.issues.length > 5 && (
+							<li style={{ color: "var(--vscode-descriptionForeground)" }}>
+								...and {validationResult.issues.length - 5} more
+							</li>
+						)}
+					</ul>
+
+					{showFixPrompt && (
+						<div style={{ marginTop: "12px" }}>
+							<div style={{ marginBottom: "4px", fontWeight: 500 }}>
+								📋 Copy this prompt and paste it to the AI:
+							</div>
+							<textarea
+								readOnly
+								value={generateFixPrompt(config || formData, validationResult.issues)}
+								style={{
+									width: "100%",
+									height: "150px",
+									padding: "8px",
+									backgroundColor: "var(--vscode-input-background)",
+									color: "var(--vscode-input-foreground)",
+									border: "1px solid var(--vscode-input-border)",
+									borderRadius: "4px",
+									fontSize: "11px",
+									fontFamily: "monospace",
+									resize: "vertical",
+								}}
+								onClick={(e) => (e.target as HTMLTextAreaElement).select()}
+							/>
+							<button
+								onClick={() => {
+									navigator.clipboard.writeText(
+										generateFixPrompt(config || formData, validationResult.issues)
+									);
+									alert("Prompt copied to clipboard!");
+								}}
+								style={{
+									marginTop: "8px",
+									padding: "6px 12px",
+									backgroundColor: "var(--vscode-button-background)",
+									color: "var(--vscode-button-foreground)",
+									border: "none",
+									borderRadius: "4px",
+									cursor: "pointer",
+									fontSize: "12px",
+								}}
+							>
+								📋 Copy to Clipboard
+							</button>
+						</div>
+					)}
+				</div>
+			)}
+
+			{/* Tip */}
+			<div
+				style={{
+					marginTop: "24px",
+					padding: "12px",
+					backgroundColor: "var(--vscode-inputValidation-infoBackground)",
+					border: "1px solid var(--vscode-inputValidation-infoBorder)",
+					borderRadius: "4px",
+					fontSize: "12px",
+				}}
+			>
+				<strong>💡 Tip:</strong> This configuration is automatically available to the AI
+				when you chat (Ctrl+L), helping it understand your project context.
 			</div>
 		</div>
 	);

@@ -306,7 +306,91 @@ const fastConfig = {
 };
 ```
 
-### 4. Database Issues
+### 4. Indexing Integrity Issues
+
+#### Integrity Mismatch Errors
+**Symptoms:**
+- Log shows `INTEGRITY MISMATCH: Document X has N chunks in SQLite but only M embeddings`
+- Documents appear indexed but search doesn't find them
+- Re-indexing happens unexpectedly on startup
+
+**Causes:**
+- Application crash during embedding generation
+- Memory overflow during large document indexing
+- Disk full during embedding persistence
+- Interrupted indexing operation
+
+**Diagnosis:**
+```typescript
+// Check a specific document's integrity manually
+const uri = URI.file('/docs/suspect-document.pdf');
+const isIndexed = await ragService.isDocumentIndexed(uri);
+
+// This now checks BOTH SQLite AND embeddings
+// If false, check logs for specific integrity issue
+console.log('Document fully indexed:', isIndexed);
+
+// Check system-wide stats
+const stats = await ragService.getStats();
+console.log('Total documents:', stats.totalDocuments);
+console.log('Total chunks:', stats.chunks.totalChunks);
+```
+
+**Solutions:**
+
+1. **Automatic repair:** The system automatically re-indexes documents with integrity issues on next startup or when `isDocumentIndexed()` is called.
+
+2. **Manual re-index single document:**
+   ```typescript
+   // Delete and re-index the problematic document
+   await ragService.deleteDocument(uri);
+   await ragService.indexDocument({
+     uri,
+     isPolicyManual: false,
+     workspaceId: ragService.getWorkspaceId()
+   });
+   ```
+
+3. **Force full re-index (workspace):**
+   ```typescript
+   // Clear all data for this workspace
+   await ragService.clearAllEmbeddings();
+   // Documents will be re-indexed on next startup
+   ```
+
+#### Partial Index (No Embeddings)
+**Symptoms:**
+- Log shows `PARTIAL INDEX: Document X exists in SQLite but has no embeddings`
+- Document metadata exists but search never finds it
+
+**Causes:**
+- Embedding model failed to load
+- Out of memory during embedding generation
+- Network timeout downloading model (first run)
+
+**Solutions:**
+1. Check embedding model is loaded correctly
+2. Verify sufficient memory (8GB+ recommended)
+3. The document will be automatically re-indexed
+
+#### Chunk/Embedding Count Mismatch
+**Symptoms:**
+- Log shows chunk count differs from embedding count by >10%
+
+**Note:** A small variance (up to 10%) is normal due to parent chunks in hierarchical chunking. Larger variances indicate an issue.
+
+**Solutions:**
+```bash
+# Check the embedding database directly
+sqlite3 ~/.safe-appeals-navigator/databases/workspaces/[hash]/chroma/embeddings.db \
+  "SELECT COUNT(*) FROM embeddings WHERE metadata LIKE '%docId%'"
+
+# Compare with chunks table
+sqlite3 ~/.safe-appeals-navigator/databases/workspaces/[hash]/workspace.db \
+  "SELECT COUNT(*) FROM chunks WHERE doc_id = 'target_doc_id'"
+```
+
+### 5. SQLite Database Issues
 
 #### SQLite Corruption
 **Symptoms:**
@@ -370,7 +454,7 @@ SELECT count(*) FROM chunks_fts;
    this.db.configure('busyTimeout', 30000); // 30 seconds
    ```
 
-### 5. Memory and Performance Issues
+### 6. Memory and Performance Issues
 
 #### Out of Memory Errors
 **Symptoms:**
@@ -423,7 +507,7 @@ function cleanupResources() {
 }
 ```
 
-### 6. Model and AI Issues
+### 7. Model and AI Issues
 
 #### Embedding Model Failures
 **Symptoms:**
@@ -459,7 +543,7 @@ const config = {
 };
 ```
 
-### 7. Network and External Service Issues
+### 8. Network and External Service Issues
 
 #### Docling Service Problems
 **Symptoms:**
@@ -835,6 +919,6 @@ class ProductionMonitor {
 
 ---
 
-*Troubleshooting guide last updated: December 2025*
+*Troubleshooting guide last updated: January 2026*
 
 

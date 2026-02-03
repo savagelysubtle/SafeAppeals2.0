@@ -66,9 +66,10 @@ import {
 	useRefreshModelState,
 	useSettingsState,
 } from "../util/services.js";
+import { DocuSignSection } from "./DocuSignSection.js";
 import { ModelDropdown } from "./ModelDropdown.js";
-import { WarningBox } from "./WarningBox.js";
 import { VoidCloudSection } from "./VoidCloudSection.js";
+import { WarningBox } from "./WarningBox.js";
 
 type Tab =
 	| "models"
@@ -107,7 +108,7 @@ const RefreshModelButton = ({
 	const metricsService = accessor.get("IMetricsService");
 
 	const [justFinished, setJustFinished] = useState<null | "finished" | "error">(
-		null
+		null,
 	);
 
 	useRefreshModelListener(
@@ -123,8 +124,8 @@ const RefreshModelButton = ({
 				}, 2000);
 				return () => clearTimeout(tid);
 			},
-			[providerName]
-		)
+			[providerName],
+		),
 	);
 
 	const { state } = refreshModelState[providerName];
@@ -163,8 +164,8 @@ const RefreshModelButton = ({
 				justFinished === "finished"
 					? `${providerTitle} Models are up-to-date!`
 					: justFinished === "error"
-					? `${providerTitle} not found!`
-					: `Manually refresh ${providerTitle} models.`
+						? `${providerTitle} not found!`
+						: `Manually refresh ${providerTitle} models.`
 			}
 		/>
 	);
@@ -342,7 +343,7 @@ const SimpleModelSettingsDialog = ({
 	const defaultModelCapabilities = getModelCapabilities(
 		providerName,
 		modelName,
-		undefined
+		undefined,
 	);
 	const currentOverrides =
 		settingsState.overridesOfModel?.[providerName]?.[modelName] ?? undefined;
@@ -357,7 +358,7 @@ const SimpleModelSettingsDialog = ({
 	const placeholder = JSON.stringify(partialDefaults, null, 2);
 
 	const [overrideEnabled, setOverrideEnabled] = useState<boolean>(
-		() => !!currentOverrides
+		() => !!currentOverrides,
 	);
 
 	const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -384,7 +385,7 @@ const SimpleModelSettingsDialog = ({
 			await settingsStateService.setOverridesOfModel(
 				providerName,
 				modelName,
-				undefined
+				undefined,
 			);
 			onClose();
 			return;
@@ -421,7 +422,7 @@ const SimpleModelSettingsDialog = ({
 		await settingsStateService.setOverridesOfModel(
 			providerName,
 			modelName,
-			cleaned
+			cleaned,
 		);
 		onClose();
 	};
@@ -468,8 +469,8 @@ const SimpleModelSettingsDialog = ({
 					{type === "default"
 						? `${modelName} comes packaged with Safe Appeals, so you shouldn't need to change these settings.`
 						: isUnrecognizedModel
-						? `Model not recognized by Safe Appeals.`
-						: `Safe Appeals recognizes ${modelName} ("${recognizedModelName}").`}
+							? `Model not recognized by Safe Appeals.`
+							: `Safe Appeals recognizes ${modelName} ("${recognizedModelName}").`}
 				</div>
 
 				{/* override toggle */}
@@ -571,7 +572,7 @@ export const ModelDump = ({
 				...model,
 				providerName,
 				providerEnabled: !!providerSettings._didFillInProviderSettings,
-			}))
+			})),
 		);
 	}
 
@@ -587,8 +588,8 @@ export const ModelDump = ({
 					m.modelName.toLowerCase().includes(searchQuery.toLowerCase()) ||
 					displayInfoOfProviderName(m.providerName)
 						.title.toLowerCase()
-						.includes(searchQuery.toLowerCase())
-		  )
+						.includes(searchQuery.toLowerCase()),
+			)
 		: modelDump;
 
 	// Add model handler
@@ -605,7 +606,7 @@ export const ModelDump = ({
 		// Check if model already exists
 		if (
 			settingsState.settingsOfProvider[userChosenProviderName].models.find(
-				(m) => m.modelName === modelName
+				(m) => m.modelName === modelName,
 			)
 		) {
 			setErrorString(`This model already exists.`);
@@ -645,8 +646,8 @@ export const ModelDump = ({
 				const tooltipName = disabled
 					? `Add ${providerTitle} to enable`
 					: value === true
-					? "Show in Dropdown"
-					: "Hide from Dropdown";
+						? "Show in Dropdown"
+						: "Hide from Dropdown";
 
 				const detailAboutModel =
 					type === "autodetected" ? (
@@ -714,7 +715,7 @@ export const ModelDump = ({
 								onChange={() => {
 									settingsStateService.toggleModelHidden(
 										providerName,
-										modelName
+										modelName,
 									);
 								}}
 								disabled={disabled}
@@ -874,10 +875,10 @@ const ProviderSetting = ({
 			voidSettingsService.setSettingOfProvider(
 				providerName,
 				settingName,
-				newVal
+				newVal,
 			);
 		},
-		[voidSettingsService, providerName, settingName]
+		[voidSettingsService, providerName, settingName],
 	);
 
 	return (
@@ -944,7 +945,11 @@ const ProviderSetting = ({
 // }
 
 // Providers that support cloud mode (have models in our LiteLLM proxy)
-const cloudSupportedProviders: ProviderName[] = ['anthropic', 'openAI', 'gemini'];
+const cloudSupportedProviders: ProviderName[] = [
+	"anthropic",
+	"openAI",
+	"gemini",
+];
 
 export const SettingsForProvider = ({
 	providerName,
@@ -957,7 +962,7 @@ export const SettingsForProvider = ({
 }) => {
 	const voidSettingsState = useSettingsState();
 	const accessor = useAccessor();
-	const voidSettingsService = accessor.get('IVoidSettingsService');
+	const voidSettingsService = accessor.get("IVoidSettingsService");
 
 	const needsModel =
 		isProviderNameDisabled(providerName, voidSettingsState) === "addModel";
@@ -967,17 +972,41 @@ export const SettingsForProvider = ({
 
 	// Cloud mode state
 	const cloudEnabled = voidSettingsState.globalSettings.voidCloudEnabled;
-	const cloudModeForProvider = voidSettingsState.globalSettings.voidCloudModeOfProvider[providerName] ?? false;
+	const cloudModeForProvider =
+		voidSettingsState.globalSettings.voidCloudModeOfProvider[providerName] ??
+		false;
 	const supportsCloud = cloudSupportedProviders.includes(providerName);
 
 	// Toggle cloud mode for this provider
 	const handleCloudModeToggle = useCallback(() => {
+		const newCloudModeValue = !cloudModeForProvider;
 		const newCloudMode = {
 			...voidSettingsState.globalSettings.voidCloudModeOfProvider,
-			[providerName]: !cloudModeForProvider,
+			[providerName]: newCloudModeValue,
 		};
-		voidSettingsService.setGlobalSetting('voidCloudModeOfProvider', newCloudMode);
-	}, [voidSettingsService, voidSettingsState.globalSettings.voidCloudModeOfProvider, providerName, cloudModeForProvider]);
+		voidSettingsService.setGlobalSetting(
+			"voidCloudModeOfProvider",
+			newCloudMode,
+		);
+
+		// If turning cloud mode on, unhide the first hidden model for this provider
+		if (newCloudModeValue) {
+			const models = voidSettingsState.settingsOfProvider[providerName].models;
+			const firstHiddenModel = models.find((m) => m.isHidden);
+			if (firstHiddenModel) {
+				voidSettingsService.toggleModelHidden(
+					providerName,
+					firstHiddenModel.modelName,
+				);
+			}
+		}
+	}, [
+		voidSettingsService,
+		voidSettingsState.globalSettings.voidCloudModeOfProvider,
+		voidSettingsState.settingsOfProvider,
+		providerName,
+		cloudModeForProvider,
+	]);
 
 	return (
 		<div>
@@ -1017,23 +1046,24 @@ export const SettingsForProvider = ({
 				)}
 
 				{/* settings besides models (e.g. api key) - hide if cloud mode is active */}
-				{(!cloudModeForProvider || !cloudEnabled) && settingNames.map((settingName, i) => {
-					return (
-						<ProviderSetting
-							key={settingName}
-							providerName={providerName}
-							settingName={settingName}
-							subTextMd={
-								i !== settingNames.length - 1 ? null : (
-									<ChatMarkdownRender
-										string={subTextMdOfProviderName(providerName)}
-										chatMessageLocation={undefined}
-									/>
-								)
-							}
-						/>
-					);
-				})}
+				{(!cloudModeForProvider || !cloudEnabled) &&
+					settingNames.map((settingName, i) => {
+						return (
+							<ProviderSetting
+								key={settingName}
+								providerName={providerName}
+								settingName={settingName}
+								subTextMd={
+									i !== settingNames.length - 1 ? null : (
+										<ChatMarkdownRender
+											string={subTextMdOfProviderName(providerName)}
+											chatMessageLocation={undefined}
+										/>
+									)
+								}
+							/>
+						);
+					})}
 
 				{showProviderSuggestions && needsModel && !cloudModeForProvider ? (
 					providerName === "ollama" ? (
@@ -1135,7 +1165,7 @@ const FastApplyMethodDropdown = () => {
 		(newVal: boolean) => {
 			voidSettingsService.setGlobalSetting("enableFastApply", newVal);
 		},
-		[voidSettingsService]
+		[voidSettingsService],
 	);
 
 	return (
@@ -1237,7 +1267,7 @@ export const ToolApprovalTypeSwitch = ({
 			});
 			metricsService.capture("Tool Auto-Accept Toggle", { enabled: newValue });
 		},
-		[voidSettingsService, metricsService]
+		[voidSettingsService, metricsService],
 	);
 
 	return (
@@ -1275,7 +1305,7 @@ export const OneClickSwitchButton = ({
 
 		const errAcc = await extensionTransferService.transferExtensions(
 			os,
-			fromEditor
+			fromEditor,
 		);
 
 		// Even if some files were missing, consider it a success if no actual errors occurred
@@ -1349,12 +1379,12 @@ const MCPServerComponent = ({
 							server.status === "success"
 								? "bg-green-500"
 								: server.status === "error"
-								? "bg-red-500"
-								: server.status === "loading"
-								? "bg-yellow-500"
-								: server.status === "offline"
-								? "bg-void-fg-3"
-								: ""
+									? "bg-red-500"
+									: server.status === "loading"
+										? "bg-yellow-500"
+										: server.status === "offline"
+											? "bg-void-fg-3"
+											: ""
 						}
 					`}
 					></div>
@@ -1388,7 +1418,7 @@ const MCPServerComponent = ({
 									>
 										{removeUniquePrefix(tool.name)}
 									</span>
-								)
+								),
 							)
 						) : (
 							<span className="text-xs text-void-fg-3">No tools available</span>
@@ -1456,7 +1486,11 @@ export const Settings = () => {
 	];
 	const shouldShowTab = (tab: Tab) => {
 		if (selectedSection === "all") return true;
-		if (selectedSection === "models" && (tab === "localProviders" || tab === "providers")) return true;
+		if (
+			selectedSection === "models" &&
+			(tab === "localProviders" || tab === "providers")
+		)
+			return true;
 		return selectedSection === tab;
 	};
 	const accessor = useAccessor();
@@ -1596,7 +1630,7 @@ export const Settings = () => {
 									className="px-4 py-2 my-2 max-w-48"
 									onClick={() => {
 										commandService.executeCommand(
-											"workbench.action.openSettings"
+											"workbench.action.openSettings",
 										);
 									}}
 								>
@@ -1605,9 +1639,7 @@ export const Settings = () => {
 								<VoidButtonBgDarken
 									className="px-4 py-2 my-2 max-w-48"
 									onClick={() => {
-										nativeHostService.openExternal(
-											"https://void-cloud.vercel.app/"
-										);
+										nativeHostService.openExternal("https://safeappeals.com/");
 									}}
 								>
 									Open Cloud Dashboard
@@ -1722,7 +1754,7 @@ export const Settings = () => {
 																	onChange={(newVal) =>
 																		voidSettingsService.setGlobalSetting(
 																			"enableAutocomplete",
-																			newVal
+																			newVal,
 																		)
 																	}
 																/>
@@ -1777,7 +1809,7 @@ export const Settings = () => {
 																onChange={(newVal) =>
 																	voidSettingsService.setGlobalSetting(
 																		"syncApplyToChat",
-																		newVal
+																		newVal,
 																	)
 																}
 															/>
@@ -1848,7 +1880,7 @@ export const Settings = () => {
 																onChange={(newVal) =>
 																	voidSettingsService.setGlobalSetting(
 																		"includeToolLintErrors",
-																		newVal
+																		newVal,
 																	)
 																}
 															/>
@@ -1873,7 +1905,7 @@ export const Settings = () => {
 																onChange={(newVal) =>
 																	voidSettingsService.setGlobalSetting(
 																		"autoAcceptLLMChanges",
-																		newVal
+																		newVal,
 																	)
 																}
 															/>
@@ -1902,7 +1934,7 @@ export const Settings = () => {
 																onChange={(newVal) =>
 																	voidSettingsService.setGlobalSetting(
 																		"showInlineSuggestions",
-																		newVal
+																		newVal,
 																	)
 																}
 															/>
@@ -1939,7 +1971,7 @@ export const Settings = () => {
 																onChange={(newVal) =>
 																	voidSettingsService.setGlobalSetting(
 																		"syncSCMToChat",
-																		newVal
+																		newVal,
 																	)
 																}
 															/>
@@ -1979,18 +2011,25 @@ export const Settings = () => {
 										<VoidCloudSection />
 									</ErrorBoundary>
 
+									{/* DocuSign section */}
+									<ErrorBoundary>
+										<DocuSignSection />
+									</ErrorBoundary>
+
 									{/* Web Search section */}
 									<div className="max-w-[600px]">
 										<h2 className={`text-3xl mb-2`}>Web Search</h2>
 										<h4 className={`text-void-fg-3 mb-4`}>
-											Enable web search tools using the Brave Search API. Get your
-											API key at{" "}
+											Enable web search tools using the Brave Search API. Get
+											your API key at{" "}
 											<a
 												href="https://api-dashboard.search.brave.com/app/keys"
 												className="text-blue-400 hover:text-blue-300 underline"
 												onClick={(e) => {
 													e.preventDefault();
-													nativeHostService.openExternal("https://api-dashboard.search.brave.com/app/keys");
+													nativeHostService.openExternal(
+														"https://api-dashboard.search.brave.com/app/keys",
+													);
 												}}
 											>
 												Brave Search API Dashboard
@@ -2003,11 +2042,13 @@ export const Settings = () => {
 												<div className="flex items-center gap-x-2">
 													<VoidSwitch
 														size="xs"
-														value={settingsState.globalSettings.webSearchEnabled}
+														value={
+															settingsState.globalSettings.webSearchEnabled
+														}
 														onChange={(newVal) => {
 															voidSettingsService.setGlobalSetting(
 																"webSearchEnabled",
-																newVal
+																newVal,
 															);
 														}}
 													/>
@@ -2023,11 +2064,14 @@ export const Settings = () => {
 														<VoidSimpleInputBox
 															placeholder="BSAxxxxxxxxxxxxxxxxxxxxxxxxxx"
 															passwordBlur={true}
-															value={settingsState.globalSettings.braveSearchApiKey ?? ""}
+															value={
+																settingsState.globalSettings
+																	.braveSearchApiKey ?? ""
+															}
 															onChangeValue={(value) => {
 																voidSettingsService.setGlobalSetting(
 																	"braveSearchApiKey",
-																	value
+																	value,
 																);
 															}}
 															className="font-mono"
@@ -2045,7 +2089,8 @@ export const Settings = () => {
 															🌐 Web Search via SafeAppeals Cloud
 														</div>
 														<span className="text-xs text-void-fg-3">
-															Pro tier: $5.00 per 1,000 requests, 50 requests/second
+															Pro tier: $5.00 per 1,000 requests, 50
+															requests/second
 														</span>
 														<span className="text-xs text-green-600">
 															✓ No API key required - managed by SafeAppeals
@@ -2152,7 +2197,6 @@ export const Settings = () => {
 										</div>
 									</div>
 
-
 									{/* Built-in Settings section */}
 									<div>
 										<h2 className={`text-3xl mb-2`}>Built-in Settings</h2>
@@ -2166,7 +2210,7 @@ export const Settings = () => {
 													className="px-4 py-1"
 													onClick={() => {
 														commandService.executeCommand(
-															"workbench.action.openSettings"
+															"workbench.action.openSettings",
 														);
 													}}
 												>
@@ -2176,7 +2220,7 @@ export const Settings = () => {
 													className="px-4 py-1"
 													onClick={() => {
 														commandService.executeCommand(
-															"workbench.action.openGlobalKeybindings"
+															"workbench.action.openGlobalKeybindings",
 														);
 													}}
 												>
@@ -2186,7 +2230,7 @@ export const Settings = () => {
 													className="px-4 py-1"
 													onClick={() => {
 														commandService.executeCommand(
-															"workbench.action.selectTheme"
+															"workbench.action.selectTheme",
 														);
 													}}
 												>
@@ -2196,7 +2240,7 @@ export const Settings = () => {
 													className="px-4 py-1"
 													onClick={() => {
 														nativeHostService.showItemInFolder(
-															environmentService.logsHome.fsPath
+															environmentService.logsHome.fsPath,
 														);
 													}}
 												>
@@ -2210,10 +2254,10 @@ export const Settings = () => {
 									<div className="max-w-[600px]">
 										<h2 className={`text-3xl mb-2`}>Metrics</h2>
 										<h4 className={`text-void-fg-3 mb-4`}>
-											Very basic anonymous usage tracking helps us keep Safe Appeals
-											running smoothly. You may opt out below. Regardless of
-											this setting, Safe Appeals never sees your code, messages, or API
-											keys.
+											Very basic anonymous usage tracking helps us keep Safe
+											Appeals running smoothly. You may opt out below.
+											Regardless of this setting, Safe Appeals never sees your
+											code, messages, or API keys.
 										</h4>
 
 										<div className="my-2">
@@ -2228,11 +2272,11 @@ export const Settings = () => {
 																OPT_OUT_KEY,
 																newVal,
 																StorageScope.APPLICATION,
-																StorageTarget.MACHINE
+																StorageTarget.MACHINE,
 															);
 															metricsService.capture(
 																`Set metrics opt-out to ${newVal}`,
-																{}
+																{},
 															); // this only fires if it's enabled, so it's fine to have here
 														}}
 													/>
@@ -2273,7 +2317,7 @@ Alternatively, place a \`.fileorg.json\` file in the root of your workspace.
 														onChange={(newValue) => {
 															voidSettingsService.setGlobalSetting(
 																"disableSystemMessage",
-																newValue
+																newValue,
 															);
 														}}
 													/>

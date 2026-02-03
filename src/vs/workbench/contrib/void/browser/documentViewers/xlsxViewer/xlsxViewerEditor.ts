@@ -13,9 +13,9 @@ import { FileAccess } from '../../../../../../base/common/network.js';
 import { URI } from '../../../../../../base/common/uri.js';
 import { generateUuid } from '../../../../../../base/common/uuid.js';
 import { IChannel } from '../../../../../../base/parts/ipc/common/ipc.js';
+import { IFileDialogService } from '../../../../../../platform/dialogs/common/dialogs.js';
 import { IEditorOptions } from '../../../../../../platform/editor/common/editor.js';
 import { IFileService } from '../../../../../../platform/files/common/files.js';
-import { IFileDialogService } from '../../../../../../platform/dialogs/common/dialogs.js';
 import { IMainProcessService } from '../../../../../../platform/ipc/common/mainProcessService.js';
 import { IOpenerService } from '../../../../../../platform/opener/common/opener.js';
 import { IStorageService } from '../../../../../../platform/storage/common/storage.js';
@@ -630,9 +630,21 @@ export class XLSXViewerEditor extends EditorPane {
 			merge: `<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M2 2h12v12H2V2zm1 1v10h10V3H3zm2 2h6v6H5V5z"/></svg>`,
 			textColor: `<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M8 2L3 14h2l1-3h4l1 3h2L8 2zm-2 7l2-5 2 5H6z"/><path d="M2 14h12v2H2v-2z" fill="currentColor"/></svg>`,
 			fillColor: `<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M13.6 4.8l-2.4-2.4c-.5-.5-1.3-.5-1.8 0L2.2 9.6c-.5.5-.5 1.3 0 1.8l2.4 2.4c.5.5 1.3.5 1.8 0l7.2-7.2c.5-.5.5-1.3 0-1.8zM5.5 12.9L3.1 10.5l7.2-7.2 2.4 2.4-7.2 7.2z"/><path d="M2 14h12v2H2v-2z" fill="currentColor"/></svg>`,
-			border: `<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M2 2h12v12H2V2zm1 1v10h10V3H3zm2 2h6v6H5V5z"/></svg>`, // Placeholder
+			border: `<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M2 2h12v12H2V2zm1 1v10h10V3H3zm2 2h6v6H5V5z"/></svg>`,
 			clear: `<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M11.4 4L10 2.6 8.6 4 7.2 2.6 5.8 4 4.4 2.6 3 4v10h10V4h-1.6zM12 13H4V5h8v8z"/></svg>`,
-			chevronDown: `<svg width="10" height="10" viewBox="0 0 16 16" fill="currentColor"><path d="M4.427 5.427l3.396 3.396a.25.25 0 0 0 .354 0l3.396-3.396A.25.25 0 0 1 12 5.5v.5a.25.25 0 0 1-.073.177l-3.75 3.75a.25.25 0 0 1-.354 0l-3.75-3.75A.25.25 0 0 1 4 6v-.5a.25.25 0 0 1 .427-.073z"/></svg>`
+			chevronDown: `<svg width="10" height="10" viewBox="0 0 16 16" fill="currentColor"><path d="M4.427 5.427l3.396 3.396a.25.25 0 0 0 .354 0l3.396-3.396A.25.25 0 0 1 12 5.5v.5a.25.25 0 0 1-.073.177l-3.75 3.75a.25.25 0 0 1-.354 0l-3.75-3.75A.25.25 0 0 1 4 6v-.5a.25.25 0 0 1 .427-.073z"/></svg>`,
+			// New icons for enhanced ribbon
+			cut: `<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M4.5 3a2.5 2.5 0 0 0-2.45 2.97L5.73 8 2.05 10.03A2.5 2.5 0 1 0 4.5 14c.87 0 1.64-.45 2.08-1.13L8 11.5l1.42 1.37A2.5 2.5 0 1 0 11.5 14a2.5 2.5 0 0 0-.05-5.03L8 8l3.45-1.97A2.5 2.5 0 1 0 8.92 3.13L8 4.5 7.08 3.13A2.5 2.5 0 0 0 4.5 3zm0 1.5a1 1 0 1 1 0 2 1 1 0 0 1 0-2zm7 0a1 1 0 1 1 0 2 1 1 0 0 1 0-2zm-7 6a1 1 0 1 1 0 2 1 1 0 0 1 0-2zm7 0a1 1 0 1 1 0 2 1 1 0 0 1 0-2z"/></svg>`,
+			copy: `<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M4 2a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V2zm2-1a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V2a1 1 0 0 0-1-1H6zM2 5a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1v-1h1v1a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h1v1H2z"/></svg>`,
+			paste: `<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M10 .5a.5.5 0 0 0-.5-.5h-3a.5.5 0 0 0-.5.5.5.5 0 0 1-.5.5.5.5 0 0 0-.5.5V2a.5.5 0 0 0 .5.5h5A.5.5 0 0 0 11 2v-.5a.5.5 0 0 0-.5-.5.5.5 0 0 1-.5-.5zM4.085 1H3.5A1.5 1.5 0 0 0 2 2.5v12A1.5 1.5 0 0 0 3.5 16h9a1.5 1.5 0 0 0 1.5-1.5v-12A1.5 1.5 0 0 0 12.5 1h-.585c.055.156.085.325.085.5V2a1.5 1.5 0 0 1-1.5 1.5h-5A1.5 1.5 0 0 1 4 2v-.5c0-.175.03-.344.085-.5zM10 7a1 1 0 1 1 2 0v5a1 1 0 1 1-2 0V7z"/></svg>`,
+			wrapText: `<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M2 3h12v2H2V3zm0 4h7v2H2V7zm0 4h12v2H2v-2zm10-4h2v2.5a1.5 1.5 0 0 1-1.5 1.5H10v-1h2.5a.5.5 0 0 0 .5-.5V9h-1z"/></svg>`,
+			insertRow: `<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M1 2h14v3H1V2zm0 4h14v3H1V6zm0 4h6v3H1v-3zm12.5 0a.5.5 0 0 1 .5.5v1h1a.5.5 0 0 1 0 1h-1v1a.5.5 0 0 1-1 0v-1h-1a.5.5 0 0 1 0-1h1v-1a.5.5 0 0 1 .5-.5z"/></svg>`,
+			insertCol: `<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M2 1v14h3V1H2zm4 0v14h3V1H6zm4 0v6h3V1h-3zm6.5 8a.5.5 0 0 1 .5.5v1h1a.5.5 0 0 1 0 1h-1v1a.5.5 0 0 1-1 0v-1h-1a.5.5 0 0 1 0-1h1v-1a.5.5 0 0 1 .5-.5z"/></svg>`,
+			deleteRow: `<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M1 2h14v3H1V2zm0 4h14v3H1V6zm0 4h6v3H1v-3zm10.146.146a.5.5 0 0 1 .708 0L13 11.293l1.146-1.147a.5.5 0 0 1 .708.708L13.707 12l1.147 1.146a.5.5 0 0 1-.708.708L13 12.707l-1.146 1.147a.5.5 0 0 1-.708-.708L12.293 12l-1.147-1.146a.5.5 0 0 1 0-.708z"/></svg>`,
+			deleteCol: `<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M2 1v14h3V1H2zm4 0v14h3V1H6zm4 0v6h3V1h-3zm2.146 8.146a.5.5 0 0 1 .708 0L14 10.293l1.146-1.147a.5.5 0 0 1 .708.708L14.707 11l1.147 1.146a.5.5 0 0 1-.708.708L14 11.707l-1.146 1.147a.5.5 0 0 1-.708-.708L13.293 11l-1.147-1.146a.5.5 0 0 1 0-.708z"/></svg>`,
+			numberFormat: `<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M2 2h3v3H2V2zm0 4.5h3v3H2v-3zm0 4.5h3v3H2v-3zM6 3h8v1H6V3zm0 4.5h8v1H6v-1zM6 12h8v1H6v-1z"/></svg>`,
+			percent: `<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M13.442 2.558a.625.625 0 0 1 0 .884l-10 10a.625.625 0 1 1-.884-.884l10-10a.625.625 0 0 1 .884 0zM4.5 6a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3zm0 1a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5zm7 6a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3zm0 1a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z"/></svg>`,
+			currency: `<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M4 10.781c.148 1.667 1.513 2.85 3.591 3.003V15h1.043v-1.216c2.27-.179 3.678-1.438 3.678-3.3 0-1.59-.947-2.51-2.956-3.028l-.722-.187V3.467c1.122.11 1.879.714 2.07 1.616h1.47c-.166-1.6-1.54-2.748-3.54-2.875V1H7.591v1.233c-1.939.23-3.27 1.472-3.27 3.156 0 1.454.966 2.483 2.661 2.917l.61.162v4.031c-1.149-.17-1.94-.8-2.131-1.718H4zm3.391-3.836c-1.043-.263-1.6-.825-1.6-1.616 0-.944.704-1.641 1.8-1.828v3.495l-.2-.05zm1.591 1.872c1.287.323 1.852.859 1.852 1.769 0 1.097-.826 1.828-2.2 1.939V8.73l.348.086z"/></svg>`
 		};
 
 		return `<!DOCTYPE html>
@@ -656,132 +668,275 @@ export class XLSXViewerEditor extends EditorPane {
 		<div class="ribbon-content">
 			<!-- Home Tab -->
 			<div class="ribbon-panel active" id="tab-home">
-				<div class="ribbon-group">
-					<div class="ribbon-btn-col">
-						<button class="ribbon-btn" id="btn-save" title="Save (Ctrl+S)">${icons.save}<span>Save</span></button>
-					</div>
-					<div class="ribbon-btn-col">
-						<button class="ribbon-btn" id="btn-print" title="Print (Ctrl+P)">🖨️<span>Print</span></button>
-					</div>
-					<div class="ribbon-btn-col">
-						<button class="ribbon-btn" id="btn-export-pdf" title="Export to PDF">📄<span>Export PDF</span></button>
-					</div>
-					<div class="ribbon-group-label">File</div>
-				</div>
-				<div class="ribbon-separator"></div>
-
-				<div class="ribbon-group">
-					<div class="ribbon-btn-row">
-						<button class="ribbon-icon-btn" id="btn-undo" title="Undo">${icons.undo}</button>
-						<button class="ribbon-icon-btn" id="btn-redo" title="Redo">${icons.redo}</button>
-					</div>
-					<div class="ribbon-group-label">History</div>
-				</div>
-				<div class="ribbon-separator"></div>
-
-				<div class="ribbon-group">
-					<div class="ribbon-btn-row">
-						<select id="font-family" class="ribbon-select" style="width: 100px;">
-							<option value="Helvetica">Helvetica</option>
-							<option value="Arial">Arial</option>
-							<option value="Times New Roman">Times New Roman</option>
-							<option value="Courier New">Courier New</option>
-							<option value="Verdana">Verdana</option>
-						</select>
-						<select id="font-size" class="ribbon-select" style="width: 50px;">
-							<option value="8">8</option>
-							<option value="9">9</option>
-							<option value="10" selected>10</option>
-							<option value="11">11</option>
-							<option value="12">12</option>
-							<option value="14">14</option>
-							<option value="16">16</option>
-							<option value="18">18</option>
-							<option value="24">24</option>
-						</select>
-					</div>
-					<div class="ribbon-btn-row">
-						<button class="ribbon-icon-btn" id="btn-bold" title="Bold">${icons.bold}</button>
-						<button class="ribbon-icon-btn" id="btn-italic" title="Italic">${icons.italic}</button>
-						<button class="ribbon-icon-btn" id="btn-underline" title="Underline">${icons.underline}</button>
-						<button class="ribbon-icon-btn" id="btn-strike" title="Strikethrough">${icons.strikethrough}</button>
-						<div class="ribbon-divider"></div>
-
-						<div class="ribbon-dropdown-btn-container">
-							<button class="ribbon-icon-btn" id="btn-text-color" title="Text Color">
-								<div style="display:flex; flex-direction:column; align-items:center;">
-									${icons.textColor}
-									<div id="text-color-indicator" style="width:12px; height:3px; background-color: #000; margin-top:-2px;"></div>
-								</div>
-								${icons.chevronDown}
+				<!-- Clipboard Group -->
+				<div class="ribbon-group ribbon-group-clipboard">
+					<div class="ribbon-group-content">
+						<button class="ribbon-btn-large" id="btn-paste" title="Paste (Ctrl+V)">
+							<span class="ribbon-icon-large">${icons.paste}</span>
+							<span class="ribbon-btn-label">Paste</span>
+						</button>
+						<div class="ribbon-btn-stack">
+							<button class="ribbon-btn-stacked" id="btn-cut" title="Cut (Ctrl+X)">
+								<span class="ribbon-icon-small">${icons.cut}</span>
+								<span>Cut</span>
 							</button>
-							<div class="color-picker-popup" id="text-color-picker">
-								<!-- Colors injected by JS -->
+							<button class="ribbon-btn-stacked" id="btn-copy" title="Copy (Ctrl+C)">
+								<span class="ribbon-icon-small">${icons.copy}</span>
+								<span>Copy</span>
+							</button>
+						</div>
+					</div>
+					<span class="ribbon-group-label">Clipboard</span>
+				</div>
+				<div class="ribbon-separator"></div>
+
+				<!-- Undo/Redo Group -->
+				<div class="ribbon-group ribbon-group-history">
+					<div class="ribbon-group-content">
+						<button class="ribbon-btn-medium" id="btn-undo" title="Undo (Ctrl+Z)">
+							<span class="ribbon-icon-medium">${icons.undo}</span>
+							<span class="ribbon-btn-label">Undo</span>
+						</button>
+						<button class="ribbon-btn-medium" id="btn-redo" title="Redo (Ctrl+Y)">
+							<span class="ribbon-icon-medium">${icons.redo}</span>
+							<span class="ribbon-btn-label">Redo</span>
+						</button>
+					</div>
+					<span class="ribbon-group-label">History</span>
+				</div>
+				<div class="ribbon-separator"></div>
+
+				<!-- Font Group -->
+				<div class="ribbon-group ribbon-group-font">
+					<div class="ribbon-group-content">
+						<div class="ribbon-font-controls">
+							<div class="ribbon-btn-row">
+								<select id="font-family" class="ribbon-select ribbon-select-font">
+									<option value="Helvetica">Helvetica</option>
+									<option value="Arial">Arial</option>
+									<option value="Times New Roman">Times New Roman</option>
+									<option value="Courier New">Courier New</option>
+									<option value="Verdana">Verdana</option>
+								</select>
+								<select id="font-size" class="ribbon-select ribbon-select-size">
+									<option value="8">8</option>
+									<option value="9">9</option>
+									<option value="10" selected>10</option>
+									<option value="11">11</option>
+									<option value="12">12</option>
+									<option value="14">14</option>
+									<option value="16">16</option>
+									<option value="18">18</option>
+									<option value="24">24</option>
+								</select>
+							</div>
+							<div class="ribbon-btn-row">
+								<button class="ribbon-icon-btn" id="btn-bold" title="Bold (Ctrl+B)">${icons.bold}</button>
+								<button class="ribbon-icon-btn" id="btn-italic" title="Italic (Ctrl+I)">${icons.italic}</button>
+								<button class="ribbon-icon-btn" id="btn-underline" title="Underline (Ctrl+U)">${icons.underline}</button>
+								<button class="ribbon-icon-btn" id="btn-strike" title="Strikethrough">${icons.strikethrough}</button>
+								<div class="ribbon-divider"></div>
+								<div class="ribbon-dropdown-btn-container">
+									<button class="ribbon-icon-btn ribbon-icon-btn-dropdown" id="btn-text-color" title="Text Color">
+										<div class="color-btn-content">
+											${icons.textColor}
+											<div id="text-color-indicator" class="color-indicator"></div>
+										</div>
+										${icons.chevronDown}
+									</button>
+									<div class="color-picker-popup" id="text-color-picker"></div>
+								</div>
+								<div class="ribbon-dropdown-btn-container">
+									<button class="ribbon-icon-btn ribbon-icon-btn-dropdown" id="btn-fill-color" title="Fill Color">
+										<div class="color-btn-content">
+											${icons.fillColor}
+											<div id="fill-color-indicator" class="color-indicator color-indicator-fill"></div>
+										</div>
+										${icons.chevronDown}
+									</button>
+									<div class="color-picker-popup" id="fill-color-picker"></div>
+								</div>
 							</div>
 						</div>
+					</div>
+					<span class="ribbon-group-label">Font</span>
+				</div>
+				<div class="ribbon-separator"></div>
 
-						<div class="ribbon-dropdown-btn-container">
-							<button class="ribbon-icon-btn" id="btn-fill-color" title="Fill Color">
-								<div style="display:flex; flex-direction:column; align-items:center;">
-									${icons.fillColor}
-									<div id="fill-color-indicator" style="width:12px; height:3px; background-color: transparent; margin-top:-2px;"></div>
-								</div>
-								${icons.chevronDown}
-							</button>
-							<div class="color-picker-popup" id="fill-color-picker">
-								<!-- Colors injected by JS -->
+				<!-- Alignment Group -->
+				<div class="ribbon-group ribbon-group-align">
+					<div class="ribbon-group-content">
+						<div class="ribbon-align-controls">
+							<div class="ribbon-btn-row">
+								<button class="ribbon-icon-btn" id="btn-align-left" title="Align Left">${icons.alignLeft}</button>
+								<button class="ribbon-icon-btn" id="btn-align-center" title="Align Center">${icons.alignCenter}</button>
+								<button class="ribbon-icon-btn" id="btn-align-right" title="Align Right">${icons.alignRight}</button>
+							</div>
+							<div class="ribbon-btn-row">
+								<button class="ribbon-icon-btn" id="btn-wrap-text" title="Wrap Text">${icons.wrapText}</button>
+								<button class="ribbon-icon-btn" id="btn-merge" title="Merge Cells">${icons.merge}</button>
 							</div>
 						</div>
-
 					</div>
-					<div class="ribbon-group-label">Font</div>
+					<span class="ribbon-group-label">Alignment</span>
 				</div>
 				<div class="ribbon-separator"></div>
 
-				<div class="ribbon-group">
-					<div class="ribbon-btn-row">
-						<button class="ribbon-icon-btn" id="btn-align-left" title="Align Left">${icons.alignLeft}</button>
-						<button class="ribbon-icon-btn" id="btn-align-center" title="Align Center">${icons.alignCenter}</button>
-						<button class="ribbon-icon-btn" id="btn-align-right" title="Align Right">${icons.alignRight}</button>
+				<!-- Number Format Group -->
+				<div class="ribbon-group ribbon-group-number">
+					<div class="ribbon-group-content">
+						<div class="ribbon-number-controls">
+							<div class="ribbon-btn-row">
+								<select id="number-format" class="ribbon-select ribbon-select-format">
+									<option value="general">General</option>
+									<option value="number">Number</option>
+									<option value="currency">Currency</option>
+									<option value="accounting">Accounting</option>
+									<option value="percentage">Percentage</option>
+									<option value="date">Date</option>
+									<option value="time">Time</option>
+								</select>
+							</div>
+							<div class="ribbon-btn-row">
+								<button class="ribbon-icon-btn" id="btn-currency" title="Currency Format">${icons.currency}</button>
+								<button class="ribbon-icon-btn" id="btn-percent" title="Percentage Format">${icons.percent}</button>
+								<button class="ribbon-icon-btn" id="btn-comma" title="Comma Style">&#44;</button>
+								<button class="ribbon-icon-btn" id="btn-decimal-inc" title="Increase Decimal">.0→.00</button>
+								<button class="ribbon-icon-btn" id="btn-decimal-dec" title="Decrease Decimal">.00→.0</button>
+							</div>
+						</div>
 					</div>
-					<div class="ribbon-btn-row">
-						<button class="ribbon-icon-btn" id="btn-merge" title="Merge Cells">${icons.merge}</button>
-					</div>
-					<div class="ribbon-group-label">Alignment</div>
+					<span class="ribbon-group-label">Number</span>
 				</div>
 				<div class="ribbon-separator"></div>
 
-				<div class="ribbon-group">
-					<div class="ribbon-btn-row">
-						<button class="ribbon-btn" id="btn-sum" title="AutoSum">Σ <span>SUM</span></button>
+				<!-- Cells Group -->
+				<div class="ribbon-group ribbon-group-cells">
+					<div class="ribbon-group-content">
+						<div class="ribbon-btn-stack">
+							<button class="ribbon-btn-stacked" id="btn-insert-row" title="Insert Row">
+								<span class="ribbon-icon-small">${icons.insertRow}</span>
+								<span>Insert Row</span>
+							</button>
+							<button class="ribbon-btn-stacked" id="btn-insert-col" title="Insert Column">
+								<span class="ribbon-icon-small">${icons.insertCol}</span>
+								<span>Insert Col</span>
+							</button>
+						</div>
+						<div class="ribbon-btn-stack">
+							<button class="ribbon-btn-stacked" id="btn-delete-row" title="Delete Row">
+								<span class="ribbon-icon-small">${icons.deleteRow}</span>
+								<span>Delete Row</span>
+							</button>
+							<button class="ribbon-btn-stacked" id="btn-delete-col" title="Delete Column">
+								<span class="ribbon-icon-small">${icons.deleteCol}</span>
+								<span>Delete Col</span>
+							</button>
+						</div>
 					</div>
-					<div class="ribbon-btn-row">
-						<button class="ribbon-icon-btn" id="btn-average" title="Average">AVG</button>
-						<button class="ribbon-icon-btn" id="btn-count" title="Count">CNT</button>
-						<button class="ribbon-icon-btn" id="btn-min" title="Minimum">MIN</button>
-						<button class="ribbon-icon-btn" id="btn-max" title="Maximum">MAX</button>
+					<span class="ribbon-group-label">Cells</span>
+				</div>
+				<div class="ribbon-separator"></div>
+
+				<!-- Editing/Formulas Group -->
+				<div class="ribbon-group ribbon-group-editing">
+					<div class="ribbon-group-content">
+						<button class="ribbon-btn-large" id="btn-sum" title="AutoSum">
+							<span class="ribbon-icon-large" style="font-size: 20px; font-weight: bold;">Σ</span>
+							<span class="ribbon-btn-label">Sum</span>
+						</button>
+						<div class="ribbon-btn-stack">
+							<button class="ribbon-btn-stacked" id="btn-average" title="Average">
+								<span>AVG</span>
+							</button>
+							<button class="ribbon-btn-stacked" id="btn-count" title="Count">
+								<span>COUNT</span>
+							</button>
+						</div>
+						<div class="ribbon-btn-stack">
+							<button class="ribbon-btn-stacked" id="btn-min" title="Minimum">
+								<span>MIN</span>
+							</button>
+							<button class="ribbon-btn-stacked" id="btn-max" title="Maximum">
+								<span>MAX</span>
+							</button>
+						</div>
 					</div>
-					<div class="ribbon-group-label">Formulas</div>
+					<span class="ribbon-group-label">Formulas</span>
+				</div>
+				<div class="ribbon-separator"></div>
+
+				<!-- File Group -->
+				<div class="ribbon-group ribbon-group-file">
+					<div class="ribbon-group-content">
+						<button class="ribbon-btn-medium" id="btn-save" title="Save (Ctrl+S)">
+							<span class="ribbon-icon-medium">${icons.save}</span>
+							<span class="ribbon-btn-label">Save</span>
+						</button>
+						<button class="ribbon-btn-medium" id="btn-print" title="Print (Ctrl+P)">
+							<span class="ribbon-icon-medium">🖨️</span>
+							<span class="ribbon-btn-label">Print</span>
+						</button>
+						<button class="ribbon-btn-medium" id="btn-export-pdf" title="Export to PDF">
+							<span class="ribbon-icon-medium">📄</span>
+							<span class="ribbon-btn-label">PDF</span>
+						</button>
+					</div>
+					<span class="ribbon-group-label">File</span>
 				</div>
 			</div>
 
 			<!-- View Tab -->
 			<div class="ribbon-panel" id="tab-view">
 				<div class="ribbon-group">
-					<div class="ribbon-btn-row">
-						<label><input type="checkbox" id="chk-gridlines" checked> Gridlines</label>
+					<div class="ribbon-group-content">
+						<label class="ribbon-checkbox">
+							<input type="checkbox" id="chk-gridlines" checked>
+							<span>Gridlines</span>
+						</label>
+						<label class="ribbon-checkbox">
+							<input type="checkbox" id="chk-headers" checked>
+							<span>Headers</span>
+						</label>
 					</div>
-					<div class="ribbon-group-label">Show</div>
+					<span class="ribbon-group-label">Show</span>
+				</div>
+				<div class="ribbon-separator"></div>
+				<div class="ribbon-group">
+					<div class="ribbon-group-content">
+						<button class="ribbon-btn-medium" id="btn-freeze-panes" title="Freeze Panes">
+							<span class="ribbon-icon-medium">❄️</span>
+							<span class="ribbon-btn-label">Freeze</span>
+						</button>
+					</div>
+					<span class="ribbon-group-label">Window</span>
 				</div>
 			</div>
 
 			<!-- Data Tab -->
 			<div class="ribbon-panel" id="tab-data">
 				<div class="ribbon-group">
-					<div class="ribbon-btn-col">
-						<button class="ribbon-btn" id="btn-clear" title="Clear All">${icons.clear}<span>Clear</span></button>
+					<div class="ribbon-group-content">
+						<button class="ribbon-btn-large" id="btn-clear" title="Clear All">
+							<span class="ribbon-icon-large">${icons.clear}</span>
+							<span class="ribbon-btn-label">Clear</span>
+						</button>
 					</div>
-					<div class="ribbon-group-label">Data Tools</div>
+					<span class="ribbon-group-label">Edit</span>
+				</div>
+				<div class="ribbon-separator"></div>
+				<div class="ribbon-group">
+					<div class="ribbon-group-content">
+						<button class="ribbon-btn-medium" id="btn-sort-asc" title="Sort A to Z">
+							<span class="ribbon-icon-medium">↑</span>
+							<span class="ribbon-btn-label">Sort A-Z</span>
+						</button>
+						<button class="ribbon-btn-medium" id="btn-sort-desc" title="Sort Z to A">
+							<span class="ribbon-icon-medium">↓</span>
+							<span class="ribbon-btn-label">Sort Z-A</span>
+						</button>
+					</div>
+					<span class="ribbon-group-label">Sort</span>
 				</div>
 			</div>
 		</div>

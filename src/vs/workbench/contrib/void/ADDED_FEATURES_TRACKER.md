@@ -760,7 +760,10 @@ Main Process (RAGMainService)
 - 🔄 **Planned**: XLSX formula bar improvements
 - ✅ **Implemented**: Theming support for DOCX and XLSX
   - Dark and light mode support
-  - Customizable themes
+  - ✅ **Implemented**: Customizable themes
+  - ✅ **Implemented**: Dark and light mode support
+  - ✅ **Implemented**: Customizable themes
+  - ✅ **Implemented**: Dark and light mode support
   - Theme synchronization with VS Code
 
 ### File Organizer
@@ -1309,7 +1312,7 @@ interface ITimelineService {
 	loadTimeline(): Promise<CaseTimeline | null>;
 	saveTimeline(timeline: CaseTimeline): Promise<void>;
 	addEvent(
-		event: Omit<TimelineEvent, "id" | "createdAt" | "updatedAt">
+		event: Omit<TimelineEvent, "id" | "createdAt" | "updatedAt">,
 	): Promise<TimelineEvent>;
 	updateEvent(id: string, updates: Partial<TimelineEvent>): Promise<void>;
 	deleteEvent(id: string): Promise<void>;
@@ -1364,6 +1367,15 @@ interface ITimelineService {
 - ✅ Left panel: Case Summary + Deadline Warnings (fixed width)
 - ✅ Right panel: Timeline/Calendar view + Toolbar (flexible width)
 - ✅ Improved visibility for timeline events
+
+#### 7. **Calendar View**
+
+- ✅ Interactive calendar visualization within Timeline dashboard
+- ✅ Month/week navigation with event display
+- ✅ Click-to-view event details
+- ✅ Visual indicators for deadlines and appointments
+- ✅ Integrated with external calendar sync (Google/Outlook)
+- ✅ Push events to connected external calendars
 
 ### Plan Document
 
@@ -1442,6 +1454,347 @@ When user asks: "Add the medical appointment from this report to my timeline"
 
 ---
 
+## ✍️ DocuSign E-Signature Integration
+
+**Status**: ✅ Implemented
+**Date Added**: December 2025
+
+### Overview
+
+Full DocuSign integration for sending documents for electronic signature directly from the document viewers. Uses JWT Grant authentication with RSA keypair for secure server-to-server authentication.
+
+### Core Features
+
+#### 1. **Authentication**
+
+- ✅ JWT Grant authentication with RSA keypair
+- ✅ Automatic PKCS#1 to PKCS#8 key conversion
+- ✅ Secure private key storage via Electron safeStorage
+- ✅ Bundled integration key support (no user config needed)
+- ✅ Custom integration key option for self-hosting
+- ✅ Consent flow handling with browser redirect
+- ✅ Demo and production environment support
+
+#### 2. **Envelope Management**
+
+- ✅ Create envelopes with documents and recipients
+- ✅ Send envelopes for signature
+- ✅ Get envelope status (sent, delivered, signed, completed, declined, voided)
+- ✅ List recent envelopes with summaries
+- ✅ Void envelopes with reason
+- ✅ Download signed documents (combined or individual)
+
+#### 3. **Document Integration**
+
+- ✅ Send documents directly from DOCX/PDF viewers
+- ✅ "Send for Signature" button in document ribbon
+- ✅ Anchor-based signature placement (`/sig/` anchor string)
+- ✅ Document-to-envelope mapping for in-app tracking
+- ✅ Automatic file type detection (DOCX, PDF, DOC)
+
+#### 4. **Recipient Management**
+
+- ✅ Add signers with email and name
+- ✅ Add CC recipients (receive copies)
+- ✅ Routing order for sequential signing
+- ✅ Role-based recipient types
+
+#### 5. **Status Tracking**
+
+- ✅ Automatic status polling (30-second intervals)
+- ✅ Real-time notifications on status changes
+- ✅ Completion notifications with download prompt
+- ✅ Decline notifications with warning
+- ✅ Envelope cache persistence (workspace-scoped)
+
+#### 6. **Settings Integration**
+
+- ✅ Integration key configuration
+- ✅ User ID configuration
+- ✅ Private key import
+- ✅ Environment toggle (demo/production)
+- ✅ Consent status tracking
+
+### Commands
+
+| Command                          | Title                        |
+| -------------------------------- | ---------------------------- |
+| `void.docusign.signIn`           | DocuSign: Sign In            |
+| `void.docusign.signOut`          | DocuSign: Sign Out           |
+| `void.docusign.sendForSignature` | DocuSign: Send for Signature |
+
+### Architecture
+
+```
+Browser Process:
+├── IDocuSignService (browser/docuSign/docuSignService.ts)
+│   ├── Auth state management
+│   ├── Envelope CRUD via IPC
+│   ├── Document tracking
+│   └── Status polling
+└── DocuSign Actions (browser/docuSign/docuSignActions.ts)
+    └── Command registrations
+
+IPC Channel (void-channel-docusign):
+├── getConfig() → bundled config
+├── getAccessToken() → JWT token exchange
+├── checkConsent() → consent status
+├── getConsentUrl() → OAuth consent URL
+├── storePrivateKey() → secure storage
+├── hasPrivateKey() → key check
+├── createEnvelope() → envelope creation
+├── sendEnvelope() → envelope send
+├── getEnvelope() → envelope details
+├── getEnvelopeStatus() → status check
+├── listEnvelopes() → recent envelopes
+├── downloadSignedDocument() → PDF bytes
+├── voidEnvelope() → void with reason
+└── signOut() → clear session
+
+Electron Main:
+├── docuSignChannel.ts - IPC handler
+└── DocuSign eSignature SDK integration
+```
+
+### Files
+
+**Common** (`common/docuSign/`):
+
+- `docuSignTypes.ts` - Interfaces (IDocuSignEnvelope, IDocuSignUser, etc.)
+
+**Browser** (`browser/docuSign/`):
+
+- `docuSignService.ts` - Main service with auth, envelopes, tracking
+- `docuSignActions.ts` - F1 commands registration
+
+**Electron Main** (`electron-main/`):
+
+- `docuSignChannel.ts` - IPC channel handler
+- `docusign-esign.d.ts` - TypeScript declarations for SDK
+
+### Service Interface
+
+```typescript
+interface IDocuSignService {
+	// Auth
+	signIn(): Promise<void>;
+	signOut(): Promise<void>;
+	isSignedIn(): boolean;
+	checkConsent(): Promise<DocuSignConsentStatus>;
+	openConsentPage(): Promise<void>;
+	storePrivateKey(privateKey: string): Promise<{ success: boolean }>;
+
+	// Envelopes
+	createEnvelope(
+		request: IDocuSignEnvelopeCreateRequest,
+	): Promise<IDocuSignEnvelopeCreateResponse>;
+	sendEnvelope(envelopeId: string): Promise<void>;
+	getEnvelope(envelopeId: string): Promise<IDocuSignEnvelope>;
+	getEnvelopeStatus(envelopeId: string): Promise<DocuSignEnvelopeStatus>;
+	listEnvelopes(fromDate?: Date): Promise<IDocuSignEnvelopeSummary[]>;
+	downloadSignedDocument(envelopeId: string): Promise<Uint8Array>;
+	voidEnvelope(envelopeId: string, reason: string): Promise<void>;
+
+	// Document integration
+	sendDocumentForSignature(
+		documentUri: URI,
+		documentBase64: string,
+		recipients: IDocuSignRecipientInput[],
+		emailSubject: string,
+		emailBlurb?: string,
+	): Promise<string>;
+	getEnvelopeForDocument(documentUri: URI): Promise<IDocuSignEnvelope | null>;
+
+	// Events
+	readonly onAuthStateChange: Event<DocuSignAuthChangeEvent>;
+	readonly onEnvelopeStatusChange: Event<DocuSignEnvelopeStatusChangeEvent>;
+}
+```
+
+### Dependencies
+
+- `docusign-esign` - Official DocuSign eSignature Node.js SDK
+
+---
+
+## ⏱️ Time Tracker Extension
+
+**Status**: ✅ Implemented
+**Date Added**: February 2026
+**Location**: `extensions/time-tracker/`
+
+### Overview
+
+A professional legal time tracking extension with UTBMS codes, 6-minute billing increments, and LEDES 1998B export format. Designed for workers' compensation attorneys with per-workspace isolation.
+
+### Core Features
+
+#### 1. **Timer Controls**
+
+- ✅ Real-time timer with start/stop/toggle
+- ✅ Live elapsed time display (HH:MM:SS format)
+- ✅ 6-minute billing increments (0.1 hour rounding, industry standard)
+- ✅ Configurable rounding modes (up, down, nearest)
+- ✅ Minimum increment enforcement (0.1 hours default)
+- ✅ Auto-save timer on window/app close
+
+#### 2. **Matter/Case Management**
+
+- ✅ Create and manage client matters
+- ✅ Matter fields: client name, matter name, matter number
+- ✅ Default billing rate per matter
+- ✅ Active/inactive matter status
+- ✅ Quick matter selection from sidebar dropdown
+
+#### 3. **Billing Rates**
+
+- ✅ Multiple billing rate tiers
+- ✅ Default rate designation
+- ✅ Hourly rate configuration
+- ✅ Rate selection per time entry
+
+#### 4. **UTBMS Code Support**
+
+- ✅ Standard UTBMS Task codes (L100-L500 series)
+- ✅ Standard UTBMS Activity codes (A101-A118)
+- ✅ Task/Activity code dropdowns in sidebar
+- ✅ Codes stored with each time entry
+
+#### 5. **Time Entry Management**
+
+- ✅ Manual entry creation
+- ✅ Entry editing (description, codes, billable status)
+- ✅ Entry deletion with confirmation dialog
+- ✅ Billable/non-billable toggle
+- ✅ Description field (500 char limit)
+- ✅ Today's entries list with totals
+
+#### 6. **Entry Display**
+
+- ✅ Date display (e.g., "Feb 2")
+- ✅ Time range display (e.g., "04:07 PM → 04:13 PM")
+- ✅ Duration in hours (0.1 increments)
+- ✅ Matter name display
+- ✅ UTBMS code badges
+- ✅ Billable status indicator
+- ✅ Delete button (hover reveal)
+
+#### 7. **Export Formats**
+
+- ✅ **CSV** - Standard spreadsheet format
+- ✅ **JSON** - Structured data export
+- ✅ **LEDES 1998B** - Legal billing standard format
+- ✅ Date range filtering for exports
+- ✅ File save dialog with suggested filenames
+
+#### 8. **UI Components**
+
+**Status Bar**:
+
+- ✅ Live timer display
+- ✅ Current matter indicator
+- ✅ Today's total hours
+- ✅ Click to toggle timer
+
+**Sidebar Panel**:
+
+- ✅ View Container: `timeTracker` (Activity Bar)
+- ✅ WebviewViewProvider implementation
+- ✅ VSCode CSS variable theming
+- ✅ Card-based UI matching Timeline/CaseInfo style
+- ✅ Unicode emoji icons (no codicon dependency issues)
+
+#### 9. **Storage**
+
+- ✅ Per-workspace SQLite database
+- ✅ Database path: `~/.safe-appeals-navigator/databases/workspaces/{workspaceId}/timetracker.db`
+- ✅ Tables: `matters`, `billing_rates`, `time_entries`
+- ✅ Workspace ID from folder path hash
+- ✅ Uses root `better-sqlite3` (shared with RAG)
+
+### Commands
+
+| Command                    | Title                 | Keybinding     |
+| -------------------------- | --------------------- | -------------- |
+| `timeTracker.start`        | Start Timer           | -              |
+| `timeTracker.stop`         | Stop Timer            | -              |
+| `timeTracker.toggle`       | Toggle Timer          | `Ctrl+Shift+T` |
+| `timeTracker.addEntry`     | Add Manual Entry      | `Ctrl+Shift+E` |
+| `timeTracker.manageMatter` | Manage Matters        | -              |
+| `timeTracker.manageRates`  | Manage Billing Rates  | -              |
+| `timeTracker.exportCSV`    | Export to CSV         | -              |
+| `timeTracker.exportJSON`   | Export to JSON        | -              |
+| `timeTracker.exportLEDES`  | Export to LEDES 1998B | -              |
+
+### Settings
+
+| Setting                        | Default | Description                                 |
+| ------------------------------ | ------- | ------------------------------------------- |
+| `timeTracker.roundingMode`     | `up`    | How to round time (up/down/nearest)         |
+| `timeTracker.minimumIncrement` | `0.1`   | Minimum billable increment in hours         |
+| `timeTracker.autoStopOnClose`  | `true`  | Auto-stop timer when app closes             |
+| `timeTracker.defaultBillable`  | `true`  | Default billable status for new entries     |
+| `timeTracker.reminderInterval` | `30`    | Reminder interval in minutes (0 = disabled) |
+
+### Files
+
+**Extension Root** (`extensions/time-tracker/`):
+
+- `package.json` - Extension manifest with commands, views, settings
+- `tsconfig.json` - TypeScript configuration (uses root @types)
+
+**Source** (`extensions/time-tracker/src/`):
+
+- `extension.ts` - Entry point, service initialization, command registration
+- `types.ts` - TypeScript interfaces (Matter, BillingRate, TimeEntry, etc.)
+- `storageService.ts` - SQLite database operations
+- `timeTrackerService.ts` - Timer logic with 6-min rounding
+- `matterService.ts` - Matter CRUD via quick picks
+- `rateService.ts` - Rate CRUD via quick picks
+- `exportService.ts` - CSV, JSON, LEDES export
+- `ledesFormatter.ts` - LEDES 1998B format generation
+- `statusBarController.ts` - Status bar item management
+- `sidebarProvider.ts` - WebviewViewProvider with HTML/JS/CSS
+- `utbmsCodes.ts` - UTBMS code definitions and helpers
+
+**Data** (`extensions/time-tracker/data/`):
+
+- `utbms-codes.json` - Standard UTBMS task and activity codes
+
+**Media** (`extensions/time-tracker/media/`):
+
+- `sidebar.css` - Webview styles (VSCode CSS variables, card patterns)
+
+### Service Architecture
+
+```
+Extension Host:
+├── TimeTrackerService (timer logic, state management)
+├── StorageService (SQLite operations)
+├── MatterService (matter CRUD)
+├── RateService (rate CRUD)
+├── ExportService (file exports)
+├── StatusBarController (status bar UI)
+└── SidebarProvider (webview panel)
+
+Webview:
+├── Timer display and controls
+├── Entry details form
+├── Today's entries list
+├── Export buttons
+└── Manage buttons (trigger VSCode commands)
+
+IPC Communication:
+└── postMessage/onDidReceiveMessage for webview ↔ extension host
+```
+
+### Dependencies
+
+- `better-sqlite3` (from root node_modules, rebuilt for Electron)
+- VSCode Extension API
+
+---
+
 ## 📞 Contacts & Resources
 
 - **GitHub**: <https://github.com/savagelysubtle/SafeAppeals2.0>
@@ -1452,5 +1805,5 @@ When user asks: "Add the medical appointment from this report to my timeline"
 
 ---
 
-**Last Updated**: December 25, 2025
-**Version**: 1.99.6
+**Last Updated**: February 3, 2026
+**Version**: 1.99.7

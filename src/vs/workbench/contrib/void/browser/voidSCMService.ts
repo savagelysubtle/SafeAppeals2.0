@@ -3,27 +3,27 @@
  *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
  *--------------------------------------------------------------------------------------*/
 
+import { ThrottledDelayer } from '../../../../base/common/async.js'
+import { CancellationError, isCancellationError } from '../../../../base/common/errors.js'
+import { Disposable } from '../../../../base/common/lifecycle.js'
 import { ThemeIcon } from '../../../../base/common/themables.js'
+import { generateUuid } from '../../../../base/common/uuid.js'
+import { ProxyChannel } from '../../../../base/parts/ipc/common/ipc.js'
 import { localize2 } from '../../../../nls.js'
 import { Action2, MenuId, registerAction2 } from '../../../../platform/actions/common/actions.js'
 import { ContextKeyExpr, IContextKey, IContextKeyService } from '../../../../platform/contextkey/common/contextkey.js'
-import { ISCMService } from '../../scm/common/scm.js'
-import { ProxyChannel } from '../../../../base/parts/ipc/common/ipc.js'
-import { IVoidSCMService } from '../common/voidSCMTypes.js'
+import { InstantiationType, registerSingleton } from '../../../../platform/instantiation/common/extensions.js'
+import { createDecorator, ServicesAccessor } from '../../../../platform/instantiation/common/instantiation.js'
 import { IMainProcessService } from '../../../../platform/ipc/common/mainProcessService.js'
-import { IVoidSettingsService } from '../common/voidSettingsService.js'
-import { IConvertToLLMMessageService } from './convertToLLMMessageService.js'
-import { ILLMMessageService } from '../common/sendLLMMessageService.js'
-import { ModelSelection, OverridesOfModel, ModelSelectionOptions } from '../common/voidSettingsTypes.js'
+import { INotificationService } from '../../../../platform/notification/common/notification.js'
+import { ISCMService } from '../../scm/common/scm.js'
 import { gitCommitMessage_systemMessage, gitCommitMessage_userMessage } from '../common/prompt/prompts.js'
 import { LLMChatMessage } from '../common/sendLLMMessageTypes.js'
-import { generateUuid } from '../../../../base/common/uuid.js'
-import { ThrottledDelayer } from '../../../../base/common/async.js'
-import { CancellationError, isCancellationError } from '../../../../base/common/errors.js'
-import { registerSingleton, InstantiationType } from '../../../../platform/instantiation/common/extensions.js'
-import { createDecorator, ServicesAccessor } from '../../../../platform/instantiation/common/instantiation.js'
-import { Disposable } from '../../../../base/common/lifecycle.js'
-import { INotificationService } from '../../../../platform/notification/common/notification.js'
+import { IVoidSCMService } from '../common/voidSCMTypes.js'
+import { IVoidSettingsService } from '../common/voidSettingsService.js'
+import { ModelSelection, ModelSelectionOptions, OverridesOfModel } from '../common/voidSettingsTypes.js'
+import { ICloudLLMRouterService } from './cloudLLMRouterService.js'
+import { IConvertToLLMMessageService } from './convertToLLMMessageService.js'
 
 interface ModelOptions {
 	modelSelection: ModelSelection | null
@@ -54,7 +54,7 @@ class GenerateCommitMessageService extends Disposable implements IGenerateCommit
 		@IMainProcessService mainProcessService: IMainProcessService,
 		@IVoidSettingsService private readonly voidSettingsService: IVoidSettingsService,
 		@IConvertToLLMMessageService private readonly convertToLLMMessageService: IConvertToLLMMessageService,
-		@ILLMMessageService private readonly llmMessageService: ILLMMessageService,
+		@ICloudLLMRouterService private readonly cloudLLMRouterService: ICloudLLMRouterService,
 		@IContextKeyService private readonly contextKeyService: IContextKeyService,
 		@INotificationService private readonly notificationService: INotificationService
 	) {
@@ -119,7 +119,7 @@ class GenerateCommitMessageService extends Disposable implements IGenerateCommit
 
 	abort() {
 		if (this.llmRequestId) {
-			this.llmMessageService.abort(this.llmRequestId)
+			this.cloudLLMRouterService.abort(this.llmRequestId)
 		}
 		this.execute.cancel()
 		this.loadingContextKey.set(false)
@@ -138,7 +138,7 @@ class GenerateCommitMessageService extends Disposable implements IGenerateCommit
 	private sendLLMMessage(messages: LLMChatMessage[], separateSystemMessage: string, modelOptions: ModelOptions): Promise<string> {
 		return new Promise((resolve, reject) => {
 
-			this.llmRequestId = this.llmMessageService.sendLLMMessage({
+			this.llmRequestId = this.cloudLLMRouterService.sendLLMMessage({
 				messagesType: 'chatMessages',
 				messages,
 				separateSystemMessage,

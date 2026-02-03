@@ -43,6 +43,9 @@ import './tools/toolsService.js';
 // register Thread History
 import './chatThreadService.js';
 
+// register Chat Thread Storage (per-workspace SQLite via IPC)
+import './chat/chatThreadStorageService.js';
+
 // ping
 import './metricsPollService.js';
 
@@ -80,11 +83,22 @@ import './fileConverter/fileConverter.contribution.js';
 // register timeline & case management
 import './timeline/timeline.contribution.js';
 
+// register calendar sync state service
+import './calendar/calendarSyncStateService.js';
+
+// register Google Calendar client service
+import './calendar/googleCalendarClientService.js';
+
+// register Outlook Calendar client service
+import './calendar/outlookCalendarClientService.js';
+
 // register email dashboard
 import '../common/emailService.js';
-import './emailService.js';
-import './emailDraftService.js';
+import './emailClassifier.js';
 import './emailDashboard/emailDashboard.contribution.js';
+import './emailDraftService.js';
+import './emailService.js';
+import './emailThreadService.js';
 import './emailViewers/emailViewer.contribution.js';
 
 // ---------- common (unclear if these actually need to be imported, because they're already imported wherever they're used) ----------
@@ -134,19 +148,29 @@ import '../common/documentViewerService.js';
 // PDF viewer components
 import './documentViewers/documentViewer.contribution.js';
 
+// DOCX Quick Edit Actions (Ctrl+L/K for DOCX viewer)
+import './documentViewers/docxViewer/docxQuickEditActions.js';
+
 // Document file creation handler (for DOCX/XLSX auto-population)
 import './documentCreatorService.js';
 import './documentFileCreation.contribution.js';
 
 // Void Cloud service, URL handler, and auth provider
-import './voidCloudService.js';
 import './voidCloudActions.js';
-import { VoidCloudUrlHandler } from './voidCloudUrlHandler.js';
 import { SafeAppealsCloudAuthProvider } from './voidCloudAuthProvider.js';
+import './voidCloudService.js';
+import { VoidCloudUrlHandler } from './voidCloudUrlHandler.js';
+
+// DocuSign e-signature service
+import './docuSign/docuSignActions.js';
+import './docuSign/docuSignService.js';
 
 // Ensure RAG workspace service starts
 import { IWorkbenchContributionsRegistry, Extensions as WorkbenchExtensions } from '../../../common/contributions.js';
 import { LifecyclePhase } from '../../../services/lifecycle/common/lifecycle.js';
+import { IEmailService } from '../common/emailService.js';
+import { IEmailClassifierService } from './emailClassifier.js';
+import { EmailService } from './emailService.js';
 
 class RAGWorkspaceContribution {
 	constructor(
@@ -156,8 +180,30 @@ class RAGWorkspaceContribution {
 	}
 }
 
+// Wire up email classifier to email service (avoid circular dependency)
+class EmailClassifierWiringContribution {
+	constructor(
+		@IEmailService emailService: IEmailService,
+		@IEmailClassifierService emailClassifierService: IEmailClassifierService
+	) {
+		// Wire up the classifier to the email service (for on-import classification)
+		if (emailService instanceof EmailService) {
+			(emailService as EmailService).setClassifierService(emailClassifierService);
+		}
+
+		// Wire up the email service to the classifier (for background polling)
+		if ('setEmailService' in emailClassifierService) {
+			(emailClassifierService as { setEmailService(service: IEmailService): void }).setEmailService(emailService);
+		}
+	}
+}
+
 Registry.as<IWorkbenchContributionsRegistry>(WorkbenchExtensions.Workbench)
 	.registerWorkbenchContribution(RAGWorkspaceContribution, LifecyclePhase.Restored);
+
+// Register email classifier wiring (after services are available)
+Registry.as<IWorkbenchContributionsRegistry>(WorkbenchExtensions.Workbench)
+	.registerWorkbenchContribution(EmailClassifierWiringContribution, LifecyclePhase.Restored);
 
 // Register Void Cloud URL handler for OAuth callback
 Registry.as<IWorkbenchContributionsRegistry>(WorkbenchExtensions.Workbench)

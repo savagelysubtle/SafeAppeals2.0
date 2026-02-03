@@ -4,100 +4,109 @@
  *--------------------------------------------------------------------------------------*/
 
 import React, {
-	ButtonHTMLAttributes,
-	Fragment,
-	KeyboardEvent,
-	useCallback,
-	useEffect,
-	useMemo,
-	useRef,
-	useState,
+    ButtonHTMLAttributes,
+    Fragment,
+    KeyboardEvent,
+    useCallback,
+    useEffect,
+    useMemo,
+    useRef,
+    useState,
 } from "react";
 
 import { ScrollType } from "../../../../../../../editor/common/editorCommon.js";
 import {
-	useAccessor,
-	useActiveURI,
-	useChatThreadsState,
-	useChatThreadsStreamState,
-	useCommandBarState,
-	useFullChatThreadsStreamState,
-	useSettingsState,
+    useAccessor,
+    useActiveURI,
+    useChatThreadsState,
+    useChatThreadsStreamState,
+    useCommandBarState,
+    useFullChatThreadsStreamState,
+    useSettingsState,
 } from "../util/services.js";
 
 import {
-	AlertTriangle,
-	Ban,
-	Check,
-	ChevronRight,
-	CircleEllipsis,
-	Copy as CopyIcon,
-	File,
-	Folder,
-	Image,
-	Pencil,
-	RotateCw,
-	Text,
-	Trash2,
-	X,
+    Check,
+    Copy as CopyIcon,
+    File,
+    Folder,
+    Image,
+    Pencil,
+    RotateCw,
+    Text,
+    Trash2,
+    X
 } from "lucide-react";
 import { DataTransfers } from "../../../../../../../base/browser/dnd.js";
 import { URI } from "../../../../../../../base/common/uri.js";
 import { getPathForFile } from "../../../../../../../platform/dnd/browser/dnd.js";
 import {
-	ChatMode,
-	FeatureName,
-	isFeatureNameDisabled,
+    ChatMode,
+    FeatureName,
+    isFeatureNameDisabled,
 } from "../../../../../../../workbench/contrib/void/common/voidSettingsTypes.js";
 import {
-	ChatMessage,
-	CheckpointEntry,
-	StagingSelectionItem,
-	ToolMessage,
+    ChatMessage,
+    CheckpointEntry,
+    StagingSelectionItem,
+    ToolMessage,
 } from "../../../../common/chatThreadServiceTypes.js";
 import { removeMCPToolNamePrefix } from "../../../../common/mcpServiceTypes.js";
 import {
-	builtinToolNames,
-	isABuiltinToolName,
-	MAX_FILE_CHARS_PAGE,
+    isABuiltinToolName,
+    MAX_FILE_CHARS_PAGE
 } from "../../../../common/prompt/prompts.js";
-import { RawToolCallObj } from "../../../../common/sendLLMMessageTypes.js";
+import { isSingleToolCall, RawToolCallObj } from "../../../../common/sendLLMMessageTypes.js";
 import {
-	approvalTypeOfBuiltinToolName,
-	BuiltinToolCallParams,
-	BuiltinToolName,
-	LintErrorItem,
-	ToolName,
+    approvalTypeOfBuiltinToolName,
+    BuiltinToolName,
+    LintErrorItem,
+    ToolName
 } from "../../../../common/tools/toolsServiceTypes.js";
 import { VOID_CTRL_L_ACTION_ID } from "../../../actionIDs.js";
 import { IsRunningType } from "../../../chatThreadService.js";
 import { VOID_OPEN_SETTINGS_ACTION_ID } from "../../../voidSettingsPane.js";
 import {
-	CopyButton,
-	EditToolAcceptRejectButtonsHTML,
-	IconShell1,
-	StatusIndicator,
-	useEditToolStreamState,
+    CopyButton,
+    EditToolAcceptRejectButtonsHTML,
+    IconShell1,
+    StatusIndicator,
+    useEditToolStreamState,
 } from "../markdown/ApplyBlockHoverButtons.js";
 import {
-	ChatMarkdownRender,
-	ChatMessageLocation,
-	getApplyBoxId,
+    ChatMarkdownRender,
+    ChatMessageLocation,
+    getApplyBoxId,
 } from "../markdown/ChatMarkdownRender.js";
 import {
-	BlockCode,
-	TextAreaFns,
-	VoidCustomDropdownBox,
-	VoidDiffEditor,
-	VoidInputBox2,
+    BlockCode,
+    TextAreaFns,
+    VoidCustomDropdownBox,
+    VoidDiffEditor,
+    VoidInputBox2,
 } from "../util/inputs.js";
 import { ModelDropdown } from "../void-settings-tsx/ModelDropdown.js";
 import { ToolApprovalTypeSwitch } from "../void-settings-tsx/Settings.js";
 import { WarningBox } from "../void-settings-tsx/WarningBox.js";
+import { ContextWindowIndicator } from "./ContextWindowIndicator.js";
 import ErrorBoundary from "./ErrorBoundary.js";
 import { ErrorDisplay } from "./ErrorDisplay.js";
 import { PastThreadsList } from "./SidebarThreadSelector.js";
-import { ContextWindowIndicator } from "./ContextWindowIndicator.js";
+import {
+    BottomChildren,
+    CodeChildren,
+    getBasename,
+    getRelative,
+    getTitle,
+    ListableToolItem,
+    ProseWrapper,
+    SmallProseWrapper,
+    titleOfBuiltinToolName,
+    ToolChildrenWrapper,
+    ToolHeaderWrapper,
+    toolNameToDesc,
+    type ToolHeaderParams
+} from "./tool-renderers/index.js";
 
 export const IconX = ({
 	size,
@@ -392,6 +401,21 @@ export const VoidChatArea: React.FC<VoidChatAreaProps> = ({
 	const dialogService = accessor.get("IDialogService");
 	const notificationService = accessor.get("INotificationService");
 	const ragAutoIndexService = accessor.get("IRAGAutoIndexService");
+	const documentViewerService = accessor.get("IDocumentViewerService");
+
+	// Debug service availability
+	console.log("Service availability:", {
+		fileService: !!fileService,
+		dialogService: !!dialogService,
+		notificationService: !!notificationService,
+		ragAutoIndexService: !!ragAutoIndexService,
+		documentViewerService: !!documentViewerService
+	});
+
+	// If dialogService is not available, try to get it again or use fallback
+	if (!dialogService) {
+		console.warn("DialogService not available, using fallback");
+	}
 
 	// Common exclusion patterns (like .gitignore)
 	const shouldExcludeFile = (uri: URI): boolean => {
@@ -414,8 +438,14 @@ export const VoidChatArea: React.FC<VoidChatAreaProps> = ({
 			"*.so",
 		];
 
+		// Allow COMMIT_EDITMSG files even if they're in .git directory
+		const fileName = path.split(/[/\\]/).pop();
+		if (fileName === "COMMIT_EDITMSG") {
+			return false;
+		}
+
 		// Check if path contains any excluded pattern as a complete directory name
-		return excludePatterns.some((pattern) => {
+		const result = excludePatterns.some((pattern) => {
 			if (pattern.startsWith("*.")) {
 				// Handle file extension patterns - exact match only
 				const ext = pattern.substring(1).toLowerCase();
@@ -430,12 +460,19 @@ export const VoidChatArea: React.FC<VoidChatAreaProps> = ({
 			for (let i = 0; i < segments.length - 1; i++) {
 				// Exclude last segment (filename)
 				if (segments[i] === pattern) {
+					console.log(`Excluding file ${path} because directory segment "${segments[i]}" matches pattern "${pattern}"`);
 					return true;
 				}
 			}
 
 			return false;
 		});
+
+		if (result) {
+			console.log(`File ${path} excluded by pattern matching`);
+		}
+
+		return result;
 	};
 
 	// Check file size and warn if too large
@@ -445,13 +482,14 @@ export const VoidChatArea: React.FC<VoidChatAreaProps> = ({
 		try {
 			const stat = await fileService.stat(uri);
 			const sizeInMB = stat.size / (1024 * 1024);
-			const MAX_FILE_SIZE_MB = 50;
-			const WARN_FILE_SIZE_MB = 1;
+			const MAX_FILE_SIZE_MB = 200; // Increased from 50MB to 200MB for document files
+			const WARN_FILE_SIZE_MB = 10; // Increased warning threshold
 
 			if (sizeInMB > MAX_FILE_SIZE_MB) {
 				return { isValid: false, size: sizeInMB };
 			}
 
+			// Only warn for files > 10MB to avoid spam for normal document files
 			if (sizeInMB > WARN_FILE_SIZE_MB) {
 				// Show warning but allow
 				console.warn(`Large file: ${uri.fsPath} (${sizeInMB.toFixed(2)}MB)`);
@@ -506,63 +544,236 @@ export const VoidChatArea: React.FC<VoidChatAreaProps> = ({
 		return ['pdf', 'docx', 'doc', 'xlsx', 'xls', 'pptx', 'ppt'].includes(ext);
 	};
 
-	// Helper function to recursively collect files from a folder with filtering
-	const collectFilesFromFolder = async (
-		folderUri: URI,
-		maxFiles: number = 50
-	): Promise<{
-		uris: URI[];
-		skippedCount: number;
-		largeFilesSkipped: number;
-	}> => {
-		const fileUris: URI[] = [];
-		let skippedCount = 0;
-		let largeFilesSkipped = 0;
+	/**
+	 * Helper function to create a file selection with intelligent content extraction.
+	 * For PDFs: Extracts full text content so the agent can see the document
+	 *           Shows notification if OCR was used for scanned PDFs
+	 * For other documents: May extract content based on document type
+	 * For regular files: Creates standard file selection
+	 */
+	const createFileSelectionWithContent = async (
+		uri: URI
+	): Promise<StagingSelectionItem> => {
+		const language = getFileLanguage(uri);
 
+		// Check if this is a PDF - extract full content for chat context
+		if (documentViewerService.isPDFFile(uri)) {
+			try {
+				console.log(`[Smart PDF Drop] Extracting full content from: ${uri.fsPath}`);
+				const startTime = Date.now();
+
+				// Use getFullTextContentWithOCRInfo to extract all pages and get OCR status
+				const result = await documentViewerService.getFullTextContentWithOCRInfo(uri);
+
+				const elapsed = Date.now() - startTime;
+				console.log(`[Smart PDF Drop] Extracted ${result?.text?.length || 0} chars in ${elapsed}ms${result?.wasOCR ? ' (via OCR)' : ''}`);
+
+				if (result && result.text) {
+					// Show notification if OCR was used (scanned PDF)
+					if (result.wasOCR) {
+						const fileName = uri.fsPath.split(/[/\\]/).pop() || 'document.pdf';
+						notificationService.info(`Scanned PDF detected: "${fileName}" was processed with OCR (${result.ocrLanguage || 'eng'})`);
+					}
+
+					// Create file selection with ragContext containing the full PDF text
+					const fileName = uri.fsPath.split(/[/\\]/).pop() || 'document.pdf';
+					const ragContext = `Document: ${fileName}\n\n${result.text}`;
+					console.log(`[Smart PDF Drop] ✅ Creating selection with ragContext (${ragContext.length} chars)`);
+					console.log(`[Smart PDF Drop] ragContext preview: ${ragContext.substring(0, 200)}...`);
+					return {
+						type: "File",
+						uri,
+						language,
+						state: {
+							wasAddedAsCurrentFile: false,
+							ragContext: ragContext
+						},
+					};
+				} else {
+					console.log(`[Smart PDF Drop] ⚠️ No text in result - result.text is empty or undefined`);
+				}
+			} catch (error) {
+				console.error(`[Smart PDF Drop] Failed to extract PDF content:`, error);
+				notificationService.warn(`Could not extract PDF text. The agent may have limited visibility into this document.`);
+			}
+		}
+
+		// For non-PDFs or if PDF extraction failed, create standard selection
+		return {
+			type: "File",
+			uri,
+			language,
+			state: { wasAddedAsCurrentFile: false },
+		};
+	};
+
+	// Helper function to create a readable file tree representation
+	const createFileTree = async (folderUri: URI, prefix: string = ""): Promise<string> => {
+		let tree = "";
 		try {
+			console.log(`Starting scan of folder: ${folderUri.fsPath}`);
 			const entries = await fileService.resolve(folderUri, {
 				resolveMetadata: true,
 			});
 
-			if (entries.children) {
-				for (const child of entries.children) {
-					// Stop if we've reached the max file limit
-					if (fileUris.length >= maxFiles) {
-						skippedCount++;
-						continue;
-					}
+			console.log(`Folder ${folderUri.fsPath} has ${entries.children?.length || 0} children`);
+			if (!entries.children || entries.children.length === 0) {
+				console.log(`No children found for folder ${folderUri.fsPath}`);
+				return "";
+			}
 
-					// Check exclusion patterns
-					if (shouldExcludeFile(child.resource)) {
-						skippedCount++;
-						continue;
-					}
+			console.log(`Processing ${entries.children.length} items in ${folderUri.fsPath}`);
 
-					if (child.isDirectory) {
-						const result = await collectFilesFromFolder(
-							child.resource,
-							maxFiles - fileUris.length
-						);
-						fileUris.push(...result.uris);
-						skippedCount += result.skippedCount;
-						largeFilesSkipped += result.largeFilesSkipped;
-					} else {
-						// Check file size
-						const sizeCheck = await checkFileSize(child.resource);
-						if (!sizeCheck.isValid) {
-							largeFilesSkipped++;
-							continue;
-						}
+			// Sort directories first, then files, alphabetically
+			const sortedChildren = entries.children.sort((a, b) => {
+				if (a.isDirectory && !b.isDirectory) return -1;
+				if (!a.isDirectory && b.isDirectory) return 1;
+				return a.name.localeCompare(b.name);
+			});
 
-						fileUris.push(child.resource);
-					}
+			for (let i = 0; i < sortedChildren.length; i++) {
+				const child = sortedChildren[i];
+				const isLast = i === sortedChildren.length - 1;
+				const connector = isLast ? "└── " : "├── ";
+				const nextPrefix = prefix + (isLast ? "    " : "│   ");
+
+				// Check exclusion patterns - don't show excluded items in tree
+				if (shouldExcludeFile(child.resource)) {
+					continue;
+				}
+
+				if (child.isDirectory) {
+					tree += `${prefix}${connector}${child.name}/\n`;
+					tree += await createFileTree(child.resource, nextPrefix);
+				} else {
+					// Check file size - show size for large files
+					const sizeCheck = await checkFileSize(child.resource);
+					const sizeInfo = sizeCheck.size > 10 ? ` (${sizeCheck.size.toFixed(1)}MB)` : "";
+					tree += `${prefix}${connector}${child.name}${sizeInfo}\n`;
 				}
 			}
 		} catch (err) {
-			console.error("Error reading folder:", err);
+			console.error("Error creating file tree:", err);
 		}
+		return tree;
+	};
 
-		return { uris: fileUris, skippedCount, largeFilesSkipped };
+	// Helper function to recursively collect files from a folder with smart handling
+	const collectFilesFromFolder = async (
+		folderUri: URI
+	): Promise<{
+		uris: URI[];
+		skippedCount: number;
+		largeFilesSkipped: number;
+		isFileTree: boolean;
+		fileTreeContent?: string;
+		totalSizeMB?: number;
+	}> => {
+		const fileUris: URI[] = [];
+		let skippedCount = 0;
+		let largeFilesSkipped = 0;
+		let totalSizeMB = 0;
+
+		// First pass: scan all files to calculate total size
+		const scanFolder = async (uri: URI): Promise<{ files: URI[], totalSize: number, skipped: number, largeSkipped: number }> => {
+			const files: URI[] = [];
+			let totalSize = 0;
+			let skipped = 0;
+			let largeSkipped = 0;
+
+			try {
+				const entries = await fileService.resolve(uri, {
+					resolveMetadata: true,
+				});
+
+				if (entries.children) {
+					for (const child of entries.children) {
+						// Check exclusion patterns
+						if (shouldExcludeFile(child.resource)) {
+							skipped++;
+							continue;
+						}
+
+						if (child.isDirectory) {
+						console.log(`Scanning subdirectory: ${child.resource.fsPath}`);
+						const subResult = await scanFolder(child.resource);
+						files.push(...subResult.files);
+						totalSize += subResult.totalSize;
+						skipped += subResult.skipped;
+						largeSkipped += subResult.largeSkipped;
+						console.log(`Subdirectory ${child.resource.fsPath} results: ${subResult.files.length} files, ${subResult.totalSize}MB total`);
+					} else {
+						// Check if file should be excluded
+						if (shouldExcludeFile(child.resource)) {
+							skipped++;
+							console.log(`File ${child.resource.fsPath} excluded by pattern`);
+							continue;
+						}
+
+						// Check file size
+						const sizeCheck = await checkFileSize(child.resource);
+						if (!sizeCheck.isValid) {
+							largeSkipped++;
+							console.log(`File ${child.resource.fsPath} too large: ${sizeCheck.size}MB`);
+							continue;
+						}
+
+						files.push(child.resource);
+						totalSize += sizeCheck.size;
+						console.log(`Added file ${child.resource.fsPath} (${sizeCheck.size}MB)`);
+					}
+					}
+				}
+			} catch (err) {
+				console.error("Error scanning folder:", err);
+			}
+
+			return { files, totalSize, skipped, largeSkipped };
+		};
+
+		const scanResult = await scanFolder(folderUri);
+		totalSizeMB = scanResult.totalSize;
+		skippedCount = scanResult.skipped;
+		largeFilesSkipped = scanResult.largeSkipped;
+
+		console.log("Folder scan results:", {
+			folderUri: folderUri.fsPath,
+			totalFiles: scanResult.files.length,
+			totalSizeMB,
+			skippedCount,
+			largeFilesSkipped,
+			remainingFiles: scanResult.files.length - skippedCount - largeFilesSkipped
+		});
+
+		// Smart decision: if total size is reasonable, include all files
+		const MAX_TOTAL_SIZE_MB = 50; // If folder total is under 50MB, include all files
+		const MAX_FILES_FOR_INLINE = 20; // If under 20 files, always include
+
+		if (totalSizeMB <= MAX_TOTAL_SIZE_MB || scanResult.files.length <= MAX_FILES_FOR_INLINE) {
+			// Include all files
+			fileUris.push(...scanResult.files);
+			return {
+				uris: fileUris,
+				skippedCount,
+				largeFilesSkipped,
+				isFileTree: false,
+				totalSizeMB
+			};
+		} else {
+			// Create file tree representation instead
+			const folderName = folderUri.fsPath.split(/[/\\]/).pop() || "folder";
+			const fileTree = await createFileTree(folderUri);
+			const treeContent = `📁 ${folderName}/\n${fileTree}\n\n📊 Summary:\n- Total files: ${scanResult.files.length}\n- Total size: ${totalSizeMB.toFixed(1)}MB\n- Filtered out: ${skippedCount} files\n- Too large: ${largeFilesSkipped} files\n\nThis folder contains many files. The AI can analyze this structure and request specific files to read using tools.`;
+
+			return {
+				uris: [], // No actual files, just the tree
+				skippedCount,
+				largeFilesSkipped,
+				isFileTree: true,
+				fileTreeContent: treeContent,
+				totalSizeMB
+			};
+		}
 	};
 
 	const handleDrop = async (e: React.DragEvent) => {
@@ -594,59 +805,80 @@ export const VoidChatArea: React.FC<VoidChatAreaProps> = ({
 						: [];
 
 					for (const uri of uris) {
+						console.log(`Processing dragged item: ${uri.fsPath}`);
 						if (newSelections.length >= MAX_FILES) break;
 
 						// Check exclusion patterns for single files too
 						if (shouldExcludeFile(uri)) {
+							console.log(`Dragged item ${uri.fsPath} excluded by pattern`);
 							totalSkipped++;
 							continue;
 						}
 
 						const stat = await fileService.stat(uri);
+						console.log(`Item ${uri.fsPath} is ${stat.isDirectory ? 'directory' : 'file'}`);
 						if (stat.isDirectory) {
-							// Handle folder - add all files recursively
-							const result = await collectFilesFromFolder(
-								uri,
-								MAX_FILES - newSelections.length
-							);
+							// Handle folder with smart file/folder tree logic
+							const result = await collectFilesFromFolder(uri);
 
 							totalSkipped += result.skippedCount;
 							totalLargeFilesSkipped += result.largeFilesSkipped;
 
-							// Show confirmation if many files
-							if (result.uris.length >= CONFIRMATION_THRESHOLD) {
+							if (result.isFileTree && result.fileTreeContent) {
+								// Create a virtual file with the folder tree
 								const folderName = uri.fsPath.split(/[/\\]/).pop() || "folder";
-								const response = await dialogService.confirm({
-									message: `Add ${result.uris.length} files from "${folderName}"?`,
-									detail:
-										totalSkipped > 0
-											? `${totalSkipped} files were filtered out (node_modules, build artifacts, etc.)${
-													totalLargeFilesSkipped > 0
-														? `\n${totalLargeFilesSkipped} files skipped (>50MB)`
-														: ""
-											  }`
-											: totalLargeFilesSkipped > 0
-											? `${totalLargeFilesSkipped} files skipped (>50MB)`
-											: undefined,
-									type: "question",
-								});
+								const treeUri = URI.parse(`folder-tree://${folderName}.txt`);
+								const language = "plaintext";
 
-								if (!response.confirmed) {
-									notificationService.info("File drop cancelled");
-									return;
-								}
-							}
-
-							for (const fileUri of result.uris) {
-								const language = getFileLanguage(fileUri);
 								newSelections.push({
 									type: "File",
-									uri: fileUri,
+									uri: treeUri,
 									language,
-									state: { wasAddedAsCurrentFile: false },
+									state: {
+										wasAddedAsCurrentFile: false,
+										virtualContent: result.fileTreeContent,
+										isVirtualFile: true
+									},
 								});
+								totalFilesProcessed += 1;
+
+								notificationService.info(`Added folder structure for "${folderName}" (${result.totalSizeMB?.toFixed(1)}MB total)`);
+							} else {
+								// Show confirmation if many files
+								if (result.uris.length >= CONFIRMATION_THRESHOLD) {
+									const folderName = uri.fsPath.split(/[/\\]/).pop() || "folder";
+									const response = dialogService?.confirm ? await dialogService.confirm({
+										message: `Add ${result.uris.length} files from "${folderName}"?`,
+										detail:
+											totalSkipped > 0
+												? `${totalSkipped} files were filtered out (node_modules, build artifacts, etc.)${
+														totalLargeFilesSkipped > 0
+															? `\n${totalLargeFilesSkipped} files skipped (>200MB)`
+															: ""
+												  }`
+												: totalLargeFilesSkipped > 0
+												? `${totalLargeFilesSkipped} files skipped (>200MB)`
+												: undefined,
+										type: "question",
+									}) : { confirmed: true }; // Default to confirmed if dialog service unavailable
+
+									if (!response.confirmed) {
+										notificationService.info("File drop cancelled");
+										return;
+									}
+								}
+
+								for (const fileUri of result.uris) {
+									const language = getFileLanguage(fileUri);
+									newSelections.push({
+										type: "File",
+										uri: fileUri,
+										language,
+										state: { wasAddedAsCurrentFile: false },
+									});
+								}
+								totalFilesProcessed += result.uris.length;
 							}
-							totalFilesProcessed += result.uris.length;
 						} else {
 							// Check file size for single files
 							const sizeCheck = await checkFileSize(uri);
@@ -654,19 +886,14 @@ export const VoidChatArea: React.FC<VoidChatAreaProps> = ({
 								notificationService.warn(
 									`File too large: ${uri.fsPath} (${sizeCheck.size.toFixed(
 										2
-									)}MB, max 50MB)`
+									)}MB, max 200MB)`
 								);
 								continue;
 							}
 
-							// Add single file
-							const language = getFileLanguage(uri);
-							newSelections.push({
-								type: "File",
-								uri,
-								language,
-								state: { wasAddedAsCurrentFile: false },
-							});
+							// Add single file with intelligent content extraction (PDFs get full text)
+							const selection = await createFileSelectionWithContent(uri);
+							newSelections.push(selection);
 							totalFilesProcessed++;
 						}
 					}
@@ -704,48 +931,66 @@ export const VoidChatArea: React.FC<VoidChatAreaProps> = ({
 						try {
 							const stat = await fileService.stat(uri);
 							if (stat.isDirectory) {
-								const result = await collectFilesFromFolder(
-									uri,
-									MAX_FILES - newSelections.length
-								);
+								const result = await collectFilesFromFolder(uri);
 
 								totalSkipped += result.skippedCount;
 								totalLargeFilesSkipped += result.largeFilesSkipped;
 
-								if (result.uris.length >= CONFIRMATION_THRESHOLD) {
-									const folderName =
-										uri.fsPath.split(/[/\\]/).pop() || "folder";
-									const response = await dialogService.confirm({
-										message: `Add ${result.uris.length} files from "${folderName}"?`,
-										detail:
-											totalSkipped > 0
-												? `${totalSkipped} files were filtered out${
-														totalLargeFilesSkipped > 0
-															? `, ${totalLargeFilesSkipped} files skipped (>50MB)`
-															: ""
-												  }`
-												: totalLargeFilesSkipped > 0
-												? `${totalLargeFilesSkipped} files skipped (>50MB)`
-												: undefined,
-										type: "question",
-									});
+								if (result.isFileTree && result.fileTreeContent) {
+									// Create a virtual file with the folder tree
+									const folderName = uri.fsPath.split(/[/\\]/).pop() || "folder";
+									const treeUri = URI.parse(`folder-tree://${folderName}.txt`);
+									const language = "plaintext";
 
-									if (!response.confirmed) {
-										notificationService.info("File drop cancelled");
-										return;
-									}
-								}
-
-								for (const fileUri of result.uris) {
-									const language = getFileLanguage(fileUri);
 									newSelections.push({
 										type: "File",
-										uri: fileUri,
+										uri: treeUri,
 										language,
-										state: { wasAddedAsCurrentFile: false },
+										state: {
+											wasAddedAsCurrentFile: false,
+											virtualContent: result.fileTreeContent,
+											isVirtualFile: true
+										},
 									});
+									totalFilesProcessed += 1;
+
+									notificationService.info(`Added folder structure for "${folderName}" (${result.totalSizeMB?.toFixed(1)}MB total)`);
+								} else {
+									if (result.uris.length >= CONFIRMATION_THRESHOLD) {
+										const folderName =
+											uri.fsPath.split(/[/\\]/).pop() || "folder";
+										const response = dialogService?.confirm ? await dialogService.confirm({
+											message: `Add ${result.uris.length} files from "${folderName}"?`,
+											detail:
+												totalSkipped > 0
+													? `${totalSkipped} files were filtered out${
+															totalLargeFilesSkipped > 0
+																? `, ${totalLargeFilesSkipped} files skipped (>200MB)`
+																: ""
+													  }`
+													: totalLargeFilesSkipped > 0
+													? `${totalLargeFilesSkipped} files skipped (>200MB)`
+													: undefined,
+											type: "question",
+										}) : { confirmed: true }; // Default to confirmed if dialog service unavailable
+
+										if (!response.confirmed) {
+											notificationService.info("File drop cancelled");
+											return;
+										}
+									}
+
+									for (const fileUri of result.uris) {
+										const language = getFileLanguage(fileUri);
+										newSelections.push({
+											type: "File",
+											uri: fileUri,
+											language,
+											state: { wasAddedAsCurrentFile: false },
+										});
+									}
+									totalFilesProcessed += result.uris.length;
 								}
-								totalFilesProcessed += result.uris.length;
 							} else {
 								const sizeCheck = await checkFileSize(uri);
 								if (!sizeCheck.isValid) {
@@ -757,13 +1002,9 @@ export const VoidChatArea: React.FC<VoidChatAreaProps> = ({
 									continue;
 								}
 
-								const language = getFileLanguage(uri);
-								newSelections.push({
-									type: "File",
-									uri,
-									language,
-									state: { wasAddedAsCurrentFile: false },
-								});
+								// Add single file with intelligent content extraction (PDFs get full text)
+								const selection = await createFileSelectionWithContent(uri);
+								newSelections.push(selection);
 								totalFilesProcessed++;
 							}
 						} catch (err) {
@@ -798,48 +1039,66 @@ export const VoidChatArea: React.FC<VoidChatAreaProps> = ({
 						const stat = await fileService.stat(uri);
 
 						if (stat.isDirectory) {
-							// Handle folder - add all files recursively
-							const result = await collectFilesFromFolder(
-								uri,
-								MAX_FILES - newSelections.length
-							);
+							// Handle folder with smart file/folder tree logic
+							const result = await collectFilesFromFolder(uri);
 
 							totalSkipped += result.skippedCount;
 							totalLargeFilesSkipped += result.largeFilesSkipped;
 
-							if (result.uris.length >= CONFIRMATION_THRESHOLD) {
+							if (result.isFileTree && result.fileTreeContent) {
+								// Create a virtual file with the folder tree
 								const folderName = uri.fsPath.split(/[/\\]/).pop() || "folder";
-								const response = await dialogService.confirm({
-									message: `Add ${result.uris.length} files from "${folderName}"?`,
-									detail:
-										totalSkipped > 0
-											? `${totalSkipped} files were filtered out${
-													totalLargeFilesSkipped > 0
-														? `, ${totalLargeFilesSkipped} files skipped (>50MB)`
-														: ""
-											  }`
-											: totalLargeFilesSkipped > 0
-											? `${totalLargeFilesSkipped} files skipped (>50MB)`
-											: undefined,
-									type: "question",
-								});
+								const treeUri = URI.parse(`folder-tree://${folderName}.txt`);
+								const language = "plaintext";
 
-								if (!response.confirmed) {
-									notificationService.info("File drop cancelled");
-									return;
-								}
-							}
-
-							for (const fileUri of result.uris) {
-								const language = getFileLanguage(fileUri);
 								newSelections.push({
 									type: "File",
-									uri: fileUri,
+									uri: treeUri,
 									language,
-									state: { wasAddedAsCurrentFile: false },
+									state: {
+										wasAddedAsCurrentFile: false,
+										virtualContent: result.fileTreeContent,
+										isVirtualFile: true
+									},
 								});
+								totalFilesProcessed += 1;
+
+								notificationService.info(`Added folder structure for "${folderName}" (${result.totalSizeMB?.toFixed(1)}MB total)`);
+							} else {
+								if (result.uris.length >= CONFIRMATION_THRESHOLD) {
+									const folderName = uri.fsPath.split(/[/\\]/).pop() || "folder";
+									const response = dialogService?.confirm ? await dialogService.confirm({
+										message: `Add ${result.uris.length} files from "${folderName}"?`,
+										detail:
+											totalSkipped > 0
+												? `${totalSkipped} files were filtered out${
+														totalLargeFilesSkipped > 0
+															? `, ${totalLargeFilesSkipped} files skipped (>200MB)`
+															: ""
+												  }`
+												: totalLargeFilesSkipped > 0
+												? `${totalLargeFilesSkipped} files skipped (>200MB)`
+												: undefined,
+										type: "question",
+									}) : { confirmed: true }; // Default to confirmed if dialog service unavailable
+
+									if (!response.confirmed) {
+										notificationService.info("File drop cancelled");
+										return;
+									}
+								}
+
+								for (const fileUri of result.uris) {
+									const language = getFileLanguage(fileUri);
+									newSelections.push({
+										type: "File",
+										uri: fileUri,
+										language,
+										state: { wasAddedAsCurrentFile: false },
+									});
+								}
+								totalFilesProcessed += result.uris.length;
 							}
-							totalFilesProcessed += result.uris.length;
 						} else {
 							// Check file size
 							const sizeCheck = await checkFileSize(uri);
@@ -847,19 +1106,14 @@ export const VoidChatArea: React.FC<VoidChatAreaProps> = ({
 								notificationService.warn(
 									`File too large: ${file.name} (${sizeCheck.size.toFixed(
 										2
-									)}MB, max 50MB)`
+									)}MB, max 200MB)`
 								);
 								continue;
 							}
 
-							// Add single file
-							const language = getFileLanguage(uri);
-							newSelections.push({
-								type: "File",
-								uri,
-								language,
-								state: { wasAddedAsCurrentFile: false },
-							});
+							// Add single file with intelligent content extraction (PDFs get full text)
+							const selection = await createFileSelectionWithContent(uri);
+							newSelections.push(selection);
 							totalFilesProcessed++;
 						}
 					} catch (err) {
@@ -900,7 +1154,7 @@ export const VoidChatArea: React.FC<VoidChatAreaProps> = ({
 					totalSkipped > 0
 						? `All ${totalSkipped} files were filtered out (node_modules, build artifacts, etc.)`
 						: totalLargeFilesSkipped > 0
-						? `All files were too large (>50MB)`
+						? `All files were too large (>200MB)`
 						: "No valid files or folders found in drop event";
 
 				notificationService.warn(reason);
@@ -1146,48 +1400,7 @@ const ScrollToBottomContainer = ({
 	);
 };
 
-export const getRelative = (
-	uri: URI,
-	accessor: ReturnType<typeof useAccessor>
-) => {
-	const workspaceContextService = accessor.get("IWorkspaceContextService");
-	let path: string;
-	const isInside = workspaceContextService.isInsideWorkspace(uri);
-	if (isInside) {
-		const f = workspaceContextService
-			.getWorkspace()
-			.folders.find((f) => uri.fsPath?.startsWith(f.uri.fsPath));
-		if (f) {
-			path = uri.fsPath.replace(f.uri.fsPath, "");
-		} else {
-			path = uri.fsPath;
-		}
-	} else {
-		path = uri.fsPath;
-	}
-	return path || undefined;
-};
-
-export const getFolderName = (pathStr: string) => {
-	// 'unixify' path
-	pathStr = pathStr.replace(/[/\\]+/g, "/"); // replace any / or \ or \\ with /
-	const parts = pathStr.split("/"); // split on /
-	// Filter out empty parts (the last element will be empty if path ends with /)
-	const nonEmptyParts = parts.filter((part) => part.length > 0);
-	if (nonEmptyParts.length === 0) return "/"; // Root directory
-	if (nonEmptyParts.length === 1) return nonEmptyParts[0] + "/"; // Only one folder
-	// Get the last two parts
-	const lastTwo = nonEmptyParts.slice(-2);
-	return lastTwo.join("/") + "/";
-};
-
-export const getBasename = (pathStr: string, parts: number = 1) => {
-	// 'unixify' path
-	pathStr = pathStr.replace(/[/\\]+/g, "/"); // replace any / or \ or \\ with /
-	const allParts = pathStr.split("/"); // split on /
-	if (allParts.length === 0) return pathStr;
-	return allParts.slice(-parts).join("/");
-};
+// Path helpers (getRelative, getFolderName, getBasename) are now imported from ./tool-renderers/
 
 // Open file utility function
 export const voidOpenFileFn = (
@@ -1277,9 +1490,9 @@ export const SelectedFiles = ({
 			const prospectiveURIs = recentUris
 				.filter(
 					(uri) =>
-						!selections.find(
-							(s) => s.type === "File" && s.uri.fsPath === uri.fsPath
-						)
+					!selections.find(
+						(s) => s.type === "File" && s.uri?.fsPath === uri.fsPath
+					)
 				)
 				.slice(0, maxProspectiveFiles);
 
@@ -1323,17 +1536,17 @@ export const SelectedFiles = ({
 						  selection.language +
 						  selection.range +
 						  selection.state.wasAddedAsCurrentFile +
-						  selection.uri.fsPath
+						  (selection.uri?.fsPath ?? i)
 						: selection.type === "File"
 						? selection.type +
 						  selection.language +
 						  selection.state.wasAddedAsCurrentFile +
-						  selection.uri.fsPath
+						  (selection.uri?.fsPath ?? i)
 						: selection.type === "Folder"
 						? selection.type +
 						  selection.language +
 						  selection.state +
-						  selection.uri.fsPath
+						  (selection.uri?.fsPath ?? i)
 						: i;
 
 				const SelectionIcon =
@@ -1418,7 +1631,7 @@ export const SelectedFiles = ({
 
 								{
 									// file name and range
-									getBasename(selection.uri.fsPath) +
+									getBasename(selection.uri?.fsPath) +
 										(selection.type === "CodeSelection"
 											? ` (${selection.range[0]}-${selection.range[1]})`
 											: "")
@@ -1427,7 +1640,7 @@ export const SelectedFiles = ({
 								{selection.type === "File" &&
 								selection.state.wasAddedAsCurrentFile &&
 								messageIdx === undefined &&
-								currentURI?.fsPath === selection.uri.fsPath ? (
+								currentURI?.fsPath === selection.uri?.fsPath ? (
 									<span
 										className={`text-[8px] 'void-opacity-60 text-void-fg-4`}
 									>
@@ -1461,189 +1674,7 @@ export const SelectedFiles = ({
 	);
 };
 
-type ToolHeaderParams = {
-	icon?: React.ReactNode;
-	title: React.ReactNode;
-	desc1: React.ReactNode;
-	desc1OnClick?: () => void;
-	desc2?: React.ReactNode;
-	isError?: boolean;
-	info?: string;
-	desc1Info?: string;
-	isRejected?: boolean;
-	numResults?: number;
-	hasNextPage?: boolean;
-	children?: React.ReactNode;
-	bottomChildren?: React.ReactNode;
-	onClick?: () => void;
-	desc2OnClick?: () => void;
-	isOpen?: boolean;
-	className?: string;
-};
-
-const ToolHeaderWrapper = ({
-	icon,
-	title,
-	desc1,
-	desc1OnClick,
-	desc1Info,
-	desc2,
-	numResults,
-	hasNextPage,
-	children,
-	info,
-	bottomChildren,
-	isError,
-	onClick,
-	desc2OnClick,
-	isOpen,
-	isRejected,
-	className, // applies to the main content
-}: ToolHeaderParams) => {
-	const [isOpen_, setIsOpen] = useState(false);
-	const isExpanded = isOpen !== undefined ? isOpen : isOpen_;
-
-	const isDropdown = children !== undefined; // null ALLOWS dropdown
-	const isClickable = !!(isDropdown || onClick);
-
-	const isDesc1Clickable = !!desc1OnClick;
-
-	const desc1HTML = (
-		<span
-			className={`text-void-fg-4 text-xs italic truncate ml-2
-			${
-				isDesc1Clickable
-					? "cursor-pointer hover:brightness-125 transition-all duration-150"
-					: ""
-			}
-		`}
-			onClick={desc1OnClick}
-			{...(desc1Info
-				? {
-						"data-tooltip-id": "void-tooltip",
-						"data-tooltip-content": desc1Info,
-						"data-tooltip-place": "top",
-						"data-tooltip-delay-show": 1000,
-				  }
-				: {})}
-		>
-			{desc1}
-		</span>
-	);
-
-	return (
-		<div className="">
-			<div
-				className={`w-full border border-void-border-3 rounded px-2 py-1 bg-void-bg-3 overflow-hidden ${className}`}
-			>
-				{/* header */}
-				<div className={`select-none flex items-center min-h-[24px]`}>
-					<div
-						className={`flex items-center w-full gap-x-2 overflow-hidden justify-between ${
-							isRejected ? "line-through" : ""
-						}`}
-					>
-						{/* left */}
-						<div // container for if desc1 is clickable
-							className="ml-1 flex items-center overflow-hidden"
-						>
-							{/* title eg "> Edited File" */}
-							<div
-								className={`
-							flex items-center min-w-0 overflow-hidden grow
-							${
-								isClickable
-									? "cursor-pointer hover:brightness-125 transition-all duration-150"
-									: ""
-							}
-						`}
-								onClick={() => {
-									if (isDropdown) {
-										setIsOpen((v) => !v);
-									}
-									if (onClick) {
-										onClick();
-									}
-								}}
-							>
-								{isDropdown && (
-									<ChevronRight
-										className={`
-								text-void-fg-3 mr-0.5 h-4 w-4 flex-shrink-0 transition-transform duration-100 ease-[cubic-bezier(0.4,0,0.2,1)]
-								${isExpanded ? "rotate-90" : ""}
-							`}
-									/>
-								)}
-								<span className="text-void-fg-3 flex-shrink-0">{title}</span>
-
-								{!isDesc1Clickable && desc1HTML}
-							</div>
-							{isDesc1Clickable && desc1HTML}
-						</div>
-
-						{/* right */}
-						<div className="flex items-center gap-x-2 flex-shrink-0">
-							{info && (
-								<CircleEllipsis
-									className="ml-2 text-void-fg-4 opacity-60 flex-shrink-0"
-									size={14}
-									data-tooltip-id="void-tooltip"
-									data-tooltip-content={info}
-									data-tooltip-place="top-end"
-								/>
-							)}
-
-							{isError && (
-								<AlertTriangle
-									className="text-void-warning opacity-90 flex-shrink-0"
-									size={14}
-									data-tooltip-id="void-tooltip"
-									data-tooltip-content={"Error running tool"}
-									data-tooltip-place="top"
-								/>
-							)}
-							{isRejected && (
-								<Ban
-									className="text-void-fg-4 opacity-90 flex-shrink-0"
-									size={14}
-									data-tooltip-id="void-tooltip"
-									data-tooltip-content={"Canceled"}
-									data-tooltip-place="top"
-								/>
-							)}
-							{desc2 && (
-								<span className="text-void-fg-4 text-xs" onClick={desc2OnClick}>
-									{desc2}
-								</span>
-							)}
-							{numResults !== undefined && (
-								<span className="text-void-fg-4 text-xs ml-auto mr-1">
-									{`${numResults}${hasNextPage ? "+" : ""} result${
-										numResults !== 1 ? "s" : ""
-									}`}
-								</span>
-							)}
-						</div>
-					</div>
-				</div>
-				{/* children */}
-				{
-					<div
-						className={`overflow-hidden transition-all duration-200 ease-in-out ${
-							isExpanded ? "opacity-100 py-1" : "max-h-0 opacity-0"
-						}
-					text-void-fg-4 rounded-sm overflow-x-auto
-				  `}
-						//    bg-black bg-opacity-10 border border-void-border-4 border-opacity-50
-					>
-						{children}
-					</div>
-				}
-			</div>
-			{bottomChildren}
-		</div>
-	);
-};
+// ToolHeaderWrapper and ToolHeaderParams are now imported from ./tool-renderers/
 
 const EditTool = ({
 	toolMessage,
@@ -1743,54 +1774,7 @@ const EditTool = ({
 	return <ToolHeaderWrapper {...componentParams} />;
 };
 
-const SimplifiedToolHeader = ({
-	title,
-	children,
-}: {
-	title: string;
-	children?: React.ReactNode;
-}) => {
-	const [isOpen, setIsOpen] = useState(false);
-	const isDropdown = children !== undefined;
-	return (
-		<div>
-			<div className="w-full">
-				{/* header */}
-				<div
-					className={`select-none flex items-center min-h-[24px] ${
-						isDropdown ? "cursor-pointer" : ""
-					}`}
-					onClick={() => {
-						if (isDropdown) {
-							setIsOpen((v) => !v);
-						}
-					}}
-				>
-					{isDropdown && (
-						<ChevronRight
-							className={`text-void-fg-3 mr-0.5 h-4 w-4 flex-shrink-0 transition-transform duration-100 ease-[cubic-bezier(0.4,0,0.2,1)] ${
-								isOpen ? "rotate-90" : ""
-							}`}
-						/>
-					)}
-					<div className="flex items-center w-full overflow-hidden">
-						<span className="text-void-fg-3">{title}</span>
-					</div>
-				</div>
-				{/* children */}
-				{
-					<div
-						className={`overflow-hidden transition-all duration-200 ease-in-out ${
-							isOpen ? "opacity-100" : "max-h-0 opacity-0"
-						} text-void-fg-4`}
-					>
-						{children}
-					</div>
-				}
-			</div>
-		</div>
-	);
-};
+// SimplifiedToolHeader is now imported from ./tool-renderers/
 
 const UserMessageComponent = ({
 	chatMessage,
@@ -2087,105 +2071,8 @@ const UserMessageComponent = ({
 	);
 };
 
-const SmallProseWrapper = ({ children }: { children: React.ReactNode }) => {
-	return (
-		<div
-			className="
-text-void-fg-4
-prose
-prose-sm
-break-words
-max-w-none
-leading-snug
-text-[13px]
+// SmallProseWrapper and ProseWrapper are now imported from ./tool-renderers/
 
-[&>:first-child]:!mt-0
-[&>:last-child]:!mb-0
-
-prose-h1:text-[14px]
-prose-h1:my-4
-
-prose-h2:text-[13px]
-prose-h2:my-4
-
-prose-h3:text-[13px]
-prose-h3:my-3
-
-prose-h4:text-[13px]
-prose-h4:my-2
-
-prose-p:my-2
-prose-p:leading-snug
-prose-hr:my-2
-
-prose-ul:my-2
-prose-ul:pl-4
-prose-ul:list-outside
-prose-ul:list-disc
-prose-ul:leading-snug
-
-
-prose-ol:my-2
-prose-ol:pl-4
-prose-ol:list-outside
-prose-ol:list-decimal
-prose-ol:leading-snug
-
-marker:text-inherit
-
-prose-blockquote:pl-2
-prose-blockquote:my-2
-
-prose-code:text-void-fg-3
-prose-code:text-[12px]
-prose-code:before:content-none
-prose-code:after:content-none
-
-prose-pre:text-[12px]
-prose-pre:p-2
-prose-pre:my-2
-
-prose-table:text-[13px]
-"
-		>
-			{children}
-		</div>
-	);
-};
-
-const ProseWrapper = ({ children }: { children: React.ReactNode }) => {
-	return (
-		<div
-			className="
-text-void-fg-2
-prose
-prose-sm
-break-words
-prose-p:block
-prose-hr:my-4
-prose-pre:my-2
-marker:text-inherit
-prose-ol:list-outside
-prose-ol:list-decimal
-prose-ul:list-outside
-prose-ul:list-disc
-prose-li:my-0
-prose-code:before:content-none
-prose-code:after:content-none
-prose-headings:prose-sm
-prose-headings:font-bold
-
-prose-p:leading-normal
-prose-ol:leading-normal
-prose-ul:leading-normal
-
-max-w-none
-"
-		>
-			{children}
-		</div>
-	);
-};
 const AssistantMessageComponent = ({
 	chatMessage,
 	isCheckpointGhost,
@@ -2322,327 +2209,7 @@ const ReasoningWrapper = ({
 
 // should either be past or "-ing" tense, not present tense. Eg. when the LLM searches for something, the user expects it to say "I searched for X" or "I am searching for X". Not "I search X".
 
-const loadingTitleWrapper = (item: React.ReactNode): React.ReactNode => {
-	return (
-		<span className="flex items-center flex-nowrap">
-			{item}
-			<IconLoading className="w-3 text-sm" />
-		</span>
-	);
-};
-
-const titleOfBuiltinToolName = {
-	read_file: {
-		done: "Read file",
-		proposed: "Read file",
-		running: loadingTitleWrapper("Reading file"),
-	},
-	ls_dir: {
-		done: "Inspected folder",
-		proposed: "Inspect folder",
-		running: loadingTitleWrapper("Inspecting folder"),
-	},
-	get_dir_tree: {
-		done: "Inspected folder tree",
-		proposed: "Inspect folder tree",
-		running: loadingTitleWrapper("Inspecting folder tree"),
-	},
-	search_pathnames_only: {
-		done: "Searched by file name",
-		proposed: "Search by file name",
-		running: loadingTitleWrapper("Searching by file name"),
-	},
-	search_for_files: {
-		done: "Searched",
-		proposed: "Search",
-		running: loadingTitleWrapper("Searching"),
-	},
-	create_file_or_folder: {
-		done: `Created`,
-		proposed: `Create`,
-		running: loadingTitleWrapper(`Creating`),
-	},
-	delete_file_or_folder: {
-		done: `Deleted`,
-		proposed: `Delete`,
-		running: loadingTitleWrapper(`Deleting`),
-	},
-	edit_file: {
-		done: `Edited file`,
-		proposed: "Edit file",
-		running: loadingTitleWrapper("Editing file"),
-	},
-	rewrite_file: {
-		done: `Wrote file`,
-		proposed: "Write file",
-		running: loadingTitleWrapper("Writing file"),
-	},
-	run_command: {
-		done: `Ran terminal`,
-		proposed: "Run terminal",
-		running: loadingTitleWrapper("Running terminal"),
-	}, // Terminal functionality disabled
-	run_persistent_command: {
-		done: `Ran terminal`,
-		proposed: "Run terminal",
-		running: loadingTitleWrapper("Running terminal"),
-	}, // Terminal functionality disabled
-
-	open_persistent_terminal: {
-		done: `Opened terminal`,
-		proposed: "Open terminal",
-		running: loadingTitleWrapper("Opening terminal"),
-	},
-	kill_persistent_terminal: {
-		done: `Killed terminal`,
-		proposed: "Kill terminal",
-		running: loadingTitleWrapper("Killing terminal"),
-	},
-
-	read_lint_errors: {
-		done: `Read lint errors`,
-		proposed: "Read lint errors",
-		running: loadingTitleWrapper("Reading lint errors"),
-	},
-	search_in_file: {
-		done: "Searched in file",
-		proposed: "Search in file",
-		running: loadingTitleWrapper("Searching in file"),
-	},
-	rag_index_document: {
-		done: "Indexed document",
-		proposed: "Index document",
-		running: loadingTitleWrapper("Indexing document"),
-	},
-	rag_search_policy: {
-		done: "Searched policy",
-		proposed: "Search policy",
-		running: loadingTitleWrapper("Searching policy"),
-	},
-	rag_search_workspace: {
-		done: "Searched workspace",
-		proposed: "Search workspace",
-		running: loadingTitleWrapper("Searching workspace"),
-	},
-	rag_get_stats: {
-		done: "Got stats",
-		proposed: "Get stats",
-		running: loadingTitleWrapper("Getting stats"),
-	},
-	edit_document: {
-		done: "Edited document",
-		proposed: "Edit document",
-		running: loadingTitleWrapper("Editing document"),
-	},
-} as const satisfies Record<
-	BuiltinToolName,
-	{ done: any; proposed: any; running: any }
->;
-
-const getTitle = (
-	toolMessage: Pick<
-		ChatMessage & { role: "tool" },
-		"name" | "type" | "mcpServerName"
-	>
-): React.ReactNode => {
-	const t = toolMessage;
-
-	// non-built-in title
-	if (!builtinToolNames.includes(t.name as BuiltinToolName)) {
-		// descriptor of Running or Ran etc
-		const descriptor =
-			t.type === "success"
-				? "Called"
-				: t.type === "running_now"
-				? "Calling"
-				: t.type === "tool_request"
-				? "Call"
-				: t.type === "rejected"
-				? "Call"
-				: t.type === "invalid_params"
-				? "Call"
-				: t.type === "tool_error"
-				? "Call"
-				: "Call";
-
-		const title = `${descriptor} ${toolMessage.mcpServerName || "MCP"}`;
-		if (t.type === "running_now" || t.type === "tool_request")
-			return loadingTitleWrapper(title);
-		return title;
-	}
-
-	// built-in title
-	else {
-		const toolName = t.name as BuiltinToolName;
-		if (t.type === "success") return titleOfBuiltinToolName[toolName].done;
-		if (t.type === "running_now")
-			return titleOfBuiltinToolName[toolName].running;
-		return titleOfBuiltinToolName[toolName].proposed;
-	}
-};
-
-const toolNameToDesc = (
-	toolName: BuiltinToolName,
-	_toolParams: BuiltinToolCallParams[BuiltinToolName] | undefined,
-	accessor: ReturnType<typeof useAccessor>
-): {
-	desc1: React.ReactNode;
-	desc1Info?: string;
-} => {
-	if (!_toolParams) {
-		return { desc1: "" };
-	}
-
-	const x = {
-		read_file: () => {
-			const toolParams = _toolParams as BuiltinToolCallParams["read_file"];
-			return {
-				desc1: getBasename(toolParams.uri.fsPath),
-				desc1Info: getRelative(toolParams.uri, accessor),
-			};
-		},
-		ls_dir: () => {
-			const toolParams = _toolParams as BuiltinToolCallParams["ls_dir"];
-			return {
-				desc1: getFolderName(toolParams.uri.fsPath),
-				desc1Info: getRelative(toolParams.uri, accessor),
-			};
-		},
-		search_pathnames_only: () => {
-			const toolParams =
-				_toolParams as BuiltinToolCallParams["search_pathnames_only"];
-			return {
-				desc1: `"${toolParams.query}"`,
-			};
-		},
-		search_for_files: () => {
-			const toolParams =
-				_toolParams as BuiltinToolCallParams["search_for_files"];
-			return {
-				desc1: `"${toolParams.query}"`,
-			};
-		},
-		search_in_file: () => {
-			const toolParams = _toolParams as BuiltinToolCallParams["search_in_file"];
-			return {
-				desc1: `"${toolParams.query}"`,
-				desc1Info: getRelative(toolParams.uri, accessor),
-			};
-		},
-		create_file_or_folder: () => {
-			const toolParams =
-				_toolParams as BuiltinToolCallParams["create_file_or_folder"];
-			return {
-				desc1: toolParams.isFolder
-					? getFolderName(toolParams.uri.fsPath) ?? "/"
-					: getBasename(toolParams.uri.fsPath),
-				desc1Info: getRelative(toolParams.uri, accessor),
-			};
-		},
-		delete_file_or_folder: () => {
-			const toolParams =
-				_toolParams as BuiltinToolCallParams["delete_file_or_folder"];
-			return {
-				desc1: toolParams.isFolder
-					? getFolderName(toolParams.uri.fsPath) ?? "/"
-					: getBasename(toolParams.uri.fsPath),
-				desc1Info: getRelative(toolParams.uri, accessor),
-			};
-		},
-		rewrite_file: () => {
-			const toolParams = _toolParams as BuiltinToolCallParams["rewrite_file"];
-			return {
-				desc1: getBasename(toolParams.uri.fsPath),
-				desc1Info: getRelative(toolParams.uri, accessor),
-			};
-		},
-		edit_file: () => {
-			const toolParams = _toolParams as BuiltinToolCallParams["edit_file"];
-			return {
-				desc1: getBasename(toolParams.uri.fsPath),
-				desc1Info: getRelative(toolParams.uri, accessor),
-			};
-		},
-		run_command: () => {
-			const toolParams = _toolParams as BuiltinToolCallParams["run_command"]; // Terminal functionality disabled
-			return {
-				desc1: `"${toolParams.command}"`,
-			};
-		},
-		run_persistent_command: () => {
-			const toolParams =
-				_toolParams as BuiltinToolCallParams["run_persistent_command"]; // Terminal functionality disabled
-			return {
-				desc1: `"${toolParams.command}"`,
-			};
-		},
-		open_persistent_terminal: () => {
-			const toolParams =
-				_toolParams as BuiltinToolCallParams["open_persistent_terminal"];
-			return { desc1: "" };
-		},
-		kill_persistent_terminal: () => {
-			const toolParams =
-				_toolParams as BuiltinToolCallParams["kill_persistent_terminal"];
-			return { desc1: toolParams.persistentTerminalId };
-		},
-		get_dir_tree: () => {
-			const toolParams = _toolParams as BuiltinToolCallParams["get_dir_tree"];
-			return {
-				desc1: getFolderName(toolParams.uri.fsPath) ?? "/",
-				desc1Info: getRelative(toolParams.uri, accessor),
-			};
-		},
-		read_lint_errors: () => {
-			const toolParams =
-				_toolParams as BuiltinToolCallParams["read_lint_errors"];
-			return {
-				desc1: getBasename(toolParams.uri.fsPath),
-				desc1Info: getRelative(toolParams.uri, accessor),
-			};
-		},
-		rag_index_document: () => {
-			const toolParams =
-				_toolParams as BuiltinToolCallParams["rag_index_document"];
-			return {
-				desc1: getBasename(toolParams.uri.fsPath),
-				desc1Info: getRelative(toolParams.uri, accessor),
-			};
-		},
-		rag_search_policy: () => {
-			const toolParams =
-				_toolParams as BuiltinToolCallParams["rag_search_policy"];
-			return {
-				desc1: `"${toolParams.query}"`,
-			};
-		},
-		rag_search_workspace: () => {
-			const toolParams =
-				_toolParams as BuiltinToolCallParams["rag_search_workspace"];
-			return {
-				desc1: `"${toolParams.query}"`,
-			};
-		},
-		rag_get_stats: () => {
-			return {
-				desc1: "",
-			};
-		},
-		edit_document: () => {
-			const toolParams = _toolParams as BuiltinToolCallParams["edit_document"];
-			return {
-				desc1: getBasename(toolParams.uri.fsPath),
-				desc1Info: getRelative(toolParams.uri, accessor),
-			};
-		},
-	};
-
-	try {
-		return x[toolName]?.() || { desc1: "" };
-	} catch {
-		return { desc1: "" };
-	}
-};
+// Title helpers (loadingTitleWrapper, titleOfBuiltinToolName, getTitle, toolNameToDesc) are now imported from ./tool-renderers/
 
 const ToolRequestAcceptRejectButtons = ({
 	toolName,
@@ -2730,79 +2297,9 @@ const ToolRequestAcceptRejectButtons = ({
 	);
 };
 
-export const ToolChildrenWrapper = ({
-	children,
-	className,
-}: {
-	children: React.ReactNode;
-	className?: string;
-}) => {
-	return (
-		<div className={`${className ? className : ""} cursor-default select-none`}>
-			<div className="px-2 min-w-full overflow-hidden">{children}</div>
-		</div>
-	);
-};
-export const CodeChildren = ({
-	children,
-	className,
-}: {
-	children: React.ReactNode;
-	className?: string;
-}) => {
-	return (
-		<div className={`${className ?? ""} p-1 rounded-sm overflow-auto text-sm`}>
-			<div className="!select-text cursor-auto">{children}</div>
-		</div>
-	);
-};
-
-export const ListableToolItem = ({
-	name,
-	onClick,
-	isSmall,
-	className,
-	showDot,
-}: {
-	name: React.ReactNode;
-	onClick?: () => void;
-	isSmall?: boolean;
-	className?: string;
-	showDot?: boolean;
-}) => {
-	return (
-		<div
-			className={`
-			${
-				onClick
-					? "hover:brightness-125 hover:cursor-pointer transition-all duration-200 "
-					: ""
-			}
-			flex items-center flex-nowrap whitespace-nowrap
-			${className ? className : ""}
-			`}
-			onClick={onClick}
-		>
-			{showDot === false ? null : (
-				<div className="flex-shrink-0">
-					<svg
-						className="w-1 h-1 opacity-60 mr-1.5 fill-current"
-						viewBox="0 0 100 40"
-					>
-						<rect x="0" y="15" width="100" height="10" />
-					</svg>
-				</div>
-			)}
-			<div
-				className={`${
-					isSmall ? "italic text-void-fg-4 flex items-center" : ""
-				}`}
-			>
-				{name}
-			</div>
-		</div>
-	);
-};
+// ToolChildrenWrapper, CodeChildren, and ListableToolItem are now imported from ./tool-renderers/
+// Re-export for backward compatibility
+export { CodeChildren, getBasename, getRelative, ListableToolItem, ToolChildrenWrapper } from "./tool-renderers/index.js";
 
 const EditToolChildren = ({
 	uri,
@@ -2843,43 +2340,7 @@ const LintErrorChildren = ({ lintErrors }: { lintErrors: LintErrorItem[] }) => {
 	);
 };
 
-const BottomChildren = ({
-	children,
-	title,
-}: {
-	children: React.ReactNode;
-	title: string;
-}) => {
-	const [isOpen, setIsOpen] = useState(false);
-	if (!children) return null;
-	return (
-		<div className="w-full px-2 mt-0.5">
-			<div
-				className={`flex items-center cursor-pointer select-none transition-colors duration-150 pl-0 py-0.5 rounded group`}
-				onClick={() => setIsOpen((o) => !o)}
-				style={{ background: "none" }}
-			>
-				<ChevronRight
-					className={`mr-1 h-3 w-3 flex-shrink-0 transition-transform duration-100 text-void-fg-4 group-hover:text-void-fg-3 ${
-						isOpen ? "rotate-90" : ""
-					}`}
-				/>
-				<span className="font-medium text-void-fg-4 group-hover:text-void-fg-3 text-xs">
-					{title}
-				</span>
-			</div>
-			<div
-				className={`overflow-hidden transition-all duration-200 ease-in-out ${
-					isOpen ? "opacity-100" : "max-h-0 opacity-0"
-				} text-xs pl-4`}
-			>
-				<div className="overflow-x-auto text-void-fg-4 opacity-90 border-l-2 border-void-warning px-2 py-0.5">
-					{children}
-				</div>
-			</div>
-		</div>
-	);
-};
+// BottomChildren is now imported from ./tool-renderers/
 
 const EditToolHeaderButtons = ({
 	applyBoxId,
@@ -3938,7 +3399,7 @@ const builtinToolNameToComponent: {
 			return <ToolHeaderWrapper {...componentParams} />;
 		},
 	},
-	rag_search_policy: {
+	rag_search_reference: {
 		resultWrapper: ({ toolMessage }) => {
 			const accessor = useAccessor();
 			const title = getTitle(toolMessage);
@@ -4067,6 +3528,445 @@ const builtinToolNameToComponent: {
 				componentParams.children = (
 					<ToolChildrenWrapper>
 						<CodeChildren>{result.stats}</CodeChildren>
+					</ToolChildrenWrapper>
+				);
+			} else if (toolMessage.type === "tool_error") {
+				const { result } = toolMessage;
+				componentParams.bottomChildren = (
+					<BottomChildren title="Error">
+						<CodeChildren>{result}</CodeChildren>
+					</BottomChildren>
+				);
+			}
+
+			return <ToolHeaderWrapper {...componentParams} />;
+		},
+	},
+	// --- Document editing tool ---
+	edit_document: {
+		resultWrapper: ({ toolMessage }) => {
+			const accessor = useAccessor();
+			const title = getTitle(toolMessage);
+			const { desc1, desc1Info } = toolNameToDesc(
+				toolMessage.name,
+				toolMessage.params,
+				accessor
+			);
+			const icon = null;
+
+			if (toolMessage.type === "tool_request") return null;
+			if (toolMessage.type === "running_now") return null;
+
+			const isError = false;
+			const isRejected = toolMessage.type === "rejected";
+			const componentParams: ToolHeaderParams = {
+				title,
+				desc1,
+				desc1Info,
+				isError,
+				icon,
+				isRejected,
+			};
+
+			if (toolMessage.type === "success") {
+				const { result } = toolMessage;
+				componentParams.children = (
+					<ToolChildrenWrapper>
+						<CodeChildren>{result.message || "Document edited successfully"}</CodeChildren>
+					</ToolChildrenWrapper>
+				);
+			} else if (toolMessage.type === "tool_error") {
+				const { result } = toolMessage;
+				componentParams.bottomChildren = (
+					<BottomChildren title="Error">
+						<CodeChildren>{result}</CodeChildren>
+					</BottomChildren>
+				);
+			}
+
+			return <ToolHeaderWrapper {...componentParams} />;
+		},
+	},
+	// --- RAG search all tool ---
+	rag_search_all: {
+		resultWrapper: ({ toolMessage }) => {
+			const accessor = useAccessor();
+			const title = getTitle(toolMessage);
+			const { desc1 } = toolNameToDesc(
+				toolMessage.name,
+				toolMessage.params,
+				accessor
+			);
+			const icon = null;
+
+			if (toolMessage.type === "tool_request") return null;
+			if (toolMessage.type === "running_now") return null;
+
+			const isError = false;
+			const isRejected = toolMessage.type === "rejected";
+			const componentParams: ToolHeaderParams = {
+				title,
+				desc1,
+				isError,
+				icon,
+				isRejected,
+			};
+
+			if (toolMessage.type === "success") {
+				const { result } = toolMessage;
+				componentParams.children = (
+					<ToolChildrenWrapper>
+						<CodeChildren>{result.contextPack || "No results"}</CodeChildren>
+					</ToolChildrenWrapper>
+				);
+			} else if (toolMessage.type === "tool_error") {
+				const { result } = toolMessage;
+				componentParams.bottomChildren = (
+					<BottomChildren title="Error">
+						<CodeChildren>{result}</CodeChildren>
+					</BottomChildren>
+				);
+			}
+
+			return <ToolHeaderWrapper {...componentParams} />;
+		},
+	},
+	// --- Web search tool ---
+	web_search: {
+		resultWrapper: ({ toolMessage }) => {
+			const accessor = useAccessor();
+			const title = getTitle(toolMessage);
+			const { desc1 } = toolNameToDesc(
+				toolMessage.name,
+				toolMessage.params,
+				accessor
+			);
+			const icon = null;
+
+			if (toolMessage.type === "tool_request") return null;
+			if (toolMessage.type === "running_now") return null;
+
+			const isError = false;
+			const isRejected = toolMessage.type === "rejected";
+			const componentParams: ToolHeaderParams = {
+				title,
+				desc1,
+				isError,
+				icon,
+				isRejected,
+			};
+
+			if (toolMessage.type === "success") {
+				const { result } = toolMessage;
+				componentParams.children = (
+					<ToolChildrenWrapper>
+						<CodeChildren>{JSON.stringify(result, null, 2)}</CodeChildren>
+					</ToolChildrenWrapper>
+				);
+			} else if (toolMessage.type === "tool_error") {
+				const { result } = toolMessage;
+				componentParams.bottomChildren = (
+					<BottomChildren title="Error">
+						<CodeChildren>{result}</CodeChildren>
+					</BottomChildren>
+				);
+			}
+
+			return <ToolHeaderWrapper {...componentParams} />;
+		},
+	},
+	// --- Multi link search tool ---
+	multi_link_search: {
+		resultWrapper: ({ toolMessage }) => {
+			const accessor = useAccessor();
+			const title = getTitle(toolMessage);
+			const { desc1 } = toolNameToDesc(
+				toolMessage.name,
+				toolMessage.params,
+				accessor
+			);
+			const icon = null;
+
+			if (toolMessage.type === "tool_request") return null;
+			if (toolMessage.type === "running_now") return null;
+
+			const isError = false;
+			const isRejected = toolMessage.type === "rejected";
+			const componentParams: ToolHeaderParams = {
+				title,
+				desc1,
+				isError,
+				icon,
+				isRejected,
+			};
+
+			if (toolMessage.type === "success") {
+				const { result } = toolMessage;
+				componentParams.children = (
+					<ToolChildrenWrapper>
+						<CodeChildren>{JSON.stringify(result, null, 2)}</CodeChildren>
+					</ToolChildrenWrapper>
+				);
+			} else if (toolMessage.type === "tool_error") {
+				const { result } = toolMessage;
+				componentParams.bottomChildren = (
+					<BottomChildren title="Error">
+						<CodeChildren>{result}</CodeChildren>
+					</BottomChildren>
+				);
+			}
+
+			return <ToolHeaderWrapper {...componentParams} />;
+		},
+	},
+	// --- Timeline tools ---
+	timeline_add_event: {
+		resultWrapper: ({ toolMessage }) => {
+			const accessor = useAccessor();
+			const title = getTitle(toolMessage);
+			const { desc1 } = toolNameToDesc(
+				toolMessage.name,
+				toolMessage.params,
+				accessor
+			);
+			const icon = null;
+
+			if (toolMessage.type === "tool_request") return null;
+			if (toolMessage.type === "running_now") return null;
+
+			const isError = false;
+			const isRejected = toolMessage.type === "rejected";
+			const componentParams: ToolHeaderParams = {
+				title,
+				desc1,
+				isError,
+				icon,
+				isRejected,
+			};
+
+			if (toolMessage.type === "success") {
+				const { result } = toolMessage;
+				componentParams.children = (
+					<ToolChildrenWrapper>
+						<CodeChildren>{`Event added: ${result.event?.title ?? "Unknown"}`}</CodeChildren>
+					</ToolChildrenWrapper>
+				);
+			} else if (toolMessage.type === "tool_error") {
+				const { result } = toolMessage;
+				componentParams.bottomChildren = (
+					<BottomChildren title="Error">
+						<CodeChildren>{result}</CodeChildren>
+					</BottomChildren>
+				);
+			}
+
+			return <ToolHeaderWrapper {...componentParams} />;
+		},
+	},
+	timeline_update_event: {
+		resultWrapper: ({ toolMessage }) => {
+			const accessor = useAccessor();
+			const title = getTitle(toolMessage);
+			const { desc1 } = toolNameToDesc(
+				toolMessage.name,
+				toolMessage.params,
+				accessor
+			);
+			const icon = null;
+
+			if (toolMessage.type === "tool_request") return null;
+			if (toolMessage.type === "running_now") return null;
+
+			const isError = false;
+			const isRejected = toolMessage.type === "rejected";
+			const componentParams: ToolHeaderParams = {
+				title,
+				desc1,
+				isError,
+				icon,
+				isRejected,
+			};
+
+			if (toolMessage.type === "success") {
+				const { result } = toolMessage;
+				componentParams.children = (
+					<ToolChildrenWrapper>
+						<CodeChildren>{result.success ? "Event updated successfully" : "Failed to update event"}</CodeChildren>
+					</ToolChildrenWrapper>
+				);
+			} else if (toolMessage.type === "tool_error") {
+				const { result } = toolMessage;
+				componentParams.bottomChildren = (
+					<BottomChildren title="Error">
+						<CodeChildren>{result}</CodeChildren>
+					</BottomChildren>
+				);
+			}
+
+			return <ToolHeaderWrapper {...componentParams} />;
+		},
+	},
+	timeline_delete_event: {
+		resultWrapper: ({ toolMessage }) => {
+			const accessor = useAccessor();
+			const title = getTitle(toolMessage);
+			const { desc1 } = toolNameToDesc(
+				toolMessage.name,
+				toolMessage.params,
+				accessor
+			);
+			const icon = null;
+
+			if (toolMessage.type === "tool_request") return null;
+			if (toolMessage.type === "running_now") return null;
+
+			const isError = false;
+			const isRejected = toolMessage.type === "rejected";
+			const componentParams: ToolHeaderParams = {
+				title,
+				desc1,
+				isError,
+				icon,
+				isRejected,
+			};
+
+			if (toolMessage.type === "success") {
+				const { result } = toolMessage;
+				componentParams.children = (
+					<ToolChildrenWrapper>
+						<CodeChildren>{result.success ? "Event deleted successfully" : "Failed to delete event"}</CodeChildren>
+					</ToolChildrenWrapper>
+				);
+			} else if (toolMessage.type === "tool_error") {
+				const { result } = toolMessage;
+				componentParams.bottomChildren = (
+					<BottomChildren title="Error">
+						<CodeChildren>{result}</CodeChildren>
+					</BottomChildren>
+				);
+			}
+
+			return <ToolHeaderWrapper {...componentParams} />;
+		},
+	},
+	timeline_get_events: {
+		resultWrapper: ({ toolMessage }) => {
+			const accessor = useAccessor();
+			const title = getTitle(toolMessage);
+			const { desc1 } = toolNameToDesc(
+				toolMessage.name,
+				toolMessage.params,
+				accessor
+			);
+			const icon = null;
+
+			if (toolMessage.type === "tool_request") return null;
+			if (toolMessage.type === "running_now") return null;
+
+			const isError = false;
+			const isRejected = toolMessage.type === "rejected";
+			const componentParams: ToolHeaderParams = {
+				title,
+				desc1,
+				isError,
+				icon,
+				isRejected,
+			};
+
+			if (toolMessage.type === "success") {
+				const { result } = toolMessage;
+				componentParams.numResults = result.events?.length ?? 0;
+				componentParams.children = (
+					<ToolChildrenWrapper>
+						<CodeChildren>{JSON.stringify(result, null, 2)}</CodeChildren>
+					</ToolChildrenWrapper>
+				);
+			} else if (toolMessage.type === "tool_error") {
+				const { result } = toolMessage;
+				componentParams.bottomChildren = (
+					<BottomChildren title="Error">
+						<CodeChildren>{result}</CodeChildren>
+					</BottomChildren>
+				);
+			}
+
+			return <ToolHeaderWrapper {...componentParams} />;
+		},
+	},
+	timeline_link_document: {
+		resultWrapper: ({ toolMessage }) => {
+			const accessor = useAccessor();
+			const title = getTitle(toolMessage);
+			const { desc1 } = toolNameToDesc(
+				toolMessage.name,
+				toolMessage.params,
+				accessor
+			);
+			const icon = null;
+
+			if (toolMessage.type === "tool_request") return null;
+			if (toolMessage.type === "running_now") return null;
+
+			const isError = false;
+			const isRejected = toolMessage.type === "rejected";
+			const componentParams: ToolHeaderParams = {
+				title,
+				desc1,
+				isError,
+				icon,
+				isRejected,
+			};
+
+			if (toolMessage.type === "success") {
+				const { result } = toolMessage;
+				componentParams.children = (
+					<ToolChildrenWrapper>
+						<CodeChildren>{result.success ? "Document linked to event successfully" : "Failed to link document"}</CodeChildren>
+					</ToolChildrenWrapper>
+				);
+			} else if (toolMessage.type === "tool_error") {
+				const { result } = toolMessage;
+				componentParams.bottomChildren = (
+					<BottomChildren title="Error">
+						<CodeChildren>{result}</CodeChildren>
+					</BottomChildren>
+				);
+			}
+
+			return <ToolHeaderWrapper {...componentParams} />;
+		},
+	},
+	timeline_get_deadlines: {
+		resultWrapper: ({ toolMessage }) => {
+			const accessor = useAccessor();
+			const title = getTitle(toolMessage);
+			const { desc1 } = toolNameToDesc(
+				toolMessage.name,
+				toolMessage.params,
+				accessor
+			);
+			const icon = null;
+
+			if (toolMessage.type === "tool_request") return null;
+			if (toolMessage.type === "running_now") return null;
+
+			const isError = false;
+			const isRejected = toolMessage.type === "rejected";
+			const componentParams: ToolHeaderParams = {
+				title,
+				desc1,
+				isError,
+				icon,
+				isRejected,
+			};
+
+			if (toolMessage.type === "success") {
+				const { result } = toolMessage;
+				const totalCount = (result.upcoming?.length ?? 0) + (result.overdue?.length ?? 0);
+				componentParams.numResults = totalCount;
+				componentParams.children = (
+					<ToolChildrenWrapper>
+						<CodeChildren>{JSON.stringify(result, null, 2)}</CodeChildren>
 					</ToolChildrenWrapper>
 				);
 			} else if (toolMessage.type === "tool_error") {
@@ -4579,6 +4479,8 @@ const EditToolSoFar = ({
 }: {
 	toolCallSoFar: RawToolCallObj;
 }) => {
+	// Guard against MultipleToolCalls - only handle single tool calls
+	if (!isSingleToolCall(toolCallSoFar)) return null;
 	if (!isABuiltinToolName(toolCallSoFar.name)) return null;
 
 	const accessor = useAccessor();
@@ -4652,7 +4554,8 @@ export const SidebarChat = () => {
 		currThreadStreamState?.llmInfo ?? {};
 
 	// this is just if it's currently being generated, NOT if it's currently running
-	const toolIsGenerating = toolCallSoFar && !toolCallSoFar.isDone; // show loading for slow tools (right now just edit)
+	// Type guard: only single tool calls have isDone property
+	const toolIsGenerating = toolCallSoFar && isSingleToolCall(toolCallSoFar) && !toolCallSoFar.isDone; // show loading for slow tools (right now just edit)
 
 	// ----- SIDEBAR CHAT state (local) -----
 
@@ -4783,7 +4686,8 @@ export const SidebarChat = () => {
 		) : null;
 
 	// the tool currently being generated
-	const generatingTool = toolIsGenerating ? (
+	// Need to re-check isSingleToolCall because TypeScript doesn't track the boolean
+	const generatingTool = toolIsGenerating && toolCallSoFar && isSingleToolCall(toolCallSoFar) ? (
 		toolCallSoFar.name === "edit_file" ||
 		toolCallSoFar.name === "rewrite_file" ? (
 			<EditToolSoFar
@@ -4862,6 +4766,123 @@ export const SidebarChat = () => {
 		[onSubmit, onAbort, isRunning]
 	);
 
+	// Handle Ctrl+V paste for images from clipboard using document-level listener
+	// This is more reliable than React's synthetic paste event
+	const notificationService = accessor.get("INotificationService");
+	const selectionsRef = useRef(selections);
+	selectionsRef.current = selections; // Keep ref updated
+
+	useEffect(() => {
+		const handleDocumentPaste = async (e: ClipboardEvent) => {
+			// Only handle paste when our textarea has focus
+			if (document.activeElement !== textAreaRef.current) {
+				return;
+			}
+
+			const items = e.clipboardData?.items;
+			if (!items) return;
+
+			// Find image items in clipboard
+			const imageItems: DataTransferItem[] = [];
+			for (let i = 0; i < items.length; i++) {
+				const item = items[i];
+				if (item.type.startsWith('image/')) {
+					imageItems.push(item);
+				}
+			}
+
+			// If no images found, let the default paste behavior continue (for text)
+			if (imageItems.length === 0) return;
+
+			// Prevent default paste behavior since we're handling images
+			e.preventDefault();
+			e.stopPropagation();
+
+			console.log('[Paste] Found', imageItems.length, 'image(s) in clipboard');
+
+			const newSelections: StagingSelectionItem[] = [];
+
+			for (const item of imageItems) {
+				try {
+					const file = item.getAsFile();
+					if (!file) {
+						console.log('[Paste] Could not get file from clipboard item');
+						continue;
+					}
+
+					console.log('[Paste] Processing file:', file.type, file.size);
+
+					// Determine MIME type
+					let mimeType: 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp' = 'image/png';
+					if (file.type === 'image/jpeg' || file.type === 'image/jpg') {
+						mimeType = 'image/jpeg';
+					} else if (file.type === 'image/gif') {
+						mimeType = 'image/gif';
+					} else if (file.type === 'image/webp') {
+						mimeType = 'image/webp';
+					}
+
+					// Check file size (max 20MB for images)
+					const MAX_IMAGE_SIZE_MB = 20;
+					const sizeInMB = file.size / (1024 * 1024);
+					if (sizeInMB > MAX_IMAGE_SIZE_MB) {
+						notificationService.warn(`Image too large: ${sizeInMB.toFixed(2)}MB (max ${MAX_IMAGE_SIZE_MB}MB)`);
+						continue;
+					}
+
+					// Convert to base64
+					const base64Data = await new Promise<string>((resolve, reject) => {
+						const reader = new FileReader();
+						reader.onload = () => {
+							const result = reader.result as string;
+							// Remove the data URL prefix (data:image/png;base64,)
+							const base64 = result.split(',')[1];
+							resolve(base64);
+						};
+						reader.onerror = reject;
+						reader.readAsDataURL(file);
+					});
+
+					// Generate a unique URI for the pasted image
+					const timestamp = Date.now();
+					const extension = mimeType.split('/')[1] === 'jpeg' ? 'jpg' : mimeType.split('/')[1];
+					const pastedImageUri = URI.parse(`clipboard-image://pasted-${timestamp}.${extension}`);
+
+					// Create the image selection with cached base64 data
+					const imageSelection: StagingSelectionItem = {
+						type: 'Image',
+						uri: pastedImageUri,
+						mimeType: mimeType,
+						state: {
+							wasAddedAsCurrentFile: false,
+							base64Data: base64Data // Pre-cached, no need to read from disk
+						}
+					};
+
+					newSelections.push(imageSelection);
+					console.log(`[Paste] Added clipboard image: ${pastedImageUri.toString()} (${sizeInMB.toFixed(2)}MB, ${mimeType})`);
+
+				} catch (err) {
+					console.error('Error processing pasted image:', err);
+					notificationService.error(`Error processing pasted image: ${err}`);
+				}
+			}
+
+			// Add the new selections using current ref value
+			if (newSelections.length > 0) {
+				setSelections([...selectionsRef.current, ...newSelections]);
+				notificationService.info(`Added ${newSelections.length} image(s) from clipboard`);
+			}
+		};
+
+		// Use capture phase to intercept paste before other handlers
+		document.addEventListener('paste', handleDocumentPaste, true);
+
+		return () => {
+			document.removeEventListener('paste', handleDocumentPaste, true);
+		};
+	}, [notificationService, setSelections]);
+
 	const inputChatArea = (
 		<VoidChatArea
 			featureName="Chat"
@@ -4900,8 +4921,10 @@ export const SidebarChat = () => {
 	const initiallySuggestedPromptsHTML = (
 		<div className="flex flex-col gap-2 w-full text-nowrap text-void-fg-3 select-none">
 			{[
-				"Summarize my codebase",
-				"How do types work in Rust?",
+				"What are my upcoming deadlines?",
+				"Help me draft an appeal letter",
+				"Search my case documents for medical findings",
+				"Add an event to my timeline",
 				"Create a .fileorg.json file for me",
 			].map((text, index) => (
 				<div

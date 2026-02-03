@@ -10,6 +10,13 @@
 	let currentPage = 1;
 	let totalPages = 1;
 
+	// Model selection state (for inline edit popup)
+	let availableModels = [];
+	let modelSelectElement = null;
+
+	// Store editor selection for inline edit (survives async LLM call)
+	let pendingInlineEditSelection = null; // { from: number, to: number }
+
 	// Debounce timer for content change notifications
 	let contentChangeDebounceTimer = null;
 	const CONTENT_CHANGE_DEBOUNCE_MS = 300;
@@ -292,6 +299,7 @@
 					onSave: handleSaveRequest,
 					onPrint: handlePrint,
 					onExportPDF: handleExportPDF,
+					onSendForSignature: handleSendForSignature,
 					onModification: trackModification,
 					onPageSizeChange: (pageSize) => {
 						console.log('[DOCX Webview] Page size changed to:', pageSize);
@@ -412,6 +420,290 @@
 				}, true); // Use capture phase to intercept before Tiptap's handler
 				console.log('[DOCX Webview] Link click interceptor installed');
 			}
+
+			// ============================================
+			// SELECTION TRACKING FOR CTRL+L AND CTRL+K
+			// ============================================
+
+			// Create selection tooltip element
+			const selectionTooltip = document.createElement('div');
+			selectionTooltip.className = 'docx-selection-tooltip';
+			selectionTooltip.innerHTML = `
+			<button data-action="addToChat">Add to Chat <kbd>Ctrl+L</kbd></button>
+			<button data-action="editInline">Edit Inline <kbd>Ctrl+K</kbd></button>
+		`;
+			selectionTooltip.style.display = 'none';
+			document.body.appendChild(selectionTooltip);
+
+			// Create inline edit popup (Ctrl+K style)
+			const inlineEditPopup = document.createElement('div');
+			inlineEditPopup.className = 'docx-inline-edit-popup';
+			inlineEditPopup.innerHTML = `
+			<div class="inline-edit-header">
+				<span class="inline-edit-title">Quick Edit</span>
+				<button class="inline-edit-close" title="Close (Esc)">×</button>
+			</div>
+			<div class="inline-edit-model-selector">
+				<label for="inline-edit-model">Model:</label>
+				<select id="inline-edit-model" class="inline-edit-model-select">
+					<option value="">Loading models...</option>
+				</select>
+			</div>
+			<div class="inline-edit-selection-preview"></div>
+			<textarea class="inline-edit-input" placeholder="Enter instructions for editing this text..." rows="2"></textarea>
+			<div class="inline-edit-footer">
+				<span class="inline-edit-hint">Press Enter to submit, Esc to cancel</span>
+				<button class="inline-edit-submit">Submit</button>
+			</div>
+		`;
+			inlineEditPopup.style.display = 'none';
+			document.body.appendChild(inlineEditPopup);
+
+			// Store reference to model select element in top-level variable
+			modelSelectElement = inlineEditPopup.querySelector('#inline-edit-model');
+
+			// Inline edit state
+			let inlineEditSelection = null;
+			const inlineEditInput = inlineEditPopup.querySelector('.inline-edit-input');
+			const inlineEditPreview = inlineEditPopup.querySelector('.inline-edit-selection-preview');
+			const inlineEditCloseBtn = inlineEditPopup.querySelector('.inline-edit-close');
+			const inlineEditSubmitBtn = inlineEditPopup.querySelector('.inline-edit-submit');
+
+			function showInlineEditPopup(selection) {
+				if (!selection || !selection.text) return;
+
+				inlineEditSelection = selection;
+
+				// Store the Tiptap editor selection immediately when popup is shown
+				// This ensures we capture the selection before any DOM changes
+				if (tiptapEditor && tiptapEditor.editor) {
+					const { from, to } = tiptapEditor.editor.state.selection;
+					pendingInlineEditSelection = { from, to };
+					console.log('[DOCX Webview] Captured editor selection on popup show:', pendingInlineEditSelection);
+				}
+
+				// Show preview of selected text (truncated)
+				const preview = selection.text.length > 100
+					? selection.text.substring(0, 100) + '...'
+					: selection.text;
+				inlineEditPreview.textContent = `"${preview}"`;
+
+				// Position the popup near the selection
+				const windowSelection = window.getSelection();
+				if (windowSelection && windowSelection.rangeCount > 0) {
+					const range = windowSelection.getRangeAt(0);
+					const rect = range.getBoundingClientRect();
+
+					// Position below the selection
+					let left = rect.left;
+					let top = rect.bottom + 8;
+
+					// Keep in viewport
+					const popupWidth = 400;
+					const popupHeight = 180;
+
+					if (left + popupWidth > window.innerWidth - 20) {
+						left = window.innerWidth - popupWidth - 20;
+					}
+					if (left < 10) left = 10;
+
+					if (top + popupHeight > window.innerHeight - 20) {
+						top = rect.top - popupHeight - 8;
+					}
+					if (top < 10) top = 10;
+
+					inlineEditPopup.style.left = `${left}px`;
+					inlineEditPopup.style.top = `${top}px`;
+				}
+
+				inlineEditPopup.style.display = 'flex';
+				inlineEditInput.value = '';
+				inlineEditInput.focus();
+
+				// Hide the selection tooltip
+				selectionTooltip.style.display = 'none';
+			}
+
+			function hideInlineEditPopup() {
+				inlineEditPopup.style.display = 'none';
+				inlineEditSelection = null;
+				inlineEditInput.value = '';
+			}
+
+			function submitInlineEdit() {
+				const instructions = inlineEditInput.value.trim();
+				if (!instructions || !inlineEditSelection) return;
+
+				// Store the Tiptap editor selection BEFORE the async call
+				// This survives even if the DOM selection is cleared
+				if (tiptapEditor && tiptapEditor.editor) {
+					const { from, to } = tiptapEditor.editor.state.selection;
+					pendingInlineEditSelection = { from, to };
+					console.log('[DOCX Webview] Stored editor selection:', pendingInlineEditSelection);
+				}
+
+				// Get selected model
+				const selectedModel = modelSelectElement && modelSelectElement.selectedIndex >= 0
+					? availableModels[modelSelectElement.selectedIndex]
+					: null;
+
+				// Show loading state
+				inlineEditSubmitBtn.disabled = true;
+				inlineEditSubmitBtn.textContent = 'Processing...';
+				inlineEditInput.disabled = true;
+				if (modelSelectElement) modelSelectElement.disabled = true;
+
+				// Send to host for processing
+				vscode.postMessage({
+					type: 'inlineEditRequest',
+					selection: inlineEditSelection,
+					instructions: instructions,
+					modelSelection: selectedModel ? selectedModel.selection : null
+				});
+
+				// Hide popup after a short delay (the edit will be applied asynchronously)
+				setTimeout(() => {
+					hideInlineEditPopup();
+					// Reset button state
+					inlineEditSubmitBtn.disabled = false;
+					inlineEditSubmitBtn.textContent = 'Submit';
+					inlineEditInput.disabled = false;
+					if (modelSelectElement) modelSelectElement.disabled = false;
+				}, 300);
+			}
+
+			// Inline edit event handlers
+			inlineEditCloseBtn.addEventListener('click', hideInlineEditPopup);
+			inlineEditSubmitBtn.addEventListener('click', submitInlineEdit);
+
+			inlineEditInput.addEventListener('keydown', (e) => {
+				if (e.key === 'Enter' && !e.shiftKey) {
+					e.preventDefault();
+					submitInlineEdit();
+				} else if (e.key === 'Escape') {
+					e.preventDefault();
+					hideInlineEditPopup();
+				}
+			});
+
+			// Prevent clicks inside popup from closing it
+			inlineEditPopup.addEventListener('mousedown', (e) => {
+				e.stopPropagation();
+			});
+
+			// Listen for Ctrl+K keyboard shortcut event
+			document.addEventListener('docx-show-inline-edit', (e) => {
+				if (e.detail) {
+					showInlineEditPopup(e.detail);
+				}
+			});
+
+			// Position and show tooltip near selection (above the selection)
+			function updateTooltipPosition(selection) {
+				if (!selection || selection.rangeCount === 0) {
+					selectionTooltip.style.display = 'none';
+					return;
+				}
+				const range = selection.getRangeAt(0);
+				const rect = range.getBoundingClientRect();
+
+				// Measure the tooltip first
+				selectionTooltip.style.visibility = 'hidden';
+				selectionTooltip.style.display = 'flex';
+				const tooltipRect = selectionTooltip.getBoundingClientRect();
+				const tooltipWidth = tooltipRect.width || 280;
+				const tooltipHeight = tooltipRect.height || 40;
+
+				// Position above the selection, centered horizontally
+				let left = rect.left + (rect.width / 2) - (tooltipWidth / 2);
+				let top = rect.top - tooltipHeight - 8;
+
+				// If tooltip would go above the viewport, position below the selection
+				if (top < 10) {
+					top = rect.bottom + 8;
+				}
+
+				// Keep tooltip in horizontal viewport bounds
+				if (left < 10) {
+					left = 10;
+				}
+				// Leave space on the right for the chat panel (estimate 400px)
+				const maxRight = window.innerWidth - 420;
+				if (left + tooltipWidth > maxRight) {
+					left = maxRight - tooltipWidth;
+				}
+
+				selectionTooltip.style.left = `${left}px`;
+				selectionTooltip.style.top = `${top}px`;
+				selectionTooltip.style.visibility = 'visible';
+			}
+
+			// Handle tooltip button clicks
+			selectionTooltip.addEventListener('click', (e) => {
+				const action = e.target.dataset?.action || e.target.closest('button')?.dataset?.action;
+				if (action === 'addToChat') {
+					vscode.postMessage({ type: 'executeCommand', command: 'void.ctrlLAction' });
+					selectionTooltip.style.display = 'none';
+				} else if (action === 'editInline') {
+					// Get current selection and show inline edit popup
+					const selection = window.getSelection();
+					if (selection && !selection.isCollapsed) {
+						const selectedText = selection.toString().trim();
+						if (selectedText.length >= 3) {
+							const range = selection.getRangeAt(0);
+							const clonedSelection = range.cloneContents();
+							const div = document.createElement('div');
+							div.appendChild(clonedSelection);
+							showInlineEditPopup({ text: selectedText, html: div.innerHTML });
+						}
+					}
+				}
+			});
+
+			// Selection tracking with debounce
+			let selectionDebounceTimer = null;
+			document.addEventListener('selectionchange', () => {
+				if (selectionDebounceTimer) clearTimeout(selectionDebounceTimer);
+				selectionDebounceTimer = setTimeout(() => {
+					const selection = window.getSelection();
+					if (selection && !selection.isCollapsed) {
+						const selectedText = selection.toString().trim();
+						if (selectedText.length >= 3) {
+							const range = selection.getRangeAt(0);
+							const clonedSelection = range.cloneContents();
+							const div = document.createElement('div');
+							div.appendChild(clonedSelection);
+
+							// Send selection to host
+							vscode.postMessage({
+								type: 'textSelected',
+								selection: { text: selectedText, html: div.innerHTML }
+							});
+
+							// Show tooltip
+							updateTooltipPosition(selection);
+						} else {
+							selectionTooltip.style.display = 'none';
+						}
+					} else {
+						vscode.postMessage({ type: 'clearSelection' });
+						selectionTooltip.style.display = 'none';
+					}
+				}, 150);
+			});
+
+			// Hide tooltip on scroll or click outside
+			container.addEventListener('scroll', () => {
+				selectionTooltip.style.display = 'none';
+			});
+
+			document.addEventListener('mousedown', (e) => {
+				if (!selectionTooltip.contains(e.target)) {
+					// Don't hide immediately - let the selection change event handle it
+				}
+			});
+
+			console.log('[DOCX Webview] Selection tracking initialized');
 
 			// Initialize ruler
 			initializeRuler();
@@ -767,6 +1059,54 @@
 		}
 	}
 
+	// Send for Signature (DocuSign) - sends document to host for e-signature workflow
+	async function handleSendForSignature() {
+		if (!tiptapEditor) {
+			console.warn('[DOCX Webview] Editor not initialized for signature');
+			return;
+		}
+
+		console.log('[DOCX Webview] Starting Send for Signature process...');
+
+		try {
+			// Export to DOCX blob to get the current document state
+			const blob = await tiptapEditor.saveToDocx();
+
+			// Convert blob to base64
+			const arrayBuffer = await blob.arrayBuffer();
+			const uint8Array = new Uint8Array(arrayBuffer);
+			let binaryString = '';
+			for (let i = 0; i < uint8Array.length; i++) {
+				binaryString += String.fromCharCode(uint8Array[i]);
+			}
+			const base64 = btoa(binaryString);
+
+			// Extract filename from docxUri if available
+			let filename = 'document';
+			if (docxUri) {
+				try {
+					const parts = docxUri.split('/');
+					filename = parts[parts.length - 1] || 'document';
+				} catch (e) {
+					console.warn('[DOCX Webview] Could not extract filename from URI');
+				}
+			}
+
+			// Send to host to initiate DocuSign flow
+			vscode.postMessage({
+				type: 'sendForSignature',
+				docxData: base64,
+				docxUri: docxUri,
+				filename: filename
+			});
+
+			console.log('[DOCX Webview] Sent signature request to host');
+
+		} catch (error) {
+			console.error('[DOCX Webview] Send for Signature error:', error);
+		}
+	}
+
 	// ============================================
 	// WORD COUNT
 	// ============================================
@@ -797,6 +1137,32 @@
 		if ((e.ctrlKey || e.metaKey) && e.key === 'p') {
 			e.preventDefault();
 			handlePrint();
+		}
+
+		// Ctrl+L / Cmd+L - Add to Chat
+		if ((e.ctrlKey || e.metaKey) && e.key === 'l') {
+			e.preventDefault();
+			vscode.postMessage({ type: 'executeCommand', command: 'void.ctrlLAction' });
+		}
+
+		// Ctrl+K / Cmd+K - Quick Edit (inline edit popup)
+		if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+			e.preventDefault();
+			const selection = window.getSelection();
+			if (selection && !selection.isCollapsed) {
+				const selectedText = selection.toString().trim();
+				if (selectedText.length >= 3) {
+					const range = selection.getRangeAt(0);
+					const clonedSelection = range.cloneContents();
+					const div = document.createElement('div');
+					div.appendChild(clonedSelection);
+					// Use the showInlineEditPopup function - it's defined inside initializeTiptapEditor
+					// We need to trigger it via a custom event or direct call
+					document.dispatchEvent(new CustomEvent('docx-show-inline-edit', {
+						detail: { text: selectedText, html: div.innerHTML }
+					}));
+				}
+			}
 		}
 
 		// Ctrl+Z - Undo
@@ -863,6 +1229,79 @@
 					docxUri = null;
 					contentModified = false;
 					updateStatus('Ready');
+				}
+				break;
+
+			case 'inlineEditStarted':
+				// Show loading indicator
+				updateStatus('Processing edit...');
+				break;
+
+			case 'inlineEditProgress':
+				// Could show streaming progress if desired
+				break;
+
+			case 'applyInlineEdit':
+				// Apply the edited text to replace the stored selection
+				if (tiptapEditor && tiptapEditor.editor && message.editedText) {
+					// Use the stored Tiptap selection (survives async call)
+					if (pendingInlineEditSelection) {
+						const { from, to } = pendingInlineEditSelection;
+						console.log('[DOCX Webview] Applying inline edit at positions:', from, to);
+
+						// Replace the text at the stored positions
+						tiptapEditor.editor.chain()
+							.focus()
+							.setTextSelection({ from, to })
+							.deleteSelection()
+							.insertContent(message.editedText)
+							.run();
+
+						console.log('[DOCX Webview] Applied inline edit:', message.editedText.substring(0, 50) + '...');
+						trackModification();
+						updateStatus('Edit applied');
+
+						// Clear the pending selection
+						pendingInlineEditSelection = null;
+					} else {
+						console.warn('[DOCX Webview] No stored selection to apply edit to');
+						updateStatus('Could not apply edit - no selection stored');
+					}
+				}
+				break;
+
+			case 'inlineEditError':
+				updateStatus('Edit failed: ' + (message.message || 'Unknown error'));
+				break;
+
+			case 'updateModels':
+				// Update available models for the inline edit dropdown
+				if (message.models && Array.isArray(message.models)) {
+					availableModels = message.models;
+					const defaultIndex = message.defaultIndex || 0;
+
+					// Clear and populate the dropdown
+					if (modelSelectElement) {
+						modelSelectElement.innerHTML = '';
+						availableModels.forEach((model, index) => {
+							const option = document.createElement('option');
+							option.value = index;
+							option.textContent = `${model.selection.modelName} (${model.selection.providerName})`;
+							if (index === defaultIndex) {
+								option.selected = true;
+							}
+							modelSelectElement.appendChild(option);
+						});
+
+						if (availableModels.length === 0) {
+							const option = document.createElement('option');
+							option.value = '';
+							option.textContent = 'No models available';
+							modelSelectElement.appendChild(option);
+						}
+					}
+
+					console.log('[DOCX Webview] Updated models:', availableModels.length, 'default:', defaultIndex);
 				}
 				break;
 		}

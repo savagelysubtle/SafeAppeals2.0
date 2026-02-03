@@ -18,6 +18,7 @@ export class PDFExtractorChannel implements IServerChannel {
 	async call(ctx: any, command: string, args?: any): Promise<any> {
 		switch (command) {
 			case 'extractPDFContent':
+				console.log('[PDFExtractorChannel] extractPDFContent called with args:', JSON.stringify(args));
 				// Revive URI from serialized form
 				if (args && args.uri) {
 					const uri = typeof args.uri === 'string' ? URI.parse(args.uri) : URI.revive(args.uri as UriComponents);
@@ -26,12 +27,38 @@ export class PDFExtractorChannel implements IServerChannel {
 					if (!fileService) {
 						throw new Error('fileService not available in RAGMainService');
 					}
+
+					// Debug: Check if file converter is set
+					console.log('[PDFExtractorChannel] fileService.fileConverter set:', !!fileService.fileConverter);
+					console.log('[PDFExtractorChannel] fileService.enableAutoOCR:', fileService.enableAutoOCR);
+
 					if (args.allPages) {
+						console.log('[PDFExtractorChannel] Extracting all pages...');
 						const result = await fileService.extractContent(uri);
-						return { text: result.text };
+						console.log('[PDFExtractorChannel] Extraction result:', {
+							textLength: result.text?.length,
+							wasOCR: result.wasOCR,
+							ocrLanguage: result.ocrLanguage,
+							pageCount: result.metadata?.pageCount
+						});
+						return {
+							text: result.text,
+							pageCount: result.metadata?.pageCount,
+							title: result.metadata?.title,
+							author: result.metadata?.author,
+							wasOCR: result.wasOCR ?? false,
+							ocrLanguage: result.ocrLanguage
+						};
 					} else if (typeof args.startPage === 'number' && typeof args.endPage === 'number') {
 						const result = await fileService.extractPDFPages(uri, args.startPage, args.endPage);
-						return { text: result.text };
+						return {
+							text: result.text,
+							pageCount: result.metadata?.pageCount,
+							title: result.metadata?.title,
+							author: result.metadata?.author,
+							wasOCR: result.wasOCR ?? false,
+							ocrLanguage: result.ocrLanguage
+						};
 					}
 				}
 				throw new Error('Invalid arguments for extractPDFContent');

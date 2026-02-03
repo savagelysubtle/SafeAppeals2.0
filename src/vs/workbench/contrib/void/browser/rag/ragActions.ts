@@ -45,7 +45,7 @@ class RAGSearchPolicyAction extends Action2 {
 	constructor() {
 		super({
 			id: VOID_RAG_SEARCH_POLICY_ACTION_ID,
-			title: { value: 'Search Policy Manual', original: 'Search Policy Manual' },
+			title: { value: 'Search Core References', original: 'Search Core References' },
 			category: { value: 'RAG', original: 'RAG' },
 			f1: true
 		});
@@ -53,7 +53,7 @@ class RAGSearchPolicyAction extends Action2 {
 
 	async run(accessor: ServicesAccessor): Promise<void> {
 		const notificationService = accessor.get(INotificationService);
-		notificationService.info('Use the @policy search command in chat to search policy manuals');
+		notificationService.info('Use the @reference search command in chat to search core references');
 	}
 }
 
@@ -148,7 +148,7 @@ class IndexAsWorkspaceDocAction extends Action2 {
 				async () => {
 					const result = await ragService.indexDocument({
 						uri,
-						isPolicyManual: false,  // ← This makes it a workspace document!
+						isCoreReference: false,  // ← This makes it a workspace document!
 						workspaceId: ragService.getWorkspaceId()
 					});
 
@@ -171,7 +171,7 @@ class IndexAsPolicyManualAction extends Action2 {
 	constructor() {
 		super({
 			id: 'void.rag.indexFromExplorer',
-			title: 'Index as Policy Manual',
+			title: 'Index as Core Reference',
 			category: 'SafeAppeals',
 			f1: false,
 			menu: {
@@ -228,7 +228,7 @@ class IndexAsPolicyManualAction extends Action2 {
 					// Start indexing
 					const result = await ragService.indexDocument({
 						uri,
-						isPolicyManual: true,
+						isCoreReference: true,
 						workspaceId: ragService.getWorkspaceId()
 					});
 
@@ -258,12 +258,12 @@ class IndexAsPolicyManualAction extends Action2 {
 	}
 }
 
-// Manual command to create policy-manuals folder
-class CreatePolicyFolderAction extends Action2 {
+// Manual command to create core references folder
+class CreateCoreReferencesFolderAction extends Action2 {
 	constructor() {
 		super({
 			id: 'void.rag.createPolicyFolder',
-			title: { value: 'Create Policy Manuals Folder', original: 'Create Policy Manuals Folder' },
+			title: { value: 'Create Core References Folder', original: 'Create Core References Folder' },
 			category: { value: 'RAG', original: 'RAG' },
 			f1: true
 		});
@@ -282,16 +282,16 @@ class CreatePolicyFolderAction extends Action2 {
 		}
 
 		const settings = settingsService.state.globalSettings;
-		const policyFolderName = settings.ragPolicyFolderName || 'policy-manuals';
-		const policyFolderUri = URI.joinPath(folder.uri, policyFolderName);
+		const coreReferencesFolderName = settings.ragCoreReferencesFolderName || 'core_references';
+		const coreReferencesFolderUri = URI.joinPath(folder.uri, coreReferencesFolderName);
 
 		try {
-			await fileService.createFolder(policyFolderUri);
-			notificationService.info(`✓ Created folder: ${policyFolderUri.fsPath}`);
+			await fileService.createFolder(coreReferencesFolderUri);
+			notificationService.info(`✓ Created folder: ${coreReferencesFolderUri.fsPath}`);
 		} catch (error) {
 			const errorMsg = error instanceof Error ? error.message : String(error);
 			if (errorMsg.includes('already exists')) {
-				notificationService.info(`Folder already exists: ${policyFolderUri.fsPath}`);
+				notificationService.info(`Folder already exists: ${coreReferencesFolderUri.fsPath}`);
 			} else {
 				notificationService.error(`Failed to create folder: ${errorMsg}`);
 			}
@@ -537,6 +537,6 @@ registerAction2(RAGSearchWorkspaceAction);
 registerAction2(RAGGetStatsAction);
 registerAction2(IndexAsWorkspaceDocAction);  // ← New action for case documents
 registerAction2(IndexAsPolicyManualAction);
-registerAction2(CreatePolicyFolderAction);
+registerAction2(CreateCoreReferencesFolderAction);
 registerAction2(ClearAllEmbeddingsAction);
 registerAction2(TestDoclingExtractionAction);

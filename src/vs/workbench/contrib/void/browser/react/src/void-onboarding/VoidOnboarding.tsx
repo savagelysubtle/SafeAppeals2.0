@@ -3,10 +3,17 @@
  *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
  *--------------------------------------------------------------------------------------*/
 
-import { Check, ChevronRight, Cloud, ExternalLink, LogIn, RefreshCw, User } from "lucide-react";
+import {
+	Check,
+	ChevronRight,
+	Cloud,
+	ExternalLink,
+	LogIn,
+	RefreshCw,
+} from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { isLinux } from "../../../../../../../base/common/platform.js";
 import { FileAccess } from "../../../../../../../base/common/network.js";
+import { isLinux } from "../../../../../../../base/common/platform.js";
 import { ColorScheme } from "../../../../../../../platform/theme/common/theme.js";
 import {
 	displayInfoOfProviderName,
@@ -18,14 +25,19 @@ import {
 } from "../../../../common/voidSettingsTypes.js";
 import ErrorBoundary from "../sidebar-tsx/ErrorBoundary.js";
 import "../styles.css";
-import { useAccessor, useIsDark, useSettingsState, useVoidCloudState } from "../util/services.js";
+import { VoidButtonBgDarken } from "../util/inputs.js";
+import {
+	useAccessor,
+	useIsDark,
+	useSettingsState,
+	useVoidCloudState,
+} from "../util/services.js";
 import {
 	ModelDump,
 	OllamaSetupInstructions,
 	OneClickSwitchButton,
 	SettingsForProvider,
 } from "../void-settings-tsx/Settings.js";
-import { VoidButtonBgDarken } from "../util/inputs.js";
 
 const OVERRIDE_VALUE = false;
 
@@ -71,10 +83,12 @@ const VoidIcon = () => {
 	// Get the image URI using FileAccess.asBrowserUri - this resolves to a browser-accessible URI
 	const imageUri = useMemo(() => {
 		try {
-			return FileAccess.asBrowserUri('vs/workbench/browser/media/logo_cube_noshadow.png').toString(true);
+			return FileAccess.asBrowserUri(
+				"vs/workbench/browser/media/logo_cube_noshadow.png",
+			).toString(true);
 		} catch (e) {
-			console.error('[VoidIcon] Failed to get image URI:', e);
-			return '';
+			console.error("[VoidIcon] Failed to get image URI:", e);
+			return "";
 		}
 	}, []);
 
@@ -105,9 +119,9 @@ const VoidIcon = () => {
 			src={imageUri}
 			alt="Safe Appeals Logo"
 			style={{
-				width: '100%',
-				height: '100%',
-				objectFit: 'contain',
+				width: "100%",
+				height: "100%",
+				objectFit: "contain",
 			}}
 		/>
 	);
@@ -185,7 +199,7 @@ const providerNamesOfTab: Record<TabName, ProviderName[]> = {
 					...localProviderNames,
 					...cloudProviders,
 				] as string[]
-			).includes(pn)
+			).includes(pn),
 	) as ProviderName[],
 	"Cloud/Other": cloudProviders,
 };
@@ -206,37 +220,95 @@ const featureNameMap: { display: string; featureName: FeatureName }[] = [
 ];
 
 // Providers supported by SafeAppeals Cloud
-const cloudSupportedProviderNames: ProviderName[] = ['anthropic', 'openAI', 'gemini'];
+const cloudSupportedProviderNames: ProviderName[] = [
+	"anthropic",
+	"openAI",
+	"gemini",
+];
 
 // Cloud Sign-in Section Component for Onboarding
 const CloudSignInSection = () => {
 	const accessor = useAccessor();
-	const voidSettingsService = accessor.get('IVoidSettingsService');
+	const voidSettingsService = accessor.get("IVoidSettingsService");
 	const { authState, signInWithGoogle } = useVoidCloudState();
 	const settingsState = useSettingsState();
 	const [isSigningIn, setIsSigningIn] = useState(false);
 
-	// Auto-enable cloud mode for all supported providers when user signs in
+	// Check if cloud providers need to be enabled
+	const needsCloudSetup =
+		authState.status === "signed_in" &&
+		(!settingsState.globalSettings.voidCloudEnabled ||
+			cloudSupportedProviderNames.some(
+				(pn) => !settingsState.globalSettings.voidCloudModeOfProvider[pn],
+			) ||
+			cloudSupportedProviderNames.some(
+				(pn) =>
+					!settingsState.settingsOfProvider[pn]._didFillInProviderSettings,
+			) ||
+			cloudSupportedProviderNames.some((pn) =>
+				settingsState.settingsOfProvider[pn].models.some((m) => m.isHidden),
+			) ||
+			settingsState.modelSelectionOfFeature["Chat"] === null);
+
+	// Auto-enable cloud mode for all supported providers when user is signed in
+	// Runs whenever needsCloudSetup is true
 	useEffect(() => {
-		if (authState.status === 'signed_in') {
-			// Enable cloud globally
-			if (!settingsState.globalSettings.voidCloudEnabled) {
-				voidSettingsService.setGlobalSetting('voidCloudEnabled', true);
+		if (!needsCloudSetup) return;
+
+		// Enable cloud globally
+		if (!settingsState.globalSettings.voidCloudEnabled) {
+			voidSettingsService.setGlobalSetting("voidCloudEnabled", true);
+		}
+
+		// Enable cloud mode for all supported providers
+		const currentCloudModes =
+			settingsState.globalSettings.voidCloudModeOfProvider;
+		const needsCloudModeUpdate = cloudSupportedProviderNames.some(
+			(pn) => !currentCloudModes[pn],
+		);
+
+		if (needsCloudModeUpdate) {
+			const newCloudModes = { ...currentCloudModes };
+			for (const providerName of cloudSupportedProviderNames) {
+				newCloudModes[providerName] = true;
 			}
+			voidSettingsService.setGlobalSetting(
+				"voidCloudModeOfProvider",
+				newCloudModes,
+			);
+		}
 
-			// Enable cloud mode for all supported providers
-			const currentCloudModes = settingsState.globalSettings.voidCloudModeOfProvider;
-			const needsUpdate = cloudSupportedProviderNames.some(pn => !currentCloudModes[pn]);
-
-			if (needsUpdate) {
-				const newCloudModes = { ...currentCloudModes };
-				for (const providerName of cloudSupportedProviderNames) {
-					newCloudModes[providerName] = true;
-				}
-				voidSettingsService.setGlobalSetting('voidCloudModeOfProvider', newCloudModes);
+		// Enable all cloud-supported providers and unhide their models
+		for (const providerName of cloudSupportedProviderNames) {
+			// Unhide (enable) the first hidden model for this provider (one at a time to avoid state issues)
+			const models = settingsState.settingsOfProvider[providerName].models;
+			const firstHiddenModel = models.find((m) => m.isHidden);
+			if (firstHiddenModel) {
+				voidSettingsService.toggleModelHidden(
+					providerName,
+					firstHiddenModel.modelName,
+				);
+				return; // Return early to let state update, effect will re-run
 			}
 		}
-	}, [authState.status, settingsState.globalSettings.voidCloudEnabled, settingsState.globalSettings.voidCloudModeOfProvider, voidSettingsService]);
+
+		// Auto-select a default model for Chat if none is selected
+		const defaultCloudModel = {
+			providerName: "anthropic" as ProviderName,
+			modelName: "claude-sonnet-4.5",
+		};
+
+		if (settingsState.modelSelectionOfFeature["Chat"] === null) {
+			voidSettingsService.setModelSelectionOfFeature("Chat", defaultCloudModel);
+		}
+		// Also set for Quick Edit (Ctrl+K) if not set
+		if (settingsState.modelSelectionOfFeature["Ctrl+K"] === null) {
+			voidSettingsService.setModelSelectionOfFeature(
+				"Ctrl+K",
+				defaultCloudModel,
+			);
+		}
+	}, [needsCloudSetup, settingsState, voidSettingsService]);
 
 	const handleSignIn = useCallback(async () => {
 		try {
@@ -252,16 +324,21 @@ const CloudSignInSection = () => {
 
 	const status = authState.status;
 	const user = authState.session?.user;
-	const showSigningIn = isSigningIn && status !== 'signed_in' && status !== 'error';
+	const showSigningIn =
+		isSigningIn && status !== "signed_in" && status !== "error";
 
-	if (status === 'signed_in' && user) {
+	if (status === "signed_in" && user) {
 		return (
 			<div className="w-full max-w-xl mb-6 bg-gradient-to-r from-blue-600/20 to-purple-600/20 rounded-lg p-4 border border-blue-500/30">
 				<div className="flex items-center gap-3">
 					<Cloud className="size-5 text-blue-400" />
 					<div className="flex-1">
-						<div className="text-sm font-medium text-void-fg-1">Signed in as {user.displayName || user.email}</div>
-						<div className="text-xs text-void-fg-3">Claude, GPT-4, and Gemini models are now unlocked</div>
+						<div className="text-sm font-medium text-void-fg-1">
+							Signed in as {user.displayName || user.email}
+						</div>
+						<div className="text-xs text-void-fg-3">
+							Claude, GPT-4, and Gemini models are now unlocked
+						</div>
 					</div>
 					<Check className="size-5 text-emerald-500" />
 				</div>
@@ -274,19 +351,25 @@ const CloudSignInSection = () => {
 			<div className="flex items-center gap-3 mb-3">
 				<Cloud className="size-5 text-blue-400" />
 				<div className="flex-1">
-					<div className="text-sm font-medium text-void-fg-1">Use SafeAppeals Cloud</div>
-					<div className="text-xs text-void-fg-3">Sign in to instantly access Claude, GPT-4, and Gemini models</div>
+					<div className="text-sm font-medium text-void-fg-1">
+						Use SafeAppeals Cloud
+					</div>
+					<div className="text-xs text-void-fg-3">
+						Sign in to instantly access Claude, GPT-4, and Gemini models
+					</div>
 				</div>
 			</div>
 
-			{(status === "signing_in" || showSigningIn) ? (
+			{status === "signing_in" || showSigningIn ? (
 				<div className="flex items-center gap-2 text-void-fg-3 text-sm">
 					<RefreshCw className="size-4 animate-spin" />
 					<span>Signing in... Check your browser</span>
 				</div>
 			) : status === "error" ? (
 				<div className="flex flex-col gap-2">
-					<div className="text-red-400 text-xs">{authState.error || "Sign in failed"}</div>
+					<div className="text-red-400 text-xs">
+						{authState.error || "Sign in failed"}
+					</div>
 					<VoidButtonBgDarken
 						className="px-4 py-2 flex items-center justify-center gap-2 w-full"
 						onClick={handleSignIn}
@@ -393,7 +476,9 @@ const AddProvidersPage = ({
 
 				<div className="w-full max-w-xl flex items-center gap-4 mb-4">
 					<div className="flex-1 h-px bg-void-border-2"></div>
-					<span className="text-void-fg-3 text-sm">or add API keys manually</span>
+					<span className="text-void-fg-3 text-sm">
+						or add API keys manually
+					</span>
 					<div className="flex-1 h-px bg-void-border-2"></div>
 				</div>
 
@@ -471,6 +556,21 @@ const AddProvidersPage = ({
 					)}
 					<div className="flex items-center gap-2">
 						<PreviousButton onClick={() => setPageIndex(pageIndex - 1)} />
+						{/* Skip button to bypass API key requirement */}
+						<button
+							onClick={() => {
+								setPageIndex(pageIndex + 1);
+								setErrorMessage(null);
+							}}
+							className="px-4 py-2 text-sm rounded-lg transition-all"
+							style={{
+								backgroundColor: "transparent",
+								color: "var(--vscode-descriptionForeground)",
+								border: "1px solid var(--vscode-panel-border)",
+							}}
+						>
+							Skip for now
+						</button>
 						<NextButton
 							onClick={() => {
 								const isDisabled = isFeatureNameDisabled("Chat", settingsState);
@@ -481,7 +581,7 @@ const AddProvidersPage = ({
 								} else {
 									// Show error message
 									setErrorMessage(
-										"Please set up at least one Chat model before moving on."
+										"Please set up at least one Chat model before moving on.",
 									);
 								}
 							}}
@@ -632,8 +732,8 @@ const YesNoText = ({ val }: { val: boolean | null }) => {
 				val === true
 					? "text text-emerald-500"
 					: val === false
-					? "text-rose-600"
-					: "text text-amber-300"
+						? "text-rose-600"
+						: "text text-amber-300"
 			}
 		>
 			{val === true ? "Yes" : val === false ? "No" : "Yes*"}
@@ -679,16 +779,16 @@ const PrimaryActionButton = ({
 					transition-all duration-300 ease-in-out
 					`
 						: ringSize === "screen"
-						? `
+							? `
 					gap-2 px-16 py-8
 					transition-all duration-1000 ease-in-out
 					`
-						: ringSize === undefined
-						? `
+							: ringSize === undefined
+								? `
 					gap-1 px-4 py-2
 					transition-all duration-300 ease-in-out
 				`
-						: ""
+								: ""
 				}
 
 				rounded-lg
@@ -731,10 +831,10 @@ const OnboardingCaseInfoPage = ({
 	const [reviewOfficer, setReviewOfficer] = useState("");
 	const [employerRepresentative, setEmployerRepresentative] = useState("");
 	const [yourSideKeywords, setYourSideKeywords] = useState(
-		"claimant, treating, personal"
+		"claimant, treating, personal",
 	);
 	const [theirSideKeywords, setTheirSideKeywords] = useState(
-		"employer, wcb, ime, defense"
+		"employer, wcb, ime, defense",
 	);
 
 	const fileOrganizerService = useMemo(() => {
@@ -743,7 +843,7 @@ const OnboardingCaseInfoPage = ({
 		} catch (error) {
 			console.error(
 				"[OnboardingCaseInfo] Failed to get FileOrganizerService:",
-				error
+				error,
 			);
 			return null;
 		}
@@ -755,7 +855,7 @@ const OnboardingCaseInfoPage = ({
 		} catch (error) {
 			console.error(
 				"[OnboardingCaseInfo] Failed to get IWorkspaceContextService:",
-				error
+				error,
 			);
 			return null;
 		}
@@ -826,7 +926,7 @@ const OnboardingCaseInfoPage = ({
 											: undefined,
 									employerRepresentative:
 										employerRepNames.length > 0 ? employerRepNames : undefined,
-							  }
+								}
 							: undefined,
 					},
 					keywords: {
@@ -1224,7 +1324,7 @@ const VoidOnboardingContent = () => {
 	useEffect(() => {
 		if (selectedIntelligentProvider === undefined) {
 			setSelectedIntelligentProvider(
-				providerNamesOfWantToUseOption["smart"][0]
+				providerNamesOfWantToUseOption["smart"][0],
 			);
 		}
 		if (selectedPrivateProvider === undefined) {

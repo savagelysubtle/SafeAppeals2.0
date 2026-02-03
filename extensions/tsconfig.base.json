@@ -2,6 +2,7 @@
 	"compilerOptions": {
 		"esModuleInterop": true,
 		"target": "es2020",
+		"skipLibCheck": true,
 		"lib": [
 			"ES2016",
 			"ES2017.Object",

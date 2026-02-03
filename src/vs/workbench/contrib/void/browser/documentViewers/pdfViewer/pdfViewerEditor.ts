@@ -10,8 +10,10 @@ import { CancellationToken } from '../../../../../../base/common/cancellation.js
 import { FileAccess } from '../../../../../../base/common/network.js';
 import { URI } from '../../../../../../base/common/uri.js';
 import { generateUuid } from '../../../../../../base/common/uuid.js';
+import { ICommandService } from '../../../../../../platform/commands/common/commands.js';
 import { IEditorOptions } from '../../../../../../platform/editor/common/editor.js';
 import { IFileService } from '../../../../../../platform/files/common/files.js';
+import { INotificationService, Severity } from '../../../../../../platform/notification/common/notification.js';
 import { IOpenerService } from '../../../../../../platform/opener/common/opener.js';
 import { IStorageService } from '../../../../../../platform/storage/common/storage.js';
 import { ITelemetryService } from '../../../../../../platform/telemetry/common/telemetry.js';
@@ -23,8 +25,9 @@ import { IEditorGroup } from '../../../../../services/editor/common/editorGroups
 import { IOverlayWebview, IWebviewService } from '../../../../webview/browser/webview.js';
 import { asWebviewUri } from '../../../../webview/common/webview.js';
 import { IVoidSettingsService } from '../../../common/voidSettingsService.js';
-import { PDFSelection, PDFViewerInput } from './pdfViewerInput.js';
+import { IDocuSignService } from '../../docuSign/docuSignService.js';
 import { IPDFAnnotationService, PDFAnnotation } from './pdfAnnotationService.js';
+import { PDFSelection, PDFViewerInput } from './pdfViewerInput.js';
 
 export class PDFViewerEditor extends EditorPane {
 	static readonly ID = 'void.pdfViewer';
@@ -49,7 +52,10 @@ export class PDFViewerEditor extends EditorPane {
 		@IFileService private readonly fileService: IFileService,
 		@IVoidSettingsService private readonly voidSettingsService: IVoidSettingsService,
 		@IPDFAnnotationService private readonly pdfAnnotationService: IPDFAnnotationService,
-		@IOpenerService private readonly openerService: IOpenerService
+		@IOpenerService private readonly openerService: IOpenerService,
+		@IDocuSignService private readonly docuSignService: IDocuSignService,
+		@INotificationService private readonly notificationService: INotificationService,
+		@ICommandService private readonly commandService: ICommandService
 	) {
 		super(PDFViewerEditor.ID, group, telemetryService, themeService, storageService);
 
@@ -339,6 +345,12 @@ export class PDFViewerEditor extends EditorPane {
 				this.printPdf();
 				break;
 
+			case 'sendForDocuSign':
+				// Handle DocuSign send for signature
+				console.log('[PDF Viewer] DocuSign send request');
+				this.handleSendForDocuSign();
+				break;
+
 			case 'savePdfSignature': {
 				// Save a signature to persistent storage for reuse
 				const signature = data.signature as { id: string; dataURL: string; createdAt: number };
@@ -458,6 +470,64 @@ export class PDFViewerEditor extends EditorPane {
 		}
 	}
 
+	/**
+	 * Handle Send for DocuSign e-signature request
+	 */
+	private async handleSendForDocuSign(): Promise<void> {
+		if (!this._currentInput) {
+			console.warn('[PDF Viewer] No PDF loaded for DocuSign');
+			return;
+		}
+
+		console.log('[PDF Viewer] Initiating DocuSign flow');
+
+		// Check if DocuSign service is configured and signed in
+		if (!this.docuSignService.isSignedIn()) {
+			this.notificationService.notify({
+				severity: Severity.Warning,
+				message: 'Please sign in to DocuSign first. Go to Settings > DocuSign to configure.',
+			});
+			return;
+		}
+
+		try {
+			// Get the PDF data (use cached data if available)
+			const pdfUri = this._currentInput.resource.toString();
+			let pdfBase64: string;
+
+			if (this._pdfDataCache?.uri === pdfUri) {
+				pdfBase64 = this._pdfDataCache.data;
+			} else {
+				// Load the PDF if not cached
+				const fileContent = await this.fileService.readFile(this._currentInput.resource);
+				const uint8Array = new Uint8Array(fileContent.value.buffer);
+				let binaryString = '';
+				for (let i = 0; i < uint8Array.length; i++) {
+					binaryString += String.fromCharCode(uint8Array[i]);
+				}
+				pdfBase64 = btoa(binaryString);
+			}
+
+			// Get filename
+			const path = this._currentInput.resource.path;
+			const filename = path.substring(path.lastIndexOf('/') + 1) || 'document.pdf';
+
+			// Execute the DocuSign command
+			await this.commandService.executeCommand('void.docusign.sendForSignature', {
+				documentBase64: pdfBase64,
+				documentUri: pdfUri,
+				filename: filename
+			});
+
+		} catch (error) {
+			console.error('[PDF Viewer] DocuSign error:', error);
+			this.notificationService.notify({
+				severity: Severity.Error,
+				message: `Failed to send for signature: ${error instanceof Error ? error.message : 'Unknown error'}`,
+			});
+		}
+	}
+
 	// Public methods for Ctrl+K integration
 	public getInput(): PDFViewerInput | undefined {
 		return this._currentInput;
@@ -550,11 +620,11 @@ export class PDFViewerEditor extends EditorPane {
 				  content="default-src 'none';
 						   script-src 'nonce-${nonce}' https://cdnjs.cloudflare.com vscode-resource:;
 						   worker-src blob:;
-						   style-src 'nonce-${nonce}' 'unsafe-inline' vscode-resource:;
+						   style-src 'unsafe-inline' vscode-resource:;
 						   img-src data: vscode-resource:;
 						   connect-src *;
 						   font-src data: vscode-resource:;">
-			<link rel="stylesheet" nonce="${nonce}" href="${cssUri}">
+			<link rel="stylesheet" href="${cssUri}">
 		</head>
 		<body>
 			<div id="pdf-viewer-layout">
@@ -594,12 +664,13 @@ export class PDFViewerEditor extends EditorPane {
 						<button id="print-btn" title="Print (Ctrl+P)">🖨️ Print</button>
 						<span class="controls-separator"></span>
 						<button id="add-signature" title="Add Signature">✍️ Signature</button>
+						<button id="send-docusign" title="Send for e-Signature via DocuSign">📧 DocuSign</button>
 						<span class="controls-separator"></span>
 					<div id="annotation-toolbar">
-							<button class="highlight-btn" data-color="yellow" title="Yellow Highlight" style="background-color: rgba(255, 235, 59, 0.7);">🖍️</button>
-							<button class="highlight-btn" data-color="green" title="Green Highlight" style="background-color: rgba(76, 175, 80, 0.7);">🖍️</button>
-							<button class="highlight-btn" data-color="blue" title="Blue Highlight" style="background-color: rgba(33, 150, 243, 0.7);">🖍️</button>
-							<button class="highlight-btn" data-color="pink" title="Pink Highlight" style="background-color: rgba(233, 30, 99, 0.7);">🖍️</button>
+							<button class="highlight-btn highlight-yellow" data-color="yellow" title="Yellow Highlight">🖍️</button>
+							<button class="highlight-btn highlight-green" data-color="green" title="Green Highlight">🖍️</button>
+							<button class="highlight-btn highlight-blue" data-color="blue" title="Blue Highlight">🖍️</button>
+							<button class="highlight-btn highlight-pink" data-color="pink" title="Pink Highlight">🖍️</button>
 							<button id="delete-highlight" title="Delete Highlight">🗑️</button>
 						</div>
 					</div>

@@ -3,30 +3,63 @@
  *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
  *--------------------------------------------------------------------------------------*/
 
-import React, { useState, useCallback } from 'react';
+import React, { useCallback, useState } from 'react';
 import {
-  TimelineEvent,
-  EventCategory,
-  EVENT_CATEGORY_LABELS,
-  EVENT_CATEGORY_COLORS,
-  JurisdictionConfig } from
-'../../../../common/timeline/timelineTypes.js';
+    EVENT_CATEGORY_COLORS,
+    EVENT_CATEGORY_LABELS,
+    EventCategory,
+    JurisdictionConfig,
+    TimelineEvent
+} from '../../../../common/timeline/timelineTypes.js';
 import { DocumentPicker } from './DocumentPicker.js';
 
-// SafeAppeals brand colors
-const BRAND_GREEN = '#22c55e';
-const BRAND_GREEN_HOVER = '#16a34a';
-
-// File icons based on extension
-const FILE_ICONS: Record<string, { icon: string; color: string }> = {
-  pdf: { icon: 'file-pdf', color: '#ef4444' },
-  doc: { icon: 'file-text', color: '#3b82f6' },
-  docx: { icon: 'file-text', color: '#3b82f6' },
-  txt: { icon: 'file-text', color: '#6b7280' },
-  default: { icon: 'file', color: '#64748b' }
+// Reusable style objects with VSCode CSS variables
+const modalStyle: React.CSSProperties = {
+  backgroundColor: 'var(--vscode-sideBar-background)',
+  border: '1px solid var(--vscode-panel-border)',
+  borderRadius: '12px',
 };
 
-function getFileIcon(filename: string): { icon: string; color: string } {
+const inputStyle: React.CSSProperties = {
+  backgroundColor: 'var(--vscode-input-background)',
+  color: 'var(--vscode-input-foreground)',
+  border: '1px solid var(--vscode-input-border)',
+  borderRadius: '8px',
+};
+
+const buttonPrimaryStyle: React.CSSProperties = {
+  backgroundColor: 'var(--vscode-button-background)',
+  color: 'var(--vscode-button-foreground)',
+  border: 'none',
+  borderRadius: '8px',
+  cursor: 'pointer',
+};
+
+const buttonSecondaryStyle: React.CSSProperties = {
+  backgroundColor: 'var(--vscode-button-secondaryBackground)',
+  color: 'var(--vscode-button-secondaryForeground)',
+  border: '1px solid var(--vscode-panel-border)',
+  borderRadius: '8px',
+};
+
+const labelStyle: React.CSSProperties = {
+  color: 'var(--vscode-foreground)',
+};
+
+const labelMutedStyle: React.CSSProperties = {
+  color: 'var(--vscode-descriptionForeground)',
+};
+
+// File icons based on extension - using VSCode semantic colors
+const FILE_ICONS: Record<string, { icon: string; colorVar: string }> = {
+  pdf: { icon: 'file-pdf', colorVar: 'var(--vscode-charts-red)' },
+  doc: { icon: 'file-text', colorVar: 'var(--vscode-charts-blue)' },
+  docx: { icon: 'file-text', colorVar: 'var(--vscode-charts-blue)' },
+  txt: { icon: 'file-text', colorVar: 'var(--vscode-descriptionForeground)' },
+  default: { icon: 'file', colorVar: 'var(--vscode-descriptionForeground)' }
+};
+
+function getFileIcon(filename: string): { icon: string; colorVar: string } {
   const ext = filename.split('.').pop()?.toLowerCase() || '';
   return FILE_ICONS[ext] || FILE_ICONS.default;
 }
@@ -140,36 +173,34 @@ export const EventEditor: React.FC<EventEditorProps> = ({
       style={{ backgroundColor: 'rgba(0, 0, 0, 0.85)' }}
       onClick={onCancel}
     >
-      {/* Modal Card - solid black with green accents, fixed height */}
+      {/* Modal Card */}
 			<div
         className="w-full max-w-lg rounded-xl shadow-2xl transition-all duration-200 flex flex-col"
         style={{
-          backgroundColor: '#0f0f0f',
-          border: `1px solid ${BRAND_GREEN}30`,
-          boxShadow: `0 25px 50px -12px rgba(0, 0, 0, 0.8), 0 0 0 1px ${BRAND_GREEN}10`,
+          ...modalStyle,
           height: '680px',
           maxHeight: '90vh'
         }}
         onClick={e => e.stopPropagation()}
       >
-        {/* Header with green accent */}
+        {/* Header */}
 				<div
           className="flex items-center justify-between px-6 py-4 rounded-t-xl"
-          style={{ borderBottom: `1px solid ${BRAND_GREEN}20` }}
+          style={{ borderBottom: '1px solid var(--vscode-panel-border)' }}
         >
           <div className="flex items-center gap-3">
             <div
               className="w-10 h-10 rounded-lg flex items-center justify-center"
-              style={{ backgroundColor: `${BRAND_GREEN}15` }}
+              style={{ backgroundColor: 'var(--vscode-button-secondaryBackground)' }}
             >
-              <i className="codicon codicon-calendar" style={{ color: BRAND_GREEN, fontSize: '18px' }} />
+              <i className="codicon codicon-calendar" style={{ color: 'var(--vscode-button-background)', fontSize: '18px' }} />
             </div>
             <div>
-              <h2 className="text-lg font-semibold" style={{ color: '#fafafa' }}>
+              <h2 className="text-lg font-semibold" style={{ color: 'var(--vscode-editor-foreground)' }}>
                 {isFirstEvent ? 'Add Your First Event' : isEditing ? 'Edit Event' : 'New Event'}
 					</h2>
               {isFirstEvent && (
-                <p className="text-xs" style={{ color: '#71717a' }}>
+                <p className="text-xs" style={labelMutedStyle}>
                   Start with your injury date or initial incident
                 </p>
               )}
@@ -178,9 +209,7 @@ export const EventEditor: React.FC<EventEditorProps> = ({
 					<button
             onClick={onCancel}
             className="w-8 h-8 rounded-lg flex items-center justify-center transition-colors"
-            style={{ color: '#71717a' }}
-            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#1f1f1f'}
-            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+            style={buttonSecondaryStyle}
           >
             <i className="codicon codicon-close" />
 					</button>
@@ -190,7 +219,7 @@ export const EventEditor: React.FC<EventEditorProps> = ({
         <form onSubmit={handleSubmit} className="flex flex-col flex-1" style={{ minHeight: 0 }}>
           {/* Scrollable content - always shows scrollbar */}
           <div
-            className="p-6 space-y-5 overflow-y-auto flex-1"
+            className="p-6 space-y-5 overflow-y-auto flex-1 void-scrollbar"
             style={{
               minHeight: 0,
               scrollbarGutter: 'stable'
@@ -198,8 +227,8 @@ export const EventEditor: React.FC<EventEditorProps> = ({
           >
 					{/* Title */}
           <div className="grid gap-2">
-            <label className="text-sm font-medium" style={{ color: '#e4e4e7' }}>
-              Title <span style={{ color: BRAND_GREEN }}>*</span>
+            <label className="text-sm font-medium" style={labelStyle}>
+              Title <span style={{ color: 'var(--vscode-button-background)' }}>*</span>
 						</label>
 						<input
               type="text"
@@ -209,21 +238,15 @@ export const EventEditor: React.FC<EventEditorProps> = ({
               required
               autoFocus
               className="h-10 w-full rounded-lg px-3 text-sm transition-all outline-none"
-              style={{
-                backgroundColor: '#1a1a1a',
-                border: '1px solid #27272a',
-                color: '#fafafa'
-              }}
-              onFocus={(e) => e.currentTarget.style.borderColor = BRAND_GREEN}
-              onBlur={(e) => e.currentTarget.style.borderColor = '#27272a'}
+              style={inputStyle}
             />
 					</div>
 
           {/* Dates */}
           <div className="grid grid-cols-2 gap-4">
             <div className="grid gap-2">
-              <label className="text-sm font-medium" style={{ color: '#e4e4e7' }}>
-                Date <span style={{ color: BRAND_GREEN }}>*</span>
+              <label className="text-sm font-medium" style={labelStyle}>
+                Date <span style={{ color: 'var(--vscode-button-background)' }}>*</span>
 							</label>
 							<input
                 type="date"
@@ -231,40 +254,26 @@ export const EventEditor: React.FC<EventEditorProps> = ({
                 onChange={e => setDate(e.target.value)}
                 required
                 className="h-10 w-full rounded-lg px-3 text-sm transition-all outline-none"
-                style={{
-                  backgroundColor: '#1a1a1a',
-                  border: '1px solid #27272a',
-                  color: '#fafafa',
-                  colorScheme: 'dark'
-                }}
-                onFocus={(e) => e.currentTarget.style.borderColor = BRAND_GREEN}
-                onBlur={(e) => e.currentTarget.style.borderColor = '#27272a'}
+                style={inputStyle}
               />
 						</div>
             <div className="grid gap-2">
-              <label className="text-sm font-medium" style={{ color: '#a1a1aa' }}>
-                End Date <span style={{ color: '#52525b' }}>(optional)</span>
+              <label className="text-sm font-medium" style={labelMutedStyle}>
+                End Date <span style={{ color: 'var(--vscode-disabledForeground)' }}>(optional)</span>
 							</label>
 							<input
                 type="date"
                 value={endDate}
                 onChange={e => setEndDate(e.target.value)}
                 className="h-10 w-full rounded-lg px-3 text-sm transition-all outline-none"
-                style={{
-                  backgroundColor: '#1a1a1a',
-                  border: '1px solid #27272a',
-                  color: '#fafafa',
-                  colorScheme: 'dark'
-                }}
-                onFocus={(e) => e.currentTarget.style.borderColor = BRAND_GREEN}
-                onBlur={(e) => e.currentTarget.style.borderColor = '#27272a'}
+                style={inputStyle}
               />
 						</div>
 					</div>
 
 					{/* Category */}
           <div className="grid gap-2">
-            <label className="text-sm font-medium" style={{ color: '#e4e4e7' }}>Category</label>
+            <label className="text-sm font-medium" style={labelStyle}>Category</label>
             <div className="flex flex-wrap gap-2">
               {categories.map(cat => {
                 const isSelected = category === cat;
@@ -276,9 +285,9 @@ export const EventEditor: React.FC<EventEditorProps> = ({
                 onClick={() => setCategory(cat)}
                     className="px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
                 style={{
-                      backgroundColor: isSelected ? catColor : '#1a1a1a',
-                      color: isSelected ? '#0a0a0a' : '#a1a1aa',
-                      border: `1px solid ${isSelected ? catColor : '#27272a'}`,
+                      backgroundColor: isSelected ? catColor : 'var(--vscode-button-secondaryBackground)',
+                      color: isSelected ? 'var(--vscode-editor-background)' : 'var(--vscode-descriptionForeground)',
+                      border: `1px solid ${isSelected ? catColor : 'var(--vscode-panel-border)'}`,
                       fontWeight: isSelected ? 600 : 500
                     }}
                   >
@@ -291,67 +300,61 @@ export const EventEditor: React.FC<EventEditorProps> = ({
 
 					{/* Description */}
           <div className="grid gap-2">
-            <label className="text-sm font-medium" style={{ color: '#a1a1aa' }}>Description</label>
+            <label className="text-sm font-medium" style={labelMutedStyle}>Description</label>
 						<textarea
               value={description}
               onChange={e => setDescription(e.target.value)}
               placeholder="Add details about this event..."
               rows={3}
               className="w-full rounded-lg px-3 py-2 text-sm transition-all outline-none resize-none"
-              style={{
-                backgroundColor: '#1a1a1a',
-                border: '1px solid #27272a',
-                color: '#fafafa'
-              }}
-              onFocus={(e) => e.currentTarget.style.borderColor = BRAND_GREEN}
-              onBlur={(e) => e.currentTarget.style.borderColor = '#27272a'}
+              style={inputStyle}
             />
 					</div>
 
           {/* Deadline Toggle */}
           <div
             className="rounded-lg p-4"
-            style={{ backgroundColor: '#1a1a1a', border: '1px solid #27272a' }}
+            style={buttonSecondaryStyle}
           >
             <label className="flex items-center gap-3 cursor-pointer">
               <div
                 className="relative w-10 h-6 rounded-full transition-colors cursor-pointer"
-                style={{ backgroundColor: isDeadline ? BRAND_GREEN : '#27272a' }}
+                style={{ backgroundColor: isDeadline ? 'var(--vscode-button-background)' : 'var(--vscode-panel-border)' }}
                 onClick={() => setIsDeadline(!isDeadline)}
               >
                 <div
                   className="absolute top-1 w-4 h-4 rounded-full transition-transform"
                   style={{
-                    backgroundColor: '#fafafa',
+                    backgroundColor: 'var(--vscode-editor-foreground)',
                     transform: isDeadline ? 'translateX(20px)' : 'translateX(4px)'
                   }}
                 />
               </div>
               <div>
-                <span className="text-sm font-medium" style={{ color: '#e4e4e7' }}>
+                <span className="text-sm font-medium" style={labelStyle}>
 								This is a deadline
 							</span>
-                <p className="text-xs" style={{ color: '#71717a' }}>
+                <p className="text-xs" style={labelMutedStyle}>
                   Get reminders before this date
                 </p>
               </div>
 						</label>
 
             {isDeadline && (
-              <div className="mt-4 pt-4 space-y-3" style={{ borderTop: '1px solid #27272a' }}>
+              <div className="mt-4 pt-4 space-y-3" style={{ borderTop: '1px solid var(--vscode-panel-border)' }}>
                 <label className="flex items-center gap-3 cursor-pointer">
 									<input
                   type="checkbox"
                   checked={isComplete}
                     onChange={e => setIsComplete(e.target.checked)}
                     className="w-4 h-4 rounded"
-                    style={{ accentColor: BRAND_GREEN }}
+                    style={{ accentColor: 'var(--vscode-button-background)' }}
                   />
-                  <span className="text-sm" style={{ color: '#a1a1aa' }}>Mark as complete</span>
+                  <span className="text-sm" style={labelMutedStyle}>Mark as complete</span>
 								</label>
 
                 <div className="grid gap-2">
-                  <label className="text-xs font-medium" style={{ color: '#71717a' }}>
+                  <label className="text-xs font-medium" style={labelMutedStyle}>
                     Reminder days before deadline
 									</label>
 									<input
@@ -360,11 +363,7 @@ export const EventEditor: React.FC<EventEditorProps> = ({
                     onChange={e => setReminderDays(e.target.value)}
                   placeholder="7, 3, 1"
                     className="h-9 w-full rounded-lg px-3 text-sm transition-all outline-none"
-                  style={{
-                      backgroundColor: '#0f0f0f',
-                      border: '1px solid #27272a',
-                      color: '#fafafa'
-                    }}
+                  style={inputStyle}
                   />
                 </div>
 								</div>
@@ -373,39 +372,33 @@ export const EventEditor: React.FC<EventEditorProps> = ({
 
 					{/* Tags */}
           <div className="grid gap-2">
-            <label className="text-sm font-medium" style={{ color: '#a1a1aa' }}>Tags</label>
+            <label className="text-sm font-medium" style={labelMutedStyle}>Tags</label>
 						<input
               type="text"
               value={tagsInput}
               onChange={e => setTagsInput(e.target.value)}
               placeholder="important, appeal, urgent"
               className="h-10 w-full rounded-lg px-3 text-sm transition-all outline-none"
-              style={{
-                backgroundColor: '#1a1a1a',
-                border: '1px solid #27272a',
-                color: '#fafafa'
-              }}
-              onFocus={(e) => e.currentTarget.style.borderColor = BRAND_GREEN}
-              onBlur={(e) => e.currentTarget.style.borderColor = '#27272a'}
+              style={inputStyle}
             />
-            <p className="text-xs" style={{ color: '#52525b' }}>Separate tags with commas</p>
+            <p className="text-xs" style={{ color: 'var(--vscode-disabledForeground)' }}>Separate tags with commas</p>
           </div>
 
           {/* Linked Documents */}
           <div
             className="rounded-lg p-4"
-            style={{ backgroundColor: '#1a1a1a', border: '1px solid #27272a' }}
+            style={buttonSecondaryStyle}
           >
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">
-                <i className="codicon codicon-file-symlink-file" style={{ color: BRAND_GREEN, fontSize: '14px' }} />
-                <span className="text-sm font-medium" style={{ color: '#e4e4e7' }}>
+                <i className="codicon codicon-file-symlink-file" style={{ color: 'var(--vscode-button-background)', fontSize: '14px' }} />
+                <span className="text-sm font-medium" style={labelStyle}>
                   Linked Documents
                 </span>
                 {linkedDocuments.length > 0 && (
                   <span
                     className="text-xs px-1.5 py-0.5 rounded-full"
-                    style={{ backgroundColor: `${BRAND_GREEN}20`, color: BRAND_GREEN }}
+                    style={{ backgroundColor: 'var(--vscode-button-secondaryBackground)', color: 'var(--vscode-button-background)' }}
                   >
                     {linkedDocuments.length}
                   </span>
@@ -415,19 +408,7 @@ export const EventEditor: React.FC<EventEditorProps> = ({
                 type="button"
                 onClick={() => setShowDocumentPicker(true)}
                 className="text-xs px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-all"
-                style={{
-                  backgroundColor: `${BRAND_GREEN}15`,
-                  color: BRAND_GREEN,
-                  border: `1px solid ${BRAND_GREEN}30`
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.backgroundColor = `${BRAND_GREEN}25`;
-                  e.currentTarget.style.borderColor = BRAND_GREEN;
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.backgroundColor = `${BRAND_GREEN}15`;
-                  e.currentTarget.style.borderColor = `${BRAND_GREEN}30`;
-                }}
+                style={buttonPrimaryStyle}
               >
                 <i className="codicon codicon-add" style={{ fontSize: '12px' }} />
                 {linkedDocuments.length === 0 ? 'Link Documents' : 'Manage'}
@@ -435,27 +416,25 @@ export const EventEditor: React.FC<EventEditorProps> = ({
             </div>
 
             {linkedDocuments.length > 0 ? (
-              <div className="space-y-2 max-h-32 overflow-y-auto">
+              <div className="space-y-2 max-h-32 overflow-y-auto void-scrollbar">
                 {linkedDocuments.slice(0, 5).map(uri => {
                   const fileName = getFileName(uri);
-                  const { icon, color } = getFileIcon(fileName);
+                  const { icon, colorVar } = getFileIcon(fileName);
                   return (
                     <div
                       key={uri}
                       className="flex items-center gap-2 px-3 py-2 rounded-lg"
-                      style={{ backgroundColor: '#0f0f0f' }}
+                      style={{ backgroundColor: 'var(--vscode-editor-background)' }}
                     >
-                      <i className={`codicon codicon-${icon}`} style={{ color, fontSize: '14px' }} />
-                      <span className="text-sm truncate flex-1" style={{ color: '#a1a1aa' }}>
+                      <i className={`codicon codicon-${icon}`} style={{ color: colorVar, fontSize: '14px' }} />
+                      <span className="text-sm truncate flex-1" style={labelMutedStyle}>
                         {fileName}
                       </span>
                       <button
                         type="button"
                         onClick={() => handleUnlinkDocument(uri)}
                         className="text-xs px-1.5 py-0.5 rounded transition-colors"
-                        style={{ color: '#ef4444' }}
-                        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#ef444420'}
-                        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                        style={{ color: 'var(--vscode-errorForeground)' }}
                       >
                         <i className="codicon codicon-close" style={{ fontSize: '12px' }} />
                       </button>
@@ -467,14 +446,14 @@ export const EventEditor: React.FC<EventEditorProps> = ({
                     type="button"
                     onClick={() => setShowDocumentPicker(true)}
                     className="text-xs w-full py-1.5 rounded-lg"
-                    style={{ color: '#71717a' }}
+                    style={labelMutedStyle}
                   >
                     +{linkedDocuments.length - 5} more documents
                   </button>
                 )}
               </div>
             ) : (
-              <p className="text-xs" style={{ color: '#52525b' }}>
+              <p className="text-xs" style={{ color: 'var(--vscode-disabledForeground)' }}>
                 Link related documents like medical records, decisions, or correspondence
               </p>
             )}
@@ -485,32 +464,20 @@ export const EventEditor: React.FC<EventEditorProps> = ({
 					{/* Actions - fixed footer */}
           <div
             className="flex justify-end gap-3 px-6 py-4 flex-shrink-0"
-            style={{ borderTop: '1px solid #27272a' }}
+            style={{ borderTop: '1px solid var(--vscode-panel-border)' }}
           >
 						<button
               type="button"
               onClick={onCancel}
               className="px-4 py-2 rounded-lg text-sm font-medium transition-colors"
-              style={{
-                backgroundColor: '#1a1a1a',
-                border: '1px solid #27272a',
-                color: '#a1a1aa'
-              }}
-              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#27272a'}
-              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#1a1a1a'}
+              style={buttonSecondaryStyle}
             >
 							Cancel
 						</button>
 						<button
               type="submit"
               className="px-5 py-2 rounded-lg text-sm font-semibold transition-all"
-              style={{
-                backgroundColor: BRAND_GREEN,
-                color: '#0a0a0a',
-                boxShadow: `0 2px 8px ${BRAND_GREEN}30`
-              }}
-              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = BRAND_GREEN_HOVER}
-              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = BRAND_GREEN}
+              style={buttonPrimaryStyle}
             >
               {isEditing ? 'Save Changes' : 'Create Event'}
 						</button>

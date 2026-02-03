@@ -16,7 +16,7 @@ export interface DocumentRecord {
 	lastIndexed: string;
 	checksum?: string;
 	metadata?: string; // JSON string of additional metadata
-	isPolicyManual?: boolean;
+	isCoreReference?: boolean;
 	workspaceId: string; // REQUIRED - each document belongs to exactly one workspace's micro database
 }
 
@@ -66,7 +66,7 @@ export interface SearchResult {
 		filename: string;
 		filetype: string;
 		chunkIndex: number;
-		isPolicyManual: boolean;
+		isCoreReference: boolean;
 	};
 }
 
@@ -94,6 +94,22 @@ export interface ExtractedContent {
 		createdDate?: Date;
 		modifiedDate?: Date;
 	};
+	wasOCR?: boolean;       // True if content was extracted via OCR
+	ocrLanguage?: string;   // Language used for OCR (e.g., 'eng')
+}
+
+/**
+ * OCR cache entry for storing OCR results of scanned PDFs
+ * Cached by file hash to avoid re-OCR on subsequent accesses
+ */
+export interface OCRCacheEntry {
+	id: string;              // File hash (SHA256)
+	filepath: string;        // Original file path
+	ocrText: string;         // Extracted OCR text
+	pageCount: number;       // Number of pages processed
+	language: string;        // OCR language used (e.g., 'eng')
+	createdAt: string;       // ISO timestamp when OCR was performed
+	fileModifiedAt: string;  // File modification time at OCR
 }
 
 export interface RAGSearchParams {
@@ -105,9 +121,9 @@ export interface RAGSearchParams {
 
 export interface RAGIndexParams {
 	uri: URI;
-	isPolicyManual: boolean;
+	isCoreReference: boolean;
 	workspaceId: string; // REQUIRED - each workspace has its own isolated database
-	indexScope?: 'policy_manual' | 'case_index'; // Explicit index target
+	indexScope?: 'core_references' | 'case_index'; // Explicit index target
 }
 
 export interface RAGStats {
@@ -127,7 +143,8 @@ export interface RAGStats {
 // Storage scope types (all scoped to current workspace)
 // Includes legacy values for backwards compatibility
 export type RAGStorageScope =
-	| 'policy_manual'   // Only policy manuals for THIS workspace
+	| 'core_references'   // Only core reference documents for THIS workspace
+	| 'policy_manual'     // Legacy alias for 'core_references'
 	| 'case_index'      // Only case files for THIS workspace (renamed from workspace_docs)
 	| 'workspace_all'   // Both policy + case for THIS workspace (renamed from 'both')
 	| 'workspace_docs'  // Legacy alias for 'case_index'
@@ -162,7 +179,7 @@ export interface IRAGMainService {
 	getStats(workspaceId: string): Promise<RAGStats>;
 	deleteDocument(docId: string, workspaceId: string): Promise<void>;
 	isDocumentIndexed(uri: URI, workspaceId: string): Promise<boolean>;
-	getDocumentsByType(isPolicyManual: boolean, workspaceId: string): Promise<any[]>;
+	getDocumentsByType(isCoreReference: boolean, workspaceId: string): Promise<any[]>;
 	initialize(openAIApiKey?: string): Promise<void>;
 	switchWorkspace(workspaceId: string): Promise<void>;
 	clearAllEmbeddings(workspaceId: string): Promise<{ success: boolean; message: string }>;

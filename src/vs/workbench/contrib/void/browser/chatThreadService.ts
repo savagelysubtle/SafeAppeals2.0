@@ -6,7 +6,7 @@
 import { Disposable } from '../../../../base/common/lifecycle.js';
 import { InstantiationType, registerSingleton } from '../../../../platform/instantiation/common/extensions.js';
 import { createDecorator } from '../../../../platform/instantiation/common/instantiation.js';
-import { IStorageService, StorageScope, StorageTarget } from '../../../../platform/storage/common/storage.js';
+// IStorageService removed - now using per-workspace SQLite storage only
 
 import { findLast, findLastIdx } from '../../../../base/common/arraysFind.js';
 import { timeout } from '../../../../base/common/async.js';
@@ -22,7 +22,9 @@ import { ILanguageFeaturesService } from '../../../../editor/common/services/lan
 import { IFileService } from '../../../../platform/files/common/files.js';
 import { INotificationService, Severity } from '../../../../platform/notification/common/notification.js';
 import { IWorkspaceContextService } from '../../../../platform/workspace/common/workspace.js';
+import { IChatThreadStorageService } from '../common/chat/chatThreadStorageService.js';
 import { ChatMessage, CheckpointEntry, CodespanLocationLink, StagingSelectionItem, ToolMessage } from '../common/chatThreadServiceTypes.js';
+import { IContextTrackingService } from '../common/contextTrackingService.js';
 import { IDirectoryStrService } from '../common/directoryStrService.js';
 import { VoidFileSnapshot } from '../common/editCodeServiceTypes.js';
 import { IMCPService } from '../common/mcpService.js';
@@ -31,13 +33,12 @@ import { IMetricsService } from '../common/metricsService.js';
 import { chat_userMessageContent, isABuiltinToolName } from '../common/prompt/prompts.js';
 import { ILLMMessageService } from '../common/sendLLMMessageService.js';
 import { AnthropicReasoning, getErrorMessage, RawToolCallObj, RawToolParamsObj } from '../common/sendLLMMessageTypes.js';
-import { ICloudLLMRouterService } from './cloudLLMRouterService.js';
-import { THREAD_STORAGE_KEY } from '../common/storageKeys.js';
+// Storage keys removed - now using per-workspace SQLite storage only
 import { approvalTypeOfBuiltinToolName, BuiltinToolCallParams, ToolCallParams, ToolName, ToolResult } from '../common/tools/toolsServiceTypes.js';
 import { IVoidModelService } from '../common/voidModelService.js';
 import { IVoidSettingsService } from '../common/voidSettingsService.js';
 import { FeatureName, ModelSelection, ModelSelectionOptions } from '../common/voidSettingsTypes.js';
-import { IContextTrackingService } from '../common/contextTrackingService.js';
+import { ICloudLLMRouterService } from './cloudLLMRouterService.js';
 import { IConvertToLLMMessageService } from './convertToLLMMessageService.js';
 import { IEditCodeService } from './editCodeServiceInterface.js';
 import { IToolsService } from './tools/toolsService.js';
@@ -313,13 +314,15 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 	readonly streamState: ThreadStreamState = {}
 	state: ThreadsState // allThreads is persisted, currentThread is not
 
+	// Workspace ID tracking for per-workspace storage
+	private cachedWorkspaceId: string | null = null
+
 	// used in checkpointing
 	// private readonly _userModifiedFilesToCheckInCheckpoints = new LRUCache<string, null>(50)
 
 
 
 	constructor(
-		@IStorageService private readonly _storageService: IStorageService,
 		@IVoidModelService private readonly _voidModelService: IVoidModelService,
 		@ILLMMessageService private readonly _llmMessageService: ILLMMessageService,
 		@ICloudLLMRouterService private readonly _cloudLLMRouterService: ICloudLLMRouterService,
@@ -335,20 +338,32 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 		@IFileService private readonly _fileService: IFileService,
 		@IMCPService private readonly _mcpService: IMCPService,
 		@IContextTrackingService private readonly _contextTrackingService: IContextTrackingService,
+		@IChatThreadStorageService private readonly _chatThreadStorageService: IChatThreadStorageService,
 	) {
 		super()
 		this.state = { allThreads: {}, currentThreadId: null as unknown as string } // default state
 
-		const readThreads = this._readAllThreads() || {}
-
-		const allThreads = readThreads
-		this.state = {
-			allThreads: allThreads,
-			currentThreadId: null as unknown as string, // gets set in startNewThread()
-		}
-
-		// always be in a thread
+		// STEP 1: Create an initial empty thread immediately (no storage access)
 		this.openNewThread()
+		console.log(`[ChatThreadService] Created initial thread (per-workspace storage will load when ready)`)
+
+		// STEP 2: Load from per-workspace storage (storage service handles retries)
+		this._loadFromWorkspaceStorage()
+
+		// Listen for workspace changes to reload threads
+		this._register(
+			this._workspaceContextService.onDidChangeWorkspaceFolders(() => {
+				const oldId = this.cachedWorkspaceId
+				this.cachedWorkspaceId = null // Force recalculation
+				const newId = this._getWorkspaceId()
+				if (oldId !== newId) {
+					console.log(`[ChatThreadService] Workspace changed: ${oldId} -> ${newId}`)
+					// Reset storage availability and load threads for new workspace
+					this.perWorkspaceStorageAvailable = false
+					this._loadFromWorkspaceStorage()
+				}
+			})
+		)
 
 
 		// keep track of user-modified files
@@ -399,35 +414,109 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 		this._onDidChangeCurrentThread.fire()
 	}
 
-	// !!! this is important for properly restoring URIs from storage
-	// should probably re-use code from void/src/vs/base/common/marshalling.ts instead. but this is simple enough
-	private _convertThreadDataFromStorage(threadsStr: string): ChatThreads {
-		return JSON.parse(threadsStr, (key, value) => {
-			if (value && typeof value === 'object' && value.$mid === 1) { // $mid is the MarshalledId. $mid === 1 means it is a URI
-				return URI.from(value); // TODO URI.revive instead of this?
-			}
-			return value;
-		});
-	}
+	// URI revival is now handled in the ChatThreadStorageService on the main process side
 
-	private _readAllThreads(): ChatThreads | null {
-		const threadsStr = this._storageService.get(THREAD_STORAGE_KEY, StorageScope.APPLICATION);
-		if (!threadsStr) {
+	/**
+	 * Compute workspace ID following RAGService pattern
+	 */
+	private _getWorkspaceId(): string | null {
+		// Return cached value if available
+		if (this.cachedWorkspaceId !== null) {
+			return this.cachedWorkspaceId
+		}
+
+		const folders = this._workspaceContextService.getWorkspace().folders
+		if (folders.length === 0) {
+			// No workspace open - return null to use fallback storage
+			console.log('[ChatThreadService] No workspace folder open - using fallback storage')
 			return null
 		}
-		const threads = this._convertThreadDataFromStorage(threadsStr);
 
-		return threads
+		const folderPath = folders[0].uri.fsPath
+		// Create a simple hash from the folder path
+		let hash = 0
+		for (let i = 0; i < folderPath.length; i++) {
+			const char = folderPath.charCodeAt(i)
+			hash = ((hash << 5) - hash) + char
+			hash = hash & hash // Convert to 32bit integer
+		}
+		// Convert to hex string and take first 16 chars
+		const hexHash = Math.abs(hash).toString(16).padStart(8, '0')
+		this.cachedWorkspaceId = hexHash.substring(0, 16)
+		console.log(`[ChatThreadService] Computed workspaceId: ${this.cachedWorkspaceId} for folder: ${folderPath}`)
+		return this.cachedWorkspaceId
 	}
 
-	private _storeAllThreads(threads: ChatThreads) {
-		const serializedThreads = JSON.stringify(threads);
-		this._storageService.store(
-			THREAD_STORAGE_KEY,
-			serializedThreads,
-			StorageScope.APPLICATION,
-			StorageTarget.USER
-		);
+	/**
+	 * Track if per-workspace storage is available
+	 */
+	private perWorkspaceStorageAvailable = false
+
+	/**
+	 * Load from workspace storage (storage service handles retries internally)
+	 */
+	private async _loadFromWorkspaceStorage(): Promise<void> {
+		const workspaceId = this._getWorkspaceId()
+		if (!workspaceId) {
+			console.log('[ChatThreadService] No workspace folder open - threads will not be persisted')
+			return
+		}
+
+		try {
+			console.log(`[ChatThreadService] Loading threads from workspace ${workspaceId}...`)
+			const workspaceThreads = await this._chatThreadStorageService.readAllThreads(workspaceId)
+			this.perWorkspaceStorageAvailable = true
+			console.log(`[ChatThreadService] ✓ Per-workspace storage ready`)
+
+			// If workspace has saved threads, load them
+			if (workspaceThreads && Object.keys(workspaceThreads).length > 0) {
+				// Keep the current thread ID if it exists in loaded threads, otherwise use first
+				const currentThreadId = this.state.currentThreadId
+				const newCurrentThreadId = workspaceThreads[currentThreadId] ? currentThreadId : Object.keys(workspaceThreads)[0]
+
+				this.state = {
+					allThreads: workspaceThreads,
+					currentThreadId: newCurrentThreadId
+				}
+				console.log(`[ChatThreadService] Loaded ${Object.keys(workspaceThreads).length} threads from workspace ${workspaceId}`)
+				this._onDidChangeCurrentThread.fire()
+			} else {
+				console.log(`[ChatThreadService] No saved threads in workspace ${workspaceId}, using new thread`)
+			}
+		} catch (error: any) {
+			console.warn(`[ChatThreadService] Per-workspace storage unavailable: ${error.message}`)
+			console.warn('[ChatThreadService] Threads will be created fresh and may not persist across restarts')
+		}
+	}
+
+	/**
+	 * Store threads to per-workspace storage only
+	 * No global storage - threads are isolated per workspace
+	 */
+	private _storeAllThreads(threads: ChatThreads): void {
+		const workspaceId = this._getWorkspaceId()
+		console.log(`[ChatThreadService] _storeAllThreads called. workspaceId=${workspaceId}, perWorkspaceStorageAvailable=${this.perWorkspaceStorageAvailable}`)
+
+		if (!workspaceId) {
+			// No workspace open - threads won't be persisted
+			console.warn('[ChatThreadService] No workspace - threads not persisted')
+			return
+		}
+
+		if (!this.perWorkspaceStorageAvailable) {
+			// IPC not ready yet - try to save anyway (it might work now)
+			console.log('[ChatThreadService] Storage flag not set - attempting save anyway...')
+		}
+
+		// Store to per-workspace SQLite database
+		this._chatThreadStorageService.storeAllThreads(workspaceId, threads)
+			.then(() => {
+				console.log(`[ChatThreadService] ✓ Threads saved successfully to workspace ${workspaceId}`)
+				this.perWorkspaceStorageAvailable = true // Mark as available after successful save
+			})
+			.catch(error => {
+				console.warn('[ChatThreadService] Failed to save threads:', error.message)
+			})
 	}
 
 
@@ -874,27 +963,27 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 							})
 						}
 
-					console.log('[ChatThreadService] onText received:', {
-						fullTextLength: fullText.length,
-						hasToolCall,
-						toolCallInfo: toolCall ? ('name' in toolCall ? `single: ${toolCall.name}` : `multiple: ${toolCall.toolCalls.length} tools`) : 'none',
-						fullTextPreview: fullText.substring(0, 200),
-						hasEditDocumentTag,
-						hasLegacyToolTag,
-						hasAntmlToolTag,
-						chatMode
-					})
-					this._setStreamState(threadId, { isRunning: 'LLM', llmInfo: { displayContentSoFar: fullText, reasoningSoFar: fullReasoning, toolCallSoFar: toolCall ?? null }, interrupt: Promise.resolve(() => { if (llmCancelToken) this._llmMessageService.abort(llmCancelToken) }) })
-				},
-				onFinalMessage: async ({ fullText, fullReasoning, toolCall, anthropicReasoning, }) => {
-					console.log('[ChatThreadService] onFinalMessage received:', {
-						hasToolCall: !!toolCall,
-						toolCallInfo: toolCall ? ('name' in toolCall ? `single: ${toolCall.name}, isDone: ${toolCall.isDone}` : `multiple: ${toolCall.toolCalls.length} tools`) : 'none',
-						toolCallParams: toolCall ? ('name' in toolCall ? Object.keys(toolCall.rawParams) : toolCall.toolCalls.map(t => Object.keys(t.rawParams))) : [],
-						fullTextLength: fullText.length
-					})
-					resMessageIsDonePromise({ type: 'llmDone', toolCall, info: { fullText, fullReasoning, anthropicReasoning } }) // resolve with tool calls
-				},
+						console.log('[ChatThreadService] onText received:', {
+							fullTextLength: fullText.length,
+							hasToolCall,
+							toolCallInfo: toolCall ? ('name' in toolCall ? `single: ${toolCall.name}` : `multiple: ${toolCall.toolCalls.length} tools`) : 'none',
+							fullTextPreview: fullText.substring(0, 200),
+							hasEditDocumentTag,
+							hasLegacyToolTag,
+							hasAntmlToolTag,
+							chatMode
+						})
+						this._setStreamState(threadId, { isRunning: 'LLM', llmInfo: { displayContentSoFar: fullText, reasoningSoFar: fullReasoning, toolCallSoFar: toolCall ?? null }, interrupt: Promise.resolve(() => { if (llmCancelToken) this._llmMessageService.abort(llmCancelToken) }) })
+					},
+					onFinalMessage: async ({ fullText, fullReasoning, toolCall, anthropicReasoning, }) => {
+						console.log('[ChatThreadService] onFinalMessage received:', {
+							hasToolCall: !!toolCall,
+							toolCallInfo: toolCall ? ('name' in toolCall ? `single: ${toolCall.name}, isDone: ${toolCall.isDone}` : `multiple: ${toolCall.toolCalls.length} tools`) : 'none',
+							toolCallParams: toolCall ? ('name' in toolCall ? Object.keys(toolCall.rawParams) : toolCall.toolCalls.map(t => Object.keys(t.rawParams))) : [],
+							fullTextLength: fullText.length
+						})
+						resMessageIsDonePromise({ type: 'llmDone', toolCall, info: { fullText, fullReasoning, anthropicReasoning } }) // resolve with tool calls
+					},
 					onError: async (error) => {
 						resMessageIsDonePromise({ type: 'llmError', error: error })
 					},
@@ -939,31 +1028,31 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 						else
 							continue // retry
 					}
-				// error, but too many attempts
-				else {
-					const { error } = llmRes
-					const { displayContentSoFar, reasoningSoFar, toolCallSoFar } = this.streamState[threadId].llmInfo
-					this._addMessageToThread(threadId, { role: 'assistant', displayContent: displayContentSoFar, reasoning: reasoningSoFar, anthropicReasoning: null })
-					if (toolCallSoFar) {
-						const firstToolName = 'name' in toolCallSoFar ? toolCallSoFar.name : toolCallSoFar.toolCalls[0].name
-						this._addMessageToThread(threadId, { role: 'interrupted_streaming_tool', name: firstToolName, mcpServerName: this._computeMCPServerOfToolName(firstToolName) })
+					// error, but too many attempts
+					else {
+						const { error } = llmRes
+						const { displayContentSoFar, reasoningSoFar, toolCallSoFar } = this.streamState[threadId].llmInfo
+						this._addMessageToThread(threadId, { role: 'assistant', displayContent: displayContentSoFar, reasoning: reasoningSoFar, anthropicReasoning: null })
+						if (toolCallSoFar) {
+							const firstToolName = 'name' in toolCallSoFar ? toolCallSoFar.name : toolCallSoFar.toolCalls[0].name
+							this._addMessageToThread(threadId, { role: 'interrupted_streaming_tool', name: firstToolName, mcpServerName: this._computeMCPServerOfToolName(firstToolName) })
+						}
+
+						this._setStreamState(threadId, { isRunning: undefined, error })
+						this._addUserCheckpoint({ threadId })
+						return
 					}
-
-					this._setStreamState(threadId, { isRunning: undefined, error })
-					this._addUserCheckpoint({ threadId })
-					return
 				}
-			}
 
-			// llm res success
-			const { toolCall, info } = llmRes
+				// llm res success
+				const { toolCall, info } = llmRes
 
-			console.log('[ChatThreadService] LLM response received:', {
-				hasToolCall: !!toolCall,
-				toolCallInfo: toolCall ? ('name' in toolCall ? `single: ${toolCall.name} (id: ${toolCall.id})` : `multiple: ${toolCall.toolCalls.length} tools`) : 'none',
-				fullTextLength: info.fullText.length,
-				fullTextPreview: info.fullText.substring(0, 100)
-			})
+				console.log('[ChatThreadService] LLM response received:', {
+					hasToolCall: !!toolCall,
+					toolCallInfo: toolCall ? ('name' in toolCall ? `single: ${toolCall.name} (id: ${toolCall.id})` : `multiple: ${toolCall.toolCalls.length} tools`) : 'none',
+					fullTextLength: info.fullText.length,
+					fullTextPreview: info.fullText.substring(0, 100)
+				})
 
 				// ⚠️ VALIDATION: Warn if LLM claims to have done something without a tool call
 				// This helps detect when the LLM is "hallucinating" actions instead of using tools

@@ -87,6 +87,7 @@ Name: "addcontextmenufiles"; Description: "{cm:AddContextMenuFiles,{#NameShort}}
 Name: "addcontextmenufolders"; Description: "{cm:AddContextMenuFolders,{#NameShort}}"; GroupDescription: "{cm:Other}"; Flags: unchecked; Check: not (IsWindows11OrLater and QualityIsInsiders)
 Name: "associatewithfiles"; Description: "{cm:AssociateWithFiles,{#NameShort}}"; GroupDescription: "{cm:Other}"
 Name: "addtopath"; Description: "{cm:AddToPath}"; GroupDescription: "{cm:Other}"
+Name: "installocrdeps"; Description: "{cm:InstallOCRDeps}"; GroupDescription: "{cm:OCRFeatures}"; Flags: unchecked
 Name: "runcode"; Description: "{cm:RunAfter,{#NameShort}}"; GroupDescription: "{cm:Other}"; Check: WizardSilent
 
 [Dirs]
@@ -96,6 +97,13 @@ Name: "{app}"; AfterInstall: DisableAppDirInheritance
 Source: "*"; Excludes: "\CodeSignSummary*.md,\tools,\tools\*,\appx,\appx\*,\resources\app\product.json"; DestDir: "{code:GetDestDir}"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "tools\*"; DestDir: "{app}\tools"; Flags: ignoreversion
 Source: "{#ProductJsonPath}"; DestDir: "{code:GetDestDir}\resources\app"; Flags: ignoreversion
+; OCR dependencies installer script and Poppler binaries
+Source: "{#RepoDir}\python\scripts\install-ocr-deps.ps1"; DestDir: "{app}\tools"; Flags: ignoreversion; Tasks: installocrdeps
+; Poppler binaries for PDF to image conversion (bundled)
+Source: "{#RepoDir}\build\win32\tools\poppler\*"; DestDir: "{app}\tools\poppler"; Flags: ignoreversion recursesubdirs; Tasks: installocrdeps
+; Tesseract OCR binaries for text extraction (bundled)
+Source: "{#RepoDir}\build\win32\tools\tesseract\*"; DestDir: "{app}\tools\tesseract"; Flags: ignoreversion recursesubdirs; Tasks: installocrdeps
+Source: "{#RepoDir}\build\win32\tools\tesseract\LICENSE-Tesseract.txt"; DestDir: "{app}\licenses"; Flags: ignoreversion; Tasks: installocrdeps
 #ifdef AppxPackageFullname
 Source: "appx\*"; DestDir: "{app}\appx"; BeforeInstall: RemoveAppxPackage; AfterInstall: AddAppxPackage; Flags: ignoreversion; Check: IsWindows11OrLater and QualityIsInsiders
 #endif
@@ -108,6 +116,8 @@ Name: "{userappdata}\Microsoft\Internet Explorer\Quick Launch\{#NameLong}"; File
 [Run]
 Filename: "{app}\{#ExeBasename}.exe"; Description: "{cm:LaunchProgram,{#NameLong}}"; Tasks: runcode; Flags: nowait postinstall; Check: ShouldRunAfterUpdate
 Filename: "{app}\{#ExeBasename}.exe"; Description: "{cm:LaunchProgram,{#NameLong}}"; Flags: nowait postinstall; Check: WizardNotSilent
+; Install OCR dependencies (Tesseract, Ghostscript) via winget
+Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -File ""{app}\tools\install-ocr-deps.ps1"" -SkipPython"; Tasks: installocrdeps; Flags: runhidden waituntilterminated; StatusMsg: "Installing OCR dependencies..."
 
 #ifdef AppxPackageFullname
 [UninstallRun]
@@ -1296,6 +1306,12 @@ Root: {#SoftwareClassesRootKey}; Subkey: "Software\Classes\Drive\shell\{#RegValu
 #endif
 
 Root: {#EnvironmentRootKey}; Subkey: "{#EnvironmentKey}"; ValueType: expandsz; ValueName: "Path"; ValueData: "{code:AddToPath|{app}\bin}"; Tasks: addtopath; Check: NeedsAddToPath(ExpandConstant('{app}\bin'))
+; Add Poppler to PATH for OCR/PDF processing
+Root: {#EnvironmentRootKey}; Subkey: "{#EnvironmentKey}"; ValueType: expandsz; ValueName: "Path"; ValueData: "{code:AddToPath|{app}\tools\poppler}"; Tasks: installocrdeps; Check: NeedsAddToPath(ExpandConstant('{app}\tools\poppler'))
+; Add Tesseract to PATH for OCR text extraction
+Root: {#EnvironmentRootKey}; Subkey: "{#EnvironmentKey}"; ValueType: expandsz; ValueName: "Path"; ValueData: "{code:AddToPath|{app}\tools\tesseract}"; Tasks: installocrdeps; Check: NeedsAddToPath(ExpandConstant('{app}\tools\tesseract'))
+; Set TESSDATA_PREFIX environment variable for Tesseract language data
+Root: {#EnvironmentRootKey}; Subkey: "{#EnvironmentKey}"; ValueType: string; ValueName: "TESSDATA_PREFIX"; ValueData: "{app}\tools\tesseract\tessdata"; Tasks: installocrdeps
 
 [Code]
 function IsBackgroundUpdate(): Boolean;

@@ -17,8 +17,7 @@ import { EditorInput } from '../../../../common/editor/editorInput.js';
 import { IEditorGroup } from '../../../../services/editor/common/editorGroupsService.js';
 import { IOverlayWebview, IWebviewService } from '../../../../contrib/webview/browser/webview.js';
 import { EmailViewerInput } from './emailViewerInput.js';
-import { IEmailService } from '../../common/emailService.js';
-import { IEmailDraftService } from '../emailDraftService.js';
+import { IEmailService, IEmailDraftService } from '../../common/emailService.js';
 import { IEditorService } from '../../../../services/editor/common/editorService.js';
 import { INotificationService, Severity } from '../../../../../platform/notification/common/notification.js';
 
@@ -154,32 +153,35 @@ export class EmailViewerEditor extends EditorPane {
 			// Show progress notification
 			this.notificationService.notify({
 				severity: Severity.Info,
-				message: `Generating draft reply for "${email.subject}"...`
+				message: `Creating draft reply for "${email.subject}"...`
 			});
 
-			// Generate draft using the draft service (which uses RAG for context)
-			const draftResult = await this.emailDraftService.generateDraftReply(email.id);
+			// Create initial draft content with email context
+			const draftContent = `<p>Dear ${email.from || 'Recipient'},</p>
+<p></p>
+<p>Thank you for your email regarding "${email.subject}".</p>
+<p></p>
+<p></p>
+<p>Best regards,</p>`;
 
-			// Save the draft as a DOCX file
-			const docxUri = await this.emailDraftService.saveDraftAsDocx(email.id, draftResult.content);
+			// Save draft to the draft service for inline editing
+			await this.emailDraftService.saveDraft(email.id, draftContent);
+
+			// Also create a DOCX document for external editing if needed
+			const docxUri = await this.emailService.createReplyDocument(email.id, draftContent);
 
 			// Open the generated DOCX in the editor
 			await this.editorService.openEditor({ resource: docxUri });
 
-			// Show success notification with sources if any
-			const sourcesInfo = draftResult.sources.length > 0
-				? ` (referenced: ${draftResult.sources.slice(0, 3).join(', ')})`
-				: '';
-
 			this.notificationService.notify({
 				severity: Severity.Info,
-				message: `Draft reply created successfully!${sourcesInfo}`
+				message: `Draft reply created successfully!`
 			});
 		} catch (error) {
-			console.error('[EmailViewer] Failed to generate draft reply:', error);
+			console.error('[EmailViewer] Failed to create draft reply:', error);
 			this.notificationService.notify({
 				severity: Severity.Error,
-				message: `Failed to generate draft reply: ${error instanceof Error ? error.message : 'Unknown error'}`
+				message: `Failed to create draft reply: ${error instanceof Error ? error.message : 'Unknown error'}`
 			});
 		}
 	}
