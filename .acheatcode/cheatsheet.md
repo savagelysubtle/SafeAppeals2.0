@@ -7,12 +7,13 @@
 ### Complete Build (Production Windows)
 
 ```bash
-
-# Using npm (legacy)
-bun run gulp setup-python && bun run buildreact && bun run compile-build-ci && bun run gulp bundle-vscode && bun run gulp vscode-win32-x64-ci && bun run gulp vscode-win32-x64-inno-updater && bun run gulp vscode-win32-x64-user-setup
+bun run gulp setup-python && bun run buildreact && bun run compile-build-ci && bun run compile-extensions-build && bun run gulp bundle-vscode && bun run gulp vscode-win32-x64-ci && bun run gulp vscode-win32-x64-inno-updater && bun run gulp vscode-win32-x64-user-setup
 ```
 
-> **📝 Note**: `setup-python` prepares the Python virtual environment (`python/.venv`) which is bundled into the production build. The venv contains dependencies for the Transmutation Codex file converter.
+> **📝 Note**:
+>
+> - `setup-python` prepares the Python virtual environment (`python/.venv`) which is bundled into the production build
+> - `compile-extensions-build` compiles all extensions (themes, time-tracker, etc.) for production packaging
 
 ### Development Workflow
 
@@ -182,7 +183,7 @@ Packages included: `pdf2image`, `Pillow`, `pytesseract`, `ocrmypdf`
 cd build/win32/tools && .\download-tesseract.ps1 && .\download-poppler.ps1 && cd ../../..
 
 # 2. Build installer (standard production build)
-bun run gulp setup-python && bun run buildreact && bun run compile-build-ci && bun run gulp bundle-vscode && bun run gulp vscode-win32-x64-ci && bun run gulp vscode-win32-x64-inno-updater && bun run gulp vscode-win32-x64-user-setup
+bun run gulp setup-python && bun run buildreact && bun run compile-build-ci && bun run compile-extensions-build && bun run gulp bundle-vscode && bun run gulp vscode-win32-x64-ci && bun run gulp vscode-win32-x64-inno-updater && bun run gulp vscode-win32-x64-user-setup
 ```
 
 > **Note**: During installation, users can optionally select "Install OCR dependencies" to add Tesseract/Poppler to PATH and install Ghostscript via winget.
