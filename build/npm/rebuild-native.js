@@ -125,6 +125,31 @@ function preExtractSqlite3() {
 }
 
 /**
+ * Find all nested sharp modules that need rebuilding
+ * Sharp can be nested in dependencies like @xenova/transformers
+ */
+function findNestedSharpModules() {
+	const nestedSharps = [];
+
+	// Check common locations where sharp might be nested
+	const checkPaths = [
+		path.join(root, 'node_modules', '@xenova', 'transformers', 'node_modules', 'sharp'),
+		// Add more paths if needed
+	];
+
+	for (const sharpPath of checkPaths) {
+		if (fs.existsSync(sharpPath)) {
+			const bindingGyp = path.join(sharpPath, 'binding.gyp');
+			if (fs.existsSync(bindingGyp)) {
+				nestedSharps.push(sharpPath);
+			}
+		}
+	}
+
+	return nestedSharps;
+}
+
+/**
  * Rebuild a single native module using node-gyp
  */
 function rebuildSingleModule(moduleName, electronVersion) {
@@ -158,6 +183,35 @@ function rebuildSingleModule(moduleName, electronVersion) {
 	}
 }
 
+/**
+ * Rebuild a nested sharp module at a specific path
+ */
+function rebuildNestedSharp(sharpPath, electronVersion) {
+	const bindingGyp = path.join(sharpPath, 'binding.gyp');
+	if (!fs.existsSync(bindingGyp)) {
+		return false; // Not a native module
+	}
+
+	log(`Rebuilding nested sharp at ${path.relative(root, sharpPath)}...`);
+	try {
+		cp.execSync(`npx node-gyp rebuild --target=${electronVersion} --arch=x64 --dist-url=https://electronjs.org/headers --runtime=electron`, {
+			cwd: sharpPath,
+			stdio: 'pipe',
+			env: {
+				...process.env,
+				npm_config_runtime: 'electron',
+				npm_config_target: electronVersion,
+				npm_config_disturl: 'https://electronjs.org/headers'
+			}
+		});
+		log(`✓ Nested sharp rebuilt successfully`);
+		return true;
+	} catch (error) {
+		logError(`✗ Failed to rebuild nested sharp: ${error.message}`);
+		return false;
+	}
+}
+
 function rebuildNativeModules() {
 	const electronVersion = getElectronVersion();
 	log(`Rebuilding native modules for Electron ${electronVersion}...`);
@@ -165,7 +219,12 @@ function rebuildNativeModules() {
 	// Pre-extract sqlite3 source to work around minizlib issues
 	preExtractSqlite3();
 
+	// Initialize counters
+	let successCount = 0;
+	let failCount = 0;
+
 	// Try electron-rebuild first (faster for batch rebuilds)
+	let electronRebuildSucceeded = false;
 	try {
 		log('Attempting batch rebuild with @electron/rebuild...');
 		cp.execSync(`npx @electron/rebuild --version ${electronVersion}`, {
@@ -179,16 +238,31 @@ function rebuildNativeModules() {
 				npm_config_build_from_source: 'true'
 			}
 		});
-		log('Native modules rebuilt successfully!');
-		return;
+		log('Native modules rebuilt successfully with @electron/rebuild!');
+		electronRebuildSucceeded = true;
 	} catch (error) {
 		logError(`Batch rebuild failed: ${error.message}`);
 		log('Falling back to individual module rebuilds...');
 	}
 
-	// Fall back to rebuilding modules individually
-	let successCount = 0;
-	let failCount = 0;
+	// Always check and rebuild nested sharp modules, as @electron/rebuild may miss them
+	const nestedSharps = findNestedSharpModules();
+	if (nestedSharps.length > 0) {
+		log(`Found ${nestedSharps.length} nested sharp module(s) to rebuild...`);
+		for (const sharpPath of nestedSharps) {
+			const result = rebuildNestedSharp(sharpPath, electronVersion);
+			if (result) {
+				successCount++;
+			} else {
+				failCount++;
+			}
+		}
+	}
+
+	// If electron-rebuild succeeded and we handled nested sharps, we're done
+	if (electronRebuildSucceeded && nestedSharps.length === 0) {
+		return;
+	}
 
 	for (const moduleName of NATIVE_MODULES) {
 		const result = rebuildSingleModule(moduleName, electronVersion);

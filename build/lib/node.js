@@ -11,7 +11,6 @@ const path_1 = __importDefault(require("path"));
 const fs_1 = __importDefault(require("fs"));
 const root = path_1.default.dirname(path_1.default.dirname(__dirname));
 const pkg = JSON.parse(fs_1.default.readFileSync(path_1.default.join(root, 'remote', 'package.json'), 'utf8'));
-
 const version = pkg.nodeBuild?.nodeVersion || '20.18.3';
 const platform = process.platform;
 const arch = process.arch;

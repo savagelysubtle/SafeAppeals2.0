@@ -398,7 +398,7 @@ export class WebviewElement extends Disposable implements IWebview, WebviewFindD
 		element.className = `webview ${options.customClasses || ''}`;
 		element.sandbox.add('allow-scripts', 'allow-same-origin', 'allow-forms', 'allow-pointer-lock', 'allow-downloads');
 
-		const allowRules = ['cross-origin-isolated', 'autoplay'];
+		const allowRules = ['cross-origin-isolated', 'autoplay', 'microphone'];
 		if (!isFirefox) {
 			allowRules.push('clipboard-read', 'clipboard-write');
 		}

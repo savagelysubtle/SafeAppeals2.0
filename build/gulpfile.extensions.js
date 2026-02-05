@@ -36,8 +36,8 @@ const compilations = [
 	'extensions/json-language-features/server/tsconfig.json',
 	'extensions/git/tsconfig.json',
 	'extensions/git-base/tsconfig.json',
-	'extensions/txt-rich-editor/tsconfig.json',
 	'extensions/time-tracker/tsconfig.json',
+	'extensions/audio-recorder/tsconfig.json',
 ];
 
 const getBaseUrl = out => `https://main.vscode-cdn.net/sourcemaps/${commit}/${out}`;

@@ -83,6 +83,9 @@ import './fileConverter/fileConverter.contribution.js';
 // register timeline & case management
 import './timeline/timeline.contribution.js';
 
+// register audio recorder
+import './audioRecorder/audioRecorder.contribution.js';
+
 // register calendar sync state service
 import './calendar/calendarSyncStateService.js';
 

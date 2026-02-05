@@ -3,29 +3,29 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import es from 'event-stream';
-import fs from 'fs';
+import ansiColors from 'ansi-colors';
 import cp from 'child_process';
+import crypto from 'crypto';
+import es from 'event-stream';
+import fancyLog from 'fancy-log';
+import fs from 'fs';
 import glob from 'glob';
 import gulp from 'gulp';
+import buffer from 'gulp-buffer';
+import filter from 'gulp-filter';
+import rename from 'gulp-rename';
+import * as jsoncParser from 'jsonc-parser';
 import path from 'path';
-import crypto from 'crypto';
 import { Stream } from 'stream';
 import File from 'vinyl';
+import webpack from 'webpack';
+import { IExtensionDefinition, getExtensionStream } from './builtInExtensions';
+import { getProductionDependencies } from './dependencies';
+import { fetchGithub, fetchUrls } from './fetch';
+import { getVersion } from './getVersion';
 import { createStatsStream } from './stats';
 import * as util2 from './util';
 const vzip = require('gulp-vinyl-zip');
-import filter from 'gulp-filter';
-import rename from 'gulp-rename';
-import fancyLog from 'fancy-log';
-import ansiColors from 'ansi-colors';
-import buffer from 'gulp-buffer';
-import * as jsoncParser from 'jsonc-parser';
-import webpack from 'webpack';
-import { getProductionDependencies } from './dependencies';
-import { IExtensionDefinition, getExtensionStream } from './builtInExtensions';
-import { getVersion } from './getVersion';
-import { fetchUrls, fetchGithub } from './fetch';
 
 const root = path.dirname(path.dirname(__dirname));
 const commit = getVersion(root);
@@ -114,7 +114,8 @@ function fromLocalWebpack(extensionPath: string, webpackConfigFileName: string, 
 				path: filePath,
 				stat: fs.statSync(filePath),
 				base: extensionPath,
-				contents: fs.createReadStream(filePath) as any
+				// Use readFileSync (Buffer) instead of createReadStream to avoid unconsumed stream issues
+				contents: fs.readFileSync(filePath)
 			}));
 
 		// check for a webpack configuration files, then invoke webpack
@@ -202,9 +203,11 @@ function fromLocalWebpack(extensionPath: string, webpackConfigFileName: string, 
 
 function fromLocalNormal(extensionPath: string): Stream {
 	const vsce = require('@vscode/vsce') as typeof import('@vscode/vsce');
-	const result = es.through();
+	const { PassThrough } = require('stream');
+	const result = new PassThrough({ objectMode: true });
 
-	vsce.listFiles({ cwd: extensionPath, packageManager: vsce.PackageManager.Npm })
+	// Use PackageManager.None to avoid npm hanging on Windows
+	vsce.listFiles({ cwd: extensionPath, packageManager: vsce.PackageManager.None })
 		.then(fileNames => {
 			const files = fileNames
 				.map(fileName => path.join(extensionPath, fileName))
@@ -212,12 +215,15 @@ function fromLocalNormal(extensionPath: string): Stream {
 					path: filePath,
 					stat: fs.statSync(filePath),
 					base: extensionPath,
-					contents: fs.createReadStream(filePath) as any
+					// Use readFileSync (Buffer) instead of createReadStream to avoid unconsumed stream issues
+					contents: fs.readFileSync(filePath)
 				}));
 
-			es.readArray(files).pipe(result);
+			// Push each file and signal end
+			files.forEach(file => result.push(file));
+			result.push(null);
 		})
-		.catch(err => result.emit('error', err));
+		.catch(err => result.destroy(err));
 
 	return result.pipe(createStatsStream(path.basename(extensionPath)));
 }
@@ -333,7 +339,6 @@ const allowedExtensions = new Set([
 	'xml',
 	'git',
 	'git-base',
-	'txt-rich-editor',
 	// Additional core extensions
 	'diff',
 	'html',
@@ -343,8 +348,10 @@ const allowedExtensions = new Set([
 	'search-result',
 	'simple-browser',
 	'terminal-suggest',
-	'theme-scripts',
-	// SafeAppeals themes
+	// SafeAppeals custom extensions
+	'time-tracker',
+	'audio-recorder',
+	// SafeAppeals icon themes
 	'theme-safeappeals',
 	'theme-safeappeals-yellow',
 	'theme-safeappeals-teal',
@@ -357,6 +364,7 @@ const allowedExtensions = new Set([
 	'theme-safeappeals-grey',
 	'theme-safeappeals-dark',
 	'theme-safeappeals-contrast',
+	// SafeAppeals color themes
 	'theme-safeappeals-colors-yellow',
 	'theme-safeappeals-colors-teal',
 	'theme-safeappeals-colors-red',
@@ -369,6 +377,27 @@ const allowedExtensions = new Set([
 	'theme-safeappeals-colors-green',
 	'theme-safeappeals-colors-dark',
 	'theme-safeappeals-colors-contrast',
+	// SafeAppeals black gemstone color themes
+	'theme-safeappeals-colors-black-amethyst',
+	'theme-safeappeals-colors-black-aquamarine',
+	'theme-safeappeals-colors-black-bronze',
+	'theme-safeappeals-colors-black-citrine',
+	'theme-safeappeals-colors-black-copper',
+	'theme-safeappeals-colors-black-crimson',
+	'theme-safeappeals-colors-black-emerald',
+	'theme-safeappeals-colors-black-garnet',
+	'theme-safeappeals-colors-black-gold',
+	'theme-safeappeals-colors-black-jade',
+	'theme-safeappeals-colors-black-opal',
+	'theme-safeappeals-colors-black-peridot',
+	'theme-safeappeals-colors-black-platinum',
+	'theme-safeappeals-colors-black-rosegold',
+	'theme-safeappeals-colors-black-ruby',
+	'theme-safeappeals-colors-black-sapphire',
+	'theme-safeappeals-colors-black-silver',
+	'theme-safeappeals-colors-black-tanzanite',
+	'theme-safeappeals-colors-black-topaz',
+	'theme-safeappeals-colors-black-turquoise',
 ]);
 
 const marketplaceWebExtensionsExclude = new Set([

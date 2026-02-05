@@ -73,7 +73,7 @@ export const TimelineDashboard: React.FC = () => {
 	const [googleCalendarConnected, setGoogleCalendarConnected] = useState(false);
 	const [isSyncing, setIsSyncing] = useState(false);
 
-	// Outlook Calendar integration state
+	// Outlook Calendar integration state (disabled until Azure is enabled)
 	const [outlookCalendarConnected, setOutlookCalendarConnected] =
 		useState(false);
 	const [isOutlookSyncing, setIsOutlookSyncing] = useState(false);

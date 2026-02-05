@@ -19,6 +19,7 @@ export default defineConfig({
 		'./src2/file-converter-tsx/index.tsx',
 		'./src2/timeline-tsx/index.tsx',
 		'./src2/email-dashboard-tsx/index.tsx',
+		'./src2/audio-recorder-tsx/index.tsx',
 	],
 	outDir: './out',
 	format: ['esm'],

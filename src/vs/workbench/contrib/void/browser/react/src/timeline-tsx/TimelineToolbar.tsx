@@ -67,7 +67,7 @@ interface TimelineToolbarProps {
 	onDisconnectGoogleCalendar?: () => void;
 	onSyncToGoogleCalendar?: () => void;
 	isSyncing?: boolean;
-	// Outlook Calendar integration
+	// Outlook Calendar integration (buttons hidden until Azure app registration is available)
 	outlookCalendarConnected?: boolean;
 	onConnectOutlookCalendar?: () => void;
 	onDisconnectOutlookCalendar?: () => void;
@@ -99,11 +99,12 @@ export const TimelineToolbar: React.FC<TimelineToolbarProps> = ({
 	onDisconnectGoogleCalendar,
 	onSyncToGoogleCalendar,
 	isSyncing = false,
-	outlookCalendarConnected = false,
-	onConnectOutlookCalendar,
-	onDisconnectOutlookCalendar,
-	onSyncToOutlookCalendar,
-	isOutlookSyncing = false,
+	// Outlook props - kept for future use, buttons hidden until Azure app registration
+	outlookCalendarConnected: _outlookCalendarConnected = false,
+	onConnectOutlookCalendar: _onConnectOutlookCalendar,
+	onDisconnectOutlookCalendar: _onDisconnectOutlookCalendar,
+	onSyncToOutlookCalendar: _onSyncToOutlookCalendar,
+	isOutlookSyncing: _isOutlookSyncing = false,
 	onSyncFromCase,
 	filterCategory,
 	onFilterChange,
@@ -408,10 +409,12 @@ export const TimelineToolbar: React.FC<TimelineToolbarProps> = ({
 				</div>
 			)}
 
-			{/* Outlook Calendar Integration */}
-			{!outlookCalendarConnected && onConnectOutlookCalendar && (
+			{/* Outlook Calendar Integration - HIDDEN until Azure app registration is available
+			 * TODO: Uncomment when Microsoft paid account is available for Azure app connection
+			 * Users can use Export .ics for Outlook in the meantime
+			{!_outlookCalendarConnected && _onConnectOutlookCalendar && (
 				<button
-					onClick={onConnectOutlookCalendar}
+					onClick={_onConnectOutlookCalendar}
 					className="text-xs px-3 py-1.5 rounded-lg flex items-center gap-2 transition-all cursor-pointer"
 					style={{
 						...buttonSecondaryStyle,
@@ -427,25 +430,24 @@ export const TimelineToolbar: React.FC<TimelineToolbarProps> = ({
 				</button>
 			)}
 
-			{outlookCalendarConnected && (
+			{_outlookCalendarConnected && (
 				<div className="flex items-center gap-1">
-					{/* Sync Now Button */}
-					{onSyncToOutlookCalendar && (
+					{_onSyncToOutlookCalendar && (
 						<button
-							onClick={onSyncToOutlookCalendar}
-							disabled={isOutlookSyncing || calendarEventCount === 0}
+							onClick={_onSyncToOutlookCalendar}
+							disabled={_isOutlookSyncing || calendarEventCount === 0}
 							className="text-xs px-3 py-1.5 rounded-lg flex items-center gap-2 transition-all cursor-pointer"
 							style={{
 								...buttonSecondaryStyle,
 								borderColor: "var(--vscode-charts-orange)",
-								opacity: isOutlookSyncing || calendarEventCount === 0 ? 0.5 : 1,
+								opacity: _isOutlookSyncing || calendarEventCount === 0 ? 0.5 : 1,
 								cursor:
-									isOutlookSyncing || calendarEventCount === 0
+									_isOutlookSyncing || calendarEventCount === 0
 										? "not-allowed"
 										: "pointer",
 							}}
 							title={
-								isOutlookSyncing
+								_isOutlookSyncing
 									? "Syncing..."
 									: calendarEventCount === 0
 										? "No events to sync"
@@ -453,19 +455,18 @@ export const TimelineToolbar: React.FC<TimelineToolbarProps> = ({
 							}
 						>
 							<i
-								className={`codicon ${isOutlookSyncing ? "codicon-sync codicon-modifier-spin" : "codicon-cloud-upload"}`}
+								className={`codicon ${_isOutlookSyncing ? "codicon-sync codicon-modifier-spin" : "codicon-cloud-upload"}`}
 								style={{
 									fontSize: "12px",
 									color: "var(--vscode-charts-orange)",
 								}}
 							/>
-							<span>{isOutlookSyncing ? "Syncing..." : "Outlook"}</span>
+							<span>{_isOutlookSyncing ? "Syncing..." : "Outlook"}</span>
 						</button>
 					)}
-					{/* Disconnect Button */}
-					{onDisconnectOutlookCalendar && (
+					{_onDisconnectOutlookCalendar && (
 						<button
-							onClick={onDisconnectOutlookCalendar}
+							onClick={_onDisconnectOutlookCalendar}
 							className="text-xs px-2 py-1.5 rounded-lg flex items-center transition-all cursor-pointer"
 							style={{
 								...buttonSecondaryStyle,
@@ -478,6 +479,7 @@ export const TimelineToolbar: React.FC<TimelineToolbarProps> = ({
 					)}
 				</div>
 			)}
+			*/}
 
 			{/* Sync from Case Button */}
 			<button

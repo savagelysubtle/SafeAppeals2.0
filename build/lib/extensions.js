@@ -149,7 +149,8 @@ function fromLocalWebpack(extensionPath, webpackConfigFileName, disableMangle) {
             path: filePath,
             stat: fs_1.default.statSync(filePath),
             base: extensionPath,
-            contents: fs_1.default.createReadStream(filePath)
+            // Use readFileSync (Buffer) instead of createReadStream to avoid unconsumed stream issues
+            contents: fs_1.default.readFileSync(filePath)
         }));
         // check for a webpack configuration files, then invoke webpack
         // and merge its output with the files stream.
@@ -224,8 +225,10 @@ function fromLocalWebpack(extensionPath, webpackConfigFileName, disableMangle) {
 }
 function fromLocalNormal(extensionPath) {
     const vsce = require('@vscode/vsce');
-    const result = event_stream_1.default.through();
-    vsce.listFiles({ cwd: extensionPath, packageManager: vsce.PackageManager.Npm })
+    const { PassThrough } = require('stream');
+    const result = new PassThrough({ objectMode: true });
+    // Use PackageManager.None to avoid npm hanging on Windows
+    vsce.listFiles({ cwd: extensionPath, packageManager: vsce.PackageManager.None })
         .then(fileNames => {
         const files = fileNames
             .map(fileName => path_1.default.join(extensionPath, fileName))
@@ -233,11 +236,14 @@ function fromLocalNormal(extensionPath) {
             path: filePath,
             stat: fs_1.default.statSync(filePath),
             base: extensionPath,
-            contents: fs_1.default.createReadStream(filePath)
+            // Use readFileSync (Buffer) instead of createReadStream to avoid unconsumed stream issues
+            contents: fs_1.default.readFileSync(filePath)
         }));
-        event_stream_1.default.readArray(files).pipe(result);
+        // Push each file and signal end
+        files.forEach(file => result.push(file));
+        result.push(null);
     })
-        .catch(err => result.emit('error', err));
+        .catch(err => result.destroy(err));
     return result.pipe((0, stats_1.createStatsStream)(path_1.default.basename(extensionPath)));
 }
 const userAgent = 'VSCode Build';
@@ -334,7 +340,6 @@ const allowedExtensions = new Set([
     'xml',
     'git',
     'git-base',
-    'txt-rich-editor',
     // Additional core extensions
     'diff',
     'html',
@@ -344,8 +349,10 @@ const allowedExtensions = new Set([
     'search-result',
     'simple-browser',
     'terminal-suggest',
-    'theme-scripts',
-    // SafeAppeals themes
+    // SafeAppeals custom extensions
+    'time-tracker',
+    'audio-recorder',
+    // SafeAppeals icon themes
     'theme-safeappeals',
     'theme-safeappeals-yellow',
     'theme-safeappeals-teal',
@@ -358,6 +365,7 @@ const allowedExtensions = new Set([
     'theme-safeappeals-grey',
     'theme-safeappeals-dark',
     'theme-safeappeals-contrast',
+    // SafeAppeals color themes
     'theme-safeappeals-colors-yellow',
     'theme-safeappeals-colors-teal',
     'theme-safeappeals-colors-red',
@@ -370,6 +378,27 @@ const allowedExtensions = new Set([
     'theme-safeappeals-colors-green',
     'theme-safeappeals-colors-dark',
     'theme-safeappeals-colors-contrast',
+    // SafeAppeals black gemstone color themes
+    'theme-safeappeals-colors-black-amethyst',
+    'theme-safeappeals-colors-black-aquamarine',
+    'theme-safeappeals-colors-black-bronze',
+    'theme-safeappeals-colors-black-citrine',
+    'theme-safeappeals-colors-black-copper',
+    'theme-safeappeals-colors-black-crimson',
+    'theme-safeappeals-colors-black-emerald',
+    'theme-safeappeals-colors-black-garnet',
+    'theme-safeappeals-colors-black-gold',
+    'theme-safeappeals-colors-black-jade',
+    'theme-safeappeals-colors-black-opal',
+    'theme-safeappeals-colors-black-peridot',
+    'theme-safeappeals-colors-black-platinum',
+    'theme-safeappeals-colors-black-rosegold',
+    'theme-safeappeals-colors-black-ruby',
+    'theme-safeappeals-colors-black-sapphire',
+    'theme-safeappeals-colors-black-silver',
+    'theme-safeappeals-colors-black-tanzanite',
+    'theme-safeappeals-colors-black-topaz',
+    'theme-safeappeals-colors-black-turquoise',
 ]);
 const marketplaceWebExtensionsExclude = new Set([
     'ms-vscode.node-debug',

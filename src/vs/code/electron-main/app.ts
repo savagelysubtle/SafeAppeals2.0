@@ -152,6 +152,8 @@ import { TimelineExportChannel } from '../../workbench/contrib/void/electron-mai
 import { VoidSCMService } from '../../workbench/contrib/void/electron-main/voidSCMMainService.js';
 import { VoidMainUpdateService } from '../../workbench/contrib/void/electron-main/voidUpdateMainService.js';
 import { XLSXExtractorChannel } from '../../workbench/contrib/void/electron-main/xlsxExtractorChannel.js';
+import { AudioRecorderChannel } from '../../workbench/contrib/void/electron-main/audioRecorder/audioRecorderChannel.js';
+import { AudioRecorderMainService } from '../../workbench/contrib/void/electron-main/audioRecorder/audioRecorderMainService.js';
 /**
  * The main VS Code application. There will only ever be one instance,
  * even if the user starts many instances (e.g. from the command line).
@@ -203,6 +205,8 @@ export class CodeApplication extends Disposable {
 			// TODO(deepak1556): Should be removed once migration is complete
 			// https://github.com/microsoft/vscode/issues/239228
 			'deprecated-sync-clipboard-read',
+			// Allow microphone access for audio recording in webviews (e.g., audio-recorder extension)
+			'media',
 		]);
 
 		const allowedPermissionsInCore = new Set([
@@ -1334,6 +1338,11 @@ export class CodeApplication extends Disposable {
 		// Void Chat Thread Storage service
 		const chatThreadStorageChannel = new ChatThreadStorageChannel(accessor.get(ILogService), ragPathService);
 		mainProcessElectronServer.registerChannel('void-channel-chat-threads', chatThreadStorageChannel);
+
+		// Void Audio Recorder service
+		const audioRecorderMainService = new AudioRecorderMainService(accessor.get(ILogService));
+		const audioRecorderChannel = new AudioRecorderChannel(audioRecorderMainService);
+		mainProcessElectronServer.registerChannel('void-channel-audio-recorder', audioRecorderChannel);
 
 		// Extension Host Debug Broadcasting
 		const electronExtensionHostDebugBroadcastChannel = new ElectronExtensionHostDebugBroadcastChannel(accessor.get(IWindowsMainService));
