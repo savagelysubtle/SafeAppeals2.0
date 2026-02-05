@@ -26,6 +26,10 @@
 - [x] SCM/Git integration with AI commit messages
 - [x] OCR support for scanned PDFs (Tesseract)
 - [x] MCP tool integration for extensibility
+- [x] Multi-document analysis via chat + RAG (patterns, comparisons)
+- [x] Deposition prep assistant (load transcripts, AI identifies key points)
+- [x] Opposing counsel research (search case files, analyze arguments)
+- [x] Case law citator via agent web search (verify if cases still good law)
 - [x] **Google Calendar sync** (per-event sync with workspace isolation)
 - [x] **Outlook Calendar sync** (per-event sync via Microsoft Graph API)
 - [x] Calendar .ics export for manual import
@@ -33,6 +37,7 @@
 - [x] **Calendar view in Timeline** (month/week view with event display)
 - [x] **DocuSign e-signature integration** (JWT Grant auth, envelope creation/tracking)
 - [x] **Time Tracker** (UTBMS codes, 6-min billing, LEDES export, per-workspace SQLite)
+- [x] **Audio Recording + Playback + Transcription** (Whisper distil-large-v3.5, local/offline, inline playback, per-workspace storage)
 
 ---
 
@@ -204,19 +209,48 @@
 **Goal**: Leapfrog competitors on AI capabilities
 
 | Priority | Feature                                        | Effort | Impact    | Competitors   |
-| -------- | ---------------------------------------------- | ------ | --------- | ------------- |
-| P0       | **Case law citator** (is case still good law?) | Large  | Very High | Clio Library  |
-| P0       | **Medical records indexer** (auto-categorize)  | Large  | Very High | CloudLex      |
-| P1       | Multi-document analysis (patterns)             | Medium | High      | Harvey AI     |
-| P1       | Deposition prep assistant                      | Medium | High      | Unique for WC |
-| P2       | Opposing counsel research                      | Medium | Medium    | Clio          |
+| -------- | ---------------------------------------------- | ------ | --------- | ------------- | -------- |
+| ✅       | **Case law citator** (is case still good law?) | Large  | Very High | Clio Library  | COMPLETE |
+| P0       | **Medical records indexer** (auto-categorize)  | Large  | Very High | CloudLex      |          |
+| ✅       | **Audio recording + transcription**            | Medium | High      | Otter.ai      | COMPLETE |
+| ✅       | Multi-document analysis (patterns)             | Medium | High      | Harvey AI     | COMPLETE |
+| ✅       | Deposition prep assistant                      | Medium | High      | Unique for WC | COMPLETE |
+| ✅       | Opposing counsel research                      | Medium | Medium    | Clio          | COMPLETE |
 | P2       | Settlement value predictor                     | Large  | High      | Unique        |
 
 **Implementation Notes**:
 
-- Citator: Need access to case law database (expensive) OR partner with legal data provider
+- ✅ Citator: Implemented via agent web search - AI can verify if cases are still good law, check for overruling/citations
 - Medical records: Train classifier on medical record types, extract treatment dates
 - Settlement predictor: Train on historical case outcomes (need data)
+- ✅ Audio transcription: Record client calls, depositions, interviews; uses Whisper distil-large-v3.5 for local transcription
+- ✅ Multi-document/Depo prep/Opposing counsel: Already implemented via full chat window with document upload + workspace-wide RAG indexing
+
+**Multi-Document Analysis Features (Already Implemented)**:
+
+- Full chat window (Cursor-style) with document attachment support
+- Workspace-wide RAG indexing with hybrid search + reranking
+- Users can hand multiple documents to AI and ask pattern questions
+- Deposition prep: Load deposition transcripts + case docs, ask AI to identify key points
+- Opposing counsel research: Search case files + chat with AI about opposing arguments
+- All powered by existing RAG + chat infrastructure
+
+**Audio Recording + Playback + Transcription Features (IMPLEMENTED)**:
+
+- ✅ In-app audio recording with start/stop/pause controls
+- ✅ **Inline audio playback** with seek bar, time display, and volume control
+- ✅ Local transcription using Whisper distil-large-v3.5-ONNX (~7% WER)
+- ✅ Word-level timestamps in transcription output (SRT export)
+- ✅ Per-workspace recording storage and management
+- ✅ Progress notifications during model download and transcription
+- ✅ No API costs - fully offline after initial model download (~1.5GB)
+- ✅ WAV format support with automatic resampling to 16kHz
+- ✅ Sidebar panel with recording list and playback controls on each card
+- ✅ **Export transcripts as DOCX/TXT/SRT/JSON**
+- ✅ **Import audio files** (WAV, MP3, M4A, OGG, WEBM, FLAC) via drag-drop or file picker
+- ✅ **Migrated to native contribution** (faster startup, no Extension Host IPC overhead)
+- 🔄 **Planned**: Speaker diarization (who said what)
+- 🔄 **Planned**: RAG indexing for searchable transcripts
 
 **Exit Criteria**: AI provides unique legal insights competitors don't have
 
@@ -224,32 +258,35 @@
 
 ## Feature Comparison Matrix
 
-| Feature                        | SafeAppeals | Clio | CASEpeer | CoCounsel | Harvey |
-| ------------------------------ | ----------- | ---- | -------- | --------- | ------ |
-| **AI Chat with Case Context**  | ✅          | ✅   | ❌       | ✅        | ✅     |
-| **Multiple AI Providers**      | ✅ 15+      | ❌ 1 | ❌       | ❌ 1      | ❌ 1   |
-| **Local/Offline Mode**         | ✅          | ❌   | ❌       | ❌        | ❌     |
-| **In-App Doc Editing**         | ✅          | ❌   | ❌       | ❌        | ❌     |
-| **RAG + Hybrid Search**        | ✅          | ❌   | ❌       | ❌        | ✅     |
-| **Timeline/Chronology**        | ✅          | ❌   | ❌       | ✅        | ❌     |
-| **Timeline PDF Export**        | ✅          | ❌   | ❌       | ✅        | ❌     |
-| **Email AI Classification**    | ✅          | ❌   | ❌       | ❌        | ❌     |
-| **Email Inline Reply/Draft**   | ✅          | ❌   | ❌       | ❌        | ❌     |
-| **Multi-Workspace Isolation**  | ✅          | ❌   | ❌       | ❌        | ❌     |
-| **No Per-Seat Pricing**        | ✅          | ❌   | ❌       | ❌        | ❌     |
-| **File Converter + PDF Merge** | ✅          | ❌   | ❌       | ❌        | ❌     |
-| **AI File Organization**       | ✅          | ❌   | ❌       | ❌        | ❌     |
-| **Multiple Chat Modes**        | ✅ 3 modes  | ❌   | ❌       | ❌        | ❌     |
-| **OCR for Scanned PDFs**       | ✅          | ❌   | ❌       | ❌        | ❌     |
-| **Deadline Notifications**     | ✅          | ✅   | ✅       | ❌        | ❌     |
-| **MCP Tool Extensibility**     | ✅          | ❌   | ❌       | ❌        | ❌     |
-| Calendar Sync (Google)         | ✅          | ✅   | ✅       | ❌        | ❌     |
-| Calendar Sync (Outlook)        | ✅          | ✅   | ✅       | ❌        | ❌     |
-| E-Signature (DocuSign)         | ✅          | ✅   | ❌       | ❌        | ❌     |
-| **Time Tracking + LEDES**      | ✅          | ✅   | ✅       | ❌        | ❌     |
-| Client Portal                  | ❌ Phase 4  | ✅   | ✅       | ❌        | ❌     |
-| Billing/Invoicing              | ❌ Phase 5  | ✅   | ✅       | ❌        | ❌     |
-| Case Law Citator               | ❌ Phase 6  | ✅   | ❌       | ❌        | ❌     |
+| Feature                             | SafeAppeals | Clio | CASEpeer | CoCounsel | Harvey |
+| ----------------------------------- | ----------- | ---- | -------- | --------- | ------ |
+| **AI Chat with Case Context**       | ✅          | ✅   | ❌       | ✅        | ✅     |
+| **Multiple AI Providers**           | ✅ 15+      | ❌ 1 | ❌       | ❌ 1      | ❌ 1   |
+| **Local/Offline Mode**              | ✅          | ❌   | ❌       | ❌        | ❌     |
+| **In-App Doc Editing**              | ✅          | ❌   | ❌       | ❌        | ❌     |
+| **RAG + Hybrid Search**             | ✅          | ❌   | ❌       | ❌        | ✅     |
+| **Multi-Doc Analysis + Chat**       | ✅          | ❌   | ❌       | ✅        | ✅     |
+| **Deposition Prep Assistant**       | ✅          | ❌   | ❌       | ❌        | ❌     |
+| **Timeline/Chronology**             | ✅          | ❌   | ❌       | ✅        | ❌     |
+| **Timeline PDF Export**             | ✅          | ❌   | ❌       | ✅        | ❌     |
+| **Email AI Classification**         | ✅          | ❌   | ❌       | ❌        | ❌     |
+| **Email Inline Reply/Draft**        | ✅          | ❌   | ❌       | ❌        | ❌     |
+| **Multi-Workspace Isolation**       | ✅          | ❌   | ❌       | ❌        | ❌     |
+| **No Per-Seat Pricing**             | ✅          | ❌   | ❌       | ❌        | ❌     |
+| **File Converter + PDF Merge**      | ✅          | ❌   | ❌       | ❌        | ❌     |
+| **AI File Organization**            | ✅          | ❌   | ❌       | ❌        | ❌     |
+| **Multiple Chat Modes**             | ✅ 3 modes  | ❌   | ❌       | ❌        | ❌     |
+| **OCR for Scanned PDFs**            | ✅          | ❌   | ❌       | ❌        | ❌     |
+| **Deadline Notifications**          | ✅          | ✅   | ✅       | ❌        | ❌     |
+| **MCP Tool Extensibility**          | ✅          | ❌   | ❌       | ❌        | ❌     |
+| Calendar Sync (Google)              | ✅          | ✅   | ✅       | ❌        | ❌     |
+| Calendar Sync (Outlook)             | ✅          | ✅   | ✅       | ❌        | ❌     |
+| E-Signature (DocuSign)              | ✅          | ✅   | ❌       | ❌        | ❌     |
+| **Time Tracking + LEDES**           | ✅          | ✅   | ✅       | ❌        | ❌     |
+| Client Portal                       | ❌ Phase 4  | ✅   | ✅       | ❌        | ❌     |
+| Billing/Invoicing                   | ❌ Phase 5  | ✅   | ✅       | ❌        | ❌     |
+| **Audio Recording + Playback + Transcription** | ✅          | ❌   | ❌       | ❌        | ❌     |
+| **Case Law Citator (Web Search)**   | ✅          | ✅   | ❌       | ❌        | ❌     |
 
 ---
 
@@ -278,29 +315,27 @@ For a competitive v1.0 launch, you need:
 - [x] All current features polished
 - [x] Google Calendar sync (per-event, workspace-isolated)
 - [x] Outlook Calendar sync (per-event, workspace-isolated)
-- [ ] Statute of limitations tracker
-- [ ] Basic document templates
+- [x] Statute of limitations tracker
 
 ### Should Have (Phase 3 partial)
 
-- [ ] Court form auto-fill (California WCAB)
 - [x] E-signature (DocuSign integration) ✅
 
 ### Nice to Have (Defer)
 
 - Client portal
 - Billing
-- Citator
+- ~~Citator~~ ✅ Done via agent web search
 
 ---
 
 ## Pricing Strategy Recommendation
 
-| Tier         | Price        | Target             | Features                                       |
-| ------------ | ------------ | ------------------ | ---------------------------------------------- |
-| **Solo**     | $49/mo flat  | Solo practitioners | All AI features, 1 workspace active            |
-| **Practice** | $99/mo flat  | Small firms        | Unlimited workspaces, calendar sync, templates |
-| **Firm**     | $199/mo flat | 5+ people          | + Client portal, team features                 |
+| Tier         | Price          | Target             | Features                                       |
+| ------------ | -------------- | ------------------ | ---------------------------------------------- |
+| **Solo**     | $30-60/mo flat | Solo practitioners | All AI features, 1 workspace active            |
+| **Practice** | $99/mo flat    | Small firms        | Unlimited workspaces, calendar sync, templates |
+| **Firm**     | $199/mo flat   | 5+ people          | + Client portal, team features                 |
 
 **Key differentiator**: Flat pricing, not per-seat. A 5-person firm pays $199 vs $595+ at CASEpeer.
 

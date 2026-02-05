@@ -282,16 +282,69 @@ EmailDashboardPane (VSCode ViewPane)
     ├── EmailToolbar
     │   ├── Search Input
     │   ├── Sort Dropdown
-    │   ├── View Mode Toggle
+    │   ├── View Mode Toggle (List/Compact)
     │   └── Filter Toggle
+    ├── EmailStats
+    │   └── Count widgets (emails, drafts, cases, needs reply)
     ├── EmailFilters (collapsible)
     │   └── Case Folder Dropdown
     └── Email List
         └── EmailCard (per email)
-            ├── Avatar (initials)
+            ├── Star Button
+            ├── Reminder Button → ReminderPicker
+            ├── Avatar (color-coded initials)
             ├── Content (from, subject, preview)
-            └── Actions (open, delete)
+            ├── Category/Priority Badges
+            ├── Draft Status Indicator
+            ├── Actions (Draft, AI Reply, Open, Timeline, Delete)
+            └── DraftEditor (expandable inline editor)
+                ├── Toolbar (formatting buttons)
+                ├── DraftStatusBadge (clickable status workflow)
+                ├── Content Area (contenteditable div)
+                └── DraftVersionHistory (slide-out panel)
+                    ├── Version List
+                    ├── Preview Pane
+                    └── Restore Dialog
 ```
+
+### Inline Editing Architecture
+
+The inline editing system uses a contenteditable-based approach due to CSP restrictions:
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    EmailCard Component                           │
+├─────────────────────────────────────────────────────────────────┤
+│  State: showDraftEditor, draftContent, draftStatus              │
+│                                                                  │
+│  ┌─────────────────────────────────────────────────────────────┐│
+│  │  DraftEditor (when expanded)                                 ││
+│  │  ┌─────────────────────────────────────────────────────────┐││
+│  │  │  Header: Status Badge + Save Indicator + History Btn    │││
+│  │  ├─────────────────────────────────────────────────────────┤││
+│  │  │  Toolbar: H1 H2 H3 | B I U | Lists                      │││
+│  │  ├─────────────────────────────────────────────────────────┤││
+│  │  │  Content: <div contenteditable>                         │││
+│  │  │           Auto-saves on 2-second debounce               │││
+│  │  └─────────────────────────────────────────────────────────┘││
+│  └─────────────────────────────────────────────────────────────┘│
+│                                                                  │
+│  ┌─────────────────────────────────────────────────────────────┐│
+│  │  DraftVersionHistory (slide-out panel)                      ││
+│  │  [Version List]  |  [Preview + Restore]                     ││
+│  └─────────────────────────────────────────────────────────────┘│
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Why Contenteditable Instead of Tiptap
+
+The sidebar context runs with Trusted Types enabled, which blocks:
+- `DOMParser.parseFromString()` 
+- Dynamic HTML injection
+
+Tiptap relies heavily on these APIs. The DOCX viewer can use Tiptap because it runs in a webview with relaxed CSP rules.
+
+**Solution**: Use native `contenteditable` with `document.execCommand()` for formatting.
 
 ### Styling Constants
 
@@ -343,11 +396,13 @@ viewsRegistry.registerViews([{
 ```
 src/vs/workbench/contrib/void/
 ├── common/
-│   └── emailService.ts              # Email interface & types
+│   └── emailService.ts              # Email interface, types, DraftStatus
 │
 ├── browser/
-│   ├── emailService.ts              # Browser IPC client
-│   ├── emailDraftService.ts         # AI draft generation
+│   ├── emailService.ts              # Browser IPC client (emails)
+│   ├── emailDraftService.ts         # Browser IPC client (drafts)
+│   ├── emailThreadService.ts        # Thread grouping service
+│   ├── emailClassifier.ts           # AI-powered email classification
 │   │
 │   ├── emailDashboard/
 │   │   ├── emailDashboard.contribution.ts  # View registration
@@ -361,16 +416,24 @@ src/vs/workbench/contrib/void/
 │   │
 │   └── react/src/email-dashboard-tsx/
 │       ├── index.tsx                # React mount function
-│       ├── EmailDashboard.tsx       # Main component
-│       ├── EmailToolbar.tsx         # Toolbar component
-│       ├── EmailCard.tsx            # Email list item
-│       └── EmailFilters.tsx         # Filter panel
+│       ├── EmailDashboard.tsx       # Main container component
+│       ├── EmailCard.tsx            # Email card with inline editor
+│       ├── EmailToolbar.tsx         # Search/sort/filter toolbar
+│       ├── EmailFilters.tsx         # Collapsible filter panel
+│       ├── EmailStats.tsx           # Statistics widget
+│       ├── EmailThread.tsx          # Thread view component
+│       │
+│       ├── DraftEditor.tsx          # Inline rich text editor
+│       ├── DraftEditor.css          # Editor styles
+│       ├── DraftStatusBadge.tsx     # Status workflow badge
+│       ├── DraftVersionHistory.tsx  # Version history panel
+│       └── ReminderPicker.tsx       # Reminder date picker
 │
 └── electron-main/
     ├── emailMainChannel.ts          # IPC channel
     └── email/
-        ├── emailMainService.ts      # Main service
-        └── emailIndexService.ts     # SQLite operations
+        ├── emailMainService.ts      # Main email service
+        └── emailIndexService.ts     # SQLite + FTS5 operations
 ```
 
 ---

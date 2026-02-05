@@ -6,6 +6,8 @@ This guide covers how to extend, customize, and contribute to the Email Dashboar
 
 - [Development Setup](#development-setup)
 - [Building the React Components](#building-the-react-components)
+- [Inline Draft Editing System](#inline-draft-editing-system)
+- [Draft Service Architecture](#draft-service-architecture)
 - [Adding New Features](#adding-new-features)
 - [Extending the Email Parser](#extending-the-email-parser)
 - [Customizing the UI](#customizing-the-ui)
@@ -101,6 +103,267 @@ export function mountEmailDashboard(
     </AccessorProvider>
   );
   return { dispose: () => root.unmount() };
+}
+```
+
+---
+
+## Inline Draft Editing System
+
+The inline draft editing feature allows users to compose and edit email reply drafts directly within the email card UI.
+
+### Component Architecture
+
+```
+EmailCard.tsx
+├── DraftEditor.tsx          # Main inline editor component
+│   ├── DraftStatusBadge.tsx # Status workflow badge
+│   └── DraftVersionHistory.tsx # Version history panel
+└── (integration via showDraftEditor state)
+```
+
+### DraftEditor Component
+
+The `DraftEditor` component (`DraftEditor.tsx`) provides a rich text editing experience using a `contenteditable` div.
+
+**Why not Tiptap?** The sidebar context has Trusted Types enabled which blocks Tiptap's `DOMParser.parseFromString` calls. The DOCX viewer uses Tiptap because it runs in a webview with different CSP rules.
+
+#### Props Interface
+
+```typescript
+interface DraftEditorProps {
+  emailId: string;         // Parent email ID
+  initialContent?: string; // HTML content to load
+  onSave?: (content: string) => void;  // Save callback
+  onClose?: () => void;    // Close callback
+}
+```
+
+#### Key Features
+
+| Feature | Implementation |
+|---------|----------------|
+| Auto-save | 2-second debounce on content changes |
+| Formatting | `document.execCommand()` for bold, italic, lists, etc. |
+| Version history | Integration with `IEmailDraftService.getDraftVersions()` |
+| Status workflow | Status badge with dropdown for Draft → Reviewed → Ready |
+
+#### Toolbar Implementation
+
+Formatting uses `document.execCommand()` which works with contenteditable:
+
+```typescript
+const toggleBold = () => {
+  editorContainerRef.current?.focus();
+  document.execCommand('bold');
+};
+
+const setHeading = (level: 1 | 2 | 3 | 4) => {
+  editorContainerRef.current?.focus();
+  document.execCommand('formatBlock', false, `h${level}`);
+};
+```
+
+#### Content Serialization
+
+Content is converted between HTML (storage) and plain text (display) due to CSP restrictions:
+
+```typescript
+// HTML to plain text for display
+const htmlToText = (html: string): string => {
+  return html
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/p>/gi, '\n\n')
+    .replace(/<[^>]*>/g, '')
+    .replace(/&nbsp;/g, ' ')
+    .trim();
+};
+
+// Plain text to HTML for storage
+const content = rawContent
+  .split('\n\n')
+  .filter(p => p.trim())
+  .map(p => `<p>${p.trim()}</p>`)
+  .join('\n');
+```
+
+### DraftStatusBadge Component
+
+The `DraftStatusBadge` component provides a visual indicator and dropdown for managing draft workflow status.
+
+#### Status Configuration
+
+```typescript
+const STATUS_CONFIGS: Record<DraftStatus, StatusConfig> = {
+  'draft': {
+    icon: '✏️',
+    label: 'Draft',
+    bgColor: 'var(--vscode-button-secondaryBackground)',
+    textColor: 'var(--vscode-descriptionForeground)',
+    borderColor: 'var(--vscode-panel-border)',
+  },
+  'reviewed': {
+    icon: '👀',
+    label: 'Reviewed',
+    bgColor: 'var(--vscode-inputValidation-infoBackground)',
+    textColor: 'var(--vscode-charts-blue)',
+    borderColor: 'var(--vscode-inputValidation-infoBorder)',
+  },
+  'ready': {
+    icon: '✅',
+    label: 'Ready to Send',
+    bgColor: 'var(--vscode-testing-iconPassed)',
+    textColor: 'var(--vscode-charts-green)',
+    borderColor: 'var(--vscode-charts-green)',
+  },
+  'sent': {
+    icon: '📤',
+    label: 'Sent',
+    // ... (disabled in UI - future feature)
+  },
+};
+```
+
+### DraftVersionHistory Component
+
+The version history panel displays all saved versions with preview and restore functionality.
+
+#### Features
+
+- **Split panel UI**: Version list on left, preview on right
+- **Timestamp formatting**: Relative times (e.g., "5 minutes ago", "Yesterday 2:45 PM")
+- **Restore confirmation**: Modal dialog before restoring
+- **Current version indicator**: Badge for the latest version
+
+#### Restore Flow
+
+```typescript
+const handleRestoreVersion = useCallback((content: string) => {
+  // Set content as plain text in the editor
+  if (editorContainerRef.current) {
+    editorContainerRef.current.innerText = htmlToText(content);
+  }
+  
+  // Mark as unsaved and trigger auto-save
+  setHasUnsavedChanges(true);
+  handleContentChange();
+  
+  // Close history panel
+  setShowVersionHistory(false);
+}, [handleContentChange]);
+```
+
+---
+
+## Draft Service Architecture
+
+### IEmailDraftService Interface
+
+```typescript
+// common/emailService.ts
+export interface IEmailDraftService {
+  readonly _serviceBrand: undefined;
+  
+  saveDraft(emailId: string, content: string): Promise<EmailDraft>;
+  getDraft(emailId: string): Promise<EmailDraft | null>;
+  getDraftVersions(emailId: string): Promise<EmailDraft[]>;
+  updateDraftStatus(draftId: string, status: DraftStatus): Promise<void>;
+}
+
+export type DraftStatus = 'draft' | 'reviewed' | 'ready' | 'sent';
+
+export interface EmailDraft {
+  id: string;
+  emailId: string;
+  content: string;
+  version: number;
+  status: DraftStatus;
+  createdAt: Date;
+  updatedAt: Date;
+}
+```
+
+### Browser Service (emailDraftService.ts)
+
+The browser-side service acts as an IPC client:
+
+```typescript
+export class EmailDraftService implements IEmailDraftService {
+  private readonly channel: IChannel;
+  private readonly workspaceId: string;
+
+  constructor(
+    @IMainProcessService mainProcessService: IMainProcessService,
+    @IWorkspaceContextService workspaceContextService: IWorkspaceContextService
+  ) {
+    this.channel = mainProcessService.getChannel('void-channel-email');
+    this.workspaceId = this.computeWorkspaceId();
+  }
+
+  async saveDraft(emailId: string, content: string): Promise<EmailDraft> {
+    const result = await this.channel.call<EmailDraftWithStringDates>('saveDraft', {
+      workspaceId: this.workspaceId,
+      emailId,
+      content
+    });
+    return convertDraftDates(result);
+  }
+  
+  // ... other methods
+}
+```
+
+### Database Schema (Drafts Table)
+
+```sql
+CREATE TABLE email_drafts (
+  id TEXT PRIMARY KEY,
+  email_id TEXT NOT NULL,
+  content TEXT NOT NULL,
+  version INTEGER NOT NULL DEFAULT 1,
+  status TEXT NOT NULL DEFAULT 'draft' 
+    CHECK(status IN ('draft', 'reviewed', 'ready', 'sent')),
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  FOREIGN KEY (email_id) REFERENCES emails (id) ON DELETE CASCADE
+);
+
+CREATE INDEX idx_drafts_email_id ON email_drafts(email_id);
+CREATE INDEX idx_drafts_version ON email_drafts(email_id, version DESC);
+```
+
+### Version Management
+
+Each save creates a new version:
+
+```typescript
+async saveDraft(emailId: string, content: string): Promise<EmailDraft> {
+  // Get current max version
+  const maxVersion = await this.db.get(
+    'SELECT MAX(version) as max_ver FROM email_drafts WHERE email_id = ?',
+    [emailId]
+  );
+  
+  const newVersion = (maxVersion?.max_ver || 0) + 1;
+  
+  const draft: EmailDraft = {
+    id: generateId(),
+    emailId,
+    content,
+    version: newVersion,
+    status: 'draft',
+    createdAt: new Date(),
+    updatedAt: new Date()
+  };
+  
+  await this.db.run(
+    `INSERT INTO email_drafts (id, email_id, content, version, status, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    [draft.id, draft.emailId, draft.content, draft.version, draft.status,
+     draft.createdAt.toISOString(), draft.updatedAt.toISOString()]
+  );
+  
+  return draft;
 }
 ```
 
@@ -464,16 +727,47 @@ try {
 
 ## File Reference
 
+### Core Services
+
 | File | Purpose |
 |------|---------|
-| `common/emailService.ts` | Interface definitions |
-| `browser/emailService.ts` | Browser IPC client |
-| `browser/emailDraftService.ts` | AI draft generation |
-| `browser/emailDashboard/*.ts` | View registration |
-| `browser/emailViewers/*.ts` | Custom editor |
-| `browser/react/src/email-dashboard-tsx/*.tsx` | React UI |
-| `electron-main/email/*.ts` | Main process services |
-| `electron-main/emailMainChannel.ts` | IPC channel |
+| `common/emailService.ts` | Interface definitions, types, DraftStatus enum |
+| `browser/emailService.ts` | Browser IPC client for email operations |
+| `browser/emailDraftService.ts` | Browser IPC client for draft CRUD & versioning |
+| `electron-main/email/emailMainService.ts` | Main process email parsing & storage |
+| `electron-main/email/emailIndexService.ts` | SQLite database operations |
+| `electron-main/emailMainChannel.ts` | IPC channel handler |
+
+### View Registration
+
+| File | Purpose |
+|------|---------|
+| `browser/emailDashboard/emailDashboard.contribution.ts` | View container & command registration |
+| `browser/emailDashboard/emailDashboardPane.ts` | ViewPane that hosts React component |
+| `browser/emailViewers/emailViewer.contribution.ts` | Email viewer editor registration |
+| `browser/emailViewers/emailViewerEditor.ts` | Full email viewer EditorPane |
+
+### React Components
+
+| File | Purpose |
+|------|---------|
+| `react/src/email-dashboard-tsx/index.tsx` | Mount function & entry point |
+| `react/src/email-dashboard-tsx/EmailDashboard.tsx` | Main dashboard container |
+| `react/src/email-dashboard-tsx/EmailCard.tsx` | Email card with inline editor integration |
+| `react/src/email-dashboard-tsx/EmailToolbar.tsx` | Search, sort, filter toolbar |
+| `react/src/email-dashboard-tsx/EmailFilters.tsx` | Collapsible filter panel |
+| `react/src/email-dashboard-tsx/EmailStats.tsx` | Statistics widget |
+| `react/src/email-dashboard-tsx/EmailThread.tsx` | Thread grouping view |
+
+### Inline Editing Components
+
+| File | Purpose |
+|------|---------|
+| `react/src/email-dashboard-tsx/DraftEditor.tsx` | Contenteditable rich text editor |
+| `react/src/email-dashboard-tsx/DraftEditor.css` | Editor styling |
+| `react/src/email-dashboard-tsx/DraftStatusBadge.tsx` | Status workflow dropdown badge |
+| `react/src/email-dashboard-tsx/DraftVersionHistory.tsx` | Version history panel with restore |
+| `react/src/email-dashboard-tsx/ReminderPicker.tsx` | Email reminder date picker |
 
 ---
 

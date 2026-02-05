@@ -19,11 +19,7 @@ Void has two Apply modes:
 ### Fast Apply Format
 
 ```
-<<<<<<< ORIGINAL
-// original code goes here
-=======
 // replaced code goes here
->>>>>>> UPDATED
 ```
 
 ## Core Terminology

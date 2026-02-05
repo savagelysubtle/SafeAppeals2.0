@@ -11,6 +11,9 @@ This guide covers how to use the Email Dashboard to manage case correspondence i
 - [Filtering by Case](#filtering-by-case)
 - [Sorting Emails](#sorting-emails)
 - [Deleting Emails](#deleting-emails)
+- [Inline Draft Editing](#inline-draft-editing)
+- [Draft Status Workflow](#draft-status-workflow)
+- [Version History](#version-history)
 - [Creating Draft Replies](#creating-draft-replies)
 
 ---
@@ -191,6 +194,115 @@ The delete button requires a **two-click confirmation**:
 
 ---
 
+## Inline Draft Editing
+
+The Email Dashboard features a powerful inline draft editor that lets you compose and edit email replies directly within the email card, without opening a separate window.
+
+### Opening the Draft Editor
+
+There are two ways to access the inline draft editor:
+
+| Method | Description |
+|--------|-------------|
+| **Draft Button** | Click the "Draft" button on any email card to open a blank draft editor |
+| **AI Reply Button** | Click "AI Reply" to generate an AI-assisted draft and open the editor |
+
+### Using the Draft Editor
+
+The inline editor appears directly below the email card and includes:
+
+#### Toolbar Features
+
+| Tool | Shortcut | Description |
+|------|----------|-------------|
+| **Normal Text** | — | Reset to paragraph formatting |
+| **H1/H2/H3** | — | Heading levels for structure |
+| **Bold** | `Ctrl+B` | Bold selected text |
+| **Italic** | `Ctrl+I` | Italicize selected text |
+| **Underline** | `Ctrl+U` | Underline selected text |
+| **Bullet List** | — | Create unordered list |
+| **Numbered List** | — | Create ordered list |
+
+#### Auto-Save
+
+- Drafts are **automatically saved** every 2 seconds after you stop typing
+- The status bar shows "Saving..." during save and "Saved X seconds ago" after
+- A dot indicator (•) appears in the header when there are unsaved changes
+
+### Closing the Editor
+
+Click the **collapse button** (chevron-up icon) or the **X button** to close the editor. Your draft is preserved and can be reopened later.
+
+---
+
+## Draft Status Workflow
+
+Drafts follow a structured workflow to track their progress from creation to sending.
+
+### Status Stages
+
+| Status | Icon | Description |
+|--------|------|-------------|
+| **Draft** | ✏️ | Initial state — draft is being composed |
+| **Reviewed** | 👀 | Draft has been reviewed for accuracy |
+| **Ready to Send** | ✅ | Draft is approved and ready to be sent |
+| **Sent** | 📤 | Draft has been sent (future feature) |
+
+### Changing Draft Status
+
+1. **Status Badge**: Click the status badge dropdown to change status directly
+2. **Status Button**: Use the "Mark as Reviewed" or "Mark Ready to Send" button in the editor header
+
+### Status Progression
+
+The typical workflow is:
+
+```
+Draft → Reviewed → Ready to Send → Sent
+       │          │
+       └──────────┴── (Can revert to earlier status if needed)
+```
+
+> **Note:** Save your draft before changing status. The status button is disabled while there are unsaved changes.
+
+---
+
+## Version History
+
+Every time you save a draft, a new version is created. Version history lets you view, compare, and restore previous versions.
+
+### Opening Version History
+
+Click the **History** button in the draft editor header to open the version history panel.
+
+### Version History Panel
+
+The panel displays:
+
+| Section | Description |
+|---------|-------------|
+| **Version List** | Left side — list of all saved versions with timestamps |
+| **Preview** | Right side — full content preview of selected version |
+
+### Version Information
+
+Each version shows:
+- **Version number** (e.g., "Version 3")
+- **Timestamp** (e.g., "Today 2:45 PM" or "5 minutes ago")
+- **Content preview** (first 50 characters)
+- **"Current" badge** for the latest version
+
+### Restoring a Previous Version
+
+1. Click on a version in the list to preview it
+2. Review the content in the preview pane
+3. Click **Restore This Version** to restore it
+4. Confirm the restore in the dialog
+
+> **Note:** Restoring a version replaces your current draft content. The previous content is automatically saved as a new version first.
+
+---
+
 ## Creating Draft Replies
 
 ### AI-Assisted Drafting
@@ -199,17 +311,25 @@ The Email Dashboard integrates with the RAG (Retrieval Augmented Generation) ser
 
 ### How It Works
 
-1. Open an email in the Email Viewer
-2. Click the **Draft Reply** button
+1. Hover over an email card to reveal action buttons
+2. Click the **AI Reply** button
 3. The system:
    - Searches your case documents for relevant context
    - Builds a prompt with email history and document excerpts
    - Generates a professional reply template
-4. A new DOCX file is created in `{case-folder}/replies/`
+4. The draft opens automatically in the inline editor
+5. Edit and refine the AI-generated content as needed
 
-### Draft Location
+### Draft Storage
 
-Draft replies are saved as:
+Drafts are automatically stored in the workspace database with full version history. When you're ready to export, you can:
+
+1. Use the **Export to DOCX** option (coming soon)
+2. Copy content directly from the editor
+
+### Draft Location (Exported)
+
+Exported draft replies are saved as:
 ```
 {case-folder}/replies/Reply_to_{subject}_{timestamp}.docx
 ```
@@ -226,13 +346,33 @@ Draft replies are saved as:
 
 ---
 
+## Email Card Quick Actions
+
+Each email card displays action buttons when you hover over it:
+
+| Button | Description |
+|--------|-------------|
+| **Star** | Star/unstar the email for quick access |
+| **Bell** | Set a reminder for follow-up |
+| **Draft** | Open/close the inline draft editor |
+| **AI Reply** | Generate an AI-assisted reply draft |
+| **Open** | Open email in full viewer |
+| **Timeline** | Add email as a timeline event |
+| **Delete** | Delete email (requires confirmation)
+
+---
+
 ## Keyboard Shortcuts
 
-| Shortcut | Action |
-|----------|--------|
-| `Ctrl+Shift+E` | Open Email Dashboard |
-| `Enter` | Execute search |
-| `Escape` | Clear search |
+| Shortcut | Context | Action |
+|----------|---------|--------|
+| `Ctrl+Shift+E` | Global | Open Email Dashboard |
+| `Enter` | Search | Execute search |
+| `Escape` | Search | Clear search |
+| `Ctrl+B` | Draft Editor | Bold text |
+| `Ctrl+I` | Draft Editor | Italic text |
+| `Ctrl+U` | Draft Editor | Underline text |
+| `Ctrl+S` | Draft Editor | Save draft |
 
 ---
 

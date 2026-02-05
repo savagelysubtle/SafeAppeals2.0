@@ -131,6 +131,27 @@ Professional legal time tracking with UTBMS codes and LEDES export.
 - Per-workspace SQLite storage
 - Live timer in status bar and sidebar
 
+#### [Audio Recorder](./audioRecorder/)
+
+Audio recording, playback, and transcription for legal professionals.
+
+**Components:**
+
+- [Main README](./audioRecorder/README.md) - Overview and architecture
+- [User Guide](./audioRecorder/user-guide.md) - Complete usage instructions
+- [Developer Guide](./audioRecorder/developer-guide.md) - Technical implementation details
+- [API Reference](./audioRecorder/api-reference.md) - TypeScript interfaces and services
+
+**Key Features:**
+
+- In-app audio recording with start/stop/pause
+- Inline playback with seek bar, time display, volume control
+- Local Whisper transcription (no API costs, fully offline)
+- Import audio files (WAV, MP3, M4A, OGG, WEBM, FLAC)
+- Export transcripts as DOCX, TXT, SRT, JSON
+- Per-workspace SQLite storage
+- Native contribution (faster than extension)
+
 #### [RAG System](./ragSystem/)
 
 Research-Augmented Generation system for enhanced AI responses.
@@ -257,6 +278,7 @@ Research data, matrices, and analysis files.
 | **[storage/](./storage/)**                      | Database paths, dev vs prod locations            | Developers     |
 | **[ragSystem/](./ragSystem/)**                  | RAG system operational docs                      | Technical team |
 | **[timeTracker/](./timeTracker/)**              | Legal time tracking extension                    | All users      |
+| **[audioRecorder/](./audioRecorder/)**          | Audio recording and transcription                | All users      |
 | **[timeline/](./timeline/)**                    | Timeline feature documentation                   | All users      |
 | **[images/](./images/)**                        | Documentation screenshots and diagrams           | All users      |
 
@@ -388,6 +410,6 @@ Research data, matrices, and analysis files.
 
 ---
 
-**Last Updated:** December 2025
+**Last Updated:** February 2026
 **Documentation Reorganized:** December 2025
 **Maintained by:** SafeAppeals Development Team

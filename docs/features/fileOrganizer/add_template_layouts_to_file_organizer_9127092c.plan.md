@@ -37,11 +37,15 @@ The FilingCabinet component ([FilingCabinet.tsx](src/vs/workbench/contrib/void/b
 
 ```typescript
 const treeData = [
-  { name: 'Medical', icon: '🏥', children: ['Reports', 'Imaging', 'Bills'] },
-  { name: 'Legal', icon: '⚖️', children: ['Correspondence', 'Court Filings', 'Decisions'] },
-  { name: 'Evidence', icon: '📎', children: [] },
-  { name: 'Your Side', icon: '👤', children: [] },
-  { name: 'Their Side', icon: '🏢', children: [] },
+	{ name: "Medical", icon: "🏥", children: ["Reports", "Imaging", "Bills"] },
+	{
+		name: "Legal",
+		icon: "⚖️",
+		children: ["Correspondence", "Court Filings", "Decisions"],
+	},
+	{ name: "Evidence", icon: "📎", children: [] },
+	{ name: "Your Side", icon: "👤", children: [] },
+	{ name: "Their Side", icon: "🏢", children: [] },
 ];
 ```
 
@@ -155,30 +159,31 @@ Update the classification prompt (`buildContextAwarePrompt`) to:
 
 1. **Add explicit Core_References criteria** - Define what qualifies:
 
-   - Official policy manuals (WCB policies, company HR policies)
-   - Government regulations and statutes
-   - Seminal research papers/studies cited repeatedly
-   - Medical/legal reference guides
-   - Industry standards documents
+- Official policy manuals (WCB policies, company HR policies)
+- Government regulations and statutes
+- Seminal research papers/studies cited repeatedly
+- Medical/legal reference guides
+- Industry standards documents
 
-2. **Add `isCoreReference` field** to the JSON response:
-   ```json
-   {
-     "side": "Neutral",
-     "category": "Medical",
-     "isCoreReference": true,
-     "coreReferenceReason": "Official WCB policy manual - foundational document",
-     "suggestedFolder": "Core_References",
-     ...
-   }
-   ```
+1. **Add `isCoreReference` field** to the JSON response:
 
-3. **Add explicit guidance** that Core_References is NOT for:
+```json
+ {
+   "side": "Neutral",
+   "category": "Medical",
+   "isCoreReference": true,
+   "coreReferenceReason": "Official WCB policy manual - foundational document",
+   "suggestedFolder": "Core_References",
+   ...
+ }
+```
 
-   - Regular case documents
-   - Individual medical reports
-   - Correspondence
-   - Evidence specific to one case
+1. **Add explicit guidance** that Core_References is NOT for:
+
+- Regular case documents
+- Individual medical reports
+- Correspondence
+- Evidence specific to one case
 
 ### Prompt Addition (to buildContextAwarePrompt)
 
@@ -208,8 +213,8 @@ referenced across MULTIPLE cases, not just this one.
 
 ```typescript
 export interface AIClassificationResult {
-  // ... existing fields ...
-  isCoreReference?: boolean;
-  coreReferenceReason?: string;
+	// ... existing fields ...
+	isCoreReference?: boolean;
+	coreReferenceReason?: string;
 }
 ```
