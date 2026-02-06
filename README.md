@@ -263,9 +263,9 @@ Licensed under the Apache License 2.0 - see [LICENSE.txt](LICENSE.txt) for detai
 
 ## 🆘 Support
 
-- **Documentation**: [safeappeals.cloud/docs](https://safeappeals.cloud/docs)
+- **Documentation**: [safeappeals.com/docs](https://safeappeals.com/docs)
 - **Issues**: [GitHub Issues](https://github.com/savagelysubtle/SafeAppeals2.0/issues)
-- **Email**: simpleflowworks@gmail.com
+- **Email**: support@safeappeals.com
 
 **Disclaimer**: This tool assists with document research and preparation. Always consult qualified professionals for legal or medical advice.
 
