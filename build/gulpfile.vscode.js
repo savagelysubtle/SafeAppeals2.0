@@ -469,6 +469,13 @@ function packageTask(platform, arch, sourceFolderName, destinationFolderName, op
 			: [`resources/ffmpeg/${ffmpegPlatformDir}/ffmpeg`, `resources/ffmpeg/${ffmpegPlatformDir}/ffprobe`];
 		all = es.merge(all, gulp.src(ffmpegBinaries, { base: '.', allowEmpty: true }));
 
+		// Whisper model for audio transcription (~1.5GB)
+		// Downloaded via scripts/download-whisper-model.js
+		all = es.merge(all, gulp.src([
+			'resources/models/whisper/distil-large-v3.5/ggml-model.bin',
+			'resources/models/whisper/distil-large-v3.5/.download-complete'
+		], { base: '.', allowEmpty: true }));
+
 		let result = all
 			.pipe(util.skipDirectories())
 			.pipe(util.fixWin32DirectoryPermissions())

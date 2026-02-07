@@ -216,6 +216,42 @@ cd build/win32/tools && .\download-tesseract.ps1 && .\download-poppler.ps1 && cd
 bun run gulp setup-python && bun run buildreact && bun run compile-build-ci && bun run compile-extensions-build && bun run gulp bundle-vscode && bun run gulp vscode-win32-x64-ci && bun run gulp vscode-win32-x64-inno-updater && bun run gulp vscode-win32-x64-user-setup
 ```
 
+## 🎙️ Audio Transcription Dependencies
+
+### FFmpeg & Whisper Model
+
+Both are required for audio transcription and are bundled with the installer.
+
+```powershell
+# Download FFmpeg binaries (~150MB for Windows)
+bun run download-ffmpeg
+
+# Download Whisper model (~1.5GB)
+bun run download-whisper-model
+```
+
+> **Note**: These are automatically downloaded during `node build/lib/preLaunch.js` (first-time setup) and bundled into the installer.
+
+| Component | Size | Purpose | Location |
+|-----------|------|---------|----------|
+| **FFmpeg** | ~150MB | Audio format conversion (m4a/mp3 → WAV) | `resources/ffmpeg/{platform}/` |
+| **Whisper Model** | ~1.5GB | AI speech-to-text transcription | `resources/models/whisper/distil-large-v3.5/` |
+
+### Manual Installation (Development)
+
+If not bundled, install system-wide:
+
+```powershell
+# Windows
+winget install FFmpeg
+
+# macOS
+brew install ffmpeg
+
+# Linux
+sudo apt install ffmpeg
+```
+
 > **Note**: During installation, users can optionally select "Install OCR dependencies" to add Tesseract/Poppler to PATH and install Ghostscript via winget.
 
 ---

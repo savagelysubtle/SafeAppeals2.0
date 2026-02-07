@@ -61,11 +61,31 @@ async function ensureFFmpeg() {
         }
     }
 }
+async function ensureWhisperModel() {
+    // Download Whisper model for audio transcription (~1.5GB)
+    const modelMarker = path_1.default.join(rootDir, 'resources', 'models', 'whisper', 'distil-large-v3.5', '.download-complete');
+    try {
+        await fs_1.promises.stat(modelMarker);
+        console.log('[preLaunch] Whisper model already downloaded');
+    }
+    catch {
+        console.log('[preLaunch] Downloading Whisper model (~1.5GB)...');
+        const scriptPath = path_1.default.join(rootDir, 'scripts', 'download-whisper-model.js');
+        try {
+            await fs_1.promises.stat(scriptPath);
+            await runProcess('node', [scriptPath]);
+        }
+        catch (err) {
+            console.warn('[preLaunch] Whisper model download failed. Run manually: node scripts/download-whisper-model.js');
+        }
+    }
+}
 async function main() {
     await ensureNodeModules();
     await getElectron();
     await ensureCompiled();
     await ensureFFmpeg();
+    await ensureWhisperModel();
     // Can't require this until after dependencies are installed
     const { getBuiltInExtensions } = require('./builtInExtensions');
     await getBuiltInExtensions();

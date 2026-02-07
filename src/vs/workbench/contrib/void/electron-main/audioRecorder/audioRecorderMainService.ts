@@ -633,25 +633,37 @@ export class AudioRecorderMainService implements IAudioRecorderMainService {
 	/**
 	 * Get the path to the GGML whisper model
 	 * Model is downloaded via scripts/download-whisper-model.js to resources/models/whisper/
+	 * In production, bundled at {install_dir}/resources/models/whisper/
 	 */
 	private getModelPath(): string {
 		const currentDir = path.dirname(fileURLToPath(import.meta.url));
+		const modelRelPath = 'models/whisper/distil-large-v3.5/ggml-model.bin';
 
 		// Check multiple possible locations for the model
 		const possiblePaths = [
-			// Development: relative to source
-			path.resolve(currentDir, '../../../../../../resources/models/whisper/distil-large-v3.5/ggml-model.bin'),
-			// Production: relative to out
-			path.resolve(currentDir, '../../../../../../../resources/models/whisper/distil-large-v3.5/ggml-model.bin'),
-			// Alternative paths
-			path.join(process.cwd(), 'resources/models/whisper/distil-large-v3.5/ggml-model.bin'),
+			// Packaged app: resources folder next to the executable
+			// On Windows: {install_dir}/resources/models/whisper/...
+			// On macOS: {app_bundle}/Contents/Resources/models/whisper/...
+			// On Linux: {install_dir}/resources/models/whisper/...
+			path.join(process.resourcesPath || '', modelRelPath),
+
+			// Development: relative to source (from out folder)
+			path.resolve(currentDir, '../../../../../../resources', modelRelPath),
+
+			// Development: from project root
+			path.resolve(currentDir, '../../../../../../../resources', modelRelPath),
+
+			// Alternative: current working directory
+			path.join(process.cwd(), 'resources', modelRelPath),
 		];
 
 		const modelPath = possiblePaths.find(p => fs.existsSync(p));
 		if (!modelPath) {
+			this.logService.error(`AudioRecorderMainService: Whisper model not found. Checked paths: ${possiblePaths.join(', ')}`);
 			throw new Error(`Whisper model not found. Run 'node scripts/download-whisper-model.js' to download the model. Checked paths: ${possiblePaths.join(', ')}`);
 		}
 
+		this.logService.info(`AudioRecorderMainService: Found Whisper model at ${modelPath}`);
 		return modelPath;
 	}
 
