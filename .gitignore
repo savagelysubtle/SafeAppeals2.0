@@ -46,6 +46,9 @@ resources/ffmpeg/
 # Whisper models (downloaded during setup)
 resources/models/
 
+# Tesseract binaries (downloaded during build, ~97MB)
+build/win32/tools/tesseract/
+
 .env
 
 # Nested git repository (managed separately)
