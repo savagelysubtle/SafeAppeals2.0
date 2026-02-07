@@ -6,6 +6,7 @@ import React, { useCallback, useEffect, useState } from "react";
 import {
 	RecorderState,
 	Recording,
+	TranscriptionProgress,
 } from "../../../../common/audioRecorder/audioRecorderTypes.js";
 import { useAccessor } from "../util/services.js";
 import { AudioImporter } from "./AudioImporter.js";
@@ -52,6 +53,8 @@ export const AudioRecorder: React.FC = () => {
 	const [recordings, setRecordings] = useState<Recording[]>([]);
 	const [elapsedTime, setElapsedTime] = useState(0);
 	const [showImporter, setShowImporter] = useState(false);
+	const [transcriptionProgress, setTranscriptionProgress] =
+		useState<TranscriptionProgress | null>(null);
 
 	// Get service
 	const getService = useCallback(() => {
@@ -87,9 +90,22 @@ export const AudioRecorder: React.FC = () => {
 			},
 		);
 
+		const transcriptionProgressDisposable = service.onTranscriptionProgress(
+			(progress: TranscriptionProgress) => {
+				console.log("[AudioRecorder] Transcription progress:", progress);
+				setTranscriptionProgress(progress);
+
+				// Clear progress when transcription completes
+				if (progress.progress === 100) {
+					setTimeout(() => setTranscriptionProgress(null), 2000);
+				}
+			},
+		);
+
 		return () => {
 			stateDisposable.dispose();
 			recordingsDisposable.dispose();
+			transcriptionProgressDisposable.dispose();
 		};
 	}, [getService]);
 
@@ -119,28 +135,65 @@ export const AudioRecorder: React.FC = () => {
 	const handleStart = async () => {
 		const service = getService();
 		if (service) {
-			await service.startRecording();
+			try {
+				await service.startRecording();
+			} catch (error) {
+				console.error("[AudioRecorder] Failed to start recording:", error);
+			}
 		}
 	};
 
 	const handleStop = async () => {
 		const service = getService();
 		if (service) {
-			await service.stopRecording();
+			try {
+				console.log("[AudioRecorder] Stopping recording...");
+				const recording = await service.stopRecording();
+				console.log("[AudioRecorder] Recording stopped successfully");
+
+				// Automatically start transcription after recording stops
+				if (recording && recording.status === "pending") {
+					console.log("[AudioRecorder] Auto-starting transcription...");
+					try {
+						await service.transcribe(recording.id);
+						console.log("[AudioRecorder] Auto-transcription completed");
+					} catch (transcribeError) {
+						console.error(
+							"[AudioRecorder] Auto-transcription failed:",
+							transcribeError,
+						);
+						// Don't throw - recording was saved successfully, transcription can be retried
+					}
+				}
+			} catch (error) {
+				console.error("[AudioRecorder] Failed to stop recording:", error);
+				// Force refresh state from service in case of error
+				setRecorderState(service.state);
+			}
 		}
 	};
 
 	const handlePause = () => {
 		const service = getService();
 		if (service) {
-			service.pauseRecording();
+			try {
+				console.log("[AudioRecorder] Pausing recording...");
+				service.pauseRecording();
+			} catch (error) {
+				console.error("[AudioRecorder] Failed to pause recording:", error);
+			}
 		}
 	};
 
 	const handleResume = () => {
 		const service = getService();
 		if (service) {
-			service.resumeRecording();
+			try {
+				console.log("[AudioRecorder] Resuming recording...");
+				service.resumeRecording();
+			} catch (error) {
+				console.error("[AudioRecorder] Failed to resume recording:", error);
+			}
 		}
 	};
 
@@ -171,8 +224,29 @@ export const AudioRecorder: React.FC = () => {
 	const handleImport = async (filePath: string) => {
 		const service = getService();
 		if (service) {
-			await service.importAudio(filePath);
-			setShowImporter(false);
+			try {
+				console.log("[AudioRecorder] Importing audio file:", filePath);
+				const recording = await service.importAudio(filePath);
+				setShowImporter(false);
+				console.log("[AudioRecorder] Audio imported successfully");
+
+				// Automatically start transcription after import
+				if (recording && recording.status === "pending") {
+					console.log("[AudioRecorder] Auto-starting transcription for imported file...");
+					try {
+						await service.transcribe(recording.id);
+						console.log("[AudioRecorder] Auto-transcription of import completed");
+					} catch (transcribeError) {
+						console.error(
+							"[AudioRecorder] Auto-transcription of import failed:",
+							transcribeError,
+						);
+						// Don't throw - import was successful, transcription can be retried
+					}
+				}
+			} catch (error) {
+				console.error("[AudioRecorder] Failed to import audio:", error);
+			}
 		}
 	};
 
@@ -182,6 +256,17 @@ export const AudioRecorder: React.FC = () => {
 			return service.getAudioUrl(id);
 		}
 		return "";
+	};
+
+	const handleRename = async (id: string, newName: string) => {
+		const service = getService();
+		if (service) {
+			try {
+				await service.renameRecording(id, newName);
+			} catch (error) {
+				console.error("[AudioRecorder] Failed to rename recording:", error);
+			}
+		}
 	};
 
 	return (
@@ -220,6 +305,7 @@ export const AudioRecorder: React.FC = () => {
 					onTranscribe={handleTranscribe}
 					onExport={handleExport}
 					onGetAudioUrl={handleGetAudioUrl}
+					onRename={handleRename}
 				/>
 			</div>
 		</div>

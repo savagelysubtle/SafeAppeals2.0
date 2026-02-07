@@ -40,6 +40,12 @@ uv.lock
 # Uncommenting will exclude ~260MB of ML models from git
 # .docling_models/
 
+# Bundled FFmpeg binaries (downloaded during build)
+resources/ffmpeg/
+
+# Whisper models (downloaded during setup)
+resources/models/
+
 .env
 
 # Nested git repository (managed separately)

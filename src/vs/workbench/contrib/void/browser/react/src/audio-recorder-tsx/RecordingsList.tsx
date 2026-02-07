@@ -58,6 +58,7 @@ interface RecordingsListProps {
 	onTranscribe: (id: string) => void;
 	onExport: (id: string, format: ExportFormat) => void;
 	onGetAudioUrl: (id: string) => Promise<string>;
+	onRename: (id: string, newName: string) => void;
 }
 
 export const RecordingsList: React.FC<RecordingsListProps> = ({
@@ -66,6 +67,7 @@ export const RecordingsList: React.FC<RecordingsListProps> = ({
 	onTranscribe,
 	onExport,
 	onGetAudioUrl,
+	onRename,
 }) => {
 	if (recordings.length === 0) {
 		return (
@@ -95,6 +97,7 @@ export const RecordingsList: React.FC<RecordingsListProps> = ({
 					onTranscribe={() => onTranscribe(recording.id)}
 					onExport={(format) => onExport(recording.id, format)}
 					onGetAudioUrl={() => onGetAudioUrl(recording.id)}
+					onRename={(newName) => onRename(recording.id, newName)}
 				/>
 			))}
 		</div>

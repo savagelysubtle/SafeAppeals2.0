@@ -84,6 +84,11 @@ export interface IAudioRecorderService {
 	deleteRecording(id: string): Promise<void>;
 
 	/**
+	 * Rename a recording
+	 */
+	renameRecording(id: string, newName: string): Promise<Recording | undefined>;
+
+	/**
 	 * Import an audio file as a recording
 	 */
 	importAudio(filePath: string): Promise<Recording>;

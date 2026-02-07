@@ -14,13 +14,7 @@ SafeAppeals 2.0 is a fork of [Void IDE](https://github.com/voideditor/void) that
 - **Purpose**: Repurposed from general software development to legal research and case management
 - **Repository**: SafeAppeals 2.0
 
-### 2. **Language Support Stripped**
-
-- Removed code language-specific features not relevant to legal document processing
-- Focused on document viewing and legal research capabilities
-- Streamlined for legal professional workflows
-
-### 3. **PDF Viewer Integration**
+### 2. **PDF Viewer Integration**
 
 - **Location**: `src/vs/workbench/contrib/void/browser/documentViewers/pdfViewer/`
 - **Features**:
@@ -30,7 +24,7 @@ SafeAppeals 2.0 is a fork of [Void IDE](https://github.com/voideditor/void) that
   - Custom PDF viewer UI (`media/pdfViewer.css`, `media/pdfViewer.js`)
 - **Use Case**: View and analyze legal documents, case files, and precedents
 
-### 4. **Advanced PDF Extraction with Docling**
+### 3. **Advanced PDF Extraction with Docling**
 
 - **Location**: `src/vs/workbench/contrib/void/electron-main/ragFileService.ts`
 - **Technology Stack**:
@@ -55,7 +49,7 @@ SafeAppeals 2.0 is a fork of [Void IDE](https://github.com/voideditor/void) that
 - **Integration**: Automatically adds `.venv/Scripts` to PATH for subprocess execution
 - **Use Case**: Enhanced extraction quality for complex legal documents with tables, multi-column layouts, and embedded images
 
-### 5. **Chroma Vector Database Integration**
+### 4. **Chroma Vector Database Integration**
 
 - **Purpose**: Local vector storage for legal document embeddings
 - **Technology**: ChromaDB
@@ -213,6 +207,7 @@ void-cloud/                     # Cloud backend (separate)
 ## Technologies Added
 
 ### Document Processing
+
 - **ChromaDB** - Vector database for document embeddings
 - **PDF.js** - Standard PDF rendering and parsing
 - **Docling SDK (TypeScript)** - Bridge to Python-based ML PDF processing
@@ -223,6 +218,7 @@ void-cloud/                     # Cloud backend (separate)
 - **SheetJS** - XLSX parsing and manipulation
 
 ### Cloud Infrastructure (void-cloud/)
+
 - **Fastify** - Node.js API framework
 - **Supabase** - Auth and PostgreSQL database
 - **Stripe** - Payment processing
@@ -232,6 +228,7 @@ void-cloud/                     # Cloud backend (separate)
 - **Railway** - API and LiteLLM hosting
 
 ### Development Tools
+
 - **Python 3.8+** - Backend for advanced PDF processing
 - **uv** - Fast Python package installer
 - **Vector Search** - Similarity search for legal precedents
@@ -376,6 +373,7 @@ uv sync
 ### Integration with TypeScript
 
 The TypeScript `docling-sdk` client automatically:
+
 1. Detects `.venv/Scripts` directory
 2. Adds it to subprocess PATH
 3. Spawns Python CLI for processing

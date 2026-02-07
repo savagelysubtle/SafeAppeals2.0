@@ -15,6 +15,36 @@ bun run gulp setup-python && bun run buildreact && bun run compile-build-ci && b
 > - `setup-python` prepares the Python virtual environment (`python/.venv`) which is bundled into the production build
 > - `compile-extensions-build` compiles all extensions (themes, time-tracker, etc.) for production packaging
 
+### Complete Build (Production macOS)
+
+```bash
+# For Apple Silicon (M1/M2/M3)
+bun run gulp setup-python && bun run buildreact && bun run compile-build-ci && bun run compile-extensions-build && bun run gulp bundle-vscode && bun run gulp vscode-darwin-arm64-ci
+
+# For Intel Macs
+bun run gulp setup-python && bun run buildreact && bun run compile-build-ci && bun run compile-extensions-build && bun run gulp bundle-vscode && bun run gulp vscode-darwin-x64-ci
+
+# Universal App (both architectures - requires building both first)
+VSCODE_ARCH=universal node build/darwin/create-universal-app.js ../
+```
+
+> **📝 macOS Notes**:
+>
+> - Output location: `../VSCode-darwin-arm64/` or `../VSCode-darwin-x64/`
+> - For distribution, the app needs to be signed and notarized (see `build/darwin/sign.js`)
+> - FFmpeg must be installed via Homebrew: `brew install ffmpeg`
+
+### Complete Build (Production Linux)
+
+```bash
+bun run gulp setup-python && bun run buildreact && bun run compile-build-ci && bun run compile-extensions-build && bun run gulp bundle-vscode && bun run gulp vscode-linux-x64-ci
+```
+
+> **📝 Linux Notes**:
+>
+> - Output location: `../VSCode-linux-x64/`
+> - Additional architectures: `vscode-linux-arm64-ci`, `vscode-linux-armhf-ci`
+
 ### Development Workflow
 
 ```bash

@@ -58,11 +58,17 @@ export class AudioRecorderChannel implements IServerChannel {
 			case 'deleteRecording':
 				return this.service.deleteRecording(workspaceId, args.id);
 
+			case 'renameRecording':
+				return this.service.renameRecording(workspaceId, args.id, args.newName);
+
 			case 'getAudioData':
 				return this.service.getAudioData(workspaceId, args.recordingId);
 
 			case 'importAudioFile':
 				return this.service.importAudioFile(workspaceId, args.sourcePath);
+
+			case 'transcribe':
+				return this.service.transcribe(workspaceId, args.recordingId);
 
 			case 'updateTranscription':
 				return this.service.updateTranscription(workspaceId, args.recordingId, args.result);
@@ -71,7 +77,7 @@ export class AudioRecorderChannel implements IServerChannel {
 				return this.service.updateTranscriptionStatus(workspaceId, args.recordingId, args.status);
 
 			case 'exportRecording':
-				return this.service.exportRecording(workspaceId, args.recordingId, args.format);
+				return this.service.exportRecording(workspaceId, args.recordingId, args.format, args.workspacePath);
 
 			default:
 				throw new Error(`Unknown command: ${command}`);

@@ -180,21 +180,31 @@ export class AudioRecorderService extends Disposable implements IAudioRecorderSe
 
 	async stopRecording(): Promise<Recording> {
 		if (this._state !== 'recording' && this._state !== 'paused') {
+			console.warn('[AudioRecorderService] Cannot stop recording, current state:', this._state);
 			throw new Error('Cannot stop recording, current state: ' + this._state);
+		}
+
+		// If paused, resume first so MediaRecorder can properly stop
+		if (this._state === 'paused' && this.mediaRecorder?.state === 'paused') {
+			this.mediaRecorder.resume();
 		}
 
 		return new Promise((resolve, reject) => {
 			if (!this.mediaRecorder) {
+				// Reset state even on error
+				this.setState('idle');
+				this.audioChunks = [];
 				reject(new Error('No MediaRecorder available'));
 				return;
 			}
 
 			const originalOnStop = this.mediaRecorder.onstop;
+			const mediaRecorderRef = this.mediaRecorder;
 
 			this.mediaRecorder.onstop = async (event) => {
 				// Call original onstop to stop tracks
-				if (originalOnStop && this.mediaRecorder) {
-					originalOnStop.call(this.mediaRecorder, event);
+				if (originalOnStop) {
+					originalOnStop.call(mediaRecorderRef, event);
 				}
 
 				try {
@@ -209,9 +219,11 @@ export class AudioRecorderService extends Disposable implements IAudioRecorderSe
 					const filename = `recording_${Date.now()}.wav`;
 
 					// Save to main process
+					// Convert Uint8Array to regular Array for reliable IPC serialization
+					// (Uint8Array loses its type when passed through Electron IPC)
 					const recording = await this.channel.call<Recording>('saveRecording', {
 						workspaceId: this.workspaceId,
-						audioData: wavData,
+						audioData: Array.from(wavData),
 						filename,
 						duration,
 						isImported: false
@@ -221,18 +233,41 @@ export class AudioRecorderService extends Disposable implements IAudioRecorderSe
 					this._recordings.unshift(recording);
 					this._onRecordingsChanged.fire(this._recordings);
 
-					this.setState('idle');
+					// Clean up
 					this.mediaRecorder = null;
 					this.audioChunks = [];
+					this.setState('idle');
 
 					console.log('[AudioRecorderService] Recording saved:', recording.id);
 					resolve(recording);
 				} catch (error) {
+					console.error('[AudioRecorderService] Error during stop:', error);
+					// Always reset state on error to prevent stuck state
+					this.mediaRecorder = null;
+					this.audioChunks = [];
+					this.setState('idle');
 					reject(error);
 				}
 			};
 
-			this.mediaRecorder.stop();
+			// Handle MediaRecorder errors
+			this.mediaRecorder.onerror = (event) => {
+				console.error('[AudioRecorderService] MediaRecorder error:', event);
+				this.mediaRecorder = null;
+				this.audioChunks = [];
+				this.setState('idle');
+				reject(new Error('MediaRecorder error'));
+			};
+
+			try {
+				this.mediaRecorder.stop();
+			} catch (error) {
+				console.error('[AudioRecorderService] Error calling stop():', error);
+				this.mediaRecorder = null;
+				this.audioChunks = [];
+				this.setState('idle');
+				reject(error);
+			}
 		});
 	}
 
@@ -242,11 +277,25 @@ export class AudioRecorderService extends Disposable implements IAudioRecorderSe
 			return;
 		}
 
-		if (this.mediaRecorder && this.mediaRecorder.state === 'recording') {
-			this.mediaRecorder.pause();
-			this.lastPauseTime = Date.now();
-			this.setState('paused');
-			console.log('[AudioRecorderService] Recording paused');
+		if (!this.mediaRecorder) {
+			console.warn('[AudioRecorderService] Cannot pause, no MediaRecorder available');
+			return;
+		}
+
+		try {
+			// Check MediaRecorder state - it might be in a different state than expected
+			console.log('[AudioRecorderService] MediaRecorder state before pause:', this.mediaRecorder.state);
+
+			if (this.mediaRecorder.state === 'recording') {
+				this.mediaRecorder.pause();
+				this.lastPauseTime = Date.now();
+				this.setState('paused');
+				console.log('[AudioRecorderService] Recording paused');
+			} else {
+				console.warn('[AudioRecorderService] MediaRecorder not in recording state:', this.mediaRecorder.state);
+			}
+		} catch (error) {
+			console.error('[AudioRecorderService] Error pausing:', error);
 		}
 	}
 
@@ -256,11 +305,25 @@ export class AudioRecorderService extends Disposable implements IAudioRecorderSe
 			return;
 		}
 
-		if (this.mediaRecorder && this.mediaRecorder.state === 'paused') {
-			this.mediaRecorder.resume();
-			this.pausedDuration += Date.now() - this.lastPauseTime;
-			this.setState('recording');
-			console.log('[AudioRecorderService] Recording resumed');
+		if (!this.mediaRecorder) {
+			console.warn('[AudioRecorderService] Cannot resume, no MediaRecorder available');
+			return;
+		}
+
+		try {
+			// Check MediaRecorder state
+			console.log('[AudioRecorderService] MediaRecorder state before resume:', this.mediaRecorder.state);
+
+			if (this.mediaRecorder.state === 'paused') {
+				this.mediaRecorder.resume();
+				this.pausedDuration += Date.now() - this.lastPauseTime;
+				this.setState('recording');
+				console.log('[AudioRecorderService] Recording resumed');
+			} else {
+				console.warn('[AudioRecorderService] MediaRecorder not in paused state:', this.mediaRecorder.state);
+			}
+		} catch (error) {
+			console.error('[AudioRecorderService] Error resuming:', error);
 		}
 	}
 
@@ -300,6 +363,21 @@ export class AudioRecorderService extends Disposable implements IAudioRecorderSe
 		console.log('[AudioRecorderService] Recording deleted:', id);
 	}
 
+	async renameRecording(id: string, newName: string): Promise<Recording | undefined> {
+		const recording = await this.channel.call<Recording | undefined>('renameRecording', {
+			workspaceId: this.workspaceId,
+			id,
+			newName
+		});
+
+		if (recording) {
+			this.updateLocalRecording(id, { filename: recording.filename });
+			console.log('[AudioRecorderService] Recording renamed:', id, '->', newName);
+		}
+
+		return recording;
+	}
+
 	async importAudio(filePath: string): Promise<Recording> {
 		const recording = await this.channel.call<Recording>('importAudioFile', {
 			workspaceId: this.workspaceId,
@@ -329,16 +407,41 @@ export class AudioRecorderService extends Disposable implements IAudioRecorderSe
 	// ========================================================================
 
 	async getAudioUrl(recordingId: string): Promise<string> {
+		// Get audio data and create a blob URL
+		// Note: We fetch the audio data and create a blob in the renderer process
+		// to work around CSP restrictions
 		const audioData = await this.channel.call<Uint8Array>('getAudioData', {
 			workspaceId: this.workspaceId,
 			recordingId
 		});
 
-		// Create a new ArrayBuffer copy to ensure proper typing for Blob
-		const buffer = new ArrayBuffer(audioData.length);
-		new Uint8Array(buffer).set(audioData);
+		// Handle IPC serialization: Uint8Array may arrive as Array or plain Object
+		let bytes: Uint8Array;
+		if (audioData instanceof Uint8Array) {
+			bytes = audioData;
+		} else if (Array.isArray(audioData)) {
+			bytes = new Uint8Array(audioData);
+		} else if (typeof audioData === 'object' && audioData !== null) {
+			// Handle IPC serialized format (object with numeric keys)
+			const keys = Object.keys(audioData).map(Number).sort((a, b) => a - b);
+			bytes = new Uint8Array(keys.length);
+			for (let i = 0; i < keys.length; i++) {
+				bytes[i] = (audioData as Record<number, number>)[keys[i]];
+			}
+		} else {
+			throw new Error('Invalid audio data format');
+		}
+
+		// Create blob and object URL - blob URLs created in the renderer should work
+		// Copy to a regular ArrayBuffer to avoid SharedArrayBuffer issues
+		const buffer = new ArrayBuffer(bytes.length);
+		const view = new Uint8Array(buffer);
+		view.set(bytes);
 		const blob = new Blob([buffer], { type: 'audio/wav' });
-		return URL.createObjectURL(blob);
+		const url = URL.createObjectURL(blob);
+
+		console.log(`[AudioRecorderService] Created blob URL for recording ${recordingId}: ${url.substring(0, 50)}...`);
+		return url;
 	}
 
 	async getAudioData(recordingId: string): Promise<Uint8Array> {
@@ -358,28 +461,26 @@ export class AudioRecorderService extends Disposable implements IAudioRecorderSe
 			throw new Error(`Recording not found: ${recordingId}`);
 		}
 
-		// Update status to transcribing
-		await this.channel.call('updateTranscriptionStatus', {
-			workspaceId: this.workspaceId,
-			recordingId,
-			status: 'transcribing'
-		});
-
+		// Update local status to transcribing
 		this.updateLocalRecordingStatus(recordingId, 'transcribing');
 
+		// Fire progress: loading model
+		this._onTranscriptionProgress.fire({
+			recordingId,
+			progress: 5,
+			stage: 'loading_model'
+		});
+
+		// Show notification for transcription start
+		this.notificationService.notify({
+			severity: Severity.Info,
+			message: 'Transcription started: Loading AI model...'
+		});
+
 		try {
-			// Fire progress: loading model
-			this._onTranscriptionProgress.fire({
-				recordingId,
-				progress: 5,
-				stage: 'loading_model'
-			});
-
-			// Get audio data
-			const audioData = await this.getAudioData(recordingId);
-
-			// Dynamic import of transformers
-			const { pipeline } = await import('@huggingface/transformers');
+			// Call main process to do the actual transcription
+			// (transformers library can only be loaded in main process with access to node_modules)
+			console.log('[AudioRecorderService] Starting transcription via main process:', recordingId);
 
 			this._onTranscriptionProgress.fire({
 				recordingId,
@@ -387,61 +488,18 @@ export class AudioRecorderService extends Disposable implements IAudioRecorderSe
 				stage: 'loading_model'
 			});
 
-			// Create transcription pipeline
-			const transcriber = await pipeline('automatic-speech-recognition', this._modelName, {
-				dtype: 'fp32'
+			// Show notification for processing
+			this.notificationService.notify({
+				severity: Severity.Info,
+				message: 'Transcription in progress: Processing audio...'
+			});
+
+			const transcriptionResult = await this.channel.call<TranscriptionResult>('transcribe', {
+				workspaceId: this.workspaceId,
+				recordingId
 			});
 
 			this._modelLoaded = true;
-
-			this._onTranscriptionProgress.fire({
-				recordingId,
-				progress: 30,
-				stage: 'processing'
-			});
-
-			// Decode WAV to Float32Array
-			const audioFloat32 = await this.decodeWavToFloat32(audioData);
-
-			this._onTranscriptionProgress.fire({
-				recordingId,
-				progress: 40,
-				stage: 'processing'
-			});
-
-			// Run transcription
-			const result = await transcriber(audioFloat32, {
-				return_timestamps: true,
-				chunk_length_s: 30,
-				stride_length_s: 5
-			});
-
-			this._onTranscriptionProgress.fire({
-				recordingId,
-				progress: 90,
-				stage: 'finalizing'
-			});
-
-			// Format result - handle array or single result
-			const singleResult = Array.isArray(result) ? result[0] : result;
-			const transcriptionResult: TranscriptionResult = {
-				text: singleResult && 'text' in singleResult && typeof singleResult.text === 'string' ? singleResult.text : '',
-				segments: singleResult && 'chunks' in singleResult && Array.isArray(singleResult.chunks)
-					? singleResult.chunks.map((chunk: { timestamp?: [number, number]; text?: string }) => ({
-						start: chunk.timestamp?.[0] ?? 0,
-						end: chunk.timestamp?.[1] ?? 0,
-						text: chunk.text ?? ''
-					}))
-					: [],
-				language: 'en'
-			};
-
-			// Save to database
-			await this.channel.call('updateTranscription', {
-				workspaceId: this.workspaceId,
-				recordingId,
-				result: transcriptionResult
-			});
 
 			// Update local cache
 			this.updateLocalRecording(recordingId, {
@@ -457,18 +515,24 @@ export class AudioRecorderService extends Disposable implements IAudioRecorderSe
 				stage: 'finalizing'
 			});
 
+			// Show success notification
+			this.notificationService.notify({
+				severity: Severity.Info,
+				message: 'Transcription complete!'
+			});
+
 			console.log('[AudioRecorderService] Transcription complete:', recordingId);
 			return transcriptionResult;
 		} catch (error) {
 			console.error('[AudioRecorderService] Transcription failed:', error);
+			this.updateLocalRecordingStatus(recordingId, 'failed');
 
-			await this.channel.call('updateTranscriptionStatus', {
-				workspaceId: this.workspaceId,
-				recordingId,
-				status: 'failed'
+			// Show error notification
+			this.notificationService.notify({
+				severity: Severity.Error,
+				message: `Transcription failed: ${error instanceof Error ? error.message : 'Unknown error'}`
 			});
 
-			this.updateLocalRecordingStatus(recordingId, 'failed');
 			throw error;
 		}
 	}
@@ -486,16 +550,28 @@ export class AudioRecorderService extends Disposable implements IAudioRecorderSe
 	// ========================================================================
 
 	async exportRecording(recordingId: string, format: ExportFormat): Promise<void> {
+		// Get the actual workspace path for exporting to the workspace folder
+		const workspacePath = this.getWorkspacePath();
+
 		const exportPath = await this.channel.call<string>('exportRecording', {
 			workspaceId: this.workspaceId,
 			recordingId,
-			format
+			format,
+			workspacePath
 		});
 
 		this.notificationService.notify({
 			severity: Severity.Info,
 			message: `Recording exported to: ${exportPath}`
 		});
+	}
+
+	private getWorkspacePath(): string | undefined {
+		const folders = this.contextService.getWorkspace().folders;
+		if (folders.length > 0) {
+			return folders[0].uri.fsPath;
+		}
+		return undefined;
 	}
 
 	// ========================================================================
@@ -575,41 +651,6 @@ export class AudioRecorderService extends Disposable implements IAudioRecorderSe
 		return new Uint8Array(buffer);
 	}
 
-	private async decodeWavToFloat32(wavData: Uint8Array): Promise<Float32Array> {
-		const view = new DataView(wavData.buffer);
-
-		// Parse WAV header
-		const numChannels = view.getUint16(22, true);
-		const sampleRate = view.getUint32(24, true);
-		const bitsPerSample = view.getUint16(34, true);
-
-		// Find data chunk
-		let dataOffset = 44;
-		const dataSize = view.getUint32(40, true);
-
-		const numSamples = dataSize / (bitsPerSample / 8) / numChannels;
-		const samples = new Float32Array(numSamples);
-
-		for (let i = 0; i < numSamples; i++) {
-			const sampleOffset = dataOffset + i * numChannels * (bitsPerSample / 8);
-
-			if (bitsPerSample === 16) {
-				const sample = view.getInt16(sampleOffset, true);
-				samples[i] = sample / 32768.0;
-			} else if (bitsPerSample === 8) {
-				const sample = view.getUint8(sampleOffset);
-				samples[i] = (sample - 128) / 128.0;
-			}
-		}
-
-		// Resample to 16kHz if needed
-		if (sampleRate !== 16000) {
-			return this.resample(samples, sampleRate, 16000);
-		}
-
-		return samples;
-	}
-
 	// ========================================================================
 	// Local Cache Helpers
 	// ========================================================================
@@ -617,8 +658,14 @@ export class AudioRecorderService extends Disposable implements IAudioRecorderSe
 	private updateLocalRecording(id: string, updates: Partial<Recording>): void {
 		const index = this._recordings.findIndex(r => r.id === id);
 		if (index !== -1) {
-			this._recordings[index] = { ...this._recordings[index], ...updates };
+			// Create a new array to ensure React detects the change (reference equality)
+			this._recordings = this._recordings.map((rec, i) =>
+				i === index ? { ...rec, ...updates } : rec
+			);
 			this._onRecordingsChanged.fire(this._recordings);
+			console.log('[AudioRecorderService] Updated recording:', id, 'with:', Object.keys(updates));
+		} else {
+			console.warn('[AudioRecorderService] Recording not found for update:', id);
 		}
 	}
 

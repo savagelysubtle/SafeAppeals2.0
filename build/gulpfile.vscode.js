@@ -462,6 +462,13 @@ function packageTask(platform, arch, sourceFolderName, destinationFolderName, op
 			all = es.merge(all, shortcut, policyDest);
 		}
 
+		// FFmpeg binaries for audio transcription (bundled per platform)
+		const ffmpegPlatformDir = platform === 'win32' ? 'win32' : platform === 'darwin' ? 'darwin' : 'linux';
+		const ffmpegBinaries = platform === 'win32'
+			? ['resources/ffmpeg/win32/ffmpeg.exe', 'resources/ffmpeg/win32/ffprobe.exe']
+			: [`resources/ffmpeg/${ffmpegPlatformDir}/ffmpeg`, `resources/ffmpeg/${ffmpegPlatformDir}/ffprobe`];
+		all = es.merge(all, gulp.src(ffmpegBinaries, { base: '.', allowEmpty: true }));
+
 		let result = all
 			.pipe(util.skipDirectories())
 			.pipe(util.fixWin32DirectoryPermissions())

@@ -45,10 +45,29 @@ async function ensureCompiled() {
 	}
 }
 
+async function ensureFFmpeg() {
+	// Download FFmpeg binaries for audio transcription
+	const ffmpegMarker = path.join(rootDir, 'resources', 'ffmpeg', '.download-complete');
+	try {
+		await fs.stat(ffmpegMarker);
+		console.log('[preLaunch] FFmpeg binaries already downloaded');
+	} catch {
+		console.log('[preLaunch] Downloading FFmpeg binaries...');
+		const scriptPath = path.join(rootDir, 'scripts', 'download-ffmpeg.js');
+		try {
+			await fs.stat(scriptPath);
+			await runProcess('node', [scriptPath]);
+		} catch (err) {
+			console.warn('[preLaunch] FFmpeg download script not found or failed. FFmpeg can be installed manually: winget install FFmpeg');
+		}
+	}
+}
+
 async function main() {
 	await ensureNodeModules();
 	await getElectron();
 	await ensureCompiled();
+	await ensureFFmpeg();
 
 	// Can't require this until after dependencies are installed
 	const { getBuiltInExtensions } = require('./builtInExtensions');

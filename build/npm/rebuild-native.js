@@ -165,7 +165,8 @@ function rebuildSingleModule(moduleName, electronVersion) {
 
 	log(`Rebuilding ${moduleName}...`);
 	try {
-		cp.execSync(`npx node-gyp rebuild --target=${electronVersion} --arch=x64 --dist-url=https://electronjs.org/headers --runtime=electron`, {
+		// Use bunx to avoid npm's broken minipass dependency resolution
+		cp.execSync(`bunx node-gyp rebuild --target=${electronVersion} --arch=x64 --dist-url=https://electronjs.org/headers --runtime=electron`, {
 			cwd: modulePath,
 			stdio: 'pipe',
 			env: {
@@ -194,7 +195,8 @@ function rebuildNestedSharp(sharpPath, electronVersion) {
 
 	log(`Rebuilding nested sharp at ${path.relative(root, sharpPath)}...`);
 	try {
-		cp.execSync(`npx node-gyp rebuild --target=${electronVersion} --arch=x64 --dist-url=https://electronjs.org/headers --runtime=electron`, {
+		// Use bunx to avoid npm's broken minipass dependency resolution
+		cp.execSync(`bunx node-gyp rebuild --target=${electronVersion} --arch=x64 --dist-url=https://electronjs.org/headers --runtime=electron`, {
 			cwd: sharpPath,
 			stdio: 'pipe',
 			env: {
@@ -227,7 +229,8 @@ function rebuildNativeModules() {
 	let electronRebuildSucceeded = false;
 	try {
 		log('Attempting batch rebuild with @electron/rebuild...');
-		cp.execSync(`npx @electron/rebuild --version ${electronVersion}`, {
+		// Use bunx to avoid npm's broken minipass dependency resolution
+		cp.execSync(`bunx @electron/rebuild --version ${electronVersion}`, {
 			stdio: 'inherit',
 			cwd: root,
 			env: {
@@ -281,7 +284,7 @@ function rebuildNativeModules() {
 	if (failCount > 0) {
 		logError('Some native modules failed to build. You may need to:');
 		logError('1. Install Visual Studio Build Tools with C++ workload');
-		logError('2. Run: npx node-gyp install');
+		logError('2. Run: bunx node-gyp install');
 		logError('3. Manually rebuild failing modules');
 		// Don't exit with error - allow development to continue
 	}

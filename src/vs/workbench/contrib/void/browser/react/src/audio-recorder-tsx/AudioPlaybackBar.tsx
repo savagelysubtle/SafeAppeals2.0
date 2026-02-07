@@ -15,18 +15,18 @@ const playbackContainerStyle: React.CSSProperties = {
 };
 
 const playButtonStyle: React.CSSProperties = {
-	width: "36px",
-	height: "36px",
+	width: "32px",
+	height: "32px",
 	borderRadius: "50%",
-	backgroundColor: "var(--vscode-button-background)",
-	color: "var(--vscode-button-foreground)",
-	border: "none",
+	backgroundColor: "transparent",
+	color: "var(--vscode-editor-foreground)",
+	border: "2px solid var(--vscode-editor-foreground)",
 	cursor: "pointer",
 	display: "flex",
 	alignItems: "center",
 	justifyContent: "center",
 	flexShrink: 0,
-	transition: "transform 0.1s, background-color 0.2s",
+	transition: "all 0.15s ease",
 };
 
 const seekContainerStyle: React.CSSProperties = {
@@ -48,7 +48,7 @@ const seekBarContainerStyle: React.CSSProperties = {
 
 const seekBarFillStyle: React.CSSProperties = {
 	height: "100%",
-	backgroundColor: "var(--vscode-button-background)",
+	backgroundColor: "var(--vscode-progressBar-background)",
 	borderRadius: "3px",
 	transition: "width 0.1s",
 };
@@ -107,6 +107,14 @@ function formatTime(seconds: number): string {
 	return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
 }
 
+// Inline keyframes for loading spinner
+const spinKeyframes = `
+@keyframes audio-playback-spin {
+	from { transform: rotate(0deg); }
+	to { transform: rotate(360deg); }
+}
+`;
+
 export const AudioPlaybackBar: React.FC<AudioPlaybackBarProps> = ({
 	duration,
 	onGetAudioUrl,
@@ -145,8 +153,8 @@ export const AudioPlaybackBar: React.FC<AudioPlaybackBarProps> = ({
 		}
 
 		return () => {
-			// Revoke blob URL on cleanup
-			if (audioUrl) {
+			// Only revoke blob URLs on cleanup (data URLs don't need revocation)
+			if (audioUrl && audioUrl.startsWith("blob:")) {
 				URL.revokeObjectURL(audioUrl);
 			}
 		};
@@ -257,6 +265,9 @@ export const AudioPlaybackBar: React.FC<AudioPlaybackBarProps> = ({
 
 	return (
 		<div style={playbackContainerStyle}>
+			{/* Inject keyframes for spinner animation */}
+			<style>{spinKeyframes}</style>
+
 			{/* Hidden Audio Element */}
 			<audio ref={audioRef} preload="metadata" />
 
@@ -265,23 +276,43 @@ export const AudioPlaybackBar: React.FC<AudioPlaybackBarProps> = ({
 				style={playButtonStyle}
 				onClick={togglePlay}
 				onMouseEnter={(e) => {
+					e.currentTarget.style.backgroundColor =
+						"var(--vscode-editor-foreground)";
+					e.currentTarget.style.color = "var(--vscode-editor-background)";
 					e.currentTarget.style.transform = "scale(1.05)";
 				}}
 				onMouseLeave={(e) => {
+					e.currentTarget.style.backgroundColor = "transparent";
+					e.currentTarget.style.color = "var(--vscode-editor-foreground)";
 					e.currentTarget.style.transform = "scale(1)";
 				}}
 				title={isPlaying ? "Pause" : "Play"}
 			>
 				{isLoading ? (
-					<i
-						className="codicon codicon-loading codicon-modifier-spin"
-						style={{ fontSize: "16px" }}
-					/>
+					<svg
+						width="14"
+						height="14"
+						viewBox="0 0 16 16"
+						fill="currentColor"
+						style={{ animation: "audio-playback-spin 1s linear infinite" }}
+					>
+						<path d="M8 1a7 7 0 1 0 7 7h-1.5A5.5 5.5 0 1 1 8 2.5V1z" />
+					</svg>
+				) : isPlaying ? (
+					<svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
+						<rect x="4" y="3" width="3" height="10" rx="0.5" />
+						<rect x="9" y="3" width="3" height="10" rx="0.5" />
+					</svg>
 				) : (
-					<i
-						className={`codicon ${isPlaying ? "codicon-debug-pause" : "codicon-play"}`}
-						style={{ fontSize: "16px", marginLeft: isPlaying ? 0 : "2px" }}
-					/>
+					<svg
+						width="14"
+						height="14"
+						viewBox="0 0 16 16"
+						fill="currentColor"
+						style={{ marginLeft: "2px" }}
+					>
+						<path d="M4 3.5v9a.5.5 0 0 0 .75.433l7.5-4.5a.5.5 0 0 0 0-.866l-7.5-4.5A.5.5 0 0 0 4 3.5z" />
+					</svg>
 				)}
 			</button>
 

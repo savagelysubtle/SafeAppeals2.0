@@ -2,7 +2,7 @@
  *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
  *--------------------------------------------------------------------------------------*/
 
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
 	EXPORT_FORMAT_LABELS,
 	ExportFormat,
@@ -42,6 +42,20 @@ const filenameStyle: React.CSSProperties = {
 	overflow: "hidden",
 	textOverflow: "ellipsis",
 	marginBottom: "4px",
+	cursor: "pointer",
+};
+
+const filenameInputStyle: React.CSSProperties = {
+	fontSize: "14px",
+	fontWeight: 500,
+	color: "var(--vscode-editor-foreground)",
+	backgroundColor: "var(--vscode-input-background)",
+	border: "1px solid var(--vscode-focusBorder)",
+	borderRadius: "4px",
+	padding: "2px 6px",
+	marginBottom: "4px",
+	width: "100%",
+	outline: "none",
 };
 
 const metadataStyle: React.CSSProperties = {
@@ -99,7 +113,7 @@ const buttonGroupStyle: React.CSSProperties = {
 const iconButtonStyle: React.CSSProperties = {
 	backgroundColor: "transparent",
 	color: "var(--vscode-descriptionForeground)",
-	border: "none",
+	border: "1px solid var(--vscode-panel-border)",
 	borderRadius: "6px",
 	padding: "6px 10px",
 	cursor: "pointer",
@@ -107,11 +121,26 @@ const iconButtonStyle: React.CSSProperties = {
 	alignItems: "center",
 	gap: "6px",
 	fontSize: "12px",
-	transition: "background-color 0.1s, color 0.1s",
+	transition: "all 0.15s ease",
 };
 
 const deleteButtonStyle: React.CSSProperties = {
-	...iconButtonStyle,
+	backgroundColor: "transparent",
+	color: "var(--vscode-descriptionForeground)",
+	border: "1px solid var(--vscode-panel-border)",
+	borderRadius: "6px",
+	padding: "6px 10px",
+	cursor: "pointer",
+	display: "flex",
+	alignItems: "center",
+	gap: "6px",
+	fontSize: "12px",
+	transition: "all 0.15s ease",
+};
+
+const deleteButtonHoverStyle: React.CSSProperties = {
+	backgroundColor: "var(--vscode-inputValidation-errorBackground)",
+	borderColor: "var(--vscode-errorForeground)",
 	color: "var(--vscode-errorForeground)",
 };
 
@@ -152,6 +181,7 @@ interface RecordingCardProps {
 	onTranscribe: () => void;
 	onExport: (format: ExportFormat) => void;
 	onGetAudioUrl: () => Promise<string>;
+	onRename: (newName: string) => void;
 }
 
 function formatDuration(seconds: number): string {
@@ -171,12 +201,60 @@ export const RecordingCard: React.FC<RecordingCardProps> = ({
 	onTranscribe,
 	onExport,
 	onGetAudioUrl,
+	onRename,
 }) => {
 	const [showExportMenu, setShowExportMenu] = useState(false);
 	const [confirmDelete, setConfirmDelete] = useState(false);
+	const [isEditing, setIsEditing] = useState(false);
+	const [editName, setEditName] = useState(recording.filename);
+	const inputRef = useRef<HTMLInputElement>(null);
 
 	const statusColor = RECORDING_STATUS_COLORS[recording.status];
 	const statusLabel = RECORDING_STATUS_LABELS[recording.status];
+
+	// Focus input when editing starts
+	useEffect(() => {
+		if (isEditing && inputRef.current) {
+			inputRef.current.focus();
+			// Select the filename without extension
+			const dotIndex = editName.lastIndexOf(".");
+			if (dotIndex > 0) {
+				inputRef.current.setSelectionRange(0, dotIndex);
+			} else {
+				inputRef.current.select();
+			}
+		}
+	}, [isEditing, editName]);
+
+	// Handle double-click to start editing
+	const handleDoubleClick = () => {
+		setEditName(recording.filename);
+		setIsEditing(true);
+	};
+
+	// Handle saving the new name
+	const handleSave = () => {
+		const trimmedName = editName.trim();
+		if (trimmedName && trimmedName !== recording.filename) {
+			onRename(trimmedName);
+		}
+		setIsEditing(false);
+	};
+
+	// Handle key events in the input
+	const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+		if (e.key === "Enter") {
+			handleSave();
+		} else if (e.key === "Escape") {
+			setEditName(recording.filename);
+			setIsEditing(false);
+		}
+	};
+
+	// Handle blur (clicking outside)
+	const handleBlur = () => {
+		handleSave();
+	};
 
 	const handleDelete = () => {
 		if (confirmDelete) {
@@ -202,13 +280,29 @@ export const RecordingCard: React.FC<RecordingCardProps> = ({
 			{/* Header */}
 			<div style={cardHeaderStyle}>
 				<div style={fileInfoStyle}>
-					<div style={filenameStyle} title={recording.filename}>
-						<i
-							className={`codicon ${recording.isImported ? "codicon-folder-opened" : "codicon-record"}`}
-							style={{ marginRight: "6px", fontSize: "12px" }}
+					{isEditing ? (
+						<input
+							ref={inputRef}
+							type="text"
+							value={editName}
+							onChange={(e) => setEditName(e.target.value)}
+							onBlur={handleBlur}
+							onKeyDown={handleKeyDown}
+							style={filenameInputStyle}
 						/>
-						{recording.filename}
-					</div>
+					) : (
+						<div
+							style={filenameStyle}
+							title="Double-click to rename"
+							onDoubleClick={handleDoubleClick}
+						>
+							<i
+								className={`codicon ${recording.isImported ? "codicon-folder-opened" : "codicon-record"}`}
+								style={{ marginRight: "6px", fontSize: "12px" }}
+							/>
+							{recording.filename}
+						</div>
+					)}
 					<div style={metadataStyle}>
 						{formatDate(recording.createdAt)} ·{" "}
 						{formatDuration(recording.duration)}
@@ -256,6 +350,14 @@ export const RecordingCard: React.FC<RecordingCardProps> = ({
 						<button
 							style={iconButtonStyle}
 							onClick={onTranscribe}
+							onMouseEnter={(e) => {
+								e.currentTarget.style.backgroundColor = "var(--vscode-list-hoverBackground)";
+								e.currentTarget.style.color = "var(--vscode-editor-foreground)";
+							}}
+							onMouseLeave={(e) => {
+								e.currentTarget.style.backgroundColor = "transparent";
+								e.currentTarget.style.color = "var(--vscode-descriptionForeground)";
+							}}
 							title="Transcribe with Whisper AI"
 						>
 							<i className="codicon codicon-symbol-string" />
@@ -269,6 +371,14 @@ export const RecordingCard: React.FC<RecordingCardProps> = ({
 							<button
 								style={iconButtonStyle}
 								onClick={() => setShowExportMenu(!showExportMenu)}
+								onMouseEnter={(e) => {
+									e.currentTarget.style.backgroundColor = "var(--vscode-list-hoverBackground)";
+									e.currentTarget.style.color = "var(--vscode-editor-foreground)";
+								}}
+								onMouseLeave={(e) => {
+									e.currentTarget.style.backgroundColor = "transparent";
+									e.currentTarget.style.color = "var(--vscode-descriptionForeground)";
+								}}
 								title="Export transcript"
 							>
 								<i className="codicon codicon-export" />
@@ -312,15 +422,27 @@ export const RecordingCard: React.FC<RecordingCardProps> = ({
 				<button
 					style={{
 						...deleteButtonStyle,
-						backgroundColor: confirmDelete
-							? "var(--vscode-inputValidation-errorBackground)"
-							: "transparent",
+						...(confirmDelete ? deleteButtonHoverStyle : {}),
 					}}
 					onClick={handleDelete}
+					onMouseEnter={(e) => {
+						if (!confirmDelete) {
+							e.currentTarget.style.backgroundColor = "var(--vscode-inputValidation-errorBackground)";
+							e.currentTarget.style.borderColor = "var(--vscode-errorForeground)";
+							e.currentTarget.style.color = "var(--vscode-errorForeground)";
+						}
+					}}
+					onMouseLeave={(e) => {
+						if (!confirmDelete) {
+							e.currentTarget.style.backgroundColor = "transparent";
+							e.currentTarget.style.borderColor = "var(--vscode-panel-border)";
+							e.currentTarget.style.color = "var(--vscode-descriptionForeground)";
+						}
+					}}
 					title={confirmDelete ? "Click again to confirm" : "Delete recording"}
 				>
 					<i className="codicon codicon-trash" />
-					{confirmDelete ? "Confirm?" : ""}
+					{confirmDelete ? "Confirm?" : "Delete"}
 				</button>
 			</div>
 		</div>
