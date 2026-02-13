@@ -3,7 +3,6 @@
  *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
  *--------------------------------------------------------------------------------------*/
 
-import * as crypto from 'crypto';
 import { safeStorage } from 'electron';
 import * as fs from 'fs';
 import { createRequire } from 'node:module';
@@ -11,12 +10,11 @@ import * as path from 'path';
 import { Emitter, Event } from '../../../../base/common/event.js';
 import { IServerChannel } from '../../../../base/parts/ipc/common/ipc.js';
 import {
-	DocuSignConsentStatus,
 	IDocuSignEnvelope,
 	IDocuSignEnvelopeCreateRequest,
 	IDocuSignEnvelopeCreateResponse,
 	IDocuSignEnvelopeSummary,
-	IDocuSignUser,
+	IDocuSignUser
 } from '../common/docuSign/docuSignTypes.js';
 
 // Import types for TypeScript
@@ -33,17 +31,13 @@ const docusign: {
 // CONFIGURATION
 // ============================================
 
-// Read bundled DocuSign config from environment
+// Read bundled DocuSign config from environment variables
+// These are loaded from .env by the parser in main.ts at startup
 const DOCUSIGN_INTEGRATION_KEY = process.env.DOCUSIGN_INTEGRATION_KEY || '';
-const DOCUSIGN_ENVIRONMENT = (process.env.DOCUSIGN_ENVIRONMENT as 'demo' | 'production') || 'demo';
-// Support both DOCUSIGN_USER_ID and DOCUSIGN_SERVICE_USER_ID
-const DOCUSIGN_USER_ID = process.env.DOCUSIGN_USER_ID || process.env.DOCUSIGN_SERVICE_USER_ID || '';
-const DOCUSIGN_PRIVATE_KEY_PATH = process.env.DOCUSIGN_PRIVATE_KEY_PATH || '';
-const DOCUSIGN_KEYPAIR_ID = process.env.DOCUSIGN_KEYPAIR_ID || process.env.DOCUSIGN_KEPYPAIR_ID || '';
-
+const DOCUSIGN_CLIENT_SECRET = process.env.DOCUSIGN_CLIENT_SECRET || '';
+const DOCUSIGN_ENVIRONMENT = (process.env.DOCUSIGN_ENVIRONMENT || 'demo') as 'demo' | 'production';
 // Token refresh settings
 const TOKEN_REFRESH_BUFFER_MS = 5 * 60 * 1000; // Refresh 5 minutes before expiry
-const JWT_LIFETIME_SECONDS = 3600; // 1 hour max
 
 // Base paths by environment
 const BASE_PATHS = {
@@ -58,14 +52,15 @@ const BASE_PATHS = {
 };
 
 // Storage key for encrypted private key
-const PRIVATE_KEY_STORAGE_KEY = 'docusign_private_key';
+const REFRESH_TOKEN_STORAGE_KEY = 'docusign_refresh_token';
 
 // Log at module load time for debugging
 console.log('[DocuSignChannel] Module loaded');
 console.log('[DocuSignChannel] DOCUSIGN_INTEGRATION_KEY from env:', DOCUSIGN_INTEGRATION_KEY ? `${DOCUSIGN_INTEGRATION_KEY.substring(0, 8)}...` : 'NOT SET');
+console.log('[DocuSignChannel] DOCUSIGN_CLIENT_SECRET from env:', DOCUSIGN_CLIENT_SECRET ? 'SET (Hidden)' : 'NOT SET');
 console.log('[DocuSignChannel] DOCUSIGN_ENVIRONMENT from env:', DOCUSIGN_ENVIRONMENT);
-console.log('[DocuSignChannel] DOCUSIGN_USER_ID from env:', DOCUSIGN_USER_ID ? `${DOCUSIGN_USER_ID.substring(0, 8)}...` : 'NOT SET');
-console.log('[DocuSignChannel] DOCUSIGN_KEYPAIR_ID from env:', DOCUSIGN_KEYPAIR_ID ? `${DOCUSIGN_KEYPAIR_ID.substring(0, 8)}...` : 'NOT SET');
+console.log('[DocuSignChannel] DOCUSIGN_CLIENT_SECRET from env:', DOCUSIGN_CLIENT_SECRET ? 'SET (Hidden)' : 'NOT SET');
+console.log('[DocuSignChannel] DOCUSIGN_ENVIRONMENT from env:', DOCUSIGN_ENVIRONMENT);
 
 // ============================================
 // TYPES
@@ -76,10 +71,12 @@ export interface IDocuSignConfig {
 	environment: 'demo' | 'production';
 	userId?: string;
 	privateKeyConfigured?: boolean;
+	authMode: 'oauth' | 'jwt';
 }
 
 interface CachedToken {
 	accessToken: string;
+	refreshToken?: string;
 	expiresAt: number; // Unix timestamp in ms
 	accountId: string;
 	baseUri: string;
@@ -102,7 +99,6 @@ interface AuthStateEvent {
  */
 export class DocuSignChannel implements IServerChannel {
 	private cachedToken: CachedToken | null = null;
-	private privateKey: Buffer | null = null;
 	private keyStoragePath: string = '';
 
 	// Events
@@ -114,8 +110,8 @@ export class DocuSignChannel implements IServerChannel {
 			this.keyStoragePath = path.join(appDataPath, 'docusign');
 		}
 
-		// Try to load private key from environment or stored location
-		this.loadPrivateKey();
+		// Try to load refresh token
+		this.loadRefreshToken();
 	}
 
 	// ============================================
@@ -134,29 +130,30 @@ export class DocuSignChannel implements IServerChannel {
 			switch (command) {
 				// Configuration
 				case 'getConfig':
+					console.log('[DocuSignChannel] IPC Call: getConfig');
 					return this.getConfig();
 				case 'hasBundledKey':
+					console.log('[DocuSignChannel] IPC Call: hasBundledKey');
 					return !!DOCUSIGN_INTEGRATION_KEY;
-				case 'hasPrivateKey':
-					return this.hasPrivateKey();
 				case 'isEncryptionAvailable':
 					return safeStorage.isEncryptionAvailable();
 
+				// OAuth Authentication
+				case 'exchangeAuthCode':
+					return this.exchangeAuthCode(params);
+
 				// Key management
-				case 'storePrivateKey':
-					return this.storePrivateKey(params.privateKey);
-				case 'clearPrivateKey':
-					return this.clearPrivateKey();
-				case 'validatePrivateKey':
-					return this.validatePrivateKey(params.privateKey);
+				// storePrivateKey, clearPrivateKey, validatePrivateKey removed as they are JWT specific
 
 				// JWT Authentication
 				case 'getAccessToken':
+					console.log('[DocuSignChannel] IPC Call: getAccessToken');
 					return this.getAccessToken(params);
-				case 'checkConsent':
-					return this.checkConsent(params);
 				case 'getConsentUrl':
-					return this.getConsentUrl(params);
+					console.log('[DocuSignChannel] IPC Call: getConsentUrl with params:', JSON.stringify(params));
+					const url = this.getConsentUrl(params);
+					console.log('[DocuSignChannel] Generated Consent URL:', url);
+					return url;
 
 				// Envelope operations
 				case 'createEnvelope':
@@ -195,171 +192,76 @@ export class DocuSignChannel implements IServerChannel {
 	// CONFIGURATION METHODS
 	// ============================================
 
-	private async getConfig(): Promise<IDocuSignConfig> {
+	private getConfig(): {
+		integrationKey: string;
+		environment: 'demo' | 'production';
+		privateKeyConfigured: boolean;
+		authMode: string;
+	} {
 		console.log('[DocuSignChannel] Getting config');
-		console.log('[DocuSignChannel] Config: integrationKey=%s, environment=%s, userId=%s, privateKey=%s',
+		console.log('[DocuSignChannel] Config: integrationKey=%s, environment=%s',
 			DOCUSIGN_INTEGRATION_KEY ? 'SET' : 'NOT SET',
-			DOCUSIGN_ENVIRONMENT,
-			DOCUSIGN_USER_ID ? 'SET' : 'NOT SET',
-			this.hasPrivateKey() ? 'SET' : 'NOT SET'
+			DOCUSIGN_ENVIRONMENT
 		);
 		return {
 			integrationKey: DOCUSIGN_INTEGRATION_KEY,
 			environment: DOCUSIGN_ENVIRONMENT,
-			userId: DOCUSIGN_USER_ID || undefined,
-			privateKeyConfigured: this.hasPrivateKey(),
+			privateKeyConfigured: this.hasRefreshToken(), // Reuse field to indicate "configured"
+			authMode: 'oauth',
 		};
 	}
 
 	// ============================================
-	// PRIVATE KEY MANAGEMENT
+	// PRIVATE KEY MANAGEMENT (Removed)
+	// ============================================
+	// Methods removed as they are no longer used in OAuth flow.
+
+
+
+	// ============================================
+	// REFRESH TOKEN MANAGEMENT
 	// ============================================
 
-	private hasPrivateKey(): boolean {
-		return this.privateKey !== null && this.privateKey.length > 0;
+	private hasRefreshToken(): boolean {
+		return !!this.cachedToken?.refreshToken;
 	}
 
-	private loadPrivateKey(): void {
+	private loadRefreshToken(): void {
 		try {
-			// First, try loading from environment variable path
-			if (DOCUSIGN_PRIVATE_KEY_PATH && fs.existsSync(DOCUSIGN_PRIVATE_KEY_PATH)) {
-				this.privateKey = fs.readFileSync(DOCUSIGN_PRIVATE_KEY_PATH);
-				console.log('[DocuSignChannel] Loaded private key from env path');
-				return;
-			}
-
-			// Try loading from inline environment variable
-			const envKey = process.env.DOCUSIGN_PRIVATE_KEY;
-			if (envKey) {
-				const keyContent = this.normalizePrivateKey(envKey);
-				this.privateKey = Buffer.from(keyContent);
-				console.log('[DocuSignChannel] Loaded private key from env inline');
-				return;
-			}
-
 			// Try loading from encrypted storage
 			if (this.keyStoragePath && safeStorage.isEncryptionAvailable()) {
-				const encryptedPath = path.join(this.keyStoragePath, `${PRIVATE_KEY_STORAGE_KEY}.enc`);
+				const encryptedPath = path.join(this.keyStoragePath, `${REFRESH_TOKEN_STORAGE_KEY}.enc`);
 				if (fs.existsSync(encryptedPath)) {
 					const encrypted = fs.readFileSync(encryptedPath);
 					const decrypted = safeStorage.decryptString(encrypted);
-					this.privateKey = Buffer.from(decrypted);
-					console.log('[DocuSignChannel] Loaded private key from encrypted storage');
+					const tokenData = JSON.parse(decrypted);
+
+					// Restore cached token
+					this.cachedToken = tokenData;
+					console.log('[DocuSignChannel] Loaded refresh token from encrypted storage');
+
+					// Check if we need to refresh immediately
+					if (tokenData.expiresAt < Date.now()) {
+						console.log('[DocuSignChannel] Token expired, will refresh on next use');
+					}
+
+					this._onAuthStateChange.fire({ status: 'signed_in', user: tokenData.user });
 					return;
 				}
 			}
-
-			console.log('[DocuSignChannel] No private key found');
 		} catch (error) {
-			console.error('[DocuSignChannel] Error loading private key:', error);
+			console.error('[DocuSignChannel] Error loading refresh token:', error);
 		}
 	}
 
-	/**
-	 * Normalize a private key to proper PEM format.
-	 * Handles raw base64 keys (without headers), keys with \n escapes,
-	 * and converts PKCS#1 (RSA PRIVATE KEY) to PKCS#8 (PRIVATE KEY) format.
-	 */
-	private normalizePrivateKey(key: string): string {
-		// Debug: log first 50 chars to understand the input format
-		console.log('[DocuSignChannel] normalizePrivateKey input (first 100 chars):', key.substring(0, 100));
-		console.log('[DocuSignChannel] Key length:', key.length);
-
-		// Strip surrounding quotes that dotenv might include
-		let normalized = key.trim();
-		if ((normalized.startsWith('"') && normalized.endsWith('"')) ||
-			(normalized.startsWith("'") && normalized.endsWith("'"))) {
-			normalized = normalized.slice(1, -1);
-		}
-
-		// Handle literal \n escape sequences (when dotenv doesn't expand them)
-		normalized = normalized.replace(/\\n/g, '\n');
-
-		// Handle Windows line endings
-		normalized = normalized.replace(/\r\n/g, '\n');
-		normalized = normalized.replace(/\r/g, '\n');
-
-		// Trim again after conversions
-		normalized = normalized.trim();
-
-		console.log('[DocuSignChannel] After normalization, has BEGIN PRIVATE KEY:', normalized.includes('-----BEGIN PRIVATE KEY-----'));
-		console.log('[DocuSignChannel] After normalization, has BEGIN RSA PRIVATE KEY:', normalized.includes('-----BEGIN RSA PRIVATE KEY-----'));
-
-		// Check if already in PKCS#8 format
-		if (normalized.includes('-----BEGIN PRIVATE KEY-----')) {
-			console.log('[DocuSignChannel] Key is already PKCS#8');
-			return normalized.endsWith('\n') ? normalized : normalized + '\n';
-		}
-
-		// Convert PKCS#1 (RSA PRIVATE KEY) to PKCS#8 format
-		if (normalized.includes('-----BEGIN RSA PRIVATE KEY-----')) {
-			console.log('[DocuSignChannel] Key is PKCS#1, attempting conversion to PKCS#8...');
-			try {
-				const privateKeyObject = crypto.createPrivateKey({
-					key: normalized,
-					format: 'pem',
-					type: 'pkcs1'
-				});
-				const pkcs8Key = privateKeyObject.export({ type: 'pkcs8', format: 'pem' }) as string;
-				console.log('[DocuSignChannel] Successfully converted PKCS#1 key to PKCS#8 format');
-				return pkcs8Key;
-			} catch (err) {
-				console.error('[DocuSignChannel] Failed to convert PKCS#1 to PKCS#8:', err);
-				console.error('[DocuSignChannel] Key structure check - starts with:', normalized.substring(0, 50));
-				console.error('[DocuSignChannel] Key structure check - ends with:', normalized.substring(normalized.length - 50));
-
-				// Try alternative: extract base64 and reconstruct
-				try {
-					console.log('[DocuSignChannel] Attempting base64 extraction fallback...');
-					const base64Match = normalized.match(/-----BEGIN RSA PRIVATE KEY-----\s*([\s\S]*?)\s*-----END RSA PRIVATE KEY-----/);
-					if (base64Match && base64Match[1]) {
-						const base64Content = base64Match[1].replace(/\s+/g, '');
-						const reconstructedPem = `-----BEGIN RSA PRIVATE KEY-----\n${base64Content.match(/.{1,64}/g)?.join('\n')}\n-----END RSA PRIVATE KEY-----\n`;
-						console.log('[DocuSignChannel] Reconstructed PEM, retrying conversion...');
-						const privateKeyObject2 = crypto.createPrivateKey(reconstructedPem);
-						const pkcs8Key2 = privateKeyObject2.export({ type: 'pkcs8', format: 'pem' }) as string;
-						console.log('[DocuSignChannel] Fallback conversion succeeded!');
-						return pkcs8Key2;
-					}
-				} catch (fallbackErr) {
-					console.error('[DocuSignChannel] Fallback conversion also failed:', fallbackErr);
-				}
-				// Fall through to return as-is
-			}
-		}
-
-		// If has any BEGIN header, return as-is
-		if (normalized.includes('-----BEGIN')) {
-			return normalized.endsWith('\n') ? normalized : normalized + '\n';
-		}
-
-		// Raw base64 - wrap with PKCS#8 headers
-		// Remove any whitespace/newlines from the raw key
-		const rawBase64 = normalized.replace(/\s+/g, '');
-
-		// Format with 64-char line width (PEM standard)
-		const lines: string[] = [];
-		for (let i = 0; i < rawBase64.length; i += 64) {
-			lines.push(rawBase64.substring(i, i + 64));
-		}
-
-		return `-----BEGIN PRIVATE KEY-----\n${lines.join('\n')}\n-----END PRIVATE KEY-----\n`;
-	}
-
-	private async storePrivateKey(privateKey: string): Promise<{ success: boolean; error?: string }> {
+	private async storeRefreshToken(token: CachedToken): Promise<void> {
 		try {
-			// Normalize the key first (handles raw base64 and \n escapes)
-			const normalizedKey = this.normalizePrivateKey(privateKey);
-
-			// Validate key format
-			const validation = this.validatePrivateKey(normalizedKey);
-			if (!validation.valid) {
-				return { success: false, error: validation.error };
-			}
+			this.cachedToken = token;
 
 			// Check if encryption is available
 			if (!safeStorage.isEncryptionAvailable()) {
-				return { success: false, error: 'System encryption not available. On Linux, ensure kwallet or gnome-keyring is configured.' };
+				console.warn('[DocuSignChannel] System encryption not available. Token stored in memory only.');
+				return;
 			}
 
 			// Ensure storage directory exists
@@ -368,161 +270,92 @@ export class DocuSignChannel implements IServerChannel {
 					fs.mkdirSync(this.keyStoragePath, { recursive: true });
 				}
 
-				// Encrypt and store
-				const encrypted = safeStorage.encryptString(normalizedKey);
-				const encryptedPath = path.join(this.keyStoragePath, `${PRIVATE_KEY_STORAGE_KEY}.enc`);
+				// Encrypt and store the entire token object
+				const encrypted = safeStorage.encryptString(JSON.stringify(token));
+				const encryptedPath = path.join(this.keyStoragePath, `${REFRESH_TOKEN_STORAGE_KEY}.enc`);
 				fs.writeFileSync(encryptedPath, encrypted);
 
-				// Update in-memory key
-				this.privateKey = Buffer.from(normalizedKey);
-
-				console.log('[DocuSignChannel] Private key stored securely');
-				return { success: true };
+				console.log('[DocuSignChannel] Refresh token stored securely');
 			}
-
-			// Fallback: store in memory only (less secure, lost on restart)
-			this.privateKey = Buffer.from(normalizedKey);
-			console.warn('[DocuSignChannel] Private key stored in memory only (no persistent storage path)');
-			return { success: true };
 		} catch (error) {
-			const message = error instanceof Error ? error.message : 'Unknown error';
-			console.error('[DocuSignChannel] Error storing private key:', error);
-			return { success: false, error: message };
+			console.error('[DocuSignChannel] Error storing refresh token:', error);
 		}
 	}
 
-	private async clearPrivateKey(): Promise<void> {
-		this.privateKey = null;
+	private async clearRefreshToken(): Promise<void> {
 		this.cachedToken = null;
 
 		// Remove from storage
 		if (this.keyStoragePath) {
-			const encryptedPath = path.join(this.keyStoragePath, `${PRIVATE_KEY_STORAGE_KEY}.enc`);
+			const encryptedPath = path.join(this.keyStoragePath, `${REFRESH_TOKEN_STORAGE_KEY}.enc`);
 			if (fs.existsSync(encryptedPath)) {
 				fs.unlinkSync(encryptedPath);
 			}
 		}
-
-		this._onAuthStateChange.fire({ status: 'signed_out', user: null });
-		console.log('[DocuSignChannel] Private key cleared');
-	}
-
-	private validatePrivateKey(privateKey: string): { valid: boolean; error?: string } {
-		// Normalize newlines
-		const key = privateKey.replace(/\\n/g, '\n').trim();
-
-		// Check for PKCS#8 format (required by DocuSign)
-		if (key.includes('-----BEGIN PRIVATE KEY-----')) {
-			return { valid: true };
-		}
-
-		// Check for PKCS#1 format (needs conversion)
-		if (key.includes('-----BEGIN RSA PRIVATE KEY-----')) {
-			return {
-				valid: false,
-				error: 'Private key is in PKCS#1 format. DocuSign requires PKCS#8 format. Convert with: openssl pkcs8 -topk8 -inform PEM -outform PEM -nocrypt -in key.pem -out key-pkcs8.pem'
-			};
-		}
-
-		return { valid: false, error: 'Invalid private key format. Expected PEM format starting with -----BEGIN PRIVATE KEY-----' };
 	}
 
 	// ============================================
-	// JWT AUTHENTICATION
+	// OAUTH AUTHENTICATION
 	// ============================================
 
-	private async getAccessToken(params: {
-		integrationKey?: string;
-		userId?: string;
-		environment?: 'demo' | 'production';
-	}): Promise<CachedToken> {
-		const integrationKey = params.integrationKey || DOCUSIGN_INTEGRATION_KEY;
-		const userId = params.userId || DOCUSIGN_USER_ID;
-		const environment = params.environment || DOCUSIGN_ENVIRONMENT;
+	private async exchangeAuthCode(params: { authCode: string; redirectUri: string }): Promise<void> {
+		console.log('[DocuSignChannel] Exchanging auth code for token...');
 
-		// Check if cached token is still valid
-		if (this.cachedToken) {
-			const expiresIn = this.cachedToken.expiresAt - Date.now();
-			if (expiresIn > TOKEN_REFRESH_BUFFER_MS) {
-				console.log(`[DocuSignChannel] Using cached token (expires in ${Math.round(expiresIn / 1000)}s)`);
-				return this.cachedToken;
-			}
+		if (!DOCUSIGN_INTEGRATION_KEY || !DOCUSIGN_CLIENT_SECRET) {
+			throw new Error('DocuSign Integration Key or Client Secret not configured');
 		}
-
-		// Validate configuration
-		if (!integrationKey) {
-			throw new Error('DocuSign Integration Key not configured');
-		}
-		if (!userId) {
-			throw new Error('DocuSign User ID not configured');
-		}
-		if (!this.privateKey) {
-			throw new Error('DocuSign private key not configured');
-		}
-
-		this._onAuthStateChange.fire({ status: 'signing_in', user: null });
 
 		try {
-			const basePaths = BASE_PATHS[environment];
+			console.log('[DocuSignChannel] exchangeAuthCode params:', JSON.stringify(params));
+			const basePaths = BASE_PATHS[DOCUSIGN_ENVIRONMENT];
+			console.log('[DocuSignChannel] Using base path:', basePaths.oAuth);
 			const apiClient = new docusign.ApiClient();
 			apiClient.setOAuthBasePath(basePaths.oAuth);
 
-			console.log('[DocuSignChannel] Requesting JWT token...');
-
-			// Request JWT token
-			const result = await apiClient.requestJWTUserToken(
-				integrationKey,
-				userId,
-				['signature'], // impersonation scope is implicit in JWT Grant
-				this.privateKey,
-				JWT_LIFETIME_SECONDS
+			// Exchange code for token
+			const response = await (apiClient as any).generateAccessToken(
+				DOCUSIGN_INTEGRATION_KEY,
+				DOCUSIGN_CLIENT_SECRET,
+				params.authCode
 			);
 
-			if (!result.body || !result.body.access_token) {
-				throw new Error('Invalid token response from DocuSign');
+			if (!response || !response.body) {
+				throw new Error('Invalid response from DocuSign');
 			}
 
-			// Get user info and account details
-			apiClient.addDefaultHeader('Authorization', `Bearer ${result.body.access_token}`);
-			const userInfoResult = await apiClient.getUserInfo(result.body.access_token);
+			const { access_token, refresh_token, expires_in } = response.body as any;
 
-			// Find default account
-			const defaultAccount = userInfoResult.accounts?.find((a: any) => a.isDefault === 'true') || userInfoResult.accounts?.[0];
-			if (!defaultAccount) {
+			// Get user info
+			apiClient.addDefaultHeader('Authorization', `Bearer ${access_token}`);
+			const userInfo = await apiClient.getUserInfo(access_token);
+			const account = userInfo.accounts?.find((a: any) => a.isDefault === 'true') || userInfo.accounts?.[0];
+
+			if (!account) {
 				throw new Error('No DocuSign account found for this user');
 			}
 
-			// Create cached token
-			this.cachedToken = {
-				accessToken: result.body.access_token,
-				expiresAt: Date.now() + (result.body.expires_in * 1000) - 60000, // 1 min buffer
-				accountId: defaultAccount.accountId,
-				baseUri: defaultAccount.baseUri,
+			// Create token object
+			const token: CachedToken = {
+				accessToken: access_token,
+				refreshToken: refresh_token,
+				expiresAt: Date.now() + (expires_in * 1000) - 60000, // 1 min buffer
+				accountId: account.accountId,
+				baseUri: account.baseUri,
 				user: {
-					userId: userInfoResult.sub,
-					email: userInfoResult.email,
-					name: userInfoResult.name,
+					userId: userInfo.sub,
+					email: userInfo.email,
+					name: userInfo.name,
 				},
 			};
 
-			console.log(`[DocuSignChannel] JWT token obtained (expires in ${result.body.expires_in}s, account: ${this.cachedToken.accountId})`);
+			// Store it
+			await this.storeRefreshToken(token);
 
-			this._onAuthStateChange.fire({ status: 'signed_in', user: this.cachedToken.user });
+			this._onAuthStateChange.fire({ status: 'signed_in', user: token.user });
+			console.log(`[DocuSignChannel] Successfully signed in as ${token.user.email}`);
 
-			return this.cachedToken;
 		} catch (error: any) {
-			console.error('[DocuSignChannel] JWT authentication failed:', error);
-
-			// Check for consent_required error
-			if (error.message?.includes('consent_required') || error.response?.body?.error === 'consent_required') {
-				this._onAuthStateChange.fire({
-					status: 'error',
-					user: null,
-					error: 'consent_required'
-				});
-				throw new Error('consent_required: User must grant consent before using JWT authentication');
-			}
-
+			console.error('[DocuSignChannel] OAuth exchange failed:', error);
 			this._onAuthStateChange.fire({
 				status: 'error',
 				user: null,
@@ -532,21 +365,75 @@ export class DocuSignChannel implements IServerChannel {
 		}
 	}
 
-	private async checkConsent(params: {
-		integrationKey?: string;
-		userId?: string;
-		environment?: 'demo' | 'production';
-	}): Promise<DocuSignConsentStatus> {
+	private async refreshAccessToken(): Promise<CachedToken> {
+		if (!this.cachedToken || !this.cachedToken.refreshToken) {
+			throw new Error('No refresh token available');
+		}
+
+		console.log('[DocuSignChannel] Refreshing access token...');
+
 		try {
-			await this.getAccessToken(params);
-			return 'granted';
+			const basePaths = BASE_PATHS[DOCUSIGN_ENVIRONMENT];
+			const apiClient = new docusign.ApiClient();
+			apiClient.setOAuthBasePath(basePaths.oAuth);
+
+			const response = await (apiClient as any).refreshAccessToken(
+				DOCUSIGN_INTEGRATION_KEY,
+				DOCUSIGN_CLIENT_SECRET,
+				this.cachedToken.refreshToken
+			);
+
+			const { access_token, refresh_token, expires_in } = response.body as any;
+
+			// Update token
+			const updatedToken: CachedToken = {
+				...this.cachedToken,
+				accessToken: access_token,
+				refreshToken: refresh_token || this.cachedToken.refreshToken, // Use new one if provided
+				expiresAt: Date.now() + (expires_in * 1000) - 60000,
+			};
+
+			await this.storeRefreshToken(updatedToken);
+			return updatedToken;
+
 		} catch (error: any) {
-			if (error.message?.includes('consent_required')) {
-				return 'required';
+			console.error('[DocuSignChannel] Token refresh failed:', error);
+			// On fatal refresh errors, clear session
+			if (error.response?.status === 400 || error.message?.includes('invalid_grant')) {
+				await this.signOut();
 			}
-			return 'error';
+			throw error;
 		}
 	}
+
+
+	// ============================================
+	// JWT AUTHENTICATION
+	// ============================================
+
+	private async getAccessToken(_params?: any): Promise<CachedToken> {
+
+		// Check if cached token is still valid
+		if (this.cachedToken) {
+			const expiresIn = this.cachedToken.expiresAt - Date.now();
+			if (expiresIn > TOKEN_REFRESH_BUFFER_MS) {
+				return this.cachedToken;
+			}
+
+			// Try to refresh
+			if (this.cachedToken.refreshToken) {
+				try {
+					return await this.refreshAccessToken();
+				} catch (error) {
+					console.warn('[DocuSignChannel] Token refresh failed in getAccessToken, requiring re-login', error);
+				}
+			}
+		}
+
+		this._onAuthStateChange.fire({ status: 'signed_out', user: null });
+		throw new Error('No valid session. Please sign in to DocuSign.');
+	}
+
 
 	private getConsentUrl(params: {
 		integrationKey?: string;
@@ -557,9 +444,13 @@ export class DocuSignChannel implements IServerChannel {
 		const environment = params.environment || DOCUSIGN_ENVIRONMENT;
 		const basePaths = BASE_PATHS[environment];
 
+		console.log('[DocuSignChannel] getConsentUrl environment:', environment);
+		console.log('[DocuSignChannel] getConsentUrl integrationKey:', integrationKey);
+		console.log('[DocuSignChannel] getConsentUrl redirectUri:', params.redirectUri);
+
 		const url = new URL(`https://${basePaths.oAuth}/oauth/auth`);
 		url.searchParams.set('response_type', 'code');
-		url.searchParams.set('scope', 'signature impersonation');
+		url.searchParams.set('scope', 'signature'); // removed impersonation
 		url.searchParams.set('client_id', integrationKey);
 		url.searchParams.set('redirect_uri', params.redirectUri);
 
@@ -568,6 +459,7 @@ export class DocuSignChannel implements IServerChannel {
 
 	private async signOut(): Promise<void> {
 		this.cachedToken = null;
+		await this.clearRefreshToken();
 		this._onAuthStateChange.fire({ status: 'signed_out', user: null });
 		console.log('[DocuSignChannel] Signed out');
 	}
@@ -584,6 +476,19 @@ export class DocuSignChannel implements IServerChannel {
 	// ============================================
 
 	private async getApiClient(): Promise<{ client: ApiClient; accountId: string }> {
+		// Check token expiration and refresh if needed
+		if (this.cachedToken && this.cachedToken.refreshToken) {
+			const expiresIn = this.cachedToken.expiresAt - Date.now();
+			if (expiresIn < TOKEN_REFRESH_BUFFER_MS) {
+				console.log(`[DocuSignChannel] Token expiring soon (in ${Math.round(expiresIn / 1000)}s), refreshing...`);
+				try {
+					await this.refreshAccessToken();
+				} catch (error) {
+					console.error('[DocuSignChannel] Failed to refresh token, attempting to use existing token:', error);
+				}
+			}
+		}
+
 		const token = await this.getAccessToken({});
 
 		const apiClient = new docusign.ApiClient();

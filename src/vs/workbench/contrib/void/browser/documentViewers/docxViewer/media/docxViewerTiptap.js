@@ -14,6 +14,112 @@
 	let availableModels = [];
 	let modelSelectElement = null;
 
+	// Signature setup dialog
+	let signatureSetupDialog = null;
+	let signatureSetupResolver = null;
+
+	function ensureSignatureSetupDialog() {
+		if (signatureSetupDialog) return signatureSetupDialog;
+
+		const overlay = document.createElement('div');
+		overlay.className = 'docx-signature-setup-overlay';
+
+		const dialog = document.createElement('div');
+		dialog.className = 'docx-signature-setup-dialog';
+
+		dialog.innerHTML = `
+			<div class="docx-signature-setup-title">Signature Setup</div>
+			<label class="docx-signature-setup-label">
+				Suggested signer (for example, John Doe):
+				<input class="docx-signature-setup-input" data-field="name" type="text" />
+			</label>
+			<label class="docx-signature-setup-label">
+				Suggested signer's title (for example, Manager):
+				<input class="docx-signature-setup-input" data-field="title" type="text" />
+			</label>
+			<label class="docx-signature-setup-label">
+				Suggested signer's e-mail address:
+				<input class="docx-signature-setup-input" data-field="email" type="text" />
+			</label>
+			<label class="docx-signature-setup-label">
+				Instructions to the signer:
+				<textarea class="docx-signature-setup-textarea" data-field="instructions" rows="3"></textarea>
+			</label>
+			<label class="docx-signature-setup-checkbox">
+				<input type="checkbox" data-field="allowComments" />
+				Allow the signer to add comments in the Sign dialog
+			</label>
+			<label class="docx-signature-setup-checkbox">
+				<input type="checkbox" data-field="showDate" checked />
+				Show sign date in signature line
+			</label>
+			<div class="docx-signature-setup-actions">
+				<button class="docx-signature-setup-btn" data-action="ok">OK</button>
+				<button class="docx-signature-setup-btn" data-action="cancel">Cancel</button>
+			</div>
+		`;
+
+		overlay.appendChild(dialog);
+		document.body.appendChild(overlay);
+
+		const getField = (selector) => dialog.querySelector(selector);
+		const okButton = getField('[data-action="ok"]');
+		const cancelButton = getField('[data-action="cancel"]');
+
+		const closeDialog = (result) => {
+			overlay.classList.remove('is-open');
+			if (signatureSetupResolver) {
+				signatureSetupResolver(result);
+				signatureSetupResolver = null;
+			}
+		};
+
+		okButton.addEventListener('click', () => {
+			closeDialog({
+				confirmed: true,
+				name: getField('[data-field="name"]').value || '',
+				title: getField('[data-field="title"]').value || '',
+				email: getField('[data-field="email"]').value || '',
+				instructions: getField('[data-field="instructions"]').value || '',
+				allowComments: !!getField('[data-field="allowComments"]').checked,
+				showDate: !!getField('[data-field="showDate"]').checked,
+			});
+		});
+
+		cancelButton.addEventListener('click', () => {
+			closeDialog({ confirmed: false });
+		});
+
+		overlay.addEventListener('click', (e) => {
+			if (e.target === overlay) {
+				closeDialog({ confirmed: false });
+			}
+		});
+
+		signatureSetupDialog = {
+			overlay,
+			dialog,
+			getField,
+		};
+
+		return signatureSetupDialog;
+	}
+
+	function openSignatureSetupDialog() {
+		const dialog = ensureSignatureSetupDialog();
+		dialog.getField('[data-field="name"]').value = '';
+		dialog.getField('[data-field="title"]').value = '';
+		dialog.getField('[data-field="email"]').value = '';
+		dialog.getField('[data-field="instructions"]').value = '';
+		dialog.getField('[data-field="allowComments"]').checked = false;
+		dialog.getField('[data-field="showDate"]').checked = true;
+		dialog.overlay.classList.add('is-open');
+
+		return new Promise((resolve) => {
+			signatureSetupResolver = resolve;
+		});
+	}
+
 	// Store editor selection for inline edit (survives async LLM call)
 	let pendingInlineEditSelection = null; // { from: number, to: number }
 
@@ -299,6 +405,7 @@
 					onSave: handleSaveRequest,
 					onPrint: handlePrint,
 					onExportPDF: handleExportPDF,
+					onInsertSignatureLine: handleInsertSignatureLine,
 					onSendForSignature: handleSendForSignature,
 					onModification: trackModification,
 					onPageSizeChange: (pageSize) => {
@@ -1056,6 +1163,35 @@
 
 		} catch (error) {
 			console.error('[DOCX Webview] PDF export error:', error);
+		}
+	}
+
+	async function handleInsertSignatureLine() {
+		if (!tiptapEditor || !tiptapEditor.editor) {
+			console.warn('[DOCX Webview] Editor not initialized for signature line');
+			return;
+		}
+
+		try {
+			const setup = await openSignatureSetupDialog();
+			if (!setup || !setup.confirmed) {
+				return;
+			}
+			const result = tiptapEditor.editor
+				.chain()
+				.focus()
+				.insertSignatureLine({
+					nameText: setup.name || '',
+					dateText: '',
+					showDate: setup.showDate,
+				})
+				.run();
+
+			if (result) {
+				trackModification();
+			}
+		} catch (error) {
+			console.warn('[DOCX Webview] Signature line insertion failed:', error);
 		}
 	}
 

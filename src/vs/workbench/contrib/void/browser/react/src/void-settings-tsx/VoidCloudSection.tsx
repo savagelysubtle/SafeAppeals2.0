@@ -114,12 +114,13 @@ export const VoidCloudSection = () => {
 		async (pack: "starter" | "pro") => {
 			try {
 				const nativeHostService = accessor.get("INativeHostService");
-				await nativeHostService.openExternal("https://safeappeals.com/");
+				const checkoutUrl = await createCheckoutSession(pack);
+				await nativeHostService.openExternal(checkoutUrl);
 			} catch (error) {
 				console.error("Buy credits failed:", error);
 			}
 		},
-		[accessor]
+		[accessor, createCheckoutSession]
 	);
 
 	const formatCredits = (credits: number) => {

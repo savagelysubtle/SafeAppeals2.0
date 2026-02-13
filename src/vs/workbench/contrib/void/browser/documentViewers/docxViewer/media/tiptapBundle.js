@@ -831,6 +831,459 @@
 				console.warn('[TiptapDocxEditor] ❌ TiptapNode not available for Image - images will not work!');
 			}
 
+			// Signature Line (draggable + resizable with editable fields)
+			if (TiptapNode) {
+				const SignatureLine = TiptapNode.create({
+					name: 'signatureLine',
+					group: 'block',
+					atom: true,
+					draggable: false,
+					selectable: true,
+
+					addAttributes() {
+						return {
+							nameText: {
+								default: '',
+								parseHTML: element => element.getAttribute('data-name-text') || '',
+							},
+							dateText: {
+								default: '',
+								parseHTML: element => element.getAttribute('data-date-text') || '',
+							},
+							showDate: {
+								default: true,
+								parseHTML: element => {
+									const showDateAttr = element.getAttribute('data-show-date');
+									if (showDateAttr === null) return true;
+									return showDateAttr !== 'false';
+								},
+							},
+							width: {
+								default: 260,
+								parseHTML: element => {
+									const widthAttr = element.getAttribute('data-width');
+									const style = element.getAttribute('style') || '';
+									const widthMatch = style.match(/width:\s*(\d+)px/);
+									if (widthAttr) return parseInt(widthAttr, 10);
+									if (widthMatch) return parseInt(widthMatch[1], 10);
+									return 260;
+								},
+							},
+							offsetX: {
+								default: 0,
+								parseHTML: element => parseInt(element.getAttribute('data-offset-x') || '0', 10),
+							},
+							offsetY: {
+								default: 0,
+								parseHTML: element => parseInt(element.getAttribute('data-offset-y') || '0', 10),
+							},
+						};
+					},
+
+					parseHTML() {
+						return [{
+							tag: 'div[data-signature-line]',
+						}];
+					},
+
+					renderHTML({ HTMLAttributes }) {
+						const width = HTMLAttributes.width || 260;
+						const nameText = HTMLAttributes.nameText || '';
+						const dateText = HTMLAttributes.dateText || '';
+						const showDate = HTMLAttributes.showDate !== false;
+						const offsetX = HTMLAttributes.offsetX || 0;
+						const offsetY = HTMLAttributes.offsetY || 0;
+						const signatureRow = ['div', { class: 'docx-signature-line-row' },
+							['span', { class: 'docx-signature-line-label' }, 'Signature'],
+							['span', { class: 'docx-signature-line-text' }, nameText],
+						];
+						const dateRow = ['div', { class: 'docx-signature-line-row' },
+							['span', { class: 'docx-signature-line-label' }, 'Date'],
+							['span', { class: 'docx-signature-line-text' }, dateText],
+						];
+						return ['div', {
+							'data-signature-line': 'true',
+							'data-name-text': nameText,
+							'data-date-text': dateText,
+							'data-show-date': showDate ? 'true' : 'false',
+							'data-width': width,
+							'data-offset-x': offsetX,
+							'data-offset-y': offsetY,
+							class: 'docx-signature-line',
+							style: `width: ${width}px; transform: translate(${offsetX}px, ${offsetY}px);`,
+						},
+						signatureRow,
+						...(showDate ? [dateRow] : []),
+						];
+					},
+
+					addCommands() {
+						return {
+							insertSignatureLine: (options) => ({ commands }) => {
+								const attrs = {
+									nameText: options?.nameText || '',
+									dateText: options?.dateText || '',
+									showDate: typeof options?.showDate === 'boolean' ? options.showDate : true,
+									width: options?.width || 260,
+									offsetX: options?.offsetX || 0,
+									offsetY: options?.offsetY || 0,
+								};
+								return commands.insertContent({
+									type: this.name,
+									attrs: attrs,
+								});
+							},
+							setSignatureLineShowDate: (showDate) => ({ tr, state, dispatch }) => {
+								let updated = false;
+								state.doc.descendants((node, pos) => {
+									if (node.type.name === 'signatureLine' && node.attrs.showDate !== showDate) {
+										tr.setNodeMarkup(pos, undefined, {
+											...node.attrs,
+											showDate: showDate,
+										});
+										updated = true;
+									}
+								});
+								if (updated && dispatch) {
+									dispatch(tr);
+								}
+								return updated;
+							},
+							updateSignatureLineAttrs: (attrs) => ({ tr, state, dispatch }) => {
+								const { selection } = state;
+								const node = state.doc.nodeAt(selection.from);
+								if (node && node.type.name === 'signatureLine') {
+									if (dispatch) {
+										tr.setNodeMarkup(selection.from, undefined, {
+											...node.attrs,
+											...attrs,
+										});
+										dispatch(tr);
+									}
+									return true;
+								}
+								return false;
+							},
+						};
+					},
+
+					addNodeView() {
+						return ({ node: initialNode, getPos, editor }) => {
+							let currentNode = initialNode;
+
+							const container = document.createElement('div');
+							container.className = 'docx-signature-line';
+							container.style.width = `${currentNode.attrs.width || 260}px`;
+							container.style.transform = `translate(${currentNode.attrs.offsetX || 0}px, ${currentNode.attrs.offsetY || 0}px)`;
+							container.setAttribute('data-signature-line', 'true');
+							container.setAttribute('data-width', currentNode.attrs.width || 260);
+							container.setAttribute('data-offset-x', currentNode.attrs.offsetX || 0);
+							container.setAttribute('data-offset-y', currentNode.attrs.offsetY || 0);
+							container.setAttribute('data-show-date', currentNode.attrs.showDate !== false ? 'true' : 'false');
+							container.setAttribute('draggable', 'false');
+							container.setAttribute('contenteditable', 'false');
+
+							const dragHandle = document.createElement('div');
+							dragHandle.className = 'docx-signature-line-drag-handle';
+							dragHandle.setAttribute('data-drag-handle', 'true');
+							dragHandle.setAttribute('contenteditable', 'false');
+							dragHandle.setAttribute('draggable', 'false');
+							dragHandle.title = 'Drag signature line';
+							container.appendChild(dragHandle);
+
+							const signatureRow = document.createElement('div');
+							signatureRow.className = 'docx-signature-line-row';
+							const signatureLabel = document.createElement('span');
+							signatureLabel.className = 'docx-signature-line-label';
+							signatureLabel.textContent = 'Signature';
+							const signatureInput = document.createElement('input');
+							signatureInput.className = 'docx-signature-line-input';
+							signatureInput.type = 'text';
+							signatureInput.placeholder = 'Name';
+							signatureInput.value = currentNode.attrs.nameText || '';
+							signatureRow.appendChild(signatureLabel);
+							signatureRow.appendChild(signatureInput);
+
+							const dateRow = document.createElement('div');
+							dateRow.className = 'docx-signature-line-row';
+							const dateLabel = document.createElement('span');
+							dateLabel.className = 'docx-signature-line-label';
+							dateLabel.textContent = 'Date';
+							const dateInput = document.createElement('input');
+							dateInput.className = 'docx-signature-line-input';
+							dateInput.type = 'text';
+							dateInput.placeholder = 'MM/DD/YYYY';
+							dateInput.value = currentNode.attrs.dateText || '';
+							dateRow.appendChild(dateLabel);
+							dateRow.appendChild(dateInput);
+							dateRow.style.display = currentNode.attrs.showDate === false ? 'none' : '';
+
+							container.appendChild(signatureRow);
+							container.appendChild(dateRow);
+
+							const resizeHandle = document.createElement('div');
+							resizeHandle.className = 'docx-signature-line-resize-handle';
+							resizeHandle.setAttribute('draggable', 'false');
+							resizeHandle.setAttribute('contenteditable', 'false');
+							container.appendChild(resizeHandle);
+
+							let startX;
+							let startWidth;
+							let isResizing = false;
+							let pendingWidth = null;
+							let resizeFrame = null;
+							const onResizeMouseDown = (e) => {
+								if (e.button !== 0) {
+									return;
+								}
+								e.preventDefault();
+								e.stopPropagation();
+								if (typeof e.stopImmediatePropagation === 'function') {
+									e.stopImmediatePropagation();
+								}
+								startX = e.clientX;
+								startWidth = container.offsetWidth;
+								isResizing = true;
+								container.classList.add('resizing');
+								container.setAttribute('draggable', 'false');
+								document.body.classList.add('docx-resize-active');
+								document.addEventListener('mousemove', onResizeMouseMove);
+								document.addEventListener('mouseup', onResizeMouseUp);
+								document.addEventListener('dragstart', preventDragFromHandle, true);
+							};
+
+							const onResizeMouseMove = (e) => {
+								if (!isResizing) {
+									return;
+								}
+								const dx = e.clientX - startX;
+								const newWidth = Math.max(120, startWidth + dx);
+								container.style.width = `${newWidth}px`;
+								pendingWidth = Math.round(newWidth);
+								if (!resizeFrame && typeof getPos === 'function') {
+									resizeFrame = requestAnimationFrame(() => {
+										resizeFrame = null;
+										if (pendingWidth === null) {
+											return;
+										}
+										const pos = getPos();
+										if (pos !== undefined) {
+											const newAttrs = {
+												...currentNode.attrs,
+												width: pendingWidth,
+											};
+											editor.chain().command(({ tr }) => {
+												tr.setNodeMarkup(pos, undefined, newAttrs);
+												return true;
+											}).run();
+										}
+									});
+								}
+							};
+
+							const onResizeMouseUp = () => {
+								if (!isResizing) {
+									return;
+								}
+								isResizing = false;
+								document.removeEventListener('mousemove', onResizeMouseMove);
+								document.removeEventListener('mouseup', onResizeMouseUp);
+								document.removeEventListener('dragstart', preventDragFromHandle, true);
+								container.classList.remove('resizing');
+								container.setAttribute('draggable', 'false');
+								document.body.classList.remove('docx-resize-active');
+
+								const newWidth = Math.round(container.offsetWidth);
+								if (typeof getPos === 'function') {
+									const pos = getPos();
+									if (pos !== undefined) {
+										const newAttrs = {
+											...currentNode.attrs,
+											width: newWidth,
+										};
+										editor.chain().focus().command(({ tr }) => {
+											tr.setNodeMarkup(pos, undefined, newAttrs);
+											return true;
+										}).run();
+									}
+								}
+							};
+
+							const updateFromInputs = () => {
+								if (typeof getPos === 'function') {
+									const pos = getPos();
+									if (pos !== undefined) {
+										const newAttrs = {
+											...currentNode.attrs,
+											nameText: signatureInput.value || '',
+											dateText: dateInput.value || '',
+										};
+										editor.chain().focus().command(({ tr }) => {
+											tr.setNodeMarkup(pos, undefined, newAttrs);
+											return true;
+										}).run();
+									}
+								}
+							};
+
+							let dragStartX;
+							let dragStartY;
+							let startOffsetX;
+							let startOffsetY;
+							let isDragging = false;
+							let pendingOffset = null;
+							let dragFrame = null;
+							const onDragHandleMouseDown = (e) => {
+								if (e.button !== 0) {
+									return;
+								}
+								e.preventDefault();
+								e.stopPropagation();
+								dragStartX = e.clientX;
+								dragStartY = e.clientY;
+								startOffsetX = currentNode.attrs.offsetX || 0;
+								startOffsetY = currentNode.attrs.offsetY || 0;
+								isDragging = true;
+								document.addEventListener('mousemove', onDragHandleMouseMove);
+								document.addEventListener('mouseup', onDragHandleMouseUp);
+							};
+
+							const onDragHandleMouseMove = (e) => {
+								if (!isDragging) {
+									return;
+								}
+								const nextOffsetX = startOffsetX + (e.clientX - dragStartX);
+								const nextOffsetY = startOffsetY + (e.clientY - dragStartY);
+								container.style.transform = `translate(${nextOffsetX}px, ${nextOffsetY}px)`;
+								container.setAttribute('data-offset-x', nextOffsetX);
+								container.setAttribute('data-offset-y', nextOffsetY);
+								pendingOffset = { x: Math.round(nextOffsetX), y: Math.round(nextOffsetY) };
+								if (!dragFrame && typeof getPos === 'function') {
+									dragFrame = requestAnimationFrame(() => {
+										dragFrame = null;
+										if (!pendingOffset) {
+											return;
+										}
+										const pos = getPos();
+										if (pos !== undefined) {
+											const newAttrs = {
+												...currentNode.attrs,
+												offsetX: pendingOffset.x,
+												offsetY: pendingOffset.y,
+											};
+											editor.chain().command(({ tr }) => {
+												tr.setNodeMarkup(pos, undefined, newAttrs);
+												return true;
+											}).run();
+										}
+									});
+								}
+							};
+
+							const onDragHandleMouseUp = () => {
+								if (!isDragging) {
+									return;
+								}
+								isDragging = false;
+								document.removeEventListener('mousemove', onDragHandleMouseMove);
+								document.removeEventListener('mouseup', onDragHandleMouseUp);
+								const nextOffsetX = parseInt(container.getAttribute('data-offset-x') || '0', 10);
+								const nextOffsetY = parseInt(container.getAttribute('data-offset-y') || '0', 10);
+								if (typeof getPos === 'function') {
+									const pos = getPos();
+									if (pos !== undefined) {
+										const newAttrs = {
+											...currentNode.attrs,
+											offsetX: nextOffsetX,
+											offsetY: nextOffsetY,
+										};
+										editor.chain().focus().command(({ tr }) => {
+											tr.setNodeMarkup(pos, undefined, newAttrs);
+											return true;
+										}).run();
+									}
+								}
+							};
+
+							const stopDragFromInput = (e) => {
+								e.stopPropagation();
+							};
+
+							const preventDragFromHandle = (e) => {
+								e.preventDefault();
+								e.stopPropagation();
+							};
+
+							signatureInput.addEventListener('blur', updateFromInputs);
+							dateInput.addEventListener('blur', updateFromInputs);
+							signatureInput.addEventListener('dragstart', stopDragFromInput);
+							dateInput.addEventListener('dragstart', stopDragFromInput);
+							resizeHandle.addEventListener('dragstart', preventDragFromHandle);
+							dragHandle.addEventListener('mousedown', onDragHandleMouseDown);
+
+							resizeHandle.addEventListener('mousedown', onResizeMouseDown);
+
+							return {
+								dom: container,
+								stopEvent: (event) => {
+									const target = event.target;
+									if (target === signatureInput || target === dateInput) {
+										return true;
+									}
+									if (target === resizeHandle || target === dragHandle) {
+										return true;
+									}
+									return false;
+								},
+								ignoreMutation: (mutation) => {
+									const target = mutation.target;
+									if (target === signatureInput || target === dateInput) {
+										return true;
+									}
+									return false;
+								},
+								update: (updatedNode) => {
+									if (updatedNode.type.name !== 'signatureLine') {
+										return false;
+									}
+									currentNode = updatedNode;
+									const nextWidth = updatedNode.attrs.width || 260;
+									container.style.width = `${nextWidth}px`;
+									container.setAttribute('data-width', nextWidth);
+									const nextOffsetX = updatedNode.attrs.offsetX || 0;
+									const nextOffsetY = updatedNode.attrs.offsetY || 0;
+									container.style.transform = `translate(${nextOffsetX}px, ${nextOffsetY}px)`;
+									container.setAttribute('data-offset-x', nextOffsetX);
+									container.setAttribute('data-offset-y', nextOffsetY);
+									container.setAttribute('data-show-date', updatedNode.attrs.showDate !== false ? 'true' : 'false');
+									signatureInput.value = updatedNode.attrs.nameText || '';
+									dateInput.value = updatedNode.attrs.dateText || '';
+									dateRow.style.display = updatedNode.attrs.showDate === false ? 'none' : '';
+									return true;
+								},
+								destroy: () => {
+									resizeHandle.removeEventListener('mousedown', onResizeMouseDown);
+									signatureInput.removeEventListener('blur', updateFromInputs);
+									dateInput.removeEventListener('blur', updateFromInputs);
+									signatureInput.removeEventListener('dragstart', stopDragFromInput);
+									dateInput.removeEventListener('dragstart', stopDragFromInput);
+									resizeHandle.removeEventListener('dragstart', preventDragFromHandle);
+									dragHandle.removeEventListener('mousedown', onDragHandleMouseDown);
+									document.removeEventListener('mousemove', onResizeMouseMove);
+									document.removeEventListener('mouseup', onResizeMouseUp);
+									document.removeEventListener('dragstart', preventDragFromHandle, true);
+									document.removeEventListener('mousemove', onDragHandleMouseMove);
+									document.removeEventListener('mouseup', onDragHandleMouseUp);
+								},
+							};
+						};
+					},
+				});
+
+				extensions.push(SignatureLine);
+				console.log('[TiptapDocxEditor] ✅ Signature Line extension added');
+			}
+
 			// Add @adalat-ai/page-extension - CRITICAL FOR PAGE BREAKS
 			// NOTE: The extension uses ReactNodeViewRenderer which requires a React context.
 			// Since we use vanilla Editor (not useEditor + EditorContent), we must create
@@ -1785,6 +2238,30 @@
 						children: children,
 						alignment: alignment
 					}));
+					break;
+				}
+				case 'signatureLine': {
+					const width = node.attrs?.width || 260;
+					const lineLength = Math.max(12, Math.round(width / 10));
+					const lineText = '_'.repeat(lineLength);
+					const nameText = (node.attrs?.nameText || '').trim();
+					const dateText = (node.attrs?.dateText || '').trim();
+					const showDate = node.attrs?.showDate !== false;
+
+					paragraphs.push(new Paragraph({
+						children: [
+							new TextRun({ text: 'Signature: ' }),
+							new TextRun({ text: nameText || lineText, underline: {} }),
+						],
+					}));
+					if (showDate) {
+						paragraphs.push(new Paragraph({
+							children: [
+								new TextRun({ text: 'Date: ' }),
+								new TextRun({ text: dateText || lineText, underline: {} }),
+							],
+						}));
+					}
 					break;
 				}
 

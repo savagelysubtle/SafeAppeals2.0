@@ -353,7 +353,7 @@ export interface IDocuSignSettings {
 export const defaultDocuSignSettings: IDocuSignSettings = {
 	integrationKey: '',
 	environment: 'demo',
-	authMode: 'jwt',
+	authMode: 'oauth',
 	consentStatus: 'unknown',
 };
 
@@ -368,6 +368,14 @@ export interface IDocuSignJWTRequest {
 	integrationKey: string;
 	userId: string;
 	environment: 'demo' | 'production';
+}
+
+/**
+ * OAuth Access Code request
+ */
+export interface IDocuSignOAuthRequest {
+	authCode: string;
+	redirectUri: string;
 }
 
 /**

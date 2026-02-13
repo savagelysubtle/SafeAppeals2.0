@@ -2100,6 +2100,196 @@ body[data-vscode-theme-kind="vscode-dark"] #docx-container {
 }
 
 /* ============================================
+   SIGNATURE LINE - Draggable + Resizable
+   ============================================ */
+
+.ProseMirror .docx-signature-line,
+.tiptap-editor .docx-signature-line {
+	position: relative;
+	display: inline-block;
+	padding: 8px 12px 10px;
+	border: 1px solid #000000;
+	border-radius: 4px;
+	background: #ffffff;
+	min-width: 120px;
+	box-sizing: border-box;
+}
+
+.ProseMirror .docx-signature-line-row,
+.tiptap-editor .docx-signature-line-row {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin-top: 6px;
+	min-width: 0;
+}
+
+.ProseMirror .docx-signature-line-row:first-of-type,
+.tiptap-editor .docx-signature-line-row:first-of-type {
+	margin-top: 0;
+}
+
+.ProseMirror .docx-signature-line-label,
+.tiptap-editor .docx-signature-line-label {
+	font-size: 11px;
+	color: #000000;
+	min-width: 50px;
+	user-select: none;
+}
+
+.ProseMirror .docx-signature-line-input,
+.tiptap-editor .docx-signature-line-input {
+	flex: 1;
+	border: none;
+	border-bottom: 1px solid #000000;
+	background: transparent;
+	color: #000000;
+	font-size: 12px;
+	padding: 2px 4px;
+	outline: none;
+	min-width: 0;
+	width: 100%;
+	box-sizing: border-box;
+}
+
+.ProseMirror .docx-signature-line-input::placeholder,
+.tiptap-editor .docx-signature-line-input::placeholder {
+	color: #000000;
+}
+
+.ProseMirror .docx-signature-line-drag-handle,
+.tiptap-editor .docx-signature-line-drag-handle {
+	position: absolute;
+	top: 4px;
+	left: 4px;
+	width: 12px;
+	height: 12px;
+	border-radius: 2px;
+	background: #000000;
+	cursor: move;
+	opacity: 0;
+}
+
+.ProseMirror .docx-signature-line-resize-handle,
+.tiptap-editor .docx-signature-line-resize-handle {
+	position: absolute;
+	bottom: 4px;
+	right: 4px;
+	width: 14px;
+	height: 14px;
+	border-radius: 2px;
+	background: #000000;
+	cursor: nwse-resize;
+	opacity: 0;
+	pointer-events: auto;
+	touch-action: none;
+	user-select: none;
+	z-index: 2;
+}
+
+.ProseMirror .docx-signature-line:hover .docx-signature-line-drag-handle,
+.ProseMirror .docx-signature-line:hover .docx-signature-line-resize-handle,
+.tiptap-editor .docx-signature-line:hover .docx-signature-line-drag-handle,
+.tiptap-editor .docx-signature-line:hover .docx-signature-line-resize-handle {
+	opacity: 0.9;
+}
+
+body.docx-resize-active,
+body.docx-resize-active * {
+	user-select: none !important;
+	cursor: nwse-resize !important;
+}
+
+/* ============================================
+   SIGNATURE SETUP DIALOG
+   ============================================ */
+
+.docx-signature-setup-overlay {
+	position: fixed;
+	inset: 0;
+	display: none;
+	align-items: center;
+	justify-content: center;
+	background: rgba(0, 0, 0, 0.4);
+	z-index: 10001;
+}
+
+.docx-signature-setup-overlay.is-open {
+	display: flex;
+}
+
+.docx-signature-setup-dialog {
+	width: 520px;
+	max-width: calc(100% - 32px);
+	background: #ffffff;
+	color: #000000;
+	border: 1px solid #000000;
+	border-radius: 4px;
+	padding: 16px 20px;
+	box-sizing: border-box;
+	font-family: 'Segoe UI', Arial, sans-serif;
+	font-size: 12px;
+}
+
+.docx-signature-setup-title {
+	font-size: 14px;
+	font-weight: 600;
+	margin-bottom: 12px;
+}
+
+.docx-signature-setup-label {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	margin-bottom: 10px;
+}
+
+.docx-signature-setup-input,
+.docx-signature-setup-textarea {
+	border: 1px solid #000000;
+	border-radius: 2px;
+	padding: 6px 8px;
+	font-size: 12px;
+	font-family: inherit;
+	color: #000000;
+	background: #ffffff;
+	box-sizing: border-box;
+}
+
+.docx-signature-setup-textarea {
+	resize: vertical;
+	min-height: 60px;
+}
+
+.docx-signature-setup-checkbox {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin: 8px 0;
+}
+
+.docx-signature-setup-actions {
+	display: flex;
+	justify-content: flex-end;
+	gap: 8px;
+	margin-top: 12px;
+}
+
+.docx-signature-setup-btn {
+	background: #ffffff;
+	color: #000000;
+	border: 1px solid #000000;
+	border-radius: 2px;
+	padding: 6px 16px;
+	cursor: pointer;
+	font-size: 12px;
+}
+
+.docx-signature-setup-btn:hover {
+	background: #f2f2f2;
+}
+
+/* ============================================
    SELECTION TOOLTIP - Ctrl+L / Ctrl+K Actions
    ============================================ */
 

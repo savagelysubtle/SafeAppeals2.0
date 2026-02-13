@@ -2,12 +2,12 @@
  *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
  *--------------------------------------------------------------------------------------*/
 
+import { spawn } from 'child_process';
 import * as crypto from 'crypto';
 import * as fs from 'fs';
 import { createRequire } from 'module';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
-import { spawn } from 'child_process';
 import { ILogService } from '../../../../../platform/log/common/log.js';
 import {
 	ExportFormat,
@@ -477,10 +477,11 @@ export class AudioRecorderMainService implements IAudioRecorderMainService {
 
 		// Check multiple possible locations for bundled FFmpeg
 		const possiblePaths = [
-			// Packaged app: resources folder next to the executable
-			// On Windows: {install_dir}/resources/ffmpeg/win32/
-			// On macOS: {app_bundle}/Contents/Resources/ffmpeg/darwin/
-			// On Linux: {install_dir}/resources/ffmpeg/linux/
+			// Packaged app: inside resources/app/resources/ (how gulp packages it)
+			// On Windows: {install_dir}/resources/app/resources/ffmpeg/win32/
+			path.join(process.resourcesPath || '', 'app', 'resources', 'ffmpeg', platform),
+
+			// Packaged app: direct in resources folder (alternative packaging)
 			path.join(process.resourcesPath || '', 'ffmpeg', platform),
 
 			// Development: relative to source (from out folder)
@@ -633,27 +634,27 @@ export class AudioRecorderMainService implements IAudioRecorderMainService {
 	/**
 	 * Get the path to the GGML whisper model
 	 * Model is downloaded via scripts/download-whisper-model.js to resources/models/whisper/
-	 * In production, bundled at {install_dir}/resources/models/whisper/
+	 * In production, bundled at {install_dir}/resources/app/resources/models/whisper/
 	 */
 	private getModelPath(): string {
 		const currentDir = path.dirname(fileURLToPath(import.meta.url));
 		const modelRelPath = 'models/whisper/distil-large-v3.5/ggml-model.bin';
 
-		// Check multiple possible locations for the model
 		const possiblePaths = [
-			// Packaged app: resources folder next to the executable
-			// On Windows: {install_dir}/resources/models/whisper/...
-			// On macOS: {app_bundle}/Contents/Resources/models/whisper/...
-			// On Linux: {install_dir}/resources/models/whisper/...
+			// Packaged app: inside resources/app/resources/
+			path.join(process.resourcesPath || '', 'app', 'resources', modelRelPath),
+
+			// Packaged app: direct in resources folder
 			path.join(process.resourcesPath || '', modelRelPath),
 
-			// Development: relative to source (from out folder)
+			// Development: relative to source
 			path.resolve(currentDir, '../../../../../../resources', modelRelPath),
-
-			// Development: from project root
 			path.resolve(currentDir, '../../../../../../../resources', modelRelPath),
 
-			// Alternative: current working directory
+			// Packaged app: from install directory (THIS IS THE FIX)
+			path.join(process.cwd(), 'resources', 'app', 'resources', modelRelPath),
+
+			// Alternative: direct resources from cwd
 			path.join(process.cwd(), 'resources', modelRelPath),
 		];
 
