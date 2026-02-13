@@ -527,6 +527,29 @@
 				}, true); // Use capture phase to intercept before Tiptap's handler
 				console.log('[DOCX Webview] Link click interceptor installed');
 			}
+			document.addEventListener('mouseup', (e) => {
+				if (e.button !== 0) {
+					return;
+				}
+				if (!tiptapEditor || !tiptapEditor.editor) {
+					return;
+				}
+				const target = e.target;
+				if (target && target.closest && target.closest('.docx-signature-line')) {
+					return;
+				}
+				requestAnimationFrame(() => {
+					const editor = tiptapEditor?.editor;
+					if (!editor) {
+						return;
+					}
+					const selection = editor.state.selection;
+					if (selection && selection.node && selection.node.type && selection.node.type.name === 'signatureLine') {
+						editor.commands.focus();
+						editor.commands.setTextSelection(selection.from);
+					}
+				});
+			}, true);
 
 			// ============================================
 			// SELECTION TRACKING FOR CTRL+L AND CTRL+K
