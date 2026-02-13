@@ -5,32 +5,95 @@
 
 import '../../platform/update/common/update.config.contribution.js';
 
+// ============================================
+// EARLY .ENV LOADING (must happen before other modules import process.env)
+// This enables bundled environment variables for production builds
+// ============================================
 import { app, dialog } from 'electron';
-import { unlinkSync, promises } from 'fs';
-import { URI } from '../../base/common/uri.js';
+import { existsSync, promises, readFileSync, unlinkSync } from 'fs';
+import { dirname, join } from 'path';
+import { fileURLToPath } from 'url';
+
+// Load .env file synchronously before any other modules read process.env
+(function loadEnvFile() {
+	try {
+		// Determine app root directory
+		const __filename = fileURLToPath(import.meta.url);
+		const __dirname = dirname(__filename);
+		// In dev: __dirname is out/vs/code/electron-main, go up to root
+		// In prod: __dirname is resources/app/out/vs/code/electron-main
+		const possiblePaths = [
+			join(__dirname, '../../../../.env'),           // Dev: out/vs/code/electron-main -> root
+			join(__dirname, '../../../../../.env'),        // Prod: resources/app/out/... -> root
+			join(app.getAppPath(), '.env'),                // App path
+			join(process.resourcesPath || '', '.env'),     // Resources path (prod)
+		];
+
+		for (const envPath of possiblePaths) {
+			if (existsSync(envPath)) {
+				console.log('[main.ts] Loading .env from:', envPath);
+				const content = readFileSync(envPath, 'utf-8');
+
+				// Parse .env file (simple parser for KEY=VALUE format)
+				for (const line of content.split(/\r?\n/)) {
+					const trimmed = line.trim();
+					if (!trimmed || trimmed.startsWith('#')) continue;
+
+					const eqIndex = trimmed.indexOf('=');
+					if (eqIndex === -1) continue;
+
+					const key = trimmed.substring(0, eqIndex).trim();
+					let value = trimmed.substring(eqIndex + 1).trim();
+
+					// Remove surrounding quotes
+					if ((value.startsWith('"') && value.endsWith('"')) ||
+						(value.startsWith("'") && value.endsWith("'"))) {
+						value = value.slice(1, -1);
+					}
+
+					// Handle escaped newlines in double quotes
+					value = value.replace(/\\n/g, '\n').replace(/\\r/g, '\r');
+
+					// Only set if not already defined (don't override explicit env vars)
+					if (!process.env[key]) {
+						process.env[key] = value;
+					}
+				}
+				console.log('[main.ts] Loaded env vars from .env');
+				break;
+			}
+		}
+	} catch (error) {
+		console.warn('[main.ts] Failed to load .env file:', error);
+	}
+})();
+// ============================================
 import { coalesce, distinct } from '../../base/common/arrays.js';
 import { Promises } from '../../base/common/async.js';
 import { toErrorMessage } from '../../base/common/errorMessage.js';
 import { ExpectedError, setUnexpectedErrorHandler } from '../../base/common/errors.js';
-import { IPathWithLineAndColumn, isValidBasename, parseLineAndColumnAware, sanitizeFilePath } from '../../base/common/extpath.js';
 import { Event } from '../../base/common/event.js';
+import { IPathWithLineAndColumn, isValidBasename, parseLineAndColumnAware, sanitizeFilePath } from '../../base/common/extpath.js';
 import { getPathLabel } from '../../base/common/labels.js';
+import { DisposableStore } from '../../base/common/lifecycle.js';
 import { Schemas } from '../../base/common/network.js';
 import { basename, resolve } from '../../base/common/path.js';
 import { mark } from '../../base/common/performance.js';
 import { IProcessEnvironment, isMacintosh, isWindows, OS } from '../../base/common/platform.js';
 import { cwd } from '../../base/common/process.js';
 import { rtrim, trim } from '../../base/common/strings.js';
+import { URI } from '../../base/common/uri.js';
 import { Promises as FSPromises } from '../../base/node/pfs.js';
+import { addUNCHostToAllowlist, getUNCHost } from '../../base/node/unc.js';
 import { ProxyChannel } from '../../base/parts/ipc/common/ipc.js';
 import { Client as NodeIPCClient } from '../../base/parts/ipc/common/ipc.net.js';
 import { connect as nodeIPCConnect, serve as nodeIPCServe, Server as NodeIPCServer, XDG_RUNTIME_DIR } from '../../base/parts/ipc/node/ipc.net.js';
-import { CodeApplication } from './app.js';
 import { localize } from '../../nls.js';
 import { IConfigurationService } from '../../platform/configuration/common/configuration.js';
 import { ConfigurationService } from '../../platform/configuration/common/configurationService.js';
 import { IDiagnosticsMainService } from '../../platform/diagnostics/electron-main/diagnosticsMainService.js';
 import { DiagnosticsService } from '../../platform/diagnostics/node/diagnosticsService.js';
+import { massageMessageBoxOptions } from '../../platform/dialogs/common/dialogs.js';
 import { NativeParsedArgs } from '../../platform/environment/common/argv.js';
 import { EnvironmentMainService, IEnvironmentMainService } from '../../platform/environment/electron-main/environmentMainService.js';
 import { addArg, parseMainProcessArgv } from '../../platform/environment/node/argvHelper.js';
@@ -46,32 +109,30 @@ import { ILaunchMainService } from '../../platform/launch/electron-main/launchMa
 import { ILifecycleMainService, LifecycleMainService } from '../../platform/lifecycle/electron-main/lifecycleMainService.js';
 import { BufferLogger } from '../../platform/log/common/bufferLog.js';
 import { ConsoleMainLogger, getLogLevel, ILoggerService, ILogService } from '../../platform/log/common/log.js';
+import { LogService } from '../../platform/log/common/logService.js';
+import { ILoggerMainService, LoggerMainService } from '../../platform/log/electron-main/loggerService.js';
+import { FilePolicyService } from '../../platform/policy/common/filePolicyService.js';
+import { IPolicyService, NullPolicyService } from '../../platform/policy/common/policy.js';
+import { NativePolicyService } from '../../platform/policy/node/nativePolicyService.js';
 import product from '../../platform/product/common/product.js';
 import { IProductService } from '../../platform/product/common/productService.js';
 import { IProtocolMainService } from '../../platform/protocol/electron-main/protocol.js';
 import { ProtocolMainService } from '../../platform/protocol/electron-main/protocolMainService.js';
-import { ITunnelService } from '../../platform/tunnel/common/tunnel.js';
-import { TunnelService } from '../../platform/tunnel/node/tunnelService.js';
 import { IRequestService } from '../../platform/request/common/request.js';
 import { RequestService } from '../../platform/request/electron-utility/requestService.js';
 import { ISignService } from '../../platform/sign/common/sign.js';
 import { SignService } from '../../platform/sign/node/signService.js';
 import { IStateReadService, IStateService } from '../../platform/state/node/state.js';
+import { SaveStrategy, StateService } from '../../platform/state/node/stateService.js';
 import { NullTelemetryService } from '../../platform/telemetry/common/telemetryUtils.js';
 import { IThemeMainService, ThemeMainService } from '../../platform/theme/electron-main/themeMainService.js';
-import { IUserDataProfilesMainService, UserDataProfilesMainService } from '../../platform/userDataProfile/electron-main/userDataProfile.js';
-import { IPolicyService, NullPolicyService } from '../../platform/policy/common/policy.js';
-import { NativePolicyService } from '../../platform/policy/node/nativePolicyService.js';
-import { FilePolicyService } from '../../platform/policy/common/filePolicyService.js';
-import { DisposableStore } from '../../base/common/lifecycle.js';
+import { ITunnelService } from '../../platform/tunnel/common/tunnel.js';
+import { TunnelService } from '../../platform/tunnel/node/tunnelService.js';
 import { IUriIdentityService } from '../../platform/uriIdentity/common/uriIdentity.js';
 import { UriIdentityService } from '../../platform/uriIdentity/common/uriIdentityService.js';
-import { ILoggerMainService, LoggerMainService } from '../../platform/log/electron-main/loggerService.js';
-import { LogService } from '../../platform/log/common/logService.js';
-import { massageMessageBoxOptions } from '../../platform/dialogs/common/dialogs.js';
-import { SaveStrategy, StateService } from '../../platform/state/node/stateService.js';
 import { FileUserDataProvider } from '../../platform/userData/common/fileUserDataProvider.js';
-import { addUNCHostToAllowlist, getUNCHost } from '../../base/node/unc.js';
+import { IUserDataProfilesMainService, UserDataProfilesMainService } from '../../platform/userDataProfile/electron-main/userDataProfile.js';
+import { CodeApplication } from './app.js';
 
 /**
  * The main VS Code entry point.

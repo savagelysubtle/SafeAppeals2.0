@@ -46,6 +46,7 @@ class DocxRibbon {
 			orientationLandscapeBtn: document.getElementById('orientation-landscape-btn'),
 
 			// Signature (DocuSign)
+			insertSignatureLineBtn: document.getElementById('insert-signature-line-btn'),
 			sendSignatureBtn: document.getElementById('send-signature-btn')
 		};
 
@@ -156,6 +157,12 @@ class DocxRibbon {
 		if (e.exportPdfBtn) e.exportPdfBtn.addEventListener('click', () => this.callbacks.onExportPDF?.());
 
 		// Signature (DocuSign)
+		if (e.insertSignatureLineBtn) {
+			e.insertSignatureLineBtn.addEventListener('click', () => {
+				console.log('[DocxRibbon] Insert signature line clicked');
+				this.callbacks.onInsertSignatureLine?.();
+			});
+		}
 		if (e.sendSignatureBtn) {
 			e.sendSignatureBtn.addEventListener('click', () => {
 				console.log('[DocxRibbon] Send for Signature clicked');

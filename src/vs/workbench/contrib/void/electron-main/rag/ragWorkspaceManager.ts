@@ -93,10 +93,15 @@ export class WorkspaceRAGManager {
 			this.logService.info(`RAG: Index service initialized for workspace ${workspaceId}`);
 
 			// STEP 2: Create vector adapter (loads embedding model - can be slow)
+			// Use shared model cache to avoid duplicating ~113 MB of models per workspace
+			const sharedModelCachePath = this.pathService.getModelCacheDir();
+			this.logService.info(`RAG: Using shared model cache: ${sharedModelCachePath}`);
+
 			this.logService.info(`RAG: Creating vector adapter for workspace ${workspaceId}...`);
 			const config: PersistentVectorAdapterConfig = {
 				persistPath: chromaPath,
-				useReranking: true
+				useReranking: true,
+				modelCachePath: sharedModelCachePath,
 			};
 
 			const vectorAdapter = new ChromaPersistentAdapter(config, this.logService);
@@ -113,9 +118,8 @@ export class WorkspaceRAGManager {
 			// STEP 3: Create reranker with LAZY initialization
 			// The reranker is only needed for search, not for basic indexing
 			// This makes workspace creation much faster
-			const modelCachePath = chromaPath + '/models';
 			const reranker = new LocalCrossEncoderReranker(this.logService);
-			reranker.setCachePath(modelCachePath); // Set path for lazy initialization
+			reranker.setCachePath(sharedModelCachePath); // Use shared model cache
 			this.logService.info(`RAG: Reranker created (will initialize lazily on first search)`);
 
 			// Ensure collections exist

@@ -407,6 +407,9 @@ function packageTask(platform, arch, sourceFolderName, destinationFolderName, op
 			'!python/.venv/**/wheel/**',
 		], { base: '.', dot: true, allowEmpty: true });
 
+		// Bundled environment variables for production (.env loaded by main.ts at startup)
+		const envFile = gulp.src('.env', { base: '.', allowEmpty: true });
+
 		let all = es.merge(
 			packageJsonStream,
 			productJsonStream,
@@ -416,7 +419,8 @@ function packageTask(platform, arch, sourceFolderName, destinationFolderName, op
 			sources,
 			deps,
 			pythonSrc,
-			pythonVenv
+			pythonVenv,
+			envFile
 		);
 
 		if (platform === 'win32') {
@@ -540,11 +544,13 @@ function patchWin32DependenciesTask(destinationFolderName) {
 	const cwd = path.join(path.dirname(root), destinationFolderName);
 
 	return async () => {
-		const deps = await glob('**/*.node', { cwd, ignore: [
-			'extensions/node_modules/@parcel/watcher/**',
-			'**/linux/**',  // Exclude Linux binaries
-			'**/darwin/**'  // Exclude macOS binaries
-		] });
+		const deps = await glob('**/*.node', {
+			cwd, ignore: [
+				'extensions/node_modules/@parcel/watcher/**',
+				'**/linux/**',  // Exclude Linux binaries
+				'**/darwin/**'  // Exclude macOS binaries
+			]
+		});
 		const packageJson = JSON.parse(await fs.promises.readFile(path.join(cwd, 'resources', 'app', 'package.json'), 'utf8'));
 		const product = JSON.parse(await fs.promises.readFile(path.join(cwd, 'resources', 'app', 'product.json'), 'utf8'));
 		const baseVersion = packageJson.version.replace(/-.*$/, '');

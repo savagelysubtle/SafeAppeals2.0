@@ -62,9 +62,6 @@ export class VoidCloudUrlHandler extends Disposable implements IWorkbenchContrib
 
 		// Route to appropriate handler based on authority
 		if (uri.authority === 'docusign') {
-			if (uri.path.startsWith('/consent')) {
-				return this._handleDocuSignConsentCallback(uri);
-			}
 			if (uri.path.startsWith('/callback')) {
 				return this._handleDocuSignCallback(uri);
 			}
@@ -232,65 +229,5 @@ export class VoidCloudUrlHandler extends Disposable implements IWorkbenchContrib
 		}
 	}
 
-	/**
-	 * Handle DocuSign JWT consent callback
-	 * URL format: safe-appeals-navigator://docusign/consent?code=xxx
-	 *
-	 * For JWT Grant flow, the consent callback just confirms that consent was granted.
-	 * We don't need to exchange the code - the JWT flow will handle authentication.
-	 */
-	private async _handleDocuSignConsentCallback(uri: URI): Promise<boolean> {
-		this.logService.info('VoidCloudUrlHandler: Handling DocuSign JWT consent callback');
-
-		try {
-			const queryParams = new URLSearchParams(uri.query);
-
-			// Check for errors
-			const error = queryParams.get('error');
-			const errorDescription = queryParams.get('error_description');
-			if (error) {
-				const message = errorDescription || error;
-				this.logService.error('VoidCloudUrlHandler: DocuSign consent error', message);
-				this.notificationService.notify({
-					severity: Severity.Error,
-					message: `DocuSign consent failed: ${message}`,
-				});
-				this.docuSignService.handleAuthError(message);
-				return true;
-			}
-
-			// Consent was granted - the code parameter confirms this
-			// For JWT, we don't exchange the code, we just mark consent as granted
-			const code = queryParams.get('code');
-			if (code) {
-				this.logService.info('VoidCloudUrlHandler: DocuSign consent granted');
-
-				// Notify the DocuSign service that consent was granted
-				await this.docuSignService.handleConsentGranted();
-
-				this.notificationService.notify({
-					severity: Severity.Info,
-					message: 'DocuSign consent granted! You can now use DocuSign features.',
-				});
-			} else {
-				// No code might mean the user cancelled or there was an issue
-				this.logService.warn('VoidCloudUrlHandler: DocuSign consent callback without code');
-				this.notificationService.notify({
-					severity: Severity.Warning,
-					message: 'DocuSign consent may not have been granted. Please try again.',
-				});
-			}
-
-			return true;
-		} catch (error) {
-			const message = error instanceof Error ? error.message : 'Unknown error';
-			this.logService.error('VoidCloudUrlHandler: Failed to handle DocuSign consent callback', error);
-			this.notificationService.notify({
-				severity: Severity.Error,
-				message: `DocuSign consent failed: ${message}`,
-			});
-			return true;
-		}
-	}
 }
 

@@ -1145,6 +1145,10 @@ Return ONLY the edited text, nothing else.`;
 			<!-- Signature Section (DocuSign) -->
 			<div class="ribbon-section">
 				<div class="ribbon-section-content">
+					<button class="ribbon-btn" id="insert-signature-line-btn" title="Insert a signature line">
+						<span class="ribbon-btn-icon">✍️</span>
+						<span class="ribbon-btn-label">Signature Line</span>
+					</button>
 					<button class="ribbon-btn" id="send-signature-btn" title="Send for e-Signature via DocuSign">
 						<span class="ribbon-btn-icon">✍️</span>
 						<span class="ribbon-btn-label">Send for Signature</span>

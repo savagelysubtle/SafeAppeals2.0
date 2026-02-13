@@ -5,8 +5,8 @@
 
 // eslint-disable @typescript-eslint/no-explicit-any
 
-import { ILogService } from '../../../../../platform/log/common/log.js';
 import { createRequire } from 'module';
+import { ILogService } from '../../../../../platform/log/common/log.js';
 import { LocalEmbeddingService } from './ragLocalEmbeddings.js';
 import { LocalCrossEncoderReranker } from './ragReranker.js';
 import { ChunkRecord, RAGStorageScope } from './ragServiceTypes.js';
@@ -40,6 +40,7 @@ export interface VectorAdapterConfig {
 export interface PersistentVectorAdapterConfig {
 	persistPath: string;
 	useReranking?: boolean; // Default: true
+	modelCachePath?: string; // Shared model cache directory (avoids per-workspace duplication)
 }
 
 // Persistent vector store with local embeddings stored on disk
@@ -74,8 +75,9 @@ export class ChromaPersistentAdapter implements VectorAdapter {
 				fs.mkdirSync(this.config.persistPath, { recursive: true });
 			}
 
-			// Initialize local embedding service
-			const modelCachePath = this.config.persistPath + '/models';
+			// Initialize local embedding service using shared model cache
+			// This avoids duplicating ~113 MB of models per workspace
+			const modelCachePath = this.config.modelCachePath || this.config.persistPath + '/models';
 			await this.embeddingService.initialize(modelCachePath);
 
 			// Initialize reranker if enabled
@@ -112,8 +114,8 @@ export class ChromaPersistentAdapter implements VectorAdapter {
 				return;
 			}
 
-		const require = createRequire(import.meta.url);
-		const sqlite3 = require('@vscode/sqlite3');
+			const require = createRequire(import.meta.url);
+			const sqlite3 = require('@vscode/sqlite3');
 			const db = new sqlite3.Database(this.embeddingsDbPath);
 
 			return new Promise((resolve, reject) => {
@@ -131,7 +133,7 @@ export class ChromaPersistentAdapter implements VectorAdapter {
 					}
 
 					// Load all embeddings into memory
-				db.all('SELECT id, vector, metadata FROM embeddings', (err: Error | null, rows: any[]) => {
+					db.all('SELECT id, vector, metadata FROM embeddings', (err: Error | null, rows: any[]) => {
 						if (err) {
 							reject(err);
 							return;
@@ -161,41 +163,41 @@ export class ChromaPersistentAdapter implements VectorAdapter {
 	// Save a single embedding to disk
 	private async saveEmbeddingToDisk(id: string, vector: number[], metadata: Record<string, any>): Promise<void> {
 		try {
-		const require = createRequire(import.meta.url);
-		const sqlite3 = require('@vscode/sqlite3');
+			const require = createRequire(import.meta.url);
+			const sqlite3 = require('@vscode/sqlite3');
 			const db = new sqlite3.Database(this.embeddingsDbPath);
 
 			return new Promise((resolve, reject) => {
-			// Ensure table exists before inserting
-			db.run(`
+				// Ensure table exists before inserting
+				db.run(`
 				CREATE TABLE IF NOT EXISTS embeddings (
 					id TEXT PRIMARY KEY,
 					vector TEXT NOT NULL,
 					metadata TEXT NOT NULL
 				)
 			`, (err: Error | null) => {
-				if (err) {
-					db.close();
-					reject(err);
-					return;
-				}
-
-				const vectorJson = JSON.stringify(vector);
-				const metadataJson = JSON.stringify(metadata);
-
-				db.run(
-					'INSERT OR REPLACE INTO embeddings (id, vector, metadata) VALUES (?, ?, ?)',
-					[id, vectorJson, metadataJson],
-					(err: Error | null) => {
+					if (err) {
 						db.close();
-						if (err) {
-							reject(err);
-						} else {
-							resolve();
-						}
+						reject(err);
+						return;
 					}
-				);
-			});
+
+					const vectorJson = JSON.stringify(vector);
+					const metadataJson = JSON.stringify(metadata);
+
+					db.run(
+						'INSERT OR REPLACE INTO embeddings (id, vector, metadata) VALUES (?, ?, ?)',
+						[id, vectorJson, metadataJson],
+						(err: Error | null) => {
+							db.close();
+							if (err) {
+								reject(err);
+							} else {
+								resolve();
+							}
+						}
+					);
+				});
 			});
 		} catch (error) {
 			this.logService.error(`Failed to save embedding ${id} to disk:`, error);
@@ -206,12 +208,12 @@ export class ChromaPersistentAdapter implements VectorAdapter {
 	// Delete an embedding from disk
 	private async deleteEmbeddingFromDisk(id: string): Promise<void> {
 		try {
-		const require = createRequire(import.meta.url);
-		const sqlite3 = require('@vscode/sqlite3');
+			const require = createRequire(import.meta.url);
+			const sqlite3 = require('@vscode/sqlite3');
 			const db = new sqlite3.Database(this.embeddingsDbPath);
 
 			return new Promise((resolve, reject) => {
-			db.run('DELETE FROM embeddings WHERE id = ?', [id], (err: Error | null) => {
+				db.run('DELETE FROM embeddings WHERE id = ?', [id], (err: Error | null) => {
 					db.close();
 					if (err) {
 						reject(err);
@@ -291,18 +293,18 @@ export class ChromaPersistentAdapter implements VectorAdapter {
 
 			this.logService.info(`Searching ${this.embeddings.size} embeddings with threshold ${MIN_SIMILARITY_THRESHOLD}...`);
 
-		// Debug: Count embeddings by scope
-		let coreReferenceCount = 0;
-		let workspaceDocsCount = 0;
-		for (const [, data] of this.embeddings.entries()) {
-			const isCoreReference = data.metadata.isCoreReference ?? false;
-			if (isCoreReference) coreReferenceCount++;
-			else workspaceDocsCount++;
-		}
-		this.logService.info(`Embeddings breakdown: ${coreReferenceCount} core_references, ${workspaceDocsCount} case_index`);
-		this.logService.info(`Search scope: ${scope}`);
+			// Debug: Count embeddings by scope
+			let coreReferenceCount = 0;
+			let workspaceDocsCount = 0;
+			for (const [, data] of this.embeddings.entries()) {
+				const isCoreReference = data.metadata.isCoreReference ?? false;
+				if (isCoreReference) coreReferenceCount++;
+				else workspaceDocsCount++;
+			}
+			this.logService.info(`Embeddings breakdown: ${coreReferenceCount} core_references, ${workspaceDocsCount} case_index`);
+			this.logService.info(`Search scope: ${scope}`);
 
-		let scopeMatchCount = 0;
+			let scopeMatchCount = 0;
 			for (const [id, data] of this.embeddings.entries()) {
 				// Check scope - handle both old and new scope names for backwards compatibility
 				const isCoreReference = data.metadata.isCoreReference ?? false;
@@ -311,7 +313,7 @@ export class ChromaPersistentAdapter implements VectorAdapter {
 				if ((scope === 'case_index' || scope === 'workspace_docs') && isCoreReference) continue;
 				// 'workspace_all' and 'both' include everything
 
-			scopeMatchCount++;
+				scopeMatchCount++;
 				const similarity = this.cosineSimilarity(queryVector, data.vector);
 
 				// Only include results above threshold
@@ -324,7 +326,7 @@ export class ChromaPersistentAdapter implements VectorAdapter {
 				}
 			}
 
-		this.logService.info(`Scope matched ${scopeMatchCount} embeddings, ${results.length} above threshold`);
+			this.logService.info(`Scope matched ${scopeMatchCount} embeddings, ${results.length} above threshold`);
 
 			// IMPROVEMENT 3: Retrieve more results initially for better diversity
 			// Best practice: retrieve 2-3x the desired results, then apply MMR
@@ -538,8 +540,10 @@ export class ChromaHttpAdapter implements VectorAdapter {
 			path: this.config.chromaUrl
 		});
 
-		// Initialize local embedding service
-		const modelCachePath = '/tmp/transformers-cache'; // Use temp dir for HTTP adapter
+		// Initialize local embedding service using shared model cache
+		const os = await import('os');
+		const pathModule = await import('path');
+		const modelCachePath = pathModule.join(os.homedir(), '.safe-appeals-navigator', 'models');
 		await this.embeddingService.initialize(modelCachePath);
 
 		this.logService.info(`Chroma HTTP client initialized at ${this.config.chromaUrl} with local embeddings`);

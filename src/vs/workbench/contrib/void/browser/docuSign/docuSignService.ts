@@ -7,7 +7,7 @@ import { Emitter, Event } from '../../../../../base/common/event.js';
 import { Disposable } from '../../../../../base/common/lifecycle.js';
 import { URI } from '../../../../../base/common/uri.js';
 import { IChannel } from '../../../../../base/parts/ipc/common/ipc.js';
-import { IEnvironmentService } from '../../../../../platform/environment/common/environment.js';
+
 import { InstantiationType, registerSingleton } from '../../../../../platform/instantiation/common/extensions.js';
 import { createDecorator } from '../../../../../platform/instantiation/common/instantiation.js';
 import { IMainProcessService } from '../../../../../platform/ipc/common/mainProcessService.js';
@@ -17,7 +17,6 @@ import { IStorageService, StorageScope, StorageTarget } from '../../../../../pla
 import {
 	DocuSignAuthChangeEvent,
 	DocuSignAuthStatus,
-	DocuSignConsentStatus,
 	DocuSignEnvelopeStatus,
 	DocuSignEnvelopeStatusChangeEvent,
 	IDocuSignAuthState,
@@ -56,16 +55,10 @@ export interface IDocuSignService {
 	signOut(): Promise<void>;
 	refreshSession(): Promise<boolean>;
 	handleAuthError(error: string): void;
-	handleConsentGranted(): Promise<void>;
 
-	// Legacy OAuth methods (for backward compatibility)
+	// OAuth methods
+	startOAuthFlow(): Promise<void>;
 	exchangeCodeForSession(code: string): Promise<void>;
-
-	// JWT-specific methods
-	checkConsent(): Promise<DocuSignConsentStatus>;
-	openConsentPage(): Promise<void>;
-	storePrivateKey(privateKey: string): Promise<{ success: boolean; error?: string }>;
-	hasPrivateKey(): Promise<boolean>;
 
 	// Envelope methods
 	createEnvelope(request: IDocuSignEnvelopeCreateRequest): Promise<IDocuSignEnvelopeCreateResponse>;
@@ -132,15 +125,13 @@ class DocuSignService extends Disposable implements IDocuSignService {
 	// Bundled config
 	private _bundledIntegrationKey: string = '';
 	private _bundledEnvironment: 'demo' | 'production' = 'demo';
-	private _bundledUserId: string = '';
-	private _privateKeyConfigured: boolean = false;
 
 	constructor(
 		@IStorageService private readonly storageService: IStorageService,
 		@IVoidSettingsService private readonly settingsService: IVoidSettingsService,
 		@INativeHostService private readonly nativeHostService: INativeHostService,
 		@IMetricsService private readonly metricsService: IMetricsService,
-		@IEnvironmentService private readonly environmentService: IEnvironmentService,
+
 		@INotificationService private readonly notificationService: INotificationService,
 		@IMainProcessService private readonly mainProcessService: IMainProcessService,
 	) {
@@ -149,6 +140,11 @@ class DocuSignService extends Disposable implements IDocuSignService {
 		this._loadEnvelopeCache();
 		this._loadBundledConfig();
 		this._listenToAuthStateChanges();
+
+		// Attempt to restore session on startup
+		this.signIn().catch(() => {
+			// Ignore initial sign-in errors (user stays signed out)
+		});
 	}
 
 	// ============================================
@@ -163,20 +159,14 @@ class DocuSignService extends Disposable implements IDocuSignService {
 			const config = await this._channel.call<{
 				integrationKey: string;
 				environment: 'demo' | 'production';
-				userId?: string;
-				privateKeyConfigured?: boolean;
 			}>('getConfig');
 
 			if (config.integrationKey) {
 				this._bundledIntegrationKey = config.integrationKey;
 				this._bundledEnvironment = config.environment || 'demo';
-				this._bundledUserId = config.userId || '';
-				this._privateKeyConfigured = config.privateKeyConfigured || false;
 				console.log('[DocuSignService] Bundled config loaded:');
 				console.log('  - Integration Key: SET');
 				console.log('  - Environment:', this._bundledEnvironment);
-				console.log('  - User ID:', this._bundledUserId ? 'SET' : 'NOT SET');
-				console.log('  - Private Key:', this._privateKeyConfigured ? 'SET' : 'NOT SET');
 			} else {
 				console.log('[DocuSignService] No bundled integration key configured');
 			}
@@ -212,12 +202,12 @@ class DocuSignService extends Disposable implements IDocuSignService {
 			status,
 			session: user ? {
 				accessToken: '', // Token is managed by main process
-				refreshToken: null, // JWT doesn't use refresh tokens
+				refreshToken: 'exists', // We know we have one if we have a user
 				expiresAt: 0,
 				accountId: '',
 				baseUri: '',
 				user,
-				authMethod: 'jwt',
+				authMethod: 'oauth',
 			} : null,
 			error: error || null,
 		};
@@ -229,7 +219,7 @@ class DocuSignService extends Disposable implements IDocuSignService {
 				previousStatus,
 				newStatus: status,
 				hasError: !!error,
-				authMethod: 'jwt',
+				authMethod: 'oauth',
 			});
 		}
 	}
@@ -260,10 +250,6 @@ class DocuSignService extends Disposable implements IDocuSignService {
 		return this._bundledIntegrationKey || this.docuSignSettings?.integrationKey || '';
 	}
 
-	private get userId(): string {
-		return this.docuSignSettings?.userId || this._bundledUserId || '';
-	}
-
 	// ============================================
 	// PUBLIC API - BUNDLED KEY SUPPORT
 	// ============================================
@@ -282,46 +268,26 @@ class DocuSignService extends Disposable implements IDocuSignService {
 	}
 
 	// ============================================
-	// AUTH METHODS - JWT FLOW
+	// AUTH METHODS - OAUTH FLOW
 	// ============================================
 
 	async signIn(): Promise<void> {
+		console.log('[DocuSignService] signIn called');
 		// When using bundled config, all settings come from env vars
 		const usingBundled = !this.isUsingCustomKey() && this.hasBundledIntegrationKey();
 
 		if (!usingBundled) {
 			// Validate custom configuration
 			if (!this.integrationKey) {
-				this.notificationService.notify({
-					severity: Severity.Error,
-					message: 'Please configure your DocuSign Integration Key in Settings.',
-				});
-				return;
-			}
-
-			if (!this.userId) {
-				this.notificationService.notify({
-					severity: Severity.Error,
-					message: 'Please configure your DocuSign User ID in Settings.',
-				});
-				return;
-			}
-
-			// Check if private key is configured (for custom keys)
-			const hasKey = await this.hasPrivateKey();
-			if (!hasKey) {
-				this.notificationService.notify({
-					severity: Severity.Error,
-					message: 'Please configure your DocuSign private key in Settings.',
-				});
+				// Don't notify on silent sign-in attempts
 				return;
 			}
 		}
 
-		this._updateAuthState('signing_in', null);
+		// Don't set state to signing_in yet, as we are just checking for existing session
 
 		try {
-			// Request access token from main process (JWT flow)
+			// Request access token from main process (this attempts to use stored refresh token)
 			const result = await this._channel.call<{
 				accessToken: string;
 				expiresAt: number;
@@ -330,47 +296,94 @@ class DocuSignService extends Disposable implements IDocuSignService {
 				user: IDocuSignUser;
 			}>('getAccessToken', {
 				integrationKey: this.integrationKey,
-				userId: this.userId,
 				environment: this.environment,
 			});
 
-			this._authState = {
-				status: 'signed_in',
-				session: {
-					accessToken: result.accessToken,
-					refreshToken: null,
-					expiresAt: result.expiresAt,
-					accountId: result.accountId,
-					baseUri: result.baseUri,
-					user: result.user,
-					authMethod: 'jwt',
-				},
-				error: null,
-			};
+			this._updateAuthState('signed_in', result.user);
 
-			this._onAuthStateChange.fire({
-				status: 'signed_in',
-				user: result.user,
+			// We don't notify on successful RESTORE of session, only explicit actions usually.
+			// But for now, let's keep it quiet unless it's an explicit action.
+
+		} catch (error: any) {
+			// If we fail here, it means we don't have a valid token or refresh token.
+			// We remain signed out. We don't error out unless the user explicitly requested it.
+			// Since this method is often called on startup, we swallow the error but remain signed out.
+			console.log('[DocuSignService] No active session found on startup/signin check.');
+		}
+	}
+
+	async startOAuthFlow(): Promise<void> {
+		if (!this.integrationKey) {
+			this.notificationService.notify({
+				severity: Severity.Error,
+				message: 'Please configure your DocuSign Integration Key in Settings.',
 			});
+			return;
+		}
+
+		this._updateAuthState('signing_in', null);
+
+		try {
+			this.notificationService.notify({
+				severity: Severity.Info,
+				message: 'Starting DocuSign sign-in...',
+			});
+
+			const redirectUri = 'safe-appeals-navigator://docusign/callback';
+			console.log('[DocuSignService] Starting OAuth flow with redirectUri:', redirectUri);
+			console.log('[DocuSignService] Integration Key:', this.integrationKey);
+			console.log('[DocuSignService] Environment:', this.environment);
+
+			const authUrl = await this._channel.call<string>('getConsentUrl', {
+				integrationKey: this.integrationKey,
+				environment: this.environment,
+				redirectUri,
+			});
+
+			console.log('[DocuSignService] Generated Auth URL:', authUrl);
+
+			await this.nativeHostService.openExternal(authUrl);
+			console.log('[DocuSignService] Opened external URL:', authUrl);
 
 			this.notificationService.notify({
 				severity: Severity.Info,
-				message: 'Successfully signed in to DocuSign!',
+				message: 'Please complete the sign in process in your browser.',
+			});
+		} catch (error: any) {
+			this._updateAuthState('error', null, error.message);
+			console.error('[DocuSignService] Failed to start OAuth flow:', error);
+			this.notificationService.notify({
+				severity: Severity.Error,
+				message: `DocuSign Sign-in Error: ${error.message || 'Unknown error'}`,
+			});
+		}
+	}
+
+	async exchangeCodeForSession(code: string): Promise<void> {
+		this._updateAuthState('signing_in', null);
+
+		try {
+			const result = await this._channel.call<{
+				accessToken: string;
+				expiresAt: number;
+				accountId: string;
+				baseUri: string;
+				user: IDocuSignUser;
+			}>('exchangeCodeForToken', {
+				code,
+				integrationKey: this.integrationKey,
+				environment: this.environment,
+			});
+
+			this._updateAuthState('signed_in', result.user);
+
+			this.notificationService.notify({
+				severity: Severity.Info,
+				message: `Successfully signed in as ${result.user.name} (${result.user.email})`,
 			});
 
 		} catch (error: any) {
-			const message = error.message || 'Sign in failed';
-
-			// Check for consent_required error
-			if (message.includes('consent_required')) {
-				this._updateAuthState('error', null, 'consent_required');
-				this.notificationService.notify({
-					severity: Severity.Warning,
-					message: 'DocuSign requires consent. Please click "Grant Consent" in Settings.',
-				});
-				return;
-			}
-
+			const message = error.message || 'Token exchange failed';
 			this._updateAuthState('error', null, message);
 			this.notificationService.notify({
 				severity: Severity.Error,
@@ -405,8 +418,8 @@ class DocuSignService extends Disposable implements IDocuSignService {
 	}
 
 	async refreshSession(): Promise<boolean> {
-		// For JWT flow, we just get a new token
 		try {
+			// Just try to get the token again, which triggers refresh in main process
 			await this.signIn();
 			return this._authState.status === 'signed_in';
 		} catch {
@@ -416,88 +429,6 @@ class DocuSignService extends Disposable implements IDocuSignService {
 
 	handleAuthError(error: string): void {
 		this._updateAuthState('error', null, error);
-	}
-
-	async handleConsentGranted(): Promise<void> {
-		// Update consent status in settings
-		this.settingsService.setGlobalSetting('docuSign', {
-			integrationKey: this.docuSignSettings?.integrationKey || '',
-			environment: this.docuSignSettings?.environment || 'demo',
-			...this.docuSignSettings,
-			consentStatus: 'granted',
-		});
-
-		// Try to sign in now that consent is granted
-		await this.signIn();
-	}
-
-	// Legacy method - for backward compatibility with OAuth flow
-	async exchangeCodeForSession(_code: string): Promise<void> {
-		// For JWT flow, consent callback doesn't need to exchange code
-		// The code just confirms consent was granted
-		await this.handleConsentGranted();
-	}
-
-	// ============================================
-	// JWT-SPECIFIC METHODS
-	// ============================================
-
-	async checkConsent(): Promise<DocuSignConsentStatus> {
-		try {
-			return await this._channel.call<DocuSignConsentStatus>('checkConsent', {
-				integrationKey: this.integrationKey,
-				userId: this.userId,
-				environment: this.environment,
-			});
-		} catch {
-			return 'error';
-		}
-	}
-
-	async openConsentPage(): Promise<void> {
-		const redirectUri = this.environmentService.isBuilt
-			? 'safe-appeals-navigator://docusign/consent'
-			: 'http://127.0.0.1:3000/docusign/consent';
-
-		const consentUrl = await this._channel.call<string>('getConsentUrl', {
-			integrationKey: this.integrationKey,
-			environment: this.environment,
-			redirectUri,
-		});
-
-		await this.nativeHostService.openExternal(consentUrl);
-
-		this.notificationService.notify({
-			severity: Severity.Info,
-			message: 'Please complete the consent process in your browser.',
-		});
-	}
-
-	async storePrivateKey(privateKey: string): Promise<{ success: boolean; error?: string }> {
-		const result = await this._channel.call<{ success: boolean; error?: string }>('storePrivateKey', {
-			privateKey,
-		});
-
-		if (result.success) {
-			this._privateKeyConfigured = true;
-			// Update settings
-			this.settingsService.setGlobalSetting('docuSign', {
-				integrationKey: this.docuSignSettings?.integrationKey || '',
-				environment: this.docuSignSettings?.environment || 'demo',
-				...this.docuSignSettings,
-				privateKeyConfigured: true,
-			});
-		}
-
-		return result;
-	}
-
-	async hasPrivateKey(): Promise<boolean> {
-		try {
-			return await this._channel.call<boolean>('hasPrivateKey');
-		} catch {
-			return false;
-		}
 	}
 
 	// ============================================

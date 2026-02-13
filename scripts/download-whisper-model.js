@@ -14,10 +14,11 @@
 const https = require('https');
 const fs = require('fs');
 const path = require('path');
+const os = require('os');
 
 // Configuration - Use official GGML version (publicly available, no auth required)
 const MODEL_REPO = 'distil-whisper/distil-large-v3.5-ggml';
-const OUTPUT_DIR = path.join(__dirname, '..', 'resources', 'models', 'whisper', 'distil-large-v3.5');
+const OUTPUT_DIR = path.join(os.homedir(), '.safe-appeals-navigator', 'models', 'whisper', 'distil-large-v3.5');
 
 // GGML model file - single file containing the complete model
 const MODEL_FILES = [
