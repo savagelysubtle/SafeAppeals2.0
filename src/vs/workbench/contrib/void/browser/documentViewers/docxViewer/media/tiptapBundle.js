@@ -996,12 +996,16 @@
 							const signatureLabel = document.createElement('span');
 							signatureLabel.className = 'docx-signature-line-label';
 							signatureLabel.textContent = 'Signature';
+							const signatureValue = document.createElement('span');
+							signatureValue.className = 'docx-signature-line-text';
+							signatureValue.textContent = currentNode.attrs.nameText || '';
 							const signatureInput = document.createElement('input');
 							signatureInput.className = 'docx-signature-line-input';
 							signatureInput.type = 'text';
 							signatureInput.placeholder = 'Name';
 							signatureInput.value = currentNode.attrs.nameText || '';
 							signatureRow.appendChild(signatureLabel);
+							signatureRow.appendChild(signatureValue);
 							signatureRow.appendChild(signatureInput);
 
 							const dateRow = document.createElement('div');
@@ -1009,12 +1013,16 @@
 							const dateLabel = document.createElement('span');
 							dateLabel.className = 'docx-signature-line-label';
 							dateLabel.textContent = 'Date';
+							const dateValue = document.createElement('span');
+							dateValue.className = 'docx-signature-line-text';
+							dateValue.textContent = currentNode.attrs.dateText || '';
 							const dateInput = document.createElement('input');
 							dateInput.className = 'docx-signature-line-input';
 							dateInput.type = 'text';
 							dateInput.placeholder = 'MM/DD/YYYY';
 							dateInput.value = currentNode.attrs.dateText || '';
 							dateRow.appendChild(dateLabel);
+							dateRow.appendChild(dateValue);
 							dateRow.appendChild(dateInput);
 							dateRow.style.display = currentNode.attrs.showDate === false ? 'none' : '';
 
@@ -1125,6 +1133,10 @@
 									}
 								}
 							};
+							const syncDisplayFromInputs = () => {
+								signatureValue.textContent = signatureInput.value || '';
+								dateValue.textContent = dateInput.value || '';
+							};
 
 							let dragStartX;
 							let dragStartY;
@@ -1216,6 +1228,8 @@
 
 							signatureInput.addEventListener('blur', updateFromInputs);
 							dateInput.addEventListener('blur', updateFromInputs);
+							signatureInput.addEventListener('input', syncDisplayFromInputs);
+							dateInput.addEventListener('input', syncDisplayFromInputs);
 							signatureInput.addEventListener('dragstart', stopDragFromInput);
 							dateInput.addEventListener('dragstart', stopDragFromInput);
 							resizeHandle.addEventListener('dragstart', preventDragFromHandle);
@@ -1258,6 +1272,8 @@
 									container.setAttribute('data-show-date', updatedNode.attrs.showDate !== false ? 'true' : 'false');
 									signatureInput.value = updatedNode.attrs.nameText || '';
 									dateInput.value = updatedNode.attrs.dateText || '';
+									signatureValue.textContent = updatedNode.attrs.nameText || '';
+									dateValue.textContent = updatedNode.attrs.dateText || '';
 									dateRow.style.display = updatedNode.attrs.showDate === false ? 'none' : '';
 									return true;
 								},
@@ -1265,6 +1281,8 @@
 									resizeHandle.removeEventListener('mousedown', onResizeMouseDown);
 									signatureInput.removeEventListener('blur', updateFromInputs);
 									dateInput.removeEventListener('blur', updateFromInputs);
+									signatureInput.removeEventListener('input', syncDisplayFromInputs);
+									dateInput.removeEventListener('input', syncDisplayFromInputs);
 									signatureInput.removeEventListener('dragstart', stopDragFromInput);
 									dateInput.removeEventListener('dragstart', stopDragFromInput);
 									resizeHandle.removeEventListener('dragstart', preventDragFromHandle);

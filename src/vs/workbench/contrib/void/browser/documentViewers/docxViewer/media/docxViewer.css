@@ -2108,7 +2108,7 @@ body[data-vscode-theme-kind="vscode-dark"] #docx-container {
 	position: relative;
 	display: inline-block;
 	padding: 8px 12px 10px;
-	border: 1px solid #000000;
+	border: 1px solid transparent;
 	border-radius: 4px;
 	background: #ffffff;
 	min-width: 120px;
@@ -2150,11 +2150,43 @@ body[data-vscode-theme-kind="vscode-dark"] #docx-container {
 	min-width: 0;
 	width: 100%;
 	box-sizing: border-box;
+	display: none;
 }
 
 .ProseMirror .docx-signature-line-input::placeholder,
 .tiptap-editor .docx-signature-line-input::placeholder {
 	color: #000000;
+}
+
+.ProseMirror .docx-signature-line-text,
+.tiptap-editor .docx-signature-line-text {
+	flex: 1;
+	border-bottom: 1px solid #000000;
+	color: #000000;
+	font-size: 12px;
+	padding: 2px 4px;
+	min-width: 0;
+	width: 100%;
+	box-sizing: border-box;
+	display: inline-block;
+}
+
+.ProseMirror .docx-signature-line.ProseMirror-selectednode .docx-signature-line-input,
+.tiptap-editor .docx-signature-line.ProseMirror-selectednode .docx-signature-line-input,
+.ProseMirror .docx-signature-line:focus-within .docx-signature-line-input,
+.tiptap-editor .docx-signature-line:focus-within .docx-signature-line-input,
+.ProseMirror .docx-signature-line:hover .docx-signature-line-input,
+.tiptap-editor .docx-signature-line:hover .docx-signature-line-input {
+	display: inline-block;
+}
+
+.ProseMirror .docx-signature-line.ProseMirror-selectednode .docx-signature-line-text,
+.tiptap-editor .docx-signature-line.ProseMirror-selectednode .docx-signature-line-text,
+.ProseMirror .docx-signature-line:focus-within .docx-signature-line-text,
+.tiptap-editor .docx-signature-line:focus-within .docx-signature-line-text,
+.ProseMirror .docx-signature-line:hover .docx-signature-line-text,
+.tiptap-editor .docx-signature-line:hover .docx-signature-line-text {
+	display: none;
 }
 
 .ProseMirror .docx-signature-line-drag-handle,
@@ -2192,6 +2224,15 @@ body[data-vscode-theme-kind="vscode-dark"] #docx-container {
 .tiptap-editor .docx-signature-line:hover .docx-signature-line-drag-handle,
 .tiptap-editor .docx-signature-line:hover .docx-signature-line-resize-handle {
 	opacity: 0.9;
+}
+
+.ProseMirror .docx-signature-line.ProseMirror-selectednode,
+.tiptap-editor .docx-signature-line.ProseMirror-selectednode,
+.ProseMirror .docx-signature-line:focus-within,
+.tiptap-editor .docx-signature-line:focus-within,
+.ProseMirror .docx-signature-line:hover,
+.tiptap-editor .docx-signature-line:hover {
+	border-color: #000000;
 }
 
 body.docx-resize-active,
