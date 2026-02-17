@@ -30,6 +30,23 @@ bun run compile-build
 bun run compile-build-ci
 ```
 
+### XLSX Rust Viewer (WASM)
+
+```bash
+# Compile Rust crate → WASM (via wasm-pack, outputs to media/wasm/)
+bun run build-wasm
+# Equivalent to: cd .../xlsxRustViewer/wasm && wasm-pack build --target web --out-dir ../media/wasm --no-typescript
+
+# Bundle webview TypeScript → single IIFE JS (via esbuild)
+bun run build-xlsx-viewer
+# Equivalent to: node .../xlsxRustViewer/media/build.mjs
+
+# Full rebuild (both steps)
+bun run build-wasm && bun run build-xlsx-viewer
+```
+
+> **📝 Note**: Requires `wasm-pack` (`cargo install wasm-pack`) and the `wasm32-unknown-unknown` Rust target.
+
 ### Extensions
 
 ```bash
@@ -107,9 +124,11 @@ Finished compilation extensions with 0 errors
 ### Most Used Commands
 
 ```bash
-bun run buildreact    # Build React components
-bun run compile       # Compile VS Code
-bun run watchd        # Watch mode (background)
+bun run buildreact         # Build React components
+bun run compile            # Compile VS Code
+bun run watchd             # Watch mode (background)
+bun run build-wasm         # Compile Rust XLSX viewer to WASM
+bun run build-xlsx-viewer  # Bundle XLSX Rust Viewer webview JS
 ```
 
 ### Emergency Commands

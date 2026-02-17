@@ -10,7 +10,7 @@ import { ILogService } from '../../../../../platform/log/common/log.js';
 import { IEditorService } from '../../../../services/editor/common/editorService.js';
 import { IDocumentCreatorService } from '../documentCreatorService.js';
 import { DOCXViewerEditor } from './docxViewer/docxViewerEditor.js';
-import { XLSXViewerEditor } from './xlsxViewer/xlsxViewerEditor.js';
+import { XLSXRustViewerEditor } from './xlsxRustViewer/xlsxRustViewerEditor.js';
 
 export const IDocumentEditorService = createDecorator<IDocumentEditorService>('documentEditorService');
 
@@ -29,7 +29,14 @@ export type XLSXEditOperation =
 	| { type: 'insert_row'; sheet: string | number; rowIndex: number }
 	| { type: 'insert_column'; sheet: string | number; colIndex: number }
 	| { type: 'delete_row'; sheet: string | number; rowIndex: number }
-	| { type: 'delete_column'; sheet: string | number; colIndex: number };
+	| { type: 'delete_column'; sheet: string | number; colIndex: number }
+	| { type: 'create_table'; sheet: string | number; range: string; tableName: string; styleName?: string }
+	| { type: 'resize_table'; tableName: string; range: string }
+	| { type: 'rename_table'; oldName: string; newName: string }
+	| { type: 'set_table_style'; tableName: string; styleName: string }
+	| { type: 'toggle_table_filter'; tableName: string }
+	| { type: 'set_totals_row'; tableName: string; enabled: boolean }
+	| { type: 'convert_table_to_range'; tableName: string };
 
 export interface IDocumentEditorService {
 	readonly _serviceBrand: undefined;
@@ -69,7 +76,7 @@ export class DocumentEditorService implements IDocumentEditorService {
 		// Check if any editor pane has this document open
 		const editors = this.editorService.visibleEditorPanes;
 		return editors.some(editor => {
-			if (editor instanceof DOCXViewerEditor || editor instanceof XLSXViewerEditor) {
+			if (editor instanceof DOCXViewerEditor || editor instanceof XLSXRustViewerEditor) {
 				const input = editor.getInput();
 				return input?.resource.toString() === uri.toString();
 			}
@@ -263,10 +270,10 @@ export class DocumentEditorService implements IDocumentEditorService {
 		};
 	}
 
-	private findXLSXViewer(uri: URI): XLSXViewerEditor | undefined {
+	private findXLSXViewer(uri: URI): XLSXRustViewerEditor | undefined {
 		const editors = this.editorService.visibleEditorPanes;
 		for (const editor of editors) {
-			if (editor instanceof XLSXViewerEditor) {
+			if (editor instanceof XLSXRustViewerEditor) {
 				const input = editor.getInput();
 				if (input?.resource.toString() === uri.toString()) {
 					return editor;

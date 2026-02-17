@@ -16,6 +16,8 @@
   },
   "scripts": {
     "buildreact": "cd ./src/vs/workbench/contrib/void/browser/react/ && node build.js && cd ../../../../../../../",
+    "build-wasm": "cd src/vs/workbench/contrib/void/browser/documentViewers/xlsxRustViewer/wasm && wasm-pack build --target web --out-dir ../media/wasm --no-typescript",
+    "build-xlsx-viewer": "node src/vs/workbench/contrib/void/browser/documentViewers/xlsxRustViewer/media/build.mjs",
     "watchreact": "cd ./src/vs/workbench/contrib/void/browser/react/ && bun run build.js --watch && cd ../../../../../../../",
     "watchreactd": "deemon bun run watchreact",
     "kill-watchreactd": "deemon --kill bun run watchreact",

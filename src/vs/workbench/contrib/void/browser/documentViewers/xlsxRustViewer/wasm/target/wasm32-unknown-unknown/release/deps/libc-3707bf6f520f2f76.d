@@ -1,0 +1,10 @@
+D:\Coding\SafeAppeals2.0\src\vs\workbench\contrib\void\browser\documentViewers\xlsxRustViewer\wasm\target\wasm32-unknown-unknown\release\deps\libc-3707bf6f520f2f76.d: D:\ProgramData\Cargo\registry\src\index.crates.io-1949cf8c6b5b557f\libc-0.2.182\src\lib.rs D:\ProgramData\Cargo\registry\src\index.crates.io-1949cf8c6b5b557f\libc-0.2.182\src\macros.rs D:\ProgramData\Cargo\registry\src\index.crates.io-1949cf8c6b5b557f\libc-0.2.182\src\new\mod.rs D:\ProgramData\Cargo\registry\src\index.crates.io-1949cf8c6b5b557f\libc-0.2.182\src\new\common\mod.rs
+
+D:\Coding\SafeAppeals2.0\src\vs\workbench\contrib\void\browser\documentViewers\xlsxRustViewer\wasm\target\wasm32-unknown-unknown\release\deps\liblibc-3707bf6f520f2f76.rlib: D:\ProgramData\Cargo\registry\src\index.crates.io-1949cf8c6b5b557f\libc-0.2.182\src\lib.rs D:\ProgramData\Cargo\registry\src\index.crates.io-1949cf8c6b5b557f\libc-0.2.182\src\macros.rs D:\ProgramData\Cargo\registry\src\index.crates.io-1949cf8c6b5b557f\libc-0.2.182\src\new\mod.rs D:\ProgramData\Cargo\registry\src\index.crates.io-1949cf8c6b5b557f\libc-0.2.182\src\new\common\mod.rs
+
+D:\Coding\SafeAppeals2.0\src\vs\workbench\contrib\void\browser\documentViewers\xlsxRustViewer\wasm\target\wasm32-unknown-unknown\release\deps\liblibc-3707bf6f520f2f76.rmeta: D:\ProgramData\Cargo\registry\src\index.crates.io-1949cf8c6b5b557f\libc-0.2.182\src\lib.rs D:\ProgramData\Cargo\registry\src\index.crates.io-1949cf8c6b5b557f\libc-0.2.182\src\macros.rs D:\ProgramData\Cargo\registry\src\index.crates.io-1949cf8c6b5b557f\libc-0.2.182\src\new\mod.rs D:\ProgramData\Cargo\registry\src\index.crates.io-1949cf8c6b5b557f\libc-0.2.182\src\new\common\mod.rs
+
+D:\ProgramData\Cargo\registry\src\index.crates.io-1949cf8c6b5b557f\libc-0.2.182\src\lib.rs:
+D:\ProgramData\Cargo\registry\src\index.crates.io-1949cf8c6b5b557f\libc-0.2.182\src\macros.rs:
+D:\ProgramData\Cargo\registry\src\index.crates.io-1949cf8c6b5b557f\libc-0.2.182\src\new\mod.rs:
+D:\ProgramData\Cargo\registry\src\index.crates.io-1949cf8c6b5b557f\libc-0.2.182\src\new\common\mod.rs:
