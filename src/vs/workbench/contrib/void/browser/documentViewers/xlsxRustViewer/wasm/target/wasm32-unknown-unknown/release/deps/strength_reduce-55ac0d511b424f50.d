@@ -1,0 +1,9 @@
+D:\Coding\SafeAppeals2.0\src\vs\workbench\contrib\void\browser\documentViewers\xlsxRustViewer\wasm\target\wasm32-unknown-unknown\release\deps\strength_reduce-55ac0d511b424f50.d: D:\ProgramData\Cargo\registry\src\index.crates.io-1949cf8c6b5b557f\strength_reduce-0.2.4\src\lib.rs D:\ProgramData\Cargo\registry\src\index.crates.io-1949cf8c6b5b557f\strength_reduce-0.2.4\src\long_division.rs D:\ProgramData\Cargo\registry\src\index.crates.io-1949cf8c6b5b557f\strength_reduce-0.2.4\src\long_multiplication.rs
+
+D:\Coding\SafeAppeals2.0\src\vs\workbench\contrib\void\browser\documentViewers\xlsxRustViewer\wasm\target\wasm32-unknown-unknown\release\deps\libstrength_reduce-55ac0d511b424f50.rlib: D:\ProgramData\Cargo\registry\src\index.crates.io-1949cf8c6b5b557f\strength_reduce-0.2.4\src\lib.rs D:\ProgramData\Cargo\registry\src\index.crates.io-1949cf8c6b5b557f\strength_reduce-0.2.4\src\long_division.rs D:\ProgramData\Cargo\registry\src\index.crates.io-1949cf8c6b5b557f\strength_reduce-0.2.4\src\long_multiplication.rs
+
+D:\Coding\SafeAppeals2.0\src\vs\workbench\contrib\void\browser\documentViewers\xlsxRustViewer\wasm\target\wasm32-unknown-unknown\release\deps\libstrength_reduce-55ac0d511b424f50.rmeta: D:\ProgramData\Cargo\registry\src\index.crates.io-1949cf8c6b5b557f\strength_reduce-0.2.4\src\lib.rs D:\ProgramData\Cargo\registry\src\index.crates.io-1949cf8c6b5b557f\strength_reduce-0.2.4\src\long_division.rs D:\ProgramData\Cargo\registry\src\index.crates.io-1949cf8c6b5b557f\strength_reduce-0.2.4\src\long_multiplication.rs
+
+D:\ProgramData\Cargo\registry\src\index.crates.io-1949cf8c6b5b557f\strength_reduce-0.2.4\src\lib.rs:
+D:\ProgramData\Cargo\registry\src\index.crates.io-1949cf8c6b5b557f\strength_reduce-0.2.4\src\long_division.rs:
+D:\ProgramData\Cargo\registry\src\index.crates.io-1949cf8c6b5b557f\strength_reduce-0.2.4\src\long_multiplication.rs:

@@ -1,0 +1,10 @@
+D:\Coding\SafeAppeals2.0\src\vs\workbench\contrib\void\browser\documentViewers\xlsxRustViewer\wasm\target\wasm32-unknown-unknown\release\deps\num_complex-543a9e2b6569855f.d: D:\ProgramData\Cargo\registry\src\index.crates.io-1949cf8c6b5b557f\num-complex-0.4.6\src\lib.rs D:\ProgramData\Cargo\registry\src\index.crates.io-1949cf8c6b5b557f\num-complex-0.4.6\src\cast.rs D:\ProgramData\Cargo\registry\src\index.crates.io-1949cf8c6b5b557f\num-complex-0.4.6\src\pow.rs D:\ProgramData\Cargo\registry\src\index.crates.io-1949cf8c6b5b557f\num-complex-0.4.6\src\complex_float.rs
+
+D:\Coding\SafeAppeals2.0\src\vs\workbench\contrib\void\browser\documentViewers\xlsxRustViewer\wasm\target\wasm32-unknown-unknown\release\deps\libnum_complex-543a9e2b6569855f.rlib: D:\ProgramData\Cargo\registry\src\index.crates.io-1949cf8c6b5b557f\num-complex-0.4.6\src\lib.rs D:\ProgramData\Cargo\registry\src\index.crates.io-1949cf8c6b5b557f\num-complex-0.4.6\src\cast.rs D:\ProgramData\Cargo\registry\src\index.crates.io-1949cf8c6b5b557f\num-complex-0.4.6\src\pow.rs D:\ProgramData\Cargo\registry\src\index.crates.io-1949cf8c6b5b557f\num-complex-0.4.6\src\complex_float.rs
+
+D:\Coding\SafeAppeals2.0\src\vs\workbench\contrib\void\browser\documentViewers\xlsxRustViewer\wasm\target\wasm32-unknown-unknown\release\deps\libnum_complex-543a9e2b6569855f.rmeta: D:\ProgramData\Cargo\registry\src\index.crates.io-1949cf8c6b5b557f\num-complex-0.4.6\src\lib.rs D:\ProgramData\Cargo\registry\src\index.crates.io-1949cf8c6b5b557f\num-complex-0.4.6\src\cast.rs D:\ProgramData\Cargo\registry\src\index.crates.io-1949cf8c6b5b557f\num-complex-0.4.6\src\pow.rs D:\ProgramData\Cargo\registry\src\index.crates.io-1949cf8c6b5b557f\num-complex-0.4.6\src\complex_float.rs
+
+D:\ProgramData\Cargo\registry\src\index.crates.io-1949cf8c6b5b557f\num-complex-0.4.6\src\lib.rs:
+D:\ProgramData\Cargo\registry\src\index.crates.io-1949cf8c6b5b557f\num-complex-0.4.6\src\cast.rs:
+D:\ProgramData\Cargo\registry\src\index.crates.io-1949cf8c6b5b557f\num-complex-0.4.6\src\pow.rs:
+D:\ProgramData\Cargo\registry\src\index.crates.io-1949cf8c6b5b557f\num-complex-0.4.6\src\complex_float.rs:

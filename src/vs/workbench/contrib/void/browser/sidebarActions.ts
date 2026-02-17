@@ -29,7 +29,7 @@ import { VOID_CTRL_L_ACTION_ID } from './actionIDs.js';
 import { IChatThreadService } from './chatThreadService.js';
 import { DOCXViewerInput } from './documentViewers/docxViewer/docxViewerInput.js';
 import { PDFViewerInput } from './documentViewers/pdfViewer/pdfViewerInput.js';
-import { XLSXViewerInput } from './documentViewers/xlsxViewer/xlsxViewerInput.js';
+import { XLSXViewerInput } from './documentViewers/xlsxViewerAbandoned/xlsxViewerInput.js';
 import { VOID_VIEW_CONTAINER_ID, VOID_VIEW_ID } from './sidebarPane.js';
 import { VOID_TOGGLE_SETTINGS_ACTION_ID } from './voidSettingsPane.js';
 

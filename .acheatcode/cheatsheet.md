@@ -70,6 +70,10 @@ bun run compile
 # React components
 bun run buildreact
 
+# XLSX Rust Viewer (Rust → WASM + TS → JS bundle)
+bun run build-wasm            # Compile Rust crate to WASM via wasm-pack
+bun run build-xlsx-viewer     # Bundle webview TS into xlsxRustViewer.js via esbuild
+
 # Run any gulp command with proper Node.js flags
 bun run gulp <task>
 ```
@@ -143,10 +147,12 @@ bun restart-watchd
 ## 📋 Most Used Commands
 
 ```bash
-bun run buildreact    # Build React components
-bun run compile       # Compile VS Code
-bun run watchd        # Watch mode (background)
-./scripts/code.sh # Launch VS Code
+bun run buildreact         # Build React components
+bun run compile            # Compile VS Code
+bun run watchd             # Watch mode (background)
+bun run build-wasm         # Compile Rust XLSX viewer to WASM
+bun run build-xlsx-viewer  # Bundle XLSX Rust Viewer webview JS
+./scripts/code.sh          # Launch VS Code
 ```
 
 ## 📦 Package Management

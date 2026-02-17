@@ -59,6 +59,26 @@ bun run watchreact
 bun run watchreactd
 ```
 
+### XLSX Rust Viewer (WASM)
+
+```bash
+# Compile Rust crate → WASM binary + JS glue (via wasm-pack)
+bun run build-wasm
+# Equivalent to: cd .../xlsxRustViewer/wasm && wasm-pack build --target web --out-dir ../media/wasm --no-typescript
+
+# Bundle webview TypeScript → single IIFE JS (via esbuild)
+bun run build-xlsx-viewer
+# Equivalent to: node .../xlsxRustViewer/media/build.mjs
+
+# Full rebuild (both steps)
+bun run build-wasm && bun run build-xlsx-viewer
+```
+
+> **📝 Prerequisites**: `cargo install wasm-pack` and `rustup target add wasm32-unknown-unknown`
+> **📁 Source**: `src/vs/workbench/contrib/void/browser/documentViewers/xlsxRustViewer/`
+> **📁 WASM output**: `.../xlsxRustViewer/media/wasm/xlsx_rust_viewer_bg.wasm` (~10MB)
+> **📁 JS bundle**: `.../xlsxRustViewer/media/xlsxRustViewer.js` (~31KB)
+
 ### Extensions
 
 ```bash
@@ -370,12 +390,15 @@ cd src && bunx tsc --skipLibCheck
 ## 📁 Key Directories
 
 ```
-src/vs/workbench/contrib/void/     # Void-specific code
-src/vs/workbench/contrib/void/browser/react/  # React components
-build/                              # Build scripts
-scripts/                            # Launch scripts
-extensions/                         # Built-in extensions
-out/                                # Compiled output
+src/vs/workbench/contrib/void/                          # Void-specific code
+src/vs/workbench/contrib/void/browser/react/            # React components
+src/vs/workbench/contrib/void/browser/documentViewers/  # Document viewers (PDF, DOCX, XLSX, Image)
+  xlsxRustViewer/wasm/                                  # Rust WASM crate (calamine + rust_xlsxwriter + polars)
+  xlsxRustViewer/media/                                 # Webview assets (JS bundle, WASM output)
+build/                                                  # Build scripts
+scripts/                                                # Launch scripts
+extensions/                                             # Built-in extensions
+out/                                                    # Compiled output
 ```
 
 ## ⚡ Performance Tips
@@ -419,10 +442,12 @@ bun run extensions-ci-pr
 ### Most Used Commands
 
 ```bash
-bun run buildreact    # Build React components
-bun run compile       # Compile VS Code
-npm run watchd        # Watch mode (background)
-./scripts/code.sh     # Launch VS Code
+bun run buildreact         # Build React components
+bun run compile            # Compile VS Code
+bun run watchd             # Watch mode (background)
+bun run build-wasm         # Compile Rust XLSX viewer to WASM
+bun run build-xlsx-viewer  # Bundle XLSX Rust Viewer webview JS
+./scripts/code.sh          # Launch VS Code
 ```
 
 ### Emergency Commands
