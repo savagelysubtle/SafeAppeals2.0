@@ -18,6 +18,7 @@
     "buildreact": "cd ./src/vs/workbench/contrib/void/browser/react/ && node build.js && cd ../../../../../../../",
     "build-wasm": "cd src/vs/workbench/contrib/void/browser/documentViewers/xlsxRustViewer/wasm && wasm-pack build --target web --out-dir ../media/wasm --no-typescript",
     "build-xlsx-viewer": "node src/vs/workbench/contrib/void/browser/documentViewers/xlsxRustViewer/media/build.mjs",
+    "build-pdf-viewer": "node src/vs/workbench/contrib/void/browser/documentViewers/pdfViewer/media/build.mjs",
     "watchreact": "cd ./src/vs/workbench/contrib/void/browser/react/ && bun run build.js --watch && cd ../../../../../../../",
     "watchreactd": "deemon bun run watchreact",
     "kill-watchreactd": "deemon --kill bun run watchreact",
@@ -150,6 +151,7 @@
     "baseline-browser-mapping": "^2.9.3",
     "better-sqlite3": "^11.8.1",
     "caniuse-lite": "^1.0.30001759",
+    "chart.js": "^4.5.1",
     "chromadb": "^1.8.1",
     "color-string": "1.9.1",
     "cross-spawn": "^7.0.6",
@@ -207,6 +209,7 @@
     "yjs": "^13.6.28"
   },
   "devDependencies": {
+    "@electron/rebuild": "^3.7.0",
     "@playwright/test": "^1.50.0",
     "@stylistic/eslint-plugin-ts": "^2.8.0",
     "@tailwindcss/typography": "^0.5.16",
@@ -235,7 +238,6 @@
     "@types/yauzl": "^2.10.0",
     "@types/yazl": "^2.4.2",
     "@typescript-eslint/utils": "^8.8.0",
-    "@electron/rebuild": "^3.7.0",
     "@vscode/gulp-electron": "1.36.0",
     "@vscode/l10n-dev": "0.0.35",
     "@vscode/telemetry-extractor": "^1.10.2",

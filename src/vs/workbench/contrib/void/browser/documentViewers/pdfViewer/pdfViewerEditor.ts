@@ -368,6 +368,17 @@ export class PDFViewerEditor extends EditorPane {
 				this.deleteSignatureFromStorage(data.signatureId);
 				break;
 			}
+
+			case 'exportAnnotations': {
+				// Export annotations as a JSON file download via notification
+				if (this._currentInput) {
+					const annotations = this.pdfAnnotationService.getAnnotations(this._currentInput.resource);
+					const json = JSON.stringify(annotations, null, 2);
+					// Send JSON back to webview to trigger browser download
+					this.webview?.postMessage({ type: 'downloadAnnotations', json });
+				}
+				break;
+			}
 		}
 	}
 
@@ -599,18 +610,24 @@ export class PDFViewerEditor extends EditorPane {
 		const nonce = generateUuid();
 		const mediaUri = this.getMediaUri();
 
-		// Convert to webview-accessible URIs using the standalone function
+		// Convert to webview-accessible URIs
 		const cssUri = asWebviewUri(URI.joinPath(mediaUri, 'pdfViewer.css'));
-		const viewerJsUri = asWebviewUri(URI.joinPath(mediaUri, 'pdfViewer.js'));
+
+		// Bundled webview script (IIFE, built by esbuild from main.ts + all modules)
+		const scriptUri = asWebviewUri(URI.joinPath(mediaUri, 'pdfRustViewer.js'));
+		// WASM binaries - loaded at runtime via fetch() inside the bundled script
+		const wasmUri = asWebviewUri(URI.joinPath(mediaUri, 'wasm', 'pdf_viewer_bg.wasm'));
+		// PDFium Emscripten glue (loaded as separate script tag)
+		const pdfiumJsUri = asWebviewUri(URI.joinPath(mediaUri, 'wasm', 'pdfium.js'));
+		// PDFium WASM binary URL (passed as data attribute, loaded by pdfium.js)
+		const pdfiumWasmUri = asWebviewUri(URI.joinPath(mediaUri, 'wasm', 'pdfium.wasm'));
 
 		console.log('[PDF Viewer] Media URIs generated:');
 		console.log('  Media base:', mediaUri.toString());
 		console.log('  CSS:', cssUri.toString());
-		console.log('  Viewer script:', viewerJsUri.toString());
-
-		// Use CDN for PDF.js - it's a UMD build that works without ES modules
-		const pdfJsCdnUri = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
-		const pdfWorkerCdnUri = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+		console.log('  Script:', scriptUri.toString());
+		console.log('  WASM:', wasmUri.toString());
+		console.log('  PDFium JS:', pdfiumJsUri.toString());
 
 		return `<!DOCTYPE html>
 		<html>
@@ -618,15 +635,15 @@ export class PDFViewerEditor extends EditorPane {
 			<meta charset="UTF-8">
 			<meta http-equiv="Content-Security-Policy"
 				  content="default-src 'none';
-						   script-src 'nonce-${nonce}' https://cdnjs.cloudflare.com vscode-resource:;
-						   worker-src blob:;
+						   script-src 'nonce-${nonce}' 'wasm-unsafe-eval' vscode-resource:;
 						   style-src 'unsafe-inline' vscode-resource:;
 						   img-src data: vscode-resource:;
-						   connect-src *;
+						   connect-src https: vscode-resource:;
 						   font-src data: vscode-resource:;">
 			<link rel="stylesheet" href="${cssUri}">
 		</head>
 		<body>
+			<div id="config" data-wasm-url="${wasmUri}" data-pdfium-url="${pdfiumWasmUri}" style="display:none;"></div>
 			<div id="pdf-viewer-layout">
 				<div id="sidebar">
 					<div id="sidebar-header">
@@ -654,24 +671,46 @@ export class PDFViewerEditor extends EditorPane {
 				</div>
 				<div id="pdf-container">
 					<div id="pdf-controls">
-						<button id="prev-page">Previous</button>
-						<span id="page-info">Page <span id="current-page">1</span> of <span id="total-pages">1</span></span>
-						<button id="next-page">Next</button>
+						<div class="controls-group">
+							<button id="prev-page" title="Previous Page">&lsaquo;</button>
+							<span id="page-info">Page <span id="current-page">1</span> of <span id="total-pages">1</span></span>
+							<button id="next-page" title="Next Page">&rsaquo;</button>
+						</div>
 						<span class="controls-separator"></span>
-						<button id="zoom-in">Zoom In</button>
-						<button id="zoom-out">Zoom Out</button>
+						<div class="controls-group">
+							<button id="zoom-out" title="Zoom Out">&minus;</button>
+							<button id="zoom-in" title="Zoom In">&plus;</button>
+						</div>
 						<span class="controls-separator"></span>
-						<button id="print-btn" title="Print (Ctrl+P)">🖨️ Print</button>
+						<div class="controls-group">
+							<button id="fit-width" title="Fit Width">Fit W</button>
+							<button id="fit-page" title="Fit Page">Fit P</button>
+							<button id="actual-size" title="Actual Size (100%)">100%</button>
+						</div>
 						<span class="controls-separator"></span>
-						<button id="add-signature" title="Add Signature">✍️ Signature</button>
-						<button id="send-docusign" title="Send for e-Signature via DocuSign">📧 DocuSign</button>
+						<div class="controls-group">
+							<button id="rotate-view" title="Rotate 90&deg;">&#8635;</button>
+							<button id="dark-mode-reading" title="Invert Colors">&#9680;</button>
+							<button id="scroll-mode-toggle" title="Toggle Continuous Scroll">&#8801;</button>
+						</div>
 						<span class="controls-separator"></span>
-					<div id="annotation-toolbar">
-							<button class="highlight-btn highlight-yellow" data-color="yellow" title="Yellow Highlight">🖍️</button>
-							<button class="highlight-btn highlight-green" data-color="green" title="Green Highlight">🖍️</button>
-							<button class="highlight-btn highlight-blue" data-color="blue" title="Blue Highlight">🖍️</button>
-							<button class="highlight-btn highlight-pink" data-color="pink" title="Pink Highlight">🖍️</button>
-							<button id="delete-highlight" title="Delete Highlight">🗑️</button>
+						<div class="controls-group">
+							<button id="print-btn" title="Print (Ctrl+P)">Print</button>
+							<button id="export-annotations" title="Export Annotations as JSON">Export</button>
+						</div>
+						<span class="controls-separator"></span>
+						<div class="controls-group">
+							<button id="add-signature" title="Add Signature">Signature</button>
+							<button id="send-docusign" title="Send for e-Signature via DocuSign">DocuSign</button>
+						</div>
+						<span class="controls-separator"></span>
+						<div id="annotation-toolbar" class="controls-group">
+							<button class="highlight-btn highlight-yellow" data-color="yellow" title="Yellow Highlight"></button>
+							<button class="highlight-btn highlight-green" data-color="green" title="Green Highlight"></button>
+							<button class="highlight-btn highlight-blue" data-color="blue" title="Blue Highlight"></button>
+							<button class="highlight-btn highlight-pink" data-color="pink" title="Pink Highlight"></button>
+							<button id="redact-tool" title="Redaction Tool">&#9646;</button>
+							<button id="delete-highlight" title="Delete Selected Annotation">&times;</button>
 						</div>
 					</div>
 					<div id="canvas-wrapper">
@@ -680,6 +719,7 @@ export class PDFViewerEditor extends EditorPane {
 							<div id="pdf-text-layer" class="pdf-text-layer"></div>
 						</div>
 					</div>
+					<div id="continuous-scroll-container"></div>
 				</div>
 			</div>
 
@@ -743,17 +783,13 @@ export class PDFViewerEditor extends EditorPane {
 			</div>
 
 			<script nonce="${nonce}">
-				window.PDF_WORKER_URI = '${pdfWorkerCdnUri}';
-				console.log('[PDF Viewer HTML] Worker URI set:', window.PDF_WORKER_URI);
-				console.log('[PDF Viewer HTML] About to load scripts...');
-
 				// Add global error handler
 				window.addEventListener('error', (e) => {
 					console.error('[PDF Viewer HTML] Global error:', e.message, e.filename, e.lineno, e.colno, e.error);
 				}, true);
 			</script>
-			<script nonce="${nonce}" src="${pdfJsCdnUri}"></script>
-			<script nonce="${nonce}" src="${viewerJsUri}"></script>
+			<script nonce="${nonce}" src="${pdfiumJsUri}"></script>
+			<script nonce="${nonce}" src="${scriptUri}"></script>
 		</body>
 		</html>`;
 	}
