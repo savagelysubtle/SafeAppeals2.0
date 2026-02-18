@@ -67,21 +67,75 @@ export interface TableDefinition {
 // Color palette per table style (header fill, band fill, border/accent)
 interface TableColors { header: string; band: string; border: string; headerText: string }
 const TABLE_COLORS: Record<string, TableColors> = {
-    'TableStyleMedium2':  { header: '#4472c4', band: '#d6e4f0', border: '#4472c4', headerText: '#fff' },
-    'TableStyleMedium1':  { header: '#a5a5a5', band: '#e0e0e0', border: '#a5a5a5', headerText: '#fff' },
-    'TableStyleMedium3':  { header: '#ed7d31', band: '#fce4cc', border: '#ed7d31', headerText: '#fff' },
-    'TableStyleMedium4':  { header: '#ffc000', band: '#fff2cc', border: '#ffc000', headerText: '#333' },
-    'TableStyleMedium5':  { header: '#5b9bd5', band: '#dce6f0', border: '#5b9bd5', headerText: '#fff' },
-    'TableStyleMedium6':  { header: '#70ad47', band: '#e2efda', border: '#70ad47', headerText: '#fff' },
-    'TableStyleMedium7':  { header: '#264478', band: '#c5d0e0', border: '#264478', headerText: '#fff' },
-    'TableStyleMedium9':  { header: '#7030a0', band: '#e1d5ec', border: '#7030a0', headerText: '#fff' },
-    'TableStyleLight1':   { header: '#000000', band: '#f2f2f2', border: '#999999', headerText: '#fff' },
+    // --- Light styles (1-21): 3 groups of 7 accent colors, increasingly visible banding ---
+    // Group 1 (1-7): very subtle banding
+    'TableStyleLight1':   { header: '#000000', band: '#f7f7f7', border: '#999999', headerText: '#fff' },
     'TableStyleLight2':   { header: '#4472c4', band: '#edf2fa', border: '#4472c4', headerText: '#fff' },
-    'TableStyleLight9':   { header: '#ed7d31', band: '#fef4eb', border: '#ed7d31', headerText: '#fff' },
-    'TableStyleLight14':  { header: '#70ad47', band: '#f0f7ec', border: '#70ad47', headerText: '#fff' },
+    'TableStyleLight3':   { header: '#ed7d31', band: '#fef4eb', border: '#ed7d31', headerText: '#fff' },
+    'TableStyleLight4':   { header: '#a5a5a5', band: '#f5f5f5', border: '#a5a5a5', headerText: '#fff' },
+    'TableStyleLight5':   { header: '#ffc000', band: '#fffbef', border: '#ffc000', headerText: '#333' },
+    'TableStyleLight6':   { header: '#5b9bd5', band: '#eef4fa', border: '#5b9bd5', headerText: '#fff' },
+    'TableStyleLight7':   { header: '#70ad47', band: '#f0f7ec', border: '#70ad47', headerText: '#fff' },
+    // Group 2 (8-14): moderate banding
+    'TableStyleLight8':   { header: '#000000', band: '#f2f2f2', border: '#000000', headerText: '#fff' },
+    'TableStyleLight9':   { header: '#4472c4', band: '#dbe5f5', border: '#4472c4', headerText: '#fff' },
+    'TableStyleLight10':  { header: '#ed7d31', band: '#fce4cc', border: '#ed7d31', headerText: '#fff' },
+    'TableStyleLight11':  { header: '#a5a5a5', band: '#ececec', border: '#a5a5a5', headerText: '#fff' },
+    'TableStyleLight12':  { header: '#ffc000', band: '#fff5d5', border: '#ffc000', headerText: '#333' },
+    'TableStyleLight13':  { header: '#5b9bd5', band: '#dde9f5', border: '#5b9bd5', headerText: '#fff' },
+    'TableStyleLight14':  { header: '#70ad47', band: '#e2efda', border: '#70ad47', headerText: '#fff' },
+    // Group 3 (15-21): stronger banding
+    'TableStyleLight15':  { header: '#000000', band: '#e8e8e8', border: '#000000', headerText: '#fff' },
+    'TableStyleLight16':  { header: '#4472c4', band: '#c9d8f0', border: '#4472c4', headerText: '#fff' },
+    'TableStyleLight17':  { header: '#ed7d31', band: '#f9d5ad', border: '#ed7d31', headerText: '#fff' },
+    'TableStyleLight18':  { header: '#a5a5a5', band: '#e0e0e0', border: '#a5a5a5', headerText: '#fff' },
+    'TableStyleLight19':  { header: '#ffc000', band: '#ffefb8', border: '#ffc000', headerText: '#333' },
+    'TableStyleLight20':  { header: '#5b9bd5', band: '#ccddf0', border: '#5b9bd5', headerText: '#fff' },
+    'TableStyleLight21':  { header: '#70ad47', band: '#d4e7c8', border: '#70ad47', headerText: '#fff' },
+    // --- Medium styles (1-28): 4 groups of 7 accent colors ---
+    // Group 1 (1-7): filled header + banded rows
+    'TableStyleMedium1':  { header: '#000000', band: '#e0e0e0', border: '#000000', headerText: '#fff' },
+    'TableStyleMedium2':  { header: '#4472c4', band: '#d6e4f0', border: '#4472c4', headerText: '#fff' },
+    'TableStyleMedium3':  { header: '#ed7d31', band: '#fce4cc', border: '#ed7d31', headerText: '#fff' },
+    'TableStyleMedium4':  { header: '#a5a5a5', band: '#dcdcdc', border: '#a5a5a5', headerText: '#fff' },
+    'TableStyleMedium5':  { header: '#ffc000', band: '#fff2cc', border: '#ffc000', headerText: '#333' },
+    'TableStyleMedium6':  { header: '#5b9bd5', band: '#dce6f0', border: '#5b9bd5', headerText: '#fff' },
+    'TableStyleMedium7':  { header: '#70ad47', band: '#e2efda', border: '#70ad47', headerText: '#fff' },
+    // Group 2 (8-14): filled header + borders + stronger banding
+    'TableStyleMedium8':  { header: '#000000', band: '#d0d0d0', border: '#000000', headerText: '#fff' },
+    'TableStyleMedium9':  { header: '#4472c4', band: '#b8cde5', border: '#4472c4', headerText: '#fff' },
+    'TableStyleMedium10': { header: '#ed7d31', band: '#f9c99a', border: '#ed7d31', headerText: '#fff' },
+    'TableStyleMedium11': { header: '#a5a5a5', band: '#cccccc', border: '#a5a5a5', headerText: '#fff' },
+    'TableStyleMedium12': { header: '#ffc000', band: '#ffe599', border: '#ffc000', headerText: '#333' },
+    'TableStyleMedium13': { header: '#5b9bd5', band: '#bdd0e5', border: '#5b9bd5', headerText: '#fff' },
+    'TableStyleMedium14': { header: '#70ad47', band: '#c5dfb5', border: '#70ad47', headerText: '#fff' },
+    // Group 3 (15-21): filled header + cell borders + deep banding
+    'TableStyleMedium15': { header: '#000000', band: '#c0c0c0', border: '#000000', headerText: '#fff' },
+    'TableStyleMedium16': { header: '#4472c4', band: '#9ab6da', border: '#4472c4', headerText: '#fff' },
+    'TableStyleMedium17': { header: '#ed7d31', band: '#f6ae68', border: '#ed7d31', headerText: '#fff' },
+    'TableStyleMedium18': { header: '#a5a5a5', band: '#bcbcbc', border: '#a5a5a5', headerText: '#fff' },
+    'TableStyleMedium19': { header: '#ffc000', band: '#ffd966', border: '#ffc000', headerText: '#333' },
+    'TableStyleMedium20': { header: '#5b9bd5', band: '#9dbada', border: '#5b9bd5', headerText: '#fff' },
+    'TableStyleMedium21': { header: '#70ad47', band: '#a8cf90', border: '#70ad47', headerText: '#fff' },
+    // Group 4 (22-28): outside border + row borders
+    'TableStyleMedium22': { header: '#000000', band: '#b0b0b0', border: '#000000', headerText: '#fff' },
+    'TableStyleMedium23': { header: '#4472c4', band: '#7ca0cf', border: '#4472c4', headerText: '#fff' },
+    'TableStyleMedium24': { header: '#ed7d31', band: '#f39336', border: '#ed7d31', headerText: '#fff' },
+    'TableStyleMedium25': { header: '#a5a5a5', band: '#aaaaaa', border: '#a5a5a5', headerText: '#fff' },
+    'TableStyleMedium26': { header: '#ffc000', band: '#ffcc33', border: '#ffc000', headerText: '#333' },
+    'TableStyleMedium27': { header: '#5b9bd5', band: '#7ea4cf', border: '#5b9bd5', headerText: '#fff' },
+    'TableStyleMedium28': { header: '#70ad47', band: '#8bbf6b', border: '#70ad47', headerText: '#fff' },
+    // --- Dark styles (1-11): dark bands with filled headers ---
     'TableStyleDark1':    { header: '#000000', band: '#404040', border: '#000000', headerText: '#fff' },
     'TableStyleDark2':    { header: '#4472c4', band: '#2b4a7a', border: '#4472c4', headerText: '#fff' },
     'TableStyleDark3':    { header: '#ed7d31', band: '#7a4018', border: '#ed7d31', headerText: '#fff' },
+    'TableStyleDark4':    { header: '#a5a5a5', band: '#5a5a5a', border: '#a5a5a5', headerText: '#fff' },
+    'TableStyleDark5':    { header: '#ffc000', band: '#8a6800', border: '#ffc000', headerText: '#fff' },
+    'TableStyleDark6':    { header: '#5b9bd5', band: '#2f5e8a', border: '#5b9bd5', headerText: '#fff' },
+    'TableStyleDark7':    { header: '#70ad47', band: '#3a5925', border: '#70ad47', headerText: '#fff' },
+    'TableStyleDark8':    { header: '#1a1a1a', band: '#333333', border: '#1a1a1a', headerText: '#fff' },
+    'TableStyleDark9':    { header: '#264478', band: '#1a3060', border: '#264478', headerText: '#fff' },
+    'TableStyleDark10':   { header: '#c55a11', band: '#6b3510', border: '#c55a11', headerText: '#fff' },
     'TableStyleDark11':   { header: '#7030a0', band: '#3d1a57', border: '#7030a0', headerText: '#fff' },
 };
 const DEFAULT_TABLE_COLORS: TableColors = { header: '#4472c4', band: '#d6e4f0', border: '#4472c4', headerText: '#fff' };
@@ -99,6 +153,7 @@ interface UndoSnapshot {
 export class CanvasRenderer {
     private canvas: HTMLCanvasElement;
     private ctx: CanvasRenderingContext2D;
+    private _wrapper: HTMLDivElement;
     private width: number = 0;
     private height: number = 0;
 
@@ -141,6 +196,13 @@ export class CanvasRenderer {
 
     // Table definitions for the current sheet
     private tables: TableDefinition[] = [];
+
+    // Filter state: hidden rows (rows excluded by column filters)
+    private _hiddenRows: Set<number> = new Set();
+    // Active filters: key = "tableName:colIndex", value = set of allowed cell values
+    private _activeFilters: Map<string, Set<string>> = new Map();
+    // HTML filter arrow buttons overlaid on table header cells
+    private _filterButtons: HTMLButtonElement[] = [];
 
     // Formula display cache: "row:col" -> display string
     private formulaResults: Record<string, { display: string; is_error: boolean; numeric: number | null }> = {};
@@ -197,6 +259,7 @@ export class CanvasRenderer {
     public onInlineEditInput?: (value: string) => void;
     public onInlineEditCommit?: () => void;
     public onInlineEditCancel?: () => void;
+    public onFilterArrowClick?: (tableName: string, colIndex: number, colName: string, screenX: number, screenY: number) => void;
 
     // HTML scrollbar elements
     private _hScrollbar: HTMLDivElement;
@@ -207,18 +270,18 @@ export class CanvasRenderer {
 
     constructor(container: HTMLElement) {
         // Wrap canvas and horizontal scrollbar in a flex layout
-        const wrapper = document.createElement('div');
-        wrapper.style.cssText = 'display:flex;flex-direction:column;width:100%;height:100%;overflow:hidden;';
-        container.appendChild(wrapper);
+        this._wrapper = document.createElement('div');
+        this._wrapper.style.cssText = 'display:flex;flex-direction:column;width:100%;height:100%;overflow:hidden;position:relative;';
+        container.appendChild(this._wrapper);
 
         this.canvas = document.createElement('canvas');
         this.canvas.style.cssText = 'display:block;outline:none;flex:1;min-height:0;';
-        wrapper.appendChild(this.canvas);
+        this._wrapper.appendChild(this.canvas);
 
         // Create horizontal scrollbar
         this._hScrollbar = document.createElement('div');
         this._hScrollbar.style.cssText = 'height:14px;flex-shrink:0;background:#e8e8e8;border-top:1px solid #ccc;position:relative;cursor:default;';
-        wrapper.appendChild(this._hScrollbar);
+        this._wrapper.appendChild(this._hScrollbar);
 
         this._hScrollThumb = document.createElement('div');
         this._hScrollThumb.style.cssText = 'position:absolute;top:2px;height:10px;min-width:30px;background:#999;border-radius:5px;cursor:pointer;';
@@ -274,6 +337,10 @@ export class CanvasRenderer {
         this.ctx = context;
 
         this.resize();
+        // Use ResizeObserver for reliable container tracking — window.resize
+        // does NOT fire inside webview iframes when VSCode resizes panels.
+        const ro = new ResizeObserver(() => this.resize());
+        ro.observe(this._wrapper);
         window.addEventListener('resize', () => this.resize());
 
         this.canvas.addEventListener('wheel', (e) => this.handleWheel(e), { passive: false });
@@ -319,6 +386,10 @@ export class CanvasRenderer {
         this._findMatchIndex = -1;
         this.colWidths = {};
         this.rowHeights = {};
+        this._hiddenRows.clear();
+        this._activeFilters.clear();
+        this._clearFilterButtons();
+        this._clearCfCache();
         this._layoutDirty = true;
         this._syncFromActiveSheet();
         this._loading = false;
@@ -361,6 +432,21 @@ export class CanvasRenderer {
 
     getActiveSheetIndex(): number { return this._activeSheetIndex; }
 
+    // --- Chart coordinate helpers (public wrappers for ChartManager) ---
+    publicCx(colIdx: number): number { return this.cx(colIdx); }
+    publicRy(rowIdx: number): number { return this.ry(rowIdx); }
+    publicCw(colIdx: number): number { return this.cw(colIdx); }
+    publicRh(rowIdx: number): number { return this.rh(rowIdx); }
+    publicScrollLeft(): number { return this.scrollLeft; }
+    publicScrollTop(): number { return this.scrollTop; }
+    publicHeaderWidth(): number { return this._showHeaders ? this.headerWidth : 0; }
+    publicHeaderHeight(): number { return this._showHeaders ? this.headerHeight : 0; }
+    /** Get the wrapper div that contains the canvas and overlays */
+    getWrapper(): HTMLDivElement { return this._wrapper; }
+
+    /** Callback when scroll position changes (for chart overlay repositioning) */
+    onScrollChanged?: () => void;
+
     setActiveSheetIndex(idx: number) {
         if (!this.data?.sheets?.[idx]) return;
         this._activeSheetIndex = idx;
@@ -369,6 +455,10 @@ export class CanvasRenderer {
         this.selectedCell = null;
         this.selectionRange = null;
         this.formulaResults = {};
+        this._hiddenRows.clear();
+        this._activeFilters.clear();
+        this._clearFilterButtons();
+        this._clearCfCache();
         this._layoutDirty = true;
         this._syncFromActiveSheet();
         this.cancelCellEdit();
@@ -443,7 +533,8 @@ export class CanvasRenderer {
         this._rowPos = new Array(nr + 1);
         this._rowPos[0] = 0;
         for (let r = 0; r < nr; r++) {
-            this._rowPos[r + 1] = this._rowPos[r] + (this.rowHeights[r] ?? this.rowHeight);
+            const h = this._hiddenRows.has(r) ? 0 : (this.rowHeights[r] ?? this.rowHeight);
+            this._rowPos[r + 1] = this._rowPos[r] + h;
         }
 
         this._layoutDirty = false;
@@ -1284,6 +1375,235 @@ export class CanvasRenderer {
         return null;
     }
 
+    /**
+     * Create / reposition / remove real HTML buttons over each table header filter arrow.
+     * Called at the end of every render() so buttons track scrolling and layout changes.
+     */
+    private _syncFilterButtons(): void {
+        const wrapper = this.canvas.parentElement;
+        if (!wrapper) return;
+
+        const effHeaderWidth = this._showHeaders ? this.headerWidth : 0;
+        const effHeaderHeight = this._showHeaders ? this.headerHeight : 0;
+
+        let btnIdx = 0;
+
+        for (const table of this.tables) {
+            if (!table.filter_enabled || !table.has_header_row) continue;
+            const tr = table.range;
+            const hdrRowH = this.rh(tr.start_row);
+            const hdrY = this.ry(tr.start_row) - this.scrollTop + effHeaderHeight;
+
+            for (let c = tr.start_col; c <= tr.end_col; c++) {
+                const cellRight = this.cx(c) - this.scrollLeft + effHeaderWidth + this.cw(c);
+                const btnLeft = cellRight - 18;
+                const btnTop = hdrY;
+
+                // Visibility: hide buttons that are scrolled off-screen or behind headers
+                const visible = btnLeft > effHeaderWidth - 10
+                    && btnTop >= effHeaderHeight - 2
+                    && btnTop + hdrRowH > effHeaderHeight
+                    && cellRight <= this.width + 10;
+
+                // Create or reuse button
+                let btn: HTMLButtonElement;
+                if (btnIdx < this._filterButtons.length) {
+                    btn = this._filterButtons[btnIdx];
+                } else {
+                    btn = document.createElement('button');
+                    btn.className = 'filter-arrow-btn';
+                    btn.textContent = '\u25BC'; // ▼
+                    wrapper.appendChild(btn);
+                    this._filterButtons.push(btn);
+                }
+
+                // Store data on the button for the click handler
+                const tableName = table.name;
+                const colIndex = c;
+                const colDef = table.columns[c - tr.start_col];
+                const colName = colDef?.name ?? '';
+
+                btn.onclick = (e) => {
+                    e.stopPropagation();
+                    if (this.onFilterArrowClick) {
+                        const rect = btn.getBoundingClientRect();
+                        this.onFilterArrowClick(tableName, colIndex, colName, rect.left, rect.bottom);
+                    }
+                };
+
+                // Position
+                btn.style.left = `${btnLeft}px`;
+                btn.style.top = `${btnTop}px`;
+                btn.style.height = `${hdrRowH}px`;
+                btn.style.display = visible ? 'flex' : 'none';
+
+                btnIdx++;
+            }
+        }
+
+        // Remove excess buttons from previous renders
+        while (this._filterButtons.length > btnIdx) {
+            const old = this._filterButtons.pop()!;
+            old.remove();
+        }
+    }
+
+    /** Remove all filter arrow buttons from the DOM. */
+    private _clearFilterButtons(): void {
+        for (const btn of this._filterButtons) {
+            btn.remove();
+        }
+        this._filterButtons = [];
+    }
+
+    /** Get unique cell values for a column within a table's data range (excludes header/totals). */
+    public getColumnUniqueValues(tableName: string, colIndex: number): string[] {
+        const table = this.tables.find(t => t.name === tableName);
+        if (!table || !this.data?.sheets?.[this._activeSheetIndex]) return [];
+
+        const sheet = this.data.sheets[this._activeSheetIndex];
+        const tr = table.range;
+        const dataStart = table.has_header_row ? tr.start_row + 1 : tr.start_row;
+        const dataEnd = table.has_totals_row ? tr.end_row - 1 : tr.end_row;
+
+        const valueSet = new Set<string>();
+        for (let r = dataStart; r <= dataEnd; r++) {
+            const cell = sheet.cells?.[r]?.[colIndex];
+            valueSet.add(cell?.value ?? '');
+        }
+
+        // Sort: blanks last, then alphabetical
+        const sorted = [...valueSet].sort((a, b) => {
+            if (a === '' && b !== '') return 1;
+            if (a !== '' && b === '') return -1;
+            return a.localeCompare(b);
+        });
+        return sorted;
+    }
+
+    /** Get the current filter for a table column, if any. */
+    public getActiveFilter(tableName: string, colIndex: number): Set<string> | undefined {
+        return this._activeFilters.get(`${tableName}:${colIndex}`);
+    }
+
+    /**
+     * If the edited cell is a table header, update the column definition name to match.
+     * This keeps the table overlay text in sync with cell edits.
+     */
+    public syncTableHeaderName(row: number, col: number, value: string): void {
+        for (const table of this.tables) {
+            if (!table.has_header_row) continue;
+            const tr = table.range;
+            if (row !== tr.start_row) continue;
+            if (col < tr.start_col || col > tr.end_col) continue;
+            const colDef = table.columns[col - tr.start_col];
+            if (colDef) {
+                colDef.name = value;
+            }
+            break;
+        }
+    }
+
+    /** Sort rows within a table's data range by a column. */
+    public sortTableColumn(tableName: string, colIndex: number, ascending: boolean): void {
+        const table = this.tables.find(t => t.name === tableName);
+        if (!table || !this.data?.sheets?.[this._activeSheetIndex]) return;
+        this.pushUndo();
+
+        const sheet = this.data.sheets[this._activeSheetIndex];
+        const tr = table.range;
+        const dataStart = table.has_header_row ? tr.start_row + 1 : tr.start_row;
+        const dataEnd = table.has_totals_row ? tr.end_row - 1 : tr.end_row;
+
+        // Collect data rows (only within the table range)
+        const rows: { cells: Record<number, { value: string; data_type?: string; style?: CellStyle }>; style: Record<string, CellStyle> | undefined }[] = [];
+        for (let r = dataStart; r <= dataEnd; r++) {
+            rows.push({
+                cells: sheet.cells[r] ?? {},
+                style: this.styles[r]
+            });
+        }
+
+        // Sort by target column
+        rows.sort((a, b) => {
+            const aVal = a.cells[colIndex]?.value ?? '';
+            const bVal = b.cells[colIndex]?.value ?? '';
+            const aNum = Number(aVal);
+            const bNum = Number(bVal);
+            const bothNumeric = aVal !== '' && bVal !== '' && !isNaN(aNum) && !isNaN(bNum);
+            const cmp = bothNumeric ? aNum - bNum : aVal.localeCompare(bVal);
+            return ascending ? cmp : -cmp;
+        });
+
+        // Write sorted rows back to the table data range
+        for (let i = 0; i < rows.length; i++) {
+            const r = dataStart + i;
+            sheet.cells[r] = rows[i].cells;
+            if (rows[i].style) {
+                this.styles[r] = rows[i].style as Record<string, CellStyle>;
+            } else {
+                delete this.styles[r];
+            }
+        }
+
+        this.render();
+    }
+
+    /** Apply a value filter to a table column. Only rows with allowed values are shown. */
+    public applyFilter(tableName: string, colIndex: number, allowedValues: Set<string>): void {
+        this._activeFilters.set(`${tableName}:${colIndex}`, allowedValues);
+        this._rebuildHiddenRows();
+    }
+
+    /** Clear the filter for a specific table column. */
+    public clearFilter(tableName: string, colIndex: number): void {
+        this._activeFilters.delete(`${tableName}:${colIndex}`);
+        this._rebuildHiddenRows();
+    }
+
+    /** Recompute the set of hidden rows from all active filters. */
+    private _rebuildHiddenRows(): void {
+        this._hiddenRows.clear();
+
+        if (this._activeFilters.size === 0 || !this.data?.sheets?.[this._activeSheetIndex]) {
+            this._layoutDirty = true;
+            this.render();
+            return;
+        }
+
+        const sheet = this.data.sheets[this._activeSheetIndex];
+
+        // Group filters by table
+        const filtersOfTable = new Map<string, { colIndex: number; allowed: Set<string> }[]>();
+        for (const [key, allowed] of this._activeFilters) {
+            const [tName, colStr] = key.split(':');
+            if (!filtersOfTable.has(tName)) filtersOfTable.set(tName, []);
+            filtersOfTable.get(tName)!.push({ colIndex: parseInt(colStr, 10), allowed });
+        }
+
+        for (const [tName, filters] of filtersOfTable) {
+            const table = this.tables.find(t => t.name === tName);
+            if (!table) continue;
+
+            const tr = table.range;
+            const dataStart = table.has_header_row ? tr.start_row + 1 : tr.start_row;
+            const dataEnd = table.has_totals_row ? tr.end_row - 1 : tr.end_row;
+
+            for (let r = dataStart; r <= dataEnd; r++) {
+                for (const f of filters) {
+                    const cellVal = sheet.cells?.[r]?.[f.colIndex]?.value ?? '';
+                    if (!f.allowed.has(cellVal)) {
+                        this._hiddenRows.add(r);
+                        break;
+                    }
+                }
+            }
+        }
+
+        this._layoutDirty = true;
+        this.render();
+    }
+
     private handleContextMenu(e: MouseEvent) {
         e.preventDefault();
         const { x, y } = this.mouseToCanvas(e);
@@ -1457,20 +1777,15 @@ export class CanvasRenderer {
     }
 
     resize() {
-        // Use getBoundingClientRect for the actual display dimensions -- this is
-        // the same coordinate space mouse events use, so hit-tests always match.
-        // (flex:1 with flex-basis:0 sizes the canvas regardless of explicit height.)
-        const rect = this.canvas.getBoundingClientRect();
-        if (rect.width > 0 && rect.height > 0) {
-            this.width = Math.round(rect.width);
-            this.height = Math.round(rect.height);
-        } else {
-            // Fallback before first layout (e.g. during constructor)
-            const parent = this.canvas.parentElement;
-            if (!parent) return;
-            this.width = parent.clientWidth;
-            this.height = parent.clientHeight - (this._hScrollbar?.offsetHeight ?? 0);
-        }
+        // Read available space from the wrapper (which is %-sized and tracks
+        // container changes), not the canvas (which has explicit pixel dimensions
+        // that would prevent it from growing with the container).
+        const rect = this._wrapper.getBoundingClientRect();
+        if (rect.width <= 0 || rect.height <= 0) return;
+
+        const scrollbarH = this._hScrollbar?.offsetHeight ?? 0;
+        this.width = Math.round(rect.width);
+        this.height = Math.round(rect.height) - scrollbarH;
 
         const dpr = window.devicePixelRatio || 1;
         this.canvas.width = this.width * dpr;
@@ -1479,6 +1794,7 @@ export class CanvasRenderer {
         this.canvas.style.height = `${this.height}px`;
         this.ctx.scale(dpr, dpr);
 
+        this._layoutDirty = true;
         this.render();
         this.updateHScrollbar();
     }
@@ -1486,6 +1802,7 @@ export class CanvasRenderer {
     // --- Rendering ---
 
     render() {
+        this._clearCfCache();
         this.ctx.fillStyle = '#ffffff';
         this.ctx.fillRect(0, 0, this.width, this.height);
 
@@ -1555,6 +1872,18 @@ export class CanvasRenderer {
                 if (this._showGridlines) {
                     this.ctx.strokeStyle = '#e0e0e0';
                     this.ctx.strokeRect(x, y, cellW, cellH);
+                }
+
+                // Data bar rendering (conditional formatting)
+                const dbInfo = this._cfDataBars.get(`${r}:${c}`);
+                if (dbInfo) {
+                    const barW = Math.max(1, (cellW - 4) * dbInfo.ratio);
+                    this.ctx.fillStyle = dbInfo.color + '66'; // ~40% opacity
+                    this.ctx.fillRect(x + 2, y + 2, barW, cellH - 4);
+                    // Bar border
+                    this.ctx.strokeStyle = dbInfo.color;
+                    this.ctx.lineWidth = 1;
+                    this.ctx.strokeRect(x + 2, y + 2, barW, cellH - 4);
                 }
 
                 // Multi-cell selection highlight (light fill on all selected cells)
@@ -1660,8 +1989,23 @@ export class CanvasRenderer {
 
                     this.ctx.restore();
                 }
+
+                // Icon set rendering (conditional formatting)
+                const iconInfo = this._cfIcons.get(`${r}:${c}`);
+                if (iconInfo) {
+                    this.ctx.save();
+                    this.ctx.font = `bold ${Math.min(cellH - 4, 14)}px sans-serif`;
+                    this.ctx.fillStyle = iconInfo.color;
+                    this.ctx.textAlign = 'left';
+                    this.ctx.textBaseline = 'middle';
+                    this.ctx.fillText(iconInfo.icon, x + 2, y + cellH / 2);
+                    this.ctx.restore();
+                }
             }
         }
+
+        // --- Draw Sparklines ---
+        this.drawSparklines(effHeaderWidth, effHeaderHeight);
 
         // --- Draw Table Overlays ---
         for (const table of this.tables) {
@@ -1732,18 +2076,7 @@ export class CanvasRenderer {
                         this.ctx.fillText(colDef.name, colCx, colCy);
                     }
 
-                    // Filter dropdown icon
-                    if (table.filter_enabled) {
-                        const iconX = this.cx(c) - this.scrollLeft + effHeaderWidth + this.cw(c) - 14;
-                        const iconY = hdrY + hdrRowH / 2 - 3;
-                        this.ctx.fillStyle = tc.headerText;
-                        this.ctx.beginPath();
-                        this.ctx.moveTo(iconX, iconY);
-                        this.ctx.lineTo(iconX + 8, iconY);
-                        this.ctx.lineTo(iconX + 4, iconY + 6);
-                        this.ctx.closePath();
-                        this.ctx.fill();
-                    }
+                    // Filter dropdown arrow is rendered as an HTML button (see _syncFilterButtons)
                 }
             }
 
@@ -2163,6 +2496,164 @@ export class CanvasRenderer {
         this.drawScrollbars();
 
         this.ctx.restore();
+
+        // --- Sync filter arrow buttons over table headers ---
+        this._syncFilterButtons();
+
+        // Notify listeners that the canvas was repainted (e.g. for chart overlay repositioning)
+        if (this.onScrollChanged) this.onScrollChanged();
+    }
+
+    /** Draw sparkline mini-charts inside cells */
+    private drawSparklines(effHeaderWidth: number, effHeaderHeight: number) {
+        if (!this.data?.sheets) return;
+        const sheet = this.data.sheets[this._activeSheetIndex];
+        if (!sheet?.sparklines || sheet.sparklines.length === 0) return;
+
+        this.ctx.save();
+        this.ctx.beginPath();
+        this.ctx.rect(effHeaderWidth, effHeaderHeight, this.width - effHeaderWidth, this.height - effHeaderHeight);
+        this.ctx.clip();
+
+        for (const spark of sheet.sparklines) {
+            // Parse location cell ref (e.g., "G3") to row, col
+            const loc = this.parseSparklineCellRef(spark.location);
+            if (!loc) continue;
+
+            // Get cell position
+            const cellX = this.cx(loc.col) - this.scrollLeft + effHeaderWidth;
+            const cellY = this.ry(loc.row) - this.scrollTop + effHeaderHeight;
+            const cellW = this.cw(loc.col);
+            const cellH = this.rh(loc.row);
+
+            // Skip if off-screen
+            if (cellX + cellW < effHeaderWidth || cellY + cellH < effHeaderHeight) continue;
+            if (cellX > this.width || cellY > this.height) continue;
+
+            // Parse data values from the data_range reference
+            const values = this.resolveSparklineData(spark.data_range, sheet);
+            if (values.length === 0) continue;
+
+            const color = spark.color || '#4472C4';
+            const negColor = spark.negative_color || '#FF0000';
+            const padding = 3;
+            const drawX = cellX + padding;
+            const drawY = cellY + padding;
+            const drawW = cellW - padding * 2;
+            const drawH = cellH - padding * 2;
+
+            if (drawW <= 0 || drawH <= 0) continue;
+
+            const minVal = Math.min(...values);
+            const maxVal = Math.max(...values);
+            const range = maxVal - minVal || 1;
+
+            switch (spark.sparkline_type) {
+                case 'line':
+                    this.drawLineSparkline(drawX, drawY, drawW, drawH, values, minVal, range, color);
+                    break;
+                case 'column':
+                    this.drawColumnSparkline(drawX, drawY, drawW, drawH, values, minVal, range, color, negColor);
+                    break;
+                case 'stacked':
+                    this.drawWinLossSparkline(drawX, drawY, drawW, drawH, values, color, negColor);
+                    break;
+                default:
+                    this.drawLineSparkline(drawX, drawY, drawW, drawH, values, minVal, range, color);
+            }
+        }
+        this.ctx.restore();
+    }
+
+    private drawLineSparkline(x: number, y: number, w: number, h: number, values: number[], minVal: number, range: number, color: string) {
+        if (values.length < 2) return;
+        this.ctx.beginPath();
+        this.ctx.strokeStyle = color;
+        this.ctx.lineWidth = 1.5;
+        this.ctx.lineJoin = 'round';
+
+        const step = w / (values.length - 1);
+        for (let i = 0; i < values.length; i++) {
+            const px = x + i * step;
+            const py = y + h - ((values[i] - minVal) / range) * h;
+            if (i === 0) this.ctx.moveTo(px, py);
+            else this.ctx.lineTo(px, py);
+        }
+        this.ctx.stroke();
+    }
+
+    private drawColumnSparkline(x: number, y: number, w: number, h: number, values: number[], minVal: number, range: number, color: string, negColor: string) {
+        const gap = 1;
+        const barW = Math.max(1, (w - gap * (values.length - 1)) / values.length);
+        const baseline = minVal >= 0 ? y + h : y + h * (1 - (-minVal / range));
+
+        for (let i = 0; i < values.length; i++) {
+            const px = x + i * (barW + gap);
+            const val = values[i];
+            const barH = (Math.abs(val) / range) * h;
+            const isNeg = val < 0;
+
+            this.ctx.fillStyle = isNeg ? negColor : color;
+            if (isNeg) {
+                this.ctx.fillRect(px, baseline, barW, Math.min(barH, y + h - baseline));
+            } else {
+                this.ctx.fillRect(px, baseline - barH, barW, barH);
+            }
+        }
+    }
+
+    private drawWinLossSparkline(x: number, y: number, w: number, h: number, values: number[], color: string, negColor: string) {
+        const gap = 1;
+        const barW = Math.max(1, (w - gap * (values.length - 1)) / values.length);
+        const halfH = h / 2;
+        const midY = y + halfH;
+
+        for (let i = 0; i < values.length; i++) {
+            const px = x + i * (barW + gap);
+            if (values[i] >= 0) {
+                this.ctx.fillStyle = color;
+                this.ctx.fillRect(px, midY - halfH * 0.8, barW, halfH * 0.8);
+            } else {
+                this.ctx.fillStyle = negColor;
+                this.ctx.fillRect(px, midY, barW, halfH * 0.8);
+            }
+        }
+    }
+
+    private parseSparklineCellRef(ref: string): { row: number; col: number } | null {
+        const cleaned = ref.replace(/\$/g, '').replace(/.*!/, '');
+        const m = cleaned.match(/^([A-Z]{1,3})(\d+)$/);
+        if (!m) return null;
+        let col = 0;
+        for (let i = 0; i < m[1].length; i++) {
+            col = col * 26 + (m[1].charCodeAt(i) - 64);
+        }
+        return { row: parseInt(m[2], 10) - 1, col: col - 1 };
+    }
+
+    private resolveSparklineData(dataRange: string, sheet: any): number[] {
+        // dataRange is like "Sheet1!B2:B10" or "B2:B10"
+        const range = dataRange.replace(/.*!/, '').replace(/\$/g, '');
+        const parts = range.split(':');
+        if (parts.length !== 2) return [];
+
+        const start = this.parseSparklineCellRef(parts[0]);
+        const end = this.parseSparklineCellRef(parts[1]);
+        if (!start || !end) return [];
+
+        const values: number[] = [];
+        for (let r = start.row; r <= end.row; r++) {
+            for (let c = start.col; c <= end.col; c++) {
+                const cell = sheet.cells?.[r]?.[c];
+                if (cell) {
+                    const num = parseFloat(cell.value);
+                    values.push(isNaN(num) ? 0 : num);
+                } else {
+                    values.push(0);
+                }
+            }
+        }
+        return values;
     }
 
     private drawScrollbars() {
@@ -2471,12 +2962,13 @@ export class CanvasRenderer {
 
     private getCellStyle(row: number, col: number): CellStyle | undefined {
         const overlay = this.styles[row]?.[col];
-        // Also check model styles
         const sheet = this.data?.sheets?.[this._activeSheetIndex];
         const modelStyle = sheet?.cells?.[row]?.[col]?.style;
-        if (!modelStyle && !overlay) return overlay;
-        // Merge: overlay takes priority over model style
+        const cfStyle = this.evaluateConditionalFormats(row, col);
+        if (!modelStyle && !overlay && !cfStyle) return overlay;
+        // Merge: model -> CF -> overlay (overlay highest priority)
         const merged: CellStyle = {};
+        // 1. Model style (base)
         if (modelStyle) {
             if (modelStyle.bold) merged.bold = true;
             if (modelStyle.italic) merged.italic = true;
@@ -2489,6 +2981,16 @@ export class CanvasRenderer {
             if (modelStyle.number_format) merged.numberFormat = modelStyle.number_format;
             if (modelStyle.wrap_text) merged.wrapText = true;
         }
+        // 2. Conditional formatting (overrides model)
+        if (cfStyle) {
+            if (cfStyle.bold !== undefined) merged.bold = cfStyle.bold;
+            if (cfStyle.italic !== undefined) merged.italic = cfStyle.italic;
+            if (cfStyle.underline !== undefined) merged.underline = cfStyle.underline;
+            if (cfStyle.textColor) merged.textColor = cfStyle.textColor;
+            if (cfStyle.fillColor) merged.fillColor = cfStyle.fillColor;
+            if (cfStyle.numberFormat) merged.numberFormat = cfStyle.numberFormat;
+        }
+        // 3. Overlay (user edits, highest priority)
         if (overlay) {
             if (overlay.bold !== undefined) merged.bold = overlay.bold;
             if (overlay.italic !== undefined) merged.italic = overlay.italic;
@@ -2502,6 +3004,493 @@ export class CanvasRenderer {
             if (overlay.wrapText !== undefined) merged.wrapText = overlay.wrapText;
         }
         return merged;
+    }
+
+    // --- Conditional Formatting Evaluation Engine ---
+
+    /** Cache for aggregate computations (top10, average, duplicates, etc.) keyed by rule index */
+    private _cfCache: Map<number, any> = new Map();
+    /** Per-render cycle data bar/icon set results keyed by "row:col" */
+    private _cfDataBars: Map<string, { ratio: number; color: string }> = new Map();
+    private _cfIcons: Map<string, { icon: string; color: string }> = new Map();
+
+    /** Clear CF cache on data changes */
+    private _clearCfCache(): void {
+        this._cfCache.clear();
+        this._cfDataBars.clear();
+        this._cfIcons.clear();
+    }
+
+    /** Check if (row, col) falls within a sqref range string like "A1:D10" or "A1:D10 F1:G5" */
+    private cellInRange(row: number, col: number, sqref: string): boolean {
+        const parts = sqref.split(/\s+/);
+        for (const part of parts) {
+            const colons = part.split(':');
+            if (colons.length === 2) {
+                const [r1, c1] = this.parseCfCellRef(colons[0]);
+                const [r2, c2] = this.parseCfCellRef(colons[1]);
+                const minR = Math.min(r1, r2), maxR = Math.max(r1, r2);
+                const minC = Math.min(c1, c2), maxC = Math.max(c1, c2);
+                if (row >= minR && row <= maxR && col >= minC && col <= maxC) return true;
+            } else {
+                const [r, c] = this.parseCfCellRef(colons[0]);
+                if (row === r && col === c) return true;
+            }
+        }
+        return false;
+    }
+
+    /** Parse cell ref like "B3" or "$B$3" to [row, col] (0-indexed) */
+    private parseCfCellRef(ref: string): [number, number] {
+        const clean = ref.replace(/\$/g, '');
+        let col = 0, row = 0, inDigits = false;
+        for (const ch of clean) {
+            if (!inDigits && ch >= 'A' && ch <= 'Z') {
+                col = col * 26 + (ch.charCodeAt(0) - 64);
+            } else if (!inDigits && ch >= 'a' && ch <= 'z') {
+                col = col * 26 + (ch.charCodeAt(0) - 96);
+            } else {
+                inDigits = true;
+                row = row * 10 + parseInt(ch);
+            }
+        }
+        return [row - 1, col - 1];
+    }
+
+    /** Get sqref bounds as {minRow, minCol, maxRow, maxCol} */
+    private getSqrefBounds(sqref: string): { minRow: number; minCol: number; maxRow: number; maxCol: number } {
+        let minRow = Infinity, minCol = Infinity, maxRow = -1, maxCol = -1;
+        const parts = sqref.split(/\s+/);
+        for (const part of parts) {
+            const colons = part.split(':');
+            for (const ref of colons) {
+                const [r, c] = this.parseCfCellRef(ref);
+                if (r < minRow) minRow = r;
+                if (c < minCol) minCol = c;
+                if (r > maxRow) maxRow = r;
+                if (c > maxCol) maxCol = c;
+            }
+        }
+        return { minRow, minCol, maxRow, maxCol };
+    }
+
+    /** Collect all numeric values in a sqref range */
+    private collectNumericValues(sqref: string): number[] {
+        const bounds = this.getSqrefBounds(sqref);
+        const sheet = this.data?.sheets?.[this._activeSheetIndex];
+        if (!sheet?.cells) return [];
+        const values: number[] = [];
+        for (let r = bounds.minRow; r <= bounds.maxRow; r++) {
+            const rowData = sheet.cells[r];
+            if (!rowData) continue;
+            for (let c = bounds.minCol; c <= bounds.maxCol; c++) {
+                if (!this.cellInRange(r, c, sqref)) continue;
+                const cell = rowData[c];
+                if (cell && cell.data_type === 'n') {
+                    const n = parseFloat(cell.value);
+                    if (!isNaN(n)) values.push(n);
+                }
+            }
+        }
+        return values;
+    }
+
+    /** Collect all string values in a sqref range */
+    private collectStringValues(sqref: string): string[] {
+        const bounds = this.getSqrefBounds(sqref);
+        const sheet = this.data?.sheets?.[this._activeSheetIndex];
+        if (!sheet?.cells) return [];
+        const values: string[] = [];
+        for (let r = bounds.minRow; r <= bounds.maxRow; r++) {
+            const rowData = sheet.cells[r];
+            if (!rowData) continue;
+            for (let c = bounds.minCol; c <= bounds.maxCol; c++) {
+                if (!this.cellInRange(r, c, sqref)) continue;
+                const cell = rowData[c];
+                if (cell) values.push(cell.value ?? '');
+            }
+        }
+        return values;
+    }
+
+    /** Get cell numeric value */
+    private getCellNumericValue(row: number, col: number): number | undefined {
+        const sheet = this.data?.sheets?.[this._activeSheetIndex];
+        const cell = sheet?.cells?.[row]?.[col];
+        if (!cell) return undefined;
+        if (cell.data_type === 'n') {
+            const n = parseFloat(cell.value);
+            return isNaN(n) ? undefined : n;
+        }
+        return undefined;
+    }
+
+    /** Get cell string value */
+    private getCellStringValue(row: number, col: number): string {
+        const sheet = this.data?.sheets?.[this._activeSheetIndex];
+        return sheet?.cells?.[row]?.[col]?.value ?? '';
+    }
+
+    /** Convert DxfStyle to CellStyle */
+    private dxfToCellStyle(dxf: any): CellStyle {
+        const style: CellStyle = {};
+        if (dxf.bold) style.bold = true;
+        if (dxf.italic) style.italic = true;
+        if (dxf.underline) style.underline = true;
+        if (dxf.text_color) style.textColor = dxf.text_color;
+        if (dxf.fill_color) style.fillColor = dxf.fill_color;
+        if (dxf.number_format) style.numberFormat = dxf.number_format;
+        return style;
+    }
+
+    /** Evaluate all conditional formatting rules for a cell, returning a style override */
+    private evaluateConditionalFormats(row: number, col: number): CellStyle | undefined {
+        const sheet = this.data?.sheets?.[this._activeSheetIndex];
+        if (!sheet?.conditional_formats?.length) return undefined;
+
+        let result: CellStyle | undefined;
+        const rules = sheet.conditional_formats;
+        for (let i = 0; i < rules.length; i++) {
+            const rule = rules[i];
+            if (!this.cellInRange(row, col, rule.sqref)) continue;
+            const match = this.evaluateRule(rule, i, row, col);
+            if (match) {
+                result = result ? { ...result, ...match } : { ...match };
+            }
+        }
+        return result;
+    }
+
+    /** Evaluate a single CF rule for the given cell */
+    private evaluateRule(rule: any, ruleIndex: number, row: number, col: number): CellStyle | undefined {
+        switch (rule.rule_type) {
+            case 'cellIs': return this.evaluateCellIs(rule, row, col);
+            case 'containsText': return this.evaluateContainsText(rule, row, col, 'contains');
+            case 'notContainsText': return this.evaluateContainsText(rule, row, col, 'notContains');
+            case 'beginsWith': return this.evaluateContainsText(rule, row, col, 'beginsWith');
+            case 'endsWith': return this.evaluateContainsText(rule, row, col, 'endsWith');
+            case 'top10': return this.evaluateTop10(rule, ruleIndex, row, col);
+            case 'aboveAverage': return this.evaluateAboveAverage(rule, ruleIndex, row, col);
+            case 'duplicateValues': return this.evaluateDuplicateUnique(rule, ruleIndex, row, col, true);
+            case 'uniqueValues': return this.evaluateDuplicateUnique(rule, ruleIndex, row, col, false);
+            case 'containsBlanks': {
+                const val = this.getCellStringValue(row, col);
+                if (val.trim() === '') return rule.dxf_style ? this.dxfToCellStyle(rule.dxf_style) : {};
+                return undefined;
+            }
+            case 'notContainsBlanks': {
+                const val = this.getCellStringValue(row, col);
+                if (val.trim() !== '') return rule.dxf_style ? this.dxfToCellStyle(rule.dxf_style) : {};
+                return undefined;
+            }
+            case 'colorScale': return this.evaluateColorScale(rule, ruleIndex, row, col);
+            case 'dataBar': {
+                this.evaluateDataBar(rule, ruleIndex, row, col);
+                return undefined; // Data bars are drawn separately, not as CellStyle
+            }
+            case 'iconSet': {
+                this.evaluateIconSet(rule, ruleIndex, row, col);
+                return undefined; // Icons drawn separately
+            }
+            case 'expression': return this.evaluateExpression(rule, row, col);
+            default: return undefined;
+        }
+    }
+
+    private evaluateCellIs(rule: any, row: number, col: number): CellStyle | undefined {
+        const cellVal = this.getCellNumericValue(row, col);
+        if (cellVal === undefined) return undefined;
+        const op = rule.operator || 'greaterThan';
+        const v1 = parseFloat(rule.values?.[0] ?? '0');
+        const v2 = parseFloat(rule.values?.[1] ?? '0');
+        let match = false;
+        switch (op) {
+            case 'greaterThan': match = cellVal > v1; break;
+            case 'greaterThanOrEqual': match = cellVal >= v1; break;
+            case 'lessThan': match = cellVal < v1; break;
+            case 'lessThanOrEqual': match = cellVal <= v1; break;
+            case 'equal': match = cellVal === v1; break;
+            case 'notEqual': match = cellVal !== v1; break;
+            case 'between': match = cellVal >= v1 && cellVal <= v2; break;
+            case 'notBetween': match = cellVal < v1 || cellVal > v2; break;
+        }
+        if (match && rule.dxf_style) return this.dxfToCellStyle(rule.dxf_style);
+        return undefined;
+    }
+
+    private evaluateContainsText(rule: any, row: number, col: number, mode: string): CellStyle | undefined {
+        const cellVal = this.getCellStringValue(row, col).toLowerCase();
+        const text = (rule.text || rule.values?.[0] || '').toLowerCase();
+        let match = false;
+        switch (mode) {
+            case 'contains': match = cellVal.includes(text); break;
+            case 'notContains': match = !cellVal.includes(text); break;
+            case 'beginsWith': match = cellVal.startsWith(text); break;
+            case 'endsWith': match = cellVal.endsWith(text); break;
+        }
+        if (match && rule.dxf_style) return this.dxfToCellStyle(rule.dxf_style);
+        return undefined;
+    }
+
+    private evaluateTop10(rule: any, ruleIndex: number, row: number, col: number): CellStyle | undefined {
+        const cellVal = this.getCellNumericValue(row, col);
+        if (cellVal === undefined) return undefined;
+        const cacheKey = ruleIndex;
+        if (!this._cfCache.has(cacheKey)) {
+            const values = this.collectNumericValues(rule.sqref);
+            values.sort((a, b) => a - b);
+            const rank = rule.rank || 10;
+            const isBottom = rule.bottom === true;
+            const isPercent = rule.percent === true;
+            let count = isPercent ? Math.ceil(values.length * rank / 100) : rank;
+            count = Math.min(count, values.length);
+            let threshold: number;
+            if (isBottom) {
+                threshold = values[count - 1] ?? -Infinity;
+                this._cfCache.set(cacheKey, { type: 'bottom', threshold });
+            } else {
+                threshold = values[values.length - count] ?? Infinity;
+                this._cfCache.set(cacheKey, { type: 'top', threshold });
+            }
+        }
+        const cache = this._cfCache.get(cacheKey);
+        const match = cache.type === 'top' ? cellVal >= cache.threshold : cellVal <= cache.threshold;
+        if (match && rule.dxf_style) return this.dxfToCellStyle(rule.dxf_style);
+        return undefined;
+    }
+
+    private evaluateAboveAverage(rule: any, ruleIndex: number, row: number, col: number): CellStyle | undefined {
+        const cellVal = this.getCellNumericValue(row, col);
+        if (cellVal === undefined) return undefined;
+        if (!this._cfCache.has(ruleIndex)) {
+            const values = this.collectNumericValues(rule.sqref);
+            const avg = values.length > 0 ? values.reduce((a, b) => a + b, 0) / values.length : 0;
+            this._cfCache.set(ruleIndex, { avg });
+        }
+        const { avg } = this._cfCache.get(ruleIndex);
+        const isAbove = rule.above_average !== false;
+        const match = isAbove ? cellVal > avg : cellVal < avg;
+        if (match && rule.dxf_style) return this.dxfToCellStyle(rule.dxf_style);
+        return undefined;
+    }
+
+    private evaluateDuplicateUnique(rule: any, ruleIndex: number, row: number, col: number, wantDuplicate: boolean): CellStyle | undefined {
+        const cellVal = this.getCellStringValue(row, col);
+        if (cellVal === '') return undefined;
+        if (!this._cfCache.has(ruleIndex)) {
+            const allValues = this.collectStringValues(rule.sqref);
+            const counts: Record<string, number> = {};
+            for (const v of allValues) {
+                if (v !== '') counts[v] = (counts[v] || 0) + 1;
+            }
+            this._cfCache.set(ruleIndex, { counts });
+        }
+        const { counts } = this._cfCache.get(ruleIndex);
+        const isDuplicate = (counts[cellVal] || 0) > 1;
+        const match = wantDuplicate ? isDuplicate : !isDuplicate;
+        if (match && rule.dxf_style) return this.dxfToCellStyle(rule.dxf_style);
+        return undefined;
+    }
+
+    private evaluateExpression(rule: any, row: number, col: number): CellStyle | undefined {
+        // Simple expression evaluation — only support basic cell reference comparison
+        // Full formula evaluation would require the formula engine
+        if (rule.dxf_style) return this.dxfToCellStyle(rule.dxf_style);
+        return undefined;
+    }
+
+    /** Evaluate color scale and return a fill color */
+    private evaluateColorScale(rule: any, ruleIndex: number, row: number, col: number): CellStyle | undefined {
+        const cellVal = this.getCellNumericValue(row, col);
+        if (cellVal === undefined) return undefined;
+        const cs = rule.color_scale;
+        if (!cs || !cs.colors || cs.colors.length < 2) return undefined;
+
+        if (!this._cfCache.has(ruleIndex)) {
+            const values = this.collectNumericValues(rule.sqref);
+            const min = values.length > 0 ? Math.min(...values) : 0;
+            const max = values.length > 0 ? Math.max(...values) : 1;
+            this._cfCache.set(ruleIndex, { min, max });
+        }
+        const { min, max } = this._cfCache.get(ruleIndex);
+        const range = max - min || 1;
+        const ratio = Math.max(0, Math.min(1, (cellVal - min) / range));
+
+        let fillColor: string;
+        if (cs.colors.length === 2) {
+            fillColor = this.interpolateColor(cs.colors[0], cs.colors[1], ratio);
+        } else {
+            // 3-color scale: interpolate in two segments
+            if (ratio <= 0.5) {
+                fillColor = this.interpolateColor(cs.colors[0], cs.colors[1], ratio * 2);
+            } else {
+                fillColor = this.interpolateColor(cs.colors[1], cs.colors[2], (ratio - 0.5) * 2);
+            }
+        }
+        return { fillColor };
+    }
+
+    /** Interpolate between two hex colors */
+    private interpolateColor(c1: string, c2: string, t: number): string {
+        const parse = (hex: string) => {
+            hex = hex.replace('#', '');
+            return [parseInt(hex.substring(0, 2), 16), parseInt(hex.substring(2, 4), 16), parseInt(hex.substring(4, 6), 16)];
+        };
+        const [r1, g1, b1] = parse(c1);
+        const [r2, g2, b2] = parse(c2);
+        const r = Math.round(r1 + (r2 - r1) * t);
+        const g = Math.round(g1 + (g2 - g1) * t);
+        const b = Math.round(b1 + (b2 - b1) * t);
+        return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
+    }
+
+    /** Evaluate data bar — stores result in _cfDataBars map */
+    private evaluateDataBar(rule: any, ruleIndex: number, row: number, col: number): void {
+        const cellVal = this.getCellNumericValue(row, col);
+        if (cellVal === undefined) return;
+        const db = rule.data_bar;
+        if (!db) return;
+
+        if (!this._cfCache.has(ruleIndex)) {
+            const values = this.collectNumericValues(rule.sqref);
+            const min = values.length > 0 ? Math.min(...values) : 0;
+            const max = values.length > 0 ? Math.max(...values) : 1;
+            this._cfCache.set(ruleIndex, { min, max });
+        }
+        const { min, max } = this._cfCache.get(ruleIndex);
+        const range = max - min || 1;
+        const ratio = Math.max(0, Math.min(1, (cellVal - min) / range));
+        this._cfDataBars.set(`${row}:${col}`, { ratio, color: db.color || '#638EC6' });
+    }
+
+    /** Evaluate icon set — stores result in _cfIcons map */
+    private evaluateIconSet(rule: any, ruleIndex: number, row: number, col: number): void {
+        const cellVal = this.getCellNumericValue(row, col);
+        if (cellVal === undefined) return;
+        const is = rule.icon_set;
+        if (!is) return;
+
+        if (!this._cfCache.has(ruleIndex)) {
+            const values = this.collectNumericValues(rule.sqref);
+            const min = values.length > 0 ? Math.min(...values) : 0;
+            const max = values.length > 0 ? Math.max(...values) : 1;
+            this._cfCache.set(ruleIndex, { min, max });
+        }
+        const { min, max } = this._cfCache.get(ruleIndex);
+        const range = max - min || 1;
+        const pct = ((cellVal - min) / range) * 100;
+
+        // Determine icon based on thresholds or default percentile splits
+        const thresholds = is.thresholds && is.thresholds.length > 0
+            ? is.thresholds
+            : this.getDefaultIconThresholds(is.icon_style);
+
+        const iconInfo = this.getIconForValue(pct, thresholds, is.icon_style, is.reverse);
+        this._cfIcons.set(`${row}:${col}`, iconInfo);
+    }
+
+    /** Get default thresholds for icon set styles */
+    private getDefaultIconThresholds(style: string): number[] {
+        if (style.startsWith('5')) return [20, 40, 60, 80];
+        if (style.startsWith('4')) return [25, 50, 75];
+        return [33, 67]; // 3-icon default
+    }
+
+    /** Get icon character and color for a given percentile value */
+    private getIconForValue(pct: number, thresholds: number[], style: string, reverse: boolean): { icon: string; color: string } {
+        const icons = this.getIconSet(style);
+        let idx = 0;
+        for (let i = 0; i < thresholds.length; i++) {
+            if (pct >= thresholds[i]) idx = i + 1;
+        }
+        if (reverse) idx = icons.length - 1 - idx;
+        idx = Math.max(0, Math.min(idx, icons.length - 1));
+        return icons[idx];
+    }
+
+    /** Get icon set definition (char + color) */
+    private getIconSet(style: string): Array<{ icon: string; color: string }> {
+        switch (style) {
+            case '3Arrows': case '3ArrowsGray':
+                return [
+                    { icon: '▼', color: '#ff0000' },
+                    { icon: '►', color: '#ffbf00' },
+                    { icon: '▲', color: '#00b050' },
+                ];
+            case '3TrafficLights1': case '3TrafficLights': case '3TrafficLights2':
+                return [
+                    { icon: '●', color: '#ff0000' },
+                    { icon: '●', color: '#ffbf00' },
+                    { icon: '●', color: '#00b050' },
+                ];
+            case '3Flags':
+                return [
+                    { icon: '⚑', color: '#ff0000' },
+                    { icon: '⚑', color: '#ffbf00' },
+                    { icon: '⚑', color: '#00b050' },
+                ];
+            case '3Signs':
+                return [
+                    { icon: '◆', color: '#ff0000' },
+                    { icon: '▲', color: '#ffbf00' },
+                    { icon: '●', color: '#00b050' },
+                ];
+            case '3Symbols': case '3Symbols2':
+                return [
+                    { icon: '✕', color: '#ff0000' },
+                    { icon: '!', color: '#ffbf00' },
+                    { icon: '✓', color: '#00b050' },
+                ];
+            case '3Stars':
+                return [
+                    { icon: '☆', color: '#ffbf00' },
+                    { icon: '★', color: '#ffbf00' },
+                    { icon: '★', color: '#ffbf00' },
+                ];
+            case '4Arrows': case '4ArrowsGray':
+                return [
+                    { icon: '▼', color: '#ff0000' },
+                    { icon: '▾', color: '#ffbf00' },
+                    { icon: '▴', color: '#92d050' },
+                    { icon: '▲', color: '#00b050' },
+                ];
+            case '4RedToBlack':
+                return [
+                    { icon: '●', color: '#000000' },
+                    { icon: '●', color: '#888888' },
+                    { icon: '●', color: '#ff6666' },
+                    { icon: '●', color: '#ff0000' },
+                ];
+            case '4TrafficLights':
+                return [
+                    { icon: '●', color: '#ff0000' },
+                    { icon: '●', color: '#ffbf00' },
+                    { icon: '●', color: '#92d050' },
+                    { icon: '●', color: '#00b050' },
+                ];
+            case '5Arrows': case '5ArrowsGray':
+                return [
+                    { icon: '▼', color: '#ff0000' },
+                    { icon: '▾', color: '#ff6666' },
+                    { icon: '►', color: '#ffbf00' },
+                    { icon: '▴', color: '#92d050' },
+                    { icon: '▲', color: '#00b050' },
+                ];
+            case '5Quarters':
+                return [
+                    { icon: '○', color: '#888888' },
+                    { icon: '◔', color: '#888888' },
+                    { icon: '◑', color: '#888888' },
+                    { icon: '◕', color: '#888888' },
+                    { icon: '●', color: '#888888' },
+                ];
+            default: // 3TrafficLights as fallback
+                return [
+                    { icon: '●', color: '#ff0000' },
+                    { icon: '●', color: '#ffbf00' },
+                    { icon: '●', color: '#00b050' },
+                ];
+        }
     }
 
     private normalizeRange(range: SelectionRange): SelectionRange {

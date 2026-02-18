@@ -12,7 +12,9 @@ import { FileAccess } from '../../../../../../base/common/network.js';
 import { URI } from '../../../../../../base/common/uri.js';
 import { generateUuid } from '../../../../../../base/common/uuid.js';
 import { IEditorOptions } from '../../../../../../platform/editor/common/editor.js';
+import { IFileDialogService } from '../../../../../../platform/dialogs/common/dialogs.js';
 import { IFileService } from '../../../../../../platform/files/common/files.js';
+import { IOpenerService } from '../../../../../../platform/opener/common/opener.js';
 import { IStorageService } from '../../../../../../platform/storage/common/storage.js';
 import { ITelemetryService } from '../../../../../../platform/telemetry/common/telemetry.js';
 import { IThemeService } from '../../../../../../platform/theme/common/themeService.js';
@@ -40,7 +42,9 @@ export class XLSXRustViewerEditor extends EditorPane {
 		@IThemeService themeService: IThemeService,
 		@IStorageService storageService: IStorageService,
 		@IWebviewService private readonly webviewService: IWebviewService,
-		@IFileService private readonly fileService: IFileService
+		@IFileService private readonly fileService: IFileService,
+		@IOpenerService private readonly openerService: IOpenerService,
+		@IFileDialogService private readonly fileDialogService: IFileDialogService
 	) {
 		super(XLSXRustViewerEditor.ID, group, telemetryService, themeService, storageService);
 	}
@@ -167,6 +171,14 @@ export class XLSXRustViewerEditor extends EditorPane {
 				this.handleSaveData(data.data);
 				break;
 
+			case 'print':
+				this.handlePrint(data.imageData);
+				break;
+
+			case 'exportImage':
+				this.handleExportImage(data.imageData);
+				break;
+
 			case 'error':
 				console.error('[XLSX Rust Viewer] Webview error:', data.message);
 				break;
@@ -201,6 +213,90 @@ export class XLSXRustViewerEditor extends EditorPane {
 			console.log('[XLSX Rust Viewer] File saved to disk:', this._currentInput.resource.toString());
 		} catch (error) {
 			console.error('[XLSX Rust Viewer] Failed to save file:', error);
+		}
+	}
+
+	/**
+	 * Open a print-ready HTML page in the default browser with the canvas snapshot.
+	 * Writes a temp HTML file because data: URIs don't work with openExternal on Windows.
+	 */
+	private async handlePrint(imageDataUrl: string): Promise<void> {
+		if (!imageDataUrl) return;
+
+		try {
+			const fileName = this._currentInput?.getName() ?? 'Spreadsheet';
+			const printHtml = [
+				'<!DOCTYPE html><html><head><meta charset="utf-8">',
+				`<title>Print - ${fileName}</title>`,
+				'<style>',
+				'@media print { @page { margin: 0.5in; } body { margin: 0; } }',
+				'body { display: flex; justify-content: center; padding: 20px; }',
+				'img { max-width: 100%; height: auto; }',
+				'</style>',
+				'</head><body>',
+				`<img src="${imageDataUrl}" onload="window.print()">`,
+				'</body></html>',
+			].join('');
+
+			// Write temp HTML file next to the source file
+			const parentUri = this._currentInput
+				? URI.joinPath(this._currentInput.resource, '..')
+				: undefined;
+			const tmpName = `.~print-${generateUuid().slice(0, 8)}.html`;
+			const tmpUri = parentUri
+				? URI.joinPath(parentUri, tmpName)
+				: URI.parse(`file:///tmp/${tmpName}`);
+
+			await this.fileService.writeFile(tmpUri, VSBuffer.fromString(printHtml));
+
+			// Open in default browser
+			await this.openerService.open(tmpUri, { openExternal: true });
+
+			// Clean up temp file after a delay
+			setTimeout(() => {
+				this.fileService.del(tmpUri).catch(() => { /* ignore cleanup errors */ });
+			}, 30000);
+		} catch (error) {
+			console.error('[XLSX Rust Viewer] Print failed:', error);
+		}
+	}
+
+	/**
+	 * Export the canvas snapshot as a PNG image file via Save dialog.
+	 */
+	private async handleExportImage(imageDataUrl: string): Promise<void> {
+		if (!imageDataUrl) return;
+
+		try {
+			// Suggest a default filename based on the source xlsx
+			const baseName = this._currentInput
+				? this._currentInput.resource.path.replace(/^.*[\\/]/, '').replace(/\.[^.]+$/, '')
+				: 'spreadsheet';
+			const defaultUri = this._currentInput
+				? URI.joinPath(this._currentInput.resource, '..', `${baseName}.png`)
+				: undefined;
+
+			const result = await this.fileDialogService.showSaveDialog({
+				title: 'Export as Image',
+				defaultUri,
+				filters: [
+					{ name: 'PNG Image', extensions: ['png'] }
+				]
+			});
+
+			if (result) {
+				// Strip the data URL prefix to get raw base64
+				const base64 = imageDataUrl.replace(/^data:image\/png;base64,/, '');
+				const binaryString = atob(base64);
+				const bytes = new Uint8Array(binaryString.length);
+				for (let i = 0; i < binaryString.length; i++) {
+					bytes[i] = binaryString.charCodeAt(i);
+				}
+				await this.fileService.writeFile(result, VSBuffer.wrap(bytes));
+				console.log('[XLSX Rust Viewer] Image exported to:', result.toString());
+			}
+		} catch (error) {
+			console.error('[XLSX Rust Viewer] Export failed:', error);
 		}
 	}
 
@@ -243,6 +339,7 @@ export class XLSXRustViewerEditor extends EditorPane {
 		this._dimension = dimension;
 		if (this.webview && this._element) {
 			this.webview.layoutWebviewOverElement(this._element, dimension);
+			this.webview.postMessage({ type: 'layout' });
 		}
 	}
 
@@ -541,6 +638,332 @@ export class XLSXRustViewerEditor extends EditorPane {
 		.ctx-separator {
 			height: 1px; margin: 5px 10px;
 			background: var(--vscode-menu-separatorBackground, #3c3c3c);
+		}
+		/* --- Filter Dropdown --- */
+		.xlsx-filter-dropdown {
+			position: fixed; z-index: 1001;
+			width: 260px;
+			background: var(--vscode-menu-background, #252526);
+			border: 1px solid var(--vscode-menu-border, #454545);
+			border-radius: 6px;
+			box-shadow: 0 6px 20px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.04);
+			padding: 5px 0;
+			font-size: 12px;
+			backdrop-filter: blur(8px);
+			color: var(--vscode-menu-foreground, #ccc);
+		}
+		.filter-item {
+			padding: 5px 12px; cursor: pointer;
+			border-radius: 0; transition: background 0.08s;
+		}
+		.filter-item:hover {
+			background: var(--vscode-list-activeSelectionBackground, #094771);
+			color: var(--vscode-list-activeSelectionForeground, #fff);
+		}
+		.filter-clear { font-style: italic; opacity: 0.85; }
+		.filter-separator {
+			height: 1px; margin: 5px 10px;
+			background: var(--vscode-menu-separatorBackground, #3c3c3c);
+		}
+		.filter-search {
+			display: block; width: calc(100% - 24px); margin: 6px 12px;
+			padding: 4px 8px;
+			background: var(--vscode-input-background, #3c3c3c);
+			color: var(--vscode-input-foreground, #ccc);
+			border: 1px solid var(--vscode-input-border, #555);
+			border-radius: 3px; outline: none; font-size: 12px;
+		}
+		.filter-search:focus { border-color: var(--vscode-focusBorder, #007fd4); }
+		.filter-checkbox-list {
+			max-height: 180px; overflow-y: auto;
+			padding: 0 6px;
+		}
+		.filter-checkbox-row {
+			display: flex; align-items: center; gap: 6px;
+			padding: 3px 6px; cursor: pointer; border-radius: 3px;
+		}
+		.filter-checkbox-row:hover {
+			background: var(--vscode-list-hoverBackground, #2a2d2e);
+		}
+		.filter-select-all {
+			padding: 4px 12px; font-weight: bold;
+		}
+		.filter-btn-row {
+			display: flex; justify-content: flex-end; gap: 6px;
+			padding: 6px 12px;
+		}
+		.filter-btn {
+			padding: 4px 16px; border: none; border-radius: 3px;
+			cursor: pointer; font-size: 12px;
+		}
+		.filter-btn-ok {
+			background: var(--vscode-button-background, #0e639c);
+			color: var(--vscode-button-foreground, #fff);
+		}
+		.filter-btn-ok:hover { background: var(--vscode-button-hoverBackground, #1177bb); }
+		.filter-btn-cancel {
+			background: var(--vscode-button-secondaryBackground, #3a3d41);
+			color: var(--vscode-button-secondaryForeground, #ccc);
+		}
+		.filter-btn-cancel:hover { background: var(--vscode-button-secondaryHoverBackground, #45494e); }
+		/* --- Filter Arrow Buttons (overlaid on table headers) --- */
+		.filter-arrow-btn {
+			position: absolute;
+			z-index: 5;
+			pointer-events: auto;
+			cursor: pointer;
+			width: 18px;
+			border: none;
+			background: transparent;
+			color: #fff;
+			font-size: 10px;
+			line-height: 1;
+			padding: 0;
+			margin: 0;
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			opacity: 0.85;
+			transition: background 0.1s, opacity 0.1s;
+		}
+		.filter-arrow-btn:hover {
+			background: rgba(255,255,255,0.18);
+			opacity: 1;
+			border-radius: 2px;
+		}
+
+		/* Conditional Formatting Dialog */
+		.cf-dialog {
+			position: fixed;
+			top: 50%;
+			left: 50%;
+			transform: translate(-50%, -50%);
+			width: 420px;
+			max-height: 80vh;
+			background: var(--vscode-editorWidget-background, #252526);
+			border: 1px solid var(--vscode-editorWidget-border, #454545);
+			border-radius: 6px;
+			box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+			display: flex;
+			flex-direction: column;
+			z-index: 10000;
+			font-family: var(--vscode-font-family, system-ui);
+			font-size: 12px;
+			color: var(--vscode-foreground, #ccc);
+		}
+		.cf-dialog-title {
+			display: flex;
+			align-items: center;
+			justify-content: space-between;
+			padding: 8px 12px;
+			font-weight: 600;
+			font-size: 13px;
+			background: var(--vscode-titleBar-activeBackground, #3c3c3c);
+			border-bottom: 1px solid var(--vscode-editorWidget-border, #454545);
+			border-radius: 6px 6px 0 0;
+			user-select: none;
+		}
+		.cf-dialog-close {
+			background: none;
+			border: none;
+			color: var(--vscode-foreground, #ccc);
+			font-size: 18px;
+			cursor: pointer;
+			padding: 0 4px;
+			line-height: 1;
+		}
+		.cf-dialog-close:hover { color: #ff4444; }
+		.cf-dialog-body {
+			padding: 12px;
+			overflow-y: auto;
+			flex: 1;
+		}
+		.cf-dialog-section {
+			margin-bottom: 12px;
+		}
+		.cf-dialog-label {
+			font-weight: 600;
+			margin-bottom: 6px;
+			font-size: 11px;
+			text-transform: uppercase;
+			letter-spacing: 0.5px;
+			color: var(--vscode-descriptionForeground, #999);
+		}
+		.cf-dialog-row {
+			display: flex;
+			align-items: center;
+			gap: 6px;
+			margin-bottom: 6px;
+		}
+		.cf-input-label {
+			min-width: 70px;
+			font-size: 12px;
+		}
+		.cf-select, .cf-input {
+			flex: 1;
+			padding: 4px 6px;
+			background: var(--vscode-input-background, #3c3c3c);
+			border: 1px solid var(--vscode-input-border, #555);
+			color: var(--vscode-input-foreground, #ccc);
+			border-radius: 3px;
+			font-size: 12px;
+			font-family: inherit;
+		}
+		.cf-select:focus, .cf-input:focus {
+			border-color: var(--vscode-focusBorder, #007fd4);
+			outline: none;
+		}
+		.cf-color-input {
+			width: 32px;
+			height: 24px;
+			padding: 0;
+			border: 1px solid var(--vscode-input-border, #555);
+			border-radius: 3px;
+			cursor: pointer;
+			background: none;
+		}
+		.cf-config-area {
+			margin-top: 6px;
+		}
+		.cf-dialog-note {
+			padding: 4px 8px;
+			background: var(--vscode-textBlockQuote-background, #333);
+			border-radius: 3px;
+			font-size: 11px;
+			color: var(--vscode-descriptionForeground, #999);
+		}
+		.cf-preview {
+			margin-top: 8px;
+			padding: 8px 12px;
+			border: 1px solid var(--vscode-input-border, #555);
+			border-radius: 3px;
+			font-size: 13px;
+			text-align: center;
+		}
+		.cf-dialog-footer {
+			display: flex;
+			justify-content: flex-end;
+			gap: 8px;
+			padding: 8px 12px;
+			border-top: 1px solid var(--vscode-editorWidget-border, #454545);
+		}
+		.cf-btn {
+			padding: 5px 14px;
+			border: 1px solid var(--vscode-button-secondaryBackground, #3a3d41);
+			background: var(--vscode-button-secondaryBackground, #3a3d41);
+			color: var(--vscode-button-secondaryForeground, #ccc);
+			border-radius: 3px;
+			cursor: pointer;
+			font-size: 12px;
+		}
+		.cf-btn:hover { background: var(--vscode-button-secondaryHoverBackground, #45494e); }
+		.cf-btn-primary {
+			background: var(--vscode-button-background, #0e639c);
+			color: var(--vscode-button-foreground, #fff);
+			border-color: var(--vscode-button-background, #0e639c);
+		}
+		.cf-btn-primary:hover { background: var(--vscode-button-hoverBackground, #1177bb); }
+		.cf-rule-list {
+			max-height: 120px;
+			overflow-y: auto;
+			border: 1px solid var(--vscode-input-border, #555);
+			border-radius: 3px;
+			margin-bottom: 6px;
+		}
+		.cf-rule-empty {
+			padding: 8px;
+			text-align: center;
+			color: var(--vscode-descriptionForeground, #888);
+			font-style: italic;
+		}
+		.cf-rule-item {
+			display: flex;
+			align-items: center;
+			gap: 6px;
+			padding: 4px 8px;
+			border-bottom: 1px solid var(--vscode-input-border, #444);
+			cursor: pointer;
+		}
+		.cf-rule-item:last-child { border-bottom: none; }
+		.cf-rule-item:hover { background: var(--vscode-list-hoverBackground, #2a2d2e); }
+		.cf-rule-desc {
+			flex: 1;
+			overflow: hidden;
+			text-overflow: ellipsis;
+			white-space: nowrap;
+			font-size: 11px;
+		}
+		.cf-rule-range {
+			font-size: 10px;
+			color: var(--vscode-descriptionForeground, #888);
+			min-width: 50px;
+			text-align: right;
+		}
+		.cf-rule-preview {
+			padding: 1px 4px;
+			border-radius: 2px;
+			font-size: 11px;
+			min-width: 20px;
+			text-align: center;
+		}
+		.cf-rule-delete {
+			background: none;
+			border: none;
+			color: var(--vscode-errorForeground, #f48771);
+			cursor: pointer;
+			font-size: 14px;
+			padding: 0 2px;
+			line-height: 1;
+		}
+		.cf-rule-delete:hover { color: #ff4444; }
+		.cf-custom-colors {
+			margin-top: 4px;
+		}
+
+		/* --- Chart Overlays --- */
+		.chart-overlay {
+			position: absolute;
+			z-index: 10;
+			border: 1px solid var(--vscode-editorWidget-border, #454545);
+			background: var(--vscode-editor-background, #1e1e1e);
+			pointer-events: auto;
+			cursor: move;
+			box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+			border-radius: 4px;
+			overflow: hidden;
+		}
+		.chart-overlay.selected {
+			border: 2px solid var(--vscode-focusBorder, #007acc);
+			box-shadow: 0 0 0 1px var(--vscode-focusBorder, #007acc), 0 4px 12px rgba(0,0,0,0.3);
+		}
+		.chart-resize-handle {
+			position: absolute;
+			width: 8px;
+			height: 8px;
+			background: var(--vscode-focusBorder, #007acc);
+			border-radius: 50%;
+			z-index: 11;
+		}
+		.chart-resize-handle:hover {
+			background: var(--vscode-button-hoverBackground, #1177bb);
+			transform: scale(1.3);
+		}
+
+		/* --- Chart Wizard Dialog --- */
+		.chart-wizard-overlay {
+			position: fixed;
+			inset: 0;
+			background: rgba(0,0,0,0.5);
+			z-index: 10000;
+			display: none;
+			align-items: center;
+			justify-content: center;
+		}
+		.chart-wizard-dialog {
+			background: var(--vscode-editor-background, #1e1e1e);
+			border: 1px solid var(--vscode-focusBorder, #007acc);
+			border-radius: 8px;
+			box-shadow: 0 8px 32px rgba(0,0,0,0.5);
 		}
 	</style>
 </head>

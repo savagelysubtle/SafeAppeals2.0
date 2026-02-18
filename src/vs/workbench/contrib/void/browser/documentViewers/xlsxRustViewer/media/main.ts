@@ -10,6 +10,10 @@ import init, { XlsxParser, XlsxWriter, TableOps, FormulaEngine, init_panic_hook 
 import { CanvasRenderer, FormulaRange } from './renderer.js';
 import { Ribbon, RibbonEvent } from './ribbon.js';
 import { ContextMenu, ContextMenuEvent } from './contextMenu.js';
+import { FilterDropdown, FilterDropdownEvent } from './filterDropdown.js';
+import { ConditionalFormatDialog, CFDialogEvent } from './conditionalFormatDialog.js';
+import { ChartManager, ChartDefinition, RendererCoords } from './chartManager.js';
+import { ChartWizardDialog, ChartWizardEvent } from './chartWizardDialog.js';
 
 // VS Code API (available in webview context)
 declare function acquireVsCodeApi(): { postMessage(msg: unknown): void; getState(): unknown; setState(state: unknown): void };
@@ -22,6 +26,10 @@ let tableOps: TableOps | null = null;
 let formulaEngine: FormulaEngine | null = null;
 let renderer: CanvasRenderer | null = null;
 let contextMenu: ContextMenu | null = null;
+let filterDropdown: FilterDropdown | null = null;
+let cfDialog: ConditionalFormatDialog | null = null;
+let chartManager: ChartManager | null = null;
+let chartWizard: ChartWizardDialog | null = null;
 let ribbon: Ribbon | null = null;
 
 async function initialize() {
@@ -59,6 +67,25 @@ async function initialize() {
 			column_count: table.columns.length,
 		};
 	});
+
+	// Initialize filter dropdown for table column headers
+	filterDropdown = new FilterDropdown(document.body, handleFilterDropdownAction);
+
+	// Initialize conditional formatting dialog
+	cfDialog = new ConditionalFormatDialog(document.body, handleCfDialogAction);
+
+	// Chart manager will be initialized in setupRendererCallbacks after renderer is ready
+
+	// Initialize chart wizard dialog
+	chartWizard = new ChartWizardDialog(document.body, handleChartWizardAction);
+
+	// Wire filter arrow clicks from renderer to the filter dropdown
+	renderer.onFilterArrowClick = (tableName, colIndex, colName, screenX, screenY) => {
+		if (!renderer || !filterDropdown) return;
+		const uniqueValues = renderer.getColumnUniqueValues(tableName, colIndex);
+		const currentFilter = renderer.getActiveFilter(tableName, colIndex);
+		filterDropdown.show(screenX, screenY, tableName, colIndex, colName, uniqueValues, currentFilter);
+	};
 
 	// Get WASM URL from data attribute injected by the editor
 	const configEl = document.getElementById('config');
@@ -108,6 +135,9 @@ window.addEventListener('message', async (event) => {
 				renderer.setData(null);
 			}
 			break;
+		case 'layout':
+			renderer?.resize();
+			break;
 	}
 });
 
@@ -147,6 +177,7 @@ async function handleLoad(base64Data: string) {
 		renderer.setData(model);
 		evaluateFormulas();
 		buildSheetTabs();
+		syncChartOverlays();
 
 	} catch (e: unknown) {
 		const message = e instanceof Error ? e.message : String(e);
@@ -195,6 +226,7 @@ function buildSheetTabs() {
 			renderer.setActiveSheetIndex(i);
 			evaluateFormulas();
 			buildSheetTabs();
+			syncChartOverlays();
 		};
 		tab.addEventListener('contextmenu', (e) => {
 			e.preventDefault();
@@ -252,7 +284,7 @@ function addSheet() {
 	const data = renderer.getData();
 	if (!data?.sheets) return;
 	const name = `Sheet${data.sheets.length + 1}`;
-	data.sheets.push({ name, cells: {}, row_count: 100, col_count: 26, tables: [], merged_cells: [] });
+	data.sheets.push({ name, cells: {}, row_count: 100, col_count: 26, tables: [], merged_cells: [], charts: [], sparklines: [] });
 	renderer.updateModel(data);
 	renderer.setActiveSheetIndex(data.sheets.length - 1);
 	buildSheetTabs();
@@ -391,6 +423,12 @@ function handleRibbonAction(event: RibbonEvent) {
 		case 'formulaMin': insertFormula('MIN'); break;
 		case 'formulaMax': insertFormula('MAX'); break;
 
+		// Conditional Formatting
+		case 'conditionalFormatting': showConditionalFormattingDialog(); break;
+
+		// Charts
+		case 'insertChart': showChartWizard(); break;
+
 		// View
 		case 'gridlines': renderer.toggleGridlines(); break;
 		case 'headers': renderer.toggleHeaders(); break;
@@ -403,8 +441,24 @@ function handleRibbonAction(event: RibbonEvent) {
 
 		// File
 		case 'save': handleSave(); break;
-		case 'print': window.print(); break;
-		case 'exportPDF': /* TODO: export PDF */ break;
+		case 'print': {
+			// window.print() is blocked in sandboxed webviews; capture canvas and route through extension host
+			const canvas = document.querySelector('canvas');
+			if (canvas) {
+				const dataUrl = canvas.toDataURL('image/png');
+				vscode.postMessage({ type: 'print', imageData: dataUrl });
+			}
+			break;
+		}
+		case 'exportPDF': {
+			// Capture canvas and route through extension host for export
+			const exportCanvas = document.querySelector('canvas');
+			if (exportCanvas) {
+				const dataUrl = exportCanvas.toDataURL('image/png');
+				vscode.postMessage({ type: 'exportImage', imageData: dataUrl });
+			}
+			break;
+		}
 
 		// Table operations (from Insert and Data tabs)
 		case 'createTable': {
@@ -458,6 +512,84 @@ function handleRibbonAction(event: RibbonEvent) {
 }
 
 // --- Context Menu Action Handler ---
+
+function handleFilterDropdownAction(event: FilterDropdownEvent) {
+	if (!renderer) return;
+
+	switch (event.action) {
+		case 'sortAZ':
+			renderer.sortTableColumn(event.tableName, event.colIndex, true);
+			break;
+		case 'sortZA':
+			renderer.sortTableColumn(event.tableName, event.colIndex, false);
+			break;
+		case 'filter':
+			if (event.allowedValues) {
+				renderer.applyFilter(event.tableName, event.colIndex, event.allowedValues);
+			}
+			break;
+		case 'clearFilter':
+			renderer.clearFilter(event.tableName, event.colIndex);
+			break;
+	}
+}
+
+function showConditionalFormattingDialog() {
+	if (!renderer || !cfDialog) return;
+	const data = renderer.getData();
+	const sheet = data?.sheets?.[renderer.getActiveSheetIndex?.() ?? 0];
+	const existingRules = sheet?.conditional_formats || [];
+
+	// Get current selection as sqref default
+	const sel = renderer.getSelectedCell();
+	const selRange = renderer.getSelectedRange?.();
+	let sqref = 'A1:A10';
+	if (selRange) {
+		const c1 = getColName(selRange.startCol) + (selRange.startRow + 1);
+		const c2 = getColName(selRange.endCol) + (selRange.endRow + 1);
+		sqref = `${c1}:${c2}`;
+	} else if (sel) {
+		sqref = getColName(sel.col) + (sel.row + 1);
+	}
+
+	cfDialog.show(sqref, existingRules);
+}
+
+function handleCfDialogAction(event: CFDialogEvent) {
+	if (!renderer) return;
+	const data = renderer.getData();
+	if (!data?.sheets) return;
+	const sheetIdx = renderer.getActiveSheetIndex?.() ?? 0;
+	const sheet = data.sheets[sheetIdx];
+	if (!sheet) return;
+	if (!sheet.conditional_formats) sheet.conditional_formats = [];
+
+	switch (event.action) {
+		case 'add':
+			if (event.rule) {
+				sheet.conditional_formats.push(event.rule);
+				renderer.render();
+				markDirty();
+			}
+			break;
+		case 'edit':
+			if (event.rule && event.ruleIndex !== undefined && event.ruleIndex < sheet.conditional_formats.length) {
+				sheet.conditional_formats[event.ruleIndex] = event.rule;
+				renderer.render();
+				markDirty();
+			}
+			break;
+		case 'delete':
+			if (event.ruleIndex !== undefined && event.ruleIndex < sheet.conditional_formats.length) {
+				sheet.conditional_formats.splice(event.ruleIndex, 1);
+				renderer.render();
+				markDirty();
+			}
+			break;
+		case 'close':
+			break;
+	}
+}
 
 function handleContextMenuAction(event: ContextMenuEvent) {
 	if (!renderer) return;
@@ -922,6 +1054,221 @@ document.addEventListener('keydown', (e) => {
 	}
 });
 
+// --- Chart Functions ---
+
+function getRendererCoords(): RendererCoords | null {
+	if (!renderer) return null;
+	return {
+		cx: (col: number) => renderer!.publicCx(col),
+		ry: (row: number) => renderer!.publicRy(row),
+		cw: (col: number) => renderer!.publicCw(col),
+		rh: (row: number) => renderer!.publicRh(row),
+		getScrollLeft: () => renderer!.publicScrollLeft(),
+		getScrollTop: () => renderer!.publicScrollTop(),
+		getHeaderWidth: () => renderer!.publicHeaderWidth(),
+		getHeaderHeight: () => renderer!.publicHeaderHeight(),
+	};
+}
+
+function syncChartOverlays() {
+	if (!renderer || !chartManager) return;
+	const data = renderer.getData();
+	const sheetIdx = renderer.getActiveSheetIndex();
+	const charts = data?.sheets?.[sheetIdx]?.charts;
+	const coords = getRendererCoords();
+	if (coords) {
+		chartManager.syncCharts(charts, coords);
+	}
+}
+
+function showChartWizard(editIndex?: number) {
+	if (!renderer || !chartWizard) return;
+	const sel = renderer.getSelectedCell();
+	const selRange = renderer.getSelectedRange?.();
+	let defaultRange = 'A1:D10';
+	const anchorRow = sel?.row ?? 0;
+	const anchorCol = sel?.col ?? 0;
+
+	if (selRange) {
+		const c1 = getColName(selRange.startCol) + (selRange.startRow + 1);
+		const c2 = getColName(selRange.endCol) + (selRange.endRow + 1);
+		defaultRange = `${c1}:${c2}`;
+	}
+
+	let editDef: ChartDefinition | undefined;
+	if (editIndex !== undefined) {
+		const data = renderer.getData();
+		const sheetIdx = renderer.getActiveSheetIndex();
+		editDef = data?.sheets?.[sheetIdx]?.charts?.[editIndex];
+	}
+
+	chartWizard.show(defaultRange, anchorRow, anchorCol, editDef, editIndex);
+}
+
+function handleChartWizardAction(event: ChartWizardEvent) {
+	if (!renderer) return;
+	const data = renderer.getData();
+	if (!data?.sheets) return;
+	const sheetIdx = renderer.getActiveSheetIndex();
+	const sheet = data.sheets[sheetIdx];
+	if (!sheet) return;
+	if (!sheet.charts) sheet.charts = [];
+
+	switch (event.action) {
+		case 'insert':
+			if (event.chartDef) {
+				resolveChartData(event.chartDef, sheet);
+				sheet.charts.push(event.chartDef);
+				syncChartOverlays();
+				markDirty();
+			}
+			break;
+		case 'update':
+			if (event.chartDef && event.editIndex !== undefined && event.editIndex < sheet.charts.length) {
+				resolveChartData(event.chartDef, sheet);
+				sheet.charts[event.editIndex] = event.chartDef;
+				syncChartOverlays();
+				markDirty();
+			}
+			break;
+	}
+}
+
+/**
+ * Resolve chart series data references against actual cell data.
+ * Populates values_cache/categories_cache from the sheet cells,
+ * and ensures values_ref includes the sheet name for saving.
+ */
+function resolveChartData(chartDef: ChartDefinition, sheet: any) {
+	const sheetName = sheet.name || 'Sheet1';
+	const cells = sheet.cells || {};
+
+	for (const series of chartDef.series) {
+		if (series.values_ref) {
+			// Ensure the range includes sheet name for the writer
+			if (!series.values_ref.includes('!')) {
+				series.values_ref = `${sheetName}!${series.values_ref}`;
+			}
+
+			// Parse range and read cell values
+			const parsed = parseCellRange(series.values_ref);
+			if (parsed) {
+				const { startRow, startCol, endRow, endCol } = parsed;
+
+				// If range is a single column or row, treat first row/col as categories
+				const isVertical = startCol === endCol || (endCol - startCol) < (endRow - startRow);
+
+				if (isVertical) {
+					// First row is header (category label), rest are values
+					const cats: string[] = [];
+					const vals: number[] = [];
+					for (let r = startRow; r <= endRow; r++) {
+						const cell = cells[r]?.[startCol];
+						const val = getCellValue(cell);
+						if (r === startRow && typeof val === 'string' && isNaN(Number(val))) {
+							series.name = val;
+							continue;
+						}
+						cats.push(`Row ${r + 1}`);
+						vals.push(typeof val === 'number' ? val : (parseFloat(String(val)) || 0));
+					}
+					series.categories_cache = cats;
+					series.values_cache = vals;
+				} else {
+					// Multi-column: first column = categories, remaining = values
+					const cats: string[] = [];
+					const vals: number[] = [];
+					for (let r = startRow; r <= endRow; r++) {
+						const catCell = cells[r]?.[startCol];
+						const catVal = getCellValue(catCell);
+						cats.push(String(catVal ?? `Row ${r + 1}`));
+						// Sum remaining columns for this row
+						let sum = 0;
+						for (let c = startCol + 1; c <= endCol; c++) {
+							const vCell = cells[r]?.[c];
+							const v = getCellValue(vCell);
+							sum += typeof v === 'number' ? v : (parseFloat(String(v)) || 0);
+						}
+						vals.push(sum);
+					}
+					// If first row looks like headers, use it for categories
+					if (cats.length > 0 && isNaN(Number(cats[0]))) {
+						series.categories_cache = cats;
+						series.values_cache = vals;
+					} else {
+						series.categories_cache = cats;
+						series.values_cache = vals;
+					}
+				}
+
+				// Also set categories_ref for the writer
+				if (!series.categories_ref) {
+					series.categories_ref = series.values_ref;
+				}
+			}
+		}
+	}
+}
+
+function parseCellRange(ref: string): { startRow: number; startCol: number; endRow: number; endCol: number } | null {
+	// Strip sheet name if present
+	let range = ref;
+	const bangIdx = range.indexOf('!');
+	if (bangIdx >= 0) range = range.substring(bangIdx + 1);
+	// Strip $ signs
+	range = range.replace(/\$/g, '');
+
+	const parts = range.split(':');
+	if (parts.length < 2) return null;
+
+	const start = parseCellRef(parts[0]);
+	const end = parseCellRef(parts[1]);
+	if (!start || !end) return null;
+
+	return { startRow: start.row, startCol: start.col, endRow: end.row, endCol: end.col };
+}
+
+function parseCellRef(ref: string): { row: number; col: number } | null {
+	const match = ref.match(/^([A-Za-z]+)(\d+)$/);
+	if (!match) return null;
+	return { col: parseColName(match[1].toUpperCase()), row: parseInt(match[2], 10) - 1 };
+}
+
+function getCellValue(cell: any): string | number | null {
+	if (!cell) return null;
+	if (cell.data_type === 'number' || cell.data_type === 'float') return parseFloat(cell.value) || 0;
+	return cell.value ?? null;
+}
+
+function handleChartAction(action: string, chartIndex: number, chartDef?: ChartDefinition) {
+	if (!renderer) return;
+	const data = renderer.getData();
+	if (!data?.sheets) return;
+	const sheetIdx = renderer.getActiveSheetIndex();
+	const sheet = data.sheets[sheetIdx];
+	if (!sheet?.charts) return;
+
+	switch (action) {
+		case 'delete':
+			sheet.charts.splice(chartIndex, 1);
+			syncChartOverlays();
+			markDirty();
+			break;
+		case 'moved':
+			if (chartDef && chartIndex < sheet.charts.length) {
+				sheet.charts[chartIndex] = chartDef;
+				markDirty();
+			}
+			break;
+		case 'editChart':
+			showChartWizard(chartIndex);
+			break;
+		case 'select':
+			// Selection visual feedback is handled by ChartOverlay
+			break;
+	}
+}
+
 // --- Helpers ---
 
 function markDirty() {
@@ -931,6 +1278,17 @@ function markDirty() {
 // Wire up renderer callbacks
 function setupRendererCallbacks() {
 	if (!renderer) return;
+
+	// Initialize chart manager now that renderer is ready
+	chartManager = new ChartManager(renderer.getWrapper(), handleChartAction);
+
+	// Chart overlay repositioning on scroll/render
+	renderer.onScrollChanged = () => {
+		if (chartManager) {
+			const coords = getRendererCoords();
+			if (coords) chartManager.updatePositions(coords);
+		}
+	};
 
 	// Custom HTML context menu (replaces native)
 	renderer.onContextMenu = (row: number, col: number, x: number, y: number, headerType?: 'col' | 'row') => {
@@ -942,6 +1300,8 @@ function setupRendererCallbacks() {
 	// Cell edit -> notify extension host of dirty state + re-evaluate formulas
 	renderer.onCellEdit = (_row: number, _col: number, _value: string) => {
 		markDirty();
+		// Keep table column header names in sync with cell edits
+		renderer!.syncTableHeaderName(_row, _col, _value);
 		if (formulaEngine) {
 			formulaEngine.invalidate(_row, _col);
 		}
@@ -1086,14 +1446,6 @@ function extractFormulaRanges(formula: string): FormulaRange[] {
 	}
 
 	return ranges;
-}
-
-/** Parse a cell reference like "A1", "$B$3", "AA100" into {row, col} (0-based) */
-function parseCellRef(ref: string): { row: number; col: number } | null {
-	const cleaned = ref.replace(/\$/g, '');
-	const m = cleaned.match(/^([A-Z]{1,3})(\d+)$/);
-	if (!m) return null;
-	return { col: parseColName(m[1]), row: parseInt(m[2], 10) - 1 };
 }
 
 /** Build a cell reference string from row/col (0-based) */

@@ -36,27 +36,85 @@ const IC: Record<string, string> = {
 	filter: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h12l-4.5 5v4l-3 2V8z"/></svg>',
 	totals: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"><line x1="2" y1="12.5" x2="14" y2="12.5" stroke-width="2"/><line x1="2" y1="10" x2="14" y2="10" stroke-width=".8"/><path d="M4 3l2.5 5M6.5 8l2.5-5M4 4.5h5"/></svg>',
 	convertRange: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"><rect x="1" y="1" width="14" height="14" rx="1"/><line x1="1" y1="5" x2="15" y2="5"/><path d="M8 8l-2 2 2 2"/><path d="M8 8l2 2-2 2"/></svg>',
+	condFormat: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"><rect x="1" y="1" width="6" height="14" rx="1"/><rect x="9" y="1" width="6" height="14" rx="1"/><rect x="1" y="1" width="6" height="5" fill="#ff6b6b" opacity=".6" rx="1"/><rect x="1" y="6" width="6" height="4" fill="#ffd93d" opacity=".6"/><rect x="1" y="10" width="6" height="5" fill="#6bcb77" opacity=".6" rx="1"/><rect x="9" y="1" width="6" height="14" rx="1"/><rect x="10" y="3" width="4" height="2" fill="#4472c4" opacity=".7" rx=".5"/><rect x="10" y="7" width="2.5" height="2" fill="#4472c4" opacity=".7" rx=".5"/><rect x="10" y="11" width="1" height="2" fill="#4472c4" opacity=".7" rx=".5"/></svg>',
+	chart: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="1" width="14" height="14" rx="1"/><rect x="3" y="9" width="2" height="5" fill="#4472C4" stroke="none" rx=".3"/><rect x="7" y="5" width="2" height="9" fill="#ED7D31" stroke="none" rx=".3"/><rect x="11" y="7" width="2" height="7" fill="#70AD47" stroke="none" rx=".3"/></svg>',
 };
 
 // Color theme for each built-in table style (header color, banded row color)
-const TABLE_STYLE_COLORS: Record<string, { header: string; band: string; label: string }> = {
-	'TableStyleMedium2': { header: '#4472c4', band: '#d6e4f0', label: 'Blue' },
-	'TableStyleMedium1': { header: '#a5a5a5', band: '#e0e0e0', label: 'Gray' },
-	'TableStyleMedium3': { header: '#ed7d31', band: '#fce4cc', label: 'Orange' },
-	'TableStyleMedium4': { header: '#ffc000', band: '#fff2cc', label: 'Gold' },
-	'TableStyleMedium5': { header: '#5b9bd5', band: '#dce6f0', label: 'Sky' },
-	'TableStyleMedium6': { header: '#70ad47', band: '#e2efda', label: 'Green' },
-	'TableStyleMedium7': { header: '#264478', band: '#c5d0e0', label: 'Navy' },
-	'TableStyleMedium9': { header: '#7030a0', band: '#e1d5ec', label: 'Purple' },
-	'TableStyleLight1': { header: '#000000', band: '#f2f2f2', label: 'Light Gray' },
-	'TableStyleLight2': { header: '#4472c4', band: '#edf2fa', label: 'Light Blue' },
-	'TableStyleLight9': { header: '#ed7d31', band: '#fef4eb', label: 'Light Orange' },
-	'TableStyleLight14': { header: '#70ad47', band: '#f0f7ec', label: 'Light Green' },
-	'TableStyleDark1': { header: '#000000', band: '#404040', label: 'Dark Black' },
-	'TableStyleDark2': { header: '#4472c4', band: '#2b4a7a', label: 'Dark Blue' },
-	'TableStyleDark3': { header: '#ed7d31', band: '#7a4018', label: 'Dark Orange' },
-	'TableStyleDark11': { header: '#7030a0', band: '#3d1a57', label: 'Dark Purple' },
-};
+interface StyleEntry { header: string; band: string; label: string }
+const LIGHT_STYLES: [string, StyleEntry][] = [
+	['TableStyleLight1',  { header: '#000000', band: '#f7f7f7', label: 'Black' }],
+	['TableStyleLight2',  { header: '#4472c4', band: '#edf2fa', label: 'Blue' }],
+	['TableStyleLight3',  { header: '#ed7d31', band: '#fef4eb', label: 'Orange' }],
+	['TableStyleLight4',  { header: '#a5a5a5', band: '#f5f5f5', label: 'Gray' }],
+	['TableStyleLight5',  { header: '#ffc000', band: '#fffbef', label: 'Gold' }],
+	['TableStyleLight6',  { header: '#5b9bd5', band: '#eef4fa', label: 'Sky' }],
+	['TableStyleLight7',  { header: '#70ad47', band: '#f0f7ec', label: 'Green' }],
+	['TableStyleLight8',  { header: '#000000', band: '#f2f2f2', label: 'Black 2' }],
+	['TableStyleLight9',  { header: '#4472c4', band: '#dbe5f5', label: 'Blue 2' }],
+	['TableStyleLight10', { header: '#ed7d31', band: '#fce4cc', label: 'Orange 2' }],
+	['TableStyleLight11', { header: '#a5a5a5', band: '#ececec', label: 'Gray 2' }],
+	['TableStyleLight12', { header: '#ffc000', band: '#fff5d5', label: 'Gold 2' }],
+	['TableStyleLight13', { header: '#5b9bd5', band: '#dde9f5', label: 'Sky 2' }],
+	['TableStyleLight14', { header: '#70ad47', band: '#e2efda', label: 'Green 2' }],
+	['TableStyleLight15', { header: '#000000', band: '#e8e8e8', label: 'Black 3' }],
+	['TableStyleLight16', { header: '#4472c4', band: '#c9d8f0', label: 'Blue 3' }],
+	['TableStyleLight17', { header: '#ed7d31', band: '#f9d5ad', label: 'Orange 3' }],
+	['TableStyleLight18', { header: '#a5a5a5', band: '#e0e0e0', label: 'Gray 3' }],
+	['TableStyleLight19', { header: '#ffc000', band: '#ffefb8', label: 'Gold 3' }],
+	['TableStyleLight20', { header: '#5b9bd5', band: '#ccddf0', label: 'Sky 3' }],
+	['TableStyleLight21', { header: '#70ad47', band: '#d4e7c8', label: 'Green 3' }],
+];
+const MEDIUM_STYLES: [string, StyleEntry][] = [
+	['TableStyleMedium1',  { header: '#000000', band: '#e0e0e0', label: 'Black' }],
+	['TableStyleMedium2',  { header: '#4472c4', band: '#d6e4f0', label: 'Blue' }],
+	['TableStyleMedium3',  { header: '#ed7d31', band: '#fce4cc', label: 'Orange' }],
+	['TableStyleMedium4',  { header: '#a5a5a5', band: '#dcdcdc', label: 'Gray' }],
+	['TableStyleMedium5',  { header: '#ffc000', band: '#fff2cc', label: 'Gold' }],
+	['TableStyleMedium6',  { header: '#5b9bd5', band: '#dce6f0', label: 'Sky' }],
+	['TableStyleMedium7',  { header: '#70ad47', band: '#e2efda', label: 'Green' }],
+	['TableStyleMedium8',  { header: '#000000', band: '#d0d0d0', label: 'Black 2' }],
+	['TableStyleMedium9',  { header: '#4472c4', band: '#b8cde5', label: 'Blue 2' }],
+	['TableStyleMedium10', { header: '#ed7d31', band: '#f9c99a', label: 'Orange 2' }],
+	['TableStyleMedium11', { header: '#a5a5a5', band: '#cccccc', label: 'Gray 2' }],
+	['TableStyleMedium12', { header: '#ffc000', band: '#ffe599', label: 'Gold 2' }],
+	['TableStyleMedium13', { header: '#5b9bd5', band: '#bdd0e5', label: 'Sky 2' }],
+	['TableStyleMedium14', { header: '#70ad47', band: '#c5dfb5', label: 'Green 2' }],
+	['TableStyleMedium15', { header: '#000000', band: '#c0c0c0', label: 'Black 3' }],
+	['TableStyleMedium16', { header: '#4472c4', band: '#9ab6da', label: 'Blue 3' }],
+	['TableStyleMedium17', { header: '#ed7d31', band: '#f6ae68', label: 'Orange 3' }],
+	['TableStyleMedium18', { header: '#a5a5a5', band: '#bcbcbc', label: 'Gray 3' }],
+	['TableStyleMedium19', { header: '#ffc000', band: '#ffd966', label: 'Gold 3' }],
+	['TableStyleMedium20', { header: '#5b9bd5', band: '#9dbada', label: 'Sky 3' }],
+	['TableStyleMedium21', { header: '#70ad47', band: '#a8cf90', label: 'Green 3' }],
+	['TableStyleMedium22', { header: '#000000', band: '#b0b0b0', label: 'Black 4' }],
+	['TableStyleMedium23', { header: '#4472c4', band: '#7ca0cf', label: 'Blue 4' }],
+	['TableStyleMedium24', { header: '#ed7d31', band: '#f39336', label: 'Orange 4' }],
+	['TableStyleMedium25', { header: '#a5a5a5', band: '#aaaaaa', label: 'Gray 4' }],
+	['TableStyleMedium26', { header: '#ffc000', band: '#ffcc33', label: 'Gold 4' }],
+	['TableStyleMedium27', { header: '#5b9bd5', band: '#7ea4cf', label: 'Sky 4' }],
+	['TableStyleMedium28', { header: '#70ad47', band: '#8bbf6b', label: 'Green 4' }],
+];
+const DARK_STYLES: [string, StyleEntry][] = [
+	['TableStyleDark1',  { header: '#000000', band: '#404040', label: 'Black' }],
+	['TableStyleDark2',  { header: '#4472c4', band: '#2b4a7a', label: 'Blue' }],
+	['TableStyleDark3',  { header: '#ed7d31', band: '#7a4018', label: 'Orange' }],
+	['TableStyleDark4',  { header: '#a5a5a5', band: '#5a5a5a', label: 'Gray' }],
+	['TableStyleDark5',  { header: '#ffc000', band: '#8a6800', label: 'Gold' }],
+	['TableStyleDark6',  { header: '#5b9bd5', band: '#2f5e8a', label: 'Sky' }],
+	['TableStyleDark7',  { header: '#70ad47', band: '#3a5925', label: 'Green' }],
+	['TableStyleDark8',  { header: '#1a1a1a', band: '#333333', label: 'Charcoal' }],
+	['TableStyleDark9',  { header: '#264478', band: '#1a3060', label: 'Navy' }],
+	['TableStyleDark10', { header: '#c55a11', band: '#6b3510', label: 'Rust' }],
+	['TableStyleDark11', { header: '#7030a0', band: '#3d1a57', label: 'Purple' }],
+];
+// Combined lookup for style picker and ribbon references
+const TABLE_STYLE_COLORS: Record<string, StyleEntry> = {};
+for (const arr of [LIGHT_STYLES, MEDIUM_STYLES, DARK_STYLES]) {
+	for (const [name, entry] of arr) {
+		TABLE_STYLE_COLORS[name] = entry;
+	}
+}
 
 export class Ribbon {
 	private container: HTMLElement;
@@ -211,6 +269,13 @@ export class Ribbon {
 		cells.insertBefore(cellsBody, cells.lastChild);
 		panel.appendChild(cells);
 
+		// --- Styles ---
+		const stylesGroup = this.group('Styles');
+		const stylesBody = this.el('div', 'group-body');
+		stylesBody.appendChild(this.tallBtn(IC.condFormat, 'Cond.\nFormat', 'conditionalFormatting'));
+		stylesGroup.insertBefore(stylesBody, stylesGroup.lastChild);
+		panel.appendChild(stylesGroup);
+
 		// --- Formulas ---
 		const fx = this.group('Formulas');
 		const fxBody = this.el('div', 'group-body');
@@ -232,6 +297,13 @@ export class Ribbon {
 	// ======================= INSERT TAB =======================
 	private buildInsertTab(): HTMLElement {
 		const panel = this.tabPanel('insert', false);
+
+		// --- Charts group ---
+		const chartGroup = this.group('Charts');
+		const chartBody = this.el('div', 'group-body');
+		chartBody.appendChild(this.tallBtn(IC.chart, 'Chart', 'insertChart'));
+		chartGroup.insertBefore(chartBody, chartGroup.lastChild);
+		panel.appendChild(chartGroup);
 
 		// --- Tables group ---
 		const tblGroup = this.group('Tables');
@@ -259,7 +331,7 @@ export class Ribbon {
 		return panel;
 	}
 
-	/** Visual table style picker — shows colored mini table previews in a dropdown grid */
+	/** Visual table style picker — shows colored mini table previews in a categorized dropdown grid */
 	private buildTableStylePicker(): HTMLElement {
 		const wrapper = document.createElement('div');
 		wrapper.className = 'table-style-picker';
@@ -272,53 +344,86 @@ export class Ribbon {
 		const currentColors = TABLE_STYLE_COLORS[this.selectedTableStyle] || TABLE_STYLE_COLORS['TableStyleMedium2'];
 		trigger.innerHTML = `${this.miniTableSvg(currentColors.header, currentColors.band)}<span class="btn-label">Styles</span>`;
 
-		// Dropdown panel
+		// Dropdown panel — use position:fixed to escape overflow:hidden on .ribbon-content
 		const dropdown = document.createElement('div');
 		dropdown.className = 'table-style-dropdown';
-		dropdown.style.cssText = 'display:none;position:absolute;top:100%;left:0;z-index:9999;background:var(--vscode-editor-background,#1e1e1e);border:1px solid var(--vscode-focusBorder,#007fd4);border-radius:4px;padding:6px;box-shadow:0 4px 12px rgba(0,0,0,0.4);';
+		dropdown.style.cssText = 'display:none;position:fixed;z-index:9999;background:var(--vscode-editor-background,#1e1e1e);border:1px solid var(--vscode-focusBorder,#007fd4);border-radius:4px;padding:8px;box-shadow:0 4px 12px rgba(0,0,0,0.4);max-height:400px;overflow-y:auto;width:260px;';
 
-		const grid = document.createElement('div');
-		grid.style.cssText = 'display:grid;grid-template-columns:repeat(4,1fr);gap:4px;';
+		const allCells: HTMLButtonElement[] = [];
 
-		const styleNames = Object.keys(TABLE_STYLE_COLORS);
-		for (const styleName of styleNames) {
-			const colors = TABLE_STYLE_COLORS[styleName];
-			const cell = document.createElement('button');
-			cell.className = 'table-style-cell';
-			cell.title = colors.label;
-			cell.style.cssText = `border:2px solid ${styleName === this.selectedTableStyle ? 'var(--vscode-focusBorder,#007fd4)' : 'transparent'};border-radius:3px;padding:2px;background:transparent;cursor:pointer;display:flex;align-items:center;justify-content:center;`;
-			cell.innerHTML = this.miniTableSvg(colors.header, colors.band);
-			cell.onclick = () => {
-				this.selectedTableStyle = styleName;
-				// Update trigger swatch
-				const newColors = TABLE_STYLE_COLORS[styleName];
-				trigger.innerHTML = `${this.miniTableSvg(newColors.header, newColors.band)}<span class="btn-label">Styles</span>`;
-				// Highlight selected
-				grid.querySelectorAll('.table-style-cell').forEach(c => {
-					(c as HTMLElement).style.borderColor = 'transparent';
-				});
-				cell.style.borderColor = 'var(--vscode-focusBorder,#007fd4)';
-				dropdown.style.display = 'none';
-				// Also apply to active table if cursor is in one
-				this.onAction({ action: 'setTableStyle', value: styleName });
-			};
-			grid.appendChild(cell);
+		// Build a section for each category
+		const categories: [string, [string, StyleEntry][]][] = [
+			['Light', LIGHT_STYLES],
+			['Medium', MEDIUM_STYLES],
+			['Dark', DARK_STYLES],
+		];
+
+		for (const [catName, styles] of categories) {
+			// Section header
+			const header = document.createElement('div');
+			header.textContent = catName;
+			header.style.cssText = 'font-size:11px;font-weight:bold;color:var(--vscode-descriptionForeground,#888);padding:4px 2px 2px;margin-top:4px;';
+			dropdown.appendChild(header);
+
+			// 7-column grid for this category
+			const grid = document.createElement('div');
+			grid.style.cssText = 'display:grid;grid-template-columns:repeat(7,1fr);gap:3px;margin-bottom:2px;';
+
+			for (const [styleName, colors] of styles) {
+				const cell = document.createElement('button');
+				cell.className = 'table-style-cell';
+				cell.title = `${catName} - ${colors.label}`;
+				cell.style.cssText = `border:2px solid ${styleName === this.selectedTableStyle ? 'var(--vscode-focusBorder,#007fd4)' : 'transparent'};border-radius:3px;padding:2px;background:transparent;cursor:pointer;display:flex;align-items:center;justify-content:center;`;
+				cell.innerHTML = this.miniTableSvg(colors.header, colors.band);
+				cell.onclick = () => {
+					this.selectedTableStyle = styleName;
+					const newColors = TABLE_STYLE_COLORS[styleName];
+					trigger.innerHTML = `${this.miniTableSvg(newColors.header, newColors.band)}<span class="btn-label">Styles</span>`;
+					// Highlight selected
+					allCells.forEach(c => { c.style.borderColor = 'transparent'; });
+					cell.style.borderColor = 'var(--vscode-focusBorder,#007fd4)';
+					dropdown.style.display = 'none';
+					this.onAction({ action: 'setTableStyle', value: styleName });
+				};
+				allCells.push(cell);
+				grid.appendChild(cell);
+			}
+
+			dropdown.appendChild(grid);
 		}
 
-		dropdown.appendChild(grid);
 		trigger.onclick = () => {
-			dropdown.style.display = dropdown.style.display === 'none' ? 'block' : 'none';
+			const isHidden = dropdown.style.display === 'none';
+			if (isHidden) {
+				// Position dropdown below the trigger using fixed positioning
+				const rect = trigger.getBoundingClientRect();
+				dropdown.style.left = `${rect.left}px`;
+				dropdown.style.top = `${rect.bottom + 2}px`;
+				// Clamp to viewport so it doesn't overflow off-screen
+				dropdown.style.display = 'block';
+				const dropRect = dropdown.getBoundingClientRect();
+				if (dropRect.right > window.innerWidth) {
+					dropdown.style.left = `${window.innerWidth - dropRect.width - 4}px`;
+				}
+				if (dropRect.bottom > window.innerHeight) {
+					dropdown.style.top = `${rect.top - dropRect.height - 2}px`;
+				}
+			} else {
+				dropdown.style.display = 'none';
+			}
 		};
 
-		// Close on click outside
+		// Close on click outside (check both trigger wrapper and dropdown since dropdown is in body)
 		document.addEventListener('mousedown', (e) => {
-			if (!wrapper.contains(e.target as Node)) {
+			const target = e.target as Node;
+			if (!wrapper.contains(target) && !dropdown.contains(target)) {
 				dropdown.style.display = 'none';
 			}
 		});
 
 		wrapper.appendChild(trigger);
-		wrapper.appendChild(dropdown);
+		// Append dropdown to body so it's outside all overflow:hidden containers
+		document.body.appendChild(dropdown);
 		return wrapper;
 	}
 

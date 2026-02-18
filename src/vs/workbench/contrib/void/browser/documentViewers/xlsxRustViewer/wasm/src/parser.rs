@@ -94,6 +94,189 @@ pub struct MergedCellRange {
     pub end_col: u32,
 }
 
+// --- Conditional Formatting Types ---
+
+#[derive(Serialize, Deserialize, Clone, Debug, Default)]
+pub struct DxfStyle {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bold: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub italic: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub underline: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub text_color: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fill_color: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub number_format: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct ColorScaleSpec {
+    pub colors: Vec<String>,
+    #[serde(default)]
+    pub values: Vec<f64>,
+    #[serde(default)]
+    pub value_types: Vec<String>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct DataBarSpec {
+    pub color: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub min_value: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_value: Option<f64>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct IconSetSpec {
+    pub icon_style: String,
+    #[serde(default)]
+    pub thresholds: Vec<f64>,
+    #[serde(default)]
+    pub reverse: bool,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct ConditionalFormatRule {
+    pub rule_type: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub operator: Option<String>,
+    #[serde(default = "default_priority")]
+    pub priority: u32,
+    #[serde(default)]
+    pub values: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub dxf_id: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub dxf_style: Option<DxfStyle>,
+    pub sqref: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub color_scale: Option<ColorScaleSpec>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub data_bar: Option<DataBarSpec>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub icon_set: Option<IconSetSpec>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rank: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub percent: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bottom: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub above_average: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub std_dev: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub text: Option<String>,
+}
+
+fn default_priority() -> u32 { 1 }
+
+// --- Chart Types ---
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct ChartAnchor {
+    pub from_col: u32,
+    pub from_row: u32,
+    #[serde(default)]
+    pub from_col_off: i64,
+    #[serde(default)]
+    pub from_row_off: i64,
+    pub to_col: u32,
+    pub to_row: u32,
+    #[serde(default)]
+    pub to_col_off: i64,
+    #[serde(default)]
+    pub to_row_off: i64,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct ChartSeries {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub categories_ref: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub values_ref: Option<String>,
+    #[serde(default)]
+    pub categories_cache: Vec<String>,
+    #[serde(default)]
+    pub values_cache: Vec<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub chart_type: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct ChartAxis {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    #[serde(default)]
+    pub position: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub min_val: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_val: Option<f64>,
+    pub axis_type: String,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct ChartLegend {
+    #[serde(default = "default_legend_position")]
+    pub position: String,
+    #[serde(default = "default_true")]
+    pub visible: bool,
+}
+
+fn default_legend_position() -> String { "right".to_string() }
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct ChartStyle {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub color_scheme: Option<Vec<String>>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct ChartDefinition {
+    pub chart_type: String,
+    #[serde(default)]
+    pub series: Vec<ChartSeries>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub legend: Option<ChartLegend>,
+    #[serde(default)]
+    pub axes: Vec<ChartAxis>,
+    pub anchor: ChartAnchor,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub style: Option<ChartStyle>,
+}
+
+// --- Sparkline Types ---
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct SparklineDefinition {
+    pub sparkline_type: String,
+    pub data_range: String,
+    pub location: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub color: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub negative_color: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub axis_color: Option<String>,
+    #[serde(default)]
+    pub high_point: bool,
+    #[serde(default)]
+    pub low_point: bool,
+    #[serde(default)]
+    pub first_point: bool,
+    #[serde(default)]
+    pub last_point: bool,
+}
+
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct SheetData {
     pub name: String,
@@ -108,6 +291,12 @@ pub struct SheetData {
     pub col_widths: HashMap<u32, f64>,
     #[serde(default)]
     pub row_heights: HashMap<u32, f64>,
+    #[serde(default)]
+    pub conditional_formats: Vec<ConditionalFormatRule>,
+    #[serde(default)]
+    pub charts: Vec<ChartDefinition>,
+    #[serde(default)]
+    pub sparklines: Vec<SparklineDefinition>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -180,6 +369,9 @@ impl XlsxParser {
                     merged_cells: Vec::new(),
                     col_widths: HashMap::new(),
                     row_heights: HashMap::new(),
+                    conditional_formats: Vec::new(),
+                    charts: Vec::new(),
+                    sparklines: Vec::new(),
                 });
             }
         }
@@ -197,6 +389,15 @@ impl XlsxParser {
 
         // Parse cell styles from xl/styles.xml and apply to cells
         parse_cell_styles_from_zip(data, &mut sheets);
+
+        // Parse conditional formatting rules from worksheets and dxf styles
+        parse_conditional_formatting_from_zip(data, &mut sheets);
+
+        // Parse charts from drawings and chart XML parts
+        parse_charts_from_zip(data, &mut sheets);
+
+        // Parse sparklines from worksheet extension lists
+        parse_sparklines_from_zip(data, &mut sheets);
 
         let model = WorkbookModel { sheets };
         let json = serde_json::to_string(&model).map_err(|e| JsError::new(&e.to_string()))?;
@@ -1011,6 +1212,1206 @@ fn parse_sheet_metadata_from_zip(data: &[u8], sheets: &mut Vec<SheetData>) {
                     Ok(quick_xml::events::Event::End(ref e)) => {
                         if e.name().as_ref() == b"mergeCells" {
                             in_merge_cells = false;
+                        }
+                    }
+                    Ok(quick_xml::events::Event::Eof) => break,
+                    Err(_) => break,
+                    _ => {}
+                }
+                buf.clear();
+            }
+        }
+    }
+}
+
+// --- Conditional Formatting Parsing ---
+
+/// Parse DXF (Differential Formatting) styles from xl/styles.xml
+fn parse_dxf_styles(styles_xml: &str) -> Vec<DxfStyle> {
+    let mut dxf_styles = Vec::new();
+    let mut reader = quick_xml::Reader::from_str(styles_xml);
+    let mut buf = Vec::new();
+    let mut in_dxfs = false;
+    let mut in_dxf = false;
+    let mut in_font = false;
+    let mut in_fill = false;
+    let mut in_numfmt = false;
+    let mut current_dxf = DxfStyle::default();
+
+    loop {
+        match reader.read_event_into(&mut buf) {
+            Ok(quick_xml::events::Event::Start(ref e)) => {
+                let tag = e.name();
+                match tag.as_ref() {
+                    b"dxfs" => { in_dxfs = true; }
+                    b"dxf" if in_dxfs => {
+                        in_dxf = true;
+                        current_dxf = DxfStyle::default();
+                    }
+                    b"font" if in_dxf => { in_font = true; }
+                    b"fill" if in_dxf => { in_fill = true; }
+                    b"numFmt" if in_dxf => { in_numfmt = true; }
+                    b"b" if in_font => { current_dxf.bold = Some(true); }
+                    b"i" if in_font => { current_dxf.italic = Some(true); }
+                    b"u" if in_font => { current_dxf.underline = Some(true); }
+                    b"color" if in_font => {
+                        for attr in e.attributes().flatten() {
+                            if attr.key.as_ref() == b"rgb" {
+                                if let Ok(val) = attr.unescape_value() {
+                                    let s = val.to_string();
+                                    // ARGB -> RGB
+                                    let rgb = if s.len() == 8 { format!("#{}", &s[2..]) } else { format!("#{}", s) };
+                                    current_dxf.text_color = Some(rgb);
+                                }
+                            }
+                        }
+                    }
+                    b"fgColor" | b"bgColor" if in_fill => {
+                        for attr in e.attributes().flatten() {
+                            if attr.key.as_ref() == b"rgb" {
+                                if let Ok(val) = attr.unescape_value() {
+                                    let s = val.to_string();
+                                    let rgb = if s.len() == 8 { format!("#{}", &s[2..]) } else { format!("#{}", s) };
+                                    current_dxf.fill_color = Some(rgb);
+                                }
+                            }
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            Ok(quick_xml::events::Event::Empty(ref e)) => {
+                let tag = e.name();
+                match tag.as_ref() {
+                    b"b" if in_font => { current_dxf.bold = Some(true); }
+                    b"i" if in_font => { current_dxf.italic = Some(true); }
+                    b"u" if in_font => { current_dxf.underline = Some(true); }
+                    b"color" if in_font => {
+                        for attr in e.attributes().flatten() {
+                            if attr.key.as_ref() == b"rgb" {
+                                if let Ok(val) = attr.unescape_value() {
+                                    let s = val.to_string();
+                                    let rgb = if s.len() == 8 { format!("#{}", &s[2..]) } else { format!("#{}", s) };
+                                    current_dxf.text_color = Some(rgb);
+                                }
+                            }
+                        }
+                    }
+                    b"fgColor" | b"bgColor" if in_fill => {
+                        for attr in e.attributes().flatten() {
+                            if attr.key.as_ref() == b"rgb" {
+                                if let Ok(val) = attr.unescape_value() {
+                                    let s = val.to_string();
+                                    let rgb = if s.len() == 8 { format!("#{}", &s[2..]) } else { format!("#{}", s) };
+                                    current_dxf.fill_color = Some(rgb);
+                                }
+                            }
+                        }
+                    }
+                    b"numFmt" if in_dxf => {
+                        for attr in e.attributes().flatten() {
+                            if attr.key.as_ref() == b"formatCode" {
+                                if let Ok(val) = attr.unescape_value() {
+                                    current_dxf.number_format = Some(val.to_string());
+                                }
+                            }
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            Ok(quick_xml::events::Event::End(ref e)) => {
+                let tag = e.name();
+                match tag.as_ref() {
+                    b"dxfs" => { in_dxfs = false; }
+                    b"dxf" if in_dxf => {
+                        dxf_styles.push(current_dxf.clone());
+                        in_dxf = false;
+                    }
+                    b"font" if in_font => { in_font = false; }
+                    b"fill" if in_fill => { in_fill = false; }
+                    b"numFmt" if in_numfmt => { in_numfmt = false; }
+                    _ => {}
+                }
+            }
+            Ok(quick_xml::events::Event::Eof) => break,
+            Err(_) => break,
+            _ => {}
+        }
+        buf.clear();
+    }
+    dxf_styles
+}
+
+/// Parse a single <cfRule> element's attributes and children
+fn parse_cf_rule(reader: &mut quick_xml::Reader<&[u8]>, start_attrs: &quick_xml::events::BytesStart, sqref: &str) -> Option<ConditionalFormatRule> {
+    let mut rule_type = String::new();
+    let mut operator: Option<String> = None;
+    let mut priority: u32 = 1;
+    let mut dxf_id: Option<u32> = None;
+    let mut rank: Option<u32> = None;
+    let mut percent: Option<bool> = None;
+    let mut bottom: Option<bool> = None;
+    let mut above_average: Option<bool> = None;
+    let mut std_dev: Option<u32> = None;
+    let mut text: Option<String> = None;
+
+    for attr in start_attrs.attributes().flatten() {
+        let key = attr.key.as_ref();
+        let val = attr.unescape_value().unwrap_or_default().to_string();
+        match key {
+            b"type" => rule_type = val,
+            b"operator" => operator = Some(val),
+            b"priority" => priority = val.parse().unwrap_or(1),
+            b"dxfId" => dxf_id = val.parse().ok(),
+            b"rank" => rank = val.parse().ok(),
+            b"percent" => percent = Some(val == "1"),
+            b"bottom" => bottom = Some(val == "1"),
+            b"aboveAverage" => {
+                // aboveAverage="0" means BELOW average
+                above_average = Some(val != "0");
+            }
+            b"stdDev" => std_dev = val.parse().ok(),
+            b"text" => text = Some(val),
+            _ => {}
+        }
+    }
+
+    if rule_type.is_empty() {
+        return None;
+    }
+
+    let mut formulas: Vec<String> = Vec::new();
+    let mut color_scale: Option<ColorScaleSpec> = None;
+    let mut data_bar: Option<DataBarSpec> = None;
+    let mut icon_set: Option<IconSetSpec> = None;
+    let mut buf = Vec::new();
+    let mut in_formula = false;
+    let mut formula_text = String::new();
+    let mut in_color_scale = false;
+    let mut cs_colors: Vec<String> = Vec::new();
+    let mut cs_values: Vec<f64> = Vec::new();
+    let mut cs_value_types: Vec<String> = Vec::new();
+    let mut in_data_bar = false;
+    let mut db_color = String::from("#638EC6");
+    let mut in_icon_set = false;
+    let mut is_thresholds: Vec<f64> = Vec::new();
+    let mut is_style = String::from("3TrafficLights1");
+    let mut is_reverse = false;
+
+    loop {
+        match reader.read_event_into(&mut buf) {
+            Ok(quick_xml::events::Event::Start(ref e)) => {
+                let tag = e.name();
+                match tag.as_ref() {
+                    b"formula" => { in_formula = true; formula_text.clear(); }
+                    b"colorScale" => { in_color_scale = true; }
+                    b"dataBar" => { in_data_bar = true; }
+                    b"iconSet" => {
+                        in_icon_set = true;
+                        for attr in e.attributes().flatten() {
+                            match attr.key.as_ref() {
+                                b"iconSet" => {
+                                    if let Ok(v) = attr.unescape_value() { is_style = v.to_string(); }
+                                }
+                                b"reverse" => {
+                                    if let Ok(v) = attr.unescape_value() { is_reverse = v.as_ref() == "1"; }
+                                }
+                                _ => {}
+                            }
+                        }
+                    }
+                    b"cfvo" if in_color_scale || in_data_bar || in_icon_set => {
+                        let mut cfvo_type = String::new();
+                        let mut cfvo_val: Option<f64> = None;
+                        for attr in e.attributes().flatten() {
+                            match attr.key.as_ref() {
+                                b"type" => { if let Ok(v) = attr.unescape_value() { cfvo_type = v.to_string(); } }
+                                b"val" => { if let Ok(v) = attr.unescape_value() { cfvo_val = v.parse().ok(); } }
+                                _ => {}
+                            }
+                        }
+                        if in_color_scale {
+                            cs_value_types.push(cfvo_type);
+                            cs_values.push(cfvo_val.unwrap_or(0.0));
+                        } else if in_icon_set {
+                            if let Some(v) = cfvo_val { is_thresholds.push(v); }
+                        }
+                    }
+                    b"color" if in_color_scale => {
+                        for attr in e.attributes().flatten() {
+                            if attr.key.as_ref() == b"rgb" {
+                                if let Ok(v) = attr.unescape_value() {
+                                    let s = v.to_string();
+                                    let rgb = if s.len() == 8 { format!("#{}", &s[2..]) } else { format!("#{}", s) };
+                                    cs_colors.push(rgb);
+                                }
+                            }
+                        }
+                    }
+                    b"color" if in_data_bar => {
+                        for attr in e.attributes().flatten() {
+                            if attr.key.as_ref() == b"rgb" {
+                                if let Ok(v) = attr.unescape_value() {
+                                    let s = v.to_string();
+                                    db_color = if s.len() == 8 { format!("#{}", &s[2..]) } else { format!("#{}", s) };
+                                }
+                            }
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            Ok(quick_xml::events::Event::Empty(ref e)) => {
+                let tag = e.name();
+                match tag.as_ref() {
+                    b"cfvo" if in_color_scale || in_data_bar || in_icon_set => {
+                        let mut cfvo_type = String::new();
+                        let mut cfvo_val: Option<f64> = None;
+                        for attr in e.attributes().flatten() {
+                            match attr.key.as_ref() {
+                                b"type" => { if let Ok(v) = attr.unescape_value() { cfvo_type = v.to_string(); } }
+                                b"val" => { if let Ok(v) = attr.unescape_value() { cfvo_val = v.parse().ok(); } }
+                                _ => {}
+                            }
+                        }
+                        if in_color_scale {
+                            cs_value_types.push(cfvo_type);
+                            cs_values.push(cfvo_val.unwrap_or(0.0));
+                        } else if in_icon_set {
+                            if let Some(v) = cfvo_val { is_thresholds.push(v); }
+                        }
+                    }
+                    b"color" if in_color_scale => {
+                        for attr in e.attributes().flatten() {
+                            if attr.key.as_ref() == b"rgb" {
+                                if let Ok(v) = attr.unescape_value() {
+                                    let s = v.to_string();
+                                    let rgb = if s.len() == 8 { format!("#{}", &s[2..]) } else { format!("#{}", s) };
+                                    cs_colors.push(rgb);
+                                }
+                            }
+                        }
+                    }
+                    b"color" if in_data_bar => {
+                        for attr in e.attributes().flatten() {
+                            if attr.key.as_ref() == b"rgb" {
+                                if let Ok(v) = attr.unescape_value() {
+                                    let s = v.to_string();
+                                    db_color = if s.len() == 8 { format!("#{}", &s[2..]) } else { format!("#{}", s) };
+                                }
+                            }
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            Ok(quick_xml::events::Event::Text(ref e)) => {
+                if in_formula {
+                    if let Ok(t) = e.unescape() {
+                        formula_text.push_str(&t);
+                    }
+                }
+            }
+            Ok(quick_xml::events::Event::End(ref e)) => {
+                let tag = e.name();
+                match tag.as_ref() {
+                    b"formula" => {
+                        in_formula = false;
+                        if !formula_text.is_empty() {
+                            formulas.push(formula_text.clone());
+                        }
+                    }
+                    b"colorScale" => {
+                        in_color_scale = false;
+                        color_scale = Some(ColorScaleSpec {
+                            colors: cs_colors.clone(),
+                            values: cs_values.clone(),
+                            value_types: cs_value_types.clone(),
+                        });
+                    }
+                    b"dataBar" => {
+                        in_data_bar = false;
+                        data_bar = Some(DataBarSpec {
+                            color: db_color.clone(),
+                            min_value: None,
+                            max_value: None,
+                        });
+                    }
+                    b"iconSet" => {
+                        in_icon_set = false;
+                        icon_set = Some(IconSetSpec {
+                            icon_style: is_style.clone(),
+                            thresholds: is_thresholds.clone(),
+                            reverse: is_reverse,
+                        });
+                    }
+                    b"cfRule" => break,
+                    _ => {}
+                }
+            }
+            Ok(quick_xml::events::Event::Eof) => break,
+            Err(_) => break,
+            _ => {}
+        }
+        buf.clear();
+    }
+
+    Some(ConditionalFormatRule {
+        rule_type,
+        operator,
+        priority,
+        values: formulas,
+        dxf_id,
+        dxf_style: None, // resolved later
+        sqref: sqref.to_string(),
+        color_scale,
+        data_bar,
+        icon_set,
+        rank,
+        percent,
+        bottom,
+        above_average,
+        std_dev,
+        text,
+    })
+}
+
+/// Parse conditional formatting from all worksheet XMLs plus DXF styles from styles.xml
+fn parse_conditional_formatting_from_zip(data: &[u8], sheets: &mut [SheetData]) {
+    let cursor = Cursor::new(data);
+    let mut archive = match zip::ZipArchive::new(cursor) {
+        Ok(a) => a,
+        Err(_) => return,
+    };
+
+    // Step 1: Parse DXF styles from xl/styles.xml
+    let dxf_styles = if let Ok(mut file) = archive.by_name("xl/styles.xml") {
+        let mut content = String::new();
+        if file.read_to_string(&mut content).is_ok() {
+            parse_dxf_styles(&content)
+        } else {
+            Vec::new()
+        }
+    } else {
+        Vec::new()
+    };
+
+    // Step 2: Parse CF rules from each worksheet
+    let sheet_name_order = parse_sheet_name_order(&mut archive);
+
+    let file_names: Vec<String> = (0..archive.len())
+        .filter_map(|i| archive.by_index(i).ok().map(|f| f.name().to_string()))
+        .collect();
+
+    let mut worksheet_files: Vec<&String> = file_names.iter()
+        .filter(|f| f.starts_with("xl/worksheets/sheet") && f.ends_with(".xml") && !f.contains("_rels"))
+        .collect();
+    worksheet_files.sort();
+
+    for (idx, ws_file) in worksheet_files.iter().enumerate() {
+        let sheet_name = match sheet_name_order.get(idx) {
+            Some(n) => n.clone(),
+            None => continue,
+        };
+
+        let sheet = match sheets.iter_mut().find(|s| s.name == sheet_name) {
+            Some(s) => s,
+            None => continue,
+        };
+
+        if let Ok(mut file) = archive.by_name(ws_file) {
+            let mut content = String::new();
+            if file.read_to_string(&mut content).is_err() {
+                continue;
+            }
+
+            let mut reader = quick_xml::Reader::from_str(&content);
+            let mut buf = Vec::new();
+            let mut current_sqref = String::new();
+
+            loop {
+                match reader.read_event_into(&mut buf) {
+                    Ok(quick_xml::events::Event::Start(ref e)) => {
+                        let tag = e.name();
+                        if tag.as_ref() == b"conditionalFormatting" {
+                            for attr in e.attributes().flatten() {
+                                if attr.key.as_ref() == b"sqref" {
+                                    if let Ok(val) = attr.unescape_value() {
+                                        current_sqref = val.to_string();
+                                    }
+                                }
+                            }
+                        } else if tag.as_ref() == b"cfRule" && !current_sqref.is_empty() {
+                            if let Some(mut rule) = parse_cf_rule(&mut reader, e, &current_sqref) {
+                                // Resolve dxfId to inline DxfStyle
+                                if let Some(did) = rule.dxf_id {
+                                    if let Some(dxf) = dxf_styles.get(did as usize) {
+                                        rule.dxf_style = Some(dxf.clone());
+                                    }
+                                }
+                                sheet.conditional_formats.push(rule);
+                            }
+                        }
+                    }
+                    Ok(quick_xml::events::Event::End(ref e)) => {
+                        if e.name().as_ref() == b"conditionalFormatting" {
+                            current_sqref.clear();
+                        }
+                    }
+                    Ok(quick_xml::events::Event::Eof) => break,
+                    Err(_) => break,
+                    _ => {}
+                }
+                buf.clear();
+            }
+
+            // Sort by priority
+            sheet.conditional_formats.sort_by_key(|r| r.priority);
+        }
+    }
+}
+
+// --- Chart Parsing ---
+
+/// Extract drawing relationship targets from a .rels file
+fn extract_drawing_refs_from_rels(rels_xml: &str) -> Vec<(String, String)> {
+    let mut refs = Vec::new();
+    let mut reader = quick_xml::Reader::from_str(rels_xml);
+    let mut buf = Vec::new();
+    loop {
+        match reader.read_event_into(&mut buf) {
+            Ok(quick_xml::events::Event::Empty(ref e)) | Ok(quick_xml::events::Event::Start(ref e)) => {
+                if e.name().as_ref() == b"Relationship" {
+                    let mut rel_type = String::new();
+                    let mut target = String::new();
+                    let mut rid = String::new();
+                    for attr in e.attributes().flatten() {
+                        let key = attr.key.as_ref();
+                        let val = attr.unescape_value().unwrap_or_default().to_string();
+                        match key {
+                            b"Type" => rel_type = val,
+                            b"Target" => target = val,
+                            b"Id" => rid = val,
+                            _ => {}
+                        }
+                    }
+                    if rel_type.contains("/drawing") && !target.is_empty() {
+                        refs.push((rid, target));
+                    }
+                }
+            }
+            Ok(quick_xml::events::Event::Eof) => break,
+            Err(_) => break,
+            _ => {}
+        }
+        buf.clear();
+    }
+    refs
+}
+
+/// Extract chart relationship targets from a drawing .rels file
+fn extract_chart_refs_from_rels(rels_xml: &str) -> HashMap<String, String> {
+    let mut refs = HashMap::new();
+    let mut reader = quick_xml::Reader::from_str(rels_xml);
+    let mut buf = Vec::new();
+    loop {
+        match reader.read_event_into(&mut buf) {
+            Ok(quick_xml::events::Event::Empty(ref e)) | Ok(quick_xml::events::Event::Start(ref e)) => {
+                if e.name().as_ref() == b"Relationship" {
+                    let mut rel_type = String::new();
+                    let mut target = String::new();
+                    let mut rid = String::new();
+                    for attr in e.attributes().flatten() {
+                        let key = attr.key.as_ref();
+                        let val = attr.unescape_value().unwrap_or_default().to_string();
+                        match key {
+                            b"Type" => rel_type = val,
+                            b"Target" => target = val,
+                            b"Id" => rid = val,
+                            _ => {}
+                        }
+                    }
+                    if rel_type.contains("/chart") && !target.is_empty() {
+                        refs.insert(rid, target);
+                    }
+                }
+            }
+            Ok(quick_xml::events::Event::Eof) => break,
+            Err(_) => break,
+            _ => {}
+        }
+        buf.clear();
+    }
+    refs
+}
+
+/// Parse a drawing XML to extract anchors and their chart rIds
+fn parse_drawing_anchors(drawing_xml: &str) -> Vec<(ChartAnchor, String)> {
+    let mut results = Vec::new();
+    let mut reader = quick_xml::Reader::from_str(drawing_xml);
+    let mut buf = Vec::new();
+
+    let mut in_anchor = false;
+    let mut in_from = false;
+    let mut in_to = false;
+    let mut from_col: u32 = 0;
+    let mut from_row: u32 = 0;
+    let mut from_col_off: i64 = 0;
+    let mut from_row_off: i64 = 0;
+    let mut to_col: u32 = 0;
+    let mut to_row: u32 = 0;
+    let mut to_col_off: i64 = 0;
+    let mut to_row_off: i64 = 0;
+    let mut chart_rid = String::new();
+    let mut current_text_tag = String::new();
+
+    loop {
+        match reader.read_event_into(&mut buf) {
+            Ok(quick_xml::events::Event::Start(ref e)) => {
+                let name_val = e.name();
+                let local = local_name(name_val.as_ref());
+                match local {
+                    b"twoCellAnchor" | b"oneCellAnchor" => {
+                        in_anchor = true;
+                        from_col = 0; from_row = 0; from_col_off = 0; from_row_off = 0;
+                        to_col = 0; to_row = 0; to_col_off = 0; to_row_off = 0;
+                        chart_rid.clear();
+                    }
+                    b"from" if in_anchor => { in_from = true; }
+                    b"to" if in_anchor => { in_to = true; }
+                    b"col" | b"colOff" | b"row" | b"rowOff" if in_from || in_to => {
+                        current_text_tag = String::from_utf8_lossy(local).to_string();
+                    }
+                    _ => {}
+                }
+            }
+            Ok(quick_xml::events::Event::Empty(ref e)) => {
+                let name_val = e.name();
+                let local = local_name(name_val.as_ref());
+                if local == b"chart" && in_anchor {
+                    for attr in e.attributes().flatten() {
+                        let key_local = local_name(attr.key.as_ref());
+                        if key_local == b"id" {
+                            if let Ok(v) = attr.unescape_value() {
+                                chart_rid = v.to_string();
+                            }
+                        }
+                    }
+                }
+            }
+            Ok(quick_xml::events::Event::Text(ref e)) => {
+                if let Ok(text) = e.unescape() {
+                    let val = text.trim();
+                    if in_from {
+                        match current_text_tag.as_str() {
+                            "col" => from_col = val.parse().unwrap_or(0),
+                            "colOff" => from_col_off = val.parse().unwrap_or(0),
+                            "row" => from_row = val.parse().unwrap_or(0),
+                            "rowOff" => from_row_off = val.parse().unwrap_or(0),
+                            _ => {}
+                        }
+                    } else if in_to {
+                        match current_text_tag.as_str() {
+                            "col" => to_col = val.parse().unwrap_or(0),
+                            "colOff" => to_col_off = val.parse().unwrap_or(0),
+                            "row" => to_row = val.parse().unwrap_or(0),
+                            "rowOff" => to_row_off = val.parse().unwrap_or(0),
+                            _ => {}
+                        }
+                    }
+                }
+                current_text_tag.clear();
+            }
+            Ok(quick_xml::events::Event::End(ref e)) => {
+                let name_val = e.name();
+                let local = local_name(name_val.as_ref());
+                match local {
+                    b"from" => { in_from = false; }
+                    b"to" => { in_to = false; }
+                    b"twoCellAnchor" | b"oneCellAnchor" => {
+                        if in_anchor && !chart_rid.is_empty() {
+                            // Default to_col/to_row if not provided (oneCellAnchor)
+                            if to_col == 0 && to_row == 0 {
+                                to_col = from_col + 8;
+                                to_row = from_row + 15;
+                            }
+                            results.push((
+                                ChartAnchor {
+                                    from_col, from_row, from_col_off, from_row_off,
+                                    to_col, to_row, to_col_off, to_row_off,
+                                },
+                                chart_rid.clone(),
+                            ));
+                        }
+                        in_anchor = false;
+                    }
+                    _ => {}
+                }
+            }
+            Ok(quick_xml::events::Event::Eof) => break,
+            Err(_) => break,
+            _ => {}
+        }
+        buf.clear();
+    }
+    results
+}
+
+/// Get local name from a possibly namespaced tag (e.g., "xdr:twoCellAnchor" -> "twoCellAnchor")
+fn local_name(name: &[u8]) -> &[u8] {
+    if let Some(pos) = name.iter().position(|&b| b == b':') {
+        &name[pos + 1..]
+    } else {
+        name
+    }
+}
+
+/// Parse a chart XML file (xl/charts/chartN.xml) into a partial ChartDefinition
+fn parse_chart_xml(chart_xml: &str) -> Option<(String, Vec<ChartSeries>, Option<String>, Option<ChartLegend>, Vec<ChartAxis>)> {
+    let mut reader = quick_xml::Reader::from_str(chart_xml);
+    let mut buf = Vec::new();
+
+    let mut chart_type = String::new();
+    let mut series_list: Vec<ChartSeries> = Vec::new();
+    let mut title: Option<String> = None;
+    let mut legend: Option<ChartLegend> = None;
+    let mut axes: Vec<ChartAxis> = Vec::new();
+
+    // Track chart type element nesting
+    let chart_type_tags: &[&[u8]] = &[
+        b"barChart", b"bar3DChart", b"lineChart", b"line3DChart",
+        b"pieChart", b"pie3DChart", b"doughnutChart",
+        b"areaChart", b"area3DChart", b"scatterChart",
+        b"radarChart", b"stockChart", b"bubbleChart", b"surfaceChart",
+    ];
+
+    let mut in_chart_type = false;
+    let mut in_ser = false;
+    let mut in_title = false;
+    let mut in_legend = false;
+    let mut in_cat = false;
+    let mut in_val = false;
+    let mut in_x_val = false;
+    let mut in_y_val = false;
+    let mut in_tx = false;
+    let mut in_str_ref = false;
+    let mut in_num_ref = false;
+    let mut in_str_cache = false;
+    let mut in_num_cache = false;
+    let mut in_cat_ax = false;
+    let mut in_val_ax = false;
+    let mut in_formula = false;
+    let mut in_chart_title_t = false;
+
+    let mut current_formula = String::new();
+    let mut current_series = ChartSeries {
+        name: None, categories_ref: None, values_ref: None,
+        categories_cache: Vec::new(), values_cache: Vec::new(), chart_type: None,
+    };
+    let mut cache_strings: Vec<String> = Vec::new();
+    let mut cache_nums: Vec<f64> = Vec::new();
+    let mut series_name_text = String::new();
+    let mut legend_pos = String::from("right");
+    let mut title_text = String::new();
+    let mut axis_title = String::new();
+    let mut in_axis_title = false;
+
+    let mut current_text_tag = String::new();
+
+    loop {
+        match reader.read_event_into(&mut buf) {
+            Ok(quick_xml::events::Event::Start(ref e)) => {
+                let name_val = e.name();
+                let local = local_name(name_val.as_ref());
+
+                // Chart type detection
+                for tag in chart_type_tags {
+                    if local == *tag {
+                        in_chart_type = true;
+                        chart_type = match local {
+                            b"barChart" | b"bar3DChart" => "bar".to_string(),
+                            b"lineChart" | b"line3DChart" => "line".to_string(),
+                            b"pieChart" | b"pie3DChart" => "pie".to_string(),
+                            b"doughnutChart" => "doughnut".to_string(),
+                            b"areaChart" | b"area3DChart" => "area".to_string(),
+                            b"scatterChart" => "scatter".to_string(),
+                            b"radarChart" => "radar".to_string(),
+                            b"stockChart" => "stock".to_string(),
+                            b"bubbleChart" => "bubble".to_string(),
+                            b"surfaceChart" => "surface".to_string(),
+                            _ => "bar".to_string(),
+                        };
+                        break;
+                    }
+                }
+
+                match local {
+                    b"ser" if in_chart_type => {
+                        in_ser = true;
+                        current_series = ChartSeries {
+                            name: None, categories_ref: None, values_ref: None,
+                            categories_cache: Vec::new(), values_cache: Vec::new(), chart_type: None,
+                        };
+                        series_name_text.clear();
+                    }
+                    b"title" if !in_ser && !in_cat_ax && !in_val_ax => { in_title = true; title_text.clear(); }
+                    b"title" if (in_cat_ax || in_val_ax) => { in_axis_title = true; axis_title.clear(); }
+                    b"legend" => { in_legend = true; legend_pos = "right".to_string(); }
+                    b"cat" if in_ser => { in_cat = true; }
+                    b"val" if in_ser => { in_val = true; }
+                    b"xVal" if in_ser => { in_x_val = true; }
+                    b"yVal" if in_ser => { in_y_val = true; }
+                    b"tx" if in_ser => { in_tx = true; }
+                    b"strRef" => { in_str_ref = true; }
+                    b"numRef" => { in_num_ref = true; }
+                    b"strCache" => { in_str_cache = true; cache_strings.clear(); }
+                    b"numCache" => { in_num_cache = true; cache_nums.clear(); }
+                    b"f" if in_str_ref || in_num_ref => { in_formula = true; current_formula.clear(); }
+                    b"catAx" => { in_cat_ax = true; }
+                    b"valAx" => { in_val_ax = true; }
+                    b"t" if in_title => { in_chart_title_t = true; }
+                    b"t" if in_axis_title => { in_chart_title_t = true; }
+                    b"v" if in_str_cache || in_num_cache => { current_text_tag = "v".to_string(); }
+                    _ => {}
+                }
+            }
+            Ok(quick_xml::events::Event::Empty(ref e)) => {
+                let name_val = e.name();
+                let local = local_name(name_val.as_ref());
+                if local == b"legendPos" && in_legend {
+                    for attr in e.attributes().flatten() {
+                        if local_name(attr.key.as_ref()) == b"val" {
+                            if let Ok(v) = attr.unescape_value() {
+                                legend_pos = match v.as_ref() {
+                                    "b" => "bottom".to_string(),
+                                    "t" => "top".to_string(),
+                                    "l" => "left".to_string(),
+                                    "r" => "right".to_string(),
+                                    "tr" => "top".to_string(),
+                                    _ => "right".to_string(),
+                                };
+                            }
+                        }
+                    }
+                }
+            }
+            Ok(quick_xml::events::Event::Text(ref e)) => {
+                if let Ok(text) = e.unescape() {
+                    let val = text.trim().to_string();
+                    if in_formula {
+                        current_formula.push_str(&val);
+                    } else if in_chart_title_t {
+                        if in_axis_title {
+                            axis_title.push_str(&val);
+                        } else if in_title && !in_ser {
+                            title_text.push_str(&val);
+                        } else if in_tx && in_ser {
+                            series_name_text.push_str(&val);
+                        }
+                    } else if current_text_tag == "v" {
+                        if in_str_cache {
+                            cache_strings.push(val);
+                        } else if in_num_cache {
+                            cache_nums.push(val.parse().unwrap_or(0.0));
+                        }
+                    }
+                }
+            }
+            Ok(quick_xml::events::Event::End(ref e)) => {
+                let name_val = e.name();
+                let local = local_name(name_val.as_ref());
+
+                // Check for chart type end tags
+                for tag in chart_type_tags {
+                    if local == *tag {
+                        in_chart_type = false;
+                        break;
+                    }
+                }
+
+                match local {
+                    b"ser" => {
+                        if in_ser {
+                            if !series_name_text.is_empty() {
+                                current_series.name = Some(series_name_text.clone());
+                            }
+                            series_list.push(current_series.clone());
+                        }
+                        in_ser = false;
+                        series_name_text.clear();
+                    }
+                    b"f" => {
+                        if in_formula && !current_formula.is_empty() {
+                            if in_cat || in_x_val {
+                                current_series.categories_ref = Some(current_formula.clone());
+                            } else if in_val || in_y_val {
+                                current_series.values_ref = Some(current_formula.clone());
+                            } else if in_tx {
+                                // Series name from formula -- usually a single cell
+                            }
+                        }
+                        in_formula = false;
+                    }
+                    b"strCache" => {
+                        if in_cat || in_x_val {
+                            current_series.categories_cache = cache_strings.clone();
+                        } else if in_tx {
+                            if let Some(first) = cache_strings.first() {
+                                series_name_text = first.clone();
+                            }
+                        }
+                        in_str_cache = false;
+                    }
+                    b"numCache" => {
+                        if in_val || in_y_val {
+                            current_series.values_cache = cache_nums.clone();
+                        }
+                        in_num_cache = false;
+                    }
+                    b"strRef" => { in_str_ref = false; }
+                    b"numRef" => { in_num_ref = false; }
+                    b"cat" => { in_cat = false; }
+                    b"val" => { in_val = false; }
+                    b"xVal" => { in_x_val = false; }
+                    b"yVal" => { in_y_val = false; }
+                    b"tx" => { in_tx = false; }
+                    b"title" if in_axis_title => {
+                        in_axis_title = false;
+                    }
+                    b"title" => { in_title = false; }
+                    b"t" => { in_chart_title_t = false; }
+                    b"v" => { current_text_tag.clear(); }
+                    b"legend" => {
+                        in_legend = false;
+                        legend = Some(ChartLegend {
+                            position: legend_pos.clone(),
+                            visible: true,
+                        });
+                    }
+                    b"catAx" => {
+                        axes.push(ChartAxis {
+                            title: if axis_title.is_empty() { None } else { Some(axis_title.clone()) },
+                            position: "bottom".to_string(),
+                            min_val: None, max_val: None,
+                            axis_type: "category".to_string(),
+                        });
+                        in_cat_ax = false;
+                        axis_title.clear();
+                    }
+                    b"valAx" => {
+                        axes.push(ChartAxis {
+                            title: if axis_title.is_empty() { None } else { Some(axis_title.clone()) },
+                            position: "left".to_string(),
+                            min_val: None, max_val: None,
+                            axis_type: "value".to_string(),
+                        });
+                        in_val_ax = false;
+                        axis_title.clear();
+                    }
+                    _ => {}
+                }
+            }
+            Ok(quick_xml::events::Event::Eof) => break,
+            Err(_) => break,
+            _ => {}
+        }
+        buf.clear();
+    }
+
+    if chart_type.is_empty() && series_list.is_empty() {
+        return None;
+    }
+    if chart_type.is_empty() { chart_type = "bar".to_string(); }
+
+    if !title_text.is_empty() {
+        title = Some(title_text);
+    }
+
+    Some((chart_type, series_list, title, legend, axes))
+}
+
+/// Parse all charts from the XLSX zip file and add them to the corresponding sheets
+fn parse_charts_from_zip(data: &[u8], sheets: &mut [SheetData]) {
+    let cursor = Cursor::new(data);
+    let mut archive = match zip::ZipArchive::new(cursor) {
+        Ok(a) => a,
+        Err(_) => return,
+    };
+
+    let sheet_name_order = parse_sheet_name_order(&mut archive);
+
+    let file_names: Vec<String> = (0..archive.len())
+        .filter_map(|i| archive.by_index(i).ok().map(|f| f.name().to_string()))
+        .collect();
+
+    let mut worksheet_files: Vec<&String> = file_names.iter()
+        .filter(|f| f.starts_with("xl/worksheets/sheet") && f.ends_with(".xml") && !f.contains("_rels"))
+        .collect();
+    worksheet_files.sort();
+
+    for (idx, ws_file) in worksheet_files.iter().enumerate() {
+        let sheet_name = match sheet_name_order.get(idx) {
+            Some(n) => n.clone(),
+            None => continue,
+        };
+
+        let sheet = match sheets.iter_mut().find(|s| s.name == sheet_name) {
+            Some(s) => s,
+            None => continue,
+        };
+
+        // Find drawing relationships for this worksheet
+        let base_name = ws_file.trim_start_matches("xl/worksheets/");
+        let rels_path = format!("xl/worksheets/_rels/{}.rels", base_name);
+
+        let drawing_refs = if let Ok(mut rels_file) = archive.by_name(&rels_path) {
+            let mut content = String::new();
+            if rels_file.read_to_string(&mut content).is_ok() {
+                extract_drawing_refs_from_rels(&content)
+            } else {
+                Vec::new()
+            }
+        } else {
+            Vec::new()
+        };
+
+        for (_rid, drawing_target) in &drawing_refs {
+            // Resolve relative path
+            let drawing_path = if drawing_target.starts_with("../") {
+                format!("xl/{}", drawing_target.trim_start_matches("../"))
+            } else if drawing_target.starts_with("/") {
+                drawing_target.trim_start_matches('/').to_string()
+            } else {
+                format!("xl/worksheets/{}", drawing_target)
+            };
+
+            // Read drawing XML
+            let drawing_xml = if let Ok(mut f) = archive.by_name(&drawing_path) {
+                let mut s = String::new();
+                if f.read_to_string(&mut s).is_ok() { s } else { continue; }
+            } else {
+                continue;
+            };
+
+            // Parse drawing anchors
+            let anchors = parse_drawing_anchors(&drawing_xml);
+            if anchors.is_empty() { continue; }
+
+            // Read drawing rels to map rIds to chart file paths
+            let drawing_base = drawing_path.rsplit('/').next().unwrap_or(&drawing_path);
+            let drawing_dir = drawing_path.trim_end_matches(drawing_base);
+            let drawing_rels_path = format!("{}_rels/{}.rels", drawing_dir, drawing_base);
+
+            let chart_refs = if let Ok(mut f) = archive.by_name(&drawing_rels_path) {
+                let mut s = String::new();
+                if f.read_to_string(&mut s).is_ok() {
+                    extract_chart_refs_from_rels(&s)
+                } else {
+                    HashMap::new()
+                }
+            } else {
+                HashMap::new()
+            };
+
+            // For each anchor with a chart reference, parse the chart XML
+            for (anchor, chart_rid) in &anchors {
+                let chart_target = match chart_refs.get(chart_rid) {
+                    Some(t) => t,
+                    None => continue,
+                };
+
+                let chart_path = if chart_target.starts_with("../") {
+                    format!("xl/{}", chart_target.trim_start_matches("../"))
+                } else if chart_target.starts_with("/") {
+                    chart_target.trim_start_matches('/').to_string()
+                } else {
+                    format!("{}{}",  drawing_dir, chart_target)
+                };
+
+                let chart_xml = if let Ok(mut f) = archive.by_name(&chart_path) {
+                    let mut s = String::new();
+                    if f.read_to_string(&mut s).is_ok() { s } else { continue; }
+                } else {
+                    continue;
+                };
+
+                if let Some((chart_type, series, title, legend, axes)) = parse_chart_xml(&chart_xml) {
+                    sheet.charts.push(ChartDefinition {
+                        chart_type,
+                        series,
+                        title,
+                        legend,
+                        axes,
+                        anchor: anchor.clone(),
+                        style: None,
+                    });
+                }
+            }
+        }
+    }
+}
+
+// --- Sparkline Parsing ---
+
+/// Parse sparklines from worksheet extension lists (<x14:sparklineGroups>)
+fn parse_sparklines_from_zip(data: &[u8], sheets: &mut [SheetData]) {
+    let cursor = Cursor::new(data);
+    let mut archive = match zip::ZipArchive::new(cursor) {
+        Ok(a) => a,
+        Err(_) => return,
+    };
+
+    let sheet_name_order = parse_sheet_name_order(&mut archive);
+
+    let file_names: Vec<String> = (0..archive.len())
+        .filter_map(|i| archive.by_index(i).ok().map(|f| f.name().to_string()))
+        .collect();
+
+    let mut worksheet_files: Vec<&String> = file_names.iter()
+        .filter(|f| f.starts_with("xl/worksheets/sheet") && f.ends_with(".xml") && !f.contains("_rels"))
+        .collect();
+    worksheet_files.sort();
+
+    for (idx, ws_file) in worksheet_files.iter().enumerate() {
+        let sheet_name = match sheet_name_order.get(idx) {
+            Some(n) => n.clone(),
+            None => continue,
+        };
+
+        let sheet = match sheets.iter_mut().find(|s| s.name == sheet_name) {
+            Some(s) => s,
+            None => continue,
+        };
+
+        if let Ok(mut file) = archive.by_name(ws_file) {
+            let mut content = String::new();
+            if file.read_to_string(&mut content).is_err() { continue; }
+
+            let mut reader = quick_xml::Reader::from_str(&content);
+            let mut buf = Vec::new();
+
+            let mut in_sparkline_group = false;
+            let mut in_sparkline = false;
+            let mut spark_type = String::from("line");
+            let mut spark_color: Option<String> = None;
+            let mut spark_negative_color: Option<String> = None;
+            let mut spark_high = false;
+            let mut spark_low = false;
+            let mut spark_first = false;
+            let mut spark_last = false;
+            let mut current_text_tag = String::new();
+            let mut data_range = String::new();
+            let mut location = String::new();
+
+            loop {
+                match reader.read_event_into(&mut buf) {
+                    Ok(quick_xml::events::Event::Start(ref e)) => {
+                        let name_val = e.name();
+                        let local = local_name(name_val.as_ref());
+                        if local == b"sparklineGroup" {
+                            in_sparkline_group = true;
+                            spark_type = "line".to_string();
+                            spark_color = None;
+                            spark_negative_color = None;
+                            spark_high = false;
+                            spark_low = false;
+                            spark_first = false;
+                            spark_last = false;
+
+                            for attr in e.attributes().flatten() {
+                                let key = local_name(attr.key.as_ref());
+                                let val = attr.unescape_value().unwrap_or_default().to_string();
+                                match key {
+                                    b"type" => spark_type = val,
+                                    b"high" => spark_high = val == "1",
+                                    b"low" => spark_low = val == "1",
+                                    b"first" => spark_first = val == "1",
+                                    b"last" => spark_last = val == "1",
+                                    _ => {}
+                                }
+                            }
+                        } else if local == b"sparkline" && in_sparkline_group {
+                            in_sparkline = true;
+                            data_range.clear();
+                            location.clear();
+                        } else if (local == b"f" || local == b"sqref") && in_sparkline {
+                            current_text_tag = String::from_utf8_lossy(local).to_string();
+                        } else if local == b"colorSeries" && in_sparkline_group {
+                            for attr in e.attributes().flatten() {
+                                if local_name(attr.key.as_ref()) == b"rgb" {
+                                    if let Ok(v) = attr.unescape_value() {
+                                        let s = v.to_string();
+                                        spark_color = Some(if s.len() == 8 { format!("#{}", &s[2..]) } else { format!("#{}", s) });
+                                    }
+                                }
+                            }
+                        } else if local == b"colorNegative" && in_sparkline_group {
+                            for attr in e.attributes().flatten() {
+                                if local_name(attr.key.as_ref()) == b"rgb" {
+                                    if let Ok(v) = attr.unescape_value() {
+                                        let s = v.to_string();
+                                        spark_negative_color = Some(if s.len() == 8 { format!("#{}", &s[2..]) } else { format!("#{}", s) });
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    Ok(quick_xml::events::Event::Empty(ref e)) => {
+                        let name_val = e.name();
+                        let local = local_name(name_val.as_ref());
+                        if local == b"colorSeries" && in_sparkline_group {
+                            for attr in e.attributes().flatten() {
+                                if local_name(attr.key.as_ref()) == b"rgb" {
+                                    if let Ok(v) = attr.unescape_value() {
+                                        let s = v.to_string();
+                                        spark_color = Some(if s.len() == 8 { format!("#{}", &s[2..]) } else { format!("#{}", s) });
+                                    }
+                                }
+                            }
+                        } else if local == b"colorNegative" && in_sparkline_group {
+                            for attr in e.attributes().flatten() {
+                                if local_name(attr.key.as_ref()) == b"rgb" {
+                                    if let Ok(v) = attr.unescape_value() {
+                                        let s = v.to_string();
+                                        spark_negative_color = Some(if s.len() == 8 { format!("#{}", &s[2..]) } else { format!("#{}", s) });
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    Ok(quick_xml::events::Event::Text(ref e)) => {
+                        if let Ok(text) = e.unescape() {
+                            let val = text.trim().to_string();
+                            match current_text_tag.as_str() {
+                                "f" => data_range = val,
+                                "sqref" => location = val,
+                                _ => {}
+                            }
+                        }
+                        current_text_tag.clear();
+                    }
+                    Ok(quick_xml::events::Event::End(ref e)) => {
+                        let name_val = e.name();
+                        let local = local_name(name_val.as_ref());
+                        if local == b"sparkline" && in_sparkline {
+                            if !data_range.is_empty() && !location.is_empty() {
+                                sheet.sparklines.push(SparklineDefinition {
+                                    sparkline_type: spark_type.clone(),
+                                    data_range: data_range.clone(),
+                                    location: location.clone(),
+                                    color: spark_color.clone(),
+                                    negative_color: spark_negative_color.clone(),
+                                    axis_color: None,
+                                    high_point: spark_high,
+                                    low_point: spark_low,
+                                    first_point: spark_first,
+                                    last_point: spark_last,
+                                });
+                            }
+                            in_sparkline = false;
+                        } else if local == b"sparklineGroup" {
+                            in_sparkline_group = false;
                         }
                     }
                     Ok(quick_xml::events::Event::Eof) => break,

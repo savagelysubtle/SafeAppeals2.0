@@ -27,8 +27,7 @@ import { PDFContentExtractor } from './pdfViewer/pdfContentExtractor.js';
 import './pdfViewer/pdfQuickEditActions.js';
 // Import PDF Annotation Service (registers the singleton)
 import './pdfViewer/pdfAnnotationService.js';
-// XLSX content extractor (still used for AI text extraction, viewer code lives in xlsxViewerAbandoned/)
-import { XLSXContentExtractor } from './xlsxViewerAbandoned/xlsxContentExtractor.js';
+import { XLSXContentExtractor } from './xlsxRustViewer/xlsxContentExtractor.js';
 
 // Register PDF Viewer Editor Pane
 Registry.as<IEditorPaneRegistry>(EditorExtensions.EditorPane)

@@ -61,6 +61,9 @@ impl ViewportManager {
             merged_cells: sheet.merged_cells.clone(),
             col_widths: sheet.col_widths.clone(),
             row_heights: sheet.row_heights.clone(),
+            conditional_formats: sheet.conditional_formats.clone(),
+            charts: sheet.charts.clone(),
+            sparklines: sheet.sparklines.clone(),
         };
 
         let json = serde_json::to_string(&viewport_sheet).map_err(|e| JsError::new(&e.to_string()))?;
