@@ -29,7 +29,7 @@ import { VOID_CTRL_L_ACTION_ID } from './actionIDs.js';
 import { IChatThreadService } from './chatThreadService.js';
 import { DOCXViewerInput } from './documentViewers/docxViewer/docxViewerInput.js';
 import { PDFViewerInput } from './documentViewers/pdfViewer/pdfViewerInput.js';
-import { XLSXViewerInput } from './documentViewers/xlsxViewerAbandoned/xlsxViewerInput.js';
+import { XLSXRustViewerInput } from './documentViewers/xlsxRustViewer/xlsxRustViewerInput.js';
 import { VOID_VIEW_CONTAINER_ID, VOID_VIEW_ID } from './sidebarPane.js';
 import { VOID_TOGGLE_SETTINGS_ACTION_ID } from './voidSettingsPane.js';
 
@@ -311,8 +311,8 @@ ${selectedText}
 		}
 
 		// Check for XLSX viewer
-		if (activePane?.input instanceof XLSXViewerInput) {
-			const xlsxInput = activePane.input as XLSXViewerInput;
+		if (activePane?.input instanceof XLSXRustViewerInput) {
+			const xlsxInput = activePane.input as XLSXRustViewerInput;
 			const notificationService = accessor.get(INotificationService);
 
 			try {
