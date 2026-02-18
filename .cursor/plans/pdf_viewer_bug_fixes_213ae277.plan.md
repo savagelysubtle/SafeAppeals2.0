@@ -7,13 +7,13 @@ todos:
     status: completed
   - id: fix-ribbon
     content: "Redesign toolbar: remove emojis, use text-only buttons, clean colored circles for highlights, consistent sizing"
-    status: in_progress
+    status: completed
   - id: fix-outline-cutoff
     content: "Fix outline text truncation: change white-space to normal, allow word wrapping"
-    status: pending
+    status: completed
   - id: rebuild-bundle
     content: Rebuild pdfRustViewer.js bundle and compile to out/
-    status: pending
+    status: completed
 isProject: false
 ---
 
