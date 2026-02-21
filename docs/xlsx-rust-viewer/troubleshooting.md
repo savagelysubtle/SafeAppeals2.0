@@ -29,21 +29,6 @@ rustup target add wasm32-unknown-unknown
 getrandom = { version = "0.3", features = ["wasm_js"] }
 ```
 
-### `error: package depends on polars with feature X but polars does not have that feature`
-
-**Cause:** Polars feature names change between versions.
-
-**Fix:** Check the [Polars docs](https://docs.rs/polars) for the correct feature names at the version specified in `Cargo.toml`. Current working features:
-```toml
-polars = { version = "0.45", default-features = false, features = ["lazy", "dtype-categorical", "strings", "csv"] }
-```
-
-### `error[E0599]: no method named X found for struct polars::prelude::CsvReadOptions`
-
-**Cause:** Polars API changes frequently between versions. The CSV reader API is particularly unstable.
-
-**Fix:** The current `table_ops.rs` avoids `CsvReadOptions` entirely and uses `DataFrame::new()` + `Column::new()` directly. If you need CSV parsing, check the Polars version-specific API.
-
 ### `warning: "import.meta" is not available with the "iife" output format`
 
 **Cause:** esbuild warns when bundling ES module code (wasm-bindgen glue) into an IIFE.
@@ -58,6 +43,29 @@ polars = { version = "0.45", default-features = false, features = ["lazy", "dtyp
 ```rust
 .map_err(|e: calamine::XlsxError| JsError::new(&e.to_string()))?;
 ```
+
+### `error[E0716]: temporary value dropped while borrowed`
+
+**Cause:** Common in the writer when working with `zip::ZipArchive`. A temporary value (e.g., from `archive.by_name()`) is dropped before the borrow is used.
+
+**Fix:** Bind the temporary to a `let` variable to extend its lifetime:
+```rust
+// Wrong:
+return archive.by_name(name).is_ok();
+
+// Right:
+let result = archive.by_name(name).is_ok();
+result
+```
+
+### TypeScript: `Property 'X' does not exist on type 'XlsxWriter'`
+
+**Cause:** The WASM module was rebuilt but the TypeScript webview bundle was not. Or a Rust function was removed/renamed but TypeScript still references the old name.
+
+**Fix:**
+1. Rebuild both: `bun run build-wasm && bun run build-xlsx-viewer`
+2. If the error persists, check that the Rust function exists and has `#[wasm_bindgen]`
+3. Check the generated `media/wasm/xlsx_rust_viewer.js` for the exported name
 
 ---
 
@@ -92,20 +100,56 @@ polars = { version = "0.45", default-features = false, features = ["lazy", "dtyp
 **Check:**
 1. The JSON returned by `parser.load()` may be empty or malformed
 2. Check that the model has `sheets[0].cells` with data
-3. The renderer expects `model.sheets[0].cells[row][col].value` -- verify this structure in the console
+3. The renderer expects `model.sheets[0].cells[row][col].value` — verify this structure in the console
 
-### "WASM not initialized" error in Worker
+### Charts don't appear after creating them
 
-**Note:** The Worker (`worker.ts`) is **not currently used**. The POC loads WASM directly on the main webview thread. If you see this error, something is importing/running the worker code incorrectly.
+**Symptoms:** Chart wizard completes but no chart overlay shows.
 
-### Scroll performance is poor
+**Check:**
+1. Open DevTools and look for `[ChartManager]` log messages
+2. Verify the chart's `series` have populated `dataCache` and `categoryCache` arrays
+3. Check that `resolveChartData()` ran successfully (look for console warnings about missing data references)
+4. If charts disappear when switching tabs, verify `vscode.setState()` / `getState()` are preserving chart state
 
-**Possible causes:**
-- The full `WorkbookModel` JSON is parsed on every scroll (it shouldn't be -- the model is held in memory)
-- DPI scaling may be triggering unnecessary redraws
-- Very large files may exceed the main thread's capacity (solution: move to Web Worker)
+### Charts don't appear in Excel after saving
 
-**Mitigation:** The renderer uses `requestAnimationFrame` for scroll redraws and only draws visible cells. For files with >100K rows, consider implementing the Web Worker architecture.
+**Symptoms:** File saves successfully and reopens in the viewer with charts, but Excel shows no charts.
+
+**Check:**
+1. Open DevTools and look for `[XLSX Writer]` log messages during save — they should show chart injection activity
+2. Verify the WASM module is up to date: `bun run build-wasm && bun run build-xlsx-viewer`
+3. Open the saved `.xlsx` file as a ZIP and check for:
+   - `xl/charts/chart1.xml` — OOXML chart definition
+   - `xl/drawings/drawing1.xml` — drawing with two-cell anchor
+   - `xl/drawings/_rels/drawing1.xml.rels` — relationship linking drawing to chart
+   - `[Content_Types].xml` — should include entries for charts and drawings
+   - Worksheet XML should have a `<drawing r:id="rIdN"/>` element
+4. If any of these are missing, the `inject_chart_files()` function in `writer.rs` may have encountered an error
+
+### `FileSystemError: EBUSY: resource busy or locked`
+
+**Cause:** The `.xlsx` file is open in another application (typically Microsoft Excel).
+
+**Fix:** Close the file in Excel before saving from the viewer. Excel holds exclusive locks on open files.
+
+### `Ignored call to 'print()'. The document is sandboxed`
+
+**Cause:** The webview iframe has CSP restrictions that prevent direct `window.print()` calls.
+
+**Impact:** The viewer works around this by capturing the canvas as an image and sending it to the extension host, which creates a temporary HTML document for printing. If you see this warning, printing should still work via the fallback mechanism.
+
+### PDF thumbnails all show the last page
+
+**Note:** This issue is in the PDF viewer, not the XLSX viewer, but is documented here for reference since both viewers share WASM patterns.
+
+**Cause:** WASM reuses the same memory buffer for rendered pages. If thumbnails are generated without copying pixel data, all thumbnails reference the same buffer (which contains the last rendered page).
+
+**Fix:** Explicitly copy `ImageData` pixel data for each thumbnail:
+```typescript
+const copy = new Uint8ClampedArray(imageData.data);
+const thumbnailData = new ImageData(copy, imageData.width, imageData.height);
+```
 
 ---
 
@@ -117,7 +161,7 @@ polars = { version = "0.45", default-features = false, features = ["lazy", "dtyp
 ```bash
 bun run build-wasm && bun run build-xlsx-viewer
 ```
-The first compiles Rust to WASM. The second re-bundles the wasm-bindgen JS glue into the IIFE.
+The first compiles Rust to WASM and outputs to `media/wasm/`. The second rebundles the wasm-bindgen JS glue into the IIFE.
 
 ### Changes to media TypeScript don't appear after reload
 
@@ -125,7 +169,7 @@ The first compiles Rust to WASM. The second re-bundles the wasm-bindgen JS glue 
 ```bash
 bun run build-xlsx-viewer
 ```
-Then reload the window. The media files are not part of the VSCode watch mode -- they have their own build step.
+Then reload the window. The media files are not part of the VSCode watch mode — they have their own build step.
 
 ### Changes to extension host TypeScript don't appear
 
@@ -135,20 +179,36 @@ bun run compile
 ```
 Or let the watch mode (`bun run watchd`) pick them up automatically. Then reload the window.
 
-### The viewer doesn't appear in "Open With..." menu
+### The viewer doesn't appear or files open in a text editor
 
 **Check:**
 1. Verify the registration in `documentViewer.contribution.ts` is intact
 2. Verify the imports for `XLSXRustViewerEditor`, `XLSXRustViewerInput`, `XLSXRustViewerInputSerializer` are not broken
 3. Recompile the extension host code: `bun run compile`
 4. Reload the window
+5. The viewer should be registered at `RegisteredEditorPriority.exclusive` — if it's at `option` priority, files won't open in it by default
 
-### WASM binary is too large
+### `TypeError: this.resource.toJSON is not a function`
 
-The current WASM binary is ~10 MB due to Polars and Arrow. To reduce size:
+**Cause:** The `XLSXRustViewerInput` serializer was called with a deserialized input where `resource` is a plain object instead of a `URI` instance.
 
-1. **Remove Polars** if table ops are not needed (saves ~5-7 MB)
-2. **Use `wasm-opt -Oz`** for aggressive size optimization (wasm-pack does this by default in release mode)
-3. **Use `default-features = false`** on all dependencies
-4. **Consider `wasm-pack build --release`** (already the default)
-5. **Gzip/Brotli compression** at the webview level would reduce transfer size (not currently implemented)
+**Fix:** The serializer's `deserialize()` method must use `URI.revive()`:
+```typescript
+const resource = URI.revive(parsed.resource);
+```
+And `toJSON()` should handle the case where `resource` may not have a `toJSON` method:
+```typescript
+toJSON() {
+    return JSON.stringify({ resource: this.resource });
+}
+```
+
+### Old WASM version running despite rebuild
+
+**Symptoms:** Console log messages don't match the code you wrote. Charts or other features behave as if using old code.
+
+**Check:**
+1. Verify the WASM binary was updated: check the file modification time of `media/wasm/xlsx_rust_viewer_bg.wasm`
+2. Verify the JS bundle was updated: check the file modification time of `media/xlsxRustViewer.js`
+3. Run both builds in sequence: `bun run build-wasm && bun run build-xlsx-viewer`
+4. Hard reload the window after rebuilding

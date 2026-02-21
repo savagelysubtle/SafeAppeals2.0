@@ -12,133 +12,36 @@ Type-safe parameter definitions for all built-in tools.
 
 ```typescript
 export type BuiltinToolCallParams = {
-	// File reading operations
-	'read_file': {
-		uri: URI;                    // File URI to read
-		startLine: number | null;     // Starting line (1-based, null = start)
-		endLine: number | null;       // Ending line (null = end of file)
-		pageNumber: number;          // Pagination for large files
-	};
-
-	'ls_dir': {
-		uri: URI;                   // Directory URI to list
-		pageNumber: number;         // Pagination for large directories
-	};
-
-	'get_dir_tree': {
-		uri: URI;                  // Directory URI for tree view
-	};
-
-	'search_pathnames_only': {
-		query: string;             // Search query for filenames
-		includePattern: string | null; // Glob pattern to include
-		pageNumber: number;        // Pagination for results
-	};
-
-	'search_for_files': {
-		query: string;             // Content search query
-		isRegex: boolean;          // Whether query is regex
-		searchInFolder: URI | null; // Directory to search (null = workspace)
-		pageNumber: number;        // Pagination for results
-	};
-
-	'search_in_file': {
-		uri: URI;                  // File URI to search in
-		query: string;             // Search query
-		isRegex: boolean;          // Whether query is regex
-	};
-
-	'read_lint_errors': {
-		uri: URI;                  // File URI to check for lint errors
-	};
-
-	// File modification operations
-	'rewrite_file': {
-		uri: URI;                  // File URI to rewrite
-		newContent: string;        // Complete new file content
-	};
-
-	'edit_file': {
-		uri: URI;                  // File URI to edit
-		searchReplaceBlocks: string; // Search/replace operations
-	};
-
-	'create_file_or_folder': {
-		uri: URI;                  // URI to create
-		isFolder: boolean;         // Whether to create folder or file
-	};
-
-	'delete_file_or_folder': {
-		uri: URI;                  // URI to delete
-		isRecursive: boolean;      // Whether to delete recursively
-		isFolder: boolean;         // Whether URI is a folder
-	};
-
-	'edit_document': {
-		uri: URI;                  // Document URI to edit
-		operations: Array<{        // Rich text operations
-			type: string;
-			[key: string]: any;
-		}>;
-	};
-
-	// Terminal operations
-	'run_command': {
-		command: string;           // Command to execute
-		cwd: string | null;        // Working directory (null = current)
-		terminalId: string;        // Terminal identifier
-	};
-
-	'open_persistent_terminal': {
-		cwd: string | null;        // Working directory for terminal
-	};
-
-	'run_persistent_command': {
-		command: string;           // Command for persistent terminal
-		persistentTerminalId: string; // Persistent terminal ID
-	};
-
-	'kill_persistent_terminal': {
-		persistentTerminalId: string; // Terminal to kill
-	};
-
-	// RAG operations
-	'rag_index_document': {
-		uri: URI;                  // Document to index
-		isPolicyManual: boolean;   // Whether it's a policy document
-		workspaceId?: string;      // Optional workspace ID (auto-injected)
-		indexScope?: 'policy_manual' | 'case_index'; // Target index
-	};
-
-	'rag_search_policy': {
-		query: string;             // Search query for policy documents
-		limit: number;             // Maximum results
-	};
-
-	'rag_search_workspace': {
-		query: string;             // Search query for case documents
-		limit: number;             // Maximum results
-	};
-
-	'rag_search_all': {
-		query: string;             // Search query across ALL documents
-		limit: number;             // Maximum results
-	};
-
-	'rag_get_stats': {};          // No parameters needed
-
-	// Web search operations
-	'web_search': {
-		query: string;             // Search query
-		count: number | null;      // Number of results (null = default)
-		offset: number | null;     // Pagination offset (null = 0)
-	};
-
-	'multi_link_search': {
-		queries: string[];         // Multiple search queries
-		count: number | null;      // Results per query
-	};
-};
+  'read_file': { uri: URI, startLine: number | null, endLine: number | null, pageNumber: number },
+  'ls_dir': { uri: URI, pageNumber: number },
+  'get_dir_tree': { uri: URI },
+  'search_pathnames_only': { query: string, includePattern: string | null, pageNumber: number },
+  'search_for_files': { query: string, isRegex: boolean, searchInFolder: URI | null, pageNumber: number },
+  'search_in_file': { uri: URI, query: string, isRegex: boolean },
+  'read_lint_errors': { uri: URI },
+  'rewrite_file': { uri: URI, newContent: string },
+  'edit_file': { uri: URI, searchReplaceBlocks: string },
+  'create_file_or_folder': { uri: URI, isFolder: boolean },
+  'delete_file_or_folder': { uri: URI, isRecursive: boolean, isFolder: boolean },
+  'edit_document': { uri: URI, operations: Array<{ type: string; [key: string]: any }> },
+  'run_command': { command: string; cwd: string | null, terminalId: string },
+  'open_persistent_terminal': { cwd: string | null },
+  'run_persistent_command': { command: string; persistentTerminalId: string },
+  'kill_persistent_terminal': { persistentTerminalId: string },
+  'rag_index_document': { uri: URI, isCoreReference: boolean },
+  'rag_search_reference': { query: string, limit: number },
+  'rag_search_workspace': { query: string, limit: number },
+  'rag_search_all': { query: string, limit: number },
+  'rag_get_stats': {},
+  'web_search': { query: string, count: number | null, offset: number | null },
+  'multi_link_search': { queries: string[], count: number | null },
+  'timeline_add_event': { date: string, title: string, description: string | null, category: EventCategory, isDeadline: boolean, linkedDocuments: string[] },
+  'timeline_update_event': { eventId: string, date: string | null, title: string | null, description: string | null, category: EventCategory | null, isDeadline: boolean | null, isComplete: boolean | null },
+  'timeline_delete_event': { eventId: string },
+  'timeline_get_events': { category: EventCategory | null, startDate: string | null, endDate: string | null, isDeadline: boolean | null, limit: number },
+  'timeline_link_document': { eventId: string, documentUri: URI },
+  'timeline_get_deadlines': { daysAhead: number },
+}
 ```
 
 #### BuiltinToolResultType
@@ -147,111 +50,36 @@ Result type definitions for all built-in tools.
 
 ```typescript
 export type BuiltinToolResultType = {
-	// File reading results
-	'read_file': {
-		fileContents: string;      // File content
-		totalFileLen: number;      // Total characters
-		totalNumLines: number;     // Total lines
-		hasNextPage: boolean;     // Whether more pages exist
-	};
-
-	'ls_dir': {
-		children: ShallowDirectoryItem[] | null; // Directory contents
-		hasNextPage: boolean;     // More pages available
-		hasPrevPage: boolean;     // Previous pages available
-		itemsRemaining: number;   // Items not shown due to pagination
-	};
-
-	'get_dir_tree': {
-		str: string;              // Directory tree as string
-	};
-
-	'search_pathnames_only': {
-		uris: URI[];              // Matching file URIs
-		hasNextPage: boolean;     // More results available
-	};
-
-	'search_for_files': {
-		uris: URI[];              // Matching file URIs
-		hasNextPage: boolean;     // More results available
-	};
-
-	'search_in_file': {
-		lines: number[];          // Line numbers with matches
-	};
-
-	'read_lint_errors': {
-		lintErrors: LintErrorItem[] | null; // Lint errors found
-	};
-
-	// File modification results
-	'rewrite_file': Promise<{
-		lintErrors: LintErrorItem[] | null; // Post-write lint errors
-	}>;
-
-	'edit_file': Promise<{
-		lintErrors: LintErrorItem[] | null; // Post-edit lint errors
-	}>;
-
-	'create_file_or_folder': {}; // No specific result data
-
-	'delete_file_or_folder': {}; // No specific result data
-
-	'edit_document': {
-		success: boolean;         // Whether operation succeeded
-		error?: string;           // Error message if failed
-		message?: string;         // Success message
-	};
-
-	// Terminal results
-	'run_command': {
-		result: string;           // Command output
-		resolveReason: TerminalResolveReason; // How command ended
-	};
-
-	'run_persistent_command': {
-		result: string;           // Command output
-		resolveReason: TerminalResolveReason; // How command ended
-	};
-
-	'open_persistent_terminal': {
-		persistentTerminalId: string; // ID of opened terminal
-	};
-
-	'kill_persistent_terminal': {}; // No specific result data
-
-	// RAG results
-	'rag_index_document': {
-		success: boolean;         // Whether indexing succeeded
-		message: string;          // Status message
-	};
-
-	'rag_search_policy': {
-		contextPack: string;      // Retrieved context from policy manuals
-	};
-
-	'rag_search_workspace': {
-		contextPack: string;      // Retrieved context from case files
-	};
-
-	'rag_search_all': {
-		contextPack: string;      // Retrieved context from ALL sources
-	};
-
-	'rag_get_stats': {
-		stats: string;            // Statistics as string
-	};
-
-	// Web search results
-	'web_search': {
-		results: WebSearchResult[]; // Search results
-		totalResults: number;     // Total results found
-	};
-
-	'multi_link_search': {
-		searchResults: MultiSearchResult[]; // Results for each query
-	};
-};
+  'read_file': { fileContents: string, totalFileLen: number, totalNumLines: number, hasNextPage: boolean },
+  'ls_dir': { children: ShallowDirectoryItem[] | null, hasNextPage: boolean, hasPrevPage: boolean, itemsRemaining: number },
+  'get_dir_tree': { str: string },
+  'search_pathnames_only': { uris: URI[], hasNextPage: boolean },
+  'search_for_files': { uris: URI[], hasNextPage: boolean },
+  'search_in_file': { lines: number[] },
+  'read_lint_errors': { lintErrors: LintErrorItem[] | null },
+  'rewrite_file': Promise<{ lintErrors: LintErrorItem[] | null }>,
+  'edit_file': Promise<{ lintErrors: LintErrorItem[] | null }>,
+  'create_file_or_folder': {},
+  'delete_file_or_folder': {},
+  'edit_document': { success: boolean, error?: string, message?: string },
+  'run_command': { result: string; resolveReason: TerminalResolveReason },
+  'run_persistent_command': { result: string; resolveReason: TerminalResolveReason },
+  'open_persistent_terminal': { persistentTerminalId: string },
+  'kill_persistent_terminal': {},
+  'rag_index_document': { success: boolean, message: string },
+  'rag_search_reference': { contextPack: string },
+  'rag_search_workspace': { contextPack: string },
+  'rag_search_all': { contextPack: string },
+  'rag_get_stats': { stats: string },
+  'web_search': { results: WebSearchResult[], totalResults: number },
+  'multi_link_search': { searchResults: MultiSearchResult[] },
+  'timeline_add_event': { event: TimelineEvent },
+  'timeline_update_event': { success: boolean },
+  'timeline_delete_event': { success: boolean },
+  'timeline_get_events': { events: TimelineEvent[], totalCount: number },
+  'timeline_link_document': { success: boolean },
+  'timeline_get_deadlines': { upcoming: TimelineEvent[], overdue: TimelineEvent[] },
+}
 ```
 
 ### Tool Approval System
@@ -266,32 +94,21 @@ export type ToolApprovalType = 'edits' | 'terminal' | 'MCP tools' | 'RAG tools';
 
 #### approvalTypeOfBuiltinToolName
 
-Mapping of tools to their approval requirements.
+Mapping of tools to their approval requirements. Tools not listed require no approval (read-only).
 
 ```typescript
-export const approvalTypeOfBuiltinToolName: Partial<{
-	[T in BuiltinToolName]?: ToolApprovalType;
-}> = {
-	// File editing tools require approval
-	'create_file_or_folder': 'edits',
-	'delete_file_or_folder': 'edits',
-	'rewrite_file': 'edits',
-	'edit_file': 'edits',
-	'edit_document': 'edits',
-
-	// Terminal tools require approval
-	'run_command': 'terminal',
-	'run_persistent_command': 'terminal',
-	'open_persistent_terminal': 'terminal',
-	'kill_persistent_terminal': 'terminal',
-
-	// RAG tools are read-only (no approval needed)
-	// 'rag_index_document': 'RAG tools', // Commented out - read-only
-	// 'rag_search_policy': 'RAG tools',   // Commented out - read-only
-	// 'rag_search_workspace': 'RAG tools', // Commented out - read-only
-	// 'rag_search_all': 'RAG tools',      // Commented out - read-only
-	// 'rag_get_stats': 'RAG tools',       // Commented out - read-only
-};
+export const approvalTypeOfBuiltinToolName: Partial<{ [T in BuiltinToolName]?: 'edits' | 'terminal' | 'MCP tools' | 'RAG tools' }> = {
+  'create_file_or_folder': 'edits',
+  'delete_file_or_folder': 'edits',
+  'rewrite_file': 'edits',
+  'edit_file': 'edits',
+  'edit_document': 'edits',
+  'run_command': 'terminal',
+  'run_persistent_command': 'terminal',
+  'open_persistent_terminal': 'terminal',
+  'kill_persistent_terminal': 'terminal',
+  // RAG tools - commented out, no approval needed (read-only)
+}
 ```
 
 ### Generic Tool Types
@@ -302,9 +119,9 @@ Generic tool parameter type that works with both built-in and MCP tools.
 
 ```typescript
 export type ToolCallParams<T extends BuiltinToolName | (string & {})> =
-	T extends BuiltinToolName
-		? BuiltinToolCallParams[T]
-		: RawToolParamsObj; // For MCP tools
+  T extends BuiltinToolName
+    ? BuiltinToolCallParams[T]
+    : RawToolParamsObj; // For MCP tools
 ```
 
 #### ToolResult
@@ -313,149 +130,10 @@ Generic tool result type that works with both built-in and MCP tools.
 
 ```typescript
 export type ToolResult<T extends BuiltinToolName | (string & {})> =
-	T extends BuiltinToolName
-		? BuiltinToolResultType[T]
-		: RawMCPToolCall; // For MCP tools
+  T extends BuiltinToolName
+    ? BuiltinToolResultType[T]
+    : RawMCPToolCall; // For MCP tools
 ```
-
-## Schema Validation API
-
-### ToolSchemaValidator Class
-
-Main class for tool parameter validation with caching and performance monitoring.
-
-```typescript
-export class ToolSchemaValidator {
-	// Private fields
-	private compiledValidators: Map<BuiltinToolName, CompiledValidator<any>>;
-	private validationMetrics: Map<BuiltinToolName, {
-		count: number;
-		totalTime: number;
-		errors: number;
-	}>;
-
-	/**
-	 * Compile a validator for a tool schema (cached for performance)
-	 */
-	compileValidator<T>(schema: ToolSchema): CompiledValidator<T>;
-
-	/**
-	 * Validate tool call parameters against schema
-	 */
-	validateToolCall<T extends BuiltinToolName>(
-		toolName: T,
-		params: RawToolParamsObj
-	): ValidationResult<BuiltinToolCallParams[T]>;
-
-	/**
-	 * Create schema from tool info (utility function)
-	 */
-	createSchemaFromToolInfo(toolInfo: InternalToolInfo): ToolSchema;
-
-	/**
-	 * Get validation metrics for monitoring
-	 */
-	getValidationMetrics(): Map<BuiltinToolName, {
-		count: number;
-		totalTime: number;
-		errors: number;
-		averageTime: number;
-		errorRate: number;
-	}>;
-}
-```
-
-### Validation Types
-
-#### ValidationError
-
-Detailed error information for validation failures.
-
-```typescript
-export interface ValidationError {
-	field: string;           // Parameter name that failed
-	message: string;         // Human-readable error message
-	value?: unknown;         // The invalid value that was provided
-}
-```
-
-#### ValidationResult
-
-Result of a validation operation with success status and errors.
-
-```typescript
-export interface ValidationResult<T> {
-	success: boolean;       // Whether validation passed
-	data?: T;              // Validated and typed data (if success)
-	errors: ValidationError[]; // All validation errors found
-}
-```
-
-#### ParamType
-
-Supported parameter types for schema validation.
-
-```typescript
-export type ParamType =
-	| 'string'           // Basic string
-	| 'number'           // Numeric value
-	| 'boolean'          // True/false
-	| 'uri'              // VSCode URI object
-	| 'optional_string'  // Optional string (can be empty)
-	| 'optional_uri'     // Optional URI
-	| 'page_number';     // Special pagination number
-```
-
-#### ParamConstraint
-
-Complete constraint definition for parameter validation.
-
-```typescript
-export interface ParamConstraint {
-	type: ParamType;                      // Parameter type
-	required?: boolean;                   // Whether parameter is mandatory
-	min?: number;                         // Minimum value (for numbers)
-	max?: number;                         // Maximum value (for numbers)
-	pattern?: RegExp;                     // Regex pattern for strings
-	customValidator?: (value: unknown) => string | null; // Custom validation function
-}
-```
-
-#### ToolSchema
-
-Schema definition for a complete tool with all its parameters.
-
-```typescript
-export interface ToolSchema {
-	toolName: BuiltinToolName;            // Tool identifier
-	params: {                             // Parameter constraints
-		[paramName: string]: ParamConstraint;
-	};
-}
-```
-
-### CompiledValidator
-
-Pre-compiled validation function for performance.
-
-```typescript
-export type CompiledValidator<T> = (params: RawToolParamsObj) => ValidationResult<T>;
-```
-
-## Utility Functions
-
-### createSchemaFromToolInfo
-
-Converts internal tool information into a validation schema.
-
-```typescript
-export function createSchemaFromToolInfo(toolInfo: InternalToolInfo): ToolSchema;
-```
-
-**Parameters:**
-- `toolInfo`: Internal tool definition from the prompts system
-
-**Returns:** Complete `ToolSchema` for the tool
 
 ## Supporting Types
 
@@ -465,8 +143,8 @@ How a terminal command execution ended.
 
 ```typescript
 export type TerminalResolveReason =
-	| { type: 'timeout' }           // Command timed out
-	| { type: 'done', exitCode: number }; // Command completed normally
+  | { type: 'timeout' }
+  | { type: 'done', exitCode: number };
 ```
 
 ### LintErrorItem
@@ -475,10 +153,10 @@ Lint error information for file validation.
 
 ```typescript
 export type LintErrorItem = {
-	code: string;                   // Error code
-	message: string;               // Error message
-	startLineNumber: number;        // Starting line (1-based)
-	endLineNumber: number;          // Ending line (1-based)
+  code: string;
+  message: string;
+  startLineNumber: number;
+  endLineNumber: number;
 };
 ```
 
@@ -488,10 +166,10 @@ File system item information (partial IFileStat).
 
 ```typescript
 export type ShallowDirectoryItem = {
-	uri: URI;                      // Item URI
-	name: string;                  // Item name
-	isDirectory: boolean;          // Whether it's a directory
-	isSymbolicLink: boolean;       // Whether it's a symlink
+  uri: URI;
+  name: string;
+  isDirectory: boolean;
+  isSymbolicLink: boolean;
 };
 ```
 
@@ -499,19 +177,23 @@ export type ShallowDirectoryItem = {
 
 ```typescript
 export type WebSearchResult = {
-	title: string;                 // Result title
-	url: string;                   // Result URL
-	description: string;           // Result description
-	age?: string;                  // Result age
-	published?: string;            // Publication date
+  title: string;
+  url: string;
+  description: string;
+  age?: string;
+  published?: string;
 };
 
 export type MultiSearchResult = {
-	query: string;                 // Original search query
-	results: WebSearchResult[];    // Results for this query
-	error?: string;                // Error if search failed
+  query: string;
+  results: WebSearchResult[];
+  error?: string;
 };
 ```
+
+### Timeline Types
+
+`EventCategory` and `TimelineEvent` are defined in `common/timeline/timelineTypes.ts`. See that file for full definitions.
 
 ## Tool Name Types
 
@@ -537,9 +219,9 @@ Generic parameter name type with tool-specific typing.
 
 ```typescript
 export type ToolParamName<T extends ToolName> =
-	T extends BuiltinToolName
-		? BuiltinToolParamNameOfTool<T>
-		: string;
+  T extends BuiltinToolName
+    ? BuiltinToolParamNameOfTool<T>
+    : string;
 ```
 
 ## Constants
@@ -550,11 +232,69 @@ Set of all available tool approval types for runtime checks.
 
 ```typescript
 export const toolApprovalTypes = new Set<ToolApprovalType>([
-	'edits',
-	'terminal',
-	'MCP tools',
-	'RAG tools',
+  'edits',
+  'terminal',
+  'MCP tools',
+  'RAG tools',
 ]);
 ```
 
-This API reference provides the complete type system for the Void tools framework, enabling type-safe tool calling, validation, and execution across the entire AI agent system.
+## edit_document Operations
+
+The `edit_document` tool accepts an array of operations. Operation type and parameters depend on the document format (DOCX or XLSX).
+
+### DOCX Operations
+
+| Operation | Parameters |
+|-----------|------------|
+| `insert_text` | `position` (number), `text` (string) |
+| `replace_text` | `search` (string), `replace` (string), `all?` (boolean) |
+| `format_text` | `range` (`{ start, end }`), `format` (bold, italic, underline, fontSize, fontFamily, color) |
+| `insert_table` | table definition |
+| `insert_page_break` | — |
+| `set_margins` | margin values |
+
+### XLSX Cell Operations
+
+| Operation | Parameters |
+|-----------|------------|
+| `set_cell_value` | `sheet`, `cell`, `value` |
+| `set_cell_formula` | `sheet`, `cell`, `formula` |
+| `format_cell` | `sheet`, `cell`, format options |
+| `insert_row` | `sheet`, row index |
+| `insert_column` | `sheet`, column index |
+| `delete_row` | `sheet`, row index |
+| `delete_column` | `sheet`, column index |
+
+### XLSX Table Operations
+
+| Operation | Parameters |
+|-----------|------------|
+| `create_table` | `sheet`, `range`, `tableName` |
+| `rename_table` | `sheet`, table identifier, `name` |
+| `set_table_style` | `sheet`, table identifier, style |
+| `toggle_table_filter` | `sheet`, table identifier |
+| `set_totals_row` | `sheet`, table identifier, totals config |
+| `convert_table_to_range` | `sheet`, table identifier |
+
+### XLSX Chart Operations
+
+| Operation | Parameters |
+|-----------|------------|
+| `insert_chart` | `sheet`, `chart_type`, `data_range`, `title?`, `position?` |
+| `delete_chart` | `sheet`, `chart_index` |
+
+**Chart types:** `column`, `bar`, `line`, `pie`, `scatter`, `area`, `doughnut`, `radar`
+
+**Example:**
+```json
+[
+  {"type": "set_cell_value", "sheet": 0, "cell": "A1", "value": "Month"},
+  {"type": "set_cell_value", "sheet": 0, "cell": "B1", "value": "Sales"},
+  {"type": "insert_chart", "sheet": 0, "chart_type": "column", "data_range": "A1:B3", "title": "Monthly Sales", "position": "D2"}
+]
+```
+
+---
+
+This API reference provides the complete type system for the Void tools framework, enabling type-safe tool calling and execution across the AI agent system.

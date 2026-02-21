@@ -2006,6 +2006,166 @@ CREATE TABLE recordings (
 
 ---
 
+## 🌐 Embedded Web Browser
+
+**Status**: ✅ Implemented
+**Date Added**: February 2026
+**Location**: `src/vs/workbench/contrib/void/` (browser/browserPanel, common, electron-main)
+
+### Overview
+
+A fully functional web browser embedded directly into the IDE, built on Electron's `WebContentsView` API. Renders pages using a real Chromium renderer (not an iframe or webview), providing full website compatibility including Google Search, sign-in flows, and modern JavaScript applications. Accessible via a globe icon in the top-right title bar or the command palette.
+
+### Core Features
+
+#### 1. **Full Chromium Browsing**
+
+- ✅ Native `WebContentsView` with full web standards support
+- ✅ Google Search, sign-in, and all interactive features work without degradation
+- ✅ Dedicated persistent session (`persist:void-browser-v2`) with cookies/storage across restarts
+- ✅ Clean User-Agent (Electron/app identifiers stripped for site compatibility)
+- ✅ Sandboxed rendering (`sandbox: true`, `contextIsolation: true`)
+
+#### 2. **URL Bar with Smart Navigation**
+
+- ✅ Type a URL, domain, or plain text to search Google automatically
+- ✅ Domain detection (contains `.` and no spaces → prepend `https://`)
+- ✅ Search fallback (anything else → Google search query)
+- ✅ Scheme detection (existing `https://`, `http://`, etc. used as-is)
+
+#### 3. **Navigation Controls**
+
+- ✅ Back / Forward / Reload / Home buttons
+- ✅ Keyboard shortcut `Ctrl+L` to focus and select URL bar
+- ✅ History-aware back/forward (disabled when no history)
+
+#### 4. **Bookmarks Bar**
+
+- ✅ Star icon to bookmark current page (turns gold when bookmarked)
+- ✅ Persistent bookmarks bar below the toolbar with clickable chips
+- ✅ Right-click bookmark → native OS context menu (Open, Open in New Tab, Copy URL, Remove)
+- ✅ Bookmarks persist in VS Code profile storage across restarts
+- ✅ Notification feedback on bookmark add/remove
+
+#### 5. **Browsing History**
+
+- ✅ Up to 200 entries, most recent first
+- ✅ Accessible from URL bar dropdown on focus
+- ✅ Persisted in VS Code profile storage
+
+#### 6. **Find in Page**
+
+- ✅ `Ctrl+F` opens inline find bar
+- ✅ Real-time highlighting, forward/reverse search
+- ✅ `Escape` to close
+
+#### 7. **Downloads**
+
+- ✅ Native save dialog on download link click
+- ✅ Progress tracking with completion notification
+
+#### 8. **DevTools**
+
+- ✅ One-click Chromium DevTools access (detached window)
+
+#### 9. **Editor Integration**
+
+- ✅ Opens as a standard editor tab (close, split, drag, pin)
+- ✅ Multiple browser tabs via New Tab button
+- ✅ Session restore (remembers URL per tab across restarts)
+- ✅ Proper cleanup: closing the tab removes the native view immediately
+- ✅ Focus management: keyboard input works in embedded pages
+
+### Commands
+
+| Command ID           | Title                      | Access                                |
+| -------------------- | -------------------------- | ------------------------------------- |
+| `void.openBrowser`   | SafeAppeals: Open Browser  | Globe icon (top-right), `Ctrl+Shift+P` |
+
+### Architecture
+
+```
+Browser Process:
+├── IBrowserPanelService (browser/browserService.ts - IPC client)
+│   ├── History management (IStorageService)
+│   ├── Bookmark management (IStorageService)
+│   └── IPC relay for navigation/loading/download events
+├── BrowserEditor (browser/browserEditor.ts - EditorPane)
+│   ├── Toolbar UI (back/fwd/reload/home, URL bar, bookmarks, DevTools)
+│   ├── Bookmarks bar with clickable chips
+│   ├── Find-in-page bar
+│   ├── Content area bounds computation (CSS→DIP coordinate conversion)
+│   └── ResizeObserver for responsive layout
+├── BrowserInput (browser/browserInput.ts - EditorInput)
+└── BrowserInputSerializer (browser/browserInputSerializer.ts)
+
+IPC Channel (void-channel-browser-panel):
+├── createView(viewId, url, bounds)
+├── destroyView(viewId)
+├── navigateTo(viewId, url)
+├── goBack/goForward/reload(viewId)
+├── setBounds(viewId, bounds)
+├── setVisible(viewId, visible)
+├── openDevTools(viewId)
+├── findInPage/stopFindInPage(viewId, text)
+├── focusView(viewId)
+└── showContextMenu(items) → selected item ID
+
+Electron Main:
+├── BrowserPanelChannel (electron-main/browserPanelChannel.ts)
+│   ├── WebContentsView lifecycle management
+│   ├── Session setup (persist:void-browser-v2)
+│   ├── Navigation event forwarding
+│   ├── Download handling (will-download)
+│   └── Native context menu (Electron Menu.popup)
+└── app.ts security exemptions
+    ├── will-navigate: allows navigation for browser session
+    └── setWindowOpenHandler: skips for browser session
+```
+
+### Files
+
+**Common** (`common/`):
+
+- `browserPanelTypes.ts` - `BrowserViewBounds`, `BrowserViewNavigationEvent`, `BrowserViewLoadingEvent`
+
+**Browser** (`browser/browserPanel/`):
+
+- `browserEditor.ts` - EditorPane with toolbar, bookmarks bar, find bar, bounds computation
+- `browserInput.ts` - EditorInput with URL, tabId, serialization
+- `browserInputSerializer.ts` - Session restore serializer
+- `browserService.ts` - `IBrowserPanelService` (IPC client + history/bookmarks)
+
+**Electron Main** (`electron-main/`):
+
+- `browserPanelChannel.ts` - IServerChannel managing `WebContentsView` instances
+
+**Registration**:
+
+- `documentViewer.contribution.ts` - EditorPane, EditorInput, Serializer registration
+- `sidebarActions.ts` - `void.openBrowser` action (globe icon in title bar)
+
+### Key Technical Decisions
+
+1. **`WebContentsView` over Webview/iframe**: Full Chromium renderer with no CSP restrictions, enabling Google sign-in and complex JS apps
+2. **Session isolation**: Dedicated `persist:void-browser-v2` partition prevents cookie/cache contamination with VS Code's own session
+3. **Minimal UA modification**: Only strip Electron/app identifiers from User-Agent; no header interception, no CSP stripping, no consent cookie hacks — tested extensively and the minimal approach works best
+4. **Security exemptions in `app.ts`**: Session-identity-based checks (`===` on `Session` object) to exempt the browser from VS Code's global navigation blockers while keeping all other webContents protected
+5. **Native context menus**: Use `Electron.Menu.popup()` for bookmark context menus since DOM elements render behind the native `WebContentsView`
+
+### Documentation
+
+See `docs/browser-panel/` for comprehensive documentation:
+
+- [README](../browser-panel/README.md) - Overview and quick start
+- [Architecture](../browser-panel/architecture.md) - Process model, IPC, security
+- [User Guide](../browser-panel/user-guide.md) - Feature walkthrough
+- [Developer Guide](../browser-panel/developer-guide.md) - Extension points, testing
+- [API Reference](../browser-panel/api-reference.md) - Service API, types
+- [Troubleshooting](../browser-panel/troubleshooting.md) - Common issues and fixes
+
+---
+
 ## 📞 Contacts & Resources
 
 - **GitHub**: <https://github.com/savagelysubtle/SafeAppeals2.0>
@@ -2016,5 +2176,5 @@ CREATE TABLE recordings (
 
 ---
 
-**Last Updated**: February 5, 2026
+**Last Updated**: February 18, 2026
 **Version**: 1.99.7
