@@ -3,6 +3,7 @@
  *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
  *--------------------------------------------------------------------------------------*/
 
+import { Codicon } from '../../../../base/common/codicons.js';
 import { KeyCode, KeyMod } from '../../../../base/common/keyCodes.js';
 
 
@@ -490,6 +491,36 @@ registerAction2(class extends Action2 {
 	}
 })
 
+
+// Open Browser
+registerAction2(class extends Action2 {
+	constructor() {
+		super({
+			id: 'void.openBrowser',
+			title: localize2('voidOpenBrowser', 'SafeAppeals: Open Browser'),
+			icon: Codicon.globe,
+			f1: true,
+			menu: [
+				{
+					id: MenuId.LayoutControlMenuSubmenu,
+					group: 'z_end',
+					order: -1,
+				},
+				{
+					id: MenuId.LayoutControlMenu,
+					when: ContextKeyExpr.equals('config.workbench.layoutControl.type', 'both'),
+					group: 'z_end',
+					order: -1,
+				}
+			]
+		});
+	}
+	async run(accessor: ServicesAccessor): Promise<void> {
+		const editorService = accessor.get(IEditorService)
+		const { BrowserInput } = await import('./browserPanel/browserInput.js')
+		editorService.openEditor(new BrowserInput(), { pinned: true })
+	}
+})
 
 // Settings gear
 registerAction2(class extends Action2 {

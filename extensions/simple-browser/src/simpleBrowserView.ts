@@ -15,7 +15,7 @@ export interface ShowOptions {
 export class SimpleBrowserView extends Disposable {
 
 	public static readonly viewType = 'simpleBrowser.view';
-	private static readonly title = vscode.l10n.t("Simple Browser");
+	private static readonly title = vscode.l10n.t("Browser");
 
 	private static getWebviewLocalResourceRoots(extensionUri: vscode.Uri): readonly vscode.Uri[] {
 		return [
@@ -133,6 +133,7 @@ export class SimpleBrowserView extends Disposable {
 
 				<meta id="simple-browser-settings" data-settings="${escapeAttribute(JSON.stringify({
 			url: url,
+			homeUrl: configuration.get<string>('home', 'https://www.google.com'),
 			focusLockEnabled: configuration.get<boolean>('focusLockIndicator.enabled', true)
 		}))}">
 
@@ -153,9 +154,13 @@ export class SimpleBrowserView extends Disposable {
 						<button
 							title="${vscode.l10n.t("Reload")}"
 							class="reload-button icon"><i class="codicon codicon-refresh"></i></button>
+
+						<button
+							title="${vscode.l10n.t("Home")}"
+							class="home-button icon"><i class="codicon codicon-home"></i></button>
 					</nav>
 
-					<input class="url-input" type="text">
+					<input class="url-input" type="text" placeholder="https://...">
 
 					<nav class="controls">
 						<button
@@ -164,8 +169,9 @@ export class SimpleBrowserView extends Disposable {
 					</nav>
 				</header>
 				<div class="content">
+					<div class="loading-indicator"><i class="codicon codicon-loading codicon-modifier-spin"></i></div>
 					<div class="iframe-focused-alert">${vscode.l10n.t("Focus Lock")}</div>
-					<iframe sandbox="allow-scripts allow-forms allow-same-origin allow-downloads"></iframe>
+					<iframe sandbox="allow-scripts allow-forms allow-same-origin allow-downloads allow-popups allow-popups-to-escape-sandbox allow-modals"></iframe>
 				</div>
 
 				<script src="${mainJs}" nonce="${nonce}"></script>
