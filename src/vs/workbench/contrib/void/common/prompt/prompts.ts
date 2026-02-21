@@ -1,8 +1,3 @@
-/*--------------------------------------------------------------------------------------
- *  Copyright 2025 Glass Devtools, Inc. All rights reserved.
- *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
- *--------------------------------------------------------------------------------------*/
-
 import { URI } from '../../../../../base/common/uri.js';
 import { IFileService } from '../../../../../platform/files/common/files.js';
 import { StagingSelectionItem } from '../chatThreadServiceTypes.js';
@@ -16,13 +11,20 @@ import { getSystemPrompt } from './systemPrompt.js';
 // Triple backtick wrapper used throughout the prompts for code blocks
 export const tripleTick = ['```', '```']
 
-// EDIT_DOCUMENT_DESCRIPTION from toolSchemas.ts
 export const EDIT_DOCUMENT_DESCRIPTION = `Edit DOCX/XLSX files using JSON operations array.
 
 **VALID OPERATION TYPES:**
 
 DOCX operations: insert_text, replace_text, format_text, insert_table, insert_page_break, set_margins
-XLSX operations: set_cell_value, set_cell_formula, format_cell, insert_row, insert_column, delete_row, delete_column
+
+XLSX cell operations: set_cell_value, set_cell_formula, format_cell, insert_row, insert_column, delete_row, delete_column
+
+XLSX table operations: create_table, rename_table, set_table_style, toggle_table_filter, set_totals_row, convert_table_to_range
+
+XLSX chart operations: insert_chart, delete_chart
+  - chart_type: "column", "bar", "line", "pie", "scatter", "area", "doughnut", "radar"
+  - data_range: cell range like "A1:D10"
+  - position: optional anchor cell like "F2" (defaults to below data)
 
 **EXAMPLES:**
 
@@ -32,12 +34,33 @@ Create welcome message in DOCX:
 Replace content in DOCX:
 [{"type": "replace_text", "search": "old text", "replace": "new text", "all": true}]
 
-Create spreadsheet headers in XLSX:
+Create spreadsheet with data, table, and chart in XLSX:
 [
-  {"type": "set_cell_value", "sheet": 0, "cell": "A1", "value": "Date"},
-  {"type": "set_cell_value", "sheet": 0, "cell": "B1", "value": "Provider"},
-  {"type": "format_cell", "sheet": 0, "cell": "A1", "format": {"bold": true}}
-]`;
+  {"type": "set_cell_value", "sheet": 0, "cell": "A1", "value": "Month"},
+  {"type": "set_cell_value", "sheet": 0, "cell": "B1", "value": "Sales"},
+  {"type": "set_cell_value", "sheet": 0, "cell": "A2", "value": "Jan"},
+  {"type": "set_cell_value", "sheet": 0, "cell": "B2", "value": 1200},
+  {"type": "set_cell_value", "sheet": 0, "cell": "A3", "value": "Feb"},
+  {"type": "set_cell_value", "sheet": 0, "cell": "B3", "value": 1800},
+  {"type": "format_cell", "sheet": 0, "cell": "A1", "format": {"bold": true}},
+  {"type": "create_table", "sheet": 0, "range": "A1:B3", "tableName": "SalesTable"},
+  {"type": "insert_chart", "sheet": 0, "chart_type": "column", "data_range": "A1:B3", "title": "Monthly Sales", "position": "D2"}
+]
+
+Create table from existing range:
+[{"type": "create_table", "sheet": 0, "range": "A1:D10", "tableName": "DataTable", "styleName": "TableStyleMedium2"}]
+
+Rename table and toggle filters:
+[
+  {"type": "rename_table", "oldName": "Table1", "newName": "SalesData"},
+  {"type": "toggle_table_filter", "tableName": "SalesData"}
+]
+
+Insert chart from data range:
+[{"type": "insert_chart", "sheet": 0, "chart_type": "pie", "data_range": "A1:B5", "title": "Distribution"}]
+
+Delete a chart:
+[{"type": "delete_chart", "sheet": 0, "chart_index": 0}]`;
 
 // Maximum limits for directory structure information
 export const MAX_DIRSTR_CHARS_TOTAL_BEGINNING = 20_000
@@ -389,7 +412,7 @@ Your context window is limited. Before reading, consider:
 		description: EDIT_DOCUMENT_DESCRIPTION,
 		params: {
 			...uriParam('document'),
-			operations: { description: `JSON array of operations. See valid types and examples above.` }
+			operations: { description: `JSON array of operations. DOCX types: insert_text, replace_text, format_text, insert_table, insert_page_break, set_margins. XLSX cell types: set_cell_value, set_cell_formula, format_cell, insert_row, insert_column, delete_row, delete_column. XLSX table types: create_table, rename_table, set_table_style, toggle_table_filter, set_totals_row, convert_table_to_range. XLSX chart types: insert_chart (chart_type, data_range, title, position), delete_chart (chart_index). See description for full parameter details and examples.` }
 		}
 	},
 
@@ -500,7 +523,7 @@ When using results in responses, cite as:
 		name: 'rag_search_workspace',
 		description: `Search indexed case-specific documents (medical reports, IME evaluations, appeals board decisions, claim correspondence, treatment records) for information relevant to a particular injured worker's case.
 
-**PURPOSE:** Retrieve case-specific facts, medical findings, procedural history, and claim details. This is your PRIMARY source for case-specific information (NOT policy/regulatory guidance - use rag_search_policy for that).
+**PURPOSE:** Retrieve case-specific facts, medical findings, procedural history, and claim details. This is your PRIMARY source for case-specific information (NOT policy/regulatory guidance - use rag_search_reference for that).
 
 **WHEN TO USE:**
 - Finding medical opinions, diagnoses, treatment recommendations, work restrictions
@@ -785,7 +808,7 @@ const toolCallDefinitionsXMLString = (tools: InternalToolInfo[]) => {
 		} else if (t.name === 'edit_file') {
 			example = `\n    <example>\n    <function_calls>\n    <invoke name="edit_file">\n    <parameter name="uri">/case_files/appeal_letter.txt</parameter>\n    <parameter name="search_replace_blocks">\n    <search_replace_block>\n    <search>existing text</search>\n    <replace>new text</replace>\n    </search_replace_block>\n    </parameter>\n    </invoke>\n    </function_calls>\n    </example>\n`
 		} else if (t.name === 'edit_document') {
-			example = `\n    <example>\n    <function_calls>\n    <invoke name="edit_document">\n    <parameter name="uri">/case_files/welcome.docx</parameter>\n    <parameter name="operations">[{"type": "insert_text", "position": 0, "text": "Welcome\\n\\nThis was written by AI."}]</parameter>\n    </invoke>\n    </function_calls>\n    </example>\n`
+			example = `\n    <example>\n    <function_calls>\n    <invoke name="edit_document">\n    <parameter name="uri">/case_files/welcome.docx</parameter>\n    <parameter name="operations">[{"type": "insert_text", "position": 0, "text": "Welcome\\n\\nThis was written by AI."}]</parameter>\n    </invoke>\n    </function_calls>\n    </example>\n    <example>\n    <function_calls>\n    <invoke name="edit_document">\n    <parameter name="uri">/case_files/data.xlsx</parameter>\n    <parameter name="operations">[{"type": "set_cell_value", "sheet": 0, "cell": "A1", "value": "Month"}, {"type": "set_cell_value", "sheet": 0, "cell": "B1", "value": "Amount"}, {"type": "set_cell_value", "sheet": 0, "cell": "A2", "value": "Jan"}, {"type": "set_cell_value", "sheet": 0, "cell": "B2", "value": 500}, {"type": "create_table", "sheet": 0, "range": "A1:B2", "tableName": "Expenses"}, {"type": "insert_chart", "sheet": 0, "chart_type": "column", "data_range": "A1:B2", "title": "Monthly Expenses", "position": "D2"}]</parameter>\n    </invoke>\n    </function_calls>\n    </example>\n`
 		} else if (t.name === 'rag_search_reference') {
 			example = `\n    <example>\n    <function_calls>\n    <invoke name="rag_search_reference">\n    <parameter name="query">appeal deadline workers compensation</parameter>\n    <parameter name="limit">5</parameter>\n    </invoke>\n    </function_calls>\n    </example>\n`
 		} else if (t.name === 'rag_search_workspace') {

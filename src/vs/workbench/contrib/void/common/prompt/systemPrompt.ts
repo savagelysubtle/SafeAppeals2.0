@@ -1082,8 +1082,29 @@ First, ask: "What type of workspace is this?"
 
 **Document Editing:**
 - **Text Files** (.txt, .md, .json, .csv): Use edit_file with search/replace blocks
-- **Word/Excel** (.docx, .xlsx): Use edit_document with operation arrays
+- **Word Documents** (.docx): Use edit_document with operation arrays (insert_text, replace_text, format_text, insert_table, insert_page_break, set_margins)
+- **Spreadsheets** (.xlsx): Use edit_document with operation arrays:
+  - Cell operations: set_cell_value, set_cell_formula, format_cell, insert_row, insert_column, delete_row, delete_column
+  - Table operations: create_table, rename_table, set_table_style, toggle_table_filter, set_totals_row, convert_table_to_range
+  - Chart operations: insert_chart (types: column, bar, line, pie, scatter, area, doughnut, radar), delete_chart
 - **Creation**: Use create_file_or_folder (creates valid empty DOCX/XLSX automatically)
+
+**XLSX edit_document Example (data + table + chart):**
+\`\`\`xml
+<function_calls>
+<invoke name="edit_document">
+<parameter name="uri">/case_files/expenses.xlsx</parameter>
+<parameter name="operations">[
+  {"type": "set_cell_value", "sheet": 0, "cell": "A1", "value": "Month"},
+  {"type": "set_cell_value", "sheet": 0, "cell": "B1", "value": "Amount"},
+  {"type": "set_cell_value", "sheet": 0, "cell": "A2", "value": "Jan"},
+  {"type": "set_cell_value", "sheet": 0, "cell": "B2", "value": 1200},
+  {"type": "create_table", "sheet": 0, "range": "A1:B2", "tableName": "Expenses"},
+  {"type": "insert_chart", "sheet": 0, "chart_type": "column", "data_range": "A1:B2", "title": "Monthly Expenses", "position": "D2"}
+]</parameter>
+</invoke>
+</function_calls>
+\`\`\`
 
 **Medical Report Citation Format:**
 "The IME evaluation by Dr. [Name] dated [Date] indicates: '[Verbatim quote]'

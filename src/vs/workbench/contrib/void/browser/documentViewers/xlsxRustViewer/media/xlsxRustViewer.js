@@ -4,7 +4,7 @@
   var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
   var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "symbol" ? key + "" : key, value);
 
-  // wasm/xlsx_rust_viewer.js
+  // media/wasm/xlsx_rust_viewer.js
   var import_meta = {};
   var ContextMenuManager = class {
     __destroy_into_raw() {
@@ -500,7 +500,7 @@
       }
     }
     constructor() {
-      const ret = wasm.viewportmanager_new();
+      const ret = wasm.contextmenumanager_new();
       this.__wbg_ptr = ret >>> 0;
       ViewportManagerFinalization.register(this, this.__wbg_ptr, this);
       return this;
@@ -813,7 +813,7 @@
     return __wbg_finalize_init(instance, module);
   }
 
-  // renderer.ts
+  // media/renderer.ts
   var TABLE_COLORS = {
     // --- Light styles (1-21): 3 groups of 7 accent colors, increasingly visible banding ---
     // Group 1 (1-7): very subtle banding
@@ -1298,6 +1298,10 @@
     }
     getSelectedCell() {
       return this.selectedCell;
+    }
+    setSelection(startRow, startCol, endRow, endCol) {
+      this.selectedCell = { row: startRow, col: startCol };
+      this.selectionRange = { startRow, startCol, endRow, endCol };
     }
     getTables() {
       return this.tables;
@@ -3942,7 +3946,7 @@
     }
   };
 
-  // ribbon.ts
+  // media/ribbon.ts
   var IC = {
     paste: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor"><rect x="3" y="5" width="10" height="10" rx="1" stroke-width="1.2"/><path d="M6 5V3a1.5 1.5 0 013 0v2" stroke-width="1.2"/><line x1="6" y1="9" x2="10" y2="9" stroke-width="1"/><line x1="6" y1="11.5" x2="10" y2="11.5" stroke-width="1"/></svg>',
     cut: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2"><circle cx="5" cy="12" r="2"/><circle cx="11" cy="12" r="2"/><path d="M6.5 10.5L10 3M9.5 10.5L6 3"/></svg>',
@@ -4483,7 +4487,7 @@
     }
   };
 
-  // contextMenu.ts
+  // media/contextMenu.ts
   var ContextMenu = class {
     constructor(container, onAction) {
       this.currentRow = 0;
@@ -4640,7 +4644,7 @@
     }
   };
 
-  // filterDropdown.ts
+  // media/filterDropdown.ts
   var FilterDropdown = class {
     constructor(parent, onAction) {
       this.tableName = "";
@@ -4829,7 +4833,7 @@
     }
   };
 
-  // conditionalFormatDialog.ts
+  // media/conditionalFormatDialog.ts
   var RULE_TYPES = [
     // Highlight Cells Rules
     { label: "Greater Than", value: "cellIs:greaterThan", category: "Highlight Cells Rules" },
@@ -5386,7 +5390,7 @@
     }
   };
 
-  // ../../../../../../../../../node_modules/@kurkle/color/dist/color.esm.js
+  // ../../../../../../../../node_modules/@kurkle/color/dist/color.esm.js
   function round(v) {
     return v + 0.5 | 0;
   }
@@ -5943,7 +5947,7 @@
     }
   };
 
-  // ../../../../../../../../../node_modules/chart.js/dist/chunks/helpers.dataset.js
+  // ../../../../../../../../node_modules/chart.js/dist/chunks/helpers.dataset.js
   function noop() {
   }
   var uid = /* @__PURE__ */ (() => {
@@ -8356,7 +8360,7 @@
     };
   }
 
-  // ../../../../../../../../../node_modules/chart.js/dist/chart.js
+  // ../../../../../../../../node_modules/chart.js/dist/chart.js
   var Animator = class {
     constructor() {
       this._request = null;
@@ -19192,7 +19196,7 @@
   __publicField(TimeSeriesScale, "id", "timeseries");
   __publicField(TimeSeriesScale, "defaults", TimeScale.defaults);
 
-  // chartManager.ts
+  // media/chartManager.ts
   Chart.register(
     BarController,
     LineController,
@@ -19616,7 +19620,7 @@
     return DEFAULT_COLORS[index2 % DEFAULT_COLORS.length];
   }
 
-  // chartWizardDialog.ts
+  // media/chartWizardDialog.ts
   var CHART_TYPES = [
     { id: "column", label: "Column", icon: "\u2581\u2583\u2585\u2587" },
     { id: "bar", label: "Bar", icon: "\u2590\u2590\u2590" },
@@ -19881,8 +19885,9 @@
     }
   };
 
-  // main.ts
+  // media/main.ts
   var vscode = acquireVsCodeApi();
+  var currentFileUri = "";
   var parser = null;
   var writer = null;
   var tableOps = null;
@@ -19957,10 +19962,11 @@
     console.log("[XLSX Rust Viewer] Received message:", message.type);
     switch (message.type) {
       case "loadXLSX":
+        currentFileUri = message.xlsxUri || "";
         await handleLoad(message.data);
         break;
       case "saveXLSX":
-        await handleSave();
+        await handleSave(message.targetUri);
         break;
       case "clearXLSX":
         if (renderer) {
@@ -19969,6 +19975,11 @@
         break;
       case "layout":
         renderer?.resize();
+        break;
+      case "applyEdits":
+        if (renderer && message.operations) {
+          handleApplyEdits(message.operations);
+        }
         break;
     }
   });
@@ -19996,6 +20007,7 @@
         sampleCells: firstSheet?.cells ? JSON.stringify(firstSheet.cells).substring(0, 500) : "none"
       });
       renderer.setData(model);
+      restoreChartState();
       evaluateFormulas();
       buildSheetTabs();
       syncChartOverlays();
@@ -20132,7 +20144,7 @@
     buildSheetTabs();
     markDirty();
   }
-  async function handleSave() {
+  async function handleSave(targetUri) {
     if (!writer || !renderer) {
       console.error("[XLSX Rust Viewer] Not initialized");
       return;
@@ -20143,8 +20155,12 @@
         console.error("[XLSX Rust Viewer] No data to save");
         return;
       }
+      const totalCharts = model.sheets?.reduce((sum, s) => sum + (s.charts?.length ?? 0), 0) ?? 0;
+      const chartDebug = model.sheets?.map((s, i) => {
+        const charts = s.charts ?? [];
+        return `${s.name}: ${charts.length} chart(s)` + (charts.length > 0 ? ` [${charts.map((c) => `${c.chart_type}/${c.series?.length ?? 0}series/${c.series?.[0]?.values_ref ?? "no-ref"}`).join(", ")}]` : "");
+      });
       const modelJson = JSON.stringify(model);
-      console.log("[XLSX Rust Viewer] Saving file...");
       const savedBytes = writer.save(modelJson);
       let binary = "";
       const chunkSize = 8192;
@@ -20153,13 +20169,160 @@
         binary += String.fromCharCode.apply(null, Array.from(chunk));
       }
       const base64Data = btoa(binary);
-      console.log("[XLSX Rust Viewer] File saved (" + savedBytes.length + " bytes)");
-      vscode.postMessage({ type: "saveData", data: base64Data });
+      vscode.postMessage({
+        type: "saveData",
+        data: base64Data,
+        targetUri,
+        chartDiag: { totalCharts, sheets: chartDebug }
+      });
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
       console.error("[XLSX Rust Viewer] Save failed:", message);
       vscode.postMessage({ type: "error", message });
     }
+  }
+  function handleApplyEdits(operations) {
+    if (!renderer) return;
+    const model = renderer.getData();
+    if (!model?.sheets) return;
+    for (const op of operations) {
+      const sheetIdx = resolveSheetIndex(model, op.sheet);
+      if (sheetIdx < 0 && op.type !== "create_table" && op.type !== "resize_table" && op.type !== "rename_table" && op.type !== "set_table_style" && op.type !== "toggle_table_filter" && op.type !== "set_totals_row" && op.type !== "convert_table_to_range") {
+        console.warn("[applyEdits] Sheet not found:", op.sheet);
+        continue;
+      }
+      if (sheetIdx >= 0 && sheetIdx !== renderer.getActiveSheetIndex()) {
+        renderer.setActiveSheetIndex(sheetIdx);
+      }
+      switch (op.type) {
+        case "set_cell_value": {
+          const ref = parseCellRef(op.cell);
+          if (!ref) break;
+          const dataType = typeof op.value === "number" ? "n" : "s";
+          renderer.updateCell(ref.row, ref.col, String(op.value), dataType);
+          break;
+        }
+        case "set_cell_formula": {
+          const ref = parseCellRef(op.cell);
+          if (!ref) break;
+          renderer.updateCell(ref.row, ref.col, op.formula, "s");
+          break;
+        }
+        case "format_cell": {
+          const ref = parseCellRef(op.cell);
+          if (!ref) break;
+          renderer.setSelection(ref.row, ref.col, ref.row, ref.col);
+          if (op.format) {
+            if (op.format.bold !== void 0) renderer.toggleFormat("bold");
+            if (op.format.italic !== void 0) renderer.toggleFormat("italic");
+            if (op.format.backgroundColor) renderer.applyFormat("fillColor", op.format.backgroundColor);
+            if (op.format.fontSize) renderer.applyFormat("fontSize", String(op.format.fontSize));
+          }
+          break;
+        }
+        case "insert_row": {
+          renderer.insertRow(op.rowIndex);
+          break;
+        }
+        case "insert_column": {
+          renderer.insertCol(op.colIndex);
+          break;
+        }
+        case "delete_row": {
+          renderer.deleteRow(op.rowIndex);
+          break;
+        }
+        case "delete_column": {
+          renderer.deleteCol(op.colIndex);
+          break;
+        }
+        // --- Table operations (delegate to existing handleTableAction) ---
+        case "create_table": {
+          const range = parseCellRange(op.range);
+          if (!range) {
+            console.warn("[applyEdits] Invalid range for create_table:", op.range);
+            break;
+          }
+          renderer.setSelection(range.startRow, range.startCol, range.endRow, range.endCol);
+          handleTableAction("createTable", {
+            name: op.tableName,
+            style: op.styleName || "TableStyleMedium2"
+          });
+          break;
+        }
+        case "rename_table": {
+          handleTableAction("renameTable", { oldName: op.oldName, newName: op.newName });
+          break;
+        }
+        case "set_table_style": {
+          handleTableAction("setTableStyle", { tableName: op.tableName, style: op.styleName });
+          break;
+        }
+        case "toggle_table_filter": {
+          handleTableAction("toggleFilter", { tableName: op.tableName });
+          break;
+        }
+        case "set_totals_row": {
+          handleTableAction("setTotalsRow", { tableName: op.tableName, enabled: op.enabled });
+          break;
+        }
+        case "convert_table_to_range": {
+          handleTableAction("convertToRange", { tableName: op.tableName });
+          break;
+        }
+        // --- Chart operations ---
+        case "insert_chart": {
+          const sheet = model.sheets[sheetIdx];
+          if (!sheet) break;
+          if (!sheet.charts) sheet.charts = [];
+          const anchorCol = op.position ? parseCellRef(op.position)?.col ?? 0 : 0;
+          const anchorRow = op.position ? parseCellRef(op.position)?.row ?? (sheet.charts.length > 0 ? 20 : 10) : sheet.charts.length > 0 ? 20 : 10;
+          const chartDef = {
+            chart_type: op.chart_type,
+            title: op.title,
+            series: [{ values_ref: op.data_range, categories_cache: [], values_cache: [] }],
+            axes: [
+              { axis_type: "category", position: "bottom" },
+              { axis_type: "value", position: "left" }
+            ],
+            anchor: {
+              from_col: anchorCol,
+              from_row: anchorRow,
+              from_col_off: 0,
+              from_row_off: 0,
+              to_col: anchorCol + 8,
+              to_row: anchorRow + 15,
+              to_col_off: 0,
+              to_row_off: 0
+            }
+          };
+          resolveChartData(chartDef, sheet);
+          sheet.charts.push(chartDef);
+          syncChartOverlays();
+          break;
+        }
+        case "delete_chart": {
+          const sheet = model.sheets[sheetIdx];
+          if (!sheet?.charts || op.chart_index >= sheet.charts.length) {
+            console.warn("[applyEdits] Invalid chart_index for delete_chart:", op.chart_index);
+            break;
+          }
+          sheet.charts.splice(op.chart_index, 1);
+          syncChartOverlays();
+          break;
+        }
+        default:
+          console.warn("[applyEdits] Unknown operation type:", op.type);
+      }
+    }
+    markDirty();
+    renderer.render();
+  }
+  function resolveSheetIndex(model, sheet) {
+    if (sheet === void 0 || sheet === null) return 0;
+    if (typeof sheet === "number") return sheet;
+    const idx = model.sheets.findIndex((s) => s.name === sheet);
+    return idx >= 0 ? idx : 0;
   }
   function handleRibbonAction(event) {
     if (!renderer) return;
@@ -20987,15 +21150,17 @@
         const parsed = parseCellRange(series.values_ref);
         if (parsed) {
           const { startRow, startCol, endRow, endCol } = parsed;
-          const isVertical = startCol === endCol || endCol - startCol < endRow - startRow;
+          const isVertical = startCol === endCol;
           if (isVertical) {
             const cats = [];
             const vals = [];
+            let dataStartRow = startRow;
             for (let r = startRow; r <= endRow; r++) {
               const cell = cells[r]?.[startCol];
               const val = getCellValue(cell);
               if (r === startRow && typeof val === "string" && isNaN(Number(val))) {
                 series.name = val;
+                dataStartRow = startRow + 1;
                 continue;
               }
               cats.push(`Row ${r + 1}`);
@@ -21003,10 +21168,21 @@
             }
             series.categories_cache = cats;
             series.values_cache = vals;
+            const valCol = getColName(startCol);
+            series.values_ref = `${sheetName}!${valCol}${dataStartRow + 1}:${valCol}${endRow + 1}`;
+            if (!series.categories_ref) {
+              series.categories_ref = void 0;
+            }
           } else {
             const cats = [];
             const vals = [];
-            for (let r = startRow; r <= endRow; r++) {
+            let dataStartRow = startRow;
+            const firstCell = cells[startRow]?.[startCol];
+            const firstVal = getCellValue(firstCell);
+            if (typeof firstVal === "string" && isNaN(Number(firstVal))) {
+              dataStartRow = startRow + 1;
+            }
+            for (let r = dataStartRow; r <= endRow; r++) {
               const catCell = cells[r]?.[startCol];
               const catVal = getCellValue(catCell);
               cats.push(String(catVal ?? `Row ${r + 1}`));
@@ -21018,16 +21194,13 @@
               }
               vals.push(sum);
             }
-            if (cats.length > 0 && isNaN(Number(cats[0]))) {
-              series.categories_cache = cats;
-              series.values_cache = vals;
-            } else {
-              series.categories_cache = cats;
-              series.values_cache = vals;
-            }
-          }
-          if (!series.categories_ref) {
-            series.categories_ref = series.values_ref;
+            series.categories_cache = cats;
+            series.values_cache = vals;
+            const catCol = getColName(startCol);
+            const valStartCol = getColName(startCol + 1);
+            const valEndCol = getColName(endCol);
+            series.categories_ref = `${sheetName}!${catCol}${dataStartRow + 1}:${catCol}${endRow + 1}`;
+            series.values_ref = `${sheetName}!${valStartCol}${dataStartRow + 1}:${valEndCol}${endRow + 1}`;
           }
         }
       }
@@ -21052,7 +21225,7 @@
   }
   function getCellValue(cell) {
     if (!cell) return null;
-    if (cell.data_type === "number" || cell.data_type === "float") return parseFloat(cell.value) || 0;
+    if (cell.data_type === "n") return parseFloat(cell.value) || 0;
     return cell.value ?? null;
   }
   function handleChartAction(action, chartIndex, chartDef) {
@@ -21083,6 +21256,38 @@
   }
   function markDirty() {
     vscode.postMessage({ type: "dirty" });
+    persistChartState();
+  }
+  function persistChartState() {
+    if (!renderer || !currentFileUri) return;
+    const data = renderer.getData();
+    if (!data?.sheets) return;
+    const chartState = {};
+    for (const sheet of data.sheets) {
+      if (sheet.charts?.length) {
+        chartState[sheet.name] = sheet.charts;
+      }
+    }
+    const prev = vscode.getState() || {};
+    vscode.setState({ ...prev, [currentFileUri]: chartState });
+  }
+  function restoreChartState() {
+    if (!renderer || !currentFileUri) return;
+    const state = vscode.getState();
+    if (!state || !state[currentFileUri]) return;
+    const data = renderer.getData();
+    if (!data?.sheets) return;
+    const chartState = state[currentFileUri];
+    let restored = 0;
+    for (const sheet of data.sheets) {
+      if (chartState[sheet.name]?.length && (!sheet.charts || sheet.charts.length === 0)) {
+        sheet.charts = chartState[sheet.name];
+        restored += sheet.charts.length;
+      }
+    }
+    if (restored > 0) {
+      console.log(`[XLSX Rust Viewer] Restored ${restored} chart(s) from webview state`);
+    }
   }
   function setupRendererCallbacks() {
     if (!renderer) return;

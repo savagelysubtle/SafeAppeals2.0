@@ -399,11 +399,53 @@ impl XlsxParser {
         // Parse sparklines from worksheet extension lists
         parse_sparklines_from_zip(data, &mut sheets);
 
+        // Extract custom chart definitions stored by our writer as xl/voidCharts.json
+        extract_void_charts(data, &mut sheets);
+
         let model = WorkbookModel { sheets };
         let json = serde_json::to_string(&model).map_err(|e| JsError::new(&e.to_string()))?;
         self.model = Some(model);
 
         Ok(json)
+    }
+}
+
+// --- Custom Chart JSON Extraction ---
+
+/// Extract chart definitions from our custom xl/voidCharts.json stored in the XLSX zip.
+/// This is our own persistence format — not standard OOXML chart XML.
+fn extract_void_charts(data: &[u8], sheets: &mut [SheetData]) {
+    let cursor = Cursor::new(data);
+    let mut archive = match zip::ZipArchive::new(cursor) {
+        Ok(a) => a,
+        Err(_) => return,
+    };
+
+    let mut json_bytes = Vec::new();
+    {
+        let mut entry = match archive.by_name("xl/voidCharts.json") {
+            Ok(e) => e,
+            Err(_) => return, // No custom chart data
+        };
+        use std::io::Read;
+        if entry.read_to_end(&mut json_bytes).is_err() { return; }
+    }
+
+    // Deserialize: Vec<(sheet_name, Vec<ChartDefinition>)>
+    let charts_by_sheet: Vec<(String, Vec<ChartDefinition>)> = match serde_json::from_slice(&json_bytes) {
+        Ok(v) => v,
+        Err(_) => return,
+    };
+
+    for (sheet_name, charts) in charts_by_sheet {
+        if let Some(sheet) = sheets.iter_mut().find(|s| s.name == sheet_name) {
+            // Only apply custom JSON charts if the sheet has no OOXML-parsed charts.
+            // OOXML is the authoritative source; voidCharts.json is a fallback for
+            // files saved by older versions of this viewer.
+            if sheet.charts.is_empty() {
+                sheet.charts = charts;
+            }
+        }
     }
 }
 

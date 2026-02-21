@@ -36,7 +36,9 @@ export type XLSXEditOperation =
 	| { type: 'set_table_style'; tableName: string; styleName: string }
 	| { type: 'toggle_table_filter'; tableName: string }
 	| { type: 'set_totals_row'; tableName: string; enabled: boolean }
-	| { type: 'convert_table_to_range'; tableName: string };
+	| { type: 'convert_table_to_range'; tableName: string }
+	| { type: 'insert_chart'; sheet: string | number; chart_type: string; data_range: string; title?: string; position?: string }
+	| { type: 'delete_chart'; sheet: string | number; chart_index: number };
 
 export interface IDocumentEditorService {
 	readonly _serviceBrand: undefined;

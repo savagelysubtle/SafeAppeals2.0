@@ -1,40 +1,14 @@
 # Tools System Module
 
-A comprehensive TypeScript module for AI tool calling, XML parsing, schema validation, and tool execution in the Void VSCode extension.
+TypeScript module for AI tool types, parameter definitions, and result types in the Void VSCode extension.
 
 ## Overview
 
-This module enables AI agents to interact with the development environment through structured tool calls. It provides:
+This module provides type definitions and exports for the tool calling system. It enables:
 
-- **Tool Call Parsing**: Extracting tool calls from LLM responses using XML and native APIs
-- **Schema Validation**: Runtime validation of tool parameters with comprehensive error reporting
-- **Tool Execution**: Safe execution of tools with approval workflows and error handling
-- **Approval System**: Categorizing tools by risk level (edits, terminal, MCP, RAG)
-
-## Quick Usage
-
-```typescript
-import {
-	BuiltinToolCallParams,
-	BuiltinToolResultType,
-	ToolSchemaValidator,
-} from "./tools/index.js";
-
-// Create a schema validator
-const validator = new ToolSchemaValidator();
-
-// Validate tool parameters
-const result = validator.validateToolCall("read_file", {
-	uri: "file:///path/to/file.txt",
-	startLine: 1,
-	endLine: 10,
-});
-
-if (result.success) {
-	// Execute the tool
-	const toolResult = await executeTool(result.data);
-}
-```
+- **Type-safe parameters**: `BuiltinToolCallParams` for each built-in tool
+- **Type-safe results**: `BuiltinToolResultType` for tool return values
+- **Approval categories**: `approvalTypeOfBuiltinToolName` maps tools to approval types (edits, terminal, MCP, RAG)
 
 ## Structure
 
@@ -42,55 +16,70 @@ if (result.success) {
 tools/
 ├── index.ts              # Main exports and type re-exports
 ├── toolsServiceTypes.ts  # Tool definitions, parameters, and results
-├── toolSchemaValidator.ts # Schema validation and error handling
 └── README.md             # This file
 ```
 
-## Key Components
+## Exports (from index.ts)
 
-- **`ToolSchemaValidator`**: Validates tool parameters against schemas
-- **`BuiltinToolCallParams`**: Type-safe parameters for all built-in tools
-- **`BuiltinToolResultType`**: Result types for tool execution
-- **`ToolApprovalType`**: Approval categories for tool security
+From `toolsServiceTypes.ts`:
+
+- `TerminalResolveReason`, `LintErrorItem`, `ShallowDirectoryItem`
+- `approvalTypeOfBuiltinToolName`, `ToolApprovalType`, `toolApprovalTypes`
+- `BuiltinToolCallParams`, `BuiltinToolResultType`, `ToolCallParams`, `ToolResult`
+- `BuiltinToolName`, `BuiltinToolParamName`, `ToolName`, `ToolParamName`
+
+## Quick Usage
+
+```typescript
+import {
+  BuiltinToolCallParams,
+  BuiltinToolResultType,
+  approvalTypeOfBuiltinToolName,
+} from './tools/index.js';
+
+// Check if a tool requires approval
+const approvalType = approvalTypeOfBuiltinToolName['edit_file']; // 'edits'
+
+// Type-safe parameter access
+type ReadFileParams = BuiltinToolCallParams['read_file'];
+type ReadFileResult = BuiltinToolResultType['read_file'];
+```
 
 ## Tool Categories
 
-### File System Tools
-- **Read operations**: `read_file`, `ls_dir`, `get_dir_tree`, `search_*`
-- **Write operations**: `edit_file`, `rewrite_file`, `create_file_or_folder`, `delete_file_or_folder`
-- **Document editing**: `edit_document` for rich text document manipulation
+### File System (Read)
+`read_file`, `ls_dir`, `get_dir_tree`, `search_pathnames_only`, `search_for_files`, `search_in_file`, `read_lint_errors`
 
-### Terminal Tools
-- **Command execution**: `run_command` for one-off commands
-- **Persistent terminals**: `open_persistent_terminal`, `run_persistent_command`, `kill_persistent_terminal`
+### File System (Write)
+`edit_file`, `rewrite_file`, `create_file_or_folder`, `delete_file_or_folder`
 
-### Information Retrieval Tools
-- **RAG system**: `rag_index_document`, `rag_search_policy`, `rag_search_workspace`, `rag_get_stats`
-- **Web search**: `web_search`, `multi_link_search` for internet research
+### Document Editing
+`edit_document` (DOCX + XLSX with cell, table, and chart operations)
 
-### External Integrations
-- **MCP tools**: Model Context Protocol for third-party tool integrations
+### Terminal
+`run_command`, `open_persistent_terminal`, `run_persistent_command`, `kill_persistent_terminal`
+
+### RAG
+`rag_index_document`, `rag_search_reference`, `rag_search_workspace`, `rag_search_all`, `rag_get_stats`
+
+### Web Search
+`web_search`, `multi_link_search`
+
+### Timeline
+`timeline_add_event`, `timeline_update_event`, `timeline_delete_event`, `timeline_get_events`, `timeline_link_document`, `timeline_get_deadlines`
+
+### External
+MCP tools
 
 ## Documentation
 
-For comprehensive documentation including:
-
-- Complete API reference and tool definitions
-- Schema validation system and custom validators
-- XML parsing system and error recovery
-- Tool execution workflows and approval systems
-- Usage examples and integration patterns
-- Developer guides for extending the system
-
-See: [`docs/tools/`](../../../../../docs/tools/)
+See [`docs/tools/`](../../../../../../../docs/tools/) for API reference, validation guide, and developer documentation.
 
 ## Contributing
 
 When adding new tools or modifying the system:
 
-1. Add tool definitions to `toolsServiceTypes.ts`
-2. Create validation schemas in `toolSchemaValidator.ts`
-3. Update approval categories as needed
-4. Add comprehensive tests and documentation
-
-See the [Developer Guide](../../../../../docs/tools/developer-guide.md) for detailed instructions.
+1. Add tool definitions to `toolsServiceTypes.ts` (params + result types)
+2. Add tool description to `builtinTools` in `common/prompt/prompts.ts`
+3. Add parameter validation in `browser/tools/toolsService.ts`
+4. Update approval categories in `approvalTypeOfBuiltinToolName` as needed

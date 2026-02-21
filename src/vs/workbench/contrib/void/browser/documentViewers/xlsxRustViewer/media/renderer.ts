@@ -629,6 +629,11 @@ export class CanvasRenderer {
         return this.selectedCell;
     }
 
+    setSelection(startRow: number, startCol: number, endRow: number, endCol: number): void {
+        this.selectedCell = { row: startRow, col: startCol };
+        this.selectionRange = { startRow, startCol, endRow, endCol };
+    }
+
     getTables(): TableDefinition[] {
         return this.tables;
     }

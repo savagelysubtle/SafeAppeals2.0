@@ -22,16 +22,4 @@ export {
 	ToolParamName,
 } from './toolsServiceTypes.js';
 
-export {
-	ValidationError,
-	ValidationResult,
-	ParamType,
-	ParamConstraint,
-	ToolSchema,
-	CompiledValidator,
-	ToolSchemaValidator,
-	createSchemaFromToolInfo,
-} from './toolSchemaValidator.js';
-
-
 
