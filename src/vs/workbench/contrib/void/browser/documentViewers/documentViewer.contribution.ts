@@ -209,6 +209,28 @@ class XLSXResolverContribution extends Disposable {
 Registry.as<IWorkbenchContributionsRegistry>(WorkbenchExtensions.Workbench)
 	.registerWorkbenchContribution(XLSXResolverContribution, LifecyclePhase.Restored);
 
+// --- Browser Panel Registration ---
+import { BrowserEditor } from '../browserPanel/browserEditor.js';
+import { BrowserInput } from '../browserPanel/browserInput.js';
+import { BrowserInputSerializer } from '../browserPanel/browserInputSerializer.js';
+import '../browserPanel/browserService.js';
+
+Registry.as<IEditorPaneRegistry>(EditorExtensions.EditorPane)
+	.registerEditorPane(
+		EditorPaneDescriptor.create(
+			BrowserEditor,
+			BrowserEditor.ID,
+			'Browser'
+		),
+		[new SyncDescriptor(BrowserInput)]
+	);
+
+Registry.as<IEditorFactoryRegistry>(EditorFactoryExtensions.EditorFactory)
+	.registerEditorSerializer(
+		BrowserInputSerializer.ID,
+		BrowserInputSerializer
+	);
+
 // --- Image Viewer Registration ---
 import { ImageViewerEditor } from './imageViewer/imageViewerEditor.js';
 import { ImageViewerInput } from './imageViewer/imageViewerInput.js';

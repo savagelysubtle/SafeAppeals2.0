@@ -35,6 +35,7 @@ export class XLSXRustViewerEditor extends EditorPane {
 	private _currentInput?: XLSXRustViewerInput;
 	private _webviewReady: boolean = false;
 	private _pendingInput?: XLSXRustViewerInput;
+	private _saveTimeout?: ReturnType<typeof setTimeout>;
 
 	constructor(
 		group: IEditorGroup,
@@ -61,6 +62,18 @@ export class XLSXRustViewerEditor extends EditorPane {
 
 		if (token.isCancellationRequested || !(input instanceof XLSXRustViewerInput)) {
 			return;
+		}
+
+		// Flush any pending save for the previous document before switching
+		if (this._saveTimeout) {
+			clearTimeout(this._saveTimeout);
+			this._saveTimeout = undefined;
+			if (this._currentInput && this.webview && this._webviewReady) {
+				console.log('[XLSX Rust Viewer] Flushing pending save before switching to:', input.resource.toString());
+				this.triggerSave();
+				// Wait for the webview to process the save message and respond
+				await new Promise(resolve => setTimeout(resolve, 200));
+			}
 		}
 
 		this._currentInput = input;
@@ -154,6 +167,9 @@ export class XLSXRustViewerEditor extends EditorPane {
 				console.log('[XLSX Rust Viewer] Webview ready');
 				this._webviewReady = true;
 
+				// Run chart test to verify rust_xlsxwriter chart support in WASM
+				this.webview?.postMessage({ type: 'testChart' });
+
 				// If there's a pending input, load it now
 				if (this._pendingInput) {
 					const pendingInput = this._pendingInput;
@@ -163,12 +179,14 @@ export class XLSXRustViewerEditor extends EditorPane {
 				break;
 
 			case 'dirty':
-				console.log('[XLSX Rust Viewer] Model modified');
-				// Future: integrate with working copy to track dirty state
+				this.debouncedSave();
 				break;
 
 			case 'saveData':
-				this.handleSaveData(data.data);
+				if (data.chartDiag) {
+					console.log('[XLSX Rust Viewer] Chart diagnostics:', JSON.stringify(data.chartDiag));
+				}
+				this.handleSaveData(data.data, data.targetUri);
 				break;
 
 			case 'print':
@@ -179,6 +197,14 @@ export class XLSXRustViewerEditor extends EditorPane {
 				this.handleExportImage(data.imageData);
 				break;
 
+			case 'testChartResult':
+				if (data.error) {
+					console.error('[XLSX Rust Viewer] TEST CHART FAILED:', data.error);
+				} else {
+					console.log(`[XLSX Rust Viewer] TEST CHART OK: ${data.size} bytes (chart works in WASM if >5000)`);
+				}
+				break;
+
 			case 'error':
 				console.error('[XLSX Rust Viewer] Webview error:', data.message);
 				break;
@@ -186,19 +212,36 @@ export class XLSXRustViewerEditor extends EditorPane {
 	}
 
 	/**
+	 * Debounced auto-save: waits 500ms after the last dirty signal, then writes to disk.
+	 */
+	private debouncedSave(): void {
+		if (this._saveTimeout) {
+			clearTimeout(this._saveTimeout);
+		}
+		this._saveTimeout = setTimeout(() => {
+			this.triggerSave();
+		}, 500);
+	}
+
+	/**
 	 * Request the webview to serialize the current model back to XLSX bytes.
 	 */
 	public triggerSave(): void {
-		if (this.webview && this._webviewReady) {
-			this.webview.postMessage({ type: 'saveXLSX' });
+		if (this.webview && this._webviewReady && this._currentInput) {
+			this.webview.postMessage({
+				type: 'saveXLSX',
+				targetUri: this._currentInput.resource.toString()
+			});
 		}
 	}
 
 	/**
 	 * Handle the serialized XLSX bytes coming back from the webview and write to disk.
 	 */
-	private async handleSaveData(base64Data: string): Promise<void> {
-		if (!this._currentInput) return;
+	private async handleSaveData(base64Data: string, targetUri?: string): Promise<void> {
+		// Use the target URI from the save request if available, otherwise fall back to current input
+		const resource = targetUri ? URI.parse(targetUri) : this._currentInput?.resource;
+		if (!resource) return;
 
 		try {
 			// Decode base64 to bytes
@@ -208,9 +251,9 @@ export class XLSXRustViewerEditor extends EditorPane {
 				bytes[i] = binaryString.charCodeAt(i);
 			}
 
-			// Write to the original file
-			await this.fileService.writeFile(this._currentInput.resource, VSBuffer.wrap(bytes));
-			console.log('[XLSX Rust Viewer] File saved to disk:', this._currentInput.resource.toString());
+			// Write to the target file
+			await this.fileService.writeFile(resource, VSBuffer.wrap(bytes));
+			console.log(`[XLSX Rust Viewer] File saved to disk (${bytes.length} bytes):`, resource.toString());
 		} catch (error) {
 			console.error('[XLSX Rust Viewer] Failed to save file:', error);
 		}
@@ -306,6 +349,12 @@ export class XLSXRustViewerEditor extends EditorPane {
 			if (visible) {
 				this.webview.claim(this, targetWindow as CodeWindow, undefined);
 			} else {
+				// Flush any pending save before releasing the webview
+				if (this._saveTimeout) {
+					clearTimeout(this._saveTimeout);
+					this._saveTimeout = undefined;
+					this.triggerSave();
+				}
 				this.webview.release(this);
 			}
 		}
@@ -321,6 +370,9 @@ export class XLSXRustViewerEditor extends EditorPane {
 	}
 
 	override dispose(): void {
+		if (this._saveTimeout) {
+			clearTimeout(this._saveTimeout);
+		}
 		if (this.webview) {
 			this.webview.release(this);
 		}

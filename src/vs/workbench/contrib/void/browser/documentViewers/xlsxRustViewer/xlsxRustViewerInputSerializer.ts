@@ -3,6 +3,7 @@
  *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
  *--------------------------------------------------------------------------------------*/
 
+import { URI } from '../../../../../../base/common/uri.js';
 import { IInstantiationService } from '../../../../../../platform/instantiation/common/instantiation.js';
 import { IEditorSerializer } from '../../../../../common/editor.js';
 import { XLSXRustViewerInput } from './xlsxRustViewerInput.js';
@@ -11,7 +12,7 @@ export class XLSXRustViewerInputSerializer implements IEditorSerializer {
 	static readonly ID = XLSXRustViewerInput.TYPE_ID;
 
 	canSerialize(editorInput: XLSXRustViewerInput): boolean {
-		return true;
+		return editorInput instanceof XLSXRustViewerInput;
 	}
 
 	serialize(editorInput: XLSXRustViewerInput): string {
@@ -20,9 +21,7 @@ export class XLSXRustViewerInputSerializer implements IEditorSerializer {
 
 	deserialize(instantiationService: IInstantiationService, serializedEditorInput: string): XLSXRustViewerInput {
 		const json = JSON.parse(serializedEditorInput);
-		// Note: We need to reconstruct the input from the serialized data
-		// Ideally, we'd use the proper URI restoration logic here
-		// For now, this is a placeholder implementation
-		return instantiationService.createInstance(XLSXRustViewerInput, json.resource);
+		const resource = URI.revive(json.resource);
+		return instantiationService.createInstance(XLSXRustViewerInput, resource);
 	}
 }

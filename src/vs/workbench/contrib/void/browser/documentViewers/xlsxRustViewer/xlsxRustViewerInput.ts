@@ -95,7 +95,9 @@ export class XLSXRustViewerInput extends EditorInput {
 	// For serialization
 	toJSON(): any {
 		return {
-			resource: this.resource.toJSON(),
+			resource: typeof this.resource.toJSON === 'function'
+				? this.resource.toJSON()
+				: this.resource,
 			currentSheet: this.currentSheet
 		};
 	}

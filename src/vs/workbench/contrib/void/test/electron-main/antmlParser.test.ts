@@ -30,8 +30,8 @@ suite('ANTML Parser Tests', () => {
 					'uri': { description: 'File path' }
 				}
 			},
-			'rag_search_policy': {
-				name: 'rag_search_policy',
+			'rag_search_reference': {
+				name: 'rag_search_reference',
 				description: 'Searches policy',
 				params: {
 					'query': { description: 'Search query' },
@@ -102,7 +102,7 @@ suite('ANTML Parser Tests', () => {
 			<invoke name="read_file">
 				<parameter name="uri">test.pdf</parameter>
 			</invoke>
-			<invoke name="rag_search_policy">
+			<invoke name="rag_search_reference">
 				<parameter name="query">appeal requirements</parameter>
 				<parameter name="limit">5</parameter>
 			</invoke>
@@ -115,7 +115,7 @@ suite('ANTML Parser Tests', () => {
 		if (result.toolCall && 'toolCalls' in result.toolCall) {
 			assert.strictEqual(result.toolCall.toolCalls.length, 2, 'Should have 2 tool calls');
 			assert.strictEqual(result.toolCall.toolCalls[0].name, 'read_file', 'First tool');
-			assert.strictEqual(result.toolCall.toolCalls[1].name, 'rag_search_policy', 'Second tool');
+			assert.strictEqual(result.toolCall.toolCalls[1].name, 'rag_search_reference', 'Second tool');
 			assert.strictEqual(result.toolCall.toolCalls[1].rawParams.query, 'appeal requirements', 'Second tool query');
 			assert.strictEqual(result.toolCall.toolCalls[1].rawParams.limit, '5', 'Second tool limit');
 		} else {
@@ -213,7 +213,7 @@ suite('ANTML Parser Tests', () => {
 
 	test('should handle parameters with special characters', () => {
 		const xml = `<function_calls>
-			<invoke name="rag_search_policy">
+			<invoke name="rag_search_reference">
 				<parameter name="query">workers' compensation &amp; appeals</parameter>
 				<parameter name="limit">5</parameter>
 			</invoke>

@@ -19,6 +19,9 @@ import { ChartWizardDialog, ChartWizardEvent } from './chartWizardDialog.js';
 declare function acquireVsCodeApi(): { postMessage(msg: unknown): void; getState(): unknown; setState(state: unknown): void };
 const vscode = acquireVsCodeApi();
 
+// Track current file URI for state persistence
+let currentFileUri = '';
+
 // Global state
 let parser: XlsxParser | null = null;
 let writer: XlsxWriter | null = null;
@@ -125,10 +128,11 @@ window.addEventListener('message', async (event) => {
 
 	switch (message.type) {
 		case 'loadXLSX':
+			currentFileUri = message.xlsxUri || '';
 			await handleLoad(message.data);
 			break;
 		case 'saveXLSX':
-			await handleSave();
+			await handleSave(message.targetUri);
 			break;
 		case 'clearXLSX':
 			if (renderer) {
@@ -137,6 +141,11 @@ window.addEventListener('message', async (event) => {
 			break;
 		case 'layout':
 			renderer?.resize();
+			break;
+		case 'applyEdits':
+			if (renderer && message.operations) {
+				handleApplyEdits(message.operations);
+			}
 			break;
 	}
 });
@@ -175,6 +184,10 @@ async function handleLoad(base64Data: string) {
 		});
 
 		renderer.setData(model);
+
+		// Restore chart state from webview persistence (fallback if ZIP didn't have them)
+		restoreChartState();
+
 		evaluateFormulas();
 		buildSheetTabs();
 		syncChartOverlays();
@@ -333,7 +346,7 @@ function duplicateSheet(idx: number) {
 	markDirty();
 }
 
-async function handleSave() {
+async function handleSave(targetUri?: string) {
 	if (!writer || !renderer) {
 		console.error('[XLSX Rust Viewer] Not initialized');
 		return;
@@ -346,8 +359,15 @@ async function handleSave() {
 			return;
 		}
 
+		// Collect chart info for diagnostics
+		const totalCharts = model.sheets?.reduce((sum: number, s: any) => sum + (s.charts?.length ?? 0), 0) ?? 0;
+		const chartDebug = model.sheets?.map((s: any, i: number) => {
+			const charts = s.charts ?? [];
+			return `${s.name}: ${charts.length} chart(s)` +
+				(charts.length > 0 ? ` [${charts.map((c: any) => `${c.chart_type}/${c.series?.length ?? 0}series/${c.series?.[0]?.values_ref ?? 'no-ref'}`).join(', ')}]` : '');
+		});
+
 		const modelJson = JSON.stringify(model);
-		console.log('[XLSX Rust Viewer] Saving file...');
 
 		// Serialize model back to XLSX bytes via Rust WASM
 		const savedBytes: Uint8Array = writer.save(modelJson);
@@ -361,13 +381,176 @@ async function handleSave() {
 		}
 		const base64Data = btoa(binary);
 
-		console.log('[XLSX Rust Viewer] File saved (' + savedBytes.length + ' bytes)');
-		vscode.postMessage({ type: 'saveData', data: base64Data });
+		// Send save data and diagnostics to extension host (shows in main DevTools)
+		vscode.postMessage({
+			type: 'saveData',
+			data: base64Data,
+			targetUri,
+			chartDiag: { totalCharts, sheets: chartDebug }
+		});
 	} catch (e: unknown) {
 		const message = e instanceof Error ? e.message : String(e);
 		console.error('[XLSX Rust Viewer] Save failed:', message);
 		vscode.postMessage({ type: 'error', message });
 	}
+}
+
+// --- AI Tool: Apply Edit Operations ---
+
+function handleApplyEdits(operations: any[]) {
+	if (!renderer) return;
+	const model = renderer.getData();
+	if (!model?.sheets) return;
+
+	for (const op of operations) {
+		const sheetIdx = resolveSheetIndex(model, op.sheet);
+		if (sheetIdx < 0 && op.type !== 'create_table' && op.type !== 'resize_table'
+			&& op.type !== 'rename_table' && op.type !== 'set_table_style'
+			&& op.type !== 'toggle_table_filter' && op.type !== 'set_totals_row'
+			&& op.type !== 'convert_table_to_range') {
+			console.warn('[applyEdits] Sheet not found:', op.sheet);
+			continue;
+		}
+
+		// Switch to the target sheet if needed
+		if (sheetIdx >= 0 && sheetIdx !== renderer.getActiveSheetIndex()) {
+			renderer.setActiveSheetIndex(sheetIdx);
+		}
+
+		switch (op.type) {
+			case 'set_cell_value': {
+				const ref = parseCellRef(op.cell);
+				if (!ref) break;
+				const dataType = typeof op.value === 'number' ? 'n' : 's';
+				renderer.updateCell(ref.row, ref.col, String(op.value), dataType);
+				break;
+			}
+			case 'set_cell_formula': {
+				const ref = parseCellRef(op.cell);
+				if (!ref) break;
+				renderer.updateCell(ref.row, ref.col, op.formula, 's');
+				break;
+			}
+			case 'format_cell': {
+				const ref = parseCellRef(op.cell);
+				if (!ref) break;
+				renderer.setSelection(ref.row, ref.col, ref.row, ref.col);
+				if (op.format) {
+					if (op.format.bold !== undefined) renderer.toggleFormat('bold');
+					if (op.format.italic !== undefined) renderer.toggleFormat('italic');
+					if (op.format.backgroundColor) renderer.applyFormat('fillColor', op.format.backgroundColor);
+					if (op.format.fontSize) renderer.applyFormat('fontSize', String(op.format.fontSize));
+				}
+				break;
+			}
+			case 'insert_row': {
+				renderer.insertRow(op.rowIndex);
+				break;
+			}
+			case 'insert_column': {
+				renderer.insertCol(op.colIndex);
+				break;
+			}
+			case 'delete_row': {
+				renderer.deleteRow(op.rowIndex);
+				break;
+			}
+		case 'delete_column': {
+			renderer.deleteCol(op.colIndex);
+			break;
+		}
+		// --- Table operations (delegate to existing handleTableAction) ---
+		case 'create_table': {
+			const range = parseCellRange(op.range);
+			if (!range) {
+				console.warn('[applyEdits] Invalid range for create_table:', op.range);
+				break;
+			}
+			renderer.setSelection(range.startRow, range.startCol, range.endRow, range.endCol);
+			handleTableAction('createTable', {
+				name: op.tableName,
+				style: op.styleName || 'TableStyleMedium2',
+			});
+			break;
+		}
+		case 'rename_table': {
+			handleTableAction('renameTable', { oldName: op.oldName, newName: op.newName });
+			break;
+		}
+		case 'set_table_style': {
+			handleTableAction('setTableStyle', { tableName: op.tableName, style: op.styleName });
+			break;
+		}
+		case 'toggle_table_filter': {
+			handleTableAction('toggleFilter', { tableName: op.tableName });
+			break;
+		}
+		case 'set_totals_row': {
+			handleTableAction('setTotalsRow', { tableName: op.tableName, enabled: op.enabled });
+			break;
+		}
+		case 'convert_table_to_range': {
+			handleTableAction('convertToRange', { tableName: op.tableName });
+			break;
+		}
+		// --- Chart operations ---
+		case 'insert_chart': {
+			const sheet = model.sheets[sheetIdx];
+			if (!sheet) break;
+			if (!sheet.charts) sheet.charts = [];
+
+			const anchorCol = op.position ? (parseCellRef(op.position)?.col ?? 0) : 0;
+			const anchorRow = op.position ? (parseCellRef(op.position)?.row ?? (sheet.charts.length > 0 ? 20 : 10)) : (sheet.charts.length > 0 ? 20 : 10);
+
+			const chartDef: ChartDefinition = {
+				chart_type: op.chart_type,
+				title: op.title,
+				series: [{ values_ref: op.data_range, categories_cache: [], values_cache: [] }],
+				axes: [
+					{ axis_type: 'category', position: 'bottom' },
+					{ axis_type: 'value', position: 'left' },
+				],
+				anchor: {
+					from_col: anchorCol,
+					from_row: anchorRow,
+					from_col_off: 0,
+					from_row_off: 0,
+					to_col: anchorCol + 8,
+					to_row: anchorRow + 15,
+					to_col_off: 0,
+					to_row_off: 0,
+				},
+			};
+
+			resolveChartData(chartDef, sheet);
+			sheet.charts.push(chartDef);
+			syncChartOverlays();
+			break;
+		}
+		case 'delete_chart': {
+			const sheet = model.sheets[sheetIdx];
+			if (!sheet?.charts || op.chart_index >= sheet.charts.length) {
+				console.warn('[applyEdits] Invalid chart_index for delete_chart:', op.chart_index);
+				break;
+			}
+			sheet.charts.splice(op.chart_index, 1);
+			syncChartOverlays();
+			break;
+		}
+		default:
+			console.warn('[applyEdits] Unknown operation type:', op.type);
+	}
+}
+
+	markDirty();
+	renderer.render();
+}
+
+function resolveSheetIndex(model: any, sheet: string | number | undefined): number {
+	if (sheet === undefined || sheet === null) return 0;
+	if (typeof sheet === 'number') return sheet;
+	const idx = model.sheets.findIndex((s: any) => s.name === sheet);
+	return idx >= 0 ? idx : 0;
 }
 
 // --- Ribbon Action Handler ---
@@ -1155,18 +1338,19 @@ function resolveChartData(chartDef: ChartDefinition, sheet: any) {
 			if (parsed) {
 				const { startRow, startCol, endRow, endCol } = parsed;
 
-				// If range is a single column or row, treat first row/col as categories
-				const isVertical = startCol === endCol || (endCol - startCol) < (endRow - startRow);
+				const isVertical = startCol === endCol;
 
 				if (isVertical) {
-					// First row is header (category label), rest are values
+					// Single column: first row is header, rest are values
 					const cats: string[] = [];
 					const vals: number[] = [];
+					let dataStartRow = startRow;
 					for (let r = startRow; r <= endRow; r++) {
 						const cell = cells[r]?.[startCol];
 						const val = getCellValue(cell);
 						if (r === startRow && typeof val === 'string' && isNaN(Number(val))) {
 							series.name = val;
+							dataStartRow = startRow + 1;
 							continue;
 						}
 						cats.push(`Row ${r + 1}`);
@@ -1174,11 +1358,28 @@ function resolveChartData(chartDef: ChartDefinition, sheet: any) {
 					}
 					series.categories_cache = cats;
 					series.values_cache = vals;
+
+					// Build proper values_ref for the data rows only
+					const valCol = getColName(startCol);
+					series.values_ref = `${sheetName}!${valCol}${dataStartRow + 1}:${valCol}${endRow + 1}`;
+					// No separate categories column in vertical single-column layout
+					if (!series.categories_ref) {
+						series.categories_ref = undefined;
+					}
 				} else {
-					// Multi-column: first column = categories, remaining = values
+					// Multi-column: first column = categories, remaining columns = values
 					const cats: string[] = [];
 					const vals: number[] = [];
-					for (let r = startRow; r <= endRow; r++) {
+					let dataStartRow = startRow;
+
+					// Check if first row is a header row
+					const firstCell = cells[startRow]?.[startCol];
+					const firstVal = getCellValue(firstCell);
+					if (typeof firstVal === 'string' && isNaN(Number(firstVal))) {
+						dataStartRow = startRow + 1;
+					}
+
+					for (let r = dataStartRow; r <= endRow; r++) {
 						const catCell = cells[r]?.[startCol];
 						const catVal = getCellValue(catCell);
 						cats.push(String(catVal ?? `Row ${r + 1}`));
@@ -1191,19 +1392,15 @@ function resolveChartData(chartDef: ChartDefinition, sheet: any) {
 						}
 						vals.push(sum);
 					}
-					// If first row looks like headers, use it for categories
-					if (cats.length > 0 && isNaN(Number(cats[0]))) {
-						series.categories_cache = cats;
-						series.values_cache = vals;
-					} else {
-						series.categories_cache = cats;
-						series.values_cache = vals;
-					}
-				}
+					series.categories_cache = cats;
+					series.values_cache = vals;
 
-				// Also set categories_ref for the writer
-				if (!series.categories_ref) {
-					series.categories_ref = series.values_ref;
+					// Build proper separate references for categories and values
+					const catCol = getColName(startCol);
+					const valStartCol = getColName(startCol + 1);
+					const valEndCol = getColName(endCol);
+					series.categories_ref = `${sheetName}!${catCol}${dataStartRow + 1}:${catCol}${endRow + 1}`;
+					series.values_ref = `${sheetName}!${valStartCol}${dataStartRow + 1}:${valEndCol}${endRow + 1}`;
 				}
 			}
 		}
@@ -1236,7 +1433,7 @@ function parseCellRef(ref: string): { row: number; col: number } | null {
 
 function getCellValue(cell: any): string | number | null {
 	if (!cell) return null;
-	if (cell.data_type === 'number' || cell.data_type === 'float') return parseFloat(cell.value) || 0;
+	if (cell.data_type === 'n') return parseFloat(cell.value) || 0;
 	return cell.value ?? null;
 }
 
@@ -1273,6 +1470,47 @@ function handleChartAction(action: string, chartIndex: number, chartDef?: ChartD
 
 function markDirty() {
 	vscode.postMessage({ type: 'dirty' });
+	persistChartState();
+}
+
+/** Save chart definitions to webview state so they survive tab switches */
+function persistChartState() {
+	if (!renderer || !currentFileUri) return;
+	const data = renderer.getData();
+	if (!data?.sheets) return;
+
+	const chartState: Record<string, any[]> = {};
+	for (const sheet of data.sheets) {
+		if (sheet.charts?.length) {
+			chartState[sheet.name] = sheet.charts;
+		}
+	}
+
+	// Merge into existing state (other files' charts are preserved)
+	const prev = (vscode.getState() as Record<string, unknown>) || {};
+	vscode.setState({ ...prev, [currentFileUri]: chartState });
+}
+
+/** Restore chart definitions from webview state after loading a file */
+function restoreChartState() {
+	if (!renderer || !currentFileUri) return;
+	const state = vscode.getState() as Record<string, Record<string, any[]>> | null;
+	if (!state || !state[currentFileUri]) return;
+
+	const data = renderer.getData();
+	if (!data?.sheets) return;
+
+	const chartState = state[currentFileUri];
+	let restored = 0;
+	for (const sheet of data.sheets) {
+		if (chartState[sheet.name]?.length && (!sheet.charts || sheet.charts.length === 0)) {
+			sheet.charts = chartState[sheet.name];
+			restored += sheet.charts.length;
+		}
+	}
+	if (restored > 0) {
+		console.log(`[XLSX Rust Viewer] Restored ${restored} chart(s) from webview state`);
+	}
 }
 
 // Wire up renderer callbacks
