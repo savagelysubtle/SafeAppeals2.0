@@ -1,15 +1,14 @@
 # Tool Execution and Approval System Guide
 
-Comprehensive guide to tool execution workflows, approval mechanisms, security considerations, and error handling in the Void tools system.
+Guide to tool execution workflows, approval mechanisms, and security considerations in the Void tools system.
 
 ## Overview
 
-The tool execution system provides secure, controlled access to development environment operations through a structured approval workflow:
+The tool execution system provides controlled access to development environment operations through a structured approval workflow:
 
 - **Approval Classification**: Tools categorized by risk level (edits, terminal, MCP, RAG)
-- **Execution Pipeline**: Validation → Approval → Execution → Result processing
-- **Security Controls**: Sandboxing, timeout management, resource limits
-- **Error Recovery**: Comprehensive error handling and rollback mechanisms
+- **Execution Pipeline**: Extraction → Validation → Approval → Execution → Result processing
+- **Security Controls**: Parameter validation, working directory checks, timeout handling
 
 ## Approval System Architecture
 
@@ -51,7 +50,6 @@ export type ToolApprovalType = 'edits' | 'terminal' | 'MCP tools' | 'RAG tools';
 - Command preview and validation
 - Working directory verification
 - Timeout and resource limits
-- Sandbox environment consideration
 
 #### MCP Tools (`MCP tools`)
 
@@ -65,7 +63,6 @@ export type ToolApprovalType = 'edits' | 'terminal' | 'MCP tools' | 'RAG tools';
 **Approval Requirements:**
 - Per-tool approval based on MCP server trust level
 - Scope limitation and permission validation
-- Network access controls
 
 #### RAG Tools (`RAG tools`)
 
@@ -73,9 +70,9 @@ export type ToolApprovalType = 'edits' | 'terminal' | 'MCP tools' | 'RAG tools';
 
 **Included Tools:**
 - `rag_index_document` - Document indexing
-- `rag_search_policy` - Policy document search (policy manuals only)
-- `rag_search_workspace` - Case document search (case files only)
-- `rag_search_all` - Combined search (both policy + case documents)
+- `rag_search_reference` - Reference document search (policy manuals, regulations)
+- `rag_search_workspace` - Case document search (case files)
+- `rag_search_all` - Combined search (both reference + case documents)
 - `rag_get_stats` - Statistics retrieval
 
 **Approval Requirements:**
@@ -84,29 +81,26 @@ export type ToolApprovalType = 'edits' | 'terminal' | 'MCP tools' | 'RAG tools';
 
 ### Approval Mapping
 
+Defined in `toolsServiceTypes.ts`:
+
 ```typescript
-export const approvalTypeOfBuiltinToolName: Partial<{
-  [T in BuiltinToolName]?: ToolApprovalType;
-}> = {
-  // File editing tools
+export const approvalTypeOfBuiltinToolName: Partial<{ [T in BuiltinToolName]?: 'edits' | 'terminal' | 'MCP tools' | 'RAG tools' }> = {
   'create_file_or_folder': 'edits',
   'delete_file_or_folder': 'edits',
   'rewrite_file': 'edits',
   'edit_file': 'edits',
   'edit_document': 'edits',
-
-  // Terminal tools
   'run_command': 'terminal',
   'run_persistent_command': 'terminal',
   'open_persistent_terminal': 'terminal',
   'kill_persistent_terminal': 'terminal',
-
-  // RAG tools (read-only, no approval needed)
+  // RAG tools removed from approval requirement - they are read-only
   // 'rag_index_document': 'RAG tools',
-  // 'rag_search_policy': 'RAG tools',
+  // 'rag_search_reference': 'RAG tools',
   // 'rag_search_workspace': 'RAG tools',
+  // 'rag_search_all': 'RAG tools',
   // 'rag_get_stats': 'RAG tools',
-};
+}
 ```
 
 ## Execution Pipeline
@@ -114,7 +108,7 @@ export const approvalTypeOfBuiltinToolName: Partial<{
 ### Phase 1: Tool Call Extraction
 
 **Process:**
-1. Parse LLM response for tool calls using XML parsing system
+1. Parse LLM response for tool calls using XML/ANTML parsing (`electron-main/llmMessage/xmlParserService.ts`)
 2. Extract tool name and parameters
 3. Validate basic syntax and structure
 
@@ -123,513 +117,74 @@ export const approvalTypeOfBuiltinToolName: Partial<{
 - Incomplete tool call detection
 - Parameter extraction validation
 
-### Phase 2: Schema Validation
+### Phase 2: Parameter Validation
 
 **Process:**
-1. Load tool schema definition
-2. Validate parameter types and constraints
-3. Check required fields and custom validators
-4. Collect all validation errors
+Validation is handled inline in `toolsService.ts` using per-operation switch cases. Each built-in tool has a dedicated validator in the `validateBuiltinParams` map that:
 
-**Error Handling:**
-- Type mismatch reporting
-- Constraint violation details
-- Missing parameter identification
+1. Extracts and coerces parameters from raw LLM output
+2. Validates types (string, number, URI, boolean, etc.)
+3. Applies tool-specific constraints (e.g., EventCategory enum, operation types for edit_document)
+4. Throws descriptive errors for invalid output
+
+**Example pattern:**
+```typescript
+rag_search_reference: (params: RawToolParamsObj) => {
+  const { query: queryUnknown, limit: limitUnknown } = params;
+  const query = validateStr('query', queryUnknown);
+  const limit = validateNumber(limitUnknown, { default: 8 }) || 8;
+  return { query, limit };
+},
+```
+
+There is no separate `ToolSchemaValidator` class; validation logic lives directly in `toolsService.ts`.
 
 ### Phase 3: Approval Check
 
 **Process:**
-1. Determine tool approval type
+1. Determine tool approval type from `approvalTypeOfBuiltinToolName`
 2. Check user permissions and settings
-3. Present approval dialog if required
+3. Present approval dialog if required (edits, terminal, MCP)
 4. Wait for user confirmation
 
-**Approval Dialog:**
-```typescript
-interface ApprovalRequest {
-  toolName: string;
-  approvalType: ToolApprovalType;
-  parameters: Record<string, any>;
-  riskAssessment: {
-    level: 'low' | 'medium' | 'high' | 'critical';
-    description: string;
-    impact: string[];
-  };
-}
-```
+Tools not in the mapping or with RAG tools commented out proceed without approval (read-only).
 
 ### Phase 4: Tool Execution
 
 **Process:**
-1. Prepare execution environment
-2. Apply security controls and limits
-3. Execute tool with validated parameters
-4. Monitor execution progress and timeouts
+1. Execute tool with validated parameters via `callBuiltinTool` map in `toolsService.ts`
+2. Each tool has a dedicated async handler
+3. Terminal commands use `timeout()` and `MAX_TERMINAL_*` limits from prompts
 
 **Security Controls:**
-- Working directory restrictions
-- Command sanitization
-- Resource usage limits
-- Network access controls
+- Working directory restrictions (validated per tool)
+- Parameter sanitization in validators (e.g., `validateURI`, `validateStr`)
+- Timeout limits for long-running operations
 
 ### Phase 5: Result Processing
 
 **Process:**
-1. Validate execution results
-2. Apply result transformations
-3. Handle execution errors
-4. Prepare results for LLM consumption
+1. Tool returns typed result per `BuiltinToolResultType`
+2. `builtinToolResultToString` map formats results for LLM consumption
+3. Errors propagate to the chat UI
 
-## Security Controls
+## Security Notes
 
-### Command Sanitization
-
-```typescript
-class CommandSanitizer {
-  sanitize(command: string): string {
-    return command
-      // Remove dangerous characters
-      .replace(/[;&|`$]/g, '')
-      // Prevent directory traversal
-      .replace(/\.\./g, '')
-      // Limit command length
-      .substring(0, 1000);
-  }
-
-  validateWorkingDirectory(cwd: string | null): boolean {
-    if (!cwd) return true; // Allow null (use current)
-
-    const allowedPaths = [
-      process.cwd(),
-      path.join(process.cwd(), 'src'),
-      path.join(process.cwd(), 'test'),
-    ];
-
-    return allowedPaths.some(allowed =>
-      cwd.startsWith(allowed) || path.resolve(cwd).startsWith(allowed)
-    );
-  }
-}
-```
-
-### Resource Limits
-
-```typescript
-interface ExecutionLimits {
-  timeout: number;          // Maximum execution time (ms)
-  maxOutputSize: number;    // Maximum output size (bytes)
-  maxFileSize: number;      // Maximum file operation size
-  rateLimit: {
-    requests: number;       // Requests per time window
-    window: number;         // Time window (ms)
-  };
-}
-
-const defaultLimits: Record<ToolApprovalType, ExecutionLimits> = {
-  edits: {
-    timeout: 30000,         // 30 seconds for file ops
-    maxOutputSize: 1024 * 1024, // 1MB
-    maxFileSize: 10 * 1024 * 1024, // 10MB
-    rateLimit: { requests: 10, window: 60000 },
-  },
-  terminal: {
-    timeout: 60000,         // 1 minute for commands
-    maxOutputSize: 1024 * 1024, // 1MB
-    maxFileSize: 0,         // N/A for terminal
-    rateLimit: { requests: 5, window: 60000 },
-  },
-  'MCP tools': {
-    timeout: 30000,
-    maxOutputSize: 512 * 1024, // 512KB
-    maxFileSize: 0,
-    rateLimit: { requests: 20, window: 60000 },
-  },
-  'RAG tools': {
-    timeout: 15000,         // 15 seconds for search
-    maxOutputSize: 256 * 1024, // 256KB
-    maxFileSize: 0,
-    rateLimit: { requests: 50, window: 60000 },
-  },
-};
-```
-
-### Timeout Management
-
-```typescript
-class TimeoutManager {
-  async executeWithTimeout<T>(
-    operation: () => Promise<T>,
-    timeoutMs: number,
-    toolName: string
-  ): Promise<T> {
-    return new Promise((resolve, reject) => {
-      const timeoutId = setTimeout(() => {
-        reject(new Error(`Tool ${toolName} timed out after ${timeoutMs}ms`));
-      }, timeoutMs);
-
-      operation()
-        .then(result => {
-          clearTimeout(timeoutId);
-          resolve(result);
-        })
-        .catch(error => {
-          clearTimeout(timeoutId);
-          reject(error);
-        });
-    });
-  }
-}
-```
-
-## Error Handling and Recovery
-
-### Execution Errors
-
-```typescript
-type ExecutionError =
-  | { type: 'timeout'; toolName: string; timeoutMs: number }
-  | { type: 'permission_denied'; toolName: string; reason: string }
-  | { type: 'resource_exhausted'; toolName: string; resource: string }
-  | { type: 'validation_failed'; toolName: string; errors: ValidationError[] }
-  | { type: 'execution_failed'; toolName: string; error: Error; output?: string };
-```
-
-### Error Recovery Strategies
-
-```typescript
-class ErrorRecoveryManager {
-  async attemptRecovery(
-    error: ExecutionError,
-    originalParams: any,
-    retryCount: number
-  ): Promise<{ recovered: boolean; newParams?: any }> {
-
-    switch (error.type) {
-      case 'timeout':
-        // Retry with extended timeout
-        if (retryCount < 2) {
-          return {
-            recovered: true,
-            newParams: { ...originalParams, extendedTimeout: true }
-          };
-        }
-        break;
-
-      case 'permission_denied':
-        // Try alternative approach
-        if (error.reason.includes('directory')) {
-          return {
-            recovered: true,
-            newParams: { ...originalParams, useTempDir: true }
-          };
-        }
-        break;
-
-      case 'validation_failed':
-        // Attempt parameter correction
-        const corrected = this.correctValidationErrors(error.errors, originalParams);
-        if (corrected) {
-          return { recovered: true, newParams: corrected };
-        }
-        break;
-    }
-
-    return { recovered: false };
-  }
-}
-```
-
-### Rollback Mechanisms
-
-```typescript
-class RollbackManager {
-  private operations: RollbackOperation[] = [];
-
-  recordOperation(operation: RollbackOperation): void {
-    this.operations.push(operation);
-  }
-
-  async rollback(): Promise<void> {
-    for (const operation of this.operations.reverse()) {
-      try {
-        await operation.rollback();
-      } catch (rollbackError) {
-        console.error('Rollback failed:', rollbackError);
-        // Continue with other rollbacks
-      }
-    }
-    this.operations = [];
-  }
-}
-
-interface RollbackOperation {
-  description: string;
-  rollback: () => Promise<void>;
-}
-```
+- **URIs**: Validated via `validateURI` / `validateOptionalURI`; supports file paths and remote URIs (vscode-remote, file://)
+- **Terminal commands**: Validated for required fields; execution runs in user's workspace context
+- **Edit operations**: File existence and writability checked before modifications
+- **RAG tools**: Read-only; no approval required
 
 ## Tool-Specific Execution Details
 
 ### File Operations
 
-#### Edit Operations
+Edit tools (`edit_file`, `rewrite_file`, `edit_document`, etc.) validate URIs, apply changes through VSCode's file service, and return lint errors when applicable.
 
-```typescript
-async function executeFileEdit(params: BuiltinToolCallParams['edit_file']): Promise<BuiltinToolResultType['edit_file']> {
-  // Validate file exists and is writable
-  const fileStats = await fs.stat(params.uri.fsPath);
-  if (!fileStats.isFile()) {
-    throw new Error('Target is not a file');
-  }
+### Terminal Operations
 
-  // Apply search/replace operations
-  const content = await fs.readFile(params.uri.fsPath, 'utf8');
-  const newContent = applySearchReplace(content, params.searchReplaceBlocks);
+`run_command` and `run_persistent_command` use `ITerminalToolService` with configurable timeouts. Commands execute in the specified working directory (or workspace root).
 
-  // Create backup for rollback
-  const backupPath = `${params.uri.fsPath}.backup.${Date.now()}`;
-  await fs.copyFile(params.uri.fsPath, backupPath);
+### RAG Operations
 
-  rollbackManager.recordOperation({
-    description: `Edit file ${params.uri.fsPath}`,
-    rollback: async () => {
-      await fs.rename(backupPath, params.uri.fsPath);
-    }
-  });
-
-  // Write new content
-  await fs.writeFile(params.uri.fsPath, newContent);
-
-  // Run linting and return results
-  const lintErrors = await runLinting(params.uri);
-  return Promise.resolve({ lintErrors: lintErrors || null });
-}
-```
-
-#### Terminal Operations
-
-```typescript
-async function executeTerminalCommand(params: BuiltinToolCallParams['run_command']): Promise<BuiltinToolResultType['run_command']> {
-  // Sanitize command
-  const sanitizedCommand = commandSanitizer.sanitize(params.command);
-
-  // Validate working directory
-  if (!commandSanitizer.validateWorkingDirectory(params.cwd)) {
-    throw new Error('Invalid working directory');
-  }
-
-  // Execute with timeout
-  const executionPromise = new Promise<BuiltinToolResultType['run_command']>((resolve, reject) => {
-    const child = spawn(sanitizedCommand, [], {
-      cwd: params.cwd || process.cwd(),
-      shell: true,
-      stdio: ['pipe', 'pipe', 'pipe']
-    });
-
-    let stdout = '';
-    let stderr = '';
-
-    child.stdout.on('data', data => {
-      stdout += data.toString();
-      if (stdout.length > limits.maxOutputSize) {
-        child.kill();
-        reject(new Error('Output size limit exceeded'));
-      }
-    });
-
-    child.stderr.on('data', data => stderr += data.toString());
-
-    child.on('close', (code, signal) => {
-      const resolveReason: TerminalResolveReason =
-        code !== null
-          ? { type: 'done', exitCode: code }
-          : { type: 'timeout' };
-
-      resolve({
-        result: stdout + stderr,
-        resolveReason
-      });
-    });
-
-    child.on('error', reject);
-  });
-
-  return timeoutManager.executeWithTimeout(
-    () => executionPromise,
-    limits.terminal.timeout,
-    'run_command'
-  );
-}
-```
-
-## Performance Monitoring
-
-### Execution Metrics
-
-```typescript
-interface ExecutionMetrics {
-  toolName: string;
-  approvalType: ToolApprovalType;
-  startTime: number;
-  endTime: number;
-  success: boolean;
-  errorType?: string;
-  parametersCount: number;
-  outputSize: number;
-  timeout: number;
-}
-
-class PerformanceMonitor {
-  private metrics: ExecutionMetrics[] = [];
-
-  recordExecution(metric: ExecutionMetrics): void {
-    this.metrics.push(metric);
-    this.updateAggregates(metric);
-  }
-
-  getToolPerformance(toolName: string): {
-    averageExecutionTime: number;
-    successRate: number;
-    errorBreakdown: Record<string, number>;
-    throughput: number; // executions per minute
-  } {
-    const toolMetrics = this.metrics.filter(m => m.toolName === toolName);
-
-    // Calculate metrics...
-  }
-}
-```
-
-### Resource Usage Tracking
-
-```typescript
-interface ResourceUsage {
-  memoryPeak: number;
-  cpuTime: number;
-  ioOperations: number;
-  networkRequests: number;
-}
-
-class ResourceTracker {
-  trackExecution(
-    toolName: string,
-    execution: () => Promise<any>
-  ): Promise<{ result: any; resources: ResourceUsage }> {
-    const startResources = this.getCurrentResources();
-
-    return execution().then(result => {
-      const endResources = this.getCurrentResources();
-      const resources: ResourceUsage = {
-        memoryPeak: endResources.memory - startResources.memory,
-        cpuTime: endResources.cpuTime - startResources.cpuTime,
-        ioOperations: endResources.ioOps - startResources.ioOps,
-        networkRequests: endResources.network - startResources.network,
-      };
-
-      return { result, resources };
-    });
-  }
-}
-```
-
-## Integration Examples
-
-### Complete Tool Execution Workflow
-
-```typescript
-class ToolExecutor {
-  constructor(
-    private validator: ToolSchemaValidator,
-    private approvalManager: ApprovalManager,
-    private securityManager: SecurityManager,
-    private performanceMonitor: PerformanceMonitor
-  ) {}
-
-  async executeTool(
-    toolCall: RawToolCall,
-    context: ExecutionContext
-  ): Promise<ToolResult> {
-    const startTime = Date.now();
-
-    try {
-      // 1. Validate parameters
-      const validation = this.validator.validateToolCall(
-        toolCall.name as BuiltinToolName,
-        toolCall.parameters
-      );
-
-      if (!validation.success) {
-        throw new Error(`Validation failed: ${validation.errors.map(e => e.message).join(', ')}`);
-      }
-
-      // 2. Check approval requirements
-      const approvalType = approvalTypeOfBuiltinToolName[toolCall.name as BuiltinToolName];
-      if (approvalType && approvalType !== 'RAG tools') {
-        const approved = await this.approvalManager.requestApproval({
-          toolName: toolCall.name,
-          approvalType,
-          parameters: validation.data,
-          riskAssessment: this.assessRisk(toolCall.name, validation.data)
-        });
-
-        if (!approved) {
-          throw new Error('Tool execution denied by user');
-        }
-      }
-
-      // 3. Apply security controls
-      const sanitizedParams = await this.securityManager.sanitizeParameters(
-        toolCall.name,
-        validation.data
-      );
-
-      // 4. Execute tool
-      const result = await this.executeToolImplementation(toolCall.name, sanitizedParams);
-
-      // 5. Record metrics
-      this.performanceMonitor.recordExecution({
-        toolName: toolCall.name,
-        approvalType: approvalType || 'RAG tools',
-        startTime,
-        endTime: Date.now(),
-        success: true,
-        parametersCount: Object.keys(validation.data).length,
-        outputSize: this.calculateOutputSize(result),
-        timeout: context.timeout || 30000,
-      });
-
-      return result;
-
-    } catch (error) {
-      // Record failed execution
-      this.performanceMonitor.recordExecution({
-        toolName: toolCall.name,
-        approvalType: approvalTypeOfBuiltinToolName[toolCall.name as BuiltinToolName] || 'RAG tools',
-        startTime,
-        endTime: Date.now(),
-        success: false,
-        errorType: error.constructor.name,
-        parametersCount: Object.keys(toolCall.parameters).length,
-        outputSize: 0,
-        timeout: context.timeout || 30000,
-      });
-
-      throw error;
-    }
-  }
-
-  private assessRisk(toolName: string, params: any): RiskAssessment {
-    // Implementation of risk assessment logic
-  }
-
-  private async executeToolImplementation(name: string, params: any): Promise<any> {
-    // Route to specific tool implementation
-  }
-
-  private calculateOutputSize(result: any): number {
-    // Calculate result size for metrics
-  }
-}
-```
-
-This comprehensive execution and approval system ensures secure, monitored, and reliable tool operations while providing detailed error recovery and performance tracking.
+`rag_search_reference` searches core references (policy manuals, regulations). `rag_search_workspace` searches case documents. `rag_search_all` searches both. All return a `contextPack` string for LLM consumption.

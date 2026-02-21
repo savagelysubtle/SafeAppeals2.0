@@ -1,6 +1,6 @@
 # XLSX Rust Viewer — Feature Tracker
 
-> **Last updated**: 2026-02-16
+> **Last updated**: 2026-02-20
 >
 > This document tracks all implemented features and catalogs features from Excel/Google Sheets that could be implemented next. Organized into two sections: what we **have** and what we **could add**.
 
@@ -226,12 +226,13 @@
 | Tab / Shift+Tab | Next / previous cell |
 
 ### Rust WASM Backend
-- `XlsxParser`: load XLSX bytes → JSON workbook model
-- `XlsxWriter`: serialize model → XLSX bytes
-- `TableOps`: 9 table mutation methods
-- `FormulaEngine`: evaluate_all, evaluate_cell, get_dependents, invalidate
+- `XlsxParser`: load XLSX bytes → JSON workbook model (calamine + quick-xml OOXML parsing for charts, conditional formats, sparklines)
+- `XlsxWriter`: serialize model → XLSX bytes with custom OOXML chart injection (generates `xl/charts/*.xml`, `xl/drawings/*.xml`, patches `[Content_Types].xml` and worksheet relationships for Excel round-trip compatibility)
+- `TableOps`: 9 table mutation methods (create, rename, resize, add/remove column, set style, set totals, toggle filter, convert to range)
+- `FormulaEngine`: evaluate_all, evaluate_cell, get_dependents, invalidate — 20 built-in functions
 - `ViewportManager`: viewport-based cell extraction for virtual scrolling
 - JSON serialization boundary (all data passes as JSON strings)
+- Data model includes: cells with styles, tables, merged cells, column widths, row heights, conditional formatting rules, charts (with OOXML round-trip), and sparklines
 
 ---
 
@@ -491,7 +492,7 @@
 | Sheet Management | 7 | ~5 (unhide, protect, group) |
 | Cell Editing | 7 | ~8 (auto-fill, paste special) |
 | Selection & Navigation | 10 | ~10 (advanced, Go To) |
-| Formatting | 14 | ~20 (borders, cond. formatting) |
+| Formatting | 14 | ~12 (borders, diagonal) |
 | Number Formatting | 5 | ~5 (custom formats) |
 | Row/Column Ops | 12 | ~8 (unhide, group, auto-fit content) |
 | Tables | 17 | ~8 (calculated cols, slicers) |
@@ -499,10 +500,10 @@
 | Formulas | 20 functions | ~200+ (Excel has 500+) |
 | Find & Replace | 5 | 0 (feature-complete) |
 | View Controls | 5 | ~8 (zoom, split panes) |
-| Charts | 0 | ~15 (entire feature area) |
+| Charts & Visualization | 12 | ~3 (combo charts, advanced styling) |
 | Data Validation | 0 | ~10 (entire feature area) |
 | Comments | 0 | ~7 (entire feature area) |
 | Hyperlinks | 0 | ~5 (entire feature area) |
-| Conditional Formatting | 0 | ~8 (entire feature area) |
+| Conditional Formatting | 8 | 0 (feature-complete for basic rules) |
 | Pivot Tables | 0 | ~8 (entire feature area) |
-| **TOTAL** | **~100+ features** | **~200+ potential features** |
+| **TOTAL** | **~130+ features** | **~170+ potential features** |
