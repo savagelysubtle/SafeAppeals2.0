@@ -37,7 +37,15 @@ const IC: Record<string, string> = {
 	totals: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"><line x1="2" y1="12.5" x2="14" y2="12.5" stroke-width="2"/><line x1="2" y1="10" x2="14" y2="10" stroke-width=".8"/><path d="M4 3l2.5 5M6.5 8l2.5-5M4 4.5h5"/></svg>',
 	convertRange: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"><rect x="1" y="1" width="14" height="14" rx="1"/><line x1="1" y1="5" x2="15" y2="5"/><path d="M8 8l-2 2 2 2"/><path d="M8 8l2 2-2 2"/></svg>',
 	condFormat: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"><rect x="1" y="1" width="6" height="14" rx="1"/><rect x="9" y="1" width="6" height="14" rx="1"/><rect x="1" y="1" width="6" height="5" fill="#ff6b6b" opacity=".6" rx="1"/><rect x="1" y="6" width="6" height="4" fill="#ffd93d" opacity=".6"/><rect x="1" y="10" width="6" height="5" fill="#6bcb77" opacity=".6" rx="1"/><rect x="9" y="1" width="6" height="14" rx="1"/><rect x="10" y="3" width="4" height="2" fill="#4472c4" opacity=".7" rx=".5"/><rect x="10" y="7" width="2.5" height="2" fill="#4472c4" opacity=".7" rx=".5"/><rect x="10" y="11" width="1" height="2" fill="#4472c4" opacity=".7" rx=".5"/></svg>',
+	dataValid: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="1" width="14" height="14" rx="1"/><line x1="1" y1="5" x2="15" y2="5"/><line x1="5.5" y1="1" x2="5.5" y2="15"/><path d="M8 8l1.5 1.5L12 7" stroke="#4472c4" stroke-width="1.5"/><rect x="6" y="6" width="7" height="7" rx=".5" stroke="#4472c4" opacity=".3" stroke-dasharray="1.5 1"/></svg>',
+	circleInvalid: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"><ellipse cx="8" cy="8" rx="6" ry="5" stroke="#cc0000" stroke-dasharray="2 1.5"/><line x1="5" y1="8" x2="11" y2="8" stroke="#cc0000"/></svg>',
 	chart: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="1" width="14" height="14" rx="1"/><rect x="3" y="9" width="2" height="5" fill="#4472C4" stroke="none" rx=".3"/><rect x="7" y="5" width="2" height="9" fill="#ED7D31" stroke="none" rx=".3"/><rect x="11" y="7" width="2" height="7" fill="#70AD47" stroke="none" rx=".3"/></svg>',
+	hyperlink: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 9.5a3.5 3.5 0 0 0 4.95 0l2-2a3.5 3.5 0 0 0-4.95-4.95L7.5 3.5"/><path d="M9.5 6.5a3.5 3.5 0 0 0-4.95 0l-2 2a3.5 3.5 0 0 0 4.95 4.95L8.5 12.5"/></svg>',
+	nameManager: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"><rect x="1" y="3" width="14" height="10" rx="1"/><line x1="1" y1="6" x2="15" y2="6"/><line x1="5.5" y1="3" x2="5.5" y2="13"/><path d="M3 9h1M7.5 9h4M7.5 11h2.5" stroke-width="1"/></svg>',
+	defineName: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"><rect x="1" y="3" width="10" height="10" rx="1"/><line x1="1" y1="6" x2="11" y2="6"/><path d="M13 5v8M13 9h2" stroke-width="1.4"/></svg>',
+	fillDown: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="12" height="4" rx="0.5" fill="currentColor" opacity="0.2"/><rect x="2" y="2" width="12" height="12" rx="0.5"/><path d="M8 7v5M5.5 10l2.5 2.5 2.5-2.5"/></svg>',
+	fillRight: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="4" height="12" rx="0.5" fill="currentColor" opacity="0.2"/><rect x="2" y="2" width="12" height="12" rx="0.5"/><path d="M7 8h5M10 5.5l2.5 2.5-2.5 2.5"/></svg>',
+	flashFill: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2L4 9h4l-1 5 5-7h-4z" fill="currentColor" opacity="0.25"/><path d="M9 2L4 9h4l-1 5 5-7h-4z"/></svg>',
 };
 
 // Color theme for each built-in table style (header color, banded row color)
@@ -142,7 +150,7 @@ export class Ribbon {
 		// --- Tab Bar ---
 		const tabBar = this.el('div', 'ribbon-tab-bar');
 		const tabsLeft = this.el('div', 'ribbon-tabs-left');
-		for (const name of ['Home', 'Insert', 'View', 'Data']) {
+		for (const name of ['Home', 'Insert', 'Formulas', 'View', 'Data']) {
 			const key = name.toLowerCase();
 			const btn = this.el('button', `ribbon-tab${key === this.activeTab ? ' active' : ''}`);
 			btn.textContent = name;
@@ -164,6 +172,7 @@ export class Ribbon {
 		const content = this.el('div', 'ribbon-content');
 		content.appendChild(this.buildHomeTab());
 		content.appendChild(this.buildInsertTab());
+		content.appendChild(this.buildFormulasTab());
 		content.appendChild(this.buildViewTab());
 		content.appendChild(this.buildDataTab());
 		this.container.appendChild(content);
@@ -181,6 +190,7 @@ export class Ribbon {
 		const clipStack = this.el('div', 'clip-stack');
 		clipStack.appendChild(this.iconBtn(IC.cut, 'Cut', 'cut', 'Ctrl+X'));
 		clipStack.appendChild(this.iconBtn(IC.copy, 'Copy', 'copy', 'Ctrl+C'));
+		clipStack.appendChild(this.iconBtn(IC.paste, 'Paste Special...', 'pasteSpecial', 'Ctrl+Shift+V'));
 		clipBody.appendChild(clipStack);
 		clip.insertBefore(clipBody, clip.lastChild);
 		panel.appendChild(clip);
@@ -269,6 +279,19 @@ export class Ribbon {
 		cells.insertBefore(cellsBody, cells.lastChild);
 		panel.appendChild(cells);
 
+		// --- Editing (Fill) ---
+		const editGroup = this.group('Editing');
+		const editBody = this.el('div', 'group-body');
+		const editR1 = this.el('div', 'btn-row');
+		editR1.appendChild(this.iconBtn(IC.fillDown, 'Fill ↓', 'fillDown', 'Fill Down (Ctrl+D)'));
+		editR1.appendChild(this.iconBtn(IC.fillRight, 'Fill →', 'fillRight', 'Fill Right (Ctrl+R)'));
+		editBody.appendChild(editR1);
+		const editR2 = this.el('div', 'btn-row');
+		editR2.appendChild(this.iconBtn(IC.flashFill, 'Flash Fill', 'flashFill', 'Flash Fill (Ctrl+E)'));
+		editBody.appendChild(editR2);
+		editGroup.insertBefore(editBody, editGroup.lastChild);
+		panel.appendChild(editGroup);
+
 		// --- Styles ---
 		const stylesGroup = this.group('Styles');
 		const stylesBody = this.el('div', 'group-body');
@@ -327,6 +350,13 @@ export class Ribbon {
 		rcBody.appendChild(rcR2);
 		rcGroup.insertBefore(rcBody, rcGroup.lastChild);
 		panel.appendChild(rcGroup);
+
+		// --- Links group ---
+		const linkGroup = this.group('Links');
+		const linkBody = this.el('div', 'group-body');
+		linkBody.appendChild(this.tallBtn(IC.hyperlink, 'Hyperlink', 'insertHyperlink'));
+		linkGroup.insertBefore(linkBody, linkGroup.lastChild);
+		panel.appendChild(linkGroup);
 
 		return panel;
 	}
@@ -437,6 +467,21 @@ export class Ribbon {
 			`</svg>`;
 	}
 
+	// ======================= FORMULAS TAB =======================
+	private buildFormulasTab(): HTMLElement {
+		const panel = this.tabPanel('formulas', false);
+
+		// Defined Names group
+		const namesGroup = this.group('Defined Names');
+		const namesBody = this.el('div', 'group-body');
+		namesBody.appendChild(this.tallBtn(IC.nameManager, 'Name Manager', 'nameManager'));
+		namesBody.appendChild(this.iconBtn(IC.defineName, 'Define Name', 'defineName'));
+		namesGroup.insertBefore(namesBody, namesGroup.lastChild);
+		panel.appendChild(namesGroup);
+
+		return panel;
+	}
+
 	// ======================= VIEW TAB =======================
 	private buildViewTab(): HTMLElement {
 		const panel = this.tabPanel('view', false);
@@ -473,6 +518,16 @@ export class Ribbon {
 		sortBody.appendChild(filterStack);
 		sort.insertBefore(sortBody, sort.lastChild);
 		panel.appendChild(sort);
+
+		// Data Validation group
+		const dvGroup = this.group('Data Tools');
+		const dvBody = this.el('div', 'group-body');
+		dvBody.appendChild(this.tallBtn(IC.dataValid, 'Data\nValidation', 'dataValidation'));
+		const dvStack = this.el('div', 'btn-col gap-6');
+		dvStack.appendChild(this.iconBtn(IC.circleInvalid, 'Circle\nInvalid', 'circleInvalidData', 'Circle Invalid Data'));
+		dvBody.appendChild(dvStack);
+		dvGroup.insertBefore(dvBody, dvGroup.lastChild);
+		panel.appendChild(dvGroup);
 
 		const edit = this.group('Edit');
 		const editBody = this.el('div', 'group-body');

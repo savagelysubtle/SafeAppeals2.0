@@ -175,6 +175,68 @@ pub struct ConditionalFormatRule {
 
 fn default_priority() -> u32 { 1 }
 
+// --- Data Validation Types ---
+
+fn default_error_style() -> String { "stop".to_string() }
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct DataValidationDef {
+    pub validation_type: String,   // "whole", "decimal", "list", "date", "time", "textLength", "custom", "any"
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub operator: Option<String>,  // "between", "notBetween", "equal", "notEqual", "greaterThan", "lessThan", "greaterThanOrEqual", "lessThanOrEqual"
+    pub sqref: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub formula1: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub formula2: Option<String>,
+    #[serde(default = "default_true")]
+    pub allow_blank: bool,
+    #[serde(default = "default_true")]
+    pub show_input_message: bool,
+    #[serde(default = "default_true")]
+    pub show_error_message: bool,
+    #[serde(default = "default_true")]
+    pub show_dropdown: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub input_title: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub input_message: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error_title: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error_message: Option<String>,
+    #[serde(default = "default_error_style")]
+    pub error_style: String,       // "stop", "warning", "information"
+}
+
+// --- Hyperlink Types ---
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct HyperlinkDef {
+    pub cell_ref: String,        // "A1" or "B3:B5"
+    pub url: String,             // full URL, mailto:, or internal #Sheet!A1
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tooltip: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub display: Option<String>, // explicit display text
+    #[serde(default)]
+    pub is_internal: bool,       // true for cross-sheet/named-range links
+}
+
+// --- Defined Name Types ---
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct DefinedNameDef {
+    pub name: String,
+    pub formula: String,           // e.g. "Sheet1!$A$1:$C$10" or "0.96"
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub local_sheet_id: Option<u32>, // None = workbook scope
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub comment: Option<String>,
+    #[serde(default)]
+    pub hidden: bool,
+}
+
 // --- Chart Types ---
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -294,6 +356,10 @@ pub struct SheetData {
     #[serde(default)]
     pub conditional_formats: Vec<ConditionalFormatRule>,
     #[serde(default)]
+    pub data_validations: Vec<DataValidationDef>,
+    #[serde(default)]
+    pub hyperlinks: Vec<HyperlinkDef>,
+    #[serde(default)]
     pub charts: Vec<ChartDefinition>,
     #[serde(default)]
     pub sparklines: Vec<SparklineDefinition>,
@@ -302,6 +368,8 @@ pub struct SheetData {
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct WorkbookModel {
     pub sheets: Vec<SheetData>,
+    #[serde(default)]
+    pub defined_names: Vec<DefinedNameDef>,
 }
 
 // --- WASM Parser ---
@@ -370,6 +438,8 @@ impl XlsxParser {
                     col_widths: HashMap::new(),
                     row_heights: HashMap::new(),
                     conditional_formats: Vec::new(),
+                    data_validations: Vec::new(),
+                    hyperlinks: Vec::new(),
                     charts: Vec::new(),
                     sparklines: Vec::new(),
                 });
@@ -393,6 +463,12 @@ impl XlsxParser {
         // Parse conditional formatting rules from worksheets and dxf styles
         parse_conditional_formatting_from_zip(data, &mut sheets);
 
+        // Parse data validation rules from worksheets
+        parse_data_validations_from_zip(data, &mut sheets);
+
+        // Parse hyperlinks from worksheet XML and relationship files
+        parse_hyperlinks_from_zip(data, &mut sheets);
+
         // Parse charts from drawings and chart XML parts
         parse_charts_from_zip(data, &mut sheets);
 
@@ -402,7 +478,10 @@ impl XlsxParser {
         // Extract custom chart definitions stored by our writer as xl/voidCharts.json
         extract_void_charts(data, &mut sheets);
 
-        let model = WorkbookModel { sheets };
+        // Parse defined names (named ranges) from xl/workbook.xml
+        let defined_names = parse_defined_names_from_zip(data);
+
+        let model = WorkbookModel { sheets, defined_names };
         let json = serde_json::to_string(&model).map_err(|e| JsError::new(&e.to_string()))?;
         self.model = Some(model);
 
@@ -585,6 +664,102 @@ fn parse_sheet_name_order(archive: &mut zip::ZipArchive<Cursor<&[u8]>>) -> Vec<S
             }
         }
     }
+    names
+}
+
+/// Parse defined names (named ranges) from xl/workbook.xml
+fn parse_defined_names_from_zip(data: &[u8]) -> Vec<DefinedNameDef> {
+    let cursor = Cursor::new(data);
+    let mut archive = match zip::ZipArchive::new(cursor) {
+        Ok(a) => a,
+        Err(_) => return Vec::new(),
+    };
+
+    let mut content = String::new();
+    if let Ok(mut file) = archive.by_name("xl/workbook.xml") {
+        if file.read_to_string(&mut content).is_err() {
+            return Vec::new();
+        }
+    } else {
+        return Vec::new();
+    }
+
+    let mut names = Vec::new();
+    let mut reader = quick_xml::Reader::from_str(&content);
+    let mut buf = Vec::new();
+    let mut in_defined_names = false;
+
+    loop {
+        match reader.read_event_into(&mut buf) {
+            Ok(quick_xml::events::Event::Start(ref e)) => {
+                let tag = e.name();
+                let tag_str = std::str::from_utf8(tag.as_ref()).unwrap_or("");
+                let local_tag = tag_str.split(':').last().unwrap_or(tag_str);
+                if local_tag == "definedNames" {
+                    in_defined_names = true;
+                } else if in_defined_names && local_tag == "definedName" {
+                    let mut name_attr = String::new();
+                    let mut local_sheet_id: Option<u32> = None;
+                    let mut comment: Option<String> = None;
+                    let mut hidden = false;
+
+                    for attr in e.attributes().flatten() {
+                        let key = attr.key.as_ref();
+                        let key_str = std::str::from_utf8(key).unwrap_or("");
+                        let local_key = key_str.split(':').last().unwrap_or(key_str);
+                        let val = attr.unescape_value().unwrap_or_default().to_string();
+                        match local_key {
+                            "name" => name_attr = val,
+                            "localSheetId" => local_sheet_id = val.parse::<u32>().ok(),
+                            "comment" => comment = Some(val),
+                            "hidden" => hidden = val == "1" || val == "true",
+                            _ => {}
+                        }
+                    }
+
+                    // Read the formula text content
+                    let mut formula = String::new();
+                    buf.clear();
+                    loop {
+                        match reader.read_event_into(&mut buf) {
+                            Ok(quick_xml::events::Event::Text(e)) => {
+                                formula = e.unescape().unwrap_or_default().to_string();
+                            }
+                            Ok(quick_xml::events::Event::End(_)) => break,
+                            Ok(quick_xml::events::Event::Eof) => break,
+                            Err(_) => break,
+                            _ => {}
+                        }
+                        buf.clear();
+                    }
+
+                    if !name_attr.is_empty() && !formula.is_empty() {
+                        names.push(DefinedNameDef {
+                            name: name_attr,
+                            formula,
+                            local_sheet_id,
+                            comment,
+                            hidden,
+                        });
+                    }
+                    continue; // buf already cleared in inner loop
+                }
+            }
+            Ok(quick_xml::events::Event::End(ref e)) => {
+                let tag = e.name();
+                let tag_str = std::str::from_utf8(tag.as_ref()).unwrap_or("");
+                let local_tag = tag_str.split(':').last().unwrap_or(tag_str);
+                if local_tag == "definedNames" {
+                    in_defined_names = false;
+                }
+            }
+            Ok(quick_xml::events::Event::Eof) => break,
+            Err(_) => break,
+            _ => {}
+        }
+        buf.clear();
+    }
+
     names
 }
 
@@ -1714,6 +1889,250 @@ fn parse_conditional_formatting_from_zip(data: &[u8], sheets: &mut [SheetData]) 
     }
 }
 
+/// Parse data validation rules from all worksheet XMLs in the XLSX ZIP archive.
+fn parse_data_validations_from_zip(data: &[u8], sheets: &mut [SheetData]) {
+    let cursor = Cursor::new(data);
+    let mut archive = match zip::ZipArchive::new(cursor) {
+        Ok(a) => a,
+        Err(_) => return,
+    };
+
+    let sheet_name_order = parse_sheet_name_order(&mut archive);
+
+    let file_names: Vec<String> = (0..archive.len())
+        .filter_map(|i| archive.by_index(i).ok().map(|f| f.name().to_string()))
+        .collect();
+
+    let mut worksheet_files: Vec<&String> = file_names.iter()
+        .filter(|f| f.starts_with("xl/worksheets/sheet") && f.ends_with(".xml") && !f.contains("_rels"))
+        .collect();
+    worksheet_files.sort();
+
+    for (idx, ws_file) in worksheet_files.iter().enumerate() {
+        let sheet_name = match sheet_name_order.get(idx) {
+            Some(n) => n.clone(),
+            None => continue,
+        };
+
+        let sheet = match sheets.iter_mut().find(|s| s.name == sheet_name) {
+            Some(s) => s,
+            None => continue,
+        };
+
+        if let Ok(mut file) = archive.by_name(ws_file) {
+            let mut content = String::new();
+            if file.read_to_string(&mut content).is_err() {
+                continue;
+            }
+
+            let mut reader = quick_xml::Reader::from_str(&content);
+            let mut buf = Vec::new();
+            let mut in_data_validations = false;
+            let mut in_data_validation = false;
+            let mut current_dv: Option<DataValidationPartial> = None;
+            let mut in_formula1 = false;
+            let mut in_formula2 = false;
+            let mut formula1_text = String::new();
+            let mut formula2_text = String::new();
+
+            loop {
+                match reader.read_event_into(&mut buf) {
+                    Ok(quick_xml::events::Event::Start(ref e)) => {
+                        let tag = e.name();
+                        match tag.as_ref() {
+                            b"dataValidations" => { in_data_validations = true; }
+                            b"dataValidation" if in_data_validations => {
+                                in_data_validation = true;
+                                let mut partial = DataValidationPartial::default();
+                                for attr in e.attributes().flatten() {
+                                    let key = attr.key.as_ref();
+                                    let val = attr.unescape_value().unwrap_or_default().to_string();
+                                    match key {
+                                        b"type" => partial.validation_type = val,
+                                        b"operator" => partial.operator = Some(val),
+                                        b"sqref" => partial.sqref = val,
+                                        b"allowBlank" => partial.allow_blank = val != "0",
+                                        b"showInputMessage" => partial.show_input_message = val != "0",
+                                        b"showErrorMessage" => partial.show_error_message = val != "0",
+                                        b"showDropDown" => {
+                                            // In OOXML, showDropDown="1" means HIDE dropdown (counterintuitive)
+                                            partial.show_dropdown = val == "0" || val.is_empty();
+                                        }
+                                        b"promptTitle" => partial.input_title = Some(val),
+                                        b"prompt" => partial.input_message = Some(val),
+                                        b"errorTitle" => partial.error_title = Some(val),
+                                        b"error" => partial.error_message = Some(val),
+                                        b"errorStyle" => partial.error_style = val,
+                                        _ => {}
+                                    }
+                                }
+                                // Default type to "any" if not specified
+                                if partial.validation_type.is_empty() {
+                                    partial.validation_type = "any".to_string();
+                                }
+                                current_dv = Some(partial);
+                            }
+                            b"formula1" if in_data_validation => {
+                                in_formula1 = true;
+                                formula1_text.clear();
+                            }
+                            b"formula2" if in_data_validation => {
+                                in_formula2 = true;
+                                formula2_text.clear();
+                            }
+                            _ => {}
+                        }
+                    }
+                    Ok(quick_xml::events::Event::Text(ref e)) => {
+                        if let Ok(t) = e.unescape() {
+                            if in_formula1 {
+                                formula1_text.push_str(&t);
+                            } else if in_formula2 {
+                                formula2_text.push_str(&t);
+                            }
+                        }
+                    }
+                    Ok(quick_xml::events::Event::End(ref e)) => {
+                        let tag = e.name();
+                        match tag.as_ref() {
+                            b"dataValidations" => { in_data_validations = false; }
+                            b"dataValidation" if in_data_validation => {
+                                if let Some(mut partial) = current_dv.take() {
+                                    if !formula1_text.is_empty() {
+                                        partial.formula1 = Some(formula1_text.clone());
+                                    }
+                                    if !formula2_text.is_empty() {
+                                        partial.formula2 = Some(formula2_text.clone());
+                                    }
+                                    sheet.data_validations.push(DataValidationDef {
+                                        validation_type: partial.validation_type,
+                                        operator: partial.operator,
+                                        sqref: partial.sqref,
+                                        formula1: partial.formula1,
+                                        formula2: partial.formula2,
+                                        allow_blank: partial.allow_blank,
+                                        show_input_message: partial.show_input_message,
+                                        show_error_message: partial.show_error_message,
+                                        show_dropdown: partial.show_dropdown,
+                                        input_title: partial.input_title,
+                                        input_message: partial.input_message,
+                                        error_title: partial.error_title,
+                                        error_message: partial.error_message,
+                                        error_style: if partial.error_style.is_empty() {
+                                            "stop".to_string()
+                                        } else {
+                                            partial.error_style
+                                        },
+                                    });
+                                }
+                                in_data_validation = false;
+                                formula1_text.clear();
+                                formula2_text.clear();
+                            }
+                            b"formula1" => { in_formula1 = false; }
+                            b"formula2" => { in_formula2 = false; }
+                            _ => {}
+                        }
+                    }
+                    Ok(quick_xml::events::Event::Empty(ref e)) => {
+                        let tag = e.name();
+                        if tag.as_ref() == b"dataValidation" && in_data_validations {
+                            let mut partial = DataValidationPartial::default();
+                            for attr in e.attributes().flatten() {
+                                let key = attr.key.as_ref();
+                                let val = attr.unescape_value().unwrap_or_default().to_string();
+                                match key {
+                                    b"type" => partial.validation_type = val,
+                                    b"operator" => partial.operator = Some(val),
+                                    b"sqref" => partial.sqref = val,
+                                    b"allowBlank" => partial.allow_blank = val != "0",
+                                    b"showInputMessage" => partial.show_input_message = val != "0",
+                                    b"showErrorMessage" => partial.show_error_message = val != "0",
+                                    b"showDropDown" => {
+                                        partial.show_dropdown = val == "0" || val.is_empty();
+                                    }
+                                    b"promptTitle" => partial.input_title = Some(val),
+                                    b"prompt" => partial.input_message = Some(val),
+                                    b"errorTitle" => partial.error_title = Some(val),
+                                    b"error" => partial.error_message = Some(val),
+                                    b"errorStyle" => partial.error_style = val,
+                                    _ => {}
+                                }
+                            }
+                            if partial.validation_type.is_empty() {
+                                partial.validation_type = "any".to_string();
+                            }
+                            sheet.data_validations.push(DataValidationDef {
+                                validation_type: partial.validation_type,
+                                operator: partial.operator,
+                                sqref: partial.sqref,
+                                formula1: partial.formula1,
+                                formula2: partial.formula2,
+                                allow_blank: partial.allow_blank,
+                                show_input_message: partial.show_input_message,
+                                show_error_message: partial.show_error_message,
+                                show_dropdown: partial.show_dropdown,
+                                input_title: partial.input_title,
+                                input_message: partial.input_message,
+                                error_title: partial.error_title,
+                                error_message: partial.error_message,
+                                error_style: if partial.error_style.is_empty() {
+                                    "stop".to_string()
+                                } else {
+                                    partial.error_style
+                                },
+                            });
+                        }
+                    }
+                    Ok(quick_xml::events::Event::Eof) => break,
+                    Err(_) => break,
+                    _ => {}
+                }
+                buf.clear();
+            }
+        }
+    }
+}
+
+/// Intermediate struct for building DataValidationDef during XML parsing
+struct DataValidationPartial {
+    validation_type: String,
+    operator: Option<String>,
+    sqref: String,
+    formula1: Option<String>,
+    formula2: Option<String>,
+    allow_blank: bool,
+    show_input_message: bool,
+    show_error_message: bool,
+    show_dropdown: bool,
+    input_title: Option<String>,
+    input_message: Option<String>,
+    error_title: Option<String>,
+    error_message: Option<String>,
+    error_style: String,
+}
+
+impl Default for DataValidationPartial {
+    fn default() -> Self {
+        DataValidationPartial {
+            validation_type: String::new(),
+            operator: None,
+            sqref: String::new(),
+            formula1: None,
+            formula2: None,
+            allow_blank: true,
+            show_input_message: true,
+            show_error_message: true,
+            show_dropdown: true,
+            input_title: None,
+            input_message: None,
+            error_title: None,
+            error_message: None,
+            error_style: String::new(),
+        }
+    }
+}
+
 // --- Chart Parsing ---
 
 /// Extract drawing relationship targets from a .rels file
@@ -2171,6 +2590,186 @@ fn parse_chart_xml(chart_xml: &str) -> Option<(String, Vec<ChartSeries>, Option<
     }
 
     Some((chart_type, series_list, title, legend, axes))
+}
+
+/// Extract hyperlink relationship targets from a worksheet .rels file.
+/// Returns HashMap<rId, url> for all hyperlink relationships.
+fn extract_hyperlink_refs_from_rels(rels_xml: &str) -> HashMap<String, String> {
+    let mut refs = HashMap::new();
+    let mut reader = quick_xml::Reader::from_str(rels_xml);
+    let mut buf = Vec::new();
+    loop {
+        match reader.read_event_into(&mut buf) {
+            Ok(quick_xml::events::Event::Empty(ref e)) | Ok(quick_xml::events::Event::Start(ref e)) => {
+                if e.name().as_ref() == b"Relationship" {
+                    let mut rel_type = String::new();
+                    let mut target = String::new();
+                    let mut rid = String::new();
+                    for attr in e.attributes().flatten() {
+                        let key = attr.key.as_ref();
+                        let val = attr.unescape_value().unwrap_or_default().to_string();
+                        match key {
+                            b"Type" => rel_type = val,
+                            b"Target" => target = val,
+                            b"Id" => rid = val,
+                            _ => {}
+                        }
+                    }
+                    if rel_type.contains("/hyperlink") && !target.is_empty() {
+                        refs.insert(rid, target);
+                    }
+                }
+            }
+            Ok(quick_xml::events::Event::Eof) => break,
+            Err(_) => break,
+            _ => {}
+        }
+        buf.clear();
+    }
+    refs
+}
+
+/// Parse all hyperlinks from worksheet XML and their relationship files.
+fn parse_hyperlinks_from_zip(data: &[u8], sheets: &mut [SheetData]) {
+    let cursor = Cursor::new(data);
+    let mut archive = match zip::ZipArchive::new(cursor) {
+        Ok(a) => a,
+        Err(_) => return,
+    };
+
+    let sheet_name_order = parse_sheet_name_order(&mut archive);
+
+    let file_names: Vec<String> = (0..archive.len())
+        .filter_map(|i| archive.by_index(i).ok().map(|f| f.name().to_string()))
+        .collect();
+
+    let mut worksheet_files: Vec<&String> = file_names.iter()
+        .filter(|f| f.starts_with("xl/worksheets/sheet") && f.ends_with(".xml") && !f.contains("_rels"))
+        .collect();
+    worksheet_files.sort();
+
+    for (idx, ws_file) in worksheet_files.iter().enumerate() {
+        let sheet_name = match sheet_name_order.get(idx) {
+            Some(n) => n.clone(),
+            None => continue,
+        };
+
+        let sheet = match sheets.iter_mut().find(|s| s.name == sheet_name) {
+            Some(s) => s,
+            None => continue,
+        };
+
+        // Read the .rels file for this worksheet
+        let base_name = ws_file.trim_start_matches("xl/worksheets/");
+        let rels_path = format!("xl/worksheets/_rels/{}.rels", base_name);
+
+        let rels_map = if let Ok(mut rels_file) = archive.by_name(&rels_path) {
+            let mut content = String::new();
+            if rels_file.read_to_string(&mut content).is_ok() {
+                extract_hyperlink_refs_from_rels(&content)
+            } else {
+                HashMap::new()
+            }
+        } else {
+            HashMap::new()
+        };
+
+        // Read and parse worksheet XML for <hyperlinks> section
+        let ws_xml = if let Ok(mut f) = archive.by_name(ws_file) {
+            let mut s = String::new();
+            if f.read_to_string(&mut s).is_ok() { s } else { continue; }
+        } else {
+            continue;
+        };
+
+        let mut reader = quick_xml::Reader::from_str(&ws_xml);
+        let mut buf = Vec::new();
+        let mut in_hyperlinks = false;
+
+        loop {
+            match reader.read_event_into(&mut buf) {
+                Ok(quick_xml::events::Event::Start(ref e)) => {
+                    if e.name().as_ref() == b"hyperlinks" {
+                        in_hyperlinks = true;
+                    } else if in_hyperlinks && e.name().as_ref() == b"hyperlink" {
+                        let link = parse_hyperlink_element(e, &rels_map);
+                        if let Some(l) = link { sheet.hyperlinks.push(l); }
+                    }
+                }
+                Ok(quick_xml::events::Event::Empty(ref e)) => {
+                    if in_hyperlinks && e.name().as_ref() == b"hyperlink" {
+                        let link = parse_hyperlink_element(e, &rels_map);
+                        if let Some(l) = link { sheet.hyperlinks.push(l); }
+                    }
+                }
+                Ok(quick_xml::events::Event::End(ref e)) => {
+                    if e.name().as_ref() == b"hyperlinks" {
+                        in_hyperlinks = false;
+                    }
+                }
+                Ok(quick_xml::events::Event::Eof) => break,
+                Err(_) => break,
+                _ => {}
+            }
+            buf.clear();
+        }
+    }
+}
+
+/// Parse a single <hyperlink> element into a HyperlinkDef.
+fn parse_hyperlink_element(
+    e: &quick_xml::events::BytesStart,
+    rels_map: &HashMap<String, String>,
+) -> Option<HyperlinkDef> {
+    let mut cell_ref = String::new();
+    let mut rid = String::new();
+    let mut location = String::new();
+    let mut tooltip = String::new();
+    let mut display = String::new();
+
+    for attr in e.attributes().flatten() {
+        let val = attr.unescape_value().unwrap_or_default().to_string();
+        match attr.key.as_ref() {
+            b"ref" => cell_ref = val,
+            b"r:id" => rid = val,
+            b"location" => location = val,
+            b"tooltip" => tooltip = val,
+            b"display" => display = val,
+            _ => {}
+        }
+    }
+
+    if cell_ref.is_empty() {
+        return None;
+    }
+
+    let (url, is_internal) = if !rid.is_empty() {
+        // External link (or mailto:) - look up URL from rels map
+        let base_url = rels_map.get(&rid).cloned().unwrap_or_default();
+        if base_url.is_empty() {
+            return None;
+        }
+        // If there's also a location, append it as a fragment
+        let full_url = if !location.is_empty() {
+            format!("{}#{}", base_url, location)
+        } else {
+            base_url
+        };
+        (full_url, false)
+    } else if !location.is_empty() {
+        // Internal link only (cross-sheet or named range)
+        (format!("#{}", location), true)
+    } else {
+        return None;
+    };
+
+    Some(HyperlinkDef {
+        cell_ref,
+        url,
+        tooltip: if tooltip.is_empty() { None } else { Some(tooltip) },
+        display: if display.is_empty() { None } else { Some(display) },
+        is_internal,
+    })
 }
 
 /// Parse all charts from the XLSX zip file and add them to the corresponding sheets

@@ -50,7 +50,7 @@ export interface CreditBalance {
 }
 
 export interface CreditPack {
-	id: 'starter' | 'pro'
+	id: 'starter' | 'pro' | 'power'
 	name: string
 	credits: number
 	price: number

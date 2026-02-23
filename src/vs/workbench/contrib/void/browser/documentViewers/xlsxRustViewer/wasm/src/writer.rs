@@ -1,4 +1,5 @@
 use wasm_bindgen::prelude::*;
+use std::collections::HashSet;
 use rust_xlsxwriter::{
     Workbook, Format, Table, TableColumn as RxTableColumn, TableFunction, TableStyle,
     ConditionalFormatCell, ConditionalFormatCellRule,
@@ -8,8 +9,10 @@ use rust_xlsxwriter::{
     ConditionalFormatDuplicate,
     ConditionalFormat2ColorScale, ConditionalFormat3ColorScale,
     ConditionalFormatDataBar, ConditionalFormatIconSet, ConditionalFormatIconType,
+    DataValidation, DataValidationRule, DataValidationErrorStyle, Formula,
+    Url,
 };
-use crate::parser::{WorkbookModel, ConditionalFormatRule, ChartDefinition};
+use crate::parser::{WorkbookModel, ConditionalFormatRule, DataValidationDef, HyperlinkDef, ChartDefinition, DefinedNameDef};
 
 #[wasm_bindgen]
 extern "C" {
@@ -37,8 +40,22 @@ impl XlsxWriter {
             let worksheet = workbook.add_worksheet();
             worksheet.set_name(&sheet_data.name).map_err(|e| JsError::new(&e.to_string()))?;
 
+            // Build set of (row, col) that have hyperlinks so we can skip them in
+            // the regular cell write loop — write_url() must be the sole writer for
+            // those cells, otherwise the hyperlink relationship is not created.
+            let hyperlink_cells: HashSet<(u32, u32)> = sheet_data.hyperlinks.iter()
+                .map(|link| {
+                    let base_ref = link.cell_ref.split(':').next().unwrap_or(&link.cell_ref);
+                    parse_cf_cell_ref(base_ref)
+                })
+                .collect();
+
             for (row_idx, row_map) in &sheet_data.cells {
                 for (col_idx, cell_data) in row_map {
+                    // Skip cells that will be written by write_url() below
+                    if hyperlink_cells.contains(&(*row_idx, *col_idx)) {
+                        continue;
+                    }
                     let col_u16 = *col_idx as u16;
 
                     // Build format if cell has styles
@@ -220,9 +237,27 @@ impl XlsxWriter {
                     .map_err(|e| JsError::new(&e.to_string()))?;
             }
 
+            // Write data validation rules
+            for dv_rule in &sheet_data.data_validations {
+                write_data_validation(worksheet, dv_rule)
+                    .map_err(|e| JsError::new(&e.to_string()))?;
+            }
+
+            // Write hyperlinks — write_url() is the sole writer for hyperlink cells
+            for link in &sheet_data.hyperlinks {
+                if let Err(e) = write_hyperlink(worksheet, link, sheet_data) {
+                    log(&format!("[xlsx-writer] hyperlink write error for {}: {}", link.cell_ref, e));
+                }
+            }
+
             // Charts are NOT written via rust_xlsxwriter (its Chart API produces
             // invalid OOXML in the WASM target). Instead we post-process the ZIP
             // with inject_chart_files() below.
+        }
+
+        // Write defined names (named ranges)
+        for dn in &model.defined_names {
+            write_defined_name(&mut workbook, dn, &model);
         }
 
         let base_buf = workbook.save_to_buffer().map_err(|e| JsError::new(&e.to_string()))?;
@@ -257,6 +292,40 @@ impl XlsxWriter {
 
         Ok(result)
     }
+}
+
+/// Write a defined name (named range) to the workbook.
+fn write_defined_name(workbook: &mut Workbook, dn: &DefinedNameDef, model: &WorkbookModel) {
+    // Skip hidden built-in names (e.g. _xlnm.Print_Area) to avoid conflicts
+    if dn.hidden || dn.name.starts_with("_xlnm.") {
+        return;
+    }
+
+    // Build the full name string. For sheet-scoped names, rust_xlsxwriter
+    // requires the prefix "SheetName!Name".
+    let name_str = if let Some(sheet_id) = dn.local_sheet_id {
+        if let Some(sheet) = model.sheets.get(sheet_id as usize) {
+            let sheet_name = &sheet.name;
+            if sheet_name.contains(' ') || sheet_name.contains('\'') {
+                format!("'{}'!{}", sheet_name.replace('\'', "''"), dn.name)
+            } else {
+                format!("{}!{}", sheet_name, dn.name)
+            }
+        } else {
+            dn.name.clone()
+        }
+    } else {
+        dn.name.clone()
+    };
+
+    // rust_xlsxwriter expects the formula with a leading '='
+    let formula = if dn.formula.starts_with('=') {
+        dn.formula.clone()
+    } else {
+        format!("={}", dn.formula)
+    };
+
+    let _ = workbook.define_name(&name_str, &formula);
 }
 
 /// Parse a hex color string like "#RRGGBB" to rust_xlsxwriter Color
@@ -321,6 +390,199 @@ fn parse_cf_cell_ref(cell_ref: &str) -> (u32, u32) {
         }
     }
     (row.saturating_sub(1), col.saturating_sub(1))
+}
+
+/// Write a single data validation rule to the worksheet.
+fn write_data_validation(
+    worksheet: &mut rust_xlsxwriter::Worksheet,
+    rule: &DataValidationDef,
+) -> Result<(), rust_xlsxwriter::XlsxError> {
+    let coords = match parse_sqref_to_coords(&rule.sqref) {
+        Some(c) => c,
+        None => return Ok(()),
+    };
+    let (r1, c1, r2, c2) = coords;
+
+    let mut dv = DataValidation::new();
+
+    match rule.validation_type.as_str() {
+        "whole" => {
+            let op = rule.operator.as_deref().unwrap_or("between");
+            let v1: i32 = rule.formula1.as_deref().unwrap_or("0").parse().unwrap_or(0);
+            let v2: i32 = rule.formula2.as_deref().unwrap_or("0").parse().unwrap_or(0);
+            let dv_rule = match op {
+                "between"             => DataValidationRule::Between(v1, v2),
+                "notBetween"          => DataValidationRule::NotBetween(v1, v2),
+                "equal"               => DataValidationRule::EqualTo(v1),
+                "notEqual"            => DataValidationRule::NotEqualTo(v1),
+                "greaterThan"         => DataValidationRule::GreaterThan(v1),
+                "lessThan"            => DataValidationRule::LessThan(v1),
+                "greaterThanOrEqual"  => DataValidationRule::GreaterThanOrEqualTo(v1),
+                "lessThanOrEqual"     => DataValidationRule::LessThanOrEqualTo(v1),
+                _                     => DataValidationRule::Between(v1, v2),
+            };
+            dv = dv.allow_whole_number(dv_rule);
+        }
+        "decimal" => {
+            let op = rule.operator.as_deref().unwrap_or("between");
+            let v1: f64 = rule.formula1.as_deref().unwrap_or("0").parse().unwrap_or(0.0);
+            let v2: f64 = rule.formula2.as_deref().unwrap_or("0").parse().unwrap_or(0.0);
+            let dv_rule = match op {
+                "between"             => DataValidationRule::Between(v1, v2),
+                "notBetween"          => DataValidationRule::NotBetween(v1, v2),
+                "equal"               => DataValidationRule::EqualTo(v1),
+                "notEqual"            => DataValidationRule::NotEqualTo(v1),
+                "greaterThan"         => DataValidationRule::GreaterThan(v1),
+                "lessThan"            => DataValidationRule::LessThan(v1),
+                "greaterThanOrEqual"  => DataValidationRule::GreaterThanOrEqualTo(v1),
+                "lessThanOrEqual"     => DataValidationRule::LessThanOrEqualTo(v1),
+                _                     => DataValidationRule::Between(v1, v2),
+            };
+            dv = dv.allow_decimal_number(dv_rule);
+        }
+        "list" => {
+            if let Some(ref f1) = rule.formula1 {
+                // Cell range reference (starts with "=") or a quoted formula
+                if f1.starts_with('=') || f1.contains('!') || f1.contains(':') {
+                    dv = dv.allow_list_formula(Formula::new(f1));
+                } else {
+                    // Comma-separated inline list — split on comma, handling quoted items
+                    let items: Vec<&str> = f1.split(',').map(|s| s.trim().trim_matches('"')).collect();
+                    // allow_list_strings can return an error if list is too long; skip silently if so
+                    if let Ok(dv2) = dv.allow_list_strings(&items) {
+                        dv = dv2;
+                    } else {
+                        // Fallback: use as formula
+                        dv = DataValidation::new().allow_list_formula(Formula::new(f1));
+                    }
+                }
+            }
+            dv = dv.show_dropdown(rule.show_dropdown);
+        }
+        "date" => {
+            let op = rule.operator.as_deref().unwrap_or("between");
+            let f1 = rule.formula1.as_deref().unwrap_or("0");
+            let f2 = rule.formula2.as_deref().unwrap_or("0");
+            // Use formula-based date validation (avoids ExcelDateTime parsing complexity)
+            let dv_rule = match op {
+                "between"            => DataValidationRule::Between(Formula::new(f1), Formula::new(f2)),
+                "notBetween"         => DataValidationRule::NotBetween(Formula::new(f1), Formula::new(f2)),
+                "equal"              => DataValidationRule::EqualTo(Formula::new(f1)),
+                "notEqual"           => DataValidationRule::NotEqualTo(Formula::new(f1)),
+                "greaterThan"        => DataValidationRule::GreaterThan(Formula::new(f1)),
+                "lessThan"           => DataValidationRule::LessThan(Formula::new(f1)),
+                "greaterThanOrEqual" => DataValidationRule::GreaterThanOrEqualTo(Formula::new(f1)),
+                "lessThanOrEqual"    => DataValidationRule::LessThanOrEqualTo(Formula::new(f1)),
+                _                    => DataValidationRule::Between(Formula::new(f1), Formula::new(f2)),
+            };
+            dv = dv.allow_date_formula(dv_rule);
+        }
+        "time" => {
+            let op = rule.operator.as_deref().unwrap_or("between");
+            let f1 = rule.formula1.as_deref().unwrap_or("0");
+            let f2 = rule.formula2.as_deref().unwrap_or("0");
+            let dv_rule = match op {
+                "between"            => DataValidationRule::Between(Formula::new(f1), Formula::new(f2)),
+                "notBetween"         => DataValidationRule::NotBetween(Formula::new(f1), Formula::new(f2)),
+                "equal"              => DataValidationRule::EqualTo(Formula::new(f1)),
+                "notEqual"           => DataValidationRule::NotEqualTo(Formula::new(f1)),
+                "greaterThan"        => DataValidationRule::GreaterThan(Formula::new(f1)),
+                "lessThan"           => DataValidationRule::LessThan(Formula::new(f1)),
+                "greaterThanOrEqual" => DataValidationRule::GreaterThanOrEqualTo(Formula::new(f1)),
+                "lessThanOrEqual"    => DataValidationRule::LessThanOrEqualTo(Formula::new(f1)),
+                _                    => DataValidationRule::Between(Formula::new(f1), Formula::new(f2)),
+            };
+            dv = dv.allow_time_formula(dv_rule);
+        }
+        "textLength" => {
+            let op = rule.operator.as_deref().unwrap_or("between");
+            let v1: u32 = rule.formula1.as_deref().unwrap_or("0").parse().unwrap_or(0);
+            let v2: u32 = rule.formula2.as_deref().unwrap_or("0").parse().unwrap_or(0);
+            let dv_rule = match op {
+                "between"             => DataValidationRule::Between(v1, v2),
+                "notBetween"          => DataValidationRule::NotBetween(v1, v2),
+                "equal"               => DataValidationRule::EqualTo(v1),
+                "notEqual"            => DataValidationRule::NotEqualTo(v1),
+                "greaterThan"         => DataValidationRule::GreaterThan(v1),
+                "lessThan"            => DataValidationRule::LessThan(v1),
+                "greaterThanOrEqual"  => DataValidationRule::GreaterThanOrEqualTo(v1),
+                "lessThanOrEqual"     => DataValidationRule::LessThanOrEqualTo(v1),
+                _                     => DataValidationRule::Between(v1, v2),
+            };
+            dv = dv.allow_text_length(dv_rule);
+        }
+        "custom" => {
+            if let Some(ref f1) = rule.formula1 {
+                dv = dv.allow_custom(Formula::new(f1));
+            } else {
+                return Ok(());
+            }
+        }
+        "any" | "" => {
+            dv = dv.allow_any_value();
+        }
+        _ => return Ok(()),
+    }
+
+    // Input message — pre-truncate to Excel's limits so set_* never returns Err
+    if let Some(ref t) = rule.input_title {
+        let truncated: String = t.chars().take(32).collect();
+        dv = dv.set_input_title(&truncated).unwrap_or_else(|_| DataValidation::new());
+    }
+    if let Some(ref m) = rule.input_message {
+        let truncated: String = m.chars().take(255).collect();
+        dv = dv.set_input_message(&truncated).unwrap_or_else(|_| DataValidation::new());
+    }
+    dv = dv.show_input_message(rule.show_input_message);
+
+    // Error alert — pre-truncate to Excel's limits
+    if let Some(ref t) = rule.error_title {
+        let truncated: String = t.chars().take(32).collect();
+        dv = dv.set_error_title(&truncated).unwrap_or_else(|_| DataValidation::new());
+    }
+    if let Some(ref m) = rule.error_message {
+        let truncated: String = m.chars().take(255).collect();
+        dv = dv.set_error_message(&truncated).unwrap_or_else(|_| DataValidation::new());
+    }
+    dv = dv.show_error_message(rule.show_error_message);
+
+    match rule.error_style.as_str() {
+        "warning"     => { dv = dv.set_error_style(DataValidationErrorStyle::Warning); }
+        "information" => { dv = dv.set_error_style(DataValidationErrorStyle::Information); }
+        _             => { dv = dv.set_error_style(DataValidationErrorStyle::Stop); }
+    }
+
+    dv = dv.ignore_blank(rule.allow_blank);
+
+    worksheet.add_data_validation(r1, c1, r2, c2, &dv)?;
+    Ok(())
+}
+
+/// Write a single hyperlink to the worksheet.
+fn write_hyperlink(
+    worksheet: &mut rust_xlsxwriter::Worksheet,
+    link: &HyperlinkDef,
+    sheet_data: &crate::parser::SheetData,
+) -> Result<(), rust_xlsxwriter::XlsxError> {
+    let (row, col) = parse_cf_cell_ref(&link.cell_ref);
+    let mut url = Url::new(&link.url);
+    if let Some(ref tip) = link.tooltip {
+        let truncated: String = tip.chars().take(255).collect();
+        url = url.set_tip(&truncated);
+    }
+    // Determine display text: explicit display > cell model value > URL
+    let display_text = link.display.clone().or_else(|| {
+        sheet_data.cells.get(&row)
+            .and_then(|row_map| row_map.get(&col))
+            .map(|cell| cell.value.clone())
+            .filter(|v| !v.is_empty())
+    });
+    if let Some(ref text) = display_text {
+        let truncated: String = text.chars().take(255).collect();
+        url = url.set_text(&truncated);
+    }
+    worksheet.write_url(row, col as u16, &url)?;
+    Ok(())
 }
 
 /// Build a Format from a DxfStyle for conditional formatting

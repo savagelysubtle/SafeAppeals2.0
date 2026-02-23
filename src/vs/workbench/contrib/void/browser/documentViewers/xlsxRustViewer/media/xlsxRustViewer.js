@@ -4,7 +4,7 @@
   var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
   var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "symbol" ? key + "" : key, value);
 
-  // media/wasm/xlsx_rust_viewer.js
+  // wasm/xlsx_rust_viewer.js
   var import_meta = {};
   var ContextMenuManager = class {
     __destroy_into_raw() {
@@ -61,60 +61,68 @@
       wasm.__wbg_formulaengine_free(ptr, 0);
     }
     /**
-     * Evaluate all formula cells in the sheet.
+     * Evaluate all formula cells across all sheets.
+     * `all_sheets_json` is: { "SheetName": { "row": { "col": { "value": "...", "data_type": "..." } } } }
+     * `active_sheet` is the sheet to return results for.
      * Returns JSON: { "row:col": { "display": "...", "is_error": bool, "numeric": number|null } }
-     * @param {string} cells_json
+     * @param {string} all_sheets_json
+     * @param {string} active_sheet
      * @returns {string}
      */
-    evaluate_all(cells_json) {
-      let deferred3_0;
-      let deferred3_1;
+    evaluate_all(all_sheets_json, active_sheet) {
+      let deferred4_0;
+      let deferred4_1;
       try {
-        const ptr0 = passStringToWasm0(cells_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const ptr0 = passStringToWasm0(all_sheets_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
         const len0 = WASM_VECTOR_LEN;
-        const ret = wasm.formulaengine_evaluate_all(this.__wbg_ptr, ptr0, len0);
-        var ptr2 = ret[0];
-        var len2 = ret[1];
+        const ptr1 = passStringToWasm0(active_sheet, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ret = wasm.formulaengine_evaluate_all(this.__wbg_ptr, ptr0, len0, ptr1, len1);
+        var ptr3 = ret[0];
+        var len3 = ret[1];
         if (ret[3]) {
-          ptr2 = 0;
-          len2 = 0;
+          ptr3 = 0;
+          len3 = 0;
           throw takeFromExternrefTable0(ret[2]);
         }
-        deferred3_0 = ptr2;
-        deferred3_1 = len2;
-        return getStringFromWasm0(ptr2, len2);
+        deferred4_0 = ptr3;
+        deferred4_1 = len3;
+        return getStringFromWasm0(ptr3, len3);
       } finally {
-        wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
+        wasm.__wbindgen_free(deferred4_0, deferred4_1, 1);
       }
     }
     /**
      * Evaluate a single cell's formula.
-     * `cells_json` is the cells object: { "0": { "0": { "value": "...", "data_type": "..." }, ... }, ... }
-     * Returns JSON: { "value": "...", "display": "..." }
+     * `all_sheets_json` is: { "SheetName": { "row": { "col": { "value": "...", "data_type": "..." } } } }
+     * `active_sheet` is the name of the sheet containing the cell.
      * @param {number} row
      * @param {number} col
-     * @param {string} cells_json
+     * @param {string} all_sheets_json
+     * @param {string} active_sheet
      * @returns {string}
      */
-    evaluate_cell(row, col, cells_json) {
-      let deferred3_0;
-      let deferred3_1;
+    evaluate_cell(row, col, all_sheets_json, active_sheet) {
+      let deferred4_0;
+      let deferred4_1;
       try {
-        const ptr0 = passStringToWasm0(cells_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const ptr0 = passStringToWasm0(all_sheets_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
         const len0 = WASM_VECTOR_LEN;
-        const ret = wasm.formulaengine_evaluate_cell(this.__wbg_ptr, row, col, ptr0, len0);
-        var ptr2 = ret[0];
-        var len2 = ret[1];
+        const ptr1 = passStringToWasm0(active_sheet, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ret = wasm.formulaengine_evaluate_cell(this.__wbg_ptr, row, col, ptr0, len0, ptr1, len1);
+        var ptr3 = ret[0];
+        var len3 = ret[1];
         if (ret[3]) {
-          ptr2 = 0;
-          len2 = 0;
+          ptr3 = 0;
+          len3 = 0;
           throw takeFromExternrefTable0(ret[2]);
         }
-        deferred3_0 = ptr2;
-        deferred3_1 = len2;
-        return getStringFromWasm0(ptr2, len2);
+        deferred4_0 = ptr3;
+        deferred4_1 = len3;
+        return getStringFromWasm0(ptr3, len3);
       } finally {
-        wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
+        wasm.__wbindgen_free(deferred4_0, deferred4_1, 1);
       }
     }
     /**
@@ -148,6 +156,19 @@
       this.__wbg_ptr = ret >>> 0;
       FormulaEngineFinalization.register(this, this.__wbg_ptr, this);
       return this;
+    }
+    /**
+     * Register named ranges from the workbook model.
+     * `json` is an array of { name, formula, local_sheet_id?, hidden? } objects.
+     * @param {string} json
+     */
+    set_named_ranges(json) {
+      const ptr0 = passStringToWasm0(json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+      const len0 = WASM_VECTOR_LEN;
+      const ret = wasm.formulaengine_set_named_ranges(this.__wbg_ptr, ptr0, len0);
+      if (ret[1]) {
+        throw takeFromExternrefTable0(ret[0]);
+      }
     }
   };
   if (Symbol.dispose) FormulaEngine.prototype[Symbol.dispose] = FormulaEngine.prototype.free;
@@ -261,7 +282,7 @@
       }
     }
     constructor() {
-      const ret = wasm.tableops_new();
+      const ret = wasm.contextmenumanager_new();
       this.__wbg_ptr = ret >>> 0;
       TableOpsFinalization.register(this, this.__wbg_ptr, this);
       return this;
@@ -500,7 +521,7 @@
       }
     }
     constructor() {
-      const ret = wasm.contextmenumanager_new();
+      const ret = wasm.viewportmanager_new();
       this.__wbg_ptr = ret >>> 0;
       ViewportManagerFinalization.register(this, this.__wbg_ptr, this);
       return this;
@@ -813,7 +834,7 @@
     return __wbg_finalize_init(instance, module);
   }
 
-  // media/renderer.ts
+  // renderer.ts
   var TABLE_COLORS = {
     // --- Light styles (1-21): 3 groups of 7 accent colors, increasingly visible banding ---
     // Group 1 (1-7): very subtle banding
@@ -891,7 +912,7 @@
     if (styleName && TABLE_COLORS[styleName]) return TABLE_COLORS[styleName];
     return DEFAULT_TABLE_COLORS;
   }
-  var CanvasRenderer = class {
+  var _CanvasRenderer = class _CanvasRenderer {
     constructor(container) {
       this.width = 0;
       this.height = 0;
@@ -910,6 +931,13 @@
       this.selectedCell = null;
       this.selectionRange = null;
       this._isDragging = false;
+      // Internal clipboard (preserves styles, formulas, column widths)
+      this._internalClipboard = null;
+      // Fill handle drag state
+      this._fillDragging = false;
+      this._fillDragOrigin = null;
+      this._fillDragTarget = null;
+      this._fillDragDirection = null;
       // Inline edit state
       this.editInput = null;
       this.editingCell = null;
@@ -933,6 +961,22 @@
       this._filterButtons = [];
       // Formula display cache: "row:col" -> display string
       this.formulaResults = {};
+      // Data validation: "row:col" -> DataValidationDef (precomputed map for O(1) lookup)
+      this._validationOfCell = /* @__PURE__ */ new Map();
+      // Invalid cells (cells with validation rules that currently fail): "row:col" set
+      this._invalidCells = /* @__PURE__ */ new Set();
+      // Show/hide the invalid cell circle overlay
+      this._showInvalidCircles = false;
+      // Tooltip div for input messages
+      this._validationTooltip = null;
+      // Dropdown overlay for list validations
+      this._validationDropdown = null;
+      // Hyperlinks: "row:col" -> HyperlinkDef (precomputed map for O(1) lookup)
+      this._hyperlinkOfCell = /* @__PURE__ */ new Map();
+      // Hyperlink tooltip div
+      this._hyperlinkTooltip = null;
+      // Callback fired on Ctrl+Click of a hyperlink cell
+      this.onHyperlinkClick = null;
       // Merged cells: array of ranges
       this.mergedCells = [];
       // Per-column widths and per-row heights (sparse, only overrides)
@@ -1045,6 +1089,31 @@
       this.canvas.setAttribute("tabindex", "0");
       this.canvas.style.cursor = "cell";
       this.canvas.addEventListener("keydown", (e) => this.handleKeyDown(e));
+      this._fillHandleEl = document.createElement("div");
+      this._fillHandleEl.style.cssText = [
+        "position:absolute",
+        "width:8px",
+        "height:8px",
+        "background:#0078d7",
+        "border:1px solid #fff",
+        "cursor:" + _CanvasRenderer.FILL_CURSOR,
+        "pointer-events:auto",
+        "display:none",
+        "z-index:5",
+        "box-sizing:border-box"
+      ].join(";");
+      this._fillHandleEl.addEventListener("mousedown", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (!this.selectionRange || this._formulaMode) return;
+        this._fillDragging = true;
+        this._fillDragOrigin = this.normalizeRange(this.selectionRange);
+        this._fillDragTarget = null;
+        this._fillDragDirection = null;
+        this.canvas.style.cursor = _CanvasRenderer.FILL_CURSOR;
+        this._fillHandleEl.style.pointerEvents = "none";
+      });
+      this._wrapper.appendChild(this._fillHandleEl);
     }
     /** Update the HTML horizontal scrollbar thumb position and size */
     updateHScrollbar() {
@@ -1076,6 +1145,9 @@
       this._activeFilters.clear();
       this._clearFilterButtons();
       this._clearCfCache();
+      this._validationOfCell.clear();
+      this._invalidCells.clear();
+      this._hyperlinkOfCell.clear();
       this._layoutDirty = true;
       this._syncFromActiveSheet();
       this._loading = false;
@@ -1091,7 +1163,7 @@
       this.render();
       this.updateHScrollbar();
     }
-    /** Sync tables, mergedCells, colWidths, rowHeights from the active sheet */
+    /** Sync tables, mergedCells, colWidths, rowHeights, and validations from the active sheet */
     _syncFromActiveSheet() {
       const sheet = this.data?.sheets?.[this._activeSheetIndex];
       this.tables = sheet?.tables ?? [];
@@ -1113,6 +1185,8 @@
           this.rowHeights[Number(k)] = v;
         }
       }
+      this._buildValidationMap();
+      this._buildHyperlinkMap();
     }
     getActiveSheetIndex() {
       return this._activeSheetIndex;
@@ -1158,6 +1232,11 @@
       this._activeFilters.clear();
       this._clearFilterButtons();
       this._clearCfCache();
+      this._validationOfCell.clear();
+      this._invalidCells.clear();
+      this._hyperlinkOfCell.clear();
+      this._hideHyperlinkTooltip();
+      this._hideValidationTooltip();
       this._layoutDirty = true;
       this._syncFromActiveSheet();
       this.cancelCellEdit();
@@ -1290,6 +1369,37 @@
     }
     getSelectedRange() {
       return this.selectionRange;
+    }
+    /** Compute aggregate statistics (sum, avg, count, min, max) for the current selection. */
+    getSelectionStats() {
+      if (!this.selectionRange || !this.data?.sheets?.[this._activeSheetIndex]) return null;
+      const sheet = this.data.sheets[this._activeSheetIndex];
+      const { startRow, startCol, endRow, endCol } = this.normalizeRange(this.selectionRange);
+      let sum = 0, count = 0, countAll = 0;
+      let min = Infinity, max = -Infinity;
+      for (let r = startRow; r <= endRow; r++) {
+        for (let c = startCol; c <= endCol; c++) {
+          const frKey = `${r}:${c}`;
+          const frEntry = this.formulaResults?.[frKey];
+          const rawValue = frEntry !== void 0 ? frEntry.numeric !== null ? String(frEntry.numeric) : frEntry.display : sheet.cells?.[r]?.[c]?.value ?? "";
+          if (rawValue.trim() !== "") countAll++;
+          const n = parseFloat(rawValue);
+          if (!isNaN(n)) {
+            sum += n;
+            if (n < min) min = n;
+            if (n > max) max = n;
+            count++;
+          }
+        }
+      }
+      return {
+        sum,
+        avg: count > 0 ? sum / count : 0,
+        count,
+        countAll,
+        min: count > 0 ? min : 0,
+        max: count > 0 ? max : 0
+      };
     }
     selectAll() {
       this.selectedCell = { row: 0, col: 0 };
@@ -1543,6 +1653,51 @@
       }
       this.render();
     }
+    /** Return the merged style for a single cell (overlay on top of model style). */
+    getStyleAt(row, col) {
+      const sheet = this.data?.sheets?.[this._activeSheetIndex];
+      const modelStyle = sheet?.cells?.[row]?.[col]?.style;
+      const overlay = this.styles[row]?.[col] ?? {};
+      const base = {};
+      if (modelStyle) {
+        if (modelStyle.bold != null) base.bold = modelStyle.bold;
+        if (modelStyle.italic != null) base.italic = modelStyle.italic;
+        if (modelStyle.underline != null) base.underline = modelStyle.underline;
+        if (modelStyle.font_size != null) base.fontSize = modelStyle.font_size;
+        if (modelStyle.font_family != null) base.fontFamily = modelStyle.font_family;
+        if (modelStyle.text_color != null) base.textColor = modelStyle.text_color;
+        if (modelStyle.fill_color != null) base.fillColor = modelStyle.fill_color;
+        if (modelStyle.alignment != null) base.alignment = modelStyle.alignment;
+        if (modelStyle.number_format != null) base.numberFormat = modelStyle.number_format;
+        if (modelStyle.wrap_text != null) base.wrapText = modelStyle.wrap_text;
+      }
+      return { ...base, ...overlay };
+    }
+    /** Apply a full CellStyle object to the current selection in one shot. */
+    applyStyle(style) {
+      if (!this.selectionRange) return;
+      this.pushUndo();
+      const { startRow, startCol, endRow, endCol } = this.normalizeRange(this.selectionRange);
+      for (let r = startRow; r <= endRow; r++) {
+        if (!this.styles[r]) this.styles[r] = {};
+        for (let c = startCol; c <= endCol; c++) {
+          if (!this.styles[r][c]) this.styles[r][c] = {};
+          const s = this.styles[r][c];
+          if (style.bold !== void 0) s.bold = style.bold;
+          if (style.italic !== void 0) s.italic = style.italic;
+          if (style.underline !== void 0) s.underline = style.underline;
+          if (style.strikethrough !== void 0) s.strikethrough = style.strikethrough;
+          if (style.fontFamily !== void 0) s.fontFamily = style.fontFamily;
+          if (style.fontSize !== void 0) s.fontSize = style.fontSize;
+          if (style.textColor !== void 0) s.textColor = style.textColor;
+          if ("fillColor" in style) s.fillColor = style.fillColor;
+          if (style.alignment !== void 0) s.alignment = style.alignment;
+          if ("numberFormat" in style) s.numberFormat = style.numberFormat;
+          if (style.wrapText !== void 0) s.wrapText = style.wrapText;
+        }
+      }
+      this.render();
+    }
     // --- View Toggles ---
     toggleGridlines() {
       this._showGridlines = !this._showGridlines;
@@ -1626,6 +1781,45 @@
       }
       return lines.join("\n");
     }
+    /** Copy selection to internal clipboard (preserving styles/formulas) and return TSV for system clipboard. */
+    copySelectionToClipboard(isCut) {
+      if (!this.selectionRange || !this.data?.sheets?.[this._activeSheetIndex]) return "";
+      const sheet = this.data.sheets[this._activeSheetIndex];
+      const norm = this.normalizeRange(this.selectionRange);
+      const { startRow, startCol, endRow, endCol } = norm;
+      const cells = [];
+      const lines = [];
+      for (let r = startRow; r <= endRow; r++) {
+        const rowCells = [];
+        const tsvCells = [];
+        for (let c = startCol; c <= endCol; c++) {
+          const cell = sheet.cells?.[r]?.[c];
+          const style = this.getCellStyle(r, c);
+          rowCells.push({
+            value: cell?.value ?? "",
+            dataType: cell?.data_type ?? "s",
+            style: style ? { ...style } : void 0
+          });
+          tsvCells.push(cell?.value ?? "");
+        }
+        cells.push(rowCells);
+        lines.push(tsvCells.join("	"));
+      }
+      const colWidths = [];
+      for (let c = startCol; c <= endCol; c++) {
+        colWidths.push(this.colWidths[c] ?? this.colWidth);
+      }
+      const rowHeights = [];
+      for (let r = startRow; r <= endRow; r++) {
+        rowHeights.push(this.rowHeights[r] ?? this.rowHeight);
+      }
+      this._internalClipboard = { cells, colWidths, rowHeights, sourceRange: norm, isCut };
+      return lines.join("\n");
+    }
+    /** Get the internal clipboard (for use by paste special dialog). */
+    getInternalClipboard() {
+      return this._internalClipboard;
+    }
     pasteData(text) {
       if (!this.selectedCell || !this.data?.sheets?.[this._activeSheetIndex]) return;
       this.pushUndo();
@@ -1645,6 +1839,89 @@
           if (row >= sheet.row_count) sheet.row_count = row + 1;
           if (col >= sheet.col_count) sheet.col_count = col + 1;
         }
+      }
+      this.render();
+    }
+    /** Paste from internal clipboard using the given options. Falls back to plain pasteData when no internal clipboard exists. */
+    pasteSpecial(options) {
+      if (!this.selectedCell || !this.data?.sheets?.[this._activeSheetIndex]) return;
+      const clip = this._internalClipboard;
+      if (!clip) return;
+      this.pushUndo();
+      const sheet = this.data.sheets[this._activeSheetIndex];
+      const destRow = this.selectedCell.row;
+      const destCol = this.selectedCell.col;
+      const srcRows = clip.cells.length;
+      const srcCols = srcRows > 0 ? clip.cells[0].length : 0;
+      if (options.what === "colWidths") {
+        for (let c = 0; c < clip.colWidths.length; c++) {
+          this.setColWidth(destCol + c, clip.colWidths[c]);
+        }
+        this.render();
+        return;
+      }
+      const getDestCoords = (srcR, srcC) => {
+        if (options.transpose) {
+          return { row: destRow + srcC, col: destCol + srcR };
+        }
+        return { row: destRow + srcR, col: destCol + srcC };
+      };
+      const applyOperation = (existing, pasted, op) => {
+        if (op === "none") return pasted;
+        const a = parseFloat(existing);
+        const b = parseFloat(pasted);
+        if (isNaN(a) || isNaN(b)) return pasted;
+        switch (op) {
+          case "add":
+            return String(a + b);
+          case "subtract":
+            return String(a - b);
+          case "multiply":
+            return String(a * b);
+          case "divide":
+            return b !== 0 ? String(a / b) : existing;
+        }
+      };
+      for (let r = 0; r < srcRows; r++) {
+        for (let c = 0; c < srcCols; c++) {
+          const srcCell = clip.cells[r][c];
+          if (options.skipBlanks && srcCell.value.trim() === "") continue;
+          const { row, col } = getDestCoords(r, c);
+          if (!sheet.cells[row]) sheet.cells[row] = {};
+          if (options.what === "formats") {
+            if (srcCell.style) {
+              if (!this.styles[row]) this.styles[row] = {};
+              this.styles[row][col] = { ...srcCell.style };
+            }
+          } else {
+            const existingVal = sheet.cells[row]?.[col]?.value ?? "";
+            let newVal = srcCell.value;
+            if (options.what === "values" && newVal.startsWith("=")) {
+              const res = this.formulaResults?.[`${this._activeSheetIndex},${r + clip.sourceRange.startRow},${c + clip.sourceRange.startCol}`];
+              newVal = res !== void 0 ? String(res) : "";
+            }
+            newVal = applyOperation(existingVal, newVal, options.operation);
+            const dataType = newVal.startsWith("=") ? "f" : newVal.trim() !== "" && !isNaN(Number(newVal)) ? "n" : "s";
+            sheet.cells[row][col] = { value: newVal, data_type: dataType };
+            if (options.what === "all" && srcCell.style) {
+              if (!this.styles[row]) this.styles[row] = {};
+              this.styles[row][col] = { ...srcCell.style };
+            }
+          }
+          if (row >= sheet.row_count) sheet.row_count = row + 1;
+          if (col >= sheet.col_count) sheet.col_count = col + 1;
+        }
+      }
+      if (clip.isCut && options.what !== "formats") {
+        const { startRow, startCol, endRow, endCol } = clip.sourceRange;
+        for (let r = startRow; r <= endRow; r++) {
+          for (let c = startCol; c <= endCol; c++) {
+            if (sheet.cells[r]?.[c]) {
+              sheet.cells[r][c] = { value: "", data_type: "s" };
+            }
+          }
+        }
+        this._internalClipboard = null;
       }
       this.render();
     }
@@ -1733,9 +2010,27 @@
           }
         }
       }
+      const arrowHit = this._hitTestValidationArrow(mx, my);
+      if (arrowHit) {
+        e.preventDefault();
+        this.commitCellEdit();
+        this.selectedCell = arrowHit;
+        this.selectionRange = { startRow: arrowHit.row, startCol: arrowHit.col, endRow: arrowHit.row, endCol: arrowHit.col };
+        if (this.onSelectionChanged) this.onSelectionChanged(arrowHit.row, arrowHit.col);
+        this.showValidationDropdown(arrowHit.row, arrowHit.col);
+        this.render();
+        return;
+      }
       const cell = this.hitTestCell(e);
       if (!cell) return;
       const { row, col } = cell;
+      if ((e.ctrlKey || e.metaKey) && this.onHyperlinkClick) {
+        const link = this._hyperlinkOfCell.get(`${row}:${col}`);
+        if (link) {
+          this.onHyperlinkClick(link.url, link.is_internal);
+          return;
+        }
+      }
       if (this._formulaMode) {
         this._formulaDragAnchor = { row, col };
         this._formulaDragging = true;
@@ -1764,8 +2059,380 @@
           this.selectedCell.col
         );
       }
+      const dvRule = this.getValidationForCell(this.selectedCell.row, this.selectedCell.col);
+      if (dvRule) {
+        this._showValidationTooltip(this.selectedCell.row, this.selectedCell.col, dvRule);
+      } else {
+        this._hideValidationTooltip();
+      }
       this.render();
     }
+    // ── Date serial helpers (Excel 1900 epoch, Lotus leap-year bug) ───────────
+    static _isLeapYear(y) {
+      return y % 4 === 0 && y % 100 !== 0 || y % 400 === 0;
+    }
+    static _daysInMonth(y, m) {
+      const d = [0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+      if (m === 2 && _CanvasRenderer._isLeapYear(y)) return 29;
+      return d[m];
+    }
+    static _dateToSerial(year, month, day) {
+      let serial = 0;
+      for (let y = 1900; y < year; y++) {
+        serial += _CanvasRenderer._isLeapYear(y) ? 366 : 365;
+      }
+      const dim = [0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+      for (let m = 1; m < month; m++) {
+        serial += m === 2 && _CanvasRenderer._isLeapYear(year) ? 29 : dim[m];
+      }
+      serial += day;
+      if (year > 1900 || year === 1900 && month > 2) serial++;
+      return serial;
+    }
+    static _serialToDate(serial) {
+      let n = Math.floor(serial);
+      if (n >= 60) n--;
+      let year = 1900;
+      while (true) {
+        const diy = _CanvasRenderer._isLeapYear(year) ? 366 : 365;
+        if (n <= diy) break;
+        n -= diy;
+        year++;
+      }
+      let month = 1;
+      while (month <= 12) {
+        const dim = _CanvasRenderer._daysInMonth(year, month);
+        if (n <= dim) break;
+        n -= dim;
+        month++;
+      }
+      return [year, month, n];
+    }
+    /** Returns true if the number format string looks like a date format. */
+    static _isDateFormat(fmt) {
+      if (!fmt) return false;
+      const f = fmt.toLowerCase();
+      return /[ymd]/.test(f) && !/[#0]/.test(f);
+    }
+    // ── Pattern detection ─────────────────────────────────────────────────────
+    _detectFillPattern(cells) {
+      if (cells.length === 0) return { type: "copy", values: [] };
+      const firstVal = cells[0].value.trim();
+      for (let li = 0; li < _CanvasRenderer.FILL_LISTS.length; li++) {
+        const list = _CanvasRenderer.FILL_LISTS[li];
+        const idx = list.findIndex((v) => v.toLowerCase() === firstVal.toLowerCase());
+        if (idx !== -1) {
+          let match = true;
+          for (let i = 1; i < cells.length; i++) {
+            const expected = list[(idx + i) % list.length];
+            if (cells[i].value.trim().toLowerCase() !== expected.toLowerCase()) {
+              match = false;
+              break;
+            }
+          }
+          if (match) return { type: "customList", listIndex: li, startOffset: idx };
+        }
+      }
+      const nums = cells.map((c) => Number(c.value));
+      const allNumeric = cells.every((c) => c.value.trim() !== "" && !isNaN(Number(c.value)));
+      if (allNumeric && cells.length >= 1) {
+        if (cells.length === 1) {
+          const fmt = cells[0].style?.number_format;
+          if (_CanvasRenderer._isDateFormat(fmt)) {
+            return { type: "date", startSerial: nums[0], stepDays: 1, increment: "day" };
+          }
+          return { type: "copy", values: cells };
+        }
+        const step = nums[1] - nums[0];
+        const isUniform = nums.every((n, i) => i === 0 || Math.abs(n - nums[i - 1] - step) < 1e-9);
+        if (isUniform) {
+          const fmt = cells[0].style?.number_format;
+          if (_CanvasRenderer._isDateFormat(fmt) && Number.isInteger(step)) {
+            return { type: "date", startSerial: nums[nums.length - 1], stepDays: step, increment: "day" };
+          }
+          return { type: "number", start: nums[nums.length - 1], step };
+        }
+      }
+      const textNumRx = /^(.*?)(\d+)(\D*)$/;
+      if (cells.length >= 1) {
+        const m0 = textNumRx.exec(cells[0].value);
+        if (m0) {
+          const prefix = m0[1];
+          const suffix = m0[3];
+          const startN = parseInt(m0[2], 10);
+          if (cells.length === 1) {
+            return { type: "textNumber", prefix, suffix, start: startN, step: 1 };
+          }
+          const m1 = textNumRx.exec(cells[1].value);
+          if (m1 && m1[1] === prefix && m1[3] === suffix) {
+            const step = parseInt(m1[2], 10) - startN;
+            return { type: "textNumber", prefix, suffix, start: parseInt(cells[cells.length - 1].value.match(textNumRx)[2], 10), step };
+          }
+        }
+      }
+      return { type: "copy", values: cells };
+    }
+    // ── Series generation ──────────────────────────────────────────────────────
+    _generateFillValues(pattern, count, direction) {
+      const reverse = direction === "up" || direction === "left";
+      const results = [];
+      const sign2 = reverse ? -1 : 1;
+      for (let i = 0; i < count; i++) {
+        const idx = i + 1;
+        switch (pattern.type) {
+          case "number": {
+            const val = (pattern.start ?? 0) + sign2 * (pattern.step ?? 1) * idx;
+            results.push({ value: String(val), dataType: "n" });
+            break;
+          }
+          case "date": {
+            const base = pattern.startSerial ?? 0;
+            const step = sign2 * (pattern.stepDays ?? 1);
+            let nextSerial = base + step * idx;
+            if (pattern.increment === "weekday") {
+              let s = base;
+              for (let w = 0; w < idx; w++) {
+                s += sign2;
+                const [y, mo, d] = _CanvasRenderer._serialToDate(s);
+                const jsDate = new Date(y, mo - 1, d);
+                while (jsDate.getDay() === 0 || jsDate.getDay() === 6) {
+                  s += sign2;
+                  const [y2, mo2, d2] = _CanvasRenderer._serialToDate(s);
+                  jsDate.setFullYear(y2, mo2 - 1, d2);
+                }
+              }
+              nextSerial = s;
+            } else if (pattern.increment === "month") {
+              const [y, mo, d] = _CanvasRenderer._serialToDate(base);
+              const totalMonths = (y - 1900) * 12 + (mo - 1) + sign2 * idx;
+              const newYear = 1900 + Math.floor(totalMonths / 12);
+              const newMonth = (totalMonths % 12 + 12) % 12 + 1;
+              const maxDay = _CanvasRenderer._daysInMonth(newYear, newMonth);
+              nextSerial = _CanvasRenderer._dateToSerial(newYear, newMonth, Math.min(d, maxDay));
+            } else if (pattern.increment === "year") {
+              const [y, mo, d] = _CanvasRenderer._serialToDate(base);
+              const newYear = y + sign2 * idx;
+              const maxDay = _CanvasRenderer._daysInMonth(newYear, mo);
+              nextSerial = _CanvasRenderer._dateToSerial(newYear, mo, Math.min(d, maxDay));
+            }
+            results.push({ value: String(nextSerial), dataType: "n" });
+            break;
+          }
+          case "textNumber": {
+            const val = (pattern.start ?? 0) + sign2 * (pattern.step ?? 1) * idx;
+            const numStr = String(Math.abs(val));
+            results.push({ value: `${pattern.prefix ?? ""}${numStr}${pattern.suffix ?? ""}`, dataType: "s" });
+            break;
+          }
+          case "customList": {
+            const list = _CanvasRenderer.FILL_LISTS[pattern.listIndex ?? 0];
+            const off = (pattern.startOffset ?? 0) + sign2 * idx;
+            const normalized = (off % list.length + list.length) % list.length;
+            results.push({ value: list[normalized], dataType: "s" });
+            break;
+          }
+          case "copy":
+          default: {
+            const srcValues = pattern.values ?? [];
+            if (srcValues.length === 0) {
+              results.push({ value: "", dataType: "s" });
+            } else {
+              const src = srcValues[i % srcValues.length];
+              results.push({ value: src.value, dataType: src.dataType, style: src.style });
+            }
+            break;
+          }
+        }
+      }
+      return results;
+    }
+    // ── Apply fill ─────────────────────────────────────────────────────────────
+    _executeFill(origin, target, direction) {
+      if (!this.data?.sheets?.[this._activeSheetIndex]) return;
+      this.pushUndo();
+      const sheet = this.data.sheets[this._activeSheetIndex];
+      const isVertical = direction === "down" || direction === "up";
+      if (isVertical) {
+        for (let c = origin.startCol; c <= origin.endCol; c++) {
+          const srcCells = [];
+          for (let r = origin.startRow; r <= origin.endRow; r++) {
+            const cd = sheet.cells?.[r]?.[c];
+            srcCells.push({
+              value: cd?.value ?? "",
+              dataType: cd?.data_type ?? "s",
+              style: cd?.style
+            });
+          }
+          const pattern = this._detectFillPattern(srcCells);
+          const count = target.endRow - target.startRow + 1;
+          const filled = this._generateFillValues(pattern, count, direction);
+          for (let i = 0; i < count; i++) {
+            const r = target.startRow + i;
+            if (!sheet.cells[r]) sheet.cells[r] = {};
+            const src = srcCells[i % srcCells.length];
+            sheet.cells[r][c] = {
+              value: filled[i].value,
+              data_type: filled[i].dataType,
+              ...src.style ? { style: src.style } : {}
+            };
+            if (r >= sheet.row_count) sheet.row_count = r + 1;
+          }
+        }
+      } else {
+        for (let r = origin.startRow; r <= origin.endRow; r++) {
+          const srcCells = [];
+          for (let c = origin.startCol; c <= origin.endCol; c++) {
+            const cd = sheet.cells?.[r]?.[c];
+            srcCells.push({
+              value: cd?.value ?? "",
+              dataType: cd?.data_type ?? "s",
+              style: cd?.style
+            });
+          }
+          const pattern = this._detectFillPattern(srcCells);
+          const count = target.endCol - target.startCol + 1;
+          const filled = this._generateFillValues(pattern, count, direction);
+          for (let i = 0; i < count; i++) {
+            const c = target.startCol + i;
+            if (!sheet.cells[r]) sheet.cells[r] = {};
+            const src = srcCells[i % srcCells.length];
+            sheet.cells[r][c] = {
+              value: filled[i].value,
+              data_type: filled[i].dataType,
+              ...src.style ? { style: src.style } : {}
+            };
+            if (c >= sheet.col_count) sheet.col_count = c + 1;
+          }
+        }
+      }
+      this.selectionRange = {
+        startRow: Math.min(origin.startRow, target.startRow),
+        startCol: Math.min(origin.startCol, target.startCol),
+        endRow: Math.max(origin.endRow, target.endRow),
+        endCol: Math.max(origin.endCol, target.endCol)
+      };
+      this.render();
+    }
+    /** Fill the selection downward using the topmost row as source. */
+    fillDown() {
+      if (!this.selectionRange || !this.data?.sheets?.[this._activeSheetIndex]) return;
+      const norm = this.normalizeRange(this.selectionRange);
+      if (norm.endRow <= norm.startRow) return;
+      const origin = { startRow: norm.startRow, startCol: norm.startCol, endRow: norm.startRow, endCol: norm.endCol };
+      const target = { startRow: norm.startRow + 1, startCol: norm.startCol, endRow: norm.endRow, endCol: norm.endCol };
+      this._executeFill(origin, target, "down");
+      if (this.onCellEdit) this.onCellEdit(norm.startRow, norm.startCol, "");
+    }
+    /** Fill the selection rightward using the leftmost column as source. */
+    fillRight() {
+      if (!this.selectionRange || !this.data?.sheets?.[this._activeSheetIndex]) return;
+      const norm = this.normalizeRange(this.selectionRange);
+      if (norm.endCol <= norm.startCol) return;
+      const origin = { startRow: norm.startRow, startCol: norm.startCol, endRow: norm.endRow, endCol: norm.startCol };
+      const target = { startRow: norm.startRow, startCol: norm.startCol + 1, endRow: norm.endRow, endCol: norm.endCol };
+      this._executeFill(origin, target, "right");
+      if (this.onCellEdit) this.onCellEdit(norm.startRow, norm.startCol, "");
+    }
+    // ── Flash Fill ────────────────────────────────────────────────────────────
+    /**
+     * Flash Fill: detects a transformation pattern from filled example cells
+     * in the active column and applies it to unfilled cells in the same column.
+     * Works on the current selection column (or selectedCell column).
+     * Returns the number of cells filled, or 0 if no pattern found.
+     */
+    flashFill() {
+      if (!this.data?.sheets?.[this._activeSheetIndex] || !this.selectedCell) return 0;
+      const sheet = this.data.sheets[this._activeSheetIndex];
+      const targetCol = this.selectedCell.col;
+      const sourceCol = targetCol - 1;
+      if (sourceCol < 0) return 0;
+      const rows = [];
+      const maxRow = Math.max(sheet.row_count ?? 0, 50);
+      for (let r = 0; r < maxRow; r++) {
+        const srcVal = sheet.cells?.[r]?.[sourceCol]?.value ?? "";
+        const tgtVal = sheet.cells?.[r]?.[targetCol]?.value ?? null;
+        if (srcVal.trim() !== "") {
+          rows.push({ row: r, sourceVal: srcVal, targetVal: tgtVal?.trim() || null });
+        }
+      }
+      const examples = rows.filter((r) => r.targetVal !== null);
+      const toFill = rows.filter((r) => r.targetVal === null);
+      if (examples.length === 0 || toFill.length === 0) return 0;
+      const transforms = [
+        // Extract first word
+        (src) => src.split(/\s+/)[0] ?? null,
+        // Extract last word
+        (src) => src.split(/\s+/).pop() ?? null,
+        // Extract everything before first space
+        (src) => src.indexOf(" ") > 0 ? src.slice(0, src.indexOf(" ")) : null,
+        // Extract everything after last space
+        (src) => src.lastIndexOf(" ") > 0 ? src.slice(src.lastIndexOf(" ") + 1) : null,
+        // UPPERCASE
+        (src) => src.toUpperCase(),
+        // lowercase
+        (src) => src.toLowerCase(),
+        // Proper case
+        (src) => src.replace(/\b\w/g, (c) => c.toUpperCase()).replace(/\B\w/g, (c) => c.toLowerCase()),
+        // Reverse words
+        (src) => src.split(/\s+/).reverse().join(" ")
+      ];
+      let matched = null;
+      for (const t of transforms) {
+        const allMatch = examples.every((ex) => t(ex.sourceVal) === ex.targetVal);
+        if (allMatch) {
+          matched = t;
+          break;
+        }
+      }
+      if (!matched && targetCol >= 2) {
+        const adjCol = targetCol - 2;
+        const concatTransforms = [
+          (row) => {
+            const a = sheet.cells?.[row]?.[sourceCol]?.value ?? "";
+            const b = sheet.cells?.[row]?.[adjCol]?.value ?? "";
+            return a && b ? `${a} ${b}` : null;
+          },
+          (row) => {
+            const a = sheet.cells?.[row]?.[adjCol]?.value ?? "";
+            const b = sheet.cells?.[row]?.[sourceCol]?.value ?? "";
+            return a && b ? `${a} ${b}` : null;
+          }
+        ];
+        for (const ct of concatTransforms) {
+          const allMatch = examples.every((ex) => ct(ex.row) === ex.targetVal);
+          if (allMatch) {
+            this.pushUndo();
+            let filled2 = 0;
+            for (const fr of toFill) {
+              const val = ct(fr.row);
+              if (val !== null) {
+                if (!sheet.cells[fr.row]) sheet.cells[fr.row] = {};
+                sheet.cells[fr.row][targetCol] = { value: val, data_type: "s" };
+                filled2++;
+              }
+            }
+            this.render();
+            if (this.onCellEdit) this.onCellEdit(this.selectedCell.row, targetCol, "");
+            return filled2;
+          }
+        }
+      }
+      if (!matched) return 0;
+      this.pushUndo();
+      let filled = 0;
+      for (const fr of toFill) {
+        const val = matched(fr.sourceVal);
+        if (val !== null) {
+          if (!sheet.cells[fr.row]) sheet.cells[fr.row] = {};
+          sheet.cells[fr.row][targetCol] = { value: val, data_type: "s" };
+          filled++;
+        }
+      }
+      this.render();
+      if (this.onCellEdit) this.onCellEdit(this.selectedCell.row, targetCol, "");
+      return filled;
+    }
+    // ──────────────────────────────────────────────────────────────────────────
     /** Hit test vertical scrollbar area on canvas. */
     hitTestScrollbar(canvasX, canvasY) {
       const sb = this._scrollbarSize;
@@ -1832,23 +2499,55 @@
         this.render();
         return;
       }
-      if (!this._isDragging && !this._scrollbarDragging) {
+      if (!this._isDragging && !this._scrollbarDragging && !this._fillDragging) {
         const { x: mx, y: my } = this.mouseToCanvas(e);
         if (this.hitTestScrollbar(mx, my)) {
           this.canvas.style.cursor = "default";
+          this._hideHyperlinkTooltip();
         } else if (this._showHeaders) {
           const resizeTarget = this.hitTestResize(e);
           if (resizeTarget) {
             this.canvas.style.cursor = resizeTarget.type === "col" ? "col-resize" : "row-resize";
+            this._hideHyperlinkTooltip();
           } else if (my <= this.headerHeight && mx > this.headerWidth) {
             this.canvas.style.cursor = "pointer";
+            this._hideHyperlinkTooltip();
           } else if (mx <= this.headerWidth && my > this.headerHeight) {
             this.canvas.style.cursor = "pointer";
+            this._hideHyperlinkTooltip();
           } else {
-            this.canvas.style.cursor = "cell";
+            const hoverCell = this.hitTestCell(e);
+            if (hoverCell) {
+              const hl = this._hyperlinkOfCell.get(`${hoverCell.row}:${hoverCell.col}`);
+              if (hl) {
+                this.canvas.style.cursor = "pointer";
+                const tipText = (hl.tooltip ?? hl.url) + "\n\nCtrl+Click to follow link";
+                this._showHyperlinkTooltip(e.clientX, e.clientY, tipText);
+              } else {
+                this.canvas.style.cursor = "cell";
+                this._hideHyperlinkTooltip();
+              }
+            } else {
+              this.canvas.style.cursor = "cell";
+              this._hideHyperlinkTooltip();
+            }
           }
         } else {
-          this.canvas.style.cursor = "cell";
+          const hoverCell = this.hitTestCell(e);
+          if (hoverCell) {
+            const hl = this._hyperlinkOfCell.get(`${hoverCell.row}:${hoverCell.col}`);
+            if (hl) {
+              this.canvas.style.cursor = "pointer";
+              const tipText = (hl.tooltip ?? hl.url) + "\n\nCtrl+Click to follow link";
+              this._showHyperlinkTooltip(e.clientX, e.clientY, tipText);
+            } else {
+              this.canvas.style.cursor = "cell";
+              this._hideHyperlinkTooltip();
+            }
+          } else {
+            this.canvas.style.cursor = "cell";
+            this._hideHyperlinkTooltip();
+          }
         }
       }
       if (this._formulaDragging && this._formulaDragAnchor) {
@@ -1860,6 +2559,40 @@
             cell2.row,
             cell2.col
           );
+        }
+        return;
+      }
+      if (this._fillDragging && this._fillDragOrigin) {
+        this.canvas.style.cursor = _CanvasRenderer.FILL_CURSOR;
+        const cell2 = this.hitTestCell(e);
+        if (cell2) {
+          const orig = this._fillDragOrigin;
+          const dRow = Math.max(cell2.row - orig.endRow, orig.startRow - cell2.row);
+          const dCol = Math.max(cell2.col - orig.endCol, orig.startCol - cell2.col);
+          if (dRow >= dCol) {
+            if (cell2.row > orig.endRow) {
+              this._fillDragDirection = "down";
+              this._fillDragTarget = { startRow: orig.endRow + 1, startCol: orig.startCol, endRow: cell2.row, endCol: orig.endCol };
+            } else if (cell2.row < orig.startRow) {
+              this._fillDragDirection = "up";
+              this._fillDragTarget = { startRow: cell2.row, startCol: orig.startCol, endRow: orig.startRow - 1, endCol: orig.endCol };
+            } else {
+              this._fillDragDirection = null;
+              this._fillDragTarget = null;
+            }
+          } else {
+            if (cell2.col > orig.endCol) {
+              this._fillDragDirection = "right";
+              this._fillDragTarget = { startRow: orig.startRow, startCol: orig.endCol + 1, endRow: orig.endRow, endCol: cell2.col };
+            } else if (cell2.col < orig.startCol) {
+              this._fillDragDirection = "left";
+              this._fillDragTarget = { startRow: orig.startRow, startCol: cell2.col, endRow: orig.endRow, endCol: orig.startCol - 1 };
+            } else {
+              this._fillDragDirection = null;
+              this._fillDragTarget = null;
+            }
+          }
+          this.render();
         }
         return;
       }
@@ -1910,6 +2643,22 @@
         if (this.onFormulaRangeDragEnd) {
           this.onFormulaRangeDragEnd();
         }
+      }
+      if (this._fillDragging) {
+        this._fillDragging = false;
+        if (this._fillDragOrigin && this._fillDragTarget && this._fillDragDirection) {
+          this._executeFill(this._fillDragOrigin, this._fillDragTarget, this._fillDragDirection);
+          if (this.onCellEdit) {
+            this.onCellEdit(this._fillDragOrigin.startRow, this._fillDragOrigin.startCol, "");
+          }
+        }
+        this._fillDragOrigin = null;
+        this._fillDragTarget = null;
+        this._fillDragDirection = null;
+        this._fillHandleEl.style.pointerEvents = "auto";
+        this.canvas.style.cursor = "cell";
+        this.render();
+        return;
       }
       this._isDragging = false;
       this._headerDragMode = null;
@@ -2202,6 +2951,12 @@
             if (this.onSelectionChanged) {
               this.onSelectionChanged(newRow, newCol);
             }
+            const dvRuleKbd = this.getValidationForCell(newRow, newCol);
+            if (dvRuleKbd) {
+              this._showValidationTooltip(newRow, newCol, dvRuleKbd);
+            } else {
+              this._hideValidationTooltip();
+            }
           }
           this.render();
           return;
@@ -2381,7 +3136,9 @@
             if (cellStyle?.bold) fontStr = `bold ${fontStr}`;
             if (cellStyle?.italic) fontStr = `italic ${fontStr}`;
             this.ctx.font = fontStr;
-            this.ctx.fillStyle = cellStyle?.textColor || "#000";
+            const hyperlinkInfo = this._hyperlinkOfCell.get(`${r}:${c}`);
+            const textColor = cellStyle?.textColor || (hyperlinkInfo ? "#4a86e8" : "#000");
+            this.ctx.fillStyle = textColor;
             this.ctx.textAlign = cellStyle?.alignment || "left";
             this.ctx.save();
             this.ctx.beginPath();
@@ -2392,16 +3149,16 @@
             else if (cellStyle?.alignment === "right") textX = x + cellW - 4;
             const textY = y + cellH / 2;
             this.ctx.fillText(cellValue, textX, textY);
-            if (cellStyle?.underline) {
+            if (cellStyle?.underline || hyperlinkInfo) {
               const metrics = this.ctx.measureText(cellValue);
               const lineY = textY + fontSize * 0.15;
               this.ctx.beginPath();
-              this.ctx.strokeStyle = cellStyle.textColor || "#000";
+              this.ctx.strokeStyle = textColor;
               this.ctx.lineWidth = 1;
-              if (cellStyle.alignment === "center") {
+              if (cellStyle?.alignment === "center") {
                 this.ctx.moveTo(textX - metrics.width / 2, lineY);
                 this.ctx.lineTo(textX + metrics.width / 2, lineY);
-              } else if (cellStyle.alignment === "right") {
+              } else if (cellStyle?.alignment === "right") {
                 this.ctx.moveTo(textX - metrics.width, lineY);
                 this.ctx.lineTo(textX, lineY);
               } else {
@@ -2437,6 +3194,36 @@
             this.ctx.textAlign = "left";
             this.ctx.textBaseline = "middle";
             this.ctx.fillText(iconInfo.icon, x + 2, y + cellH / 2);
+            this.ctx.restore();
+          }
+          const dvInfo = this._validationOfCell.get(`${r}:${c}`);
+          if (dvInfo && dvInfo.validation_type === "list" && dvInfo.show_dropdown) {
+            const arrowW = 18;
+            const arrowX = x + cellW - arrowW;
+            const arrowY = y;
+            this.ctx.save();
+            this.ctx.fillStyle = "#888";
+            this.ctx.fillRect(arrowX, arrowY, arrowW, cellH);
+            this.ctx.fillStyle = "#fff";
+            const cx2 = arrowX + arrowW / 2;
+            const cy2 = arrowY + cellH / 2;
+            this.ctx.beginPath();
+            this.ctx.moveTo(cx2 - 4, cy2 - 2);
+            this.ctx.lineTo(cx2, cy2 + 2);
+            this.ctx.lineTo(cx2 + 4, cy2 - 2);
+            this.ctx.stroke();
+            this.ctx.restore();
+          }
+          if (this._showInvalidCircles && this._invalidCells.has(`${r}:${c}`)) {
+            this.ctx.save();
+            this.ctx.strokeStyle = "#ff0000";
+            this.ctx.lineWidth = 2;
+            this.ctx.setLineDash([4, 3]);
+            const pad = 2;
+            this.ctx.beginPath();
+            this.ctx.ellipse(x + cellW / 2, y + cellH / 2, cellW / 2 - pad, cellH / 2 - pad, 0, 0, Math.PI * 2);
+            this.ctx.stroke();
+            this.ctx.setLineDash([]);
             this.ctx.restore();
           }
         }
@@ -2691,12 +3478,33 @@
         this.ctx.lineWidth = 2;
         this.ctx.strokeRect(selX, selY, selW, selH);
         this.ctx.lineWidth = 1;
-        const handleSize = 6;
-        const handleX = selX + selW - handleSize / 2;
-        const handleY = selY + selH - handleSize / 2;
-        this.ctx.fillStyle = "#0078d7";
-        this.ctx.fillRect(handleX, handleY, handleSize, handleSize);
+        const handleHalf = 4;
+        const handleLeft = selX + selW - handleHalf;
+        const handleTop = selY + selH - handleHalf;
+        const inGrid = selX + selW > effHeaderWidth && selY + selH > effHeaderHeight;
+        if (inGrid && !this._formulaMode) {
+          this._fillHandleEl.style.left = `${handleLeft}px`;
+          this._fillHandleEl.style.top = `${handleTop}px`;
+          this._fillHandleEl.style.display = "block";
+        } else {
+          this._fillHandleEl.style.display = "none";
+        }
+        if (this._fillDragging && this._fillDragTarget) {
+          const t = this._fillDragTarget;
+          const tX = this.cx(t.startCol) - this.scrollLeft + effHeaderWidth;
+          const tY = this.ry(t.startRow) - this.scrollTop + effHeaderHeight;
+          const tW = this.cx(t.endCol + 1) - this.cx(t.startCol);
+          const tH = this.ry(t.endRow + 1) - this.ry(t.startRow);
+          this.ctx.setLineDash([4, 2]);
+          this.ctx.strokeStyle = "rgba(0, 120, 215, 0.7)";
+          this.ctx.lineWidth = 1.5;
+          this.ctx.strokeRect(tX, tY, tW, tH);
+          this.ctx.setLineDash([]);
+          this.ctx.lineWidth = 1;
+        }
         this.ctx.restore();
+      } else {
+        this._fillHandleEl.style.display = "none";
       }
       if (this._freezeRow > 0 || this._freezeCol > 0) {
         if (this._freezeRow > 0) {
@@ -3053,6 +3861,18 @@
     // --- Inline Cell Editing ---
     handleDoubleClick(e) {
       if (this._formulaMode) return;
+      if (this._showHeaders) {
+        const resizeTarget = this.hitTestResize(e);
+        if (resizeTarget) {
+          e.preventDefault();
+          if (resizeTarget.type === "col") {
+            this.autoFitColumn(resizeTarget.index);
+          } else {
+            this.autoFitRow(resizeTarget.index);
+          }
+          return;
+        }
+      }
       const { x, y } = this.mouseToCanvas(e);
       const effHeaderWidth = this._showHeaders ? this.headerWidth : 0;
       const effHeaderHeight = this._showHeaders ? this.headerHeight : 0;
@@ -3156,6 +3976,26 @@
       if (!this.editInput || !this.editingCell) return;
       const { row, col } = this.editingCell;
       const newValue = this.editInput.value;
+      const dvRule = this.getValidationForCell(row, col);
+      if (dvRule && dvRule.validation_type !== "any" && dvRule.show_error_message) {
+        if (!this._validateValue(newValue, dvRule)) {
+          this._showValidationError(dvRule).then((accept) => {
+            if (accept) {
+              this._doCommit(row, col, newValue);
+            } else {
+              if (this.editInput) {
+                this.editInput.style.display = "block";
+                this.editInput.focus();
+                this.editInput.select();
+              }
+            }
+          });
+          return;
+        }
+      }
+      this._doCommit(row, col, newValue);
+    }
+    _doCommit(row, col, newValue) {
       const dataType = newValue.startsWith("=") ? "s" : newValue.trim() !== "" && !isNaN(Number(newValue)) ? "n" : "s";
       this.updateCell(row, col, newValue, dataType);
       if (this.onCellEdit) {
@@ -3164,9 +4004,10 @@
       if (this.onInlineEditCommit) {
         this.onInlineEditCommit();
       }
-      this.editInput.style.display = "none";
+      if (this.editInput) this.editInput.style.display = "none";
       this.editingCell = null;
       this.canvas.focus();
+      if (this._showInvalidCircles) this.markInvalidCells();
     }
     cancelCellEdit() {
       if (!this.editInput) return;
@@ -3245,6 +4086,461 @@
       this._cfCache.clear();
       this._cfDataBars.clear();
       this._cfIcons.clear();
+    }
+    // -------------------------------------------------------------------------
+    // Data Validation
+    // -------------------------------------------------------------------------
+    /** Rebuild the validation map for the current sheet. Called from _syncFromActiveSheet. */
+    _buildValidationMap() {
+      this._validationOfCell.clear();
+      const sheet = this.data?.sheets?.[this._activeSheetIndex];
+      const rules = sheet?.data_validations ?? [];
+      for (const rule of rules) {
+        const parts = rule.sqref.split(/\s+/);
+        for (const part of parts) {
+          const colons = part.split(":");
+          if (colons.length === 2) {
+            const [r1, c1] = this.parseCfCellRef(colons[0]);
+            const [r2, c2] = this.parseCfCellRef(colons[1]);
+            const minR = Math.min(r1, r2), maxR = Math.max(r1, r2);
+            const minC = Math.min(c1, c2), maxC = Math.max(c1, c2);
+            for (let r = minR; r <= maxR; r++) {
+              for (let c = minC; c <= maxC; c++) {
+                this._validationOfCell.set(`${r}:${c}`, rule);
+              }
+            }
+          } else {
+            const [r, c] = this.parseCfCellRef(colons[0]);
+            this._validationOfCell.set(`${r}:${c}`, rule);
+          }
+        }
+      }
+    }
+    /** Get the validation rule for a specific cell (if any). */
+    getValidationForCell(row, col) {
+      return this._validationOfCell.get(`${row}:${col}`);
+    }
+    /** Get all validation rules for the current sheet. */
+    getValidations() {
+      const sheet = this.data?.sheets?.[this._activeSheetIndex];
+      return sheet?.data_validations ?? [];
+    }
+    /** Replace all validation rules for the current sheet and rebuild the map. */
+    setValidations(rules) {
+      const sheet = this.data?.sheets?.[this._activeSheetIndex];
+      if (!sheet) return;
+      sheet.data_validations = rules;
+      this._buildValidationMap();
+      if (this._showInvalidCircles) this.markInvalidCells();
+      this.render();
+    }
+    // ── Hyperlink Map ──────────────────────────────────────────────────────────
+    _buildHyperlinkMap() {
+      this._hyperlinkOfCell.clear();
+      const sheet = this.data?.sheets?.[this._activeSheetIndex];
+      if (!sheet?.hyperlinks) return;
+      for (const link of sheet.hyperlinks) {
+        const ref = link.cell_ref;
+        if (ref.includes(":")) {
+          const parts = ref.split(":");
+          const r1c1 = this._cellRefToRowCol(parts[0]);
+          const r2c2 = this._cellRefToRowCol(parts[1]);
+          if (r1c1 && r2c2) {
+            for (let r = r1c1[0]; r <= r2c2[0]; r++) {
+              for (let c = r1c1[1]; c <= r2c2[1]; c++) {
+                this._hyperlinkOfCell.set(`${r}:${c}`, link);
+              }
+            }
+          }
+        } else {
+          const rc = this._cellRefToRowCol(ref);
+          if (rc) this._hyperlinkOfCell.set(`${rc[0]}:${rc[1]}`, link);
+        }
+      }
+    }
+    _cellRefToRowCol(ref) {
+      const m = ref.toUpperCase().match(/^([A-Z]+)(\d+)$/);
+      if (!m) return null;
+      let col = 0;
+      for (const ch of m[1]) {
+        col = col * 26 + ch.charCodeAt(0) - 64;
+      }
+      const row = parseInt(m[2], 10) - 1;
+      return [row, col - 1];
+    }
+    /** Get the hyperlink for a specific cell (if any). */
+    getHyperlinkForCell(row, col) {
+      return this._hyperlinkOfCell.get(`${row}:${col}`);
+    }
+    /** Get all hyperlinks for the current sheet. */
+    getHyperlinks() {
+      const sheet = this.data?.sheets?.[this._activeSheetIndex];
+      return sheet?.hyperlinks ?? [];
+    }
+    /** Replace all hyperlinks for the current sheet and rebuild the map. */
+    setHyperlinks(links) {
+      const sheet = this.data?.sheets?.[this._activeSheetIndex];
+      if (!sheet) return;
+      sheet.hyperlinks = links;
+      this._buildHyperlinkMap();
+      this.render();
+    }
+    /** Add or update a hyperlink for a single cell. */
+    addHyperlink(link) {
+      const sheet = this.data?.sheets?.[this._activeSheetIndex];
+      if (!sheet) return;
+      if (!sheet.hyperlinks) sheet.hyperlinks = [];
+      sheet.hyperlinks = sheet.hyperlinks.filter(
+        (l) => l.cell_ref !== link.cell_ref
+      );
+      sheet.hyperlinks.push(link);
+      const rc = this._cellRefToRowCol(link.cell_ref.split(":")[0]);
+      if (rc) {
+        const [row, col] = rc;
+        const displayValue = link.display ?? link.url;
+        if (!sheet.cells) sheet.cells = {};
+        if (!sheet.cells[row]) sheet.cells[row] = {};
+        if (!sheet.cells[row][col]) sheet.cells[row][col] = { value: "", data_type: "s" };
+        const existingValue = sheet.cells[row][col].value ?? "";
+        if (existingValue === "" || link.display) {
+          sheet.cells[row][col] = { ...sheet.cells[row][col], value: displayValue, data_type: "s" };
+        }
+      }
+      this._buildHyperlinkMap();
+      this.render();
+    }
+    /** Remove the hyperlink on a specific cell (by row/col). */
+    removeHyperlinkAt(row, col) {
+      const sheet = this.data?.sheets?.[this._activeSheetIndex];
+      if (!sheet?.hyperlinks) return;
+      const key = `${row}:${col}`;
+      const link = this._hyperlinkOfCell.get(key);
+      if (!link) return;
+      sheet.hyperlinks = sheet.hyperlinks.filter(
+        (l) => l.cell_ref !== link.cell_ref
+      );
+      this._buildHyperlinkMap();
+      this.render();
+    }
+    // ── Hyperlink Tooltip ──────────────────────────────────────────────────────
+    _ensureHyperlinkTooltip() {
+      if (!this._hyperlinkTooltip) {
+        this._hyperlinkTooltip = document.createElement("div");
+        Object.assign(this._hyperlinkTooltip.style, {
+          position: "fixed",
+          zIndex: "9000",
+          background: "#1e1e1e",
+          color: "#ccc",
+          border: "1px solid #555",
+          borderRadius: "4px",
+          padding: "4px 8px",
+          fontSize: "12px",
+          pointerEvents: "none",
+          maxWidth: "320px",
+          wordBreak: "break-all",
+          display: "none"
+        });
+        document.body.appendChild(this._hyperlinkTooltip);
+      }
+      return this._hyperlinkTooltip;
+    }
+    _showHyperlinkTooltip(x, y, text) {
+      const tip = this._ensureHyperlinkTooltip();
+      tip.textContent = text;
+      tip.style.left = `${x + 12}px`;
+      tip.style.top = `${y + 12}px`;
+      tip.style.display = "block";
+    }
+    _hideHyperlinkTooltip() {
+      if (this._hyperlinkTooltip) this._hyperlinkTooltip.style.display = "none";
+    }
+    /** Validate a value against a DataValidationDef rule. Returns true if valid. */
+    _validateValue(value, rule) {
+      if (rule.validation_type === "any" || rule.validation_type === "") return true;
+      if (value.trim() === "") return rule.allow_blank;
+      switch (rule.validation_type) {
+        case "whole": {
+          const n = Number(value);
+          if (!Number.isInteger(n)) return false;
+          return this._checkNumericOp(n, rule);
+        }
+        case "decimal": {
+          const n = parseFloat(value);
+          if (isNaN(n)) return false;
+          return this._checkNumericOp(n, rule);
+        }
+        case "textLength": {
+          const len = value.length;
+          return this._checkNumericOp(len, rule);
+        }
+        case "list": {
+          if (!rule.formula1) return true;
+          if (rule.formula1.startsWith("=") || rule.formula1.includes("!") || rule.formula1.includes(":")) return true;
+          const items = rule.formula1.split(",").map((s) => s.trim().replace(/^"|"$/g, ""));
+          return items.includes(value);
+        }
+        case "date":
+        case "time": {
+          const n = parseFloat(value);
+          if (!isNaN(n)) return this._checkNumericOp(n, rule);
+          const d = Date.parse(value);
+          return !isNaN(d);
+        }
+        case "custom":
+          return true;
+        default:
+          return true;
+      }
+    }
+    /** Compare a numeric value against rule operator / formula1 / formula2. */
+    _checkNumericOp(n, rule) {
+      const v1 = parseFloat(rule.formula1 ?? "0");
+      const v2 = parseFloat(rule.formula2 ?? "0");
+      switch (rule.operator ?? "between") {
+        case "between":
+          return n >= v1 && n <= v2;
+        case "notBetween":
+          return n < v1 || n > v2;
+        case "equal":
+          return n === v1;
+        case "notEqual":
+          return n !== v1;
+        case "greaterThan":
+          return n > v1;
+        case "lessThan":
+          return n < v1;
+        case "greaterThanOrEqual":
+          return n >= v1;
+        case "lessThanOrEqual":
+          return n <= v1;
+        default:
+          return true;
+      }
+    }
+    /** Recompute invalid cells set from current sheet data. */
+    markInvalidCells() {
+      this._invalidCells.clear();
+      const sheet = this.data?.sheets?.[this._activeSheetIndex];
+      if (!sheet) return;
+      for (const [key, rule] of this._validationOfCell) {
+        const [rowStr, colStr] = key.split(":");
+        const row = Number(rowStr);
+        const col = Number(colStr);
+        const cellValue = sheet.cells?.[row]?.[col]?.value ?? "";
+        if (!this._validateValue(cellValue, rule)) {
+          this._invalidCells.add(key);
+        }
+      }
+    }
+    /** Toggle the red "circle invalid data" overlay. */
+    setShowInvalidCircles(show) {
+      this._showInvalidCircles = show;
+      if (show) this.markInvalidCells();
+      else this._invalidCells.clear();
+      this.render();
+    }
+    getShowInvalidCircles() {
+      return this._showInvalidCircles;
+    }
+    // -------------------------------------------------------------------------
+    // Validation Tooltip
+    // -------------------------------------------------------------------------
+    _ensureValidationTooltip() {
+      if (!this._validationTooltip) {
+        const el = document.createElement("div");
+        el.style.cssText = [
+          "position:absolute",
+          "z-index:9000",
+          "background:#fffde7",
+          "border:1px solid #f9c900",
+          "border-radius:3px",
+          "padding:6px 10px",
+          "font-size:12px",
+          "font-family:system-ui,-apple-system,sans-serif",
+          "pointer-events:none",
+          "box-shadow:0 2px 6px rgba(0,0,0,0.15)",
+          "max-width:260px",
+          "word-wrap:break-word",
+          "display:none"
+        ].join(";");
+        this._wrapper.appendChild(el);
+        this._validationTooltip = el;
+      }
+      return this._validationTooltip;
+    }
+    _showValidationTooltip(row, col, rule) {
+      if (!rule.show_input_message) return;
+      if (!rule.input_message && !rule.input_title) return;
+      const tooltip = this._ensureValidationTooltip();
+      const parts = [];
+      if (rule.input_title) parts.push(`<b>${this._escapeHtml(rule.input_title)}</b>`);
+      if (rule.input_message) parts.push(this._escapeHtml(rule.input_message).replace(/\n/g, "<br>"));
+      tooltip.innerHTML = parts.join("<br>");
+      const effHW = this._showHeaders ? this.headerWidth : 0;
+      const effHH = this._showHeaders ? this.headerHeight : 0;
+      const cellX = this.cx(col) - this.scrollLeft + effHW;
+      const cellY = this.ry(row) - this.scrollTop + effHH;
+      const cellH = this.rh(row);
+      tooltip.style.left = `${cellX}px`;
+      tooltip.style.top = `${cellY + cellH + 4}px`;
+      tooltip.style.display = "block";
+    }
+    _hideValidationTooltip() {
+      if (this._validationTooltip) this._validationTooltip.style.display = "none";
+    }
+    _escapeHtml(s) {
+      return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    }
+    // -------------------------------------------------------------------------
+    // Validation Error Dialog
+    // -------------------------------------------------------------------------
+    /** Show a validation error/warning/info dialog. Returns a promise resolving to whether to accept the value. */
+    _showValidationError(rule) {
+      return new Promise((resolve2) => {
+        const style = rule.error_style ?? "stop";
+        const title = rule.error_title || (style === "stop" ? "Invalid Input" : style === "warning" ? "Warning" : "Information");
+        const message = rule.error_message || "The value you entered is not valid.";
+        const overlay = document.createElement("div");
+        overlay.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,0.35);z-index:99998;display:flex;align-items:center;justify-content:center;";
+        const dialog = document.createElement("div");
+        dialog.style.cssText = "background:#fff;border-radius:6px;padding:20px 24px;min-width:280px;max-width:380px;box-shadow:0 8px 32px rgba(0,0,0,0.25);font-family:system-ui,-apple-system,sans-serif;";
+        const icon = style === "stop" ? "\u{1F6AB}" : style === "warning" ? "\u26A0\uFE0F" : "\u2139\uFE0F";
+        dialog.innerHTML = `
+                <div style="display:flex;align-items:flex-start;gap:12px;margin-bottom:14px;">
+                    <span style="font-size:22px;line-height:1;">${icon}</span>
+                    <div>
+                        <div style="font-weight:600;font-size:14px;margin-bottom:4px;">${this._escapeHtml(title)}</div>
+                        <div style="font-size:13px;color:#444;">${this._escapeHtml(message)}</div>
+                    </div>
+                </div>
+            `;
+        const buttonRow = document.createElement("div");
+        buttonRow.style.cssText = "display:flex;gap:8px;justify-content:flex-end;";
+        const makeBtn = (label, primary, action) => {
+          const btn = document.createElement("button");
+          btn.textContent = label;
+          btn.style.cssText = `padding:6px 16px;border-radius:4px;font-size:13px;cursor:pointer;border:1px solid ${primary ? "#0078d7" : "#ccc"};background:${primary ? "#0078d7" : "#fff"};color:${primary ? "#fff" : "#333"};`;
+          btn.addEventListener("click", () => {
+            document.body.removeChild(overlay);
+            action();
+          });
+          return btn;
+        };
+        if (style === "stop") {
+          buttonRow.appendChild(makeBtn("Retry", true, () => resolve2(false)));
+          buttonRow.appendChild(makeBtn("Cancel", false, () => resolve2(false)));
+        } else if (style === "warning") {
+          buttonRow.appendChild(makeBtn("Yes", false, () => resolve2(true)));
+          buttonRow.appendChild(makeBtn("No", true, () => resolve2(false)));
+          buttonRow.appendChild(makeBtn("Cancel", false, () => resolve2(false)));
+        } else {
+          buttonRow.appendChild(makeBtn("OK", true, () => resolve2(true)));
+        }
+        dialog.appendChild(buttonRow);
+        overlay.appendChild(dialog);
+        document.body.appendChild(overlay);
+      });
+    }
+    // -------------------------------------------------------------------------
+    // Validation Dropdown Overlay
+    // -------------------------------------------------------------------------
+    /** Show a dropdown overlay for list-validated cells. */
+    showValidationDropdown(row, col) {
+      const rule = this.getValidationForCell(row, col);
+      if (!rule || rule.validation_type !== "list" || !rule.formula1) return;
+      if (rule.formula1.startsWith("=") || rule.formula1.includes("!") || rule.formula1.includes(":")) {
+        if (this.onValidationDropdownClick) {
+          this.onValidationDropdownClick(row, col, [], rule.formula1);
+        }
+        return;
+      }
+      const items = rule.formula1.split(",").map((s) => s.trim().replace(/^"|"$/g, ""));
+      this._showListDropdown(row, col, items);
+    }
+    _showListDropdown(row, col, items) {
+      this._hideValidationDropdown();
+      const dropdown = document.createElement("div");
+      dropdown.style.cssText = [
+        "position:absolute",
+        "z-index:9001",
+        "background:#fff",
+        "border:1px solid #bbb",
+        "border-radius:3px",
+        "box-shadow:0 4px 12px rgba(0,0,0,0.15)",
+        "max-height:200px",
+        "overflow-y:auto",
+        "font-size:13px",
+        "font-family:system-ui,-apple-system,sans-serif"
+      ].join(";");
+      for (const item of items) {
+        const opt = document.createElement("div");
+        opt.textContent = item;
+        opt.style.cssText = "padding:6px 12px;cursor:pointer;";
+        opt.addEventListener("mouseenter", () => {
+          opt.style.background = "#e8f0fe";
+        });
+        opt.addEventListener("mouseleave", () => {
+          opt.style.background = "";
+        });
+        opt.addEventListener("mousedown", (e) => {
+          e.preventDefault();
+          this._hideValidationDropdown();
+          const sheet = this.data?.sheets?.[this._activeSheetIndex];
+          if (!sheet) return;
+          if (!sheet.cells[row]) sheet.cells[row] = {};
+          sheet.cells[row][col] = { value: item, data_type: "s", style: sheet.cells?.[row]?.[col]?.style };
+          if (this.onCellEdit) this.onCellEdit(row, col, item);
+          this.render();
+        });
+        dropdown.appendChild(opt);
+      }
+      const effHW = this._showHeaders ? this.headerWidth : 0;
+      const effHH = this._showHeaders ? this.headerHeight : 0;
+      const cellX = this.cx(col) - this.scrollLeft + effHW;
+      const cellY = this.ry(row) - this.scrollTop + effHH;
+      const cellH = this.rh(row);
+      const cellW = this.cw(col);
+      dropdown.style.left = `${cellX}px`;
+      dropdown.style.top = `${cellY + cellH}px`;
+      dropdown.style.minWidth = `${cellW}px`;
+      this._wrapper.appendChild(dropdown);
+      this._validationDropdown = dropdown;
+      const closeHandler = (e) => {
+        if (!dropdown.contains(e.target)) {
+          this._hideValidationDropdown();
+          document.removeEventListener("mousedown", closeHandler);
+        }
+      };
+      setTimeout(() => document.addEventListener("mousedown", closeHandler), 0);
+    }
+    _hideValidationDropdown() {
+      if (this._validationDropdown) {
+        this._validationDropdown.remove();
+        this._validationDropdown = null;
+      }
+    }
+    /** Check if the given canvas coordinates hit the dropdown arrow of a list-validated cell. */
+    _hitTestValidationArrow(canvasX, canvasY) {
+      const effHW = this._showHeaders ? this.headerWidth : 0;
+      const effHH = this._showHeaders ? this.headerHeight : 0;
+      const gridX = canvasX - effHW + this.scrollLeft;
+      const gridY = canvasY - effHH + this.scrollTop;
+      const sheet = this.data?.sheets?.[this._activeSheetIndex];
+      if (!sheet) return null;
+      const ARROW_W = 18;
+      for (const [key, rule] of this._validationOfCell) {
+        if (rule.validation_type !== "list" || !rule.show_dropdown) continue;
+        const [rowStr, colStr] = key.split(":");
+        const r = Number(rowStr);
+        const c = Number(colStr);
+        const cellRight = this.cx(c + 1);
+        const cellTop = this.ry(r);
+        const cellBottom = this.ry(r + 1);
+        if (gridX >= cellRight - ARROW_W && gridX < cellRight && gridY >= cellTop && gridY < cellBottom) {
+          return { row: r, col: c };
+        }
+      }
+      return null;
     }
     /** Check if (row, col) falls within a sqref range string like "A1:D10" or "A1:D10 F1:G5" */
     cellInRange(row, col, sqref) {
@@ -3845,6 +5141,97 @@
       }));
       this.render();
     }
+    // --- Auto-Fit ---
+    /** Fit column width to the widest cell content in the column. */
+    autoFitColumn(col) {
+      const sheet = this.data?.sheets?.[this._activeSheetIndex];
+      if (!sheet) return;
+      const pad = 16;
+      const minWidth = 20;
+      let maxWidth = 0;
+      for (const rowKey of Object.keys(sheet.cells)) {
+        const r = parseInt(rowKey, 10);
+        const cellData = sheet.cells[r]?.[col];
+        if (!cellData || !cellData.value) continue;
+        const cellStyle = this.getCellStyle(r, col);
+        const displayValue = cellData.value.startsWith("=") ? this.formulaResults[`${r}:${col}`]?.display ?? cellData.value : this.formatCellValue(cellData.value, cellData.data_type, cellStyle);
+        if (!displayValue) continue;
+        const fontSize = cellStyle?.fontSize || 13;
+        const fontFamily = cellStyle?.fontFamily || "system-ui, -apple-system, sans-serif";
+        let fontStr = `${fontSize}px ${fontFamily}`;
+        if (cellStyle?.bold) fontStr = `bold ${fontStr}`;
+        if (cellStyle?.italic) fontStr = `italic ${fontStr}`;
+        this.ctx.font = fontStr;
+        const measured = this.ctx.measureText(displayValue).width;
+        if (measured > maxWidth) maxWidth = measured;
+      }
+      const newWidth = Math.max(minWidth, Math.ceil(maxWidth + pad));
+      this.colWidths[col] = newWidth;
+      if (sheet) {
+        if (!sheet.col_widths) sheet.col_widths = {};
+        sheet.col_widths[col] = newWidth;
+      }
+      this._layoutDirty = true;
+      this.render();
+    }
+    /** Fit row height to the tallest cell content in the row. */
+    autoFitRow(row) {
+      const sheet = this.data?.sheets?.[this._activeSheetIndex];
+      if (!sheet) return;
+      const pad = 6;
+      const minHeight = 10;
+      let maxHeight = 0;
+      const rowData = sheet.cells?.[row];
+      if (!rowData) {
+        this.rowHeights[row] = this.rowHeight;
+        if (sheet.row_heights) delete sheet.row_heights[row];
+        this._layoutDirty = true;
+        this.render();
+        return;
+      }
+      for (const colKey of Object.keys(rowData)) {
+        const c = parseInt(colKey, 10);
+        const cellData = rowData[c];
+        if (!cellData || !cellData.value) continue;
+        const cellStyle = this.getCellStyle(row, c);
+        const fontSize = cellStyle?.fontSize || 13;
+        if (cellStyle?.wrapText) {
+          const displayValue = cellData.value.startsWith("=") ? this.formulaResults[`${row}:${c}`]?.display ?? cellData.value : this.formatCellValue(cellData.value, cellData.data_type, cellStyle);
+          if (!displayValue) continue;
+          const fontFamily = cellStyle?.fontFamily || "system-ui, -apple-system, sans-serif";
+          let fontStr = `${fontSize}px ${fontFamily}`;
+          if (cellStyle?.bold) fontStr = `bold ${fontStr}`;
+          if (cellStyle?.italic) fontStr = `italic ${fontStr}`;
+          this.ctx.font = fontStr;
+          const colWidth = this.colWidths[c] ?? this.colWidth;
+          const textWidth = this.ctx.measureText(displayValue).width;
+          const lines = Math.max(1, Math.ceil(textWidth / (colWidth - 8)));
+          const neededHeight = lines * (fontSize + 4);
+          if (neededHeight > maxHeight) maxHeight = neededHeight;
+        } else {
+          const neededHeight = fontSize + pad;
+          if (neededHeight > maxHeight) maxHeight = neededHeight;
+        }
+      }
+      const newHeight = Math.max(minHeight, Math.ceil(maxHeight));
+      this.rowHeights[row] = newHeight;
+      if (!sheet.row_heights) sheet.row_heights = {};
+      sheet.row_heights[row] = newHeight;
+      this._layoutDirty = true;
+      this.render();
+    }
+    /** Auto-fit all columns in the given range (inclusive). */
+    autoFitColumns(startCol, endCol) {
+      for (let c = startCol; c <= endCol; c++) {
+        this.autoFitColumn(c);
+      }
+    }
+    /** Auto-fit all rows in the given range (inclusive). */
+    autoFitRows(startRow, endRow) {
+      for (let r = startRow; r <= endRow; r++) {
+        this.autoFitRow(r);
+      }
+    }
     // --- Find ---
     findInSheet(query, caseSensitive = false) {
       this._findMatches = [];
@@ -3945,8 +5332,46 @@
       return count;
     }
   };
+  // ─── Auto-Fill Engine ──────────────────────────────────────────────────────
+  // Thin black cross cursor for the fill handle (matches Excel)
+  // eslint-disable-next-line @typescript-eslint/naming-convention
+  _CanvasRenderer.FILL_CURSOR = `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='17' height='17'%3E%3Cline x1='8' y1='0' x2='8' y2='17' stroke='black' stroke-width='1.5'/%3E%3Cline x1='0' y1='8' x2='17' y2='8' stroke='black' stroke-width='1.5'/%3E%3C/svg%3E") 8 8, crosshair`;
+  // eslint-disable-next-line @typescript-eslint/naming-convention
+  _CanvasRenderer.FILL_LISTS = [
+    ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"],
+    ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"],
+    [
+      "January",
+      "February",
+      "March",
+      "April",
+      "May",
+      "June",
+      "July",
+      "August",
+      "September",
+      "October",
+      "November",
+      "December"
+    ],
+    [
+      "Jan",
+      "Feb",
+      "Mar",
+      "Apr",
+      "May",
+      "Jun",
+      "Jul",
+      "Aug",
+      "Sep",
+      "Oct",
+      "Nov",
+      "Dec"
+    ]
+  ];
+  var CanvasRenderer = _CanvasRenderer;
 
-  // media/ribbon.ts
+  // ribbon.ts
   var IC = {
     paste: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor"><rect x="3" y="5" width="10" height="10" rx="1" stroke-width="1.2"/><path d="M6 5V3a1.5 1.5 0 013 0v2" stroke-width="1.2"/><line x1="6" y1="9" x2="10" y2="9" stroke-width="1"/><line x1="6" y1="11.5" x2="10" y2="11.5" stroke-width="1"/></svg>',
     cut: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2"><circle cx="5" cy="12" r="2"/><circle cx="11" cy="12" r="2"/><path d="M6.5 10.5L10 3M9.5 10.5L6 3"/></svg>',
@@ -3978,7 +5403,15 @@
     totals: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"><line x1="2" y1="12.5" x2="14" y2="12.5" stroke-width="2"/><line x1="2" y1="10" x2="14" y2="10" stroke-width=".8"/><path d="M4 3l2.5 5M6.5 8l2.5-5M4 4.5h5"/></svg>',
     convertRange: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"><rect x="1" y="1" width="14" height="14" rx="1"/><line x1="1" y1="5" x2="15" y2="5"/><path d="M8 8l-2 2 2 2"/><path d="M8 8l2 2-2 2"/></svg>',
     condFormat: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"><rect x="1" y="1" width="6" height="14" rx="1"/><rect x="9" y="1" width="6" height="14" rx="1"/><rect x="1" y="1" width="6" height="5" fill="#ff6b6b" opacity=".6" rx="1"/><rect x="1" y="6" width="6" height="4" fill="#ffd93d" opacity=".6"/><rect x="1" y="10" width="6" height="5" fill="#6bcb77" opacity=".6" rx="1"/><rect x="9" y="1" width="6" height="14" rx="1"/><rect x="10" y="3" width="4" height="2" fill="#4472c4" opacity=".7" rx=".5"/><rect x="10" y="7" width="2.5" height="2" fill="#4472c4" opacity=".7" rx=".5"/><rect x="10" y="11" width="1" height="2" fill="#4472c4" opacity=".7" rx=".5"/></svg>',
-    chart: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="1" width="14" height="14" rx="1"/><rect x="3" y="9" width="2" height="5" fill="#4472C4" stroke="none" rx=".3"/><rect x="7" y="5" width="2" height="9" fill="#ED7D31" stroke="none" rx=".3"/><rect x="11" y="7" width="2" height="7" fill="#70AD47" stroke="none" rx=".3"/></svg>'
+    dataValid: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="1" width="14" height="14" rx="1"/><line x1="1" y1="5" x2="15" y2="5"/><line x1="5.5" y1="1" x2="5.5" y2="15"/><path d="M8 8l1.5 1.5L12 7" stroke="#4472c4" stroke-width="1.5"/><rect x="6" y="6" width="7" height="7" rx=".5" stroke="#4472c4" opacity=".3" stroke-dasharray="1.5 1"/></svg>',
+    circleInvalid: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"><ellipse cx="8" cy="8" rx="6" ry="5" stroke="#cc0000" stroke-dasharray="2 1.5"/><line x1="5" y1="8" x2="11" y2="8" stroke="#cc0000"/></svg>',
+    chart: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="1" width="14" height="14" rx="1"/><rect x="3" y="9" width="2" height="5" fill="#4472C4" stroke="none" rx=".3"/><rect x="7" y="5" width="2" height="9" fill="#ED7D31" stroke="none" rx=".3"/><rect x="11" y="7" width="2" height="7" fill="#70AD47" stroke="none" rx=".3"/></svg>',
+    hyperlink: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 9.5a3.5 3.5 0 0 0 4.95 0l2-2a3.5 3.5 0 0 0-4.95-4.95L7.5 3.5"/><path d="M9.5 6.5a3.5 3.5 0 0 0-4.95 0l-2 2a3.5 3.5 0 0 0 4.95 4.95L8.5 12.5"/></svg>',
+    nameManager: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"><rect x="1" y="3" width="14" height="10" rx="1"/><line x1="1" y1="6" x2="15" y2="6"/><line x1="5.5" y1="3" x2="5.5" y2="13"/><path d="M3 9h1M7.5 9h4M7.5 11h2.5" stroke-width="1"/></svg>',
+    defineName: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"><rect x="1" y="3" width="10" height="10" rx="1"/><line x1="1" y1="6" x2="11" y2="6"/><path d="M13 5v8M13 9h2" stroke-width="1.4"/></svg>',
+    fillDown: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="12" height="4" rx="0.5" fill="currentColor" opacity="0.2"/><rect x="2" y="2" width="12" height="12" rx="0.5"/><path d="M8 7v5M5.5 10l2.5 2.5 2.5-2.5"/></svg>',
+    fillRight: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="4" height="12" rx="0.5" fill="currentColor" opacity="0.2"/><rect x="2" y="2" width="12" height="12" rx="0.5"/><path d="M7 8h5M10 5.5l2.5 2.5-2.5 2.5"/></svg>',
+    flashFill: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2L4 9h4l-1 5 5-7h-4z" fill="currentColor" opacity="0.25"/><path d="M9 2L4 9h4l-1 5 5-7h-4z"/></svg>'
   };
   var LIGHT_STYLES = [
     ["TableStyleLight1", { header: "#000000", band: "#f7f7f7", label: "Black" }],
@@ -4071,7 +5504,7 @@
       this.container.className = "xlsx-ribbon";
       const tabBar = this.el("div", "ribbon-tab-bar");
       const tabsLeft = this.el("div", "ribbon-tabs-left");
-      for (const name of ["Home", "Insert", "View", "Data"]) {
+      for (const name of ["Home", "Insert", "Formulas", "View", "Data"]) {
         const key = name.toLowerCase();
         const btn = this.el("button", `ribbon-tab${key === this.activeTab ? " active" : ""}`);
         btn.textContent = name;
@@ -4089,6 +5522,7 @@
       const content = this.el("div", "ribbon-content");
       content.appendChild(this.buildHomeTab());
       content.appendChild(this.buildInsertTab());
+      content.appendChild(this.buildFormulasTab());
       content.appendChild(this.buildViewTab());
       content.appendChild(this.buildDataTab());
       this.container.appendChild(content);
@@ -4103,6 +5537,7 @@
       const clipStack = this.el("div", "clip-stack");
       clipStack.appendChild(this.iconBtn(IC.cut, "Cut", "cut", "Ctrl+X"));
       clipStack.appendChild(this.iconBtn(IC.copy, "Copy", "copy", "Ctrl+C"));
+      clipStack.appendChild(this.iconBtn(IC.paste, "Paste Special...", "pasteSpecial", "Ctrl+Shift+V"));
       clipBody.appendChild(clipStack);
       clip.insertBefore(clipBody, clip.lastChild);
       panel.appendChild(clip);
@@ -4202,6 +5637,17 @@
       cellsBody.appendChild(cellR2);
       cells.insertBefore(cellsBody, cells.lastChild);
       panel.appendChild(cells);
+      const editGroup = this.group("Editing");
+      const editBody = this.el("div", "group-body");
+      const editR1 = this.el("div", "btn-row");
+      editR1.appendChild(this.iconBtn(IC.fillDown, "Fill \u2193", "fillDown", "Fill Down (Ctrl+D)"));
+      editR1.appendChild(this.iconBtn(IC.fillRight, "Fill \u2192", "fillRight", "Fill Right (Ctrl+R)"));
+      editBody.appendChild(editR1);
+      const editR2 = this.el("div", "btn-row");
+      editR2.appendChild(this.iconBtn(IC.flashFill, "Flash Fill", "flashFill", "Flash Fill (Ctrl+E)"));
+      editBody.appendChild(editR2);
+      editGroup.insertBefore(editBody, editGroup.lastChild);
+      panel.appendChild(editGroup);
       const stylesGroup = this.group("Styles");
       const stylesBody = this.el("div", "group-body");
       stylesBody.appendChild(this.tallBtn(IC.condFormat, "Cond.\nFormat", "conditionalFormatting"));
@@ -4249,6 +5695,11 @@
       rcBody.appendChild(rcR2);
       rcGroup.insertBefore(rcBody, rcGroup.lastChild);
       panel.appendChild(rcGroup);
+      const linkGroup = this.group("Links");
+      const linkBody = this.el("div", "group-body");
+      linkBody.appendChild(this.tallBtn(IC.hyperlink, "Hyperlink", "insertHyperlink"));
+      linkGroup.insertBefore(linkBody, linkGroup.lastChild);
+      panel.appendChild(linkGroup);
       return panel;
     }
     /** Visual table style picker — shows colored mini table previews in a categorized dropdown grid */
@@ -4331,6 +5782,17 @@
     miniTableSvg(headerColor, bandColor) {
       return `<svg width="28" height="20" viewBox="0 0 28 20" style="display:block;"><rect x="0" y="0" width="28" height="6" rx="1" fill="${headerColor}"/><rect x="0" y="7" width="28" height="6" fill="${bandColor}"/><rect x="0" y="14" width="28" height="6" rx="1" fill="${bandColor}" opacity="0.5"/><rect x="0" y="0" width="28" height="20" rx="1" fill="none" stroke="${headerColor}" stroke-width="0.5" opacity="0.5"/></svg>`;
     }
+    // ======================= FORMULAS TAB =======================
+    buildFormulasTab() {
+      const panel = this.tabPanel("formulas", false);
+      const namesGroup = this.group("Defined Names");
+      const namesBody = this.el("div", "group-body");
+      namesBody.appendChild(this.tallBtn(IC.nameManager, "Name Manager", "nameManager"));
+      namesBody.appendChild(this.iconBtn(IC.defineName, "Define Name", "defineName"));
+      namesGroup.insertBefore(namesBody, namesGroup.lastChild);
+      panel.appendChild(namesGroup);
+      return panel;
+    }
     // ======================= VIEW TAB =======================
     buildViewTab() {
       const panel = this.tabPanel("view", false);
@@ -4362,6 +5824,14 @@
       sortBody.appendChild(filterStack);
       sort.insertBefore(sortBody, sort.lastChild);
       panel.appendChild(sort);
+      const dvGroup = this.group("Data Tools");
+      const dvBody = this.el("div", "group-body");
+      dvBody.appendChild(this.tallBtn(IC.dataValid, "Data\nValidation", "dataValidation"));
+      const dvStack = this.el("div", "btn-col gap-6");
+      dvStack.appendChild(this.iconBtn(IC.circleInvalid, "Circle\nInvalid", "circleInvalidData", "Circle Invalid Data"));
+      dvBody.appendChild(dvStack);
+      dvGroup.insertBefore(dvBody, dvGroup.lastChild);
+      panel.appendChild(dvGroup);
       const edit = this.group("Edit");
       const editBody = this.el("div", "group-body");
       editBody.appendChild(this.tallBtn(IC.clear, "Clear", "clear"));
@@ -4487,12 +5957,14 @@
     }
   };
 
-  // media/contextMenu.ts
+  // contextMenu.ts
   var ContextMenu = class {
     constructor(container, onAction) {
       this.currentRow = 0;
       this.currentCol = 0;
+      this.currentSelection = null;
       this.getTableAtCell = null;
+      this.getHyperlinkAtCell = null;
       this.onAction = onAction;
       this.menu = document.createElement("div");
       this.menu.className = "xlsx-context-menu";
@@ -4511,21 +5983,36 @@
     setTableDetector(fn) {
       this.getTableAtCell = fn;
     }
-    show(x, y, row, col, headerType) {
+    /** Register a function that returns the hyperlink (if any) at a cell */
+    setHyperlinkDetector(fn) {
+      this.getHyperlinkAtCell = fn;
+    }
+    show(x, y, row, col, headerType, selectionRange) {
       this.currentRow = row;
       this.currentCol = col;
+      this.currentSelection = selectionRange ?? null;
       this.buildMenu(row, col, headerType);
       this.menu.style.left = `${x}px`;
       this.menu.style.top = `${y}px`;
       this.menu.style.display = "block";
       requestAnimationFrame(() => {
         const rect = this.menu.getBoundingClientRect();
+        let newLeft = x;
+        let newTop = y;
         if (rect.right > window.innerWidth) {
-          this.menu.style.left = `${x - rect.width}px`;
+          newLeft = x - rect.width;
         }
         if (rect.bottom > window.innerHeight) {
-          this.menu.style.top = `${y - rect.height}px`;
+          newTop = y - rect.height;
         }
+        if (newTop < 0) {
+          newTop = 0;
+        }
+        if (newLeft < 0) {
+          newLeft = 0;
+        }
+        this.menu.style.left = `${newLeft}px`;
+        this.menu.style.top = `${newTop}px`;
       });
     }
     hide() {
@@ -4536,7 +6023,11 @@
       this.menu.innerHTML = "";
       let items;
       let tableInfo = null;
+      const sel = this.currentSelection;
+      const multiColSelected = sel && Math.abs(sel.endCol - sel.startCol) > 0;
+      const multiRowSelected = sel && Math.abs(sel.endRow - sel.startRow) > 0;
       if (headerType === "col") {
+        const autoFitItem = multiColSelected ? { action: "autoFitSelectedCols", label: "Auto-Fit Selected Columns" } : { action: "colWidthAuto", label: "Auto-Fit Column Width" };
         items = [
           { action: "insertColLeft", label: `Insert Column Left` },
           { action: "insertColRight", label: `Insert Column Right` },
@@ -4546,12 +6037,13 @@
           null,
           { action: "hideCol", label: `Hide Column ${colName}` },
           null,
-          { action: "colWidthAuto", label: "Auto-Fit Column Width" },
+          autoFitItem,
           null,
           { action: "sortAZ", label: "Sort A to Z" },
           { action: "sortZA", label: "Sort Z to A" }
         ];
       } else if (headerType === "row") {
+        const autoFitItem = multiRowSelected ? { action: "autoFitSelectedRows", label: "Auto-Fit Selected Rows" } : { action: "rowHeightAuto", label: "Auto-Fit Row Height" };
         items = [
           { action: "insertRowAbove", label: "Insert Row Above" },
           { action: "insertRowBelow", label: "Insert Row Below" },
@@ -4561,13 +6053,21 @@
           null,
           { action: "hideRow", label: `Hide Row ${row + 1}` },
           null,
-          { action: "rowHeightAuto", label: "Auto-Fit Row Height" }
+          autoFitItem
         ];
       } else {
+        const existingHyperlink = this.getHyperlinkAtCell ? this.getHyperlinkAtCell(row, col) : void 0;
+        const hyperlinkItems = existingHyperlink ? [
+          { action: "editHyperlink", label: "Edit Hyperlink..." },
+          { action: "removeHyperlink", label: "Remove Hyperlink" }
+        ] : [
+          { action: "insertHyperlink", label: "Insert Hyperlink..." }
+        ];
         items = [
           { action: "cut", label: "Cut", shortcut: "Ctrl+X" },
           { action: "copy", label: "Copy", shortcut: "Ctrl+C" },
           { action: "paste", label: "Paste", shortcut: "Ctrl+V" },
+          { action: "pasteSpecial", label: "Paste Special...", shortcut: "Ctrl+Shift+V" },
           null,
           { action: "insertRowAbove", label: "Insert Row Above" },
           { action: "insertRowBelow", label: "Insert Row Below" },
@@ -4579,6 +6079,10 @@
           null,
           { action: "clear", label: "Clear Contents", shortcut: "Del" },
           { action: "formatCells", label: "Format Cells..." },
+          null,
+          ...hyperlinkItems,
+          null,
+          { action: "defineName", label: "Define Name..." },
           null,
           { action: "sortAZ", label: "Sort A to Z" },
           { action: "sortZA", label: "Sort Z to A" }
@@ -4644,7 +6148,7 @@
     }
   };
 
-  // media/filterDropdown.ts
+  // filterDropdown.ts
   var FilterDropdown = class {
     constructor(parent, onAction) {
       this.tableName = "";
@@ -4833,7 +6337,7 @@
     }
   };
 
-  // media/conditionalFormatDialog.ts
+  // conditionalFormatDialog.ts
   var RULE_TYPES = [
     // Highlight Cells Rules
     { label: "Greater Than", value: "cellIs:greaterThan", category: "Highlight Cells Rules" },
@@ -5390,7 +6894,2082 @@
     }
   };
 
-  // ../../../../../../../../node_modules/@kurkle/color/dist/color.esm.js
+  // validationDialog.ts
+  var VALIDATION_TYPES = [
+    { label: "Any Value", value: "any" },
+    { label: "Whole Number", value: "whole" },
+    { label: "Decimal", value: "decimal" },
+    { label: "List", value: "list" },
+    { label: "Date", value: "date" },
+    { label: "Time", value: "time" },
+    { label: "Text Length", value: "textLength" },
+    { label: "Custom Formula", value: "custom" }
+  ];
+  var OPERATORS = [
+    { label: "between", value: "between" },
+    { label: "not between", value: "notBetween" },
+    { label: "equal to", value: "equal" },
+    { label: "not equal to", value: "notEqual" },
+    { label: "greater than", value: "greaterThan" },
+    { label: "less than", value: "lessThan" },
+    { label: "greater than or equal to", value: "greaterThanOrEqual" },
+    { label: "less than or equal to", value: "lessThanOrEqual" }
+  ];
+  var ValidationDialog = class {
+    constructor(parent, onAction) {
+      this.editIndex = null;
+      this.existingRules = [];
+      this.onAction = onAction;
+      this.container = document.createElement("div");
+      this.container.style.cssText = this._dialogStyle();
+      this.container.style.display = "none";
+      parent.appendChild(this.container);
+      this._build();
+    }
+    _dialogStyle() {
+      return [
+        "position:absolute",
+        "right:16px",
+        "top:60px",
+        "width:440px",
+        "background:#fff",
+        "border:1px solid #c8c8c8",
+        "border-radius:6px",
+        "box-shadow:0 8px 32px rgba(0,0,0,0.18)",
+        "z-index:9100",
+        "font-family:system-ui,-apple-system,sans-serif",
+        "font-size:13px",
+        "color:#1a1a1a",
+        "display:flex",
+        "flex-direction:column",
+        "max-height:90vh",
+        "overflow:hidden"
+      ].join(";");
+    }
+    _build() {
+      this.container.innerHTML = "";
+      this.tabButtons = /* @__PURE__ */ new Map();
+      const titleBar = document.createElement("div");
+      titleBar.style.cssText = "display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:#f3f3f3;border-bottom:1px solid #ddd;border-radius:6px 6px 0 0;cursor:move;user-select:none;flex-shrink:0;";
+      const titleText = document.createElement("span");
+      titleText.textContent = "Data Validation";
+      titleText.style.cssText = "font-weight:600;font-size:14px;";
+      const closeBtn = document.createElement("button");
+      closeBtn.textContent = "\xD7";
+      closeBtn.style.cssText = "background:none;border:none;font-size:18px;cursor:pointer;color:#666;padding:0 4px;line-height:1;";
+      closeBtn.addEventListener("click", () => this.hide());
+      titleBar.appendChild(titleText);
+      titleBar.appendChild(closeBtn);
+      this.container.appendChild(titleBar);
+      this._makeDraggable(titleBar);
+      const body = document.createElement("div");
+      body.style.cssText = "flex:1;overflow-y:auto;padding:12px 14px;";
+      const rulesSection = document.createElement("div");
+      rulesSection.style.marginBottom = "14px";
+      const rulesLabel = document.createElement("div");
+      rulesLabel.textContent = "Active Rules:";
+      rulesLabel.style.cssText = "font-weight:600;margin-bottom:6px;";
+      rulesSection.appendChild(rulesLabel);
+      this.ruleListArea = document.createElement("div");
+      this.ruleListArea.style.cssText = "max-height:100px;overflow-y:auto;border:1px solid #ddd;border-radius:4px;background:#fafafa;";
+      rulesSection.appendChild(this.ruleListArea);
+      body.appendChild(rulesSection);
+      const sep = document.createElement("div");
+      sep.style.cssText = "border-top:1px solid #e0e0e0;margin-bottom:12px;";
+      body.appendChild(sep);
+      const rangeRow = this._makeRow();
+      const rangeLabel = this._makeLabel("Applies to range:");
+      this.rangeInput = document.createElement("input");
+      this.rangeInput.style.cssText = this._inputStyle();
+      this.rangeInput.placeholder = "e.g. A1:A10";
+      rangeRow.appendChild(rangeLabel);
+      rangeRow.appendChild(this.rangeInput);
+      body.appendChild(rangeRow);
+      const tabBar = document.createElement("div");
+      tabBar.style.cssText = "display:flex;border-bottom:2px solid #e0e0e0;margin-bottom:10px;";
+      const tabs = [
+        ["settings", "Settings"],
+        ["input-message", "Input Message"],
+        ["error-alert", "Error Alert"]
+      ];
+      for (const [id, label] of tabs) {
+        const btn = document.createElement("button");
+        btn.textContent = label;
+        btn.style.cssText = "padding:6px 14px;border:none;background:none;cursor:pointer;font-size:13px;border-bottom:2px solid transparent;margin-bottom:-2px;";
+        btn.addEventListener("click", () => this._switchTab(id));
+        tabBar.appendChild(btn);
+        this.tabButtons.set(id, btn);
+      }
+      body.appendChild(tabBar);
+      this.settingsContent = document.createElement("div");
+      this._buildSettingsTab(this.settingsContent);
+      body.appendChild(this.settingsContent);
+      this.inputMsgContent = document.createElement("div");
+      this._buildInputMsgTab(this.inputMsgContent);
+      body.appendChild(this.inputMsgContent);
+      this.errorAlertContent = document.createElement("div");
+      this._buildErrorAlertTab(this.errorAlertContent);
+      body.appendChild(this.errorAlertContent);
+      this.container.appendChild(body);
+      const footer = document.createElement("div");
+      footer.style.cssText = "display:flex;gap:8px;justify-content:flex-end;padding:10px 14px;border-top:1px solid #ddd;background:#f9f9f9;border-radius:0 0 6px 6px;flex-shrink:0;";
+      const addBtn = document.createElement("button");
+      addBtn.textContent = "Add Rule";
+      addBtn.style.cssText = this._primaryBtnStyle();
+      addBtn.addEventListener("click", () => this._submitRule());
+      const closeFooterBtn = document.createElement("button");
+      closeFooterBtn.textContent = "Close";
+      closeFooterBtn.style.cssText = this._secondaryBtnStyle();
+      closeFooterBtn.addEventListener("click", () => this.hide());
+      footer.appendChild(addBtn);
+      footer.appendChild(closeFooterBtn);
+      this.container.appendChild(footer);
+      this._switchTab("settings");
+      this._updateSettingsUI();
+    }
+    _buildSettingsTab(container) {
+      const typeRow = this._makeRow();
+      typeRow.appendChild(this._makeLabel("Allow:"));
+      this.typeSelect = document.createElement("select");
+      this.typeSelect.style.cssText = this._selectStyle();
+      for (const vt of VALIDATION_TYPES) {
+        const opt = document.createElement("option");
+        opt.value = vt.value;
+        opt.textContent = vt.label;
+        this.typeSelect.appendChild(opt);
+      }
+      this.typeSelect.addEventListener("change", () => this._updateSettingsUI());
+      typeRow.appendChild(this.typeSelect);
+      container.appendChild(typeRow);
+      this.operatorRow = this._makeRow();
+      this.operatorRow.appendChild(this._makeLabel("Data:"));
+      this.operatorSelect = document.createElement("select");
+      this.operatorSelect.style.cssText = this._selectStyle();
+      for (const op of OPERATORS) {
+        const opt = document.createElement("option");
+        opt.value = op.value;
+        opt.textContent = op.label;
+        this.operatorSelect.appendChild(opt);
+      }
+      this.operatorSelect.addEventListener("change", () => this._updateSettingsUI());
+      this.operatorRow.appendChild(this.operatorSelect);
+      container.appendChild(this.operatorRow);
+      const value1Row = this._makeRow();
+      this.value1Label = this._makeLabel("Minimum:");
+      this.value1Input = document.createElement("input");
+      this.value1Input.style.cssText = this._inputStyle();
+      value1Row.appendChild(this.value1Label);
+      value1Row.appendChild(this.value1Input);
+      container.appendChild(value1Row);
+      this.value2Row = this._makeRow();
+      this.value2Row.appendChild(this._makeLabel("Maximum:"));
+      this.value2Input = document.createElement("input");
+      this.value2Input.style.cssText = this._inputStyle();
+      this.value2Row.appendChild(this.value2Input);
+      container.appendChild(this.value2Row);
+      this.listRow = this._makeRow();
+      this.listRow.appendChild(this._makeLabel("Source:"));
+      this.listInput = document.createElement("input");
+      this.listInput.style.cssText = this._inputStyle();
+      this.listInput.placeholder = "Comma-separated or =Sheet1!A1:A10";
+      this.listRow.appendChild(this.listInput);
+      container.appendChild(this.listRow);
+      this.formulaRow = this._makeRow();
+      this.formulaRow.appendChild(this._makeLabel("Formula:"));
+      this.formulaInput = document.createElement("input");
+      this.formulaInput.style.cssText = this._inputStyle();
+      this.formulaInput.placeholder = "=AND(ISTEXT(A1), LEN(A1)>0)";
+      this.formulaRow.appendChild(this.formulaInput);
+      container.appendChild(this.formulaRow);
+      const blankRow = this._makeRow();
+      this.allowBlankCheck = document.createElement("input");
+      this.allowBlankCheck.type = "checkbox";
+      this.allowBlankCheck.checked = true;
+      this.allowBlankCheck.style.marginRight = "6px";
+      const blankLabel = document.createElement("label");
+      blankLabel.style.cssText = "display:flex;align-items:center;cursor:pointer;";
+      blankLabel.appendChild(this.allowBlankCheck);
+      blankLabel.appendChild(document.createTextNode("Ignore blank"));
+      blankRow.appendChild(blankLabel);
+      container.appendChild(blankRow);
+      this.showDropdownRow = this._makeRow();
+      this.showDropdownCheck = document.createElement("input");
+      this.showDropdownCheck.type = "checkbox";
+      this.showDropdownCheck.checked = true;
+      this.showDropdownCheck.style.marginRight = "6px";
+      const dropdownLabel = document.createElement("label");
+      dropdownLabel.style.cssText = "display:flex;align-items:center;cursor:pointer;";
+      dropdownLabel.appendChild(this.showDropdownCheck);
+      dropdownLabel.appendChild(document.createTextNode("In-cell dropdown"));
+      this.showDropdownRow.appendChild(dropdownLabel);
+      container.appendChild(this.showDropdownRow);
+    }
+    _buildInputMsgTab(container) {
+      const row1 = this._makeRow();
+      this.showInputMsgCheck = document.createElement("input");
+      this.showInputMsgCheck.type = "checkbox";
+      this.showInputMsgCheck.checked = true;
+      this.showInputMsgCheck.style.marginRight = "6px";
+      const lbl = document.createElement("label");
+      lbl.style.cssText = "display:flex;align-items:center;cursor:pointer;";
+      lbl.appendChild(this.showInputMsgCheck);
+      lbl.appendChild(document.createTextNode("Show input message when cell is selected"));
+      row1.appendChild(lbl);
+      container.appendChild(row1);
+      container.appendChild(this._makeSpacer());
+      const titleRow = this._makeRow();
+      titleRow.appendChild(this._makeLabel("Title:"));
+      this.inputTitleInput = document.createElement("input");
+      this.inputTitleInput.style.cssText = this._inputStyle();
+      this.inputTitleInput.placeholder = "Optional title (max 32 chars)";
+      this.inputTitleInput.maxLength = 32;
+      titleRow.appendChild(this.inputTitleInput);
+      container.appendChild(titleRow);
+      const msgRow = this._makeColRow();
+      msgRow.appendChild(this._makeLabel("Message:"));
+      this.inputMsgTextarea = document.createElement("textarea");
+      this.inputMsgTextarea.style.cssText = `${this._inputStyle()}height:64px;resize:vertical;font-family:inherit;`;
+      this.inputMsgTextarea.placeholder = "Message shown when user enters data... (max 255 chars)";
+      this.inputMsgTextarea.maxLength = 255;
+      msgRow.appendChild(this.inputMsgTextarea);
+      container.appendChild(msgRow);
+    }
+    _buildErrorAlertTab(container) {
+      const row1 = this._makeRow();
+      this.showErrorCheck = document.createElement("input");
+      this.showErrorCheck.type = "checkbox";
+      this.showErrorCheck.checked = true;
+      this.showErrorCheck.style.marginRight = "6px";
+      const lbl = document.createElement("label");
+      lbl.style.cssText = "display:flex;align-items:center;cursor:pointer;";
+      lbl.appendChild(this.showErrorCheck);
+      lbl.appendChild(document.createTextNode("Show error alert after invalid data is entered"));
+      row1.appendChild(lbl);
+      container.appendChild(row1);
+      container.appendChild(this._makeSpacer());
+      const styleRow = this._makeRow();
+      styleRow.appendChild(this._makeLabel("Style:"));
+      this.errorStyleSelect = document.createElement("select");
+      this.errorStyleSelect.style.cssText = this._selectStyle();
+      for (const [val, lbl2] of [["stop", "\u{1F6AB} Stop"], ["warning", "\u26A0\uFE0F Warning"], ["information", "\u2139\uFE0F Information"]]) {
+        const opt = document.createElement("option");
+        opt.value = val;
+        opt.textContent = lbl2;
+        this.errorStyleSelect.appendChild(opt);
+      }
+      styleRow.appendChild(this.errorStyleSelect);
+      container.appendChild(styleRow);
+      const titleRow = this._makeRow();
+      titleRow.appendChild(this._makeLabel("Title:"));
+      this.errorTitleInput = document.createElement("input");
+      this.errorTitleInput.style.cssText = this._inputStyle();
+      this.errorTitleInput.placeholder = "Optional error title (max 32 chars)";
+      this.errorTitleInput.maxLength = 32;
+      titleRow.appendChild(this.errorTitleInput);
+      container.appendChild(titleRow);
+      const msgRow = this._makeColRow();
+      msgRow.appendChild(this._makeLabel("Message:"));
+      this.errorMsgTextarea = document.createElement("textarea");
+      this.errorMsgTextarea.style.cssText = `${this._inputStyle()}height:64px;resize:vertical;font-family:inherit;`;
+      this.errorMsgTextarea.placeholder = "Error message text... (max 255 chars)";
+      this.errorMsgTextarea.maxLength = 255;
+      msgRow.appendChild(this.errorMsgTextarea);
+      container.appendChild(msgRow);
+    }
+    _switchTab(id) {
+      this.settingsContent.style.display = id === "settings" ? "block" : "none";
+      this.inputMsgContent.style.display = id === "input-message" ? "block" : "none";
+      this.errorAlertContent.style.display = id === "error-alert" ? "block" : "none";
+      for (const [tabId, btn] of this.tabButtons) {
+        const active = tabId === id;
+        btn.style.fontWeight = active ? "600" : "normal";
+        btn.style.color = active ? "#0078d7" : "#555";
+        btn.style.borderBottomColor = active ? "#0078d7" : "transparent";
+      }
+    }
+    _updateSettingsUI() {
+      const type = this.typeSelect.value;
+      const op = this.operatorSelect.value;
+      const isBetween = op === "between" || op === "notBetween";
+      this.operatorRow.style.display = type === "any" || type === "list" || type === "custom" ? "none" : "flex";
+      this.value2Row.style.display = type !== "any" && type !== "list" && type !== "custom" && isBetween ? "flex" : "none";
+      this.listRow.style.display = type === "list" ? "flex" : "none";
+      this.formulaRow.style.display = type === "custom" ? "flex" : "none";
+      this.showDropdownRow.style.display = type === "list" ? "flex" : "none";
+      const showValue1 = type !== "any" && type !== "list" && type !== "custom";
+      const value1Parent = this.value1Input.parentElement;
+      if (value1Parent) value1Parent.style.display = showValue1 ? "flex" : "none";
+      if (isBetween) {
+        this.value1Label.textContent = "Minimum:";
+      } else {
+        const opLabel = OPERATORS.find((o) => o.value === op)?.label ?? "Value";
+        this.value1Label.textContent = `Value (${opLabel}):`;
+      }
+      const placeholder = type === "date" ? "e.g. 2025-01-01" : type === "time" ? "e.g. 08:00" : "Number";
+      this.value1Input.placeholder = placeholder;
+      this.value2Input.placeholder = placeholder;
+    }
+    _submitRule() {
+      const sqref = this.rangeInput.value.trim();
+      if (!sqref) {
+        this.rangeInput.style.borderColor = "#ff0000";
+        this.rangeInput.focus();
+        return;
+      }
+      this.rangeInput.style.borderColor = "";
+      const rule = this._buildRule();
+      if (!rule) return;
+      rule.sqref = sqref;
+      if (this.editIndex !== null) {
+        this.onAction({ action: "edit", rule, ruleIndex: this.editIndex });
+        this.editIndex = null;
+        const footer = this.container.lastElementChild;
+        const btn = footer.querySelector("button");
+        if (btn) btn.textContent = "Add Rule";
+      } else {
+        this.onAction({ action: "add", rule });
+      }
+      this._refreshRuleList();
+    }
+    _buildRule() {
+      const type = this.typeSelect.value;
+      const op = this.operatorSelect.value;
+      let formula1;
+      let formula2;
+      if (type === "list") {
+        formula1 = this.listInput.value.trim() || void 0;
+      } else if (type === "custom") {
+        formula1 = this.formulaInput.value.trim() || void 0;
+      } else if (type !== "any") {
+        formula1 = this.value1Input.value.trim() || void 0;
+        if (op === "between" || op === "notBetween") {
+          formula2 = this.value2Input.value.trim() || void 0;
+        }
+      }
+      return {
+        validation_type: type,
+        operator: type !== "any" && type !== "list" && type !== "custom" ? op : void 0,
+        sqref: this.rangeInput.value.trim(),
+        formula1,
+        formula2,
+        allow_blank: this.allowBlankCheck.checked,
+        show_input_message: this.showInputMsgCheck.checked,
+        show_error_message: this.showErrorCheck.checked,
+        show_dropdown: this.showDropdownCheck.checked,
+        input_title: this.inputTitleInput.value.trim() || void 0,
+        input_message: this.inputMsgTextarea.value.trim() || void 0,
+        error_title: this.errorTitleInput.value.trim() || void 0,
+        error_message: this.errorMsgTextarea.value.trim() || void 0,
+        error_style: this.errorStyleSelect.value
+      };
+    }
+    _populateForm(rule) {
+      this.typeSelect.value = rule.validation_type;
+      if (rule.operator) this.operatorSelect.value = rule.operator;
+      this.rangeInput.value = rule.sqref;
+      if (rule.validation_type === "list") {
+        this.listInput.value = rule.formula1 ?? "";
+      } else if (rule.validation_type === "custom") {
+        this.formulaInput.value = rule.formula1 ?? "";
+      } else {
+        this.value1Input.value = rule.formula1 ?? "";
+        this.value2Input.value = rule.formula2 ?? "";
+      }
+      this.allowBlankCheck.checked = rule.allow_blank;
+      this.showDropdownCheck.checked = rule.show_dropdown;
+      this.showInputMsgCheck.checked = rule.show_input_message;
+      this.inputTitleInput.value = rule.input_title ?? "";
+      this.inputMsgTextarea.value = rule.input_message ?? "";
+      this.showErrorCheck.checked = rule.show_error_message;
+      this.errorStyleSelect.value = rule.error_style;
+      this.errorTitleInput.value = rule.error_title ?? "";
+      this.errorMsgTextarea.value = rule.error_message ?? "";
+      this._updateSettingsUI();
+    }
+    _refreshRuleList() {
+      this.ruleListArea.innerHTML = "";
+      if (!this.existingRules.length) {
+        const empty = document.createElement("div");
+        empty.textContent = "No validation rules defined.";
+        empty.style.cssText = "padding:8px 10px;color:#888;font-style:italic;font-size:12px;";
+        this.ruleListArea.appendChild(empty);
+        return;
+      }
+      for (let i = 0; i < this.existingRules.length; i++) {
+        const rule = this.existingRules[i];
+        const row = document.createElement("div");
+        row.style.cssText = "display:flex;align-items:center;padding:5px 8px;border-bottom:1px solid #eee;gap:6px;";
+        const summary = document.createElement("span");
+        summary.style.cssText = "flex:1;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;";
+        summary.title = rule.sqref;
+        const typeLabel = VALIDATION_TYPES.find((t) => t.value === rule.validation_type)?.label ?? rule.validation_type;
+        summary.textContent = `${rule.sqref}: ${typeLabel}${rule.formula1 ? ` (${rule.formula1})` : ""}`;
+        const editBtn = document.createElement("button");
+        editBtn.textContent = "Edit";
+        editBtn.style.cssText = this._smallBtnStyle();
+        editBtn.addEventListener("click", () => {
+          this.editIndex = i;
+          this._populateForm(rule);
+          this._switchTab("settings");
+          const footer = this.container.lastElementChild;
+          const btn = footer.querySelector("button");
+          if (btn) btn.textContent = "Save Changes";
+        });
+        const delBtn = document.createElement("button");
+        delBtn.textContent = "Delete";
+        delBtn.style.cssText = `${this._smallBtnStyle()}color:#c00;border-color:#f99;`;
+        delBtn.addEventListener("click", () => {
+          this.onAction({ action: "delete", ruleIndex: i });
+          this._refreshRuleList();
+        });
+        row.appendChild(summary);
+        row.appendChild(editBtn);
+        row.appendChild(delBtn);
+        this.ruleListArea.appendChild(row);
+      }
+    }
+    // ---- Public API ----
+    show(sqref, existingRules) {
+      this.existingRules = existingRules ?? [];
+      this.rangeInput.value = sqref;
+      this.editIndex = null;
+      this.typeSelect.value = "any";
+      this._updateSettingsUI();
+      this._switchTab("settings");
+      this._refreshRuleList();
+      const footer = this.container.lastElementChild;
+      const btn = footer.querySelector("button");
+      if (btn) btn.textContent = "Add Rule";
+      this.container.style.display = "flex";
+    }
+    hide() {
+      this.container.style.display = "none";
+      this.onAction({ action: "close" });
+    }
+    isVisible() {
+      return this.container.style.display !== "none";
+    }
+    /** Update the rule list display after external changes. */
+    refreshRules(rules) {
+      this.existingRules = rules;
+      this._refreshRuleList();
+    }
+    // ---- Helpers ----
+    _makeRow() {
+      const row = document.createElement("div");
+      row.style.cssText = "display:flex;align-items:center;gap:8px;margin-bottom:8px;";
+      return row;
+    }
+    _makeColRow() {
+      const row = document.createElement("div");
+      row.style.cssText = "display:flex;flex-direction:column;gap:4px;margin-bottom:8px;";
+      return row;
+    }
+    _makeLabel(text) {
+      const lbl = document.createElement("label");
+      lbl.textContent = text;
+      lbl.style.cssText = "min-width:90px;font-size:12px;color:#555;";
+      return lbl;
+    }
+    _makeSpacer() {
+      const el = document.createElement("div");
+      el.style.height = "8px";
+      return el;
+    }
+    _inputStyle() {
+      return "flex:1;padding:5px 8px;border:1px solid #ccc;border-radius:4px;font-size:13px;outline:none;width:100%;box-sizing:border-box;";
+    }
+    _selectStyle() {
+      return "flex:1;padding:5px 6px;border:1px solid #ccc;border-radius:4px;font-size:13px;";
+    }
+    _primaryBtnStyle() {
+      return "padding:7px 18px;border-radius:4px;font-size:13px;cursor:pointer;border:1px solid #0078d7;background:#0078d7;color:#fff;font-weight:500;";
+    }
+    _secondaryBtnStyle() {
+      return "padding:7px 18px;border-radius:4px;font-size:13px;cursor:pointer;border:1px solid #ccc;background:#fff;color:#333;";
+    }
+    _smallBtnStyle() {
+      return "padding:3px 8px;border-radius:3px;font-size:11px;cursor:pointer;border:1px solid #ccc;background:#fff;color:#333;";
+    }
+    _makeDraggable(handle) {
+      let dragging = false;
+      let offsetX = 0;
+      let offsetY = 0;
+      handle.addEventListener("mousedown", (e) => {
+        dragging = true;
+        const rect = this.container.getBoundingClientRect();
+        offsetX = e.clientX - rect.left;
+        offsetY = e.clientY - rect.top;
+        e.preventDefault();
+      });
+      document.addEventListener("mousemove", (e) => {
+        if (!dragging) return;
+        this.container.style.left = `${e.clientX - offsetX}px`;
+        this.container.style.top = `${e.clientY - offsetY}px`;
+        this.container.style.right = "auto";
+        this.container.style.bottom = "auto";
+      });
+      document.addEventListener("mouseup", () => {
+        dragging = false;
+      });
+    }
+  };
+
+  // formatCellsDialog.ts
+  var FONT_FAMILIES = [
+    "Calibri",
+    "Arial",
+    "Arial Narrow",
+    "Times New Roman",
+    "Courier New",
+    "Verdana",
+    "Georgia",
+    "Trebuchet MS",
+    "Tahoma",
+    "Cambria",
+    "Comic Sans MS",
+    "Impact",
+    "Palatino Linotype",
+    "Garamond"
+  ];
+  var NUMBER_PRESETS = [
+    { label: "General", code: "General" },
+    { label: "Number", code: "0", decimals: 0 },
+    { label: "Number (2 dec)", code: "0.00", decimals: 2 },
+    { label: "Number (,sep)", code: "#,##0", decimals: 0 },
+    { label: "Number (,sep 2d)", code: "#,##0.00", decimals: 2 },
+    { label: "Currency ($)", code: '"$"#,##0.00', decimals: 2 },
+    { label: "Currency ($ neg)", code: '"$"#,##0.00;[Red]"-$"#,##0.00', decimals: 2 },
+    { label: "Percentage", code: "0%", decimals: 0 },
+    { label: "Percentage (2d)", code: "0.00%", decimals: 2 },
+    { label: "Scientific", code: "0.00E+00", decimals: 2 },
+    { label: "Fraction", code: "# ?/?" },
+    { label: "Short Date", code: "M/D/YYYY" },
+    { label: "Long Date", code: "MMMM D, YYYY" },
+    { label: "Time", code: "H:MM:SS AM/PM" },
+    { label: "Text", code: "@" }
+  ];
+  var FormatCellsDialog = class {
+    constructor(container, onAction) {
+      // Tab buttons
+      this.tabButtons = /* @__PURE__ */ new Map();
+      this.tabContents = /* @__PURE__ */ new Map();
+      this.container = container;
+      this.onAction = onAction;
+      this._build();
+    }
+    _build() {
+      this.dialog = document.createElement("div");
+      this.dialog.className = "fc-dialog";
+      Object.assign(this.dialog.style, {
+        display: "none",
+        position: "fixed",
+        top: "80px",
+        left: "50%",
+        transform: "translateX(-50%)",
+        width: "480px",
+        background: "#1e1e1e",
+        border: "1px solid #555",
+        borderRadius: "6px",
+        boxShadow: "0 8px 32px rgba(0,0,0,0.6)",
+        zIndex: "9999",
+        fontFamily: "system-ui, sans-serif",
+        fontSize: "13px",
+        color: "#ccc",
+        userSelect: "none"
+      });
+      const titleBar = document.createElement("div");
+      Object.assign(titleBar.style, {
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        padding: "8px 12px",
+        background: "#2d2d2d",
+        borderRadius: "6px 6px 0 0",
+        cursor: "move",
+        borderBottom: "1px solid #444"
+      });
+      const title = document.createElement("span");
+      title.textContent = "Format Cells";
+      title.style.fontWeight = "600";
+      const closeBtn = document.createElement("button");
+      closeBtn.textContent = "\u2715";
+      Object.assign(closeBtn.style, {
+        background: "none",
+        border: "none",
+        color: "#ccc",
+        cursor: "pointer",
+        fontSize: "14px",
+        padding: "0 4px"
+      });
+      closeBtn.onclick = () => this.hide();
+      titleBar.appendChild(title);
+      titleBar.appendChild(closeBtn);
+      this.dialog.appendChild(titleBar);
+      this._makeDraggable(titleBar);
+      const tabBar = document.createElement("div");
+      Object.assign(tabBar.style, {
+        display: "flex",
+        borderBottom: "1px solid #444",
+        background: "#252526"
+      });
+      const tabs = [
+        { id: "font", label: "Font" },
+        { id: "alignment", label: "Alignment" },
+        { id: "number", label: "Number" },
+        { id: "fill", label: "Fill" }
+      ];
+      for (const tab of tabs) {
+        const btn = document.createElement("button");
+        btn.textContent = tab.label;
+        Object.assign(btn.style, {
+          background: "none",
+          border: "none",
+          color: "#aaa",
+          padding: "8px 16px",
+          cursor: "pointer",
+          fontSize: "13px",
+          borderBottom: "2px solid transparent"
+        });
+        btn.onclick = () => this._switchTab(tab.id);
+        tabBar.appendChild(btn);
+        this.tabButtons.set(tab.id, btn);
+      }
+      this.dialog.appendChild(tabBar);
+      const body = document.createElement("div");
+      body.style.padding = "16px";
+      const fontContent = this._buildFontTab();
+      const alignContent = this._buildAlignmentTab();
+      const numberContent = this._buildNumberTab();
+      const fillContent = this._buildFillTab();
+      body.appendChild(fontContent);
+      body.appendChild(alignContent);
+      body.appendChild(numberContent);
+      body.appendChild(fillContent);
+      this.tabContents.set("font", fontContent);
+      this.tabContents.set("alignment", alignContent);
+      this.tabContents.set("number", numberContent);
+      this.tabContents.set("fill", fillContent);
+      this.dialog.appendChild(body);
+      const footer = document.createElement("div");
+      Object.assign(footer.style, {
+        display: "flex",
+        justifyContent: "flex-end",
+        gap: "8px",
+        padding: "10px 16px",
+        borderTop: "1px solid #444",
+        background: "#252526",
+        borderRadius: "0 0 6px 6px"
+      });
+      const cancelBtn = document.createElement("button");
+      cancelBtn.textContent = "Cancel";
+      Object.assign(cancelBtn.style, {
+        padding: "5px 16px",
+        background: "#3a3a3a",
+        border: "1px solid #555",
+        color: "#ccc",
+        borderRadius: "4px",
+        cursor: "pointer",
+        fontSize: "13px"
+      });
+      cancelBtn.onclick = () => this.hide();
+      const applyBtn = document.createElement("button");
+      applyBtn.textContent = "Apply";
+      Object.assign(applyBtn.style, {
+        padding: "5px 16px",
+        background: "#0078d7",
+        border: "none",
+        color: "#fff",
+        borderRadius: "4px",
+        cursor: "pointer",
+        fontSize: "13px"
+      });
+      applyBtn.onclick = () => this._apply();
+      footer.appendChild(cancelBtn);
+      footer.appendChild(applyBtn);
+      this.dialog.appendChild(footer);
+      this.container.appendChild(this.dialog);
+      this._switchTab("font");
+    }
+    // ── Font Tab ────────────────────────────────────────────────────────────
+    _buildFontTab() {
+      const el = document.createElement("div");
+      const row1 = this._row();
+      const ffCol = this._col("Font", "200px");
+      this.fontFamilySelect = document.createElement("select");
+      Object.assign(this.fontFamilySelect.style, {
+        width: "100%",
+        background: "#2a2a2a",
+        border: "1px solid #555",
+        color: "#ccc",
+        borderRadius: "3px",
+        padding: "4px 6px",
+        fontSize: "13px"
+      });
+      const blankOpt = document.createElement("option");
+      blankOpt.value = "";
+      blankOpt.textContent = "(unchanged)";
+      this.fontFamilySelect.appendChild(blankOpt);
+      for (const f of FONT_FAMILIES) {
+        const opt = document.createElement("option");
+        opt.value = f;
+        opt.textContent = f;
+        opt.style.fontFamily = f;
+        this.fontFamilySelect.appendChild(opt);
+      }
+      this.fontFamilySelect.onchange = () => this._updateFontPreview();
+      ffCol.appendChild(this.fontFamilySelect);
+      row1.appendChild(ffCol);
+      const fsCol = this._col("Size", "80px");
+      this.fontSizeInput = document.createElement("input");
+      this.fontSizeInput.type = "number";
+      this.fontSizeInput.min = "6";
+      this.fontSizeInput.max = "96";
+      Object.assign(this.fontSizeInput.style, {
+        width: "100%",
+        background: "#2a2a2a",
+        border: "1px solid #555",
+        color: "#ccc",
+        borderRadius: "3px",
+        padding: "4px 6px",
+        fontSize: "13px"
+      });
+      this.fontSizeInput.oninput = () => this._updateFontPreview();
+      fsCol.appendChild(this.fontSizeInput);
+      row1.appendChild(fsCol);
+      const tcCol = this._col("Color", "80px");
+      this.textColorInput = document.createElement("input");
+      this.textColorInput.type = "color";
+      this.textColorInput.value = "#ffffff";
+      Object.assign(this.textColorInput.style, {
+        width: "100%",
+        height: "30px",
+        background: "none",
+        border: "1px solid #555",
+        borderRadius: "3px",
+        cursor: "pointer",
+        padding: "2px"
+      });
+      this.textColorInput.oninput = () => this._updateFontPreview();
+      tcCol.appendChild(this.textColorInput);
+      row1.appendChild(tcCol);
+      el.appendChild(row1);
+      const styleRow = this._row();
+      styleRow.style.marginTop = "12px";
+      styleRow.style.flexWrap = "wrap";
+      styleRow.style.gap = "12px";
+      this.boldCheck = this._checkbox("Bold");
+      this.italicCheck = this._checkbox("Italic");
+      this.underlineCheck = this._checkbox("Underline");
+      this.strikeCheck = this._checkbox("Strikethrough");
+      for (const cb of [this.boldCheck, this.italicCheck, this.underlineCheck, this.strikeCheck]) {
+        const wrapper = cb.parentElement;
+        styleRow.appendChild(wrapper);
+        cb.onchange = () => this._updateFontPreview();
+      }
+      el.appendChild(styleRow);
+      const previewLabel = document.createElement("div");
+      previewLabel.textContent = "Preview";
+      previewLabel.style.cssText = "margin-top:14px;margin-bottom:4px;color:#888;font-size:11px;text-transform:uppercase;letter-spacing:.5px;";
+      el.appendChild(previewLabel);
+      this.fontPreview = document.createElement("div");
+      Object.assign(this.fontPreview.style, {
+        border: "1px solid #444",
+        borderRadius: "4px",
+        padding: "10px 14px",
+        background: "#2a2a2a",
+        minHeight: "40px",
+        display: "flex",
+        alignItems: "center"
+      });
+      this.fontPreview.textContent = "AaBbCcYyZz 123";
+      el.appendChild(this.fontPreview);
+      return el;
+    }
+    // ── Alignment Tab ───────────────────────────────────────────────────────
+    _buildAlignmentTab() {
+      const el = document.createElement("div");
+      const hLabel = document.createElement("div");
+      hLabel.textContent = "Horizontal Alignment";
+      hLabel.style.cssText = "color:#888;font-size:11px;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;";
+      el.appendChild(hLabel);
+      const btnRow = document.createElement("div");
+      btnRow.style.cssText = "display:flex;gap:8px;margin-bottom:20px;";
+      const makeAlignBtn = (label, value) => {
+        const btn = document.createElement("button");
+        btn.textContent = label;
+        Object.assign(btn.style, {
+          flex: "1",
+          padding: "8px",
+          background: "#2a2a2a",
+          border: "1px solid #555",
+          color: "#ccc",
+          borderRadius: "4px",
+          cursor: "pointer",
+          fontSize: "13px"
+        });
+        btn.dataset["align"] = value;
+        btn.onclick = () => this._selectAlign(value);
+        return btn;
+      };
+      this.alignLeft = makeAlignBtn("\u2B1B Left", "left");
+      this.alignCenter = makeAlignBtn("\u2B1C Center", "center");
+      this.alignRight = makeAlignBtn("\u2B1B Right", "right");
+      btnRow.appendChild(this.alignLeft);
+      btnRow.appendChild(this.alignCenter);
+      btnRow.appendChild(this.alignRight);
+      el.appendChild(btnRow);
+      const wrapWrapper = document.createElement("label");
+      wrapWrapper.style.cssText = "display:flex;align-items:center;gap:8px;cursor:pointer;";
+      this.wrapTextCheck = document.createElement("input");
+      this.wrapTextCheck.type = "checkbox";
+      wrapWrapper.appendChild(this.wrapTextCheck);
+      wrapWrapper.appendChild(document.createTextNode("Wrap Text"));
+      el.appendChild(wrapWrapper);
+      return el;
+    }
+    // ── Number Tab ──────────────────────────────────────────────────────────
+    _buildNumberTab() {
+      const el = document.createElement("div");
+      const label = document.createElement("div");
+      label.textContent = "Format";
+      label.style.cssText = "color:#888;font-size:11px;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;";
+      el.appendChild(label);
+      this.numberPresetList = document.createElement("select");
+      this.numberPresetList.size = 8;
+      Object.assign(this.numberPresetList.style, {
+        width: "100%",
+        background: "#2a2a2a",
+        border: "1px solid #555",
+        color: "#ccc",
+        borderRadius: "3px",
+        fontSize: "13px",
+        marginBottom: "12px"
+      });
+      for (const preset of NUMBER_PRESETS) {
+        const opt = document.createElement("option");
+        opt.value = preset.code;
+        opt.textContent = preset.label;
+        this.numberPresetList.appendChild(opt);
+      }
+      this.numberPresetList.onchange = () => {
+        this.numberCustomInput.value = this.numberPresetList.value;
+        this._updateNumberPreview();
+      };
+      el.appendChild(this.numberPresetList);
+      const customLabel = document.createElement("div");
+      customLabel.textContent = "Format Code";
+      customLabel.style.cssText = "color:#888;font-size:11px;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px;";
+      el.appendChild(customLabel);
+      this.numberCustomInput = document.createElement("input");
+      this.numberCustomInput.type = "text";
+      this.numberCustomInput.placeholder = "e.g. #,##0.00";
+      Object.assign(this.numberCustomInput.style, {
+        width: "100%",
+        background: "#2a2a2a",
+        border: "1px solid #555",
+        color: "#ccc",
+        borderRadius: "3px",
+        padding: "4px 8px",
+        fontSize: "13px",
+        boxSizing: "border-box",
+        marginBottom: "12px"
+      });
+      this.numberCustomInput.oninput = () => this._updateNumberPreview();
+      el.appendChild(this.numberCustomInput);
+      const previewLabel = document.createElement("div");
+      previewLabel.textContent = "Preview";
+      previewLabel.style.cssText = "color:#888;font-size:11px;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px;";
+      el.appendChild(previewLabel);
+      this.numberPreview = document.createElement("div");
+      Object.assign(this.numberPreview.style, {
+        border: "1px solid #444",
+        borderRadius: "4px",
+        padding: "8px 12px",
+        background: "#2a2a2a",
+        color: "#ccc",
+        fontSize: "13px"
+      });
+      this.numberPreview.textContent = "e.g. 1234.56";
+      el.appendChild(this.numberPreview);
+      return el;
+    }
+    // ── Fill Tab ────────────────────────────────────────────────────────────
+    _buildFillTab() {
+      const el = document.createElement("div");
+      const label = document.createElement("div");
+      label.textContent = "Background Color";
+      label.style.cssText = "color:#888;font-size:11px;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;";
+      el.appendChild(label);
+      const colorRow = document.createElement("div");
+      colorRow.style.cssText = "display:flex;align-items:center;gap:12px;margin-bottom:16px;";
+      this.fillColorInput = document.createElement("input");
+      this.fillColorInput.type = "color";
+      this.fillColorInput.value = "#ffffff";
+      Object.assign(this.fillColorInput.style, {
+        width: "48px",
+        height: "32px",
+        background: "none",
+        border: "1px solid #555",
+        borderRadius: "3px",
+        cursor: "pointer",
+        padding: "2px"
+      });
+      this.fillColorInput.oninput = () => {
+        this.fillNoneBtn.style.outline = "none";
+        this._updateFillPreview();
+      };
+      colorRow.appendChild(this.fillColorInput);
+      this.fillNoneBtn = document.createElement("button");
+      this.fillNoneBtn.textContent = "No Fill";
+      Object.assign(this.fillNoneBtn.style, {
+        padding: "5px 12px",
+        background: "#2a2a2a",
+        border: "1px solid #555",
+        color: "#ccc",
+        borderRadius: "4px",
+        cursor: "pointer",
+        fontSize: "13px"
+      });
+      this.fillNoneBtn.onclick = () => {
+        this.fillColorInput.value = "#ffffff";
+        this.fillNoneBtn.style.outline = "2px solid #0078d7";
+        this._updateFillPreview(true);
+      };
+      colorRow.appendChild(this.fillNoneBtn);
+      el.appendChild(colorRow);
+      const paletteLabel = document.createElement("div");
+      paletteLabel.textContent = "Quick Colors";
+      paletteLabel.style.cssText = "color:#888;font-size:11px;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;";
+      el.appendChild(paletteLabel);
+      const palette = document.createElement("div");
+      palette.style.cssText = "display:flex;flex-wrap:wrap;gap:4px;margin-bottom:16px;";
+      const PALETTE_COLORS = [
+        "#ffffff",
+        "#f2f2f2",
+        "#d9d9d9",
+        "#bfbfbf",
+        "#a5a5a5",
+        "#7f7f7f",
+        "#595959",
+        "#000000",
+        "#ffcccc",
+        "#ff9999",
+        "#ff6666",
+        "#ff0000",
+        "#cc0000",
+        "#990000",
+        "#660000",
+        "#330000",
+        "#fff2cc",
+        "#ffe599",
+        "#ffd966",
+        "#ffc000",
+        "#f4b400",
+        "#e69138",
+        "#bf9000",
+        "#7f6000",
+        "#d9ead3",
+        "#b6d7a8",
+        "#93c47d",
+        "#6aa84f",
+        "#38761d",
+        "#274e13",
+        "#00ff00",
+        "#00cc00",
+        "#cfe2f3",
+        "#9fc5e8",
+        "#6fa8dc",
+        "#4a86e8",
+        "#1155cc",
+        "#1c4587",
+        "#0000ff",
+        "#0000cc",
+        "#ead1dc",
+        "#ea9999",
+        "#e06666",
+        "#cc4125",
+        "#a61c00",
+        "#dd7e6b",
+        "#e4c7a0",
+        "#c9daf8"
+      ];
+      for (const c of PALETTE_COLORS) {
+        const swatch = document.createElement("button");
+        Object.assign(swatch.style, {
+          width: "20px",
+          height: "20px",
+          background: c,
+          border: "1px solid #555",
+          borderRadius: "2px",
+          cursor: "pointer",
+          padding: "0"
+        });
+        swatch.title = c;
+        swatch.onclick = () => {
+          this.fillColorInput.value = c;
+          this.fillNoneBtn.style.outline = "none";
+          this._updateFillPreview();
+        };
+        palette.appendChild(swatch);
+      }
+      el.appendChild(palette);
+      const previewLabel = document.createElement("div");
+      previewLabel.textContent = "Preview";
+      previewLabel.style.cssText = "color:#888;font-size:11px;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px;";
+      el.appendChild(previewLabel);
+      this.fillPreview = document.createElement("div");
+      Object.assign(this.fillPreview.style, {
+        border: "1px solid #444",
+        borderRadius: "4px",
+        height: "32px",
+        background: "transparent"
+      });
+      el.appendChild(this.fillPreview);
+      return el;
+    }
+    // ── Helpers ─────────────────────────────────────────────────────────────
+    _row() {
+      const d = document.createElement("div");
+      d.style.cssText = "display:flex;gap:12px;align-items:flex-start;";
+      return d;
+    }
+    _col(labelText, width) {
+      const d = document.createElement("div");
+      d.style.cssText = `display:flex;flex-direction:column;gap:4px;width:${width};`;
+      const lbl = document.createElement("div");
+      lbl.textContent = labelText;
+      lbl.style.cssText = "color:#888;font-size:11px;text-transform:uppercase;letter-spacing:.5px;";
+      d.appendChild(lbl);
+      return d;
+    }
+    _checkbox(label) {
+      const wrapper = document.createElement("label");
+      wrapper.style.cssText = "display:flex;align-items:center;gap:6px;cursor:pointer;";
+      const cb = document.createElement("input");
+      cb.type = "checkbox";
+      wrapper.appendChild(cb);
+      wrapper.appendChild(document.createTextNode(label));
+      return cb;
+    }
+    _switchTab(id) {
+      for (const [tid, content] of this.tabContents) {
+        content.style.display = tid === id ? "block" : "none";
+      }
+      for (const [tid, btn] of this.tabButtons) {
+        const active = tid === id;
+        btn.style.color = active ? "#0078d7" : "#aaa";
+        btn.style.borderBottom = active ? "2px solid #0078d7" : "2px solid transparent";
+        btn.style.fontWeight = active ? "600" : "normal";
+      }
+    }
+    _selectAlign(value) {
+      for (const btn of [this.alignLeft, this.alignCenter, this.alignRight]) {
+        const isActive = btn.dataset["align"] === value;
+        btn.style.background = isActive ? "#0078d7" : "#2a2a2a";
+        btn.style.color = isActive ? "#fff" : "#ccc";
+        btn.style.borderColor = isActive ? "#0078d7" : "#555";
+      }
+    }
+    _currentAlign() {
+      for (const btn of [this.alignLeft, this.alignCenter, this.alignRight]) {
+        if (btn.style.background === "rgb(0, 120, 215)") {
+          return btn.dataset["align"];
+        }
+      }
+      return void 0;
+    }
+    _noFillSelected() {
+      return this.fillNoneBtn.style.outline !== "" && this.fillNoneBtn.style.outline !== "none";
+    }
+    _updateFontPreview() {
+      const ff = this.fontFamilySelect.value || "inherit";
+      const fs = this.fontSizeInput.value ? `${this.fontSizeInput.value}px` : "inherit";
+      const color2 = this.textColorInput.value || "#ccc";
+      this.fontPreview.style.fontFamily = ff;
+      this.fontPreview.style.fontSize = fs;
+      this.fontPreview.style.fontWeight = this.boldCheck.checked ? "bold" : "normal";
+      this.fontPreview.style.fontStyle = this.italicCheck.checked ? "italic" : "normal";
+      const dec = [];
+      if (this.underlineCheck.checked) dec.push("underline");
+      if (this.strikeCheck.checked) dec.push("line-through");
+      this.fontPreview.style.textDecoration = dec.join(" ") || "none";
+      this.fontPreview.style.color = color2;
+    }
+    _updateNumberPreview() {
+      const code = this.numberCustomInput.value.trim();
+      if (!code || code === "General") {
+        this.numberPreview.textContent = "1234.56  (General)";
+        return;
+      }
+      this.numberPreview.textContent = `Format code: ${code}`;
+    }
+    _updateFillPreview(noFill = false) {
+      this.fillPreview.style.background = noFill ? "transparent" : this.fillColorInput.value;
+    }
+    _apply() {
+      const style = {};
+      if (this.fontFamilySelect.value) style.fontFamily = this.fontFamilySelect.value;
+      const fs = parseInt(this.fontSizeInput.value, 10);
+      if (fs > 0 && !isNaN(fs)) style.fontSize = fs;
+      if (this.boldCheck.checked) style.bold = true;
+      else if (!this.boldCheck.checked && this.boldCheck.dataset["wasSet"] === "1") style.bold = false;
+      if (this.italicCheck.checked) style.italic = true;
+      else if (!this.italicCheck.checked && this.italicCheck.dataset["wasSet"] === "1") style.italic = false;
+      if (this.underlineCheck.checked) style.underline = true;
+      else if (!this.underlineCheck.checked && this.underlineCheck.dataset["wasSet"] === "1") style.underline = false;
+      if (this.strikeCheck.checked) style.strikethrough = true;
+      else if (!this.strikeCheck.checked && this.strikeCheck.dataset["wasSet"] === "1") style.strikethrough = false;
+      if (this.textColorInput.dataset["loaded"] === "1") {
+        style.textColor = this.textColorInput.value;
+      }
+      const align = this._currentAlign();
+      if (align) style.alignment = align;
+      if (this.wrapTextCheck.checked) style.wrapText = true;
+      else if (!this.wrapTextCheck.checked && this.wrapTextCheck.dataset["wasSet"] === "1") style.wrapText = false;
+      const fmt = this.numberCustomInput.value.trim();
+      if (fmt) style.numberFormat = fmt === "General" ? void 0 : fmt;
+      if (this._noFillSelected()) {
+        style.fillColor = void 0;
+      } else if (this.fillColorInput.dataset["loaded"] === "1") {
+        style.fillColor = this.fillColorInput.value;
+      }
+      this.onAction({ action: "apply", style });
+      this.hide();
+    }
+    // ── Public API ───────────────────────────────────────────────────────────
+    show(currentStyle) {
+      this.fontFamilySelect.value = currentStyle.fontFamily ?? "";
+      this.fontSizeInput.value = currentStyle.fontSize != null ? String(currentStyle.fontSize) : "";
+      const setBool = (cb, val) => {
+        cb.checked = val === true;
+        cb.dataset["wasSet"] = val !== void 0 ? "1" : "0";
+      };
+      setBool(this.boldCheck, currentStyle.bold);
+      setBool(this.italicCheck, currentStyle.italic);
+      setBool(this.underlineCheck, currentStyle.underline);
+      setBool(this.strikeCheck, currentStyle.strikethrough);
+      if (currentStyle.textColor) {
+        this.textColorInput.value = this._normalizeColor(currentStyle.textColor);
+        this.textColorInput.dataset["loaded"] = "1";
+      } else {
+        this.textColorInput.value = "#ffffff";
+        this.textColorInput.dataset["loaded"] = "0";
+      }
+      this._selectAlign("");
+      if (currentStyle.alignment) this._selectAlign(currentStyle.alignment);
+      this.wrapTextCheck.checked = currentStyle.wrapText === true;
+      this.wrapTextCheck.dataset["wasSet"] = currentStyle.wrapText !== void 0 ? "1" : "0";
+      const fmt = currentStyle.numberFormat ?? "General";
+      this.numberCustomInput.value = fmt;
+      let found = false;
+      for (let i = 0; i < this.numberPresetList.options.length; i++) {
+        if (this.numberPresetList.options[i].value === fmt) {
+          this.numberPresetList.selectedIndex = i;
+          found = true;
+          break;
+        }
+      }
+      if (!found) this.numberPresetList.selectedIndex = -1;
+      this._updateNumberPreview();
+      if (currentStyle.fillColor) {
+        this.fillColorInput.value = this._normalizeColor(currentStyle.fillColor);
+        this.fillColorInput.dataset["loaded"] = "1";
+        this.fillNoneBtn.style.outline = "none";
+        this._updateFillPreview();
+      } else {
+        this.fillColorInput.value = "#ffffff";
+        this.fillColorInput.dataset["loaded"] = "0";
+        this.fillNoneBtn.style.outline = "2px solid #0078d7";
+        this._updateFillPreview(true);
+      }
+      this._updateFontPreview();
+      this._switchTab("font");
+      this.dialog.style.display = "block";
+    }
+    hide() {
+      this.dialog.style.display = "none";
+      this.onAction({ action: "close" });
+    }
+    isVisible() {
+      return this.dialog.style.display !== "none";
+    }
+    _normalizeColor(color2) {
+      if (/^#[0-9a-fA-F]{6}$/.test(color2)) return color2;
+      if (/^#[0-9a-fA-F]{3}$/.test(color2)) {
+        const r = color2[1], g = color2[2], b = color2[3];
+        return `#${r}${r}${g}${g}${b}${b}`;
+      }
+      if (/^[0-9a-fA-F]{8}$/.test(color2)) return `#${color2.slice(2)}`;
+      return "#ffffff";
+    }
+    _makeDraggable(handle) {
+      let startX = 0, startY = 0, origLeft = 0, origTop = 0;
+      handle.addEventListener("mousedown", (e) => {
+        if (e.button !== 0) return;
+        startX = e.clientX;
+        startY = e.clientY;
+        const rect = this.dialog.getBoundingClientRect();
+        origLeft = rect.left;
+        origTop = rect.top;
+        this.dialog.style.transform = "none";
+        this.dialog.style.left = `${origLeft}px`;
+        this.dialog.style.top = `${origTop}px`;
+        const onMove = (ev) => {
+          this.dialog.style.left = `${origLeft + ev.clientX - startX}px`;
+          this.dialog.style.top = `${origTop + ev.clientY - startY}px`;
+        };
+        const onUp = () => {
+          document.removeEventListener("mousemove", onMove);
+          document.removeEventListener("mouseup", onUp);
+        };
+        document.addEventListener("mousemove", onMove);
+        document.addEventListener("mouseup", onUp);
+        e.preventDefault();
+      });
+    }
+  };
+
+  // hyperlinkDialog.ts
+  var HyperlinkDialog = class {
+    constructor(container, onAction) {
+      this.tabButtons = /* @__PURE__ */ new Map();
+      this.tabContents = /* @__PURE__ */ new Map();
+      // Current state
+      this.currentCellRef = "A1";
+      this.isEditing = false;
+      this.existingLink = null;
+      this.container = container;
+      this.onAction = onAction;
+      this._build();
+    }
+    _build() {
+      this.dialog = document.createElement("div");
+      Object.assign(this.dialog.style, {
+        display: "none",
+        position: "fixed",
+        top: "80px",
+        left: "50%",
+        transform: "translateX(-50%)",
+        width: "460px",
+        background: "#1e1e1e",
+        border: "1px solid #555",
+        borderRadius: "6px",
+        boxShadow: "0 8px 32px rgba(0,0,0,0.6)",
+        zIndex: "9999",
+        fontFamily: "system-ui, sans-serif",
+        fontSize: "13px",
+        color: "#ccc",
+        userSelect: "none"
+      });
+      const titleBar = document.createElement("div");
+      Object.assign(titleBar.style, {
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        padding: "8px 12px",
+        background: "#2d2d2d",
+        borderRadius: "6px 6px 0 0",
+        cursor: "move",
+        borderBottom: "1px solid #444"
+      });
+      const title = document.createElement("span");
+      title.textContent = "Insert Hyperlink";
+      title.style.fontWeight = "600";
+      const closeBtn = document.createElement("button");
+      closeBtn.textContent = "\u2715";
+      Object.assign(closeBtn.style, {
+        background: "none",
+        border: "none",
+        color: "#ccc",
+        cursor: "pointer",
+        fontSize: "14px",
+        padding: "0 4px"
+      });
+      closeBtn.onclick = () => this.hide();
+      titleBar.appendChild(title);
+      titleBar.appendChild(closeBtn);
+      this.dialog.appendChild(titleBar);
+      this._makeDraggable(titleBar);
+      const tabBar = document.createElement("div");
+      Object.assign(tabBar.style, {
+        display: "flex",
+        borderBottom: "1px solid #444",
+        background: "#252526"
+      });
+      const tabs = [
+        { id: "url", label: "Web URL" },
+        { id: "email", label: "Email" },
+        { id: "sheet", label: "Sheet / Cell" }
+      ];
+      for (const tab of tabs) {
+        const btn = document.createElement("button");
+        btn.textContent = tab.label;
+        Object.assign(btn.style, {
+          background: "none",
+          border: "none",
+          color: "#aaa",
+          padding: "8px 16px",
+          cursor: "pointer",
+          fontSize: "13px",
+          borderBottom: "2px solid transparent"
+        });
+        btn.onclick = () => this._switchTab(tab.id);
+        tabBar.appendChild(btn);
+        this.tabButtons.set(tab.id, btn);
+      }
+      this.dialog.appendChild(tabBar);
+      const body = document.createElement("div");
+      body.style.padding = "16px";
+      const urlContent = this._buildUrlTab();
+      const emailContent = this._buildEmailTab();
+      const sheetContent = this._buildSheetTab();
+      body.appendChild(urlContent);
+      body.appendChild(emailContent);
+      body.appendChild(sheetContent);
+      this.tabContents.set("url", urlContent);
+      this.tabContents.set("email", emailContent);
+      this.tabContents.set("sheet", sheetContent);
+      this.dialog.appendChild(body);
+      const footer = document.createElement("div");
+      Object.assign(footer.style, {
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "center",
+        gap: "8px",
+        padding: "10px 16px",
+        borderTop: "1px solid #444",
+        background: "#252526",
+        borderRadius: "0 0 6px 6px"
+      });
+      this.removeBtn = document.createElement("button");
+      this.removeBtn.textContent = "Remove Link";
+      Object.assign(this.removeBtn.style, {
+        padding: "5px 12px",
+        background: "#5a1515",
+        border: "1px solid #8a3333",
+        color: "#f88",
+        borderRadius: "4px",
+        cursor: "pointer",
+        fontSize: "13px",
+        display: "none"
+      });
+      this.removeBtn.onclick = () => {
+        this.onAction({ action: "remove", link: this.existingLink ?? void 0 });
+        this.hide();
+      };
+      footer.appendChild(this.removeBtn);
+      const rightBtns = document.createElement("div");
+      rightBtns.style.cssText = "display:flex;gap:8px;";
+      const cancelBtn = document.createElement("button");
+      cancelBtn.textContent = "Cancel";
+      Object.assign(cancelBtn.style, {
+        padding: "5px 16px",
+        background: "#3a3a3a",
+        border: "1px solid #555",
+        color: "#ccc",
+        borderRadius: "4px",
+        cursor: "pointer",
+        fontSize: "13px"
+      });
+      cancelBtn.onclick = () => this.hide();
+      const okBtn = document.createElement("button");
+      okBtn.textContent = "OK";
+      Object.assign(okBtn.style, {
+        padding: "5px 20px",
+        background: "#0078d7",
+        border: "none",
+        color: "#fff",
+        borderRadius: "4px",
+        cursor: "pointer",
+        fontSize: "13px"
+      });
+      okBtn.onclick = () => this._apply();
+      rightBtns.appendChild(cancelBtn);
+      rightBtns.appendChild(okBtn);
+      footer.appendChild(rightBtns);
+      this.dialog.appendChild(footer);
+      this.container.appendChild(this.dialog);
+      this._switchTab("url");
+    }
+    // ── URL Tab ────────────────────────────────────────────────────────────────
+    _buildUrlTab() {
+      const el = document.createElement("div");
+      el.appendChild(this._field("URL", "e.g. https://www.example.com", (inp) => {
+        this.urlInput = inp;
+      }));
+      el.appendChild(this._field("Display Text (optional)", "Text to show in cell", (inp) => {
+        this.urlDisplayInput = inp;
+      }));
+      el.appendChild(this._field("Tooltip (optional)", "Hover tooltip text", (inp) => {
+        this.urlTooltipInput = inp;
+      }));
+      return el;
+    }
+    // ── Email Tab ──────────────────────────────────────────────────────────────
+    _buildEmailTab() {
+      const el = document.createElement("div");
+      const note = document.createElement("div");
+      note.textContent = "Creates a mailto: link that opens the default email client.";
+      note.style.cssText = "color:#888;font-size:12px;margin-bottom:12px;";
+      el.appendChild(note);
+      el.appendChild(this._field("Email Address", "user@example.com", (inp) => {
+        this.emailInput = inp;
+      }));
+      el.appendChild(this._field("Subject (optional)", "", (inp) => {
+        this.emailSubjectInput = inp;
+      }));
+      el.appendChild(this._field("Display Text (optional)", "Text to show in cell", (inp) => {
+        this.emailDisplayInput = inp;
+      }));
+      return el;
+    }
+    // ── Sheet Tab ─────────────────────────────────────────────────────────────
+    _buildSheetTab() {
+      const el = document.createElement("div");
+      const note = document.createElement("div");
+      note.textContent = "Links to another location in this workbook.";
+      note.style.cssText = "color:#888;font-size:12px;margin-bottom:12px;";
+      el.appendChild(note);
+      const sheetLabel = document.createElement("div");
+      sheetLabel.textContent = "Sheet";
+      sheetLabel.style.cssText = "color:#888;font-size:11px;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px;";
+      el.appendChild(sheetLabel);
+      this.sheetSelect = document.createElement("select");
+      Object.assign(this.sheetSelect.style, {
+        width: "100%",
+        background: "#2a2a2a",
+        border: "1px solid #555",
+        color: "#ccc",
+        borderRadius: "3px",
+        padding: "5px 8px",
+        fontSize: "13px",
+        marginBottom: "12px",
+        boxSizing: "border-box"
+      });
+      el.appendChild(this.sheetSelect);
+      el.appendChild(this._field("Cell Reference", "e.g. A1", (inp) => {
+        this.sheetCellInput = inp;
+        this.sheetCellInput.value = "A1";
+      }));
+      el.appendChild(this._field("Display Text (optional)", "Text to show in cell", (inp) => {
+        this.sheetDisplayInput = inp;
+      }));
+      return el;
+    }
+    // ── Helpers ────────────────────────────────────────────────────────────────
+    _field(label, placeholder, init) {
+      const wrapper = document.createElement("div");
+      wrapper.style.marginBottom = "12px";
+      const lbl = document.createElement("div");
+      lbl.textContent = label;
+      lbl.style.cssText = "color:#888;font-size:11px;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px;";
+      wrapper.appendChild(lbl);
+      const inp = document.createElement("input");
+      inp.type = "text";
+      inp.placeholder = placeholder;
+      Object.assign(inp.style, {
+        width: "100%",
+        background: "#2a2a2a",
+        border: "1px solid #555",
+        color: "#ccc",
+        borderRadius: "3px",
+        padding: "5px 8px",
+        fontSize: "13px",
+        boxSizing: "border-box"
+      });
+      wrapper.appendChild(inp);
+      init(inp);
+      return wrapper;
+    }
+    _switchTab(id) {
+      for (const [tid, content] of this.tabContents) {
+        content.style.display = tid === id ? "block" : "none";
+      }
+      for (const [tid, btn] of this.tabButtons) {
+        const active = tid === id;
+        btn.style.color = active ? "#0078d7" : "#aaa";
+        btn.style.borderBottom = active ? "2px solid #0078d7" : "2px solid transparent";
+        btn.style.fontWeight = active ? "600" : "normal";
+      }
+    }
+    _apply() {
+      let url = "";
+      let display;
+      let tooltip;
+      let is_internal = false;
+      const activeTab = ["url", "email", "sheet"].find(
+        (id) => this.tabContents.get(id)?.style.display !== "none"
+      ) ?? "url";
+      if (activeTab === "url") {
+        url = this.urlInput.value.trim();
+        if (!url) {
+          this.urlInput.focus();
+          return;
+        }
+        if (!/^[a-zA-Z][a-zA-Z0-9+\-.]*:/.test(url)) url = `https://${url}`;
+        display = this.urlDisplayInput.value.trim() || void 0;
+        tooltip = this.urlTooltipInput.value.trim() || void 0;
+      } else if (activeTab === "email") {
+        const addr = this.emailInput.value.trim();
+        if (!addr) {
+          this.emailInput.focus();
+          return;
+        }
+        const subj = this.emailSubjectInput.value.trim();
+        url = subj ? `mailto:${addr}?subject=${encodeURIComponent(subj)}` : `mailto:${addr}`;
+        display = this.emailDisplayInput.value.trim() || void 0;
+      } else {
+        const sheetName = this.sheetSelect.value;
+        const cellRef2 = this.sheetCellInput.value.trim() || "A1";
+        if (!sheetName) return;
+        const safeSheet = sheetName.includes(" ") ? `'${sheetName}'` : sheetName;
+        url = `#${safeSheet}!${cellRef2}`;
+        is_internal = true;
+        display = this.sheetDisplayInput.value.trim() || void 0;
+      }
+      const link = {
+        cell_ref: this.currentCellRef,
+        url,
+        tooltip,
+        display,
+        is_internal
+      };
+      this.onAction({ action: this.isEditing ? "edit" : "insert", link });
+      this.hide();
+    }
+    // ── Public API ─────────────────────────────────────────────────────────────
+    show(cellRef2, sheetNames, existing) {
+      this.currentCellRef = cellRef2;
+      this.isEditing = !!existing;
+      this.existingLink = existing ?? null;
+      this.sheetSelect.innerHTML = "";
+      for (const name of sheetNames) {
+        const opt = document.createElement("option");
+        opt.value = name;
+        opt.textContent = name;
+        this.sheetSelect.appendChild(opt);
+      }
+      this.removeBtn.style.display = existing ? "block" : "none";
+      this.urlInput.value = "";
+      this.urlDisplayInput.value = "";
+      this.urlTooltipInput.value = "";
+      this.emailInput.value = "";
+      this.emailSubjectInput.value = "";
+      this.emailDisplayInput.value = "";
+      this.sheetCellInput.value = "A1";
+      this.sheetDisplayInput.value = "";
+      if (existing) {
+        if (existing.is_internal) {
+          const m = existing.url.match(/^#(.+?)!(.+)$/);
+          if (m) {
+            const sheetName = m[1].replace(/^'|'$/g, "");
+            for (let i = 0; i < this.sheetSelect.options.length; i++) {
+              if (this.sheetSelect.options[i].value === sheetName) {
+                this.sheetSelect.selectedIndex = i;
+                break;
+              }
+            }
+            this.sheetCellInput.value = m[2];
+          }
+          this.sheetDisplayInput.value = existing.display ?? "";
+          this._switchTab("sheet");
+        } else if (existing.url.startsWith("mailto:")) {
+          const m = existing.url.match(/^mailto:([^?]+)(\?subject=(.*))?$/);
+          if (m) {
+            this.emailInput.value = m[1];
+            this.emailSubjectInput.value = m[3] ? decodeURIComponent(m[3]) : "";
+          }
+          this.emailDisplayInput.value = existing.display ?? "";
+          this._switchTab("email");
+        } else {
+          this.urlInput.value = existing.url;
+          this.urlDisplayInput.value = existing.display ?? "";
+          this.urlTooltipInput.value = existing.tooltip ?? "";
+          this._switchTab("url");
+        }
+      } else {
+        this._switchTab("url");
+      }
+      this.dialog.style.display = "block";
+      setTimeout(() => this.urlInput.focus(), 50);
+    }
+    hide() {
+      this.dialog.style.display = "none";
+      this.onAction({ action: "close" });
+    }
+    isVisible() {
+      return this.dialog.style.display !== "none";
+    }
+    _makeDraggable(handle) {
+      let startX = 0, startY = 0, origLeft = 0, origTop = 0;
+      handle.addEventListener("mousedown", (e) => {
+        if (e.button !== 0) return;
+        startX = e.clientX;
+        startY = e.clientY;
+        const rect = this.dialog.getBoundingClientRect();
+        origLeft = rect.left;
+        origTop = rect.top;
+        this.dialog.style.transform = "none";
+        this.dialog.style.left = `${origLeft}px`;
+        this.dialog.style.top = `${origTop}px`;
+        const onMove = (ev) => {
+          this.dialog.style.left = `${origLeft + ev.clientX - startX}px`;
+          this.dialog.style.top = `${origTop + ev.clientY - startY}px`;
+        };
+        const onUp = () => {
+          document.removeEventListener("mousemove", onMove);
+          document.removeEventListener("mouseup", onUp);
+        };
+        document.addEventListener("mousemove", onMove);
+        document.addEventListener("mouseup", onUp);
+        e.preventDefault();
+      });
+    }
+  };
+
+  // nameManagerDialog.ts
+  var NameManagerDialog = class {
+    // -1 = creating new
+    constructor(container, onAction) {
+      this.names = [];
+      this.sheetNames = [];
+      this.selectedRow = -1;
+      // index in filtered list -> names array idx
+      this.filteredIndices = [];
+      this.editingIndex = -1;
+      this.container = container;
+      this.onAction = onAction;
+      this._build();
+      this._buildSubDialog();
+    }
+    // --- Public API ---
+    show(names2, sheetNames) {
+      this.names = names2.map((n) => ({ ...n }));
+      this.sheetNames = sheetNames;
+      this.selectedRow = -1;
+      this._rebuildScopeFilter();
+      this._refreshList();
+      this._updateButtons();
+      this.dialog.style.display = "flex";
+    }
+    hide() {
+      this.dialog.style.display = "none";
+      this.subDialog.style.display = "none";
+    }
+    isVisible() {
+      return this.dialog.style.display !== "none";
+    }
+    // --- Build main dialog ---
+    _build() {
+      this.dialog = document.createElement("div");
+      Object.assign(this.dialog.style, {
+        display: "none",
+        position: "fixed",
+        top: "60px",
+        left: "50%",
+        transform: "translateX(-50%)",
+        width: "600px",
+        maxHeight: "80vh",
+        background: "#1e1e1e",
+        border: "1px solid #555",
+        borderRadius: "4px",
+        boxShadow: "0 8px 32px rgba(0,0,0,0.7)",
+        zIndex: "1000",
+        flexDirection: "column",
+        fontFamily: "Segoe UI, sans-serif",
+        fontSize: "13px",
+        color: "#ccc"
+      });
+      const titleBar = document.createElement("div");
+      Object.assign(titleBar.style, {
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        padding: "10px 14px",
+        borderBottom: "1px solid #444",
+        background: "#252526",
+        borderRadius: "4px 4px 0 0",
+        cursor: "grab"
+      });
+      titleBar.innerHTML = '<span style="font-weight:600;font-size:14px;">Name Manager</span>';
+      const closeBtn = this._makeBtn("\u2715", "#c00", "#fff");
+      closeBtn.title = "Close";
+      closeBtn.addEventListener("click", () => {
+        this.hide();
+        this.onAction({ action: "close" });
+      });
+      titleBar.appendChild(closeBtn);
+      this.dialog.appendChild(titleBar);
+      const filterRow = document.createElement("div");
+      Object.assign(filterRow.style, { display: "flex", gap: "6px", padding: "8px 14px", borderBottom: "1px solid #444" });
+      this.filterInput = document.createElement("input");
+      this.filterInput.placeholder = "Filter by name...";
+      this.filterInput.type = "text";
+      Object.assign(this.filterInput.style, {
+        flex: "1",
+        padding: "3px 8px",
+        background: "#3c3c3c",
+        border: "1px solid #555",
+        color: "#ccc",
+        borderRadius: "3px",
+        fontSize: "12px",
+        outline: "none"
+      });
+      this.filterInput.addEventListener("input", () => this._refreshList());
+      filterRow.appendChild(this.filterInput);
+      this.scopeFilter = document.createElement("select");
+      Object.assign(this.scopeFilter.style, {
+        padding: "3px 6px",
+        background: "#3c3c3c",
+        border: "1px solid #555",
+        color: "#ccc",
+        borderRadius: "3px",
+        fontSize: "12px",
+        outline: "none"
+      });
+      this.scopeFilter.addEventListener("change", () => this._refreshList());
+      filterRow.appendChild(this.scopeFilter);
+      this.dialog.appendChild(filterRow);
+      const tableWrap = document.createElement("div");
+      Object.assign(tableWrap.style, { flex: "1", overflowY: "auto", padding: "0 14px" });
+      const table = document.createElement("table");
+      Object.assign(table.style, { width: "100%", borderCollapse: "collapse", marginTop: "6px" });
+      const thead = table.createTHead();
+      const headRow = thead.insertRow();
+      for (const col of ["Name", "Refers To", "Scope", "Comment"]) {
+        const th = document.createElement("th");
+        th.textContent = col;
+        Object.assign(th.style, {
+          textAlign: "left",
+          padding: "4px 8px",
+          fontSize: "11px",
+          color: "#888",
+          borderBottom: "1px solid #444",
+          fontWeight: "600"
+        });
+        headRow.appendChild(th);
+      }
+      this.listBody = table.createTBody();
+      table.appendChild(this.listBody);
+      tableWrap.appendChild(table);
+      this.dialog.appendChild(tableWrap);
+      const btnRow = document.createElement("div");
+      Object.assign(btnRow.style, {
+        display: "flex",
+        gap: "8px",
+        padding: "10px 14px",
+        borderTop: "1px solid #444",
+        background: "#252526"
+      });
+      const newBtn = this._makeBtn("New...", "#0e639c", "#fff");
+      newBtn.addEventListener("click", () => this._openSubDialog(-1));
+      this.editBtn = this._makeBtn("Edit...", "#0e639c", "#fff");
+      this.editBtn.disabled = true;
+      this.editBtn.addEventListener("click", () => {
+        if (this.selectedRow >= 0 && this.filteredIndices[this.selectedRow] !== void 0) {
+          this._openSubDialog(this.filteredIndices[this.selectedRow]);
+        }
+      });
+      this.deleteBtn = this._makeBtn("Delete", "#8b0000", "#fff");
+      this.deleteBtn.disabled = true;
+      this.deleteBtn.addEventListener("click", () => this._deleteSelected());
+      const closeFooterBtn = this._makeBtn("Close", "#555", "#ccc");
+      closeFooterBtn.style.marginLeft = "auto";
+      closeFooterBtn.addEventListener("click", () => {
+        this.hide();
+        this.onAction({ action: "close" });
+      });
+      btnRow.append(newBtn, this.editBtn, this.deleteBtn, closeFooterBtn);
+      this.dialog.appendChild(btnRow);
+      this.container.appendChild(this.dialog);
+      this._makeDraggable(titleBar);
+    }
+    // --- Build sub-dialog (New/Edit form) ---
+    _buildSubDialog() {
+      this.subDialog = document.createElement("div");
+      Object.assign(this.subDialog.style, {
+        display: "none",
+        position: "fixed",
+        top: "120px",
+        left: "50%",
+        transform: "translateX(-50%)",
+        width: "380px",
+        background: "#1e1e1e",
+        border: "1px solid #555",
+        borderRadius: "4px",
+        boxShadow: "0 8px 32px rgba(0,0,0,0.8)",
+        zIndex: "1010",
+        flexDirection: "column",
+        fontFamily: "Segoe UI, sans-serif",
+        fontSize: "13px",
+        color: "#ccc"
+      });
+      const titleBar = document.createElement("div");
+      Object.assign(titleBar.style, {
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        padding: "8px 12px",
+        borderBottom: "1px solid #444",
+        background: "#252526",
+        cursor: "grab"
+      });
+      this.subTitle = document.createElement("span");
+      this.subTitle.textContent = "New Name";
+      this.subTitle.style.fontWeight = "600";
+      titleBar.appendChild(this.subTitle);
+      const closeSubBtn = this._makeBtn("\u2715", "#c00", "#fff");
+      closeSubBtn.addEventListener("click", () => {
+        this.subDialog.style.display = "none";
+      });
+      titleBar.appendChild(closeSubBtn);
+      this.subDialog.appendChild(titleBar);
+      const body = document.createElement("div");
+      body.style.padding = "14px";
+      const addField = (label) => {
+        const wrap = document.createElement("div");
+        wrap.style.marginBottom = "10px";
+        const lbl = document.createElement("label");
+        lbl.textContent = label;
+        lbl.style.cssText = "display:block;font-size:11px;color:#888;margin-bottom:3px;";
+        const inp = document.createElement("input");
+        inp.type = "text";
+        Object.assign(inp.style, {
+          width: "100%",
+          boxSizing: "border-box",
+          padding: "4px 8px",
+          background: "#3c3c3c",
+          border: "1px solid #555",
+          color: "#ccc",
+          borderRadius: "3px",
+          fontSize: "12px",
+          outline: "none"
+        });
+        wrap.appendChild(lbl);
+        wrap.appendChild(inp);
+        body.appendChild(wrap);
+        return inp;
+      };
+      this.subNameInput = addField("Name:");
+      this.subNameInput.placeholder = "e.g. SalesTotal";
+      const scopeWrap = document.createElement("div");
+      scopeWrap.style.marginBottom = "10px";
+      const scopeLbl = document.createElement("label");
+      scopeLbl.textContent = "Scope:";
+      scopeLbl.style.cssText = "display:block;font-size:11px;color:#888;margin-bottom:3px;";
+      this.subScopeSelect = document.createElement("select");
+      Object.assign(this.subScopeSelect.style, {
+        width: "100%",
+        padding: "4px 8px",
+        background: "#3c3c3c",
+        border: "1px solid #555",
+        color: "#ccc",
+        borderRadius: "3px",
+        fontSize: "12px",
+        outline: "none"
+      });
+      scopeWrap.appendChild(scopeLbl);
+      scopeWrap.appendChild(this.subScopeSelect);
+      body.appendChild(scopeWrap);
+      this.subCommentInput = addField("Comment:");
+      this.subFormulaInput = addField("Refers to:");
+      this.subFormulaInput.placeholder = "e.g. Sheet1!$A$1:$C$10";
+      this.subDialog.appendChild(body);
+      const footer = document.createElement("div");
+      Object.assign(footer.style, {
+        display: "flex",
+        justifyContent: "flex-end",
+        gap: "8px",
+        padding: "10px 12px",
+        borderTop: "1px solid #444",
+        background: "#252526"
+      });
+      const okBtn = this._makeBtn("OK", "#0e639c", "#fff");
+      okBtn.addEventListener("click", () => this._commitSubDialog());
+      const cancelBtn = this._makeBtn("Cancel", "#555", "#ccc");
+      cancelBtn.addEventListener("click", () => {
+        this.subDialog.style.display = "none";
+      });
+      footer.append(okBtn, cancelBtn);
+      this.subDialog.appendChild(footer);
+      this.container.appendChild(this.subDialog);
+      this._makeDraggable(titleBar);
+    }
+    // --- Internal helpers ---
+    _rebuildScopeFilter() {
+      this.scopeFilter.innerHTML = "";
+      const addOpt = (val, label) => {
+        const opt = document.createElement("option");
+        opt.value = val;
+        opt.textContent = label;
+        this.scopeFilter.appendChild(opt);
+      };
+      addOpt("all", "All");
+      addOpt("workbook", "Workbook");
+      for (const s of this.sheetNames) addOpt(s, s);
+    }
+    _refreshList() {
+      const filter = this.filterInput.value.toLowerCase();
+      const scope = this.scopeFilter.value;
+      this.filteredIndices = [];
+      for (let i = 0; i < this.names.length; i++) {
+        const n = this.names[i];
+        if (n.hidden) continue;
+        if (filter && !n.name.toLowerCase().includes(filter)) continue;
+        if (scope === "workbook" && n.local_sheet_id !== void 0) continue;
+        if (scope !== "all" && scope !== "workbook") {
+          const sheetIdx = this.sheetNames.indexOf(scope);
+          if (n.local_sheet_id !== sheetIdx) continue;
+        }
+        this.filteredIndices.push(i);
+      }
+      this.listBody.innerHTML = "";
+      this.filteredIndices.forEach((nameIdx, rowIdx) => {
+        const n = this.names[nameIdx];
+        const tr = this.listBody.insertRow();
+        Object.assign(tr.style, { cursor: "pointer", borderBottom: "1px solid #2d2d2d" });
+        if (rowIdx === this.selectedRow) tr.style.background = "#094771";
+        const scopeLabel = n.local_sheet_id !== void 0 ? this.sheetNames[n.local_sheet_id] ?? `Sheet${n.local_sheet_id}` : "Workbook";
+        const cells = [n.name, n.formula, scopeLabel, n.comment ?? ""];
+        for (const text of cells) {
+          const td = tr.insertCell();
+          td.textContent = text;
+          Object.assign(td.style, { padding: "5px 8px", fontSize: "12px", maxWidth: "160px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" });
+        }
+        tr.addEventListener("click", () => {
+          this.selectedRow = rowIdx;
+          this._refreshList();
+          this._updateButtons();
+        });
+        tr.addEventListener("dblclick", () => {
+          this.selectedRow = rowIdx;
+          this._openSubDialog(nameIdx);
+        });
+      });
+      if (this.selectedRow >= this.filteredIndices.length) {
+        this.selectedRow = -1;
+        this._updateButtons();
+      }
+    }
+    _updateButtons() {
+      const hasSelection = this.selectedRow >= 0;
+      this.editBtn.disabled = !hasSelection;
+      this.deleteBtn.disabled = !hasSelection;
+    }
+    _openSubDialog(nameIndex) {
+      this.editingIndex = nameIndex;
+      this._rebuildSubScopeOptions();
+      if (nameIndex === -1) {
+        this.subTitle.textContent = "New Name";
+        this.subNameInput.value = "";
+        this.subFormulaInput.value = "";
+        this.subCommentInput.value = "";
+        this.subScopeSelect.value = "workbook";
+      } else {
+        const n = this.names[nameIndex];
+        this.subTitle.textContent = "Edit Name";
+        this.subNameInput.value = n.name;
+        this.subFormulaInput.value = n.formula;
+        this.subCommentInput.value = n.comment ?? "";
+        if (n.local_sheet_id !== void 0) {
+          this.subScopeSelect.value = String(n.local_sheet_id);
+        } else {
+          this.subScopeSelect.value = "workbook";
+        }
+      }
+      this.subDialog.style.display = "flex";
+      this.subNameInput.focus();
+    }
+    _rebuildSubScopeOptions() {
+      this.subScopeSelect.innerHTML = "";
+      const addOpt = (val, label) => {
+        const opt = document.createElement("option");
+        opt.value = val;
+        opt.textContent = label;
+        this.subScopeSelect.appendChild(opt);
+      };
+      addOpt("workbook", "Workbook");
+      this.sheetNames.forEach((s, i) => addOpt(String(i), s));
+    }
+    _commitSubDialog() {
+      const name = this.subNameInput.value.trim();
+      const formula = this.subFormulaInput.value.trim();
+      if (!name || !formula) return;
+      const scopeVal = this.subScopeSelect.value;
+      const local_sheet_id = scopeVal === "workbook" ? void 0 : parseInt(scopeVal, 10);
+      const def = {
+        name,
+        formula,
+        local_sheet_id,
+        comment: this.subCommentInput.value.trim() || void 0
+      };
+      this.subDialog.style.display = "none";
+      if (this.editingIndex === -1) {
+        this.onAction({ action: "create", name: def });
+      } else {
+        this.onAction({ action: "edit", name: def, index: this.editingIndex });
+      }
+    }
+    _deleteSelected() {
+      if (this.selectedRow < 0) return;
+      const nameIdx = this.filteredIndices[this.selectedRow];
+      if (nameIdx === void 0) return;
+      const n = this.names[nameIdx];
+      if (!confirm(`Delete named range "${n.name}"?`)) return;
+      this.onAction({ action: "delete", index: nameIdx });
+    }
+    _makeBtn(text, bg, color2) {
+      const btn = document.createElement("button");
+      btn.textContent = text;
+      Object.assign(btn.style, {
+        padding: "4px 12px",
+        background: bg,
+        color: color2,
+        border: "none",
+        borderRadius: "3px",
+        cursor: "pointer",
+        fontSize: "12px"
+      });
+      btn.addEventListener("mouseover", () => {
+        if (!btn.disabled) btn.style.opacity = "0.85";
+      });
+      btn.addEventListener("mouseout", () => {
+        btn.style.opacity = "1";
+      });
+      return btn;
+    }
+    _makeDraggable(handle) {
+      let dragging = false;
+      let startX = 0;
+      let startY = 0;
+      let origLeft = 0;
+      let origTop = 0;
+      const dlg = handle.closest("div[style]") ?? this.dialog;
+      handle.addEventListener("mousedown", (e) => {
+        dragging = true;
+        startX = e.clientX;
+        startY = e.clientY;
+        const rect = dlg.getBoundingClientRect();
+        origLeft = rect.left;
+        origTop = rect.top;
+        dlg.style.transform = "none";
+        dlg.style.left = origLeft + "px";
+        dlg.style.top = origTop + "px";
+        e.preventDefault();
+      });
+      document.addEventListener("mousemove", (e) => {
+        if (!dragging) return;
+        dlg.style.left = origLeft + e.clientX - startX + "px";
+        dlg.style.top = origTop + e.clientY - startY + "px";
+      });
+      document.addEventListener("mouseup", () => {
+        dragging = false;
+      });
+    }
+  };
+
+  // ../../../../../../../../../node_modules/@kurkle/color/dist/color.esm.js
   function round(v) {
     return v + 0.5 | 0;
   }
@@ -5947,7 +9526,7 @@
     }
   };
 
-  // ../../../../../../../../node_modules/chart.js/dist/chunks/helpers.dataset.js
+  // ../../../../../../../../../node_modules/chart.js/dist/chunks/helpers.dataset.js
   function noop() {
   }
   var uid = /* @__PURE__ */ (() => {
@@ -8360,7 +11939,7 @@
     };
   }
 
-  // ../../../../../../../../node_modules/chart.js/dist/chart.js
+  // ../../../../../../../../../node_modules/chart.js/dist/chart.js
   var Animator = class {
     constructor() {
       this._request = null;
@@ -19196,7 +22775,7 @@
   __publicField(TimeSeriesScale, "id", "timeseries");
   __publicField(TimeSeriesScale, "defaults", TimeScale.defaults);
 
-  // media/chartManager.ts
+  // chartManager.ts
   Chart.register(
     BarController,
     LineController,
@@ -19620,7 +23199,7 @@
     return DEFAULT_COLORS[index2 % DEFAULT_COLORS.length];
   }
 
-  // media/chartWizardDialog.ts
+  // chartWizardDialog.ts
   var CHART_TYPES = [
     { id: "column", label: "Column", icon: "\u2581\u2583\u2585\u2587" },
     { id: "bar", label: "Bar", icon: "\u2590\u2590\u2590" },
@@ -19885,7 +23464,239 @@
     }
   };
 
-  // media/main.ts
+  // pasteSpecialDialog.ts
+  var PasteSpecialDialog = class {
+    constructor(container, onAction) {
+      this.container = container;
+      this.onAction = onAction;
+      this._build();
+    }
+    _build() {
+      this.dialog = document.createElement("div");
+      Object.assign(this.dialog.style, {
+        display: "none",
+        position: "fixed",
+        top: "80px",
+        left: "50%",
+        transform: "translateX(-50%)",
+        width: "340px",
+        background: "#1e1e1e",
+        border: "1px solid #555",
+        borderRadius: "6px",
+        boxShadow: "0 8px 32px rgba(0,0,0,0.6)",
+        zIndex: "9999",
+        fontFamily: "system-ui, sans-serif",
+        fontSize: "13px",
+        color: "#ccc",
+        userSelect: "none"
+      });
+      const titleBar = document.createElement("div");
+      Object.assign(titleBar.style, {
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        padding: "8px 12px",
+        background: "#2d2d2d",
+        borderRadius: "6px 6px 0 0",
+        cursor: "move",
+        borderBottom: "1px solid #444"
+      });
+      const title = document.createElement("span");
+      title.textContent = "Paste Special";
+      title.style.fontWeight = "600";
+      const closeBtn = document.createElement("button");
+      closeBtn.textContent = "\u2715";
+      Object.assign(closeBtn.style, {
+        background: "none",
+        border: "none",
+        color: "#ccc",
+        cursor: "pointer",
+        fontSize: "14px",
+        padding: "0 4px"
+      });
+      closeBtn.onclick = () => this.hide();
+      titleBar.appendChild(title);
+      titleBar.appendChild(closeBtn);
+      this.dialog.appendChild(titleBar);
+      this._makeDraggable(titleBar);
+      const body = document.createElement("div");
+      body.style.padding = "16px";
+      const pasteGroup = this._buildRadioGroup("Paste", [
+        { label: "All", ref: (el) => {
+          this.radioAll = el;
+        }, value: "all", checked: true },
+        { label: "Values only", ref: (el) => {
+          this.radioValues = el;
+        }, value: "values" },
+        { label: "Formulas only", ref: (el) => {
+          this.radioFormulas = el;
+        }, value: "formulas" },
+        { label: "Formats only", ref: (el) => {
+          this.radioFormats = el;
+        }, value: "formats" },
+        { label: "Column widths", ref: (el) => {
+          this.radioColWidths = el;
+        }, value: "colWidths" }
+      ], "ps-what");
+      body.appendChild(pasteGroup);
+      const opGroup = this._buildRadioGroup("Operation", [
+        { label: "None", ref: (el) => {
+          this.opNone = el;
+        }, value: "none", checked: true },
+        { label: "Add", ref: (el) => {
+          this.opAdd = el;
+        }, value: "add" },
+        { label: "Subtract", ref: (el) => {
+          this.opSubtract = el;
+        }, value: "subtract" },
+        { label: "Multiply", ref: (el) => {
+          this.opMultiply = el;
+        }, value: "multiply" },
+        { label: "Divide", ref: (el) => {
+          this.opDivide = el;
+        }, value: "divide" }
+      ], "ps-op");
+      body.appendChild(opGroup);
+      const cbSection = document.createElement("div");
+      cbSection.style.marginTop = "12px";
+      this.skipBlanksCheck = this._buildCheckbox(cbSection, "Skip blanks");
+      this.transposeCheck = this._buildCheckbox(cbSection, "Transpose");
+      body.appendChild(cbSection);
+      const footer = document.createElement("div");
+      Object.assign(footer.style, {
+        display: "flex",
+        justifyContent: "flex-end",
+        gap: "8px",
+        marginTop: "16px"
+      });
+      const cancelBtn = this._buildBtn("Cancel", "#444", () => this.hide());
+      const okBtn = this._buildBtn("OK", "#0078d4", () => this._onOk());
+      footer.appendChild(cancelBtn);
+      footer.appendChild(okBtn);
+      body.appendChild(footer);
+      this.dialog.appendChild(body);
+      this.container.appendChild(this.dialog);
+    }
+    _buildRadioGroup(legend, items, name) {
+      const wrapper = document.createElement("div");
+      wrapper.style.marginBottom = "12px";
+      const legendEl = document.createElement("div");
+      legendEl.textContent = legend;
+      Object.assign(legendEl.style, {
+        fontWeight: "600",
+        color: "#fff",
+        marginBottom: "6px",
+        fontSize: "12px",
+        textTransform: "uppercase",
+        letterSpacing: "0.05em"
+      });
+      wrapper.appendChild(legendEl);
+      const grid = document.createElement("div");
+      Object.assign(grid.style, {
+        display: "grid",
+        gridTemplateColumns: "1fr 1fr",
+        gap: "4px 12px"
+      });
+      for (const item of items) {
+        const label = document.createElement("label");
+        Object.assign(label.style, { display: "flex", alignItems: "center", gap: "6px", cursor: "pointer" });
+        const input = document.createElement("input");
+        input.type = "radio";
+        input.name = name;
+        input.value = item.value;
+        if (item.checked) input.checked = true;
+        item.ref(input);
+        label.appendChild(input);
+        label.appendChild(document.createTextNode(item.label));
+        grid.appendChild(label);
+      }
+      wrapper.appendChild(grid);
+      return wrapper;
+    }
+    _buildCheckbox(parent, labelText) {
+      const label = document.createElement("label");
+      Object.assign(label.style, { display: "flex", alignItems: "center", gap: "6px", cursor: "pointer", marginBottom: "6px" });
+      const input = document.createElement("input");
+      input.type = "checkbox";
+      label.appendChild(input);
+      label.appendChild(document.createTextNode(labelText));
+      parent.appendChild(label);
+      return input;
+    }
+    _buildBtn(text, bg, onClick) {
+      const btn = document.createElement("button");
+      btn.textContent = text;
+      Object.assign(btn.style, {
+        padding: "6px 18px",
+        background: bg,
+        border: "none",
+        borderRadius: "4px",
+        color: "#fff",
+        cursor: "pointer",
+        fontSize: "13px"
+      });
+      btn.onclick = onClick;
+      return btn;
+    }
+    _onOk() {
+      const what = (() => {
+        if (this.radioValues.checked) return "values";
+        if (this.radioFormulas.checked) return "formulas";
+        if (this.radioFormats.checked) return "formats";
+        if (this.radioColWidths.checked) return "colWidths";
+        return "all";
+      })();
+      const operation = (() => {
+        if (this.opAdd.checked) return "add";
+        if (this.opSubtract.checked) return "subtract";
+        if (this.opMultiply.checked) return "multiply";
+        if (this.opDivide.checked) return "divide";
+        return "none";
+      })();
+      const options = {
+        what,
+        operation,
+        skipBlanks: this.skipBlanksCheck.checked,
+        transpose: this.transposeCheck.checked
+      };
+      this.hide();
+      this.onAction({ action: "paste", options });
+    }
+    _makeDraggable(handle) {
+      let startX = 0, startY = 0, origLeft = 0, origTop = 0;
+      handle.addEventListener("mousedown", (e) => {
+        startX = e.clientX;
+        startY = e.clientY;
+        const rect = this.dialog.getBoundingClientRect();
+        origLeft = rect.left;
+        origTop = rect.top;
+        this.dialog.style.transform = "none";
+        const onMove = (ev) => {
+          this.dialog.style.left = `${origLeft + ev.clientX - startX}px`;
+          this.dialog.style.top = `${origTop + ev.clientY - startY}px`;
+        };
+        const onUp = () => {
+          document.removeEventListener("mousemove", onMove);
+          document.removeEventListener("mouseup", onUp);
+        };
+        document.addEventListener("mousemove", onMove);
+        document.addEventListener("mouseup", onUp);
+      });
+    }
+    show() {
+      this.radioAll.checked = true;
+      this.opNone.checked = true;
+      this.skipBlanksCheck.checked = false;
+      this.transposeCheck.checked = false;
+      this.dialog.style.display = "block";
+    }
+    hide() {
+      this.dialog.style.display = "none";
+      this.onAction({ action: "close" });
+    }
+  };
+
+  // main.ts
   var vscode = acquireVsCodeApi();
   var currentFileUri = "";
   var parser = null;
@@ -19896,9 +23707,15 @@
   var contextMenu = null;
   var filterDropdown = null;
   var cfDialog = null;
+  var vdDialog = null;
+  var fcDialog = null;
+  var hlDialog = null;
+  var nmDialog = null;
   var chartManager = null;
   var chartWizard = null;
+  var psDialog = null;
   var ribbon = null;
+  var definedNames = [];
   async function initialize() {
     console.log("[XLSX Rust Viewer] Initializing...");
     const canvasContainer = document.getElementById("canvas-container");
@@ -19927,7 +23744,24 @@
     });
     filterDropdown = new FilterDropdown(document.body, handleFilterDropdownAction);
     cfDialog = new ConditionalFormatDialog(document.body, handleCfDialogAction);
+    vdDialog = new ValidationDialog(document.body, handleVdDialogAction);
+    fcDialog = new FormatCellsDialog(document.body, handleFcDialogAction);
+    hlDialog = new HyperlinkDialog(document.body, handleHlDialogAction);
+    nmDialog = new NameManagerDialog(document.body, handleNmDialogAction);
+    psDialog = new PasteSpecialDialog(document.body, handlePsDialogAction);
+    contextMenu.setHyperlinkDetector((row, col) => {
+      if (!renderer) return void 0;
+      return renderer.getHyperlinkForCell(row, col);
+    });
+    renderer.onHyperlinkClick = (url, isInternal) => {
+      if (isInternal) {
+        navigateToInternalLink(url);
+      } else {
+        vscode.postMessage({ type: "openExternal", url });
+      }
+    };
     chartWizard = new ChartWizardDialog(document.body, handleChartWizardAction);
+    setupFormulaBarInteractions();
     renderer.onFilterArrowClick = (tableName, colIndex, colName, screenX, screenY) => {
       if (!renderer || !filterDropdown) return;
       const uniqueValues = renderer.getColumnUniqueValues(tableName, colIndex);
@@ -20007,6 +23841,14 @@
         sampleCells: firstSheet?.cells ? JSON.stringify(firstSheet.cells).substring(0, 500) : "none"
       });
       renderer.setData(model);
+      definedNames = model.defined_names ?? [];
+      if (formulaEngine) {
+        try {
+          formulaEngine.set_named_ranges(JSON.stringify(definedNames));
+        } catch (e) {
+          console.warn("[XLSX Rust Viewer] Named ranges init failed:", e);
+        }
+      }
       restoreChartState();
       evaluateFormulas();
       buildSheetTabs();
@@ -20021,13 +23863,19 @@
   function evaluateFormulas() {
     if (!formulaEngine || !renderer) return;
     const data = renderer.getData();
-    const sheet = data?.sheets?.[renderer.getActiveSheetIndex()];
-    if (!sheet?.cells) return;
+    if (!data?.sheets) return;
+    const activeIdx = renderer.getActiveSheetIndex();
+    const activeSheet = data.sheets[activeIdx];
+    if (!activeSheet) return;
     try {
-      const cellsJson = JSON.stringify(sheet.cells);
-      const resultJson = formulaEngine.evaluate_all(cellsJson);
+      const allSheets = {};
+      for (const sheet of data.sheets) {
+        allSheets[sheet.name] = sheet.cells ?? {};
+      }
+      const resultJson = formulaEngine.evaluate_all(JSON.stringify(allSheets), activeSheet.name);
       const results = JSON.parse(resultJson);
       renderer.setFormulaResults(results);
+      updateStatusBar();
     } catch (e) {
       console.warn("[XLSX Rust Viewer] Formula evaluation error:", e);
     }
@@ -20337,6 +24185,9 @@
       case "paste":
         handlePaste();
         break;
+      case "pasteSpecial":
+        handlePasteSpecial();
+        break;
       // History
       case "undo":
         renderer.undo();
@@ -20456,9 +24307,29 @@
       case "conditionalFormatting":
         showConditionalFormattingDialog();
         break;
+      // Data Validation
+      case "dataValidation":
+        showDataValidationDialog();
+        break;
+      case "circleInvalidData":
+        if (renderer) {
+          renderer.setShowInvalidCircles(!renderer.getShowInvalidCircles());
+        }
+        break;
       // Charts
       case "insertChart":
         showChartWizard();
+        break;
+      // Hyperlinks
+      case "insertHyperlink":
+        showHyperlinkDialog();
+        break;
+      // Named Ranges
+      case "nameManager":
+        showNameManagerDialog();
+        break;
+      case "defineName":
+        showDefineNameDialog();
         break;
       // View
       case "gridlines":
@@ -20483,6 +24354,25 @@
         renderer.clearSelectedCells();
         markDirty();
         break;
+      // Fill
+      case "fillDown":
+        renderer.fillDown();
+        markDirty();
+        evaluateFormulas();
+        break;
+      case "fillRight":
+        renderer.fillRight();
+        markDirty();
+        evaluateFormulas();
+        break;
+      case "flashFill": {
+        const filledCount = renderer.flashFill();
+        if (filledCount > 0) {
+          markDirty();
+          evaluateFormulas();
+        }
+        break;
+      }
       // File
       case "save":
         handleSave();
@@ -20622,6 +24512,578 @@
         break;
     }
   }
+  function showDataValidationDialog() {
+    if (!renderer || !vdDialog) return;
+    const data = renderer.getData();
+    const sheet = data?.sheets?.[renderer.getActiveSheetIndex?.() ?? 0];
+    const existingRules = sheet?.data_validations ?? [];
+    const sel = renderer.getSelectedCell();
+    const selRange = renderer.getSelectedRange?.();
+    let sqref = "A1";
+    if (selRange) {
+      const c1 = getColName(selRange.startCol) + (selRange.startRow + 1);
+      const c2 = getColName(selRange.endCol) + (selRange.endRow + 1);
+      sqref = c1 === c2 ? c1 : `${c1}:${c2}`;
+    } else if (sel) {
+      sqref = getColName(sel.col) + (sel.row + 1);
+    }
+    vdDialog.show(sqref, existingRules);
+  }
+  function handleVdDialogAction(event) {
+    if (!renderer) return;
+    const data = renderer.getData();
+    if (!data?.sheets) return;
+    const sheetIdx = renderer.getActiveSheetIndex?.() ?? 0;
+    const sheet = data.sheets[sheetIdx];
+    if (!sheet) return;
+    if (!sheet.data_validations) sheet.data_validations = [];
+    switch (event.action) {
+      case "add":
+        if (event.rule) {
+          sheet.data_validations.push(event.rule);
+          renderer.setValidations(sheet.data_validations);
+          if (vdDialog) vdDialog.refreshRules(sheet.data_validations);
+          markDirty();
+        }
+        break;
+      case "edit":
+        if (event.rule && event.ruleIndex !== void 0 && event.ruleIndex < sheet.data_validations.length) {
+          sheet.data_validations[event.ruleIndex] = event.rule;
+          renderer.setValidations(sheet.data_validations);
+          if (vdDialog) vdDialog.refreshRules(sheet.data_validations);
+          markDirty();
+        }
+        break;
+      case "delete":
+        if (event.ruleIndex !== void 0 && event.ruleIndex < sheet.data_validations.length) {
+          sheet.data_validations.splice(event.ruleIndex, 1);
+          renderer.setValidations(sheet.data_validations);
+          if (vdDialog) vdDialog.refreshRules(sheet.data_validations);
+          markDirty();
+        }
+        break;
+      case "close":
+        break;
+    }
+  }
+  function showFormatCellsDialog(row, col) {
+    if (!renderer || !fcDialog) return;
+    const currentStyle = renderer.getStyleAt(row, col);
+    fcDialog.show(currentStyle);
+  }
+  function handleFcDialogAction(event) {
+    if (!renderer || !event.style) return;
+    if (event.action === "apply") {
+      renderer.applyStyle(event.style);
+      markDirty();
+    }
+  }
+  function showHyperlinkDialog(row, col) {
+    if (!renderer || !hlDialog) return;
+    const data = renderer.getData();
+    const sheetNames = (data?.sheets ?? []).map((s) => s.name);
+    let cellRef2 = "A1";
+    if (row !== void 0 && col !== void 0) {
+      cellRef2 = colToLetter(col) + (row + 1);
+    } else {
+      const sel = renderer.getSelectedCell();
+      if (sel) cellRef2 = colToLetter(sel.col) + (sel.row + 1);
+    }
+    const existing = row !== void 0 && col !== void 0 ? renderer.getHyperlinkForCell(row, col) : void 0;
+    hlDialog.show(cellRef2, sheetNames, existing);
+  }
+  function colToLetter(col) {
+    let s = "";
+    let n = col;
+    while (n >= 0) {
+      s = String.fromCharCode(n % 26 + 65) + s;
+      n = Math.floor(n / 26) - 1;
+    }
+    return s;
+  }
+  function handleHlDialogAction(event) {
+    if (!renderer) return;
+    if ((event.action === "insert" || event.action === "edit") && event.link) {
+      renderer.addHyperlink(event.link);
+      markDirty();
+    } else if (event.action === "remove" && event.link) {
+      const cellRef2 = event.link.cell_ref;
+      const m = cellRef2.toUpperCase().match(/^([A-Z]+)(\d+)$/);
+      if (m) {
+        let col = 0;
+        for (const ch of m[1]) {
+          col = col * 26 + ch.charCodeAt(0) - 64;
+        }
+        const row = parseInt(m[2], 10) - 1;
+        renderer.removeHyperlinkAt(row, col - 1);
+        markDirty();
+      }
+    }
+  }
+  function showNameManagerDialog() {
+    if (!nmDialog || !renderer) return;
+    const data = renderer.getData();
+    const sheetNames = (data?.sheets ?? []).map((s) => s.name);
+    nmDialog.show(definedNames, sheetNames);
+  }
+  function showDefineNameDialog(row, col) {
+    if (!nmDialog || !renderer) return;
+    const data = renderer.getData();
+    const sheetNames = (data?.sheets ?? []).map((s) => s.name);
+    const activeSheetName = data?.sheets?.[renderer.getActiveSheetIndex()]?.name ?? "";
+    let defaultFormula = "";
+    if (row !== void 0 && col !== void 0) {
+      defaultFormula = `${activeSheetName}!$${colToLetter(col)}$${row + 1}`;
+    } else {
+      const sel = renderer.getSelectedRange();
+      if (sel) {
+        const c1 = colToLetter(sel.startCol);
+        const c2 = colToLetter(sel.endCol);
+        if (sel.startRow === sel.endRow && sel.startCol === sel.endCol) {
+          defaultFormula = `${activeSheetName}!$${c1}$${sel.startRow + 1}`;
+        } else {
+          defaultFormula = `${activeSheetName}!$${c1}$${sel.startRow + 1}:$${c2}$${sel.endRow + 1}`;
+        }
+      } else {
+        const cell = renderer.getSelectedCell();
+        if (cell) {
+          defaultFormula = `${activeSheetName}!$${colToLetter(cell.col)}$${cell.row + 1}`;
+        }
+      }
+    }
+    nmDialog.show(definedNames, sheetNames);
+    nmDialog._openSubDialog(-1);
+    if (defaultFormula) {
+      nmDialog.subFormulaInput.value = defaultFormula;
+    }
+  }
+  function handleNmDialogAction(event) {
+    if (!renderer) return;
+    if (event.action === "create" && event.name) {
+      definedNames = [...definedNames, event.name];
+    } else if (event.action === "edit" && event.name && event.index !== void 0) {
+      definedNames = definedNames.map((n, i) => i === event.index ? event.name : n);
+    } else if (event.action === "delete" && event.index !== void 0) {
+      definedNames = definedNames.filter((_, i) => i !== event.index);
+    } else if (event.action === "close") {
+      return;
+    }
+    const data = renderer.getData();
+    if (data) {
+      data.defined_names = definedNames;
+    }
+    if (formulaEngine) {
+      try {
+        formulaEngine.set_named_ranges(JSON.stringify(definedNames));
+      } catch (e) {
+        console.warn("[XLSX Rust Viewer] Named ranges update failed:", e);
+      }
+    }
+    evaluateFormulas();
+    markDirty();
+    refreshNameBoxDropdown();
+  }
+  function navigateToNamedRange(name) {
+    if (!renderer) return;
+    const entry = definedNames.find((n) => n.name.toUpperCase() === name.toUpperCase());
+    if (!entry) return;
+    let formula = entry.formula.replace(/^=/, "");
+    const bangIdx = formula.indexOf("!");
+    if (bangIdx === -1) return;
+    const sheetPart = formula.slice(0, bangIdx).replace(/^'|'$/g, "");
+    const refPart = formula.slice(bangIdx + 1);
+    const data = renderer.getData();
+    const sheets = data?.sheets ?? [];
+    const sheetIdx = sheets.findIndex((s) => s.name === sheetPart);
+    if (sheetIdx !== -1) {
+      renderer.setActiveSheetIndex(sheetIdx);
+      buildSheetTabs();
+      evaluateFormulas();
+    }
+    const rangeMatch = refPart.replace(/\$/g, "").toUpperCase().match(/^([A-Z]+)(\d+)(?::([A-Z]+)(\d+))?$/);
+    if (rangeMatch) {
+      const parseCol = (s) => {
+        let c = 0;
+        for (const ch of s) c = c * 26 + ch.charCodeAt(0) - 64;
+        return c - 1;
+      };
+      const r1 = parseInt(rangeMatch[2], 10) - 1;
+      const c1 = parseCol(rangeMatch[1]);
+      const r2 = rangeMatch[4] ? parseInt(rangeMatch[4], 10) - 1 : r1;
+      const c2 = rangeMatch[3] ? parseCol(rangeMatch[3]) : c1;
+      renderer.setSelection(r1, c1, r2, c2);
+    }
+  }
+  function navigateToInternalLink(url) {
+    if (!renderer) return;
+    const target = url.startsWith("#") ? url.slice(1) : url;
+    const bangIdx = target.indexOf("!");
+    if (bangIdx === -1) {
+      navigateToNamedRange(target);
+      return;
+    }
+    const sheetName = target.slice(0, bangIdx).replace(/^'|'$/g, "");
+    const cellRef2 = target.slice(bangIdx + 1);
+    const data = renderer.getData();
+    const sheets = data?.sheets ?? [];
+    const sheetIdx = sheets.findIndex((s) => s.name === sheetName);
+    if (sheetIdx === -1) return;
+    renderer.setActiveSheetIndex(sheetIdx);
+    buildSheetTabs();
+    const m = cellRef2.replace(/\$/g, "").toUpperCase().match(/^([A-Z]+)(\d+)$/);
+    if (m) {
+      let col = 0;
+      for (const ch of m[1]) {
+        col = col * 26 + ch.charCodeAt(0) - 64;
+      }
+      const row = parseInt(m[2], 10) - 1;
+      renderer.setSelection(row, col - 1, row, col - 1);
+    }
+  }
+  function setupFormulaBarInteractions() {
+    const nameBoxEl = document.getElementById("cell-ref");
+    const dropdownEl = document.getElementById("name-box-dropdown");
+    const formulaInputEl = document.getElementById("formula-input");
+    if (nameBoxEl && dropdownEl) {
+      nameBoxEl.addEventListener("focus", () => {
+        nameBoxEl.select();
+        refreshNameBoxDropdown();
+        dropdownEl.style.display = definedNames.length > 0 ? "block" : "none";
+      });
+      nameBoxEl.addEventListener("blur", () => {
+        setTimeout(() => {
+          dropdownEl.style.display = "none";
+          if (renderer) {
+            const sel = renderer.getSelectedCell();
+            if (sel) updateFormulaBar(sel.row, sel.col);
+          }
+        }, 150);
+      });
+      nameBoxEl.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          const val = nameBoxEl.value.trim();
+          dropdownEl.style.display = "none";
+          const matchedName = definedNames.find((n) => n.name.toUpperCase() === val.toUpperCase());
+          if (matchedName) {
+            navigateToNamedRange(matchedName.name);
+            return;
+          }
+          if (!renderer) return;
+          const bangIdx = val.indexOf("!");
+          let cellPart = val;
+          if (bangIdx !== -1) {
+            const sheetPart = val.slice(0, bangIdx).replace(/^'|'$/g, "");
+            cellPart = val.slice(bangIdx + 1);
+            const data = renderer.getData();
+            const sheetIdx = (data?.sheets ?? []).findIndex((s) => s.name === sheetPart);
+            if (sheetIdx !== -1) {
+              renderer.setActiveSheetIndex(sheetIdx);
+              buildSheetTabs();
+              evaluateFormulas();
+            }
+          }
+          const m = cellPart.replace(/\$/g, "").toUpperCase().match(/^([A-Z]+)(\d+)$/);
+          if (m) {
+            let col = 0;
+            for (const ch of m[1]) {
+              col = col * 26 + ch.charCodeAt(0) - 64;
+            }
+            const row = parseInt(m[2], 10) - 1;
+            renderer.setSelection(row, col - 1, row, col - 1);
+          }
+          nameBoxEl.blur();
+        } else if (e.key === "Escape") {
+          dropdownEl.style.display = "none";
+          nameBoxEl.blur();
+        }
+      });
+      nameBoxEl.addEventListener("input", () => {
+        const val = nameBoxEl.value.toLowerCase();
+        refreshNameBoxDropdown(val);
+        dropdownEl.style.display = "block";
+      });
+    }
+    if (formulaInputEl) {
+      const autoEl = createFormulaAutocomplete();
+      formulaInputEl.addEventListener("input", () => {
+        updateFormulaAutocomplete(formulaInputEl, autoEl);
+      });
+      formulaInputEl.addEventListener("keydown", (e) => {
+        if (autoEl.style.display !== "none") {
+          if (e.key === "ArrowDown") {
+            e.preventDefault();
+            moveAutocompleteSelection(autoEl, 1);
+          } else if (e.key === "ArrowUp") {
+            e.preventDefault();
+            moveAutocompleteSelection(autoEl, -1);
+          } else if (e.key === "Enter" || e.key === "Tab") {
+            const sel = autoEl.querySelector(".ac-item.selected");
+            if (sel && autoEl.style.display !== "none") {
+              e.preventDefault();
+              applyAutocomplete(formulaInputEl, sel.dataset["value"] ?? "", autoEl);
+            }
+          } else if (e.key === "Escape") {
+            autoEl.style.display = "none";
+          }
+        }
+      });
+      formulaInputEl.addEventListener("blur", () => {
+        setTimeout(() => {
+          autoEl.style.display = "none";
+        }, 150);
+      });
+    }
+  }
+  function refreshNameBoxDropdown(filter) {
+    const dropdownEl = document.getElementById("name-box-dropdown");
+    if (!dropdownEl) return;
+    dropdownEl.innerHTML = "";
+    const data = renderer?.getData();
+    const sheetNames = (data?.sheets ?? []).map((s) => s.name);
+    const names2 = filter ? definedNames.filter((n) => !n.hidden && n.name.toLowerCase().includes(filter)) : definedNames.filter((n) => !n.hidden);
+    if (names2.length === 0) {
+      dropdownEl.style.display = "none";
+      return;
+    }
+    for (const n of names2) {
+      const item = document.createElement("div");
+      item.className = "nb-item";
+      const scopeLabel = n.local_sheet_id !== void 0 ? sheetNames[n.local_sheet_id] ?? "Sheet" : "Workbook";
+      item.innerHTML = `${n.name}<span class="nb-scope">${scopeLabel}</span>`;
+      item.addEventListener("mousedown", (e) => {
+        e.preventDefault();
+        navigateToNamedRange(n.name);
+        dropdownEl.style.display = "none";
+      });
+      dropdownEl.appendChild(item);
+    }
+  }
+  function createFormulaAutocomplete() {
+    const existing = document.getElementById("formula-autocomplete");
+    if (existing) return existing;
+    const el = document.createElement("div");
+    el.id = "formula-autocomplete";
+    Object.assign(el.style, {
+      display: "none",
+      position: "fixed",
+      zIndex: "300",
+      background: "#1e1e1e",
+      border: "1px solid #555",
+      borderRadius: "2px",
+      maxHeight: "200px",
+      overflowY: "auto",
+      minWidth: "160px",
+      boxShadow: "0 4px 12px rgba(0,0,0,0.6)",
+      fontSize: "12px",
+      color: "#ccc"
+    });
+    document.body.appendChild(el);
+    return el;
+  }
+  var BUILTIN_FUNCTIONS = [
+    "ABS",
+    "AND",
+    "AVERAGE",
+    "AVG",
+    "AVERAGEIF",
+    "AVERAGEIFS",
+    "CELL",
+    "CEILING",
+    "CHAR",
+    "CHOOSE",
+    "CLEAN",
+    "CODE",
+    "COLUMN",
+    "COLUMNS",
+    "CONCAT",
+    "CONCATENATE",
+    "COUNT",
+    "COUNTA",
+    "COUNTIF",
+    "COUNTIFS",
+    "DATE",
+    "DATEVALUE",
+    "DAY",
+    "DATEDIF",
+    "DB",
+    "EDATE",
+    "EOMONTH",
+    "EXP",
+    "EXACT",
+    "FALSE",
+    "FIND",
+    "FLOOR",
+    "FV",
+    "HLOOKUP",
+    "HOUR",
+    "IF",
+    "IFERROR",
+    "IFNA",
+    "IFS",
+    "INDEX",
+    "INDIRECT",
+    "INFO",
+    "INT",
+    "IRR",
+    "ISERR",
+    "ISERROR",
+    "ISBLANK",
+    "ISLOGICAL",
+    "ISNONTEXT",
+    "ISNUMBER",
+    "ISTEXT",
+    "LARGE",
+    "LEFT",
+    "LEN",
+    "LN",
+    "LOG",
+    "LOG10",
+    "LOWER",
+    "MATCH",
+    "MAX",
+    "MEDIAN",
+    "MID",
+    "MIN",
+    "MINUTE",
+    "MOD",
+    "MODE",
+    "NA",
+    "NETWORKDAYS",
+    "NOT",
+    "NOW",
+    "NPER",
+    "NPV",
+    "OFFSET",
+    "OR",
+    "PERCENTILE",
+    "PERCENTILE.INC",
+    "PI",
+    "PMT",
+    "POWER",
+    "PRODUCT",
+    "PROPER",
+    "PV",
+    "QUARTILE",
+    "QUARTILE.INC",
+    "RAND",
+    "RANDBETWEEN",
+    "RANK",
+    "RANK.EQ",
+    "RATE",
+    "REPLACE",
+    "REPT",
+    "RIGHT",
+    "ROW",
+    "ROWS",
+    "SEARCH",
+    "SECOND",
+    "SIGN",
+    "SLN",
+    "SMALL",
+    "SQRT",
+    "STDEV",
+    "STDEV.S",
+    "STDEVP",
+    "STDEV.P",
+    "SUBSTITUTE",
+    "SUM",
+    "SUMIF",
+    "SUMIFS",
+    "SUMPRODUCT",
+    "SWITCH",
+    "TEXT",
+    "TEXTAFTER",
+    "TEXTBEFORE",
+    "TEXTJOIN",
+    "TIME",
+    "TIMEVALUE",
+    "TODAY",
+    "TRIM",
+    "TRUNC",
+    "TRUE",
+    "TYPE",
+    "UPPER",
+    "VALUE",
+    "VAR",
+    "VAR.S",
+    "VARP",
+    "VAR.P",
+    "VLOOKUP",
+    "WEEKDAY",
+    "WEEKNUM",
+    "WORKDAY",
+    "XLOOKUP",
+    "XOR",
+    "YEAR"
+  ];
+  function updateFormulaAutocomplete(input, overlay) {
+    const val = input.value;
+    if (!val.startsWith("=")) {
+      overlay.style.display = "none";
+      return;
+    }
+    const cursor = input.selectionStart ?? val.length;
+    let wordStart = cursor - 1;
+    while (wordStart > 0 && /[\w$.]/.test(val[wordStart - 1])) wordStart--;
+    const word = val.slice(wordStart, cursor).toUpperCase();
+    if (word.length < 1) {
+      overlay.style.display = "none";
+      return;
+    }
+    const namedMatches = definedNames.filter((n) => !n.hidden && n.name.toUpperCase().startsWith(word)).map((n) => ({ label: n.name, isFunction: false }));
+    const funcMatches = BUILTIN_FUNCTIONS.filter((f) => f.startsWith(word)).map((f) => ({ label: f, isFunction: true }));
+    const allMatches = [...namedMatches, ...funcMatches].slice(0, 30);
+    const matches = allMatches;
+    if (matches.length === 0) {
+      overlay.style.display = "none";
+      return;
+    }
+    overlay.innerHTML = "";
+    for (const m of matches) {
+      const insertText = m.isFunction ? m.label + "(" : m.label;
+      const item = document.createElement("div");
+      item.className = "ac-item";
+      item.textContent = m.label + (m.isFunction ? "()" : "");
+      item.dataset["value"] = insertText;
+      item.dataset["wordStart"] = String(wordStart);
+      item.dataset["wordEnd"] = String(cursor);
+      Object.assign(item.style, { padding: "4px 10px", cursor: "pointer" });
+      item.addEventListener("mouseover", () => {
+        overlay.querySelectorAll(".ac-item").forEach((i) => i.classList.remove("selected"));
+        item.classList.add("selected");
+      });
+      item.addEventListener("mousedown", (e) => {
+        e.preventDefault();
+        applyAutocomplete(input, insertText, overlay);
+      });
+      overlay.appendChild(item);
+    }
+    const rect = input.getBoundingClientRect();
+    overlay.style.left = rect.left + "px";
+    overlay.style.top = rect.bottom + 2 + "px";
+    overlay.style.display = "block";
+  }
+  function moveAutocompleteSelection(overlay, dir) {
+    const items = Array.from(overlay.querySelectorAll(".ac-item"));
+    const idx = items.findIndex((i) => i.classList.contains("selected"));
+    items.forEach((i) => i.classList.remove("selected"));
+    const next = Math.max(0, Math.min(items.length - 1, idx + dir));
+    items[next]?.classList.add("selected");
+    items[next]?.scrollIntoView({ block: "nearest" });
+  }
+  function applyAutocomplete(input, name, overlay) {
+    const items = overlay.querySelectorAll(".ac-item");
+    const item = Array.from(items).find((i) => i.dataset["value"] === name);
+    if (!item) return;
+    const wordStart = parseInt(item.dataset["wordStart"] ?? "0", 10);
+    const wordEnd = parseInt(item.dataset["wordEnd"] ?? "0", 10);
+    const before = input.value.slice(0, wordStart);
+    const after = input.value.slice(wordEnd);
+    input.value = before + name + after;
+    input.setSelectionRange(wordStart + name.length, wordStart + name.length);
+    overlay.style.display = "none";
+  }
   function handleContextMenuAction(event) {
     if (!renderer) return;
     switch (event.action) {
@@ -20633,6 +25095,9 @@
         break;
       case "paste":
         handlePaste();
+        break;
+      case "pasteSpecial":
+        handlePasteSpecial();
         break;
       case "insertRowAbove":
         renderer.insertRow(event.row);
@@ -20671,6 +25136,18 @@
         markDirty();
         break;
       case "formatCells":
+        showFormatCellsDialog(event.row, event.col);
+        break;
+      case "insertHyperlink":
+      case "editHyperlink":
+        showHyperlinkDialog(event.row, event.col);
+        break;
+      case "removeHyperlink":
+        renderer.removeHyperlinkAt(event.row, event.col);
+        markDirty();
+        break;
+      case "defineName":
+        showDefineNameDialog(event.row, event.col);
         break;
       // Column/Row header actions
       case "clearCol":
@@ -20718,16 +25195,36 @@
         break;
       case "colWidthAuto":
         if (renderer) {
-          renderer.setColWidth(event.col, 100);
-          renderer.render();
+          renderer.autoFitColumn(event.col);
           markDirty();
         }
         break;
       case "rowHeightAuto":
         if (renderer) {
-          renderer.setRowHeight(event.row, 24);
-          renderer.render();
+          renderer.autoFitRow(event.row);
           markDirty();
+        }
+        break;
+      case "autoFitSelectedCols":
+        if (renderer) {
+          const selForCols = renderer.getSelectedRange();
+          if (selForCols) {
+            const sc = Math.min(selForCols.startCol, selForCols.endCol);
+            const ec = Math.max(selForCols.startCol, selForCols.endCol);
+            renderer.autoFitColumns(sc, ec);
+            markDirty();
+          }
+        }
+        break;
+      case "autoFitSelectedRows":
+        if (renderer) {
+          const selForRows = renderer.getSelectedRange();
+          if (selForRows) {
+            const sr = Math.min(selForRows.startRow, selForRows.endRow);
+            const er = Math.max(selForRows.startRow, selForRows.endRow);
+            renderer.autoFitRows(sr, er);
+            markDirty();
+          }
         }
         break;
       // Table-specific context menu actions
@@ -20943,7 +25440,7 @@
   }
   async function handleCut() {
     if (!renderer) return;
-    const data = renderer.getSelectedCellsData();
+    const data = renderer.copySelectionToClipboard(true);
     if (data) {
       try {
         await navigator.clipboard.writeText(data);
@@ -20956,7 +25453,7 @@
   }
   async function handleCopy() {
     if (!renderer) return;
-    const data = renderer.getSelectedCellsData();
+    const data = renderer.copySelectionToClipboard(false);
     if (data) {
       try {
         await navigator.clipboard.writeText(data);
@@ -20967,12 +25464,33 @@
   }
   async function handlePaste() {
     if (!renderer) return;
+    const clip = renderer.getInternalClipboard();
+    if (clip) {
+      renderer.pasteSpecial({ what: "all", operation: "none", skipBlanks: false, transpose: false });
+      markDirty();
+      return;
+    }
     try {
       const text = await navigator.clipboard.readText();
       renderer.pasteData(text);
       markDirty();
     } catch {
       console.warn("[XLSX Rust Viewer] Clipboard read not available");
+    }
+  }
+  function handlePasteSpecial() {
+    if (!renderer || !psDialog) return;
+    const clip = renderer.getInternalClipboard();
+    if (!clip) {
+      console.warn("[XLSX Rust Viewer] No internal clipboard \u2013 copy something first");
+      return;
+    }
+    psDialog.show();
+  }
+  function handlePsDialogAction(event) {
+    if (event.action === "paste" && event.options && renderer) {
+      renderer.pasteSpecial(event.options);
+      markDirty();
     }
   }
   function fallbackCopy(text) {
@@ -21037,7 +25555,11 @@
           return;
         case "v":
           e.preventDefault();
-          handlePaste();
+          if (e.shiftKey) {
+            handlePasteSpecial();
+          } else {
+            handlePaste();
+          }
           return;
         case "b":
           e.preventDefault();
@@ -21065,6 +25587,28 @@
         case "h":
           e.preventDefault();
           toggleFindBar(true);
+          return;
+        case "d":
+          e.preventDefault();
+          renderer.fillDown();
+          markDirty();
+          evaluateFormulas();
+          return;
+        case "r":
+          e.preventDefault();
+          renderer.fillRight();
+          markDirty();
+          evaluateFormulas();
+          return;
+        case "e":
+          e.preventDefault();
+          {
+            const filled = renderer.flashFill();
+            if (filled > 0) {
+              markDirty();
+              evaluateFormulas();
+            }
+          }
           return;
       }
     }
@@ -21300,7 +25844,14 @@
     };
     renderer.onContextMenu = (row, col, x, y, headerType) => {
       if (contextMenu) {
-        contextMenu.show(x, y, row, col, headerType);
+        const sel = renderer.getSelectedRange();
+        const selRange = sel ? {
+          startRow: Math.min(sel.startRow, sel.endRow),
+          startCol: Math.min(sel.startCol, sel.endCol),
+          endRow: Math.max(sel.startRow, sel.endRow),
+          endCol: Math.max(sel.startCol, sel.endCol)
+        } : void 0;
+        contextMenu.show(x, y, row, col, headerType, selRange);
       }
     };
     renderer.onCellEdit = (_row, _col, _value) => {
@@ -21313,6 +25864,7 @@
     };
     renderer.onSelectionChanged = (row, col) => {
       updateFormulaBar(row, col);
+      updateStatusBar();
     };
     renderer.onFormulaRangeSelect = (row, col) => {
       handleFormulaPointClick(row, col);
@@ -21343,8 +25895,14 @@
   function updateFormulaBar(row, col) {
     const cellRefEl = document.getElementById("cell-ref");
     const formulaInput = document.getElementById("formula-input");
-    if (cellRefEl) {
-      cellRefEl.textContent = getColName(col) + (row + 1);
+    if (cellRefEl && document.activeElement !== cellRefEl) {
+      const cellAddr = getColName(col) + (row + 1);
+      const matchingName = definedNames.find((n) => {
+        const f = n.formula.replace(/^=/, "");
+        const clean = f.replace(/\$/g, "").toUpperCase();
+        return clean === cellAddr || clean.endsWith("!" + cellAddr);
+      });
+      cellRefEl.value = matchingName ? matchingName.name : cellAddr;
     }
     if (formulaInput && renderer) {
       const data = renderer.getData();
@@ -21355,6 +25913,115 @@
         exitFormulaMode();
       }
     }
+  }
+  var statusBarEl = document.getElementById("status-bar");
+  var visibleStats = /* @__PURE__ */ new Set(["average", "count", "sum"]);
+  function formatStat(n) {
+    if (Number.isInteger(n)) return String(n);
+    return parseFloat(n.toPrecision(10)).toString();
+  }
+  function updateStatusBar() {
+    if (!renderer || !statusBarEl) return;
+    const stats = renderer.getSelectionStats();
+    statusBarEl.innerHTML = "";
+    if (!stats) return;
+    const items = [
+      { key: "average", label: "Average", value: stats.count > 0 ? formatStat(stats.avg) : "" },
+      { key: "count", label: "Count", value: stats.countAll > 0 ? String(stats.countAll) : "" },
+      { key: "numCount", label: "Numerical Count", value: stats.count > 0 ? String(stats.count) : "" },
+      { key: "min", label: "Min", value: stats.count > 0 ? formatStat(stats.min) : "" },
+      { key: "max", label: "Max", value: stats.count > 0 ? formatStat(stats.max) : "" },
+      { key: "sum", label: "Sum", value: stats.count > 0 ? formatStat(stats.sum) : "" }
+    ];
+    for (const item of items) {
+      if (!visibleStats.has(item.key) || !item.value) continue;
+      const el = document.createElement("span");
+      el.className = "status-item";
+      el.textContent = `${item.label}: ${item.value}`;
+      statusBarEl.appendChild(el);
+    }
+  }
+  function showStatusBarContextMenu(x, y) {
+    document.getElementById("status-ctx-menu")?.remove();
+    const allItems = [
+      { key: "average", label: "Average" },
+      { key: "count", label: "Count" },
+      { key: "numCount", label: "Numerical Count" },
+      { key: "min", label: "Min" },
+      { key: "max", label: "Max" },
+      { key: "sum", label: "Sum" }
+    ];
+    const menu = document.createElement("div");
+    menu.id = "status-ctx-menu";
+    Object.assign(menu.style, {
+      position: "fixed",
+      left: `${x}px`,
+      top: `${Math.max(0, y - allItems.length * 28)}px`,
+      background: "#1e1e1e",
+      border: "1px solid #555",
+      borderRadius: "4px",
+      zIndex: "9999",
+      minWidth: "180px",
+      boxShadow: "0 4px 12px rgba(0,0,0,0.5)",
+      fontFamily: "system-ui, sans-serif",
+      fontSize: "13px",
+      color: "#ccc",
+      padding: "4px 0"
+    });
+    const header = document.createElement("div");
+    header.textContent = "Customize Status Bar";
+    Object.assign(header.style, {
+      padding: "4px 12px 6px",
+      fontWeight: "600",
+      color: "#aaa",
+      fontSize: "11px",
+      textTransform: "uppercase",
+      letterSpacing: "0.05em",
+      borderBottom: "1px solid #444",
+      marginBottom: "4px"
+    });
+    menu.appendChild(header);
+    for (const item of allItems) {
+      const row = document.createElement("label");
+      Object.assign(row.style, {
+        display: "flex",
+        alignItems: "center",
+        gap: "8px",
+        padding: "5px 12px",
+        cursor: "pointer"
+      });
+      row.addEventListener("mouseenter", () => {
+        row.style.background = "rgba(255,255,255,0.08)";
+      });
+      row.addEventListener("mouseleave", () => {
+        row.style.background = "";
+      });
+      const cb = document.createElement("input");
+      cb.type = "checkbox";
+      cb.checked = visibleStats.has(item.key);
+      cb.addEventListener("change", () => {
+        if (cb.checked) visibleStats.add(item.key);
+        else visibleStats.delete(item.key);
+        updateStatusBar();
+      });
+      row.appendChild(cb);
+      row.appendChild(document.createTextNode(item.label));
+      menu.appendChild(row);
+    }
+    document.body.appendChild(menu);
+    const close = (e) => {
+      if (!menu.contains(e.target)) {
+        menu.remove();
+        document.removeEventListener("mousedown", close);
+      }
+    };
+    setTimeout(() => document.addEventListener("mousedown", close), 0);
+  }
+  if (statusBarEl) {
+    statusBarEl.addEventListener("contextmenu", (e) => {
+      e.preventDefault();
+      showStatusBarContextMenu(e.clientX, e.clientY);
+    });
   }
   function getColName(n) {
     let s = "";

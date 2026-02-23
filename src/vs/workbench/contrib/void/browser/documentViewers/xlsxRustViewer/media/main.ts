@@ -12,8 +12,13 @@ import { Ribbon, RibbonEvent } from './ribbon.js';
 import { ContextMenu, ContextMenuEvent } from './contextMenu.js';
 import { FilterDropdown, FilterDropdownEvent } from './filterDropdown.js';
 import { ConditionalFormatDialog, CFDialogEvent } from './conditionalFormatDialog.js';
+import { ValidationDialog, VDDialogEvent } from './validationDialog.js';
+import { FormatCellsDialog, FCDialogEvent } from './formatCellsDialog.js';
+import { HyperlinkDialog, HLDialogEvent } from './hyperlinkDialog.js';
+import { NameManagerDialog, NMDialogEvent, DefinedNameDef } from './nameManagerDialog.js';
 import { ChartManager, ChartDefinition, RendererCoords } from './chartManager.js';
 import { ChartWizardDialog, ChartWizardEvent } from './chartWizardDialog.js';
+import { PasteSpecialDialog, PSDialogEvent } from './pasteSpecialDialog.js';
 
 // VS Code API (available in webview context)
 declare function acquireVsCodeApi(): { postMessage(msg: unknown): void; getState(): unknown; setState(state: unknown): void };
@@ -31,9 +36,17 @@ let renderer: CanvasRenderer | null = null;
 let contextMenu: ContextMenu | null = null;
 let filterDropdown: FilterDropdown | null = null;
 let cfDialog: ConditionalFormatDialog | null = null;
+let vdDialog: ValidationDialog | null = null;
+let fcDialog: FormatCellsDialog | null = null;
+let hlDialog: HyperlinkDialog | null = null;
+let nmDialog: NameManagerDialog | null = null;
 let chartManager: ChartManager | null = null;
 let chartWizard: ChartWizardDialog | null = null;
+let psDialog: PasteSpecialDialog | null = null;
 let ribbon: Ribbon | null = null;
+
+// Workbook-level defined names (named ranges)
+let definedNames: DefinedNameDef[] = [];
 
 async function initialize() {
 	console.log('[XLSX Rust Viewer] Initializing...');
@@ -77,10 +90,43 @@ async function initialize() {
 	// Initialize conditional formatting dialog
 	cfDialog = new ConditionalFormatDialog(document.body, handleCfDialogAction);
 
+	// Initialize data validation dialog
+	vdDialog = new ValidationDialog(document.body, handleVdDialogAction);
+
+	// Initialize format cells dialog
+	fcDialog = new FormatCellsDialog(document.body, handleFcDialogAction);
+
+	// Initialize hyperlink dialog
+	hlDialog = new HyperlinkDialog(document.body, handleHlDialogAction);
+
+	// Initialize name manager dialog
+	nmDialog = new NameManagerDialog(document.body, handleNmDialogAction);
+
+	// Initialize paste special dialog
+	psDialog = new PasteSpecialDialog(document.body, handlePsDialogAction);
+
+	// Register hyperlink detector for context menu
+	contextMenu.setHyperlinkDetector((row, col) => {
+		if (!renderer) return undefined;
+		return renderer.getHyperlinkForCell(row, col);
+	});
+
+	// Wire Ctrl+Click callback for hyperlinks
+	renderer.onHyperlinkClick = (url, isInternal) => {
+		if (isInternal) {
+			navigateToInternalLink(url);
+		} else {
+			vscode.postMessage({ type: 'openExternal', url });
+		}
+	};
+
 	// Chart manager will be initialized in setupRendererCallbacks after renderer is ready
 
 	// Initialize chart wizard dialog
 	chartWizard = new ChartWizardDialog(document.body, handleChartWizardAction);
+
+	// Setup Name Box and formula bar autocomplete
+	setupFormulaBarInteractions();
 
 	// Wire filter arrow clicks from renderer to the filter dropdown
 	renderer.onFilterArrowClick = (tableName, colIndex, colName, screenX, screenY) => {
@@ -185,6 +231,16 @@ async function handleLoad(base64Data: string) {
 
 		renderer.setData(model);
 
+		// Load defined names (named ranges) from the parsed model
+		definedNames = (model.defined_names ?? []) as DefinedNameDef[];
+		if (formulaEngine) {
+			try {
+				formulaEngine.set_named_ranges(JSON.stringify(definedNames));
+			} catch (e) {
+				console.warn('[XLSX Rust Viewer] Named ranges init failed:', e);
+			}
+		}
+
 		// Restore chart state from webview persistence (fallback if ZIP didn't have them)
 		restoreChartState();
 
@@ -205,14 +261,21 @@ async function handleLoad(base64Data: string) {
 function evaluateFormulas() {
 	if (!formulaEngine || !renderer) return;
 	const data = renderer.getData();
-	const sheet = data?.sheets?.[renderer.getActiveSheetIndex()];
-	if (!sheet?.cells) return;
+	if (!data?.sheets) return;
+	const activeIdx = renderer.getActiveSheetIndex();
+	const activeSheet = data.sheets[activeIdx];
+	if (!activeSheet) return;
 
 	try {
-		const cellsJson = JSON.stringify(sheet.cells);
-		const resultJson = formulaEngine.evaluate_all(cellsJson);
+		// Build all-sheets cells map for cross-sheet formula support
+		const allSheets: Record<string, unknown> = {};
+		for (const sheet of data.sheets) {
+			allSheets[sheet.name] = sheet.cells ?? {};
+		}
+		const resultJson = formulaEngine.evaluate_all(JSON.stringify(allSheets), activeSheet.name);
 		const results = JSON.parse(resultJson);
 		renderer.setFormulaResults(results);
+		updateStatusBar();
 	} catch (e) {
 		console.warn('[XLSX Rust Viewer] Formula evaluation error:', e);
 	}
@@ -563,6 +626,7 @@ function handleRibbonAction(event: RibbonEvent) {
 		case 'cut': handleCut(); break;
 		case 'copy': handleCopy(); break;
 		case 'paste': handlePaste(); break;
+		case 'pasteSpecial': handlePasteSpecial(); break;
 
 		// History
 		case 'undo': renderer.undo(); break;
@@ -609,8 +673,23 @@ function handleRibbonAction(event: RibbonEvent) {
 		// Conditional Formatting
 		case 'conditionalFormatting': showConditionalFormattingDialog(); break;
 
+		// Data Validation
+		case 'dataValidation': showDataValidationDialog(); break;
+		case 'circleInvalidData':
+			if (renderer) {
+				renderer.setShowInvalidCircles(!renderer.getShowInvalidCircles());
+			}
+			break;
+
 		// Charts
 		case 'insertChart': showChartWizard(); break;
+
+		// Hyperlinks
+		case 'insertHyperlink': showHyperlinkDialog(); break;
+
+		// Named Ranges
+		case 'nameManager': showNameManagerDialog(); break;
+		case 'defineName': showDefineNameDialog(); break;
 
 		// View
 		case 'gridlines': renderer.toggleGridlines(); break;
@@ -621,6 +700,15 @@ function handleRibbonAction(event: RibbonEvent) {
 		case 'sortAZ': renderer.sortColumn(true); markDirty(); break;
 		case 'sortZA': renderer.sortColumn(false); markDirty(); break;
 		case 'clear': renderer.clearSelectedCells(); markDirty(); break;
+
+		// Fill
+		case 'fillDown': renderer.fillDown(); markDirty(); evaluateFormulas(); break;
+		case 'fillRight': renderer.fillRight(); markDirty(); evaluateFormulas(); break;
+		case 'flashFill': {
+			const filledCount = renderer.flashFill();
+			if (filledCount > 0) { markDirty(); evaluateFormulas(); }
+			break;
+		}
 
 		// File
 		case 'save': handleSave(); break;
@@ -774,6 +862,529 @@ function handleCfDialogAction(event: CFDialogEvent) {
 	}
 }
 
+function showDataValidationDialog() {
+	if (!renderer || !vdDialog) return;
+	const data = renderer.getData();
+	const sheet = data?.sheets?.[renderer.getActiveSheetIndex?.() ?? 0];
+	const existingRules = sheet?.data_validations ?? [];
+
+	const sel = renderer.getSelectedCell();
+	const selRange = renderer.getSelectedRange?.();
+	let sqref = 'A1';
+	if (selRange) {
+		const c1 = getColName(selRange.startCol) + (selRange.startRow + 1);
+		const c2 = getColName(selRange.endCol) + (selRange.endRow + 1);
+		sqref = c1 === c2 ? c1 : `${c1}:${c2}`;
+	} else if (sel) {
+		sqref = getColName(sel.col) + (sel.row + 1);
+	}
+
+	vdDialog.show(sqref, existingRules);
+}
+
+function handleVdDialogAction(event: VDDialogEvent) {
+	if (!renderer) return;
+	const data = renderer.getData();
+	if (!data?.sheets) return;
+	const sheetIdx = renderer.getActiveSheetIndex?.() ?? 0;
+	const sheet = data.sheets[sheetIdx];
+	if (!sheet) return;
+	if (!sheet.data_validations) sheet.data_validations = [];
+
+	switch (event.action) {
+		case 'add':
+			if (event.rule) {
+				sheet.data_validations.push(event.rule);
+				renderer.setValidations(sheet.data_validations);
+				if (vdDialog) vdDialog.refreshRules(sheet.data_validations);
+				markDirty();
+			}
+			break;
+		case 'edit':
+			if (event.rule && event.ruleIndex !== undefined && event.ruleIndex < sheet.data_validations.length) {
+				sheet.data_validations[event.ruleIndex] = event.rule;
+				renderer.setValidations(sheet.data_validations);
+				if (vdDialog) vdDialog.refreshRules(sheet.data_validations);
+				markDirty();
+			}
+			break;
+		case 'delete':
+			if (event.ruleIndex !== undefined && event.ruleIndex < sheet.data_validations.length) {
+				sheet.data_validations.splice(event.ruleIndex, 1);
+				renderer.setValidations(sheet.data_validations);
+				if (vdDialog) vdDialog.refreshRules(sheet.data_validations);
+				markDirty();
+			}
+			break;
+		case 'close':
+			break;
+	}
+}
+
+function showFormatCellsDialog(row: number, col: number): void {
+	if (!renderer || !fcDialog) return;
+	const currentStyle = renderer.getStyleAt(row, col);
+	fcDialog.show(currentStyle);
+}
+
+function handleFcDialogAction(event: FCDialogEvent): void {
+	if (!renderer || !event.style) return;
+	if (event.action === 'apply') {
+		renderer.applyStyle(event.style);
+		markDirty();
+	}
+}
+
+function showHyperlinkDialog(row?: number, col?: number): void {
+	if (!renderer || !hlDialog) return;
+	const data = renderer.getData();
+	const sheetNames: string[] = (data?.sheets ?? []).map((s: any) => s.name as string);
+	// Determine cell ref string
+	let cellRef = 'A1';
+	if (row !== undefined && col !== undefined) {
+		cellRef = colToLetter(col) + (row + 1);
+	} else {
+		const sel = renderer.getSelectedCell();
+		if (sel) cellRef = colToLetter(sel.col) + (sel.row + 1);
+	}
+	const existing = (row !== undefined && col !== undefined)
+		? renderer.getHyperlinkForCell(row, col)
+		: undefined;
+	hlDialog.show(cellRef, sheetNames, existing);
+}
+
+function colToLetter(col: number): string {
+	let s = '';
+	let n = col;
+	while (n >= 0) {
+		s = String.fromCharCode((n % 26) + 65) + s;
+		n = Math.floor(n / 26) - 1;
+	}
+	return s;
+}
+
+function handleHlDialogAction(event: HLDialogEvent): void {
+	if (!renderer) return;
+	if ((event.action === 'insert' || event.action === 'edit') && event.link) {
+		renderer.addHyperlink(event.link);
+		markDirty();
+	} else if (event.action === 'remove' && event.link) {
+		// Remove by cell_ref — find row/col from the link's cell_ref
+		const cellRef = event.link.cell_ref;
+		const m = cellRef.toUpperCase().match(/^([A-Z]+)(\d+)$/);
+		if (m) {
+			let col = 0;
+			for (const ch of m[1]) { col = col * 26 + ch.charCodeAt(0) - 64; }
+			const row = parseInt(m[2], 10) - 1;
+			renderer.removeHyperlinkAt(row, col - 1);
+			markDirty();
+		}
+	}
+}
+
+// --- Named Ranges (Name Manager) ---
+
+function showNameManagerDialog(): void {
+	if (!nmDialog || !renderer) return;
+	const data = renderer.getData();
+	const sheetNames: string[] = (data?.sheets ?? []).map((s: any) => s.name as string);
+	nmDialog.show(definedNames, sheetNames);
+}
+
+function showDefineNameDialog(row?: number, col?: number): void {
+	if (!nmDialog || !renderer) return;
+	const data = renderer.getData();
+	const sheetNames: string[] = (data?.sheets ?? []).map((s: any) => s.name as string);
+	const activeSheetName = data?.sheets?.[renderer.getActiveSheetIndex()]?.name ?? '';
+
+	// Build a default "Refers to" value from the current selection
+	let defaultFormula = '';
+	if (row !== undefined && col !== undefined) {
+		defaultFormula = `${activeSheetName}!$${colToLetter(col)}$${row + 1}`;
+	} else {
+		const sel = renderer.getSelectedRange();
+		if (sel) {
+			const c1 = colToLetter(sel.startCol);
+			const c2 = colToLetter(sel.endCol);
+			if (sel.startRow === sel.endRow && sel.startCol === sel.endCol) {
+				defaultFormula = `${activeSheetName}!$${c1}$${sel.startRow + 1}`;
+			} else {
+				defaultFormula = `${activeSheetName}!$${c1}$${sel.startRow + 1}:$${c2}$${sel.endRow + 1}`;
+			}
+		} else {
+			const cell = renderer.getSelectedCell();
+			if (cell) {
+				defaultFormula = `${activeSheetName}!$${colToLetter(cell.col)}$${cell.row + 1}`;
+			}
+		}
+	}
+
+	// Open the Name Manager showing a pre-filled sub-dialog for a new entry
+	nmDialog.show(definedNames, sheetNames);
+	// Trigger "New..." with the pre-filled formula (internal helper exposed via method)
+	(nmDialog as any)._openSubDialog(-1);
+	if (defaultFormula) {
+		(nmDialog as any).subFormulaInput.value = defaultFormula;
+	}
+}
+
+function handleNmDialogAction(event: NMDialogEvent): void {
+	if (!renderer) return;
+
+	if (event.action === 'create' && event.name) {
+		definedNames = [...definedNames, event.name];
+	} else if (event.action === 'edit' && event.name && event.index !== undefined) {
+		definedNames = definedNames.map((n, i) => i === event.index ? event.name! : n);
+	} else if (event.action === 'delete' && event.index !== undefined) {
+		definedNames = definedNames.filter((_, i) => i !== event.index);
+	} else if (event.action === 'close') {
+		return;
+	}
+
+	// Sync into the workbook model so saves include the changes
+	const data = renderer.getData();
+	if (data) {
+		data.defined_names = definedNames;
+	}
+
+	// Re-register named ranges with the formula engine
+	if (formulaEngine) {
+		try {
+			formulaEngine.set_named_ranges(JSON.stringify(definedNames));
+		} catch (e) {
+			console.warn('[XLSX Rust Viewer] Named ranges update failed:', e);
+		}
+	}
+
+	evaluateFormulas();
+	markDirty();
+
+	// Refresh Name Box dropdown
+	refreshNameBoxDropdown();
+}
+
+/** Navigate to a named range by resolving its formula */
+function navigateToNamedRange(name: string): void {
+	if (!renderer) return;
+	const entry = definedNames.find(n => n.name.toUpperCase() === name.toUpperCase());
+	if (!entry) return;
+
+	// Parse formula: e.g. "Sheet1!$A$1:$C$10" or "'My Sheet'!$A$1"
+	let formula = entry.formula.replace(/^=/, '');
+	// Strip outer quotes from sheet name
+	const bangIdx = formula.indexOf('!');
+	if (bangIdx === -1) return;
+
+	const sheetPart = formula.slice(0, bangIdx).replace(/^'|'$/g, '');
+	const refPart = formula.slice(bangIdx + 1);
+
+	const data = renderer.getData();
+	const sheets: any[] = data?.sheets ?? [];
+	const sheetIdx = sheets.findIndex((s: any) => s.name === sheetPart);
+	if (sheetIdx !== -1) {
+		renderer.setActiveSheetIndex(sheetIdx);
+		buildSheetTabs();
+		evaluateFormulas();
+	}
+
+	// Parse cell or range ref
+	const rangeMatch = refPart.replace(/\$/g, '').toUpperCase().match(/^([A-Z]+)(\d+)(?::([A-Z]+)(\d+))?$/);
+	if (rangeMatch) {
+		const parseCol = (s: string) => { let c = 0; for (const ch of s) c = c * 26 + ch.charCodeAt(0) - 64; return c - 1; };
+		const r1 = parseInt(rangeMatch[2], 10) - 1;
+		const c1 = parseCol(rangeMatch[1]);
+		const r2 = rangeMatch[4] ? parseInt(rangeMatch[4], 10) - 1 : r1;
+		const c2 = rangeMatch[3] ? parseCol(rangeMatch[3]) : c1;
+		renderer.setSelection(r1, c1, r2, c2);
+	}
+}
+
+/** Navigate to an internal hyperlink (#SheetName!CellRef or #NamedRange). */
+function navigateToInternalLink(url: string): void {
+	if (!renderer) return;
+	// Strip leading #
+	const target = url.startsWith('#') ? url.slice(1) : url;
+
+	// Check if it's a named range (no '!')
+	const bangIdx = target.indexOf('!');
+	if (bangIdx === -1) {
+		// Could be a named range
+		navigateToNamedRange(target);
+		return;
+	}
+
+	const sheetName = target.slice(0, bangIdx).replace(/^'|'$/g, '');
+	const cellRef = target.slice(bangIdx + 1);
+
+	const data = renderer.getData();
+	const sheets: any[] = data?.sheets ?? [];
+	const sheetIdx = sheets.findIndex((s: any) => s.name === sheetName);
+	if (sheetIdx === -1) return;
+
+	renderer.setActiveSheetIndex(sheetIdx);
+	buildSheetTabs();
+
+	// Parse cell ref and select it
+	const m = cellRef.replace(/\$/g, '').toUpperCase().match(/^([A-Z]+)(\d+)$/);
+	if (m) {
+		let col = 0;
+		for (const ch of m[1]) { col = col * 26 + ch.charCodeAt(0) - 64; }
+		const row = parseInt(m[2], 10) - 1;
+		renderer.setSelection(row, col - 1, row, col - 1);
+	}
+}
+
+// --- Name Box and Formula Autocomplete ---
+
+/** Set up the Name Box input (cell-ref) and the formula bar autocomplete overlay. */
+function setupFormulaBarInteractions(): void {
+	const nameBoxEl = document.getElementById('cell-ref') as HTMLInputElement | null;
+	const dropdownEl = document.getElementById('name-box-dropdown') as HTMLDivElement | null;
+	const formulaInputEl = document.getElementById('formula-input') as HTMLInputElement | null;
+
+	if (nameBoxEl && dropdownEl) {
+		nameBoxEl.addEventListener('focus', () => {
+			nameBoxEl.select();
+			refreshNameBoxDropdown();
+			dropdownEl.style.display = definedNames.length > 0 ? 'block' : 'none';
+		});
+
+		nameBoxEl.addEventListener('blur', () => {
+			// Delay so click on dropdown item fires first
+			setTimeout(() => {
+				dropdownEl.style.display = 'none';
+				// Restore to current cell address if not a valid named range
+				if (renderer) {
+					const sel = renderer.getSelectedCell();
+					if (sel) updateFormulaBar(sel.row, sel.col);
+				}
+			}, 150);
+		});
+
+		nameBoxEl.addEventListener('keydown', (e) => {
+			if (e.key === 'Enter') {
+				e.preventDefault();
+				const val = nameBoxEl.value.trim();
+				dropdownEl.style.display = 'none';
+
+				// Check if it matches a named range
+				const matchedName = definedNames.find(n => n.name.toUpperCase() === val.toUpperCase());
+				if (matchedName) {
+					navigateToNamedRange(matchedName.name);
+					return;
+				}
+
+				// Otherwise try to parse as a cell ref (e.g. "B5" or "Sheet1!B5")
+				if (!renderer) return;
+				const bangIdx = val.indexOf('!');
+				let cellPart = val;
+				if (bangIdx !== -1) {
+					const sheetPart = val.slice(0, bangIdx).replace(/^'|'$/g, '');
+					cellPart = val.slice(bangIdx + 1);
+					const data = renderer.getData();
+					const sheetIdx = (data?.sheets ?? []).findIndex((s: any) => s.name === sheetPart);
+					if (sheetIdx !== -1) {
+						renderer.setActiveSheetIndex(sheetIdx);
+						buildSheetTabs();
+						evaluateFormulas();
+					}
+				}
+				const m = cellPart.replace(/\$/g, '').toUpperCase().match(/^([A-Z]+)(\d+)$/);
+				if (m) {
+					let col = 0;
+					for (const ch of m[1]) { col = col * 26 + ch.charCodeAt(0) - 64; }
+					const row = parseInt(m[2], 10) - 1;
+					renderer.setSelection(row, col - 1, row, col - 1);
+				}
+				nameBoxEl.blur();
+			} else if (e.key === 'Escape') {
+				dropdownEl.style.display = 'none';
+				nameBoxEl.blur();
+			}
+		});
+
+		nameBoxEl.addEventListener('input', () => {
+			const val = nameBoxEl.value.toLowerCase();
+			refreshNameBoxDropdown(val);
+			dropdownEl.style.display = 'block';
+		});
+	}
+
+	// --- Formula bar autocomplete ---
+	if (formulaInputEl) {
+		const autoEl = createFormulaAutocomplete();
+		formulaInputEl.addEventListener('input', () => {
+			updateFormulaAutocomplete(formulaInputEl, autoEl);
+		});
+		formulaInputEl.addEventListener('keydown', (e) => {
+			if (autoEl.style.display !== 'none') {
+				if (e.key === 'ArrowDown') {
+					e.preventDefault();
+					moveAutocompleteSelection(autoEl, 1);
+				} else if (e.key === 'ArrowUp') {
+					e.preventDefault();
+					moveAutocompleteSelection(autoEl, -1);
+				} else if (e.key === 'Enter' || e.key === 'Tab') {
+					const sel = autoEl.querySelector('.ac-item.selected') as HTMLElement | null;
+					if (sel && autoEl.style.display !== 'none') {
+						e.preventDefault();
+						applyAutocomplete(formulaInputEl, sel.dataset['value'] ?? '', autoEl);
+					}
+				} else if (e.key === 'Escape') {
+					autoEl.style.display = 'none';
+				}
+			}
+		});
+		formulaInputEl.addEventListener('blur', () => {
+			setTimeout(() => { autoEl.style.display = 'none'; }, 150);
+		});
+	}
+}
+
+/** Refresh the Name Box dropdown list, optionally filtered by a prefix. */
+function refreshNameBoxDropdown(filter?: string): void {
+	const dropdownEl = document.getElementById('name-box-dropdown') as HTMLDivElement | null;
+	if (!dropdownEl) return;
+	dropdownEl.innerHTML = '';
+
+	const data = renderer?.getData();
+	const sheetNames: string[] = (data?.sheets ?? []).map((s: any) => s.name as string);
+
+	const names = filter
+		? definedNames.filter(n => !n.hidden && n.name.toLowerCase().includes(filter))
+		: definedNames.filter(n => !n.hidden);
+
+	if (names.length === 0) {
+		dropdownEl.style.display = 'none';
+		return;
+	}
+
+	for (const n of names) {
+		const item = document.createElement('div');
+		item.className = 'nb-item';
+		const scopeLabel = n.local_sheet_id !== undefined
+			? sheetNames[n.local_sheet_id] ?? 'Sheet'
+			: 'Workbook';
+		item.innerHTML = `${n.name}<span class="nb-scope">${scopeLabel}</span>`;
+		item.addEventListener('mousedown', (e) => {
+			e.preventDefault();
+			navigateToNamedRange(n.name);
+			dropdownEl.style.display = 'none';
+		});
+		dropdownEl.appendChild(item);
+	}
+}
+
+/** Create the formula bar autocomplete overlay element */
+function createFormulaAutocomplete(): HTMLDivElement {
+	const existing = document.getElementById('formula-autocomplete');
+	if (existing) return existing as HTMLDivElement;
+
+	const el = document.createElement('div');
+	el.id = 'formula-autocomplete';
+	Object.assign(el.style, {
+		display: 'none', position: 'fixed', zIndex: '300',
+		background: '#1e1e1e', border: '1px solid #555', borderRadius: '2px',
+		maxHeight: '200px', overflowY: 'auto', minWidth: '160px',
+		boxShadow: '0 4px 12px rgba(0,0,0,0.6)', fontSize: '12px', color: '#ccc',
+	});
+	document.body.appendChild(el);
+	return el;
+}
+
+const BUILTIN_FUNCTIONS = [
+	'ABS','AND','AVERAGE','AVG','AVERAGEIF','AVERAGEIFS',
+	'CELL','CEILING','CHAR','CHOOSE','CLEAN','CODE','COLUMN','COLUMNS','CONCAT','CONCATENATE','COUNT','COUNTA','COUNTIF','COUNTIFS',
+	'DATE','DATEVALUE','DAY','DATEDIF','DB',
+	'EDATE','EOMONTH','EXP','EXACT',
+	'FALSE','FIND','FLOOR','FV',
+	'HLOOKUP','HOUR',
+	'IF','IFERROR','IFNA','IFS','INDEX','INDIRECT','INFO','INT','IRR','ISERR','ISERROR','ISBLANK','ISLOGICAL','ISNONTEXT','ISNUMBER','ISTEXT',
+	'LARGE','LEFT','LEN','LN','LOG','LOG10','LOWER',
+	'MATCH','MAX','MEDIAN','MID','MIN','MINUTE','MOD','MODE',
+	'NA','NETWORKDAYS','NOT','NOW','NPER','NPV',
+	'OFFSET','OR',
+	'PERCENTILE','PERCENTILE.INC','PI','PMT','POWER','PRODUCT','PROPER','PV',
+	'QUARTILE','QUARTILE.INC',
+	'RAND','RANDBETWEEN','RANK','RANK.EQ','RATE','REPLACE','REPT','RIGHT','ROW','ROWS',
+	'SEARCH','SECOND','SIGN','SLN','SMALL','SQRT','STDEV','STDEV.S','STDEVP','STDEV.P','SUBSTITUTE','SUM','SUMIF','SUMIFS','SUMPRODUCT','SWITCH',
+	'TEXT','TEXTAFTER','TEXTBEFORE','TEXTJOIN','TIME','TIMEVALUE','TODAY','TRIM','TRUNC','TRUE','TYPE',
+	'UPPER',
+	'VALUE','VAR','VAR.S','VARP','VAR.P','VLOOKUP',
+	'WEEKDAY','WEEKNUM','WORKDAY',
+	'XLOOKUP','XOR',
+	'YEAR',
+];
+
+/** Update the formula autocomplete list based on current input. */
+function updateFormulaAutocomplete(input: HTMLInputElement, overlay: HTMLDivElement): void {
+	const val = input.value;
+	if (!val.startsWith('=')) { overlay.style.display = 'none'; return; }
+
+	// Extract the current "word" being typed
+	const cursor = input.selectionStart ?? val.length;
+	let wordStart = cursor - 1;
+	while (wordStart > 0 && /[\w$.]/.test(val[wordStart - 1])) wordStart--;
+	const word = val.slice(wordStart, cursor).toUpperCase();
+
+	if (word.length < 1) { overlay.style.display = 'none'; return; }
+
+	const namedMatches = definedNames.filter(n => !n.hidden && n.name.toUpperCase().startsWith(word)).map(n => ({ label: n.name, isFunction: false }));
+	const funcMatches = BUILTIN_FUNCTIONS.filter(f => f.startsWith(word)).map(f => ({ label: f, isFunction: true }));
+	const allMatches = [...namedMatches, ...funcMatches].slice(0, 30);
+	const matches = allMatches;
+	if (matches.length === 0) { overlay.style.display = 'none'; return; }
+
+	overlay.innerHTML = '';
+	for (const m of matches) {
+		const insertText = m.isFunction ? m.label + '(' : m.label;
+		const item = document.createElement('div');
+		item.className = 'ac-item';
+		item.textContent = m.label + (m.isFunction ? '()' : '');
+		item.dataset['value'] = insertText;
+		item.dataset['wordStart'] = String(wordStart);
+		item.dataset['wordEnd'] = String(cursor);
+		Object.assign(item.style, { padding: '4px 10px', cursor: 'pointer' });
+		item.addEventListener('mouseover', () => {
+			overlay.querySelectorAll('.ac-item').forEach(i => i.classList.remove('selected'));
+			item.classList.add('selected');
+		});
+		item.addEventListener('mousedown', (e) => {
+			e.preventDefault();
+			applyAutocomplete(input, insertText, overlay);
+		});
+		overlay.appendChild(item);
+	}
+
+	// Position overlay below the formula input
+	const rect = input.getBoundingClientRect();
+	overlay.style.left = rect.left + 'px';
+	overlay.style.top = (rect.bottom + 2) + 'px';
+	overlay.style.display = 'block';
+}
+
+function moveAutocompleteSelection(overlay: HTMLDivElement, dir: number): void {
+	const items = Array.from(overlay.querySelectorAll('.ac-item'));
+	const idx = items.findIndex(i => i.classList.contains('selected'));
+	items.forEach(i => i.classList.remove('selected'));
+	const next = Math.max(0, Math.min(items.length - 1, idx + dir));
+	items[next]?.classList.add('selected');
+	(items[next] as HTMLElement)?.scrollIntoView({ block: 'nearest' });
+}
+
+function applyAutocomplete(input: HTMLInputElement, name: string, overlay: HTMLDivElement): void {
+	const items = overlay.querySelectorAll('.ac-item');
+	const item = Array.from(items).find(i => (i as HTMLElement).dataset['value'] === name) as HTMLElement | null;
+	if (!item) return;
+	const wordStart = parseInt(item.dataset['wordStart'] ?? '0', 10);
+	const wordEnd = parseInt(item.dataset['wordEnd'] ?? '0', 10);
+	const before = input.value.slice(0, wordStart);
+	const after = input.value.slice(wordEnd);
+	input.value = before + name + after;
+	input.setSelectionRange(wordStart + name.length, wordStart + name.length);
+	overlay.style.display = 'none';
+}
+
 function handleContextMenuAction(event: ContextMenuEvent) {
 	if (!renderer) return;
 
@@ -781,6 +1392,7 @@ function handleContextMenuAction(event: ContextMenuEvent) {
 		case 'cut': handleCut(); break;
 		case 'copy': handleCopy(); break;
 		case 'paste': handlePaste(); break;
+		case 'pasteSpecial': handlePasteSpecial(); break;
 		case 'insertRowAbove': renderer.insertRow(event.row); markDirty(); break;
 		case 'insertRowBelow': renderer.insertRow(event.row + 1); markDirty(); break;
 		case 'insertColLeft': renderer.insertCol(event.col); markDirty(); break;
@@ -791,7 +1403,18 @@ function handleContextMenuAction(event: ContextMenuEvent) {
 		case 'sortAZ': renderer.sortColumn(true, event.col); markDirty(); break;
 		case 'sortZA': renderer.sortColumn(false, event.col); markDirty(); break;
 	case 'formatCells':
-		// Switch ribbon to Home tab to show formatting options
+		showFormatCellsDialog(event.row, event.col);
+		break;
+	case 'insertHyperlink':
+	case 'editHyperlink':
+		showHyperlinkDialog(event.row, event.col);
+		break;
+	case 'removeHyperlink':
+		renderer.removeHyperlinkAt(event.row, event.col);
+		markDirty();
+		break;
+	case 'defineName':
+		showDefineNameDialog(event.row, event.col);
 		break;
 
 	// Column/Row header actions
@@ -840,18 +1463,36 @@ function handleContextMenuAction(event: ContextMenuEvent) {
 		break;
 	case 'colWidthAuto':
 		if (renderer) {
-			// Reset to default width
-			renderer.setColWidth(event.col, 100);
-			renderer.render();
+			renderer.autoFitColumn(event.col);
 			markDirty();
 		}
 		break;
 	case 'rowHeightAuto':
 		if (renderer) {
-			// Reset to default height
-			renderer.setRowHeight(event.row, 24);
-			renderer.render();
+			renderer.autoFitRow(event.row);
 			markDirty();
+		}
+		break;
+	case 'autoFitSelectedCols':
+		if (renderer) {
+			const selForCols = renderer.getSelectedRange();
+			if (selForCols) {
+				const sc = Math.min(selForCols.startCol, selForCols.endCol);
+				const ec = Math.max(selForCols.startCol, selForCols.endCol);
+				renderer.autoFitColumns(sc, ec);
+				markDirty();
+			}
+		}
+		break;
+	case 'autoFitSelectedRows':
+		if (renderer) {
+			const selForRows = renderer.getSelectedRange();
+			if (selForRows) {
+				const sr = Math.min(selForRows.startRow, selForRows.endRow);
+				const er = Math.max(selForRows.startRow, selForRows.endRow);
+				renderer.autoFitRows(sr, er);
+				markDirty();
+			}
 		}
 		break;
 
@@ -1092,7 +1733,7 @@ function showRenameDialog(currentName: string, onConfirm: (newName: string) => v
 
 async function handleCut() {
 	if (!renderer) return;
-	const data = renderer.getSelectedCellsData();
+	const data = renderer.copySelectionToClipboard(true);
 	if (data) {
 		try {
 			await navigator.clipboard.writeText(data);
@@ -1107,7 +1748,7 @@ async function handleCut() {
 
 async function handleCopy() {
 	if (!renderer) return;
-	const data = renderer.getSelectedCellsData();
+	const data = renderer.copySelectionToClipboard(false);
 	if (data) {
 		try {
 			await navigator.clipboard.writeText(data);
@@ -1119,12 +1760,36 @@ async function handleCopy() {
 
 async function handlePaste() {
 	if (!renderer) return;
+	const clip = renderer.getInternalClipboard();
+	if (clip) {
+		// Use internal clipboard for full fidelity paste (all + no op + no transpose)
+		renderer.pasteSpecial({ what: 'all', operation: 'none', skipBlanks: false, transpose: false });
+		markDirty();
+		return;
+	}
 	try {
 		const text = await navigator.clipboard.readText();
 		renderer.pasteData(text);
 		markDirty();
 	} catch {
 		console.warn('[XLSX Rust Viewer] Clipboard read not available');
+	}
+}
+
+function handlePasteSpecial() {
+	if (!renderer || !psDialog) return;
+	const clip = renderer.getInternalClipboard();
+	if (!clip) {
+		console.warn('[XLSX Rust Viewer] No internal clipboard – copy something first');
+		return;
+	}
+	psDialog.show();
+}
+
+function handlePsDialogAction(event: PSDialogEvent) {
+	if (event.action === 'paste' && event.options && renderer) {
+		renderer.pasteSpecial(event.options);
+		markDirty();
 	}
 }
 
@@ -1204,7 +1869,11 @@ document.addEventListener('keydown', (e) => {
 				return;
 			case 'v':
 				e.preventDefault();
-				handlePaste();
+				if (e.shiftKey) {
+					handlePasteSpecial();
+				} else {
+					handlePaste();
+				}
 				return;
 			case 'b':
 				e.preventDefault();
@@ -1232,6 +1901,28 @@ document.addEventListener('keydown', (e) => {
 			case 'h':
 				e.preventDefault();
 				toggleFindBar(true);
+				return;
+			case 'd':
+				e.preventDefault();
+				renderer.fillDown();
+				markDirty();
+				evaluateFormulas();
+				return;
+			case 'r':
+				e.preventDefault();
+				renderer.fillRight();
+				markDirty();
+				evaluateFormulas();
+				return;
+			case 'e':
+				e.preventDefault();
+				{
+					const filled = renderer.flashFill();
+					if (filled > 0) {
+						markDirty();
+						evaluateFormulas();
+					}
+				}
 				return;
 		}
 	}
@@ -1531,7 +2222,14 @@ function setupRendererCallbacks() {
 	// Custom HTML context menu (replaces native)
 	renderer.onContextMenu = (row: number, col: number, x: number, y: number, headerType?: 'col' | 'row') => {
 		if (contextMenu) {
-			contextMenu.show(x, y, row, col, headerType);
+			const sel = renderer!.getSelectedRange();
+			const selRange = sel ? {
+				startRow: Math.min(sel.startRow, sel.endRow),
+				startCol: Math.min(sel.startCol, sel.endCol),
+				endRow: Math.max(sel.startRow, sel.endRow),
+				endCol: Math.max(sel.startCol, sel.endCol),
+			} : undefined;
+			contextMenu.show(x, y, row, col, headerType, selRange);
 		}
 	};
 
@@ -1546,9 +2244,10 @@ function setupRendererCallbacks() {
 		evaluateFormulas();
 	};
 
-	// Selection changed -> update formula bar
+	// Selection changed -> update formula bar and status bar
 	renderer.onSelectionChanged = (row: number, col: number) => {
 		updateFormulaBar(row, col);
+		updateStatusBar();
 	};
 
 	// Formula point-mode callbacks
@@ -1593,10 +2292,18 @@ function setupRendererCallbacks() {
 }
 
 function updateFormulaBar(row: number, col: number) {
-	const cellRefEl = document.getElementById('cell-ref');
+	const cellRefEl = document.getElementById('cell-ref') as HTMLInputElement | null;
 	const formulaInput = document.getElementById('formula-input') as HTMLInputElement | null;
-	if (cellRefEl) {
-		cellRefEl.textContent = getColName(col) + (row + 1);
+	if (cellRefEl && document.activeElement !== cellRefEl) {
+		// Show cell address, or named range name if the cell is covered by one
+		const cellAddr = getColName(col) + (row + 1);
+		const matchingName = definedNames.find(n => {
+			// Only single-cell named ranges show the name in the Name Box
+			const f = n.formula.replace(/^=/, '');
+			const clean = f.replace(/\$/g, '').toUpperCase();
+			return clean === cellAddr || clean.endsWith('!' + cellAddr);
+		});
+		cellRefEl.value = matchingName ? matchingName.name : cellAddr;
 	}
 	if (formulaInput && renderer) {
 		const data = renderer.getData();
@@ -1610,6 +2317,135 @@ function updateFormulaBar(row: number, col: number) {
 			exitFormulaMode();
 		}
 	}
+}
+
+// --- Status Bar ---
+
+const statusBarEl = document.getElementById('status-bar') as HTMLDivElement | null;
+
+// Which stat items are currently visible (persisted in memory)
+const visibleStats = new Set<string>(['average', 'count', 'sum']);
+
+/** Format a number for display in the status bar (up to 10 significant digits). */
+function formatStat(n: number): string {
+	if (Number.isInteger(n)) return String(n);
+	// Up to 10 significant digits, trim trailing zeros
+	return parseFloat(n.toPrecision(10)).toString();
+}
+
+function updateStatusBar() {
+	if (!renderer || !statusBarEl) return;
+	const stats = renderer.getSelectionStats();
+	statusBarEl.innerHTML = '';
+	if (!stats) return;
+
+	// Only show stats when more than one cell is selected or there is a value
+	const items: Array<{ key: string; label: string; value: string }> = [
+		{ key: 'average',  label: 'Average',           value: stats.count > 0 ? formatStat(stats.avg) : '' },
+		{ key: 'count',    label: 'Count',              value: stats.countAll > 0 ? String(stats.countAll) : '' },
+		{ key: 'numCount', label: 'Numerical Count',    value: stats.count > 0 ? String(stats.count) : '' },
+		{ key: 'min',      label: 'Min',                value: stats.count > 0 ? formatStat(stats.min) : '' },
+		{ key: 'max',      label: 'Max',                value: stats.count > 0 ? formatStat(stats.max) : '' },
+		{ key: 'sum',      label: 'Sum',                value: stats.count > 0 ? formatStat(stats.sum) : '' },
+	];
+
+	for (const item of items) {
+		if (!visibleStats.has(item.key) || !item.value) continue;
+		const el = document.createElement('span');
+		el.className = 'status-item';
+		el.textContent = `${item.label}: ${item.value}`;
+		statusBarEl.appendChild(el);
+	}
+}
+
+function showStatusBarContextMenu(x: number, y: number) {
+	// Remove any existing status context menu
+	document.getElementById('status-ctx-menu')?.remove();
+
+	const allItems: Array<{ key: string; label: string }> = [
+		{ key: 'average',  label: 'Average' },
+		{ key: 'count',    label: 'Count' },
+		{ key: 'numCount', label: 'Numerical Count' },
+		{ key: 'min',      label: 'Min' },
+		{ key: 'max',      label: 'Max' },
+		{ key: 'sum',      label: 'Sum' },
+	];
+
+	const menu = document.createElement('div');
+	menu.id = 'status-ctx-menu';
+	Object.assign(menu.style, {
+		position: 'fixed',
+		left: `${x}px`,
+		top: `${Math.max(0, y - allItems.length * 28)}px`,
+		background: '#1e1e1e',
+		border: '1px solid #555',
+		borderRadius: '4px',
+		zIndex: '9999',
+		minWidth: '180px',
+		boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
+		fontFamily: 'system-ui, sans-serif',
+		fontSize: '13px',
+		color: '#ccc',
+		padding: '4px 0',
+	});
+
+	const header = document.createElement('div');
+	header.textContent = 'Customize Status Bar';
+	Object.assign(header.style, {
+		padding: '4px 12px 6px',
+		fontWeight: '600',
+		color: '#aaa',
+		fontSize: '11px',
+		textTransform: 'uppercase',
+		letterSpacing: '0.05em',
+		borderBottom: '1px solid #444',
+		marginBottom: '4px',
+	});
+	menu.appendChild(header);
+
+	for (const item of allItems) {
+		const row = document.createElement('label');
+		Object.assign(row.style, {
+			display: 'flex',
+			alignItems: 'center',
+			gap: '8px',
+			padding: '5px 12px',
+			cursor: 'pointer',
+		});
+		row.addEventListener('mouseenter', () => { row.style.background = 'rgba(255,255,255,0.08)'; });
+		row.addEventListener('mouseleave', () => { row.style.background = ''; });
+
+		const cb = document.createElement('input');
+		cb.type = 'checkbox';
+		cb.checked = visibleStats.has(item.key);
+		cb.addEventListener('change', () => {
+			if (cb.checked) visibleStats.add(item.key);
+			else visibleStats.delete(item.key);
+			updateStatusBar();
+		});
+
+		row.appendChild(cb);
+		row.appendChild(document.createTextNode(item.label));
+		menu.appendChild(row);
+	}
+
+	document.body.appendChild(menu);
+
+	// Close on outside click
+	const close = (e: MouseEvent) => {
+		if (!menu.contains(e.target as Node)) {
+			menu.remove();
+			document.removeEventListener('mousedown', close);
+		}
+	};
+	setTimeout(() => document.addEventListener('mousedown', close), 0);
+}
+
+if (statusBarEl) {
+	statusBarEl.addEventListener('contextmenu', (e) => {
+		e.preventDefault();
+		showStatusBarContextMenu(e.clientX, e.clientY);
+	});
 }
 
 function getColName(n: number): string {

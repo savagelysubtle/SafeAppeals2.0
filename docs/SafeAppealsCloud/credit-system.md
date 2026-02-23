@@ -19,10 +19,12 @@ Users purchase tokens through Stripe:
 | Pack | Tokens | Price | $/Token | Stripe Price ID |
 |------|--------|-------|---------|-----------------|
 | **Starter** | 700,000 | $30 | $0.0000428 | `STRIPE_PRICE_STARTER` |
-| **Pro** | 1,400,000 | $60 | $0.0000428 | `STRIPE_PRICE_PRO` |
+| **Pro** | 2,000,000 | $65 | $0.0000325 | `STRIPE_PRICE_PRO` |
+| **Power** | 5,000,000 | $130 | $0.0000260 | `STRIPE_PRICE_POWER` |
 
 ### Value Calculation
 
+Rates vary by tier: Starter $42.86/MTok, Pro $32.50/MTok, Power $26.00/MTok. Example (Starter):
 ```
 1 token = $30 / 700,000 = $0.0000428
 1 penny ($0.01) = 233 tokens
@@ -86,7 +88,7 @@ CREATE TABLE credit_transactions (
     -- Purchase details
     stripe_session_id TEXT,
     stripe_payment_intent TEXT,
-    pack_type TEXT,               -- 'starter', 'pro'
+    pack_type TEXT,               -- 'starter', 'pro', 'power'
     amount_paid INTEGER,          -- In cents
     currency TEXT,
 
@@ -318,8 +320,13 @@ const CREDIT_PACKS = {
     },
     pro: {
         priceId: process.env.STRIPE_PRICE_PRO!,
-        credits: 1_400_000,
-        amount: 6000, // $60.00 in cents
+        credits: 2_000_000,
+        amount: 6500, // $65.00 in cents
+    },
+    power: {
+        priceId: process.env.STRIPE_PRICE_POWER!,
+        credits: 5_000_000,
+        amount: 13000, // $130.00 in cents
     },
 };
 ```
@@ -399,16 +406,16 @@ Profit = Revenue - Cost
 
 ### In Database
 
-The `log_usage_with_cost` function calculates profit:
+The `log_usage_with_cost` function calculates profit. It now uses per-user `pack_rate` from `profiles` table (Starter $42.86/MTok, Pro $32.50/MTok, Power $26.00/MTok) instead of a hardcoded rate:
 
 ```sql
--- Token pack rate: $30/700K = $0.0000428/token
-v_profit := (v_credits * 0.00004286) - v_cost.total_cost;
+-- Uses profiles.pack_rate for user's tier
+v_profit := (v_credits * pack_rate) - v_cost.total_cost;
 ```
 
 ### Example
 
-Request: 5,000 input + 1,000 output tokens on `gpt-5.2`
+Request: 5,000 input + 1,000 output tokens on `gpt-5.2` (Starter tier @ $42.86/MTok)
 
 ```
 Credits charged: 6,000 tokens
@@ -421,6 +428,8 @@ Provider cost:
 
 Profit: $0.257 - $0.02275 = $0.234 (91% margin)
 ```
+
+(Pro tier @ $32.50/MTok: Revenue = 6,000 × $0.0000325 = $0.195, margin ~88%. Power tier @ $26/MTok: Revenue = $0.156, margin ~86%.)
 
 ---
 

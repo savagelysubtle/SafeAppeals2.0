@@ -62,6 +62,8 @@ impl ViewportManager {
             col_widths: sheet.col_widths.clone(),
             row_heights: sheet.row_heights.clone(),
             conditional_formats: sheet.conditional_formats.clone(),
+            data_validations: sheet.data_validations.clone(),
+            hyperlinks: sheet.hyperlinks.clone(),
             charts: sheet.charts.clone(),
             sparklines: sheet.sparklines.clone(),
         };
