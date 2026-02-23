@@ -76,7 +76,7 @@ export interface IVoidCloudService {
 	// Credit methods
 	fetchBalance(): Promise<CreditBalance>;
 	getCreditPacks(): Promise<CreditPack[]>;
-	createCheckoutSession(packId: 'starter' | 'pro'): Promise<string>;
+	createCheckoutSession(packId: 'starter' | 'pro' | 'power'): Promise<string>;
 
 	// LLM methods
 	sendCloudRequest(params: CloudRequestParams, abortSignal?: AbortSignal): Promise<CloudRequestResponse>;
@@ -778,7 +778,7 @@ class VoidCloudService extends Disposable implements IVoidCloudService {
 		return response.packs;
 	}
 
-	async createCheckoutSession(packId: 'starter' | 'pro'): Promise<string> {
+	async createCheckoutSession(packId: 'starter' | 'pro' | 'power'): Promise<string> {
 		if (!this.isSignedIn()) {
 			throw new Error('Must be signed in to purchase credits');
 		}

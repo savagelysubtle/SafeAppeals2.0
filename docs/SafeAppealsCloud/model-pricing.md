@@ -263,25 +263,25 @@ SELECT * FROM user_cost_summary;
 
 ### Current Markup
 
-Based on token pack pricing:
-- **$30** = 700,000 tokens
-- **$60** = 1,400,000 tokens
-- **Rate**: $0.0000428 per token ($42.86/MTok)
+Based on token pack pricing (rate varies by tier):
+- **$30** = 700,000 tokens (Starter: $42.86/MTok)
+- **$65** = 2,000,000 tokens (Pro: $32.50/MTok)
+- **$130** = 5,000,000 tokens (Power: $26.00/MTok)
 
 ### Margin Calculation
 
-For `gpt-5.2` (most used model):
+For `gpt-5.2` (most used model), provider cost ~$5.50/MTok average:
 ```
-Provider cost: ~$5.50/MTok average (input+output weighted)
-User pays:     $42.86/MTok
-Margin:        ~87%
+Starter ($42.86/MTok): Margin ~87%
+Pro ($32.50/MTok):     Margin ~83%
+Power ($26.00/MTok):   Margin ~79%
 ```
 
-For `gemini-2.5-flash` (cheapest):
+For `gemini-2.5-flash` (cheapest), provider cost ~$0.30/MTok average:
 ```
-Provider cost: ~$0.30/MTok average
-User pays:     $42.86/MTok
-Margin:        ~99%
+Starter ($42.86/MTok): Margin ~99%
+Pro ($32.50/MTok):     Margin ~99%
+Power ($26.00/MTok):   Margin ~99%
 ```
 
 ### Break-Even Analysis
@@ -291,10 +291,12 @@ If you want to break even on a specific model:
 ```
 Break-even tokens = Pack Price / Provider Cost per Token
 
-For $30 pack with gpt-5.2-pro ($21 input, $168 output):
-Assuming 80% input, 20% output:
+For gpt-5.2-pro ($21 input, $168 output), assuming 80% input, 20% output:
 Avg cost = (0.8 × $21) + (0.2 × $168) = $50.40/MTok
-Break-even = $30 / $0.0000504 = 595,238 tokens
+
+Starter ($30): Break-even = $30 / $0.0000504 = 595,238 tokens
+Pro ($65):     Break-even = $65 / $0.0000504 = 1,289,683 tokens
+Power ($130):  Break-even = $130 / $0.0000504 = 2,579,365 tokens
 ```
 
 ## Troubleshooting

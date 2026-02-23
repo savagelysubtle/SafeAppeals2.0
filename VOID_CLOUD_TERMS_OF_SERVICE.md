@@ -108,10 +108,11 @@ We reserve the right to suspend or terminate your account if we reasonably belie
 
 Safe Appeals Cloud operates on a pay-as-you-go credit system:
 
-| Pack     | Price | Tokens         |
-| -------- | ----- | -------------- |
-| Starter  | $10   | 250,000 tokens |
-| Standard | $25   | 750,000 tokens |
+| Pack    | Price | Tokens         |
+| ------- | ----- | -------------- |
+| Starter | $30   | 700,000 tokens |
+| Pro     | $65   | 2,000,000 tokens |
+| Power   | $130  | 5,000,000 tokens |
 
 _Token counts are approximate and may vary based on the specific model used._
 

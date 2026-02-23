@@ -1,11 +1,20 @@
 // Custom HTML Context Menu for XLSX Rust Viewer
 
+import type { HyperlinkDef } from './renderer.js';
+
 export interface ContextMenuEvent {
 	action: string;
 	row: number;
 	col: number;
 	tableName?: string;
 	value?: string;
+}
+
+export interface ContextMenuSelectionRange {
+	startRow: number;
+	startCol: number;
+	endRow: number;
+	endCol: number;
 }
 
 interface MenuItem {
@@ -27,7 +36,9 @@ export class ContextMenu {
 	private onAction: (event: ContextMenuEvent) => void;
 	private currentRow: number = 0;
 	private currentCol: number = 0;
+	private currentSelection: ContextMenuSelectionRange | null = null;
 	private getTableAtCell: ((row: number, col: number) => TableInfo | null) | null = null;
+	private getHyperlinkAtCell: ((row: number, col: number) => HyperlinkDef | undefined) | null = null;
 
 	constructor(container: HTMLElement, onAction: (event: ContextMenuEvent) => void) {
 		this.onAction = onAction;
@@ -54,24 +65,45 @@ export class ContextMenu {
 		this.getTableAtCell = fn;
 	}
 
-	show(x: number, y: number, row: number, col: number, headerType?: 'col' | 'row') {
+	/** Register a function that returns the hyperlink (if any) at a cell */
+	setHyperlinkDetector(fn: (row: number, col: number) => HyperlinkDef | undefined) {
+		this.getHyperlinkAtCell = fn;
+	}
+
+	show(x: number, y: number, row: number, col: number, headerType?: 'col' | 'row', selectionRange?: ContextMenuSelectionRange) {
 		this.currentRow = row;
 		this.currentCol = col;
+		this.currentSelection = selectionRange ?? null;
 		this.buildMenu(row, col, headerType);
 
 		this.menu.style.left = `${x}px`;
 		this.menu.style.top = `${y}px`;
 		this.menu.style.display = 'block';
 
-		// Ensure menu stays within viewport
+		// Ensure menu stays within viewport on all four sides
 		requestAnimationFrame(() => {
 			const rect = this.menu.getBoundingClientRect();
+
+			let newLeft = x;
+			let newTop = y;
+
 			if (rect.right > window.innerWidth) {
-				this.menu.style.left = `${x - rect.width}px`;
+				newLeft = x - rect.width;
 			}
 			if (rect.bottom > window.innerHeight) {
-				this.menu.style.top = `${y - rect.height}px`;
+				newTop = y - rect.height;
 			}
+
+			// Clamp so the menu never clips above or to the left of the viewport
+			if (newTop < 0) {
+				newTop = 0;
+			}
+			if (newLeft < 0) {
+				newLeft = 0;
+			}
+
+			this.menu.style.left = `${newLeft}px`;
+			this.menu.style.top = `${newTop}px`;
 		});
 	}
 
@@ -86,8 +118,15 @@ export class ContextMenu {
 		let items: (MenuItem | null)[];
 		let tableInfo: TableInfo | null = null;
 
+		const sel = this.currentSelection;
+		const multiColSelected = sel && Math.abs(sel.endCol - sel.startCol) > 0;
+		const multiRowSelected = sel && Math.abs(sel.endRow - sel.startRow) > 0;
+
 		if (headerType === 'col') {
 			// Column header right-click menu
+			const autoFitItem: MenuItem = multiColSelected
+				? { action: 'autoFitSelectedCols', label: 'Auto-Fit Selected Columns' }
+				: { action: 'colWidthAuto', label: 'Auto-Fit Column Width' };
 			items = [
 				{ action: 'insertColLeft', label: `Insert Column Left` },
 				{ action: 'insertColRight', label: `Insert Column Right` },
@@ -97,13 +136,16 @@ export class ContextMenu {
 				null,
 				{ action: 'hideCol', label: `Hide Column ${colName}` },
 				null,
-				{ action: 'colWidthAuto', label: 'Auto-Fit Column Width' },
+				autoFitItem,
 				null,
 				{ action: 'sortAZ', label: 'Sort A to Z' },
 				{ action: 'sortZA', label: 'Sort Z to A' },
 			];
 		} else if (headerType === 'row') {
 			// Row header right-click menu
+			const autoFitItem: MenuItem = multiRowSelected
+				? { action: 'autoFitSelectedRows', label: 'Auto-Fit Selected Rows' }
+				: { action: 'rowHeightAuto', label: 'Auto-Fit Row Height' };
 			items = [
 				{ action: 'insertRowAbove', label: 'Insert Row Above' },
 				{ action: 'insertRowBelow', label: 'Insert Row Below' },
@@ -113,14 +155,25 @@ export class ContextMenu {
 				null,
 				{ action: 'hideRow', label: `Hide Row ${row + 1}` },
 				null,
-				{ action: 'rowHeightAuto', label: 'Auto-Fit Row Height' },
+				autoFitItem,
 			];
 		} else {
 			// Normal cell right-click menu
+			const existingHyperlink = this.getHyperlinkAtCell ? this.getHyperlinkAtCell(row, col) : undefined;
+			const hyperlinkItems: (MenuItem | null)[] = existingHyperlink
+				? [
+					{ action: 'editHyperlink', label: 'Edit Hyperlink...' },
+					{ action: 'removeHyperlink', label: 'Remove Hyperlink' },
+				  ]
+				: [
+					{ action: 'insertHyperlink', label: 'Insert Hyperlink...' },
+				  ];
+
 			items = [
 				{ action: 'cut', label: 'Cut', shortcut: 'Ctrl+X' },
 				{ action: 'copy', label: 'Copy', shortcut: 'Ctrl+C' },
 				{ action: 'paste', label: 'Paste', shortcut: 'Ctrl+V' },
+				{ action: 'pasteSpecial', label: 'Paste Special...', shortcut: 'Ctrl+Shift+V' },
 				null,
 				{ action: 'insertRowAbove', label: 'Insert Row Above' },
 				{ action: 'insertRowBelow', label: 'Insert Row Below' },
@@ -132,6 +185,10 @@ export class ContextMenu {
 				null,
 				{ action: 'clear', label: 'Clear Contents', shortcut: 'Del' },
 				{ action: 'formatCells', label: 'Format Cells...' },
+				null,
+				...hyperlinkItems,
+				null,
+				{ action: 'defineName', label: 'Define Name...' },
 				null,
 				{ action: 'sortAZ', label: 'Sort A to Z' },
 				{ action: 'sortZA', label: 'Sort Z to A' },

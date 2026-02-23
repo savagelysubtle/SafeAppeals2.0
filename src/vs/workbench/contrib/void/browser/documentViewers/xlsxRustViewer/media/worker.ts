@@ -84,7 +84,7 @@ self.onmessage = async (e: MessageEvent) => {
             case 'EVAL_FORMULA':
                  if (!formulaEngine) throw new Error("WASM not initialized");
                  // Evaluate all formulas with the provided cells JSON
-                 const result = formulaEngine.evaluate_all(payload.cellsJson);
+                 const result = formulaEngine.evaluate_all(payload.cellsJson, payload.activeSheet ?? '');
                  self.postMessage({ type: 'EVAL_SUCCESS', id, payload: result });
                  break;
 

@@ -205,6 +205,12 @@ export class XLSXRustViewerEditor extends EditorPane {
 				}
 				break;
 
+			case 'openExternal':
+				if (typeof data.url === 'string') {
+					this.openerService.open(URI.parse(data.url), { openExternal: true }).catch(() => {});
+				}
+				break;
+
 			case 'error':
 				console.error('[XLSX Rust Viewer] Webview error:', data.message);
 				break;
@@ -438,14 +444,24 @@ export class XLSXRustViewerEditor extends EditorPane {
 			border-bottom: 1px solid var(--vscode-panel-border, #3c3c3c);
 			flex-shrink: 0; height: 28px;
 		}
+		#name-box-wrapper { position: relative; }
 		#cell-ref {
-			min-width: 56px; padding: 2px 8px;
+			min-width: 72px; padding: 2px 8px;
 			background: var(--vscode-input-background, #3c3c3c);
 			border: 1px solid var(--vscode-input-border, #3c3c3c);
 			color: var(--vscode-input-foreground, #ccc);
 			font-size: 12px; text-align: center; border-radius: 3px;
-			font-weight: 600; letter-spacing: 0.5px;
+			font-weight: 600; letter-spacing: 0.5px; outline: none; cursor: text;
+			height: 22px; width: 80px;
 		}
+		#cell-ref:focus { border-color: var(--vscode-focusBorder, #007acc); }
+		#name-box-dropdown .nb-item {
+			padding: 4px 10px; font-size: 12px; cursor: pointer; color: #ccc;
+			border-bottom: 1px solid #333;
+		}
+		#name-box-dropdown .nb-item:hover, #name-box-dropdown .nb-item.selected { background: #094771; color: #fff; }
+		#name-box-dropdown .nb-item .nb-scope { font-size: 10px; color: #888; margin-left: 6px; }
+		#formula-autocomplete .ac-item:hover, #formula-autocomplete .ac-item.selected { background: #094771; color: #fff; }
 		.fx-label {
 			font-style: italic; font-weight: 600; font-size: 13px;
 			color: var(--vscode-descriptionForeground, #888);
@@ -471,6 +487,16 @@ export class XLSXRustViewerEditor extends EditorPane {
 			height: 28px; flex-shrink: 0; overflow-x: auto;
 			scrollbar-width: thin;
 		}
+		#status-bar {
+			display: flex; align-items: center; justify-content: flex-end;
+			gap: 16px; padding: 0 12px;
+			height: 22px; flex-shrink: 0;
+			background: var(--vscode-statusBar-background, #007acc);
+			color: var(--vscode-statusBar-foreground, #fff);
+			font-size: 11px; user-select: none; cursor: default;
+		}
+		.status-item { cursor: pointer; padding: 0 4px; border-radius: 2px; }
+		.status-item:hover { background: rgba(255,255,255,0.15); }
 		.sheet-tab {
 			padding: 0 16px; border: none; border-right: 1px solid var(--vscode-panel-border, #3c3c3c);
 			background: transparent;
@@ -1023,12 +1049,16 @@ export class XLSXRustViewerEditor extends EditorPane {
 	<div id="config" data-wasm-url="${wasmUri}" style="display:none;"></div>
 	<div id="ribbon-container"></div>
 	<div id="formula-bar">
-		<span id="cell-ref">A1</span>
+		<div id="name-box-wrapper" style="position:relative;">
+			<input id="cell-ref" type="text" value="A1" autocomplete="off" spellcheck="false" />
+			<div id="name-box-dropdown" style="display:none;position:absolute;top:100%;left:0;z-index:200;background:#1e1e1e;border:1px solid #555;min-width:180px;max-height:220px;overflow-y:auto;border-radius:2px;"></div>
+		</div>
 		<span class="fx-label">fx</span>
 		<input id="formula-input" type="text" />
 	</div>
 	<div id="canvas-container"></div>
 	<div id="sheet-tabs"></div>
+	<div id="status-bar"></div>
 	<script nonce="${nonce}" src="${scriptUri}"></script>
 </body>
 </html>`;

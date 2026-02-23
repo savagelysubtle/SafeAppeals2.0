@@ -1,5 +1,28 @@
 // Virtualized Canvas Renderer with formatting, undo/redo, cell operations, and table support
 
+// --- Internal clipboard types (exported for use by main.ts / pasteSpecialDialog.ts) ---
+
+export interface ClipboardCell {
+    value: string;
+    dataType: string;
+    style?: CellStyle;
+}
+
+export interface InternalClipboard {
+    cells: ClipboardCell[][];   // [row][col] grid
+    colWidths: number[];        // widths of source columns
+    rowHeights: number[];       // heights of source rows
+    sourceRange: SelectionRange;
+    isCut: boolean;
+}
+
+export interface PasteSpecialOptions {
+    what: 'all' | 'values' | 'formulas' | 'formats' | 'colWidths';
+    operation: 'none' | 'add' | 'subtract' | 'multiply' | 'divide';
+    skipBlanks: boolean;
+    transpose: boolean;
+}
+
 export interface CellStyle {
     bold?: boolean;
     italic?: boolean;
@@ -31,6 +54,25 @@ export interface FormulaRange {
     color: string;
     textStart: number;
     textEnd: number;
+}
+
+// --- Auto-Fill Types ---
+
+interface FillCell { value: string; dataType: string; style?: any }
+
+interface FillPattern {
+    type: 'copy' | 'number' | 'date' | 'textNumber' | 'customList';
+    // copy
+    values?: FillCell[];
+    // number
+    start?: number; step?: number;
+    // date
+    startSerial?: number; stepDays?: number;
+    increment?: 'day' | 'weekday' | 'month' | 'year';
+    // textNumber
+    prefix?: string; suffix?: string;
+    // customList
+    listIndex?: number; startOffset?: number;
 }
 
 // --- Table Types (mirrors Rust parser::TableDefinition) ---
@@ -145,6 +187,33 @@ function getTableColors(styleName?: string): TableColors {
     return DEFAULT_TABLE_COLORS;
 }
 
+// --- Data Validation Types (mirrors Rust parser::DataValidationDef) ---
+
+export interface DataValidationDef {
+    validation_type: string;  // "whole", "decimal", "list", "date", "time", "textLength", "custom", "any"
+    operator?: string;
+    sqref: string;
+    formula1?: string;
+    formula2?: string;
+    allow_blank: boolean;
+    show_input_message: boolean;
+    show_error_message: boolean;
+    show_dropdown: boolean;
+    input_title?: string;
+    input_message?: string;
+    error_title?: string;
+    error_message?: string;
+    error_style: string;  // "stop", "warning", "information"
+}
+
+export interface HyperlinkDef {
+    cell_ref: string;       // "A1" or "B3:B5"
+    url: string;            // full URL, mailto:, or internal #Sheet!A1
+    tooltip?: string;
+    display?: string;       // explicit display text
+    is_internal: boolean;   // true for cross-sheet/named-range links
+}
+
 interface UndoSnapshot {
     data: any;
     styles: Record<string, Record<string, CellStyle>>;
@@ -177,6 +246,16 @@ export class CanvasRenderer {
     private selectionRange: SelectionRange | null = null;
     private _isDragging: boolean = false;
 
+    // Internal clipboard (preserves styles, formulas, column widths)
+    private _internalClipboard: InternalClipboard | null = null;
+
+    // Fill handle drag state
+    private _fillDragging: boolean = false;
+    private _fillDragOrigin: SelectionRange | null = null;
+    private _fillDragTarget: SelectionRange | null = null;
+    private _fillDragDirection: 'down' | 'up' | 'right' | 'left' | null = null;
+    private _fillHandleEl: HTMLDivElement;
+
     // Inline edit state
     private editInput: HTMLInputElement | null = null;
     private editingCell: { row: number; col: number } | null = null;
@@ -206,6 +285,27 @@ export class CanvasRenderer {
 
     // Formula display cache: "row:col" -> display string
     private formulaResults: Record<string, { display: string; is_error: boolean; numeric: number | null }> = {};
+
+    // Data validation: "row:col" -> DataValidationDef (precomputed map for O(1) lookup)
+    private _validationOfCell: Map<string, DataValidationDef> = new Map();
+    // Invalid cells (cells with validation rules that currently fail): "row:col" set
+    private _invalidCells: Set<string> = new Set();
+    // Show/hide the invalid cell circle overlay
+    private _showInvalidCircles: boolean = false;
+    // Tooltip div for input messages
+    private _validationTooltip: HTMLDivElement | null = null;
+    // Dropdown overlay for list validations
+    private _validationDropdown: HTMLDivElement | null = null;
+
+    // Callbacks for validation-related interactions
+    public onValidationDropdownClick?: (row: number, col: number, items: string[], formula: string) => void;
+
+    // Hyperlinks: "row:col" -> HyperlinkDef (precomputed map for O(1) lookup)
+    private _hyperlinkOfCell: Map<string, HyperlinkDef> = new Map();
+    // Hyperlink tooltip div
+    private _hyperlinkTooltip: HTMLDivElement | null = null;
+    // Callback fired on Ctrl+Click of a hyperlink cell
+    public onHyperlinkClick: ((url: string, isInternal: boolean) => void) | null = null;
 
     // Merged cells: array of ranges
     private mergedCells: { startRow: number; startCol: number; endRow: number; endCol: number }[] = [];
@@ -354,6 +454,32 @@ export class CanvasRenderer {
         this.canvas.setAttribute('tabindex', '0');
         this.canvas.style.cursor = 'cell';
         this.canvas.addEventListener('keydown', (e) => this.handleKeyDown(e));
+
+        // Fill handle: a real DOM element so the browser handles hit-testing natively
+        this._fillHandleEl = document.createElement('div');
+        this._fillHandleEl.style.cssText = [
+            'position:absolute',
+            'width:8px', 'height:8px',
+            'background:#0078d7',
+            'border:1px solid #fff',
+            'cursor:' + CanvasRenderer.FILL_CURSOR,
+            'pointer-events:auto',
+            'display:none',
+            'z-index:5',
+            'box-sizing:border-box',
+        ].join(';');
+        this._fillHandleEl.addEventListener('mousedown', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            if (!this.selectionRange || this._formulaMode) return;
+            this._fillDragging = true;
+            this._fillDragOrigin = this.normalizeRange(this.selectionRange);
+            this._fillDragTarget = null;
+            this._fillDragDirection = null;
+            this.canvas.style.cursor = CanvasRenderer.FILL_CURSOR;
+            this._fillHandleEl.style.pointerEvents = 'none';
+        });
+        this._wrapper.appendChild(this._fillHandleEl);
     }
 
     /** Update the HTML horizontal scrollbar thumb position and size */
@@ -390,6 +516,9 @@ export class CanvasRenderer {
         this._activeFilters.clear();
         this._clearFilterButtons();
         this._clearCfCache();
+        this._validationOfCell.clear();
+        this._invalidCells.clear();
+        this._hyperlinkOfCell.clear();
         this._layoutDirty = true;
         this._syncFromActiveSheet();
         this._loading = false;
@@ -407,7 +536,7 @@ export class CanvasRenderer {
         this.updateHScrollbar();
     }
 
-    /** Sync tables, mergedCells, colWidths, rowHeights from the active sheet */
+    /** Sync tables, mergedCells, colWidths, rowHeights, and validations from the active sheet */
     private _syncFromActiveSheet() {
         const sheet = this.data?.sheets?.[this._activeSheetIndex];
         this.tables = sheet?.tables ?? [];
@@ -428,6 +557,8 @@ export class CanvasRenderer {
                 this.rowHeights[Number(k)] = v as number;
             }
         }
+        this._buildValidationMap();
+        this._buildHyperlinkMap();
     }
 
     getActiveSheetIndex(): number { return this._activeSheetIndex; }
@@ -459,6 +590,11 @@ export class CanvasRenderer {
         this._activeFilters.clear();
         this._clearFilterButtons();
         this._clearCfCache();
+        this._validationOfCell.clear();
+        this._invalidCells.clear();
+        this._hyperlinkOfCell.clear();
+        this._hideHyperlinkTooltip();
+        this._hideValidationTooltip();
         this._layoutDirty = true;
         this._syncFromActiveSheet();
         this.cancelCellEdit();
@@ -616,6 +752,45 @@ export class CanvasRenderer {
 
     getSelectedRange(): SelectionRange | null {
         return this.selectionRange;
+    }
+
+    /** Compute aggregate statistics (sum, avg, count, min, max) for the current selection. */
+    getSelectionStats(): { sum: number; avg: number; count: number; countAll: number; min: number; max: number } | null {
+        if (!this.selectionRange || !this.data?.sheets?.[this._activeSheetIndex]) return null;
+        const sheet = this.data.sheets[this._activeSheetIndex];
+        const { startRow, startCol, endRow, endCol } = this.normalizeRange(this.selectionRange);
+
+        let sum = 0, count = 0, countAll = 0;
+        let min = Infinity, max = -Infinity;
+
+        for (let r = startRow; r <= endRow; r++) {
+            for (let c = startCol; c <= endCol; c++) {
+                // Prefer formula display value, fall back to raw cell value
+                const frKey = `${r}:${c}`;
+                const frEntry = this.formulaResults?.[frKey];
+                const rawValue = frEntry !== undefined
+                    ? (frEntry.numeric !== null ? String(frEntry.numeric) : frEntry.display)
+                    : (sheet.cells?.[r]?.[c]?.value ?? '');
+
+                if (rawValue.trim() !== '') countAll++;
+                const n = parseFloat(rawValue);
+                if (!isNaN(n)) {
+                    sum += n;
+                    if (n < min) min = n;
+                    if (n > max) max = n;
+                    count++;
+                }
+            }
+        }
+
+        return {
+            sum,
+            avg: count > 0 ? sum / count : 0,
+            count,
+            countAll,
+            min: count > 0 ? min : 0,
+            max: count > 0 ? max : 0,
+        };
     }
 
     selectAll(): void {
@@ -901,6 +1076,53 @@ export class CanvasRenderer {
         this.render();
     }
 
+    /** Return the merged style for a single cell (overlay on top of model style). */
+    getStyleAt(row: number, col: number): CellStyle {
+        const sheet = this.data?.sheets?.[this._activeSheetIndex];
+        const modelStyle = sheet?.cells?.[row]?.[col]?.style;
+        const overlay = this.styles[row]?.[col] ?? {};
+        const base: CellStyle = {};
+        if (modelStyle) {
+            if (modelStyle.bold != null)         base.bold = modelStyle.bold;
+            if (modelStyle.italic != null)       base.italic = modelStyle.italic;
+            if (modelStyle.underline != null)    base.underline = modelStyle.underline;
+            if (modelStyle.font_size != null)    base.fontSize = modelStyle.font_size;
+            if (modelStyle.font_family != null)  base.fontFamily = modelStyle.font_family;
+            if (modelStyle.text_color != null)   base.textColor = modelStyle.text_color;
+            if (modelStyle.fill_color != null)   base.fillColor = modelStyle.fill_color;
+            if (modelStyle.alignment != null)    base.alignment = modelStyle.alignment as CellStyle['alignment'];
+            if (modelStyle.number_format != null) base.numberFormat = modelStyle.number_format;
+            if (modelStyle.wrap_text != null)    base.wrapText = modelStyle.wrap_text;
+        }
+        return { ...base, ...overlay };
+    }
+
+    /** Apply a full CellStyle object to the current selection in one shot. */
+    applyStyle(style: CellStyle): void {
+        if (!this.selectionRange) return;
+        this.pushUndo();
+        const { startRow, startCol, endRow, endCol } = this.normalizeRange(this.selectionRange);
+        for (let r = startRow; r <= endRow; r++) {
+            if (!this.styles[r]) this.styles[r] = {};
+            for (let c = startCol; c <= endCol; c++) {
+                if (!this.styles[r][c]) this.styles[r][c] = {};
+                const s = this.styles[r][c];
+                if (style.bold !== undefined)         s.bold = style.bold;
+                if (style.italic !== undefined)       s.italic = style.italic;
+                if (style.underline !== undefined)    s.underline = style.underline;
+                if (style.strikethrough !== undefined) s.strikethrough = style.strikethrough;
+                if (style.fontFamily !== undefined)   s.fontFamily = style.fontFamily;
+                if (style.fontSize !== undefined)     s.fontSize = style.fontSize;
+                if (style.textColor !== undefined)    s.textColor = style.textColor;
+                if ('fillColor' in style)             s.fillColor = style.fillColor;
+                if (style.alignment !== undefined)    s.alignment = style.alignment;
+                if ('numberFormat' in style)          s.numberFormat = style.numberFormat;
+                if (style.wrapText !== undefined)     s.wrapText = style.wrapText;
+            }
+        }
+        this.render();
+    }
+
     // --- View Toggles ---
 
     toggleGridlines(): void {
@@ -998,6 +1220,50 @@ export class CanvasRenderer {
         return lines.join('\n');
     }
 
+    /** Copy selection to internal clipboard (preserving styles/formulas) and return TSV for system clipboard. */
+    copySelectionToClipboard(isCut: boolean): string {
+        if (!this.selectionRange || !this.data?.sheets?.[this._activeSheetIndex]) return '';
+        const sheet = this.data.sheets[this._activeSheetIndex];
+        const norm = this.normalizeRange(this.selectionRange);
+        const { startRow, startCol, endRow, endCol } = norm;
+
+        const cells: ClipboardCell[][] = [];
+        const lines: string[] = [];
+        for (let r = startRow; r <= endRow; r++) {
+            const rowCells: ClipboardCell[] = [];
+            const tsvCells: string[] = [];
+            for (let c = startCol; c <= endCol; c++) {
+                const cell = sheet.cells?.[r]?.[c];
+                const style = this.getCellStyle(r, c);
+                rowCells.push({
+                    value: cell?.value ?? '',
+                    dataType: cell?.data_type ?? 's',
+                    style: style ? { ...style } : undefined,
+                });
+                tsvCells.push(cell?.value ?? '');
+            }
+            cells.push(rowCells);
+            lines.push(tsvCells.join('\t'));
+        }
+
+        const colWidths: number[] = [];
+        for (let c = startCol; c <= endCol; c++) {
+            colWidths.push(this.colWidths[c] ?? this.colWidth);
+        }
+        const rowHeights: number[] = [];
+        for (let r = startRow; r <= endRow; r++) {
+            rowHeights.push(this.rowHeights[r] ?? this.rowHeight);
+        }
+
+        this._internalClipboard = { cells, colWidths, rowHeights, sourceRange: norm, isCut };
+        return lines.join('\n');
+    }
+
+    /** Get the internal clipboard (for use by paste special dialog). */
+    getInternalClipboard(): InternalClipboard | null {
+        return this._internalClipboard;
+    }
+
     pasteData(text: string): void {
         if (!this.selectedCell || !this.data?.sheets?.[this._activeSheetIndex]) return;
         this.pushUndo();
@@ -1020,6 +1286,108 @@ export class CanvasRenderer {
                 if (col >= sheet.col_count) sheet.col_count = col + 1;
             }
         }
+        this.render();
+    }
+
+    /** Paste from internal clipboard using the given options. Falls back to plain pasteData when no internal clipboard exists. */
+    pasteSpecial(options: PasteSpecialOptions): void {
+        if (!this.selectedCell || !this.data?.sheets?.[this._activeSheetIndex]) return;
+        const clip = this._internalClipboard;
+        if (!clip) return;
+
+        this.pushUndo();
+        const sheet = this.data.sheets[this._activeSheetIndex];
+        const destRow = this.selectedCell.row;
+        const destCol = this.selectedCell.col;
+
+        const srcRows = clip.cells.length;
+        const srcCols = srcRows > 0 ? clip.cells[0].length : 0;
+
+        // Handle column-widths-only paste
+        if (options.what === 'colWidths') {
+            for (let c = 0; c < clip.colWidths.length; c++) {
+                this.setColWidth(destCol + c, clip.colWidths[c]);
+            }
+            this.render();
+            return;
+        }
+
+        const getDestCoords = (srcR: number, srcC: number): { row: number; col: number } => {
+            if (options.transpose) {
+                return { row: destRow + srcC, col: destCol + srcR };
+            }
+            return { row: destRow + srcR, col: destCol + srcC };
+        };
+
+        const applyOperation = (existing: string, pasted: string, op: PasteSpecialOptions['operation']): string => {
+            if (op === 'none') return pasted;
+            const a = parseFloat(existing);
+            const b = parseFloat(pasted);
+            if (isNaN(a) || isNaN(b)) return pasted;
+            switch (op) {
+                case 'add':      return String(a + b);
+                case 'subtract': return String(a - b);
+                case 'multiply': return String(a * b);
+                case 'divide':   return b !== 0 ? String(a / b) : existing;
+            }
+        };
+
+        for (let r = 0; r < srcRows; r++) {
+            for (let c = 0; c < srcCols; c++) {
+                const srcCell = clip.cells[r][c];
+
+                // Skip blanks option
+                if (options.skipBlanks && srcCell.value.trim() === '') continue;
+
+                const { row, col } = getDestCoords(r, c);
+                if (!sheet.cells[row]) sheet.cells[row] = {};
+
+                if (options.what === 'formats') {
+                    // Only apply styles, leave values alone
+                    if (srcCell.style) {
+                        if (!this.styles[row]) this.styles[row] = {};
+                        this.styles[row][col] = { ...srcCell.style };
+                    }
+                } else {
+                    // Paste values / formulas / all
+                    const existingVal = sheet.cells[row]?.[col]?.value ?? '';
+                    let newVal = srcCell.value;
+
+                    if (options.what === 'values' && newVal.startsWith('=')) {
+                        // Strip formula — use the cached result if available
+                        const res = this.formulaResults?.[`${this._activeSheetIndex},${r + clip.sourceRange.startRow},${c + clip.sourceRange.startCol}`];
+                        newVal = res !== undefined ? String(res) : '';
+                    }
+
+                    newVal = applyOperation(existingVal, newVal, options.operation);
+
+                    const dataType = newVal.startsWith('=') ? 'f' : (newVal.trim() !== '' && !isNaN(Number(newVal)) ? 'n' : 's');
+                    sheet.cells[row][col] = { value: newVal, data_type: dataType };
+
+                    if (options.what === 'all' && srcCell.style) {
+                        if (!this.styles[row]) this.styles[row] = {};
+                        this.styles[row][col] = { ...srcCell.style };
+                    }
+                }
+
+                if (row >= sheet.row_count) sheet.row_count = row + 1;
+                if (col >= sheet.col_count) sheet.col_count = col + 1;
+            }
+        }
+
+        // If cut, clear source cells
+        if (clip.isCut && options.what !== 'formats') {
+            const { startRow, startCol, endRow, endCol } = clip.sourceRange;
+            for (let r = startRow; r <= endRow; r++) {
+                for (let c = startCol; c <= endCol; c++) {
+                    if (sheet.cells[r]?.[c]) {
+                        sheet.cells[r][c] = { value: '', data_type: 's' };
+                    }
+                }
+            }
+            this._internalClipboard = null;
+        }
+
         this.render();
     }
 
@@ -1128,9 +1496,31 @@ export class CanvasRenderer {
             }
         }
 
+        // Check for validation dropdown arrow click
+        const arrowHit = this._hitTestValidationArrow(mx, my);
+        if (arrowHit) {
+            e.preventDefault();
+            this.commitCellEdit();
+            this.selectedCell = arrowHit;
+            this.selectionRange = { startRow: arrowHit.row, startCol: arrowHit.col, endRow: arrowHit.row, endCol: arrowHit.col };
+            if (this.onSelectionChanged) this.onSelectionChanged(arrowHit.row, arrowHit.col);
+            this.showValidationDropdown(arrowHit.row, arrowHit.col);
+            this.render();
+            return;
+        }
+
         const cell = this.hitTestCell(e);
         if (!cell) return;
         const { row, col } = cell;
+
+        // Ctrl+Click (or Cmd+Click on Mac) on a hyperlink cell fires the callback
+        if ((e.ctrlKey || e.metaKey) && this.onHyperlinkClick) {
+            const link = this._hyperlinkOfCell.get(`${row}:${col}`);
+            if (link) {
+                this.onHyperlinkClick(link.url, link.is_internal);
+                return;
+            }
+        }
 
         // Formula point-mode: clicks insert cell references instead of changing selection
         if (this._formulaMode) {
@@ -1168,8 +1558,452 @@ export class CanvasRenderer {
                 this.selectedCell!.col
             );
         }
+
+        // Show/hide input message tooltip based on validation rule
+        const dvRule = this.getValidationForCell(this.selectedCell!.row, this.selectedCell!.col);
+        if (dvRule) {
+            this._showValidationTooltip(this.selectedCell!.row, this.selectedCell!.col, dvRule);
+        } else {
+            this._hideValidationTooltip();
+        }
+
         this.render();
     }
+
+    // ─── Auto-Fill Engine ──────────────────────────────────────────────────────
+
+    // Thin black cross cursor for the fill handle (matches Excel)
+    // eslint-disable-next-line @typescript-eslint/naming-convention
+    private static readonly FILL_CURSOR = `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='17' height='17'%3E%3Cline x1='8' y1='0' x2='8' y2='17' stroke='black' stroke-width='1.5'/%3E%3Cline x1='0' y1='8' x2='17' y2='8' stroke='black' stroke-width='1.5'/%3E%3C/svg%3E") 8 8, crosshair`;
+
+    // eslint-disable-next-line @typescript-eslint/naming-convention
+    private static readonly FILL_LISTS: string[][] = [
+        ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'],
+        ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'],
+        ['January', 'February', 'March', 'April', 'May', 'June',
+         'July', 'August', 'September', 'October', 'November', 'December'],
+        ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+         'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
+    ];
+
+    // ── Date serial helpers (Excel 1900 epoch, Lotus leap-year bug) ───────────
+
+    private static _isLeapYear(y: number): boolean {
+        return (y % 4 === 0 && y % 100 !== 0) || y % 400 === 0;
+    }
+
+    private static _daysInMonth(y: number, m: number): number {
+        const d = [0,31,28,31,30,31,30,31,31,30,31,30,31];
+        if (m === 2 && CanvasRenderer._isLeapYear(y)) return 29;
+        return d[m];
+    }
+
+    private static _dateToSerial(year: number, month: number, day: number): number {
+        // Excel epoch: serial 1 = Jan 1 1900; serial 60 = fake Feb 29 1900
+        let serial = 0;
+        for (let y = 1900; y < year; y++) {
+            serial += CanvasRenderer._isLeapYear(y) ? 366 : 365;
+        }
+        const dim = [0,31,28,31,30,31,30,31,31,30,31,30,31];
+        for (let m = 1; m < month; m++) {
+            serial += (m === 2 && CanvasRenderer._isLeapYear(year)) ? 29 : dim[m];
+        }
+        serial += day;
+        if (year > 1900 || (year === 1900 && month > 2)) serial++; // Lotus bug offset
+        return serial;
+    }
+
+    private static _serialToDate(serial: number): [number, number, number] {
+        let n = Math.floor(serial);
+        if (n >= 60) n--; // Skip the Lotus fake Feb 29 1900
+        let year = 1900;
+        while (true) {
+            const diy = CanvasRenderer._isLeapYear(year) ? 366 : 365;
+            if (n <= diy) break;
+            n -= diy;
+            year++;
+        }
+        let month = 1;
+        while (month <= 12) {
+            const dim = CanvasRenderer._daysInMonth(year, month);
+            if (n <= dim) break;
+            n -= dim;
+            month++;
+        }
+        return [year, month, n];
+    }
+
+    /** Returns true if the number format string looks like a date format. */
+    private static _isDateFormat(fmt: string | undefined): boolean {
+        if (!fmt) return false;
+        const f = fmt.toLowerCase();
+        return /[ymd]/.test(f) && !/[#0]/.test(f);
+    }
+
+    // ── Pattern detection ─────────────────────────────────────────────────────
+
+    private _detectFillPattern(cells: FillCell[]): FillPattern {
+        if (cells.length === 0) return { type: 'copy', values: [] };
+
+        // Custom list check (single cell or multi-cell sequence)
+        const firstVal = cells[0].value.trim();
+        for (let li = 0; li < CanvasRenderer.FILL_LISTS.length; li++) {
+            const list = CanvasRenderer.FILL_LISTS[li];
+            const idx = list.findIndex(v => v.toLowerCase() === firstVal.toLowerCase());
+            if (idx !== -1) {
+                // Verify remaining cells follow the list
+                let match = true;
+                for (let i = 1; i < cells.length; i++) {
+                    const expected = list[(idx + i) % list.length];
+                    if (cells[i].value.trim().toLowerCase() !== expected.toLowerCase()) {
+                        match = false; break;
+                    }
+                }
+                if (match) return { type: 'customList', listIndex: li, startOffset: idx };
+            }
+        }
+
+        // All numbers?
+        const nums = cells.map(c => Number(c.value));
+        const allNumeric = cells.every(c => c.value.trim() !== '' && !isNaN(Number(c.value)));
+        if (allNumeric && cells.length >= 1) {
+            if (cells.length === 1) {
+                // Single number: check if it looks like a date serial via format
+                const fmt = cells[0].style?.number_format;
+                if (CanvasRenderer._isDateFormat(fmt)) {
+                    return { type: 'date', startSerial: nums[0], stepDays: 1, increment: 'day' };
+                }
+                // Single number: copy (Excel copies single number, doesn't increment by default on drag)
+                return { type: 'copy', values: cells };
+            }
+            const step = nums[1] - nums[0];
+            const isUniform = nums.every((n, i) => i === 0 || Math.abs((n - nums[i-1]) - step) < 1e-9);
+            if (isUniform) {
+                // Date serial detection
+                const fmt = cells[0].style?.number_format;
+                if (CanvasRenderer._isDateFormat(fmt) && Number.isInteger(step)) {
+                    return { type: 'date', startSerial: nums[nums.length - 1], stepDays: step, increment: 'day' };
+                }
+                return { type: 'number', start: nums[nums.length - 1], step };
+            }
+        }
+
+        // Text with trailing number?
+        const textNumRx = /^(.*?)(\d+)(\D*)$/;
+        if (cells.length >= 1) {
+            const m0 = textNumRx.exec(cells[0].value);
+            if (m0) {
+                const prefix = m0[1];
+                const suffix = m0[3];
+                const startN = parseInt(m0[2], 10);
+                if (cells.length === 1) {
+                    return { type: 'textNumber', prefix, suffix, start: startN, step: 1 };
+                }
+                const m1 = textNumRx.exec(cells[1].value);
+                if (m1 && m1[1] === prefix && m1[3] === suffix) {
+                    const step = parseInt(m1[2], 10) - startN;
+                    return { type: 'textNumber', prefix, suffix, start: parseInt(cells[cells.length - 1].value.match(textNumRx)![2], 10), step };
+                }
+            }
+        }
+
+        // Fallback: copy
+        return { type: 'copy', values: cells };
+    }
+
+    // ── Series generation ──────────────────────────────────────────────────────
+
+    private _generateFillValues(pattern: FillPattern, count: number, direction: 'down' | 'up' | 'right' | 'left'): FillCell[] {
+        const reverse = direction === 'up' || direction === 'left';
+        const results: FillCell[] = [];
+        const sign = reverse ? -1 : 1;
+
+        for (let i = 0; i < count; i++) {
+            const idx = i + 1; // offset from end of source (1-based)
+            switch (pattern.type) {
+                case 'number': {
+                    const val = (pattern.start ?? 0) + sign * (pattern.step ?? 1) * idx;
+                    results.push({ value: String(val), dataType: 'n' });
+                    break;
+                }
+                case 'date': {
+                    const base = pattern.startSerial ?? 0;
+                    const step = sign * (pattern.stepDays ?? 1);
+                    let nextSerial = base + step * idx;
+                    if (pattern.increment === 'weekday') {
+                        // Skip Saturday (6) and Sunday (0)
+                        let s = base;
+                        for (let w = 0; w < idx; w++) {
+                            s += sign;
+                            const [y, mo, d] = CanvasRenderer._serialToDate(s);
+                            const jsDate = new Date(y, mo - 1, d);
+                            while (jsDate.getDay() === 0 || jsDate.getDay() === 6) {
+                                s += sign;
+                                const [y2, mo2, d2] = CanvasRenderer._serialToDate(s);
+                                jsDate.setFullYear(y2, mo2 - 1, d2);
+                            }
+                        }
+                        nextSerial = s;
+                    } else if (pattern.increment === 'month') {
+                        const [y, mo, d] = CanvasRenderer._serialToDate(base);
+                        const totalMonths = (y - 1900) * 12 + (mo - 1) + sign * idx;
+                        const newYear = 1900 + Math.floor(totalMonths / 12);
+                        const newMonth = (totalMonths % 12 + 12) % 12 + 1;
+                        const maxDay = CanvasRenderer._daysInMonth(newYear, newMonth);
+                        nextSerial = CanvasRenderer._dateToSerial(newYear, newMonth, Math.min(d, maxDay));
+                    } else if (pattern.increment === 'year') {
+                        const [y, mo, d] = CanvasRenderer._serialToDate(base);
+                        const newYear = y + sign * idx;
+                        const maxDay = CanvasRenderer._daysInMonth(newYear, mo);
+                        nextSerial = CanvasRenderer._dateToSerial(newYear, mo, Math.min(d, maxDay));
+                    }
+                    results.push({ value: String(nextSerial), dataType: 'n' });
+                    break;
+                }
+                case 'textNumber': {
+                    const val = (pattern.start ?? 0) + sign * (pattern.step ?? 1) * idx;
+                    const numStr = String(Math.abs(val));
+                    results.push({ value: `${pattern.prefix ?? ''}${numStr}${pattern.suffix ?? ''}`, dataType: 's' });
+                    break;
+                }
+                case 'customList': {
+                    const list = CanvasRenderer.FILL_LISTS[pattern.listIndex ?? 0];
+                    const off = (pattern.startOffset ?? 0) + sign * idx;
+                    const normalized = ((off % list.length) + list.length) % list.length;
+                    results.push({ value: list[normalized], dataType: 's' });
+                    break;
+                }
+                case 'copy':
+                default: {
+                    const srcValues = pattern.values ?? [];
+                    if (srcValues.length === 0) {
+                        results.push({ value: '', dataType: 's' });
+                    } else {
+                        const src = srcValues[i % srcValues.length];
+                        results.push({ value: src.value, dataType: src.dataType, style: src.style });
+                    }
+                    break;
+                }
+            }
+        }
+        return results;
+    }
+
+    // ── Apply fill ─────────────────────────────────────────────────────────────
+
+    private _executeFill(origin: SelectionRange, target: SelectionRange, direction: 'down' | 'up' | 'right' | 'left'): void {
+        if (!this.data?.sheets?.[this._activeSheetIndex]) return;
+        this.pushUndo();
+        const sheet = this.data.sheets[this._activeSheetIndex];
+
+        const isVertical = direction === 'down' || direction === 'up';
+
+        if (isVertical) {
+            // For each column in origin, fill down/up
+            for (let c = origin.startCol; c <= origin.endCol; c++) {
+                // Extract source cells (top-to-bottom in origin column)
+                const srcCells: FillCell[] = [];
+                for (let r = origin.startRow; r <= origin.endRow; r++) {
+                    const cd = sheet.cells?.[r]?.[c];
+                    srcCells.push({
+                        value: cd?.value ?? '',
+                        dataType: cd?.data_type ?? 's',
+                        style: cd?.style
+                    });
+                }
+                const pattern = this._detectFillPattern(srcCells);
+                const count = target.endRow - target.startRow + 1;
+                const filled = this._generateFillValues(pattern, count, direction);
+
+                for (let i = 0; i < count; i++) {
+                    const r = target.startRow + i;
+                    if (!sheet.cells[r]) sheet.cells[r] = {};
+                    const src = srcCells[i % srcCells.length];
+                    sheet.cells[r][c] = {
+                        value: filled[i].value,
+                        data_type: filled[i].dataType,
+                        ...(src.style ? { style: src.style } : {}),
+                    };
+                    if (r >= sheet.row_count) sheet.row_count = r + 1;
+                }
+            }
+        } else {
+            // For each row in origin, fill right/left
+            for (let r = origin.startRow; r <= origin.endRow; r++) {
+                const srcCells: FillCell[] = [];
+                for (let c = origin.startCol; c <= origin.endCol; c++) {
+                    const cd = sheet.cells?.[r]?.[c];
+                    srcCells.push({
+                        value: cd?.value ?? '',
+                        dataType: cd?.data_type ?? 's',
+                        style: cd?.style
+                    });
+                }
+                const pattern = this._detectFillPattern(srcCells);
+                const count = target.endCol - target.startCol + 1;
+                const filled = this._generateFillValues(pattern, count, direction);
+
+                for (let i = 0; i < count; i++) {
+                    const c = target.startCol + i;
+                    if (!sheet.cells[r]) sheet.cells[r] = {};
+                    const src = srcCells[i % srcCells.length];
+                    sheet.cells[r][c] = {
+                        value: filled[i].value,
+                        data_type: filled[i].dataType,
+                        ...(src.style ? { style: src.style } : {}),
+                    };
+                    if (c >= sheet.col_count) sheet.col_count = c + 1;
+                }
+            }
+        }
+
+        // Expand selection to cover the full filled area
+        this.selectionRange = {
+            startRow: Math.min(origin.startRow, target.startRow),
+            startCol: Math.min(origin.startCol, target.startCol),
+            endRow: Math.max(origin.endRow, target.endRow),
+            endCol: Math.max(origin.endCol, target.endCol),
+        };
+        this.render();
+    }
+
+    /** Fill the selection downward using the topmost row as source. */
+    public fillDown(): void {
+        if (!this.selectionRange || !this.data?.sheets?.[this._activeSheetIndex]) return;
+        const norm = this.normalizeRange(this.selectionRange);
+        if (norm.endRow <= norm.startRow) return;
+        const origin: SelectionRange = { startRow: norm.startRow, startCol: norm.startCol, endRow: norm.startRow, endCol: norm.endCol };
+        const target: SelectionRange = { startRow: norm.startRow + 1, startCol: norm.startCol, endRow: norm.endRow, endCol: norm.endCol };
+        this._executeFill(origin, target, 'down');
+        if (this.onCellEdit) this.onCellEdit(norm.startRow, norm.startCol, '');
+    }
+
+    /** Fill the selection rightward using the leftmost column as source. */
+    public fillRight(): void {
+        if (!this.selectionRange || !this.data?.sheets?.[this._activeSheetIndex]) return;
+        const norm = this.normalizeRange(this.selectionRange);
+        if (norm.endCol <= norm.startCol) return;
+        const origin: SelectionRange = { startRow: norm.startRow, startCol: norm.startCol, endRow: norm.endRow, endCol: norm.startCol };
+        const target: SelectionRange = { startRow: norm.startRow, startCol: norm.startCol + 1, endRow: norm.endRow, endCol: norm.endCol };
+        this._executeFill(origin, target, 'right');
+        if (this.onCellEdit) this.onCellEdit(norm.startRow, norm.startCol, '');
+    }
+
+    // ── Flash Fill ────────────────────────────────────────────────────────────
+
+    /**
+     * Flash Fill: detects a transformation pattern from filled example cells
+     * in the active column and applies it to unfilled cells in the same column.
+     * Works on the current selection column (or selectedCell column).
+     * Returns the number of cells filled, or 0 if no pattern found.
+     */
+    public flashFill(): number {
+        if (!this.data?.sheets?.[this._activeSheetIndex] || !this.selectedCell) return 0;
+        const sheet = this.data.sheets[this._activeSheetIndex];
+        const targetCol = this.selectedCell.col;
+        const sourceCol = targetCol - 1; // look at the column to the left as source
+
+        if (sourceCol < 0) return 0;
+
+        // Gather rows where we have both source and target (examples) and source-only rows (to fill)
+        interface FlashRow { row: number; sourceVal: string; targetVal: string | null }
+        const rows: FlashRow[] = [];
+        const maxRow = Math.max(sheet.row_count ?? 0, 50);
+        for (let r = 0; r < maxRow; r++) {
+            const srcVal = sheet.cells?.[r]?.[sourceCol]?.value ?? '';
+            const tgtVal = sheet.cells?.[r]?.[targetCol]?.value ?? null;
+            if (srcVal.trim() !== '') {
+                rows.push({ row: r, sourceVal: srcVal, targetVal: tgtVal?.trim() || null });
+            }
+        }
+
+        const examples = rows.filter(r => r.targetVal !== null);
+        const toFill = rows.filter(r => r.targetVal === null);
+
+        if (examples.length === 0 || toFill.length === 0) return 0;
+
+        // Attempt pattern detection from examples
+        type Transform = (src: string) => string | null;
+        const transforms: Transform[] = [
+            // Extract first word
+            src => src.split(/\s+/)[0] ?? null,
+            // Extract last word
+            src => src.split(/\s+/).pop() ?? null,
+            // Extract everything before first space
+            src => src.indexOf(' ') > 0 ? src.slice(0, src.indexOf(' ')) : null,
+            // Extract everything after last space
+            src => src.lastIndexOf(' ') > 0 ? src.slice(src.lastIndexOf(' ') + 1) : null,
+            // UPPERCASE
+            src => src.toUpperCase(),
+            // lowercase
+            src => src.toLowerCase(),
+            // Proper case
+            src => src.replace(/\b\w/g, c => c.toUpperCase()).replace(/\B\w/g, c => c.toLowerCase()),
+            // Reverse words
+            src => src.split(/\s+/).reverse().join(' '),
+        ];
+
+        // Find the first transform that matches ALL examples
+        let matched: Transform | null = null;
+        for (const t of transforms) {
+            const allMatch = examples.every(ex => t(ex.sourceVal) === ex.targetVal);
+            if (allMatch) { matched = t; break; }
+        }
+
+        // Also try: concatenation of sourceCol and sourceCol+1
+        if (!matched && targetCol >= 2) {
+            const adjCol = targetCol - 2; // second source column
+            const concatTransforms: ((r: number) => string | null)[] = [
+                row => {
+                    const a = sheet.cells?.[row]?.[sourceCol]?.value ?? '';
+                    const b = sheet.cells?.[row]?.[adjCol]?.value ?? '';
+                    return a && b ? `${a} ${b}` : null;
+                },
+                row => {
+                    const a = sheet.cells?.[row]?.[adjCol]?.value ?? '';
+                    const b = sheet.cells?.[row]?.[sourceCol]?.value ?? '';
+                    return a && b ? `${a} ${b}` : null;
+                },
+            ];
+            for (const ct of concatTransforms) {
+                const allMatch = examples.every(ex => ct(ex.row) === ex.targetVal);
+                if (allMatch) {
+                    // Apply the concat transform
+                    this.pushUndo();
+                    let filled = 0;
+                    for (const fr of toFill) {
+                        const val = ct(fr.row);
+                        if (val !== null) {
+                            if (!sheet.cells[fr.row]) sheet.cells[fr.row] = {};
+                            sheet.cells[fr.row][targetCol] = { value: val, data_type: 's' };
+                            filled++;
+                        }
+                    }
+                    this.render();
+                    if (this.onCellEdit) this.onCellEdit(this.selectedCell.row, targetCol, '');
+                    return filled;
+                }
+            }
+        }
+
+        if (!matched) return 0;
+
+        this.pushUndo();
+        let filled = 0;
+        for (const fr of toFill) {
+            const val = matched(fr.sourceVal);
+            if (val !== null) {
+                if (!sheet.cells[fr.row]) sheet.cells[fr.row] = {};
+                sheet.cells[fr.row][targetCol] = { value: val, data_type: 's' };
+                filled++;
+            }
+        }
+        this.render();
+        if (this.onCellEdit) this.onCellEdit(this.selectedCell.row, targetCol, '');
+        return filled;
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────
 
     /** Hit test vertical scrollbar area on canvas. */
     private hitTestScrollbar(canvasX: number, canvasY: number): { axis: 'v' } | null {
@@ -1246,26 +2080,59 @@ export class CanvasRenderer {
             return;
         }
 
-        // Update cursor for resize handles, header areas, and scrollbars
-        if (!this._isDragging && !this._scrollbarDragging) {
+        // Update cursor for resize handles, header areas, scrollbars, and hyperlinks
+        if (!this._isDragging && !this._scrollbarDragging && !this._fillDragging) {
             const { x: mx, y: my } = this.mouseToCanvas(e);
 
             // Scrollbar area
             if (this.hitTestScrollbar(mx, my)) {
                 this.canvas.style.cursor = 'default';
+                this._hideHyperlinkTooltip();
             } else if (this._showHeaders) {
                 const resizeTarget = this.hitTestResize(e);
                 if (resizeTarget) {
                     this.canvas.style.cursor = resizeTarget.type === 'col' ? 'col-resize' : 'row-resize';
+                    this._hideHyperlinkTooltip();
                 } else if (my <= this.headerHeight && mx > this.headerWidth) {
                     this.canvas.style.cursor = 'pointer'; // Column header
+                    this._hideHyperlinkTooltip();
                 } else if (mx <= this.headerWidth && my > this.headerHeight) {
                     this.canvas.style.cursor = 'pointer'; // Row header
+                    this._hideHyperlinkTooltip();
                 } else {
-                    this.canvas.style.cursor = 'cell';
+                    // Check if hovering a hyperlink cell
+                    const hoverCell = this.hitTestCell(e);
+                    if (hoverCell) {
+                        const hl = this._hyperlinkOfCell.get(`${hoverCell.row}:${hoverCell.col}`);
+                        if (hl) {
+                            this.canvas.style.cursor = 'pointer';
+                            const tipText = (hl.tooltip ?? hl.url) + '\n\nCtrl+Click to follow link';
+                            this._showHyperlinkTooltip(e.clientX, e.clientY, tipText);
+                        } else {
+                            this.canvas.style.cursor = 'cell';
+                            this._hideHyperlinkTooltip();
+                        }
+                    } else {
+                        this.canvas.style.cursor = 'cell';
+                        this._hideHyperlinkTooltip();
+                    }
                 }
             } else {
-                this.canvas.style.cursor = 'cell';
+                const hoverCell = this.hitTestCell(e);
+                if (hoverCell) {
+                    const hl = this._hyperlinkOfCell.get(`${hoverCell.row}:${hoverCell.col}`);
+                    if (hl) {
+                        this.canvas.style.cursor = 'pointer';
+                        const tipText = (hl.tooltip ?? hl.url) + '\n\nCtrl+Click to follow link';
+                        this._showHyperlinkTooltip(e.clientX, e.clientY, tipText);
+                    } else {
+                        this.canvas.style.cursor = 'cell';
+                        this._hideHyperlinkTooltip();
+                    }
+                } else {
+                    this.canvas.style.cursor = 'cell';
+                    this._hideHyperlinkTooltip();
+                }
             }
         }
 
@@ -1279,6 +2146,43 @@ export class CanvasRenderer {
                     cell.row,
                     cell.col
                 );
+            }
+            return;
+        }
+
+        // Fill handle drag: update target range and direction
+        if (this._fillDragging && this._fillDragOrigin) {
+            this.canvas.style.cursor = CanvasRenderer.FILL_CURSOR;
+            const cell = this.hitTestCell(e);
+            if (cell) {
+                const orig = this._fillDragOrigin;
+                // Determine axis with bigger delta from origin boundary
+                const dRow = Math.max(cell.row - orig.endRow, orig.startRow - cell.row);
+                const dCol = Math.max(cell.col - orig.endCol, orig.startCol - cell.col);
+                if (dRow >= dCol) {
+                    if (cell.row > orig.endRow) {
+                        this._fillDragDirection = 'down';
+                        this._fillDragTarget = { startRow: orig.endRow + 1, startCol: orig.startCol, endRow: cell.row, endCol: orig.endCol };
+                    } else if (cell.row < orig.startRow) {
+                        this._fillDragDirection = 'up';
+                        this._fillDragTarget = { startRow: cell.row, startCol: orig.startCol, endRow: orig.startRow - 1, endCol: orig.endCol };
+                    } else {
+                        this._fillDragDirection = null;
+                        this._fillDragTarget = null;
+                    }
+                } else {
+                    if (cell.col > orig.endCol) {
+                        this._fillDragDirection = 'right';
+                        this._fillDragTarget = { startRow: orig.startRow, startCol: orig.endCol + 1, endRow: orig.endRow, endCol: cell.col };
+                    } else if (cell.col < orig.startCol) {
+                        this._fillDragDirection = 'left';
+                        this._fillDragTarget = { startRow: orig.startRow, startCol: cell.col, endRow: orig.endRow, endCol: orig.startCol - 1 };
+                    } else {
+                        this._fillDragDirection = null;
+                        this._fillDragTarget = null;
+                    }
+                }
+                this.render();
             }
             return;
         }
@@ -1337,6 +2241,22 @@ export class CanvasRenderer {
             if (this.onFormulaRangeDragEnd) {
                 this.onFormulaRangeDragEnd();
             }
+        }
+        if (this._fillDragging) {
+            this._fillDragging = false;
+            if (this._fillDragOrigin && this._fillDragTarget && this._fillDragDirection) {
+                this._executeFill(this._fillDragOrigin, this._fillDragTarget, this._fillDragDirection);
+                if (this.onCellEdit) {
+                    this.onCellEdit(this._fillDragOrigin.startRow, this._fillDragOrigin.startCol, '');
+                }
+            }
+            this._fillDragOrigin = null;
+            this._fillDragTarget = null;
+            this._fillDragDirection = null;
+            this._fillHandleEl.style.pointerEvents = 'auto';
+            this.canvas.style.cursor = 'cell';
+            this.render();
+            return;
         }
         this._isDragging = false;
         this._headerDragMode = null;
@@ -1711,6 +2631,12 @@ export class CanvasRenderer {
                     if (this.onSelectionChanged) {
                         this.onSelectionChanged(newRow, newCol);
                     }
+                    const dvRuleKbd = this.getValidationForCell(newRow, newCol);
+                    if (dvRuleKbd) {
+                        this._showValidationTooltip(newRow, newCol, dvRuleKbd);
+                    } else {
+                        this._hideValidationTooltip();
+                    }
                 }
                 this.render();
                 return;
@@ -1937,7 +2863,10 @@ export class CanvasRenderer {
                     if (cellStyle?.italic) fontStr = `italic ${fontStr}`;
                     this.ctx.font = fontStr;
 
-                    this.ctx.fillStyle = cellStyle?.textColor || '#000';
+                    const hyperlinkInfo = this._hyperlinkOfCell.get(`${r}:${c}`);
+                    // Hyperlink cells get blue text (unless user overrode textColor explicitly)
+                    const textColor = cellStyle?.textColor || (hyperlinkInfo ? '#4a86e8' : '#000');
+                    this.ctx.fillStyle = textColor;
                     this.ctx.textAlign = cellStyle?.alignment || 'left';
 
                     // Clip text to cell
@@ -1953,17 +2882,17 @@ export class CanvasRenderer {
                     const textY = y + cellH / 2;
                     this.ctx.fillText(cellValue, textX, textY);
 
-                    // Underline
-                    if (cellStyle?.underline) {
+                    // Underline (hyperlinks always get underline)
+                    if (cellStyle?.underline || hyperlinkInfo) {
                         const metrics = this.ctx.measureText(cellValue);
                         const lineY = textY + fontSize * 0.15;
                         this.ctx.beginPath();
-                        this.ctx.strokeStyle = cellStyle.textColor || '#000';
+                        this.ctx.strokeStyle = textColor;
                         this.ctx.lineWidth = 1;
-                        if (cellStyle.alignment === 'center') {
+                        if (cellStyle?.alignment === 'center') {
                             this.ctx.moveTo(textX - metrics.width / 2, lineY);
                             this.ctx.lineTo(textX + metrics.width / 2, lineY);
-                        } else if (cellStyle.alignment === 'right') {
+                        } else if (cellStyle?.alignment === 'right') {
                             this.ctx.moveTo(textX - metrics.width, lineY);
                             this.ctx.lineTo(textX, lineY);
                         } else {
@@ -2004,6 +2933,41 @@ export class CanvasRenderer {
                     this.ctx.textAlign = 'left';
                     this.ctx.textBaseline = 'middle';
                     this.ctx.fillText(iconInfo.icon, x + 2, y + cellH / 2);
+                    this.ctx.restore();
+                }
+
+                // Data validation: dropdown arrow for list-validated cells
+                const dvInfo = this._validationOfCell.get(`${r}:${c}`);
+                if (dvInfo && dvInfo.validation_type === 'list' && dvInfo.show_dropdown) {
+                    const arrowW = 18;
+                    const arrowX = x + cellW - arrowW;
+                    const arrowY = y;
+                    this.ctx.save();
+                    this.ctx.fillStyle = '#888';
+                    this.ctx.fillRect(arrowX, arrowY, arrowW, cellH);
+                    // Draw chevron
+                    this.ctx.fillStyle = '#fff';
+                    const cx2 = arrowX + arrowW / 2;
+                    const cy2 = arrowY + cellH / 2;
+                    this.ctx.beginPath();
+                    this.ctx.moveTo(cx2 - 4, cy2 - 2);
+                    this.ctx.lineTo(cx2, cy2 + 2);
+                    this.ctx.lineTo(cx2 + 4, cy2 - 2);
+                    this.ctx.stroke();
+                    this.ctx.restore();
+                }
+
+                // Data validation: red dashed oval for invalid cells
+                if (this._showInvalidCircles && this._invalidCells.has(`${r}:${c}`)) {
+                    this.ctx.save();
+                    this.ctx.strokeStyle = '#ff0000';
+                    this.ctx.lineWidth = 2;
+                    this.ctx.setLineDash([4, 3]);
+                    const pad = 2;
+                    this.ctx.beginPath();
+                    this.ctx.ellipse(x + cellW / 2, y + cellH / 2, cellW / 2 - pad, cellH / 2 - pad, 0, 0, Math.PI * 2);
+                    this.ctx.stroke();
+                    this.ctx.setLineDash([]);
                     this.ctx.restore();
                 }
             }
@@ -2332,14 +3296,38 @@ export class CanvasRenderer {
             this.ctx.strokeRect(selX, selY, selW, selH);
             this.ctx.lineWidth = 1;
 
-            // Draw small square handle at bottom-right corner (fill handle like Excel)
-            const handleSize = 6;
-            const handleX = selX + selW - handleSize / 2;
-            const handleY = selY + selH - handleSize / 2;
-            this.ctx.fillStyle = '#0078d7';
-            this.ctx.fillRect(handleX, handleY, handleSize, handleSize);
+            // Position the fill handle DOM element at the bottom-right corner.
+            // Drawing coords are already CSS pixels (ctx.scale(dpr) handles buffer mapping).
+            const handleHalf = 4;
+            const handleLeft = selX + selW - handleHalf;
+            const handleTop = selY + selH - handleHalf;
+            const inGrid = (selX + selW) > effHeaderWidth && (selY + selH) > effHeaderHeight;
+            if (inGrid && !this._formulaMode) {
+                this._fillHandleEl.style.left = `${handleLeft}px`;
+                this._fillHandleEl.style.top = `${handleTop}px`;
+                this._fillHandleEl.style.display = 'block';
+            } else {
+                this._fillHandleEl.style.display = 'none';
+            }
+
+            // Draw fill drag preview (dashed border over target area)
+            if (this._fillDragging && this._fillDragTarget) {
+                const t = this._fillDragTarget;
+                const tX = this.cx(t.startCol) - this.scrollLeft + effHeaderWidth;
+                const tY = this.ry(t.startRow) - this.scrollTop + effHeaderHeight;
+                const tW = this.cx(t.endCol + 1) - this.cx(t.startCol);
+                const tH = this.ry(t.endRow + 1) - this.ry(t.startRow);
+                this.ctx.setLineDash([4, 2]);
+                this.ctx.strokeStyle = 'rgba(0, 120, 215, 0.7)';
+                this.ctx.lineWidth = 1.5;
+                this.ctx.strokeRect(tX, tY, tW, tH);
+                this.ctx.setLineDash([]);
+                this.ctx.lineWidth = 1;
+            }
 
             this.ctx.restore();
+        } else {
+            this._fillHandleEl.style.display = 'none';
         }
 
         // --- Draw Freeze Panes ---
@@ -2780,6 +3768,20 @@ export class CanvasRenderer {
         // insert/replace cell references, not start editing the target cell.
         if (this._formulaMode) return;
 
+        // Double-click on a column/row border → auto-fit that column/row
+        if (this._showHeaders) {
+            const resizeTarget = this.hitTestResize(e);
+            if (resizeTarget) {
+                e.preventDefault();
+                if (resizeTarget.type === 'col') {
+                    this.autoFitColumn(resizeTarget.index);
+                } else {
+                    this.autoFitRow(resizeTarget.index);
+                }
+                return;
+            }
+        }
+
         const { x, y } = this.mouseToCanvas(e);
 
         const effHeaderWidth = this._showHeaders ? this.headerWidth : 0;
@@ -2908,7 +3910,31 @@ export class CanvasRenderer {
 
         const { row, col } = this.editingCell;
         const newValue = this.editInput.value;
-        // Formulas should be stored as string type
+
+        // Data validation check
+        const dvRule = this.getValidationForCell(row, col);
+        if (dvRule && dvRule.validation_type !== 'any' && dvRule.show_error_message) {
+            if (!this._validateValue(newValue, dvRule)) {
+                this._showValidationError(dvRule).then(accept => {
+                    if (accept) {
+                        this._doCommit(row, col, newValue);
+                    } else {
+                        // For Stop/Warning-no: keep cell in edit mode (re-focus input)
+                        if (this.editInput) {
+                            this.editInput.style.display = 'block';
+                            this.editInput.focus();
+                            this.editInput.select();
+                        }
+                    }
+                });
+                return;
+            }
+        }
+
+        this._doCommit(row, col, newValue);
+    }
+
+    private _doCommit(row: number, col: number, newValue: string) {
         const dataType = newValue.startsWith('=') ? 's' : (newValue.trim() !== '' && !isNaN(Number(newValue)) ? 'n' : 's');
 
         this.updateCell(row, col, newValue, dataType);
@@ -2921,9 +3947,12 @@ export class CanvasRenderer {
             this.onInlineEditCommit();
         }
 
-        this.editInput.style.display = 'none';
+        if (this.editInput) this.editInput.style.display = 'none';
         this.editingCell = null;
         this.canvas.focus();
+
+        // Update invalid cells if circles are shown
+        if (this._showInvalidCircles) this.markInvalidCells();
     }
 
     private cancelCellEdit() {
@@ -3024,6 +4053,506 @@ export class CanvasRenderer {
         this._cfCache.clear();
         this._cfDataBars.clear();
         this._cfIcons.clear();
+    }
+
+    // -------------------------------------------------------------------------
+    // Data Validation
+    // -------------------------------------------------------------------------
+
+    /** Rebuild the validation map for the current sheet. Called from _syncFromActiveSheet. */
+    private _buildValidationMap(): void {
+        this._validationOfCell.clear();
+        const sheet = this.data?.sheets?.[this._activeSheetIndex];
+        const rules: DataValidationDef[] = sheet?.data_validations ?? [];
+        for (const rule of rules) {
+            // Expand sqref into individual cell keys
+            const parts = rule.sqref.split(/\s+/);
+            for (const part of parts) {
+                const colons = part.split(':');
+                if (colons.length === 2) {
+                    const [r1, c1] = this.parseCfCellRef(colons[0]);
+                    const [r2, c2] = this.parseCfCellRef(colons[1]);
+                    const minR = Math.min(r1, r2), maxR = Math.max(r1, r2);
+                    const minC = Math.min(c1, c2), maxC = Math.max(c1, c2);
+                    for (let r = minR; r <= maxR; r++) {
+                        for (let c = minC; c <= maxC; c++) {
+                            this._validationOfCell.set(`${r}:${c}`, rule);
+                        }
+                    }
+                } else {
+                    const [r, c] = this.parseCfCellRef(colons[0]);
+                    this._validationOfCell.set(`${r}:${c}`, rule);
+                }
+            }
+        }
+    }
+
+    /** Get the validation rule for a specific cell (if any). */
+    getValidationForCell(row: number, col: number): DataValidationDef | undefined {
+        return this._validationOfCell.get(`${row}:${col}`);
+    }
+
+    /** Get all validation rules for the current sheet. */
+    getValidations(): DataValidationDef[] {
+        const sheet = this.data?.sheets?.[this._activeSheetIndex];
+        return sheet?.data_validations ?? [];
+    }
+
+    /** Replace all validation rules for the current sheet and rebuild the map. */
+    setValidations(rules: DataValidationDef[]): void {
+        const sheet = this.data?.sheets?.[this._activeSheetIndex];
+        if (!sheet) return;
+        sheet.data_validations = rules;
+        this._buildValidationMap();
+        if (this._showInvalidCircles) this.markInvalidCells();
+        this.render();
+    }
+
+    // ── Hyperlink Map ──────────────────────────────────────────────────────────
+
+    private _buildHyperlinkMap(): void {
+        this._hyperlinkOfCell.clear();
+        const sheet = this.data?.sheets?.[this._activeSheetIndex];
+        if (!sheet?.hyperlinks) return;
+        for (const link of sheet.hyperlinks as HyperlinkDef[]) {
+            // Expand range refs (e.g. "B3:B5") to individual cells
+            const ref = link.cell_ref;
+            if (ref.includes(':')) {
+                const parts = ref.split(':');
+                const r1c1 = this._cellRefToRowCol(parts[0]);
+                const r2c2 = this._cellRefToRowCol(parts[1]);
+                if (r1c1 && r2c2) {
+                    for (let r = r1c1[0]; r <= r2c2[0]; r++) {
+                        for (let c = r1c1[1]; c <= r2c2[1]; c++) {
+                            this._hyperlinkOfCell.set(`${r}:${c}`, link);
+                        }
+                    }
+                }
+            } else {
+                const rc = this._cellRefToRowCol(ref);
+                if (rc) this._hyperlinkOfCell.set(`${rc[0]}:${rc[1]}`, link);
+            }
+        }
+    }
+
+    private _cellRefToRowCol(ref: string): [number, number] | null {
+        const m = ref.toUpperCase().match(/^([A-Z]+)(\d+)$/);
+        if (!m) return null;
+        let col = 0;
+        for (const ch of m[1]) { col = col * 26 + ch.charCodeAt(0) - 64; }
+        const row = parseInt(m[2], 10) - 1;
+        return [row, col - 1];
+    }
+
+    /** Get the hyperlink for a specific cell (if any). */
+    getHyperlinkForCell(row: number, col: number): HyperlinkDef | undefined {
+        return this._hyperlinkOfCell.get(`${row}:${col}`);
+    }
+
+    /** Get all hyperlinks for the current sheet. */
+    getHyperlinks(): HyperlinkDef[] {
+        const sheet = this.data?.sheets?.[this._activeSheetIndex];
+        return sheet?.hyperlinks ?? [];
+    }
+
+    /** Replace all hyperlinks for the current sheet and rebuild the map. */
+    setHyperlinks(links: HyperlinkDef[]): void {
+        const sheet = this.data?.sheets?.[this._activeSheetIndex];
+        if (!sheet) return;
+        sheet.hyperlinks = links;
+        this._buildHyperlinkMap();
+        this.render();
+    }
+
+    /** Add or update a hyperlink for a single cell. */
+    addHyperlink(link: HyperlinkDef): void {
+        const sheet = this.data?.sheets?.[this._activeSheetIndex];
+        if (!sheet) return;
+        if (!sheet.hyperlinks) sheet.hyperlinks = [];
+        // Remove any existing hyperlink for the same cell ref
+        sheet.hyperlinks = (sheet.hyperlinks as HyperlinkDef[]).filter(
+            l => l.cell_ref !== link.cell_ref
+        );
+        sheet.hyperlinks.push(link);
+
+        // Update the cell value to show the display text (or URL if no display)
+        const rc = this._cellRefToRowCol(link.cell_ref.split(':')[0]);
+        if (rc) {
+            const [row, col] = rc;
+            const displayValue = link.display ?? link.url;
+            if (!sheet.cells) sheet.cells = {};
+            if (!sheet.cells[row]) sheet.cells[row] = {};
+            if (!sheet.cells[row][col]) sheet.cells[row][col] = { value: '', data_type: 's' };
+            // Only overwrite if the cell is empty or we have an explicit display text
+            const existingValue = sheet.cells[row][col].value ?? '';
+            if (existingValue === '' || link.display) {
+                sheet.cells[row][col] = { ...sheet.cells[row][col], value: displayValue, data_type: 's' };
+            }
+        }
+
+        this._buildHyperlinkMap();
+        this.render();
+    }
+
+    /** Remove the hyperlink on a specific cell (by row/col). */
+    removeHyperlinkAt(row: number, col: number): void {
+        const sheet = this.data?.sheets?.[this._activeSheetIndex];
+        if (!sheet?.hyperlinks) return;
+        const key = `${row}:${col}`;
+        const link = this._hyperlinkOfCell.get(key);
+        if (!link) return;
+        sheet.hyperlinks = (sheet.hyperlinks as HyperlinkDef[]).filter(
+            l => l.cell_ref !== link.cell_ref
+        );
+        this._buildHyperlinkMap();
+        this.render();
+    }
+
+    // ── Hyperlink Tooltip ──────────────────────────────────────────────────────
+
+    private _ensureHyperlinkTooltip(): HTMLDivElement {
+        if (!this._hyperlinkTooltip) {
+            this._hyperlinkTooltip = document.createElement('div');
+            Object.assign(this._hyperlinkTooltip.style, {
+                position: 'fixed', zIndex: '9000',
+                background: '#1e1e1e', color: '#ccc',
+                border: '1px solid #555', borderRadius: '4px',
+                padding: '4px 8px', fontSize: '12px',
+                pointerEvents: 'none', maxWidth: '320px',
+                wordBreak: 'break-all', display: 'none',
+            });
+            document.body.appendChild(this._hyperlinkTooltip);
+        }
+        return this._hyperlinkTooltip;
+    }
+
+    private _showHyperlinkTooltip(x: number, y: number, text: string): void {
+        const tip = this._ensureHyperlinkTooltip();
+        tip.textContent = text;
+        tip.style.left = `${x + 12}px`;
+        tip.style.top = `${y + 12}px`;
+        tip.style.display = 'block';
+    }
+
+    private _hideHyperlinkTooltip(): void {
+        if (this._hyperlinkTooltip) this._hyperlinkTooltip.style.display = 'none';
+    }
+
+    /** Validate a value against a DataValidationDef rule. Returns true if valid. */
+    private _validateValue(value: string, rule: DataValidationDef): boolean {
+        if (rule.validation_type === 'any' || rule.validation_type === '') return true;
+        // Blank handling
+        if (value.trim() === '') return rule.allow_blank;
+
+        switch (rule.validation_type) {
+            case 'whole': {
+                const n = Number(value);
+                if (!Number.isInteger(n)) return false;
+                return this._checkNumericOp(n, rule);
+            }
+            case 'decimal': {
+                const n = parseFloat(value);
+                if (isNaN(n)) return false;
+                return this._checkNumericOp(n, rule);
+            }
+            case 'textLength': {
+                const len = value.length;
+                return this._checkNumericOp(len, rule);
+            }
+            case 'list': {
+                if (!rule.formula1) return true;
+                // Cell range references are not resolvable client-side — allow any value
+                if (rule.formula1.startsWith('=') || rule.formula1.includes('!') || rule.formula1.includes(':')) return true;
+                const items = rule.formula1.split(',').map(s => s.trim().replace(/^"|"$/g, ''));
+                return items.includes(value);
+            }
+            case 'date':
+            case 'time': {
+                // Dates are stored as serial numbers or ISO strings; allow if parseable
+                const n = parseFloat(value);
+                if (!isNaN(n)) return this._checkNumericOp(n, rule);
+                const d = Date.parse(value);
+                return !isNaN(d);
+            }
+            case 'custom':
+                // Custom formula validation is not evaluated client-side
+                return true;
+            default:
+                return true;
+        }
+    }
+
+    /** Compare a numeric value against rule operator / formula1 / formula2. */
+    private _checkNumericOp(n: number, rule: DataValidationDef): boolean {
+        const v1 = parseFloat(rule.formula1 ?? '0');
+        const v2 = parseFloat(rule.formula2 ?? '0');
+        switch (rule.operator ?? 'between') {
+            case 'between':             return n >= v1 && n <= v2;
+            case 'notBetween':          return n < v1 || n > v2;
+            case 'equal':               return n === v1;
+            case 'notEqual':            return n !== v1;
+            case 'greaterThan':         return n > v1;
+            case 'lessThan':            return n < v1;
+            case 'greaterThanOrEqual':  return n >= v1;
+            case 'lessThanOrEqual':     return n <= v1;
+            default:                    return true;
+        }
+    }
+
+    /** Recompute invalid cells set from current sheet data. */
+    markInvalidCells(): void {
+        this._invalidCells.clear();
+        const sheet = this.data?.sheets?.[this._activeSheetIndex];
+        if (!sheet) return;
+        for (const [key, rule] of this._validationOfCell) {
+            const [rowStr, colStr] = key.split(':');
+            const row = Number(rowStr);
+            const col = Number(colStr);
+            const cellValue: string = sheet.cells?.[row]?.[col]?.value ?? '';
+            if (!this._validateValue(cellValue, rule)) {
+                this._invalidCells.add(key);
+            }
+        }
+    }
+
+    /** Toggle the red "circle invalid data" overlay. */
+    setShowInvalidCircles(show: boolean): void {
+        this._showInvalidCircles = show;
+        if (show) this.markInvalidCells();
+        else this._invalidCells.clear();
+        this.render();
+    }
+
+    getShowInvalidCircles(): boolean { return this._showInvalidCircles; }
+
+    // -------------------------------------------------------------------------
+    // Validation Tooltip
+    // -------------------------------------------------------------------------
+
+    private _ensureValidationTooltip(): HTMLDivElement {
+        if (!this._validationTooltip) {
+            const el = document.createElement('div');
+            el.style.cssText = [
+                'position:absolute',
+                'z-index:9000',
+                'background:#fffde7',
+                'border:1px solid #f9c900',
+                'border-radius:3px',
+                'padding:6px 10px',
+                'font-size:12px',
+                'font-family:system-ui,-apple-system,sans-serif',
+                'pointer-events:none',
+                'box-shadow:0 2px 6px rgba(0,0,0,0.15)',
+                'max-width:260px',
+                'word-wrap:break-word',
+                'display:none',
+            ].join(';');
+            this._wrapper.appendChild(el);
+            this._validationTooltip = el;
+        }
+        return this._validationTooltip;
+    }
+
+    private _showValidationTooltip(row: number, col: number, rule: DataValidationDef): void {
+        if (!rule.show_input_message) return;
+        if (!rule.input_message && !rule.input_title) return;
+        const tooltip = this._ensureValidationTooltip();
+        const parts: string[] = [];
+        if (rule.input_title) parts.push(`<b>${this._escapeHtml(rule.input_title)}</b>`);
+        if (rule.input_message) parts.push(this._escapeHtml(rule.input_message).replace(/\n/g, '<br>'));
+        tooltip.innerHTML = parts.join('<br>');
+        // Position below the cell
+        const effHW = this._showHeaders ? this.headerWidth : 0;
+        const effHH = this._showHeaders ? this.headerHeight : 0;
+        const cellX = this.cx(col) - this.scrollLeft + effHW;
+        const cellY = this.ry(row) - this.scrollTop + effHH;
+        const cellH = this.rh(row);
+        tooltip.style.left = `${cellX}px`;
+        tooltip.style.top = `${cellY + cellH + 4}px`;
+        tooltip.style.display = 'block';
+    }
+
+    private _hideValidationTooltip(): void {
+        if (this._validationTooltip) this._validationTooltip.style.display = 'none';
+    }
+
+    private _escapeHtml(s: string): string {
+        return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+
+    // -------------------------------------------------------------------------
+    // Validation Error Dialog
+    // -------------------------------------------------------------------------
+
+    /** Show a validation error/warning/info dialog. Returns a promise resolving to whether to accept the value. */
+    private _showValidationError(rule: DataValidationDef): Promise<boolean> {
+        return new Promise(resolve => {
+            const style = rule.error_style ?? 'stop';
+            const title = rule.error_title || (style === 'stop' ? 'Invalid Input' : style === 'warning' ? 'Warning' : 'Information');
+            const message = rule.error_message || 'The value you entered is not valid.';
+
+            const overlay = document.createElement('div');
+            overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.35);z-index:99998;display:flex;align-items:center;justify-content:center;';
+
+            const dialog = document.createElement('div');
+            dialog.style.cssText = 'background:#fff;border-radius:6px;padding:20px 24px;min-width:280px;max-width:380px;box-shadow:0 8px 32px rgba(0,0,0,0.25);font-family:system-ui,-apple-system,sans-serif;';
+
+            const icon = style === 'stop' ? '🚫' : style === 'warning' ? '⚠️' : 'ℹ️';
+
+            dialog.innerHTML = `
+                <div style="display:flex;align-items:flex-start;gap:12px;margin-bottom:14px;">
+                    <span style="font-size:22px;line-height:1;">${icon}</span>
+                    <div>
+                        <div style="font-weight:600;font-size:14px;margin-bottom:4px;">${this._escapeHtml(title)}</div>
+                        <div style="font-size:13px;color:#444;">${this._escapeHtml(message)}</div>
+                    </div>
+                </div>
+            `;
+
+            const buttonRow = document.createElement('div');
+            buttonRow.style.cssText = 'display:flex;gap:8px;justify-content:flex-end;';
+
+            const makeBtn = (label: string, primary: boolean, action: () => void) => {
+                const btn = document.createElement('button');
+                btn.textContent = label;
+                btn.style.cssText = `padding:6px 16px;border-radius:4px;font-size:13px;cursor:pointer;border:1px solid ${primary ? '#0078d7' : '#ccc'};background:${primary ? '#0078d7' : '#fff'};color:${primary ? '#fff' : '#333'};`;
+                btn.addEventListener('click', () => { document.body.removeChild(overlay); action(); });
+                return btn;
+            };
+
+            if (style === 'stop') {
+                buttonRow.appendChild(makeBtn('Retry', true, () => resolve(false)));
+                buttonRow.appendChild(makeBtn('Cancel', false, () => resolve(false)));
+            } else if (style === 'warning') {
+                buttonRow.appendChild(makeBtn('Yes', false, () => resolve(true)));
+                buttonRow.appendChild(makeBtn('No', true, () => resolve(false)));
+                buttonRow.appendChild(makeBtn('Cancel', false, () => resolve(false)));
+            } else {
+                buttonRow.appendChild(makeBtn('OK', true, () => resolve(true)));
+            }
+
+            dialog.appendChild(buttonRow);
+            overlay.appendChild(dialog);
+            document.body.appendChild(overlay);
+        });
+    }
+
+    // -------------------------------------------------------------------------
+    // Validation Dropdown Overlay
+    // -------------------------------------------------------------------------
+
+    /** Show a dropdown overlay for list-validated cells. */
+    showValidationDropdown(row: number, col: number): void {
+        const rule = this.getValidationForCell(row, col);
+        if (!rule || rule.validation_type !== 'list' || !rule.formula1) return;
+
+        // Don't resolve cell-range formulas — notify parent for external handling
+        if (rule.formula1.startsWith('=') || rule.formula1.includes('!') || rule.formula1.includes(':')) {
+            if (this.onValidationDropdownClick) {
+                this.onValidationDropdownClick(row, col, [], rule.formula1);
+            }
+            return;
+        }
+
+        const items = rule.formula1.split(',').map(s => s.trim().replace(/^"|"$/g, ''));
+        this._showListDropdown(row, col, items);
+    }
+
+    private _showListDropdown(row: number, col: number, items: string[]): void {
+        this._hideValidationDropdown();
+
+        const dropdown = document.createElement('div');
+        dropdown.style.cssText = [
+            'position:absolute',
+            'z-index:9001',
+            'background:#fff',
+            'border:1px solid #bbb',
+            'border-radius:3px',
+            'box-shadow:0 4px 12px rgba(0,0,0,0.15)',
+            'max-height:200px',
+            'overflow-y:auto',
+            'font-size:13px',
+            'font-family:system-ui,-apple-system,sans-serif',
+        ].join(';');
+
+        for (const item of items) {
+            const opt = document.createElement('div');
+            opt.textContent = item;
+            opt.style.cssText = 'padding:6px 12px;cursor:pointer;';
+            opt.addEventListener('mouseenter', () => { opt.style.background = '#e8f0fe'; });
+            opt.addEventListener('mouseleave', () => { opt.style.background = ''; });
+            opt.addEventListener('mousedown', (e) => {
+                e.preventDefault();
+                this._hideValidationDropdown();
+                // Commit the selected value
+                const sheet = this.data?.sheets?.[this._activeSheetIndex];
+                if (!sheet) return;
+                if (!sheet.cells[row]) sheet.cells[row] = {};
+                sheet.cells[row][col] = { value: item, data_type: 's', style: sheet.cells?.[row]?.[col]?.style };
+                if (this.onCellEdit) this.onCellEdit(row, col, item);
+                this.render();
+            });
+            dropdown.appendChild(opt);
+        }
+
+        const effHW = this._showHeaders ? this.headerWidth : 0;
+        const effHH = this._showHeaders ? this.headerHeight : 0;
+        const cellX = this.cx(col) - this.scrollLeft + effHW;
+        const cellY = this.ry(row) - this.scrollTop + effHH;
+        const cellH = this.rh(row);
+        const cellW = this.cw(col);
+
+        dropdown.style.left = `${cellX}px`;
+        dropdown.style.top = `${cellY + cellH}px`;
+        dropdown.style.minWidth = `${cellW}px`;
+
+        this._wrapper.appendChild(dropdown);
+        this._validationDropdown = dropdown;
+
+        // Close on outside click
+        const closeHandler = (e: MouseEvent) => {
+            if (!dropdown.contains(e.target as Node)) {
+                this._hideValidationDropdown();
+                document.removeEventListener('mousedown', closeHandler);
+            }
+        };
+        setTimeout(() => document.addEventListener('mousedown', closeHandler), 0);
+    }
+
+    private _hideValidationDropdown(): void {
+        if (this._validationDropdown) {
+            this._validationDropdown.remove();
+            this._validationDropdown = null;
+        }
+    }
+
+    /** Check if the given canvas coordinates hit the dropdown arrow of a list-validated cell. */
+    private _hitTestValidationArrow(canvasX: number, canvasY: number): { row: number; col: number } | null {
+        const effHW = this._showHeaders ? this.headerWidth : 0;
+        const effHH = this._showHeaders ? this.headerHeight : 0;
+        const gridX = canvasX - effHW + this.scrollLeft;
+        const gridY = canvasY - effHH + this.scrollTop;
+
+        // Rough hit-test: check visible cells
+        const sheet = this.data?.sheets?.[this._activeSheetIndex];
+        if (!sheet) return null;
+
+        const ARROW_W = 18;
+        for (const [key, rule] of this._validationOfCell) {
+            if (rule.validation_type !== 'list' || !rule.show_dropdown) continue;
+            const [rowStr, colStr] = key.split(':');
+            const r = Number(rowStr);
+            const c = Number(colStr);
+            const cellRight = this.cx(c + 1);
+            const cellTop = this.ry(r);
+            const cellBottom = this.ry(r + 1);
+            // Arrow occupies right ARROW_W pixels of cell
+            if (gridX >= cellRight - ARROW_W && gridX < cellRight &&
+                gridY >= cellTop && gridY < cellBottom) {
+                return { row: r, col: c };
+            }
+        }
+        return null;
     }
 
     /** Check if (row, col) falls within a sqref range string like "A1:D10" or "A1:D10 F1:G5" */
@@ -3635,6 +5164,122 @@ export class CanvasRenderer {
             end_row: m.endRow, end_col: m.endCol,
         }));
         this.render();
+    }
+
+    // --- Auto-Fit ---
+
+    /** Fit column width to the widest cell content in the column. */
+    public autoFitColumn(col: number): void {
+        const sheet = this.data?.sheets?.[this._activeSheetIndex];
+        if (!sheet) return;
+        const pad = 16; // left + right cell padding
+        const minWidth = 20;
+        let maxWidth = 0;
+
+        for (const rowKey of Object.keys(sheet.cells)) {
+            const r = parseInt(rowKey, 10);
+            const cellData = sheet.cells[r]?.[col];
+            if (!cellData || !cellData.value) continue;
+
+            const cellStyle = this.getCellStyle(r, col);
+            const displayValue = cellData.value.startsWith('=')
+                ? (this.formulaResults[`${r}:${col}`]?.display ?? cellData.value)
+                : this.formatCellValue(cellData.value, cellData.data_type, cellStyle);
+            if (!displayValue) continue;
+
+            const fontSize = cellStyle?.fontSize || 13;
+            const fontFamily = cellStyle?.fontFamily || 'system-ui, -apple-system, sans-serif';
+            let fontStr = `${fontSize}px ${fontFamily}`;
+            if (cellStyle?.bold) fontStr = `bold ${fontStr}`;
+            if (cellStyle?.italic) fontStr = `italic ${fontStr}`;
+            this.ctx.font = fontStr;
+
+            const measured = this.ctx.measureText(displayValue).width;
+            if (measured > maxWidth) maxWidth = measured;
+        }
+
+        const newWidth = Math.max(minWidth, Math.ceil(maxWidth + pad));
+        this.colWidths[col] = newWidth;
+        // Sync to model
+        if (sheet) {
+            if (!sheet.col_widths) sheet.col_widths = {};
+            sheet.col_widths[col] = newWidth;
+        }
+        this._layoutDirty = true;
+        this.render();
+    }
+
+    /** Fit row height to the tallest cell content in the row. */
+    public autoFitRow(row: number): void {
+        const sheet = this.data?.sheets?.[this._activeSheetIndex];
+        if (!sheet) return;
+        const pad = 6; // top + bottom cell padding
+        const minHeight = 10;
+        let maxHeight = 0;
+
+        const rowData = sheet.cells?.[row];
+        if (!rowData) {
+            // No data — reset to default row height
+            this.rowHeights[row] = this.rowHeight;
+            if (sheet.row_heights) delete sheet.row_heights[row];
+            this._layoutDirty = true;
+            this.render();
+            return;
+        }
+
+        for (const colKey of Object.keys(rowData)) {
+            const c = parseInt(colKey, 10);
+            const cellData = rowData[c];
+            if (!cellData || !cellData.value) continue;
+
+            const cellStyle = this.getCellStyle(row, c);
+            const fontSize = cellStyle?.fontSize || 13;
+
+            if (cellStyle?.wrapText) {
+                // For wrapped text, calculate how many lines it takes
+                const displayValue = cellData.value.startsWith('=')
+                    ? (this.formulaResults[`${row}:${c}`]?.display ?? cellData.value)
+                    : this.formatCellValue(cellData.value, cellData.data_type, cellStyle);
+                if (!displayValue) continue;
+
+                const fontFamily = cellStyle?.fontFamily || 'system-ui, -apple-system, sans-serif';
+                let fontStr = `${fontSize}px ${fontFamily}`;
+                if (cellStyle?.bold) fontStr = `bold ${fontStr}`;
+                if (cellStyle?.italic) fontStr = `italic ${fontStr}`;
+                this.ctx.font = fontStr;
+
+                const colWidth = this.colWidths[c] ?? this.colWidth;
+                const textWidth = this.ctx.measureText(displayValue).width;
+                const lines = Math.max(1, Math.ceil(textWidth / (colWidth - 8)));
+                const neededHeight = lines * (fontSize + 4);
+                if (neededHeight > maxHeight) maxHeight = neededHeight;
+            } else {
+                const neededHeight = fontSize + pad;
+                if (neededHeight > maxHeight) maxHeight = neededHeight;
+            }
+        }
+
+        const newHeight = Math.max(minHeight, Math.ceil(maxHeight));
+        this.rowHeights[row] = newHeight;
+        // Sync to model
+        if (!sheet.row_heights) sheet.row_heights = {};
+        sheet.row_heights[row] = newHeight;
+        this._layoutDirty = true;
+        this.render();
+    }
+
+    /** Auto-fit all columns in the given range (inclusive). */
+    public autoFitColumns(startCol: number, endCol: number): void {
+        for (let c = startCol; c <= endCol; c++) {
+            this.autoFitColumn(c);
+        }
+    }
+
+    /** Auto-fit all rows in the given range (inclusive). */
+    public autoFitRows(startRow: number, endRow: number): void {
+        for (let r = startRow; r <= endRow; r++) {
+            this.autoFitRow(r);
+        }
     }
 
     // --- Find ---
