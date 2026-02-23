@@ -115,6 +115,17 @@ export class LocalCrossEncoderReranker {
 			return [];
 		}
 
+		// Short-circuit: if candidates already fit within topN, skip expensive cross-encoder inference
+		if (documents.length <= topN) {
+			this.logService.info(`Reranker short-circuit: ${documents.length} candidates <= topN ${topN}, returning as-is`);
+			return documents.map(d => ({
+				chunkId: d.id,
+				relevanceScore: d.score,
+				originalScore: d.score,
+				text: d.text
+			}));
+		}
+
 		this.logService.info(`Reranking ${documents.length} documents to top ${topN}`);
 
 		// DEFENSIVE: Ensure all documents have valid text strings

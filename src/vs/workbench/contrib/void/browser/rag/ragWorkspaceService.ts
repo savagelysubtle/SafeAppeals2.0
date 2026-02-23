@@ -30,6 +30,11 @@ export class RAGWorkspaceService extends Disposable implements IRAGWorkspaceServ
 	private lastRagSettings: string = '';
 	private isInitializing: boolean = false;
 	private isPolling: boolean = false;
+	// Debounce file watcher events (Windows emits duplicates)
+	private watcherDebounceTimer: ReturnType<typeof setTimeout> | undefined;
+	private pendingWatcherUris: Set<string> = new Set();
+	// Prevent concurrent indexing of the same file
+	private indexingInProgress: Set<string> = new Set();
 
 	constructor(
 		@IWorkspaceContextService private readonly workspaceService: IWorkspaceContextService,
@@ -231,35 +236,73 @@ export class RAGWorkspaceService extends Disposable implements IRAGWorkspaceServ
 
 		this.fileWatcher = this._register(this.fileService.watch(folderUri));
 		this._register(this.fileService.onDidFilesChange(async (event) => {
-			// Get all files in the core references folder
+			// Collect affected files, then debounce to coalesce duplicate events (common on Windows)
 			try {
 				const files = await this.fileService.resolve(folderUri);
 				if (!files.children) return;
 
+				let hasChanges = false;
 				for (const file of files.children) {
 					if (file.isDirectory) continue;
 
 					const ext = basename(file.resource.fsPath).split('.').pop()?.toLowerCase();
 					if (!['pdf', 'docx', 'txt', 'md'].includes(ext || '')) continue;
 
-					// Check if this file was affected by the change event
 					if (event.affects(file.resource, FileChangeType.ADDED, FileChangeType.UPDATED)) {
-						this.logService.info(`RAG: File change detected (ADDED/UPDATED): ${file.resource.fsPath}. Indexing...`);
-						await this.ragService.indexDocument({
-							uri: file.resource,
-							isCoreReference: true,
-							workspaceId: this.ragService.getWorkspaceId()
-						});
+						this.pendingWatcherUris.add(file.resource.toString());
+						hasChanges = true;
 					} else if (event.affects(file.resource, FileChangeType.DELETED)) {
 						this.logService.info(`RAG: File change detected (DELETED): ${file.resource.fsPath}. Removing from index...`);
 						await this.ragService.deleteDocument(file.resource);
 					}
+				}
+
+				if (hasChanges) {
+					// Debounce: wait 500ms for duplicate events to settle before indexing
+					if (this.watcherDebounceTimer) {
+						clearTimeout(this.watcherDebounceTimer);
+					}
+					this.watcherDebounceTimer = setTimeout(() => {
+						this.processPendingWatcherUris().catch(err => {
+							this.logService.error('RAG: Error processing debounced file changes:', err);
+						});
+					}, 500);
 				}
 			} catch (error) {
 				this.logService.error(`RAG: Error handling file change:`, error);
 			}
 		}));
 		this.logService.info(`RAG: File watcher set up for ${folderUri.fsPath}`);
+	}
+
+	private async processPendingWatcherUris(): Promise<void> {
+		const uris = Array.from(this.pendingWatcherUris);
+		this.pendingWatcherUris.clear();
+
+		for (const uriStr of uris) {
+			const uri = URI.parse(uriStr);
+			const fsPath = uri.fsPath;
+
+			// Skip if this file is already being indexed
+			if (this.indexingInProgress.has(fsPath)) {
+				this.logService.info(`RAG: Skipping duplicate index for ${fsPath} (already in progress)`);
+				continue;
+			}
+
+			this.indexingInProgress.add(fsPath);
+			try {
+				this.logService.info(`RAG: File change detected (ADDED/UPDATED): ${fsPath}. Indexing...`);
+				await this.ragService.indexDocument({
+					uri,
+					isCoreReference: true,
+					workspaceId: this.ragService.getWorkspaceId()
+				});
+			} catch (err) {
+				this.logService.error(`RAG: Failed to index ${fsPath}:`, err);
+			} finally {
+				this.indexingInProgress.delete(fsPath);
+			}
+		}
 	}
 
 	private async scanAndIndex(folderUri: URI): Promise<void> {
@@ -298,13 +341,22 @@ export class RAGWorkspaceService extends Disposable implements IRAGWorkspaceServ
 				async (progress) => {
 					let indexed = 0;
 					for (const uri of filesToIndex) {
-						const filename = basename(uri.fsPath);
+						const fsPath = uri.fsPath;
+
+						// Skip if already being indexed by file watcher
+						if (this.indexingInProgress.has(fsPath)) {
+							this.logService.info(`RAG: Skipping ${fsPath} (already being indexed)`);
+							continue;
+						}
+
+						const filename = basename(fsPath);
 						progress.report({
 							message: `(${indexed + 1}/${filesToIndex.length}) ${filename}`,
 							increment: (1 / filesToIndex.length) * 100
 						});
 
-						this.logService.info(`RAG: Initial scan indexing: ${uri.fsPath}`);
+						this.indexingInProgress.add(fsPath);
+						this.logService.info(`RAG: Initial scan indexing: ${fsPath}`);
 						try {
 							await this.ragService.indexDocument({
 								uri,
@@ -313,7 +365,9 @@ export class RAGWorkspaceService extends Disposable implements IRAGWorkspaceServ
 							});
 							indexed++;
 						} catch (err) {
-							this.logService.error(`RAG: Failed to index ${uri.fsPath}:`, err);
+							this.logService.error(`RAG: Failed to index ${fsPath}:`, err);
+						} finally {
+							this.indexingInProgress.delete(fsPath);
 						}
 					}
 
@@ -447,6 +501,11 @@ export class RAGWorkspaceService extends Disposable implements IRAGWorkspaceServ
 	}
 
 	private disposeWatcher(): void {
+		if (this.watcherDebounceTimer) {
+			clearTimeout(this.watcherDebounceTimer);
+			this.watcherDebounceTimer = undefined;
+		}
+		this.pendingWatcherUris.clear();
 		if (this.fileWatcher) {
 			this.fileWatcher.dispose();
 			this.fileWatcher = undefined;

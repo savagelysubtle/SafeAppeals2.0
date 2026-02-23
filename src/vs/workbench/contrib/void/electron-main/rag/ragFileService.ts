@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------*/
 
 import { createHash } from 'crypto';
-import { readFileSync, statSync } from 'fs';
+import { readFileSync } from 'fs';
 import { normalize } from 'path';
 import * as os from 'os';
 import * as path from 'path';
@@ -72,11 +72,17 @@ export class RAGFileService {
 	}
 
 	/**
-	 * Calculate SHA256 hash of file content for OCR cache key
+	 * Calculate SHA256 hash of file content for OCR cache key (async streaming)
 	 */
-	private calculateFileHash(filepath: string): string {
-		const content = readFileSync(filepath);
-		return createHash('sha256').update(content).digest('hex');
+	private async calculateFileHash(filepath: string): Promise<string> {
+		const { createReadStream } = await import('fs');
+		const stream = createReadStream(filepath);
+		const hash = createHash('sha256');
+		return new Promise((resolve, reject) => {
+			stream.on('data', (chunk) => { hash.update(chunk); });
+			stream.on('end', () => resolve(hash.digest('hex')));
+			stream.on('error', reject);
+		});
 	}
 
 	/**
@@ -108,7 +114,7 @@ export class RAGFileService {
 
 		try {
 			// Step 1: Calculate file hash and check cache (if indexService available)
-			const fileHash = this.calculateFileHash(filepath);
+			const fileHash = await this.calculateFileHash(filepath);
 			this.logService.info(`[OCR] File hash: ${fileHash.substring(0, 16)}...`);
 
 			// Check cache only if indexService is available
@@ -207,7 +213,7 @@ export class RAGFileService {
 			// Step 7: Cache the result (if indexService available and result has content)
 			if (this.indexService) {
 				if (fullOcrText.length > 0) {
-					const fileStats = statSync(filepath);
+					const fileStats = await fs.promises.stat(filepath);
 					const cacheEntry: OCRCacheEntry = {
 						id: fileHash,
 						filepath: filepath,
@@ -259,13 +265,13 @@ export class RAGFileService {
 	 */
 	private async cleanupTempDir(tempDir: string): Promise<void> {
 		try {
-			const fs = await import('fs');
-			if (fs.existsSync(tempDir)) {
-				const files = fs.readdirSync(tempDir);
+			const fsModule = await import('fs');
+			if (fsModule.existsSync(tempDir)) {
+				const files = fsModule.readdirSync(tempDir);
 				for (const file of files) {
-					fs.unlinkSync(path.join(tempDir, file));
+					fsModule.unlinkSync(path.join(tempDir, file));
 				}
-				fs.rmdirSync(tempDir);
+				fsModule.rmdirSync(tempDir);
 				this.logService.info(`[OCR] Cleaned up temp directory: ${tempDir}`);
 			}
 		} catch (error) {

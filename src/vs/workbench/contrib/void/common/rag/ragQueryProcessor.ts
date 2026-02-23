@@ -38,29 +38,29 @@ export class QueryProcessor {
 	async processQuery(query: string): Promise<ProcessedQuery> {
 		const startTime = Date.now();
 
-		// Detect multi-part questions
 		const isComplex = this.isComplexQuery(query);
+		// Cache routeQuery result to avoid calling it multiple times
+		const suggestedScope = this.routeQuery(query);
 
 		if (isComplex) {
 			this.logService.info(`Complex query detected: "${query}"`);
 			return {
 				isComplex: true,
 				subQueries: this.decompose(query),
-				suggestedScope: this.routeQuery(query),
+				suggestedScope,
 				processingTime: Date.now() - startTime
 			};
 		}
 
-		// Simple query - direct routing
 		return {
 			isComplex: false,
 			subQueries: [{
 				id: 'main',
 				query,
-				scope: this.routeQuery(query),
+				scope: suggestedScope,
 				priority: 1
 			}],
-			suggestedScope: this.routeQuery(query),
+			suggestedScope,
 			processingTime: Date.now() - startTime
 		};
 	}
