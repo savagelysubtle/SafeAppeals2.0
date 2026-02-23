@@ -55,5 +55,8 @@ build/win32/tools/tesseract/
 **/wasm/target/
 **/wasm/pkg/
 
+# Python logs
+python/logs/
+
 # Nested git repository (managed separately)
 void-cloud/
