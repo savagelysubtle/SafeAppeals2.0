@@ -5,7 +5,6 @@
 
 import type { Database } from '@vscode/sqlite3';
 import { createHash } from 'crypto';
-import { readFileSync } from 'fs';
 import { createRequire } from 'module';
 import { URI } from '../../../../../base/common/uri.js';
 import { ILogService } from '../../../../../platform/log/common/log.js';
@@ -162,48 +161,14 @@ export class RAGIndexService {
 			END;
 		`;
 
-		await new Promise<void>((resolve, reject) => {
-			this.db!.exec(createDocumentsTable, (err) => {
-				if (err) reject(err);
-				else resolve();
-			});
-		});
-
-		await new Promise<void>((resolve, reject) => {
-			this.db!.exec(createChunksTable, (err) => {
-				if (err) reject(err);
-				else resolve();
-			});
-		});
-
-		await new Promise<void>((resolve, reject) => {
-			this.db!.exec(createIndexes, (err) => {
-				if (err) reject(err);
-				else resolve();
-			});
-		});
-
-		// Create FTS5 table
-		await new Promise<void>((resolve, reject) => {
-			this.db!.exec(createFTSTable, (err) => {
-				if (err) reject(err);
-				else resolve();
-			});
-		});
-
-		// Create FTS5 triggers
-		await new Promise<void>((resolve, reject) => {
-			this.db!.exec(createFTSTriggers, (err) => {
-				if (err) reject(err);
-				else resolve();
-			});
-		});
-
-	this.logService.info('Created FTS5 virtual table and triggers for keyword search');
-
-		// Create OCR cache table for scanned PDF text extraction
-		const createOCRCacheTable = `
-			CREATE TABLE IF NOT EXISTS ocr_cache (
+		// Consolidate all DDL into a single exec call
+		const allDDL = [
+			createDocumentsTable,
+			createChunksTable,
+			createIndexes,
+			createFTSTable,
+			createFTSTriggers,
+			`CREATE TABLE IF NOT EXISTS ocr_cache (
 				id TEXT PRIMARY KEY,
 				filepath TEXT NOT NULL,
 				ocr_text TEXT NOT NULL,
@@ -211,25 +176,18 @@ export class RAGIndexService {
 				language TEXT DEFAULT 'eng',
 				created_at TEXT NOT NULL,
 				file_modified_at TEXT
-			)
-		`;
+			)`,
+			'CREATE INDEX IF NOT EXISTS idx_ocr_cache_filepath ON ocr_cache(filepath)'
+		].join(';\n');
 
 		await new Promise<void>((resolve, reject) => {
-			this.db!.exec(createOCRCacheTable, (err) => {
+			this.db!.exec(allDDL, (err) => {
 				if (err) reject(err);
 				else resolve();
 			});
 		});
 
-		// Create index for OCR cache filepath lookups
-		await new Promise<void>((resolve, reject) => {
-			this.db!.exec('CREATE INDEX IF NOT EXISTS idx_ocr_cache_filepath ON ocr_cache(filepath)', (err) => {
-				if (err) reject(err);
-				else resolve();
-			});
-		});
-
-		this.logService.info('Created OCR cache table for scanned PDF support');
+		this.logService.info('Created all tables, indexes, FTS5, and OCR cache');
 
 		// Check current schema version and migrate if needed
 		const currentVersion = await this.getSchemaVersion();
@@ -440,7 +398,7 @@ private async checkColumnExists(tableName: string, columnName: string): Promise<
 		if (!this.db) throw new Error('Database not initialized');
 
 		const docId = this.generateDocumentId(params.uri);
-		const checksum = this.calculateChecksum(params.uri);
+		const checksum = await this.calculateChecksum(params.uri);
 		const now = new Date().toISOString();
 
 		// Get filepath safely
@@ -501,10 +459,19 @@ private async checkColumnExists(tableName: string, columnName: string): Promise<
 		return docId;
 	}
 
-	private calculateChecksum(uri: URI): string {
+	private async calculateChecksum(uri: URI): Promise<string> {
 		try {
-			const content = readFileSync(uri.fsPath);
-			return createHash('sha256').update(Uint8Array.from(content)).digest('hex');
+			const { createReadStream } = await import('fs');
+			const stream = createReadStream(uri.fsPath);
+			const hash = createHash('sha256');
+			return new Promise((resolve, reject) => {
+				stream.on('data', (chunk) => { hash.update(chunk); });
+				stream.on('end', () => resolve(hash.digest('hex')));
+				stream.on('error', (err) => {
+					this.logService.warn(`Could not calculate checksum for ${uri.fsPath}:`, err);
+					resolve('');
+				});
+			});
 		} catch (error) {
 			this.logService.warn(`Could not calculate checksum for ${uri.fsPath}:`, error);
 			return '';
@@ -625,37 +592,54 @@ private async checkColumnExists(tableName: string, columnName: string): Promise<
 	private async insertChunks(chunks: ChunkRecord[]): Promise<void> {
 		if (!this.db || chunks.length === 0) return;
 
-		const stmt = this.db.prepare(`
-			INSERT INTO chunks (
-				chunk_id, doc_id, text, chunk_index, tokens,
-				section_id, parent_section, section_number, section_title,
-				breadcrumb_path, chunk_type, parent_chunk_id
-			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-		`);
+		// Wrap all inserts in a single transaction (~100x faster than autocommit per row)
+		await this.runSQL('BEGIN TRANSACTION');
+		try {
+			const stmt = this.db.prepare(`
+				INSERT INTO chunks (
+					chunk_id, doc_id, text, chunk_index, tokens,
+					section_id, parent_section, section_number, section_title,
+					breadcrumb_path, chunk_type, parent_chunk_id
+				) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			`);
 
-		for (const chunk of chunks) {
-			await new Promise<void>((resolve, reject) => {
-				stmt.run([
-					chunk.chunkId,
-					chunk.docId,
-					chunk.text,
-					chunk.chunkIndex,
-					chunk.tokens || null,
-					chunk.sectionId || null,
-					chunk.parentSection || null,
-					chunk.sectionNumber || null,
-					chunk.sectionTitle || null,
-					chunk.breadcrumbPath ? JSON.stringify(chunk.breadcrumbPath) : null,
-					chunk.chunkType || null,
-					chunk.parentChunkId || null
-				], (err) => {
-					if (err) reject(err);
-					else resolve();
+			for (const chunk of chunks) {
+				await new Promise<void>((resolve, reject) => {
+					stmt.run([
+						chunk.chunkId,
+						chunk.docId,
+						chunk.text,
+						chunk.chunkIndex,
+						chunk.tokens || null,
+						chunk.sectionId || null,
+						chunk.parentSection || null,
+						chunk.sectionNumber || null,
+						chunk.sectionTitle || null,
+						chunk.breadcrumbPath ? JSON.stringify(chunk.breadcrumbPath) : null,
+						chunk.chunkType || null,
+						chunk.parentChunkId || null
+					], (err) => {
+						if (err) reject(err);
+						else resolve();
+					});
 				});
-			});
-		}
+			}
 
-		stmt.finalize();
+			stmt.finalize();
+			await this.runSQL('COMMIT');
+		} catch (error) {
+			await this.runSQL('ROLLBACK').catch(() => {});
+			throw error;
+		}
+	}
+
+	private runSQL(sql: string): Promise<void> {
+		return new Promise((resolve, reject) => {
+			this.db!.run(sql, (err: Error | null) => {
+				if (err) reject(err);
+				else resolve();
+			});
+		});
 	}
 
 	private chunkText(text: string, docId: string, chunkSize: number = 1200, overlap: number = 200): ChunkRecord[] {
@@ -747,16 +731,15 @@ private async checkColumnExists(tableName: string, columnName: string): Promise<
 			}
 		}
 
-		// Build breadcrumb paths
+		// Build breadcrumb paths using O(1) map lookup instead of O(n) find()
+		const sectionOfId = new Map(sections.map(s => [s.id, s]));
 		for (const section of sections) {
 			const path: string[] = [];
-			let currentSection: DocumentSection | undefined = section;
-
-			while (currentSection) {
-				path.unshift(currentSection.title);
-				currentSection = sections.find(s => s.id === currentSection!.parentId);
+			let current: DocumentSection | undefined = section;
+			while (current) {
+				path.unshift(current.title);
+				current = current.parentId ? sectionOfId.get(current.parentId) : undefined;
 			}
-
 			breadcrumbs.set(section.id, path);
 		}
 
@@ -1151,18 +1134,9 @@ private async checkColumnExists(tableName: string, columnName: string): Promise<
 
 				this.logService.info(`searchChunks SQL returned ${rows.length} rows`);
 
-				// DEBUG: If no rows, check if chunks exist at all
-				if (rows.length === 0) {
-					this.db!.get('SELECT COUNT(*) as count FROM chunks', (err2, row: any) => {
-						if (!err2) {
-							this.logService.info(`Total chunks in database: ${row.count}`);
-						}
-					});
-					this.db!.all('SELECT chunk_id FROM chunks LIMIT 5', (err3, sampleRows: any[]) => {
-						if (!err3) {
-							this.logService.info(`Sample chunk IDs in database: ${sampleRows.map(r => r.chunk_id).join(', ')}`);
-						}
-					});
+				// Debug queries only when results are unexpectedly empty and chunk IDs were provided
+				if (rows.length === 0 && chunkIds.length > 0) {
+					this.logService.warn(`searchChunks: 0 rows returned for ${chunkIds.length} chunk IDs -- possible ID mismatch`);
 				}
 
 				const results: SearchResult[] = rows.map(row => {
@@ -1188,16 +1162,15 @@ private async checkColumnExists(tableName: string, columnName: string): Promise<
 	}
 
 	private highlightQuery(text: string, query: string): string {
-		// Ensure we have valid strings
 		if (!text || typeof text !== 'string') return '';
 		if (!query || typeof query !== 'string') return text;
 
-		// Simple highlighting - can be improved
+		// Escape user input to prevent regex injection
+		const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 		try {
-		const regex = new RegExp(`(${query})`, 'gi');
-		return text.replace(regex, '**$1**');
-		} catch (err) {
-			// If regex fails (e.g., invalid regex chars), return text as-is
+			const regex = new RegExp(`(${escaped})`, 'gi');
+			return text.replace(regex, '**$1**');
+		} catch {
 			return text;
 		}
 	}
@@ -1289,6 +1262,20 @@ private async checkColumnExists(tableName: string, columnName: string): Promise<
 					}
 				}
 			);
+		});
+	}
+
+	/**
+	 * Get all document IDs in a single query (for bulk indexing checks)
+	 */
+	async getAllDocumentIds(): Promise<string[]> {
+		if (!this.db) return [];
+
+		return new Promise((resolve, reject) => {
+			this.db!.all('SELECT id FROM documents', (err, rows: any[]) => {
+				if (err) reject(err);
+				else resolve(rows.map(r => r.id));
+			});
 		});
 	}
 
@@ -1579,10 +1566,16 @@ private async checkColumnExists(tableName: string, columnName: string): Promise<
 	 * @param filepath Path to the file
 	 * @returns SHA256 hash string
 	 */
-	calculateFileHash(filepath: string): string {
+	async calculateFileHash(filepath: string): Promise<string> {
 		try {
-			const content = readFileSync(filepath);
-			return createHash('sha256').update(content).digest('hex');
+			const { createReadStream } = await import('fs');
+			const stream = createReadStream(filepath);
+			const hash = createHash('sha256');
+			return new Promise((resolve, reject) => {
+				stream.on('data', (chunk) => { hash.update(chunk); });
+				stream.on('end', () => resolve(hash.digest('hex')));
+				stream.on('error', reject);
+			});
 		} catch (error) {
 			this.logService.error(`Error calculating file hash for ${filepath}:`, error);
 			throw error;

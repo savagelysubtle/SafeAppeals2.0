@@ -4,52 +4,52 @@ overview: Comprehensive performance optimization of the RAG system covering vect
 todos:
   - id: persistent-db-connection
     content: "P0: Keep a persistent SQLite connection for embeddings.db instead of opening/closing per save. Add batch insert with BEGIN/COMMIT transaction in ragVectorAdapter.ts"
-    status: pending
+    status: completed
   - id: chunk-insert-transaction
     content: "P0: Wrap insertChunks in ragIndexService.ts in a BEGIN/COMMIT transaction (currently 200+ individual autocommit inserts per document)"
-    status: pending
+    status: completed
   - id: float32-storage
     content: "P0: Change in-memory vector storage from number[] to Float32Array in ChromaPersistentAdapter.embeddings map and update all read/write paths"
-    status: pending
+    status: completed
   - id: dot-similarity
     content: "P0: Replace cosineSimilarity with dotSimilarity (dot product only, since vectors are pre-normalized) and update all call sites"
-    status: pending
+    status: completed
   - id: binary-sqlite
     content: "P0: Switch SQLite vector storage from JSON text to binary BLOB, with backwards-compatible migration on load"
-    status: pending
+    status: completed
   - id: embeddings-return-type
     content: "P1: Change LocalEmbeddingService.generateEmbeddings to return Float32Array[] and convert Transformers.js output"
-    status: pending
+    status: completed
   - id: remove-duplicate-reranker
     content: "P1: Remove the unused reranker from ChromaPersistentAdapter (saves ~90MB RAM and ~2s startup per workspace)"
-    status: pending
+    status: completed
   - id: bulk-indexed-check
     content: "P1: Add getIndexedDocumentIds() bulk method to replace per-file isDocumentIndexed (3 DB queries x N files -> 1 query)"
-    status: pending
+    status: completed
   - id: async-file-io
     content: "P1: Replace readFileSync/statSync with async equivalents in ragIndexService.ts and ragFileService.ts"
-    status: pending
+    status: completed
   - id: remove-duplicate-mmr
     content: "P2: Remove MMR from ragVectorAdapter.query() -- keep only the one in ragContextService.ts"
-    status: pending
+    status: completed
   - id: cache-workspace-instance
     content: "P2: Cache last resolved workspace instance in ragMainService.getWorkspaceInstance() to skip re-resolution"
-    status: pending
+    status: completed
   - id: breadcrumb-map-lookup
     content: "P2: Build Map<id, section> for breadcrumb path resolution instead of O(n^2) sections.find() loop in ragIndexService.ts"
-    status: pending
+    status: completed
   - id: reranker-short-circuit
     content: "P2: Short-circuit reranker when candidates <= topN in ragReranker.ts"
-    status: pending
+    status: completed
   - id: doc-id-secondary-index
     content: "P2: Add countOfDocId Map for O(1) hasDocumentEmbeddings lookup instead of full linear scan"
-    status: pending
+    status: completed
   - id: context-assembly-map
     content: "P3: Replace .find() with Map lookup in ragMainService.ts context assembly"
-    status: pending
+    status: completed
   - id: cleanup-minor
     content: "P3: Fix redundant dynamic imports, double routeQuery call, unconditional debug queries, regex injection in highlightQuery"
-    status: pending
+    status: completed
 isProject: false
 ---
 

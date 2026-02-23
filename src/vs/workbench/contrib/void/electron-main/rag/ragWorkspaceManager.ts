@@ -100,7 +100,6 @@ export class WorkspaceRAGManager {
 			this.logService.info(`RAG: Creating vector adapter for workspace ${workspaceId}...`);
 			const config: PersistentVectorAdapterConfig = {
 				persistPath: chromaPath,
-				useReranking: true,
 				modelCachePath: sharedModelCachePath,
 			};
 

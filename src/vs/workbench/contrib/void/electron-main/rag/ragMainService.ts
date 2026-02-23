@@ -39,6 +39,18 @@ export class RAGMainService implements IRAGMainService {
 	private doclingProcess?: ChildProcess;
 	private doclingServerReady = false;
 
+	// Cache last resolved workspace instance to skip re-resolution on repeated calls
+	private lastWorkspaceId: string | null = null;
+	private lastInstance: {
+		vectorAdapter: VectorAdapter;
+		indexService: RAGIndexService;
+		hybridRetriever: HybridRetriever;
+		reranker: LocalCrossEncoderReranker;
+	} | null = null;
+
+	// Prevent concurrent indexing of the same file path
+	private indexingInProgress: Set<string> = new Set();
+
 	constructor(
 		@ILogService private readonly logService: ILogService,
 		@IRAGPathService private readonly pathService: IRAGPathService
@@ -121,8 +133,6 @@ export class RAGMainService implements IRAGMainService {
 		hybridRetriever: HybridRetriever;
 		reranker: LocalCrossEncoderReranker;
 	}> {
-		this.logService.info(`RAG: getWorkspaceInstance called with workspaceId: "${workspaceId}"`);
-
 		// STRICT VALIDATION - no global database allowed
 		if (!workspaceId || workspaceId === 'undefined' || workspaceId === 'null' || workspaceId.trim() === '') {
 			const error = new Error(
@@ -134,18 +144,27 @@ export class RAGMainService implements IRAGMainService {
 			throw error;
 		}
 
+		// Return cached instance if same workspace
+		if (workspaceId === this.lastWorkspaceId && this.lastInstance) {
+			return this.lastInstance;
+		}
+
 		this.logService.info(`RAG: Accessing micro database for workspace: ${workspaceId}`);
 		const instance = await this.workspaceManager.getOrCreateWorkspace(workspaceId);
 
-		// Wire up the index service to file service for OCR caching
 		this.fileService.setIndexService(instance.indexService);
 
-		return {
+		const result = {
 			vectorAdapter: instance.vectorAdapter,
 			indexService: instance.indexService,
 			hybridRetriever: instance.hybridRetriever,
 			reranker: instance.reranker
 		};
+
+		this.lastWorkspaceId = workspaceId;
+		this.lastInstance = result;
+
+		return result;
 	}
 
 	async indexDocument(params: RAGIndexParams): Promise<{ success: boolean; message: string }> {
@@ -160,8 +179,25 @@ export class RAGMainService implements IRAGMainService {
 			return { success: false, message: error };
 		}
 
+		const filepath = params.uri.fsPath || params.uri.path || '';
+
+		// Prevent concurrent indexing of the same file (duplicate watcher events)
+		if (this.indexingInProgress.has(filepath)) {
+			this.logService.info(`Skipping duplicate indexDocument for ${filepath} (already in progress)`);
+			return { success: true, message: 'Already being indexed' };
+		}
+
+		this.indexingInProgress.add(filepath);
+		try {
+			return await this._indexDocumentInner(params, filepath);
+		} finally {
+			this.indexingInProgress.delete(filepath);
+		}
+	}
+
+	private async _indexDocumentInner(params: RAGIndexParams, filepath: string): Promise<{ success: boolean; message: string }> {
 		// Get workspace-specific instance
-		const { vectorAdapter, indexService } = await this.getWorkspaceInstance(params.workspaceId);
+		const { vectorAdapter, indexService } = await this.getWorkspaceInstance(params.workspaceId!);
 
 		// Log memory usage at start
 		const memStart = process.memoryUsage();
@@ -169,12 +205,10 @@ export class RAGMainService implements IRAGMainService {
 		this.logService.info(`Using workspace: ${params.workspaceId || 'global'}`);
 
 		try {
-			const filepath = params.uri.fsPath || params.uri.path || '';
 			this.logService.info(`Indexing document: ${filepath}`);
 
 			// Check file size before processing to prevent memory issues
-			const fs = await import('fs');
-			const stats = fs.statSync(filepath);
+			const stats = await fs.promises.stat(filepath);
 			const fileSizeMB = stats.size / (1024 * 1024);
 
 			this.logService.info(`File size: ${fileSizeMB.toFixed(2)} MB`);
@@ -382,16 +416,18 @@ export class RAGMainService implements IRAGMainService {
 
 			this.logService.info(`Reranked to top ${reranked.length} results`);
 
-			// Assemble context pack
+			// Assemble context pack using Map for O(1) lookups
+			const searchResultOfChunkId = new Map(searchResults.map(s => [s.chunkId, s]));
+
 			const answerContext = reranked
 				.map(r => {
-					const original = searchResults.find(s => s.chunkId === r.chunkId);
+					const original = searchResultOfChunkId.get(r.chunkId);
 					return original?.snippet || r.text;
 				})
 				.join('\n\n');
 
 			const attributions = reranked.map(r => {
-				const original = searchResults.find(s => s.chunkId === r.chunkId);
+				const original = searchResultOfChunkId.get(r.chunkId);
 				return {
 					docId: original?.docId || '',
 					chunkId: r.chunkId,

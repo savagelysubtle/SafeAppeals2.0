@@ -81,8 +81,9 @@ export class LocalEmbeddingService {
 	/**
 	 * Generate embeddings for multiple texts
 	 * Processes in batches for memory efficiency
+	 * Returns Float32Array[] for ~4x less memory and contiguous memory layout
 	 */
-	async generateEmbeddings(texts: string[]): Promise<number[][]> {
+	async generateEmbeddings(texts: string[]): Promise<Float32Array[]> {
 		if (!this.initialized) {
 			throw new Error('Local embedding service not initialized. Call initialize() first.');
 		}
@@ -92,7 +93,7 @@ export class LocalEmbeddingService {
 		}
 
 		try {
-			const embeddings: number[][] = [];
+			const embeddings: Float32Array[] = [];
 			const totalBatches = Math.ceil(texts.length / this.BATCH_SIZE);
 
 			// Log memory at start
@@ -116,14 +117,13 @@ export class LocalEmbeddingService {
 				// Convert tensor to array
 				const batchEmbeddings = output.tolist();
 
-				// Validate embedding dimensions
+				// Validate embedding dimensions and convert to Float32Array
 				for (const embedding of batchEmbeddings) {
 					if (embedding.length !== this.EMBEDDING_DIMENSION) {
 						throw new Error(`Invalid embedding dimension: expected ${this.EMBEDDING_DIMENSION}, got ${embedding.length}`);
 					}
+					embeddings.push(new Float32Array(embedding));
 				}
-
-				embeddings.push(...batchEmbeddings);
 
 				// Log memory after each batch
 				const memAfterBatch = process.memoryUsage();
@@ -157,7 +157,7 @@ export class LocalEmbeddingService {
 	/**
 	 * Generate embedding for a single text
 	 */
-	async generateEmbedding(text: string): Promise<number[]> {
+	async generateEmbedding(text: string): Promise<Float32Array> {
 		const embeddings = await this.generateEmbeddings([text]);
 		return embeddings[0];
 	}
