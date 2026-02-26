@@ -542,6 +542,68 @@ export class ToolsService implements IToolsService {
 								throw new Error(`Invalid operation at index ${index}: "${op.type}" requires "colIndex" (number).`);
 							}
 							break;
+						// XLSX table operations
+						case 'create_table':
+							if (op.sheet === undefined) {
+								throw new Error(`Invalid operation at index ${index}: "create_table" requires "sheet".`);
+							}
+							if (typeof op.range !== 'string') {
+								throw new Error(`Invalid operation at index ${index}: "create_table" requires "range" (string like "A1:D10").`);
+							}
+							if (typeof op.tableName !== 'string') {
+								throw new Error(`Invalid operation at index ${index}: "create_table" requires "tableName" (string).`);
+							}
+							break;
+						case 'rename_table':
+							if (typeof op.oldName !== 'string') {
+								throw new Error(`Invalid operation at index ${index}: "rename_table" requires "oldName" (string).`);
+							}
+							if (typeof op.newName !== 'string') {
+								throw new Error(`Invalid operation at index ${index}: "rename_table" requires "newName" (string).`);
+							}
+							break;
+						case 'set_table_style':
+							if (typeof op.tableName !== 'string') {
+								throw new Error(`Invalid operation at index ${index}: "set_table_style" requires "tableName" (string).`);
+							}
+							if (typeof op.styleName !== 'string') {
+								throw new Error(`Invalid operation at index ${index}: "set_table_style" requires "styleName" (string).`);
+							}
+							break;
+						case 'toggle_table_filter':
+						case 'convert_table_to_range':
+							if (typeof op.tableName !== 'string') {
+								throw new Error(`Invalid operation at index ${index}: "${op.type}" requires "tableName" (string).`);
+							}
+							break;
+						case 'set_totals_row':
+							if (typeof op.tableName !== 'string') {
+								throw new Error(`Invalid operation at index ${index}: "set_totals_row" requires "tableName" (string).`);
+							}
+							if (typeof op.enabled !== 'boolean') {
+								throw new Error(`Invalid operation at index ${index}: "set_totals_row" requires "enabled" (boolean).`);
+							}
+							break;
+						// XLSX chart operations
+						case 'insert_chart':
+							if (op.sheet === undefined) {
+								throw new Error(`Invalid operation at index ${index}: "insert_chart" requires "sheet".`);
+							}
+							if (typeof op.chart_type !== 'string') {
+								throw new Error(`Invalid operation at index ${index}: "insert_chart" requires "chart_type" (string).`);
+							}
+							if (typeof op.data_range !== 'string') {
+								throw new Error(`Invalid operation at index ${index}: "insert_chart" requires "data_range" (string like "A1:D10").`);
+							}
+							break;
+						case 'delete_chart':
+							if (op.sheet === undefined) {
+								throw new Error(`Invalid operation at index ${index}: "delete_chart" requires "sheet".`);
+							}
+							if (typeof op.chart_index !== 'number') {
+								throw new Error(`Invalid operation at index ${index}: "delete_chart" requires "chart_index" (number).`);
+							}
+							break;
 						default:
 							console.warn(`[edit_document] Unknown operation type at index ${index}: "${op.type}"`);
 							// Don't throw - allow unknown types to pass through for forward compatibility

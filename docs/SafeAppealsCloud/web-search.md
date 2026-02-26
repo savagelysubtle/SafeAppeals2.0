@@ -57,7 +57,8 @@ Rounded to: 250 tokens per search
 With Brave Pro ($9/month):
 - Break-even: 900 searches/month
 - Per $30 token pack: ~2,800 searches possible
-- Per $60 token pack: ~5,600 searches possible
+- Per $65 token pack: ~8,000 searches possible
+- Per $130 token pack: ~20,000 searches possible
 
 ## Architecture
 
@@ -98,7 +99,7 @@ With Brave Pro ($9/month):
 **In Cloud API** (`void-cloud/api/src/routes/web-search.ts`):
 
 ```typescript
-// Token pack pricing: $30 = 700K tokens, $60 = 1.4M tokens
+// Token pack pricing: $30 = 700K tokens, $65 = 2M tokens, $130 = 5M tokens
 // Therefore: 1 token = $0.0000428
 // To charge ~1 penny ($0.01) per search: $0.01 / $0.0000428 = 233 tokens
 // We round to 250 tokens for clean math + margin

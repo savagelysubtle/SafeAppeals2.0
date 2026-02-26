@@ -59,7 +59,7 @@ CREATE TABLE credit_transactions (
     -- Purchase details
     stripe_session_id TEXT,
     stripe_payment_intent TEXT,
-    pack_type TEXT,               -- 'starter', 'pro'
+    pack_type TEXT,               -- 'starter', 'pro', 'power'
     amount_paid INTEGER,          -- Cents
     currency TEXT DEFAULT 'usd',
 
@@ -232,7 +232,7 @@ BEGIN
     SELECT * INTO v_cost FROM calculate_request_cost(p_model, p_input_tokens, p_output_tokens);
     v_credits := COALESCE(p_credits_charged, p_input_tokens + p_output_tokens);
 
-    -- Profit = Revenue ($42.86/MTok sell rate) - Cost
+    -- Profit = Revenue - Cost; reads pack_rate from profiles (Starter $42.86/MTok, Pro $32.50/MTok, Power $26/MTok)
     v_profit := (v_credits * 0.00004286) - v_cost.total_cost;
 
     INSERT INTO usage_logs (

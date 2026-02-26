@@ -16,94 +16,13 @@ import { Disposable } from '../../../../base/common/lifecycle.js';
 import { generateUuid } from '../../../../base/common/uuid.js';
 import { InstantiationType, registerSingleton } from '../../../../platform/instantiation/common/extensions.js';
 import { createDecorator } from '../../../../platform/instantiation/common/instantiation.js';
-import { availableTools, InternalToolInfo } from '../common/prompt/prompts.js';
+import { availableTools } from '../common/prompt/prompts.js';
 import { ILLMMessageService } from '../common/sendLLMMessageService.js';
 import { OnFinalMessage, OnText, RawToolCallObj, RawToolParamsObj, ServiceSendLLMMessageParams, SingleToolCall } from '../common/sendLLMMessageTypes.js';
 import { ToolName, ToolParamName } from '../common/tools/toolsServiceTypes.js';
 import { IVoidSettingsService } from '../common/voidSettingsService.js';
 import { ChatMode, ProviderName } from '../common/voidSettingsTypes.js';
-import { CloudTool, CloudToolCall, IVoidCloudService } from './voidCloudService.js';
-
-// ============================================
-// TOOL FORMAT CONVERSION
-// ============================================
-
-/**
- * Convert native cloud tool calls to internal RawToolCallObj format
- * This parses the JSON arguments and creates the format expected by chatThreadService
- */
-function parseNativeToolCalls(
-	cloudToolCalls: CloudToolCall[],
-	toolOfToolName: { [name: string]: InternalToolInfo | undefined }
-): RawToolCallObj | null {
-	if (!cloudToolCalls || cloudToolCalls.length === 0) {
-		return null;
-	}
-
-	const toolCalls: SingleToolCall[] = cloudToolCalls.map(tc => {
-		const toolDef = toolOfToolName[tc.function.name];
-		let parsedArgs: RawToolParamsObj = {};
-
-		try {
-			parsedArgs = JSON.parse(tc.function.arguments || '{}');
-		} catch (e) {
-			console.warn('[CloudToolParser] Failed to parse tool arguments:', tc.function.arguments);
-		}
-
-		const doneParams = toolDef
-			? Object.keys(parsedArgs).filter(p => p in toolDef.params) as ToolParamName<ToolName>[]
-			: Object.keys(parsedArgs) as ToolParamName<ToolName>[];
-
-		return {
-			id: tc.id,
-			name: tc.function.name as ToolName,
-			rawParams: parsedArgs,
-			doneParams,
-			isDone: true
-		};
-	});
-
-	console.log('[CloudToolParser] ✅ Parsed', toolCalls.length, 'native tool calls:', toolCalls.map(t => t.name));
-
-	// Return single or multiple format
-	if (toolCalls.length === 1) {
-		return toolCalls[0];
-	}
-	return { toolCalls, format: 'antml' };
-}
-
-/**
- * Convert internal tool definitions to OpenAI/LiteLLM compatible format
- * This enables native tool calling through the cloud API
- */
-function convertToCloudTools(tools: InternalToolInfo[]): CloudTool[] {
-	return tools.map(tool => {
-		const properties: { [paramName: string]: { type: string; description: string } } = {};
-		const required: string[] = [];
-
-		for (const [paramName, paramInfo] of Object.entries(tool.params)) {
-			properties[paramName] = {
-				type: 'string',
-				description: paramInfo.description
-			};
-			// Mark all params as required (matching non-cloud behavior)
-			required.push(paramName);
-		}
-
-		return {
-			type: 'function' as const,
-			function: {
-				name: tool.name,
-				description: tool.description,
-				parameters: {
-					type: 'object' as const,
-					properties,
-					required
-				}
-			}
-		};
-	});
-}
+import { IVoidCloudService } from './voidCloudService.js';
 
 // ============================================
 // BROWSER-SIDE XML TOOL PARSER FOR CLOUD RESPONSES
@@ -425,18 +344,16 @@ class CloudLLMRouterService extends Disposable implements ICloudLLMRouterService
 		}
 		cloudMessages.push(...conversationMessages);
 
-		// Get available tools for this chat mode and convert to cloud format
-		const internalTools = availableTools(chatMode ?? null, undefined);
-		const cloudTools = internalTools && internalTools.length > 0
-			? convertToCloudTools(internalTools)
-			: undefined;
+		// Tool definitions are included as XML in the system prompt (ANTML format).
+		// Do NOT send native tool definitions alongside XML -- dual formats confuse
+		// the model into responding with text instead of calling tools.
+		// The XML parser (wrapWithXMLParsing) handles parsing tool calls from text.
 
 		console.log('[CloudLLMRouter] Sending request now...', {
 			totalMessages: cloudMessages.length,
 			hasSystemMessage: cloudMessages[0]?.role === 'system',
 			systemMessagePreview: cloudMessages[0]?.role === 'system' ? cloudMessages[0].content.substring(0, 200) + '...' : 'NONE',
-			toolCount: cloudTools?.length ?? 0,
-			toolNames: cloudTools?.slice(0, 5).map(t => t.function.name) ?? []
+			toolFormat: 'xml-only',
 		});
 
 		// Wrap callbacks with XML tool parsing for chat modes that support tools
@@ -455,13 +372,11 @@ class CloudLLMRouterService extends Disposable implements ICloudLLMRouterService
 
 		console.log('[CloudLLMRouter] Temperature:', { cloudModel, isClaudeModel, temperature });
 
-		// Send via cloud service
+		// Send via cloud service (no native tools -- XML definitions in system prompt)
 		this.cloudService.sendCloudRequest({
 			model: cloudModel,
 			messages: cloudMessages,
 			temperature,
-			tools: cloudTools,
-			toolChoice: cloudTools ? 'auto' : undefined, // Let model decide when to use tools
 			stream: false, // TODO: Implement streaming
 			onText: wrappedOnText ? (text) => wrappedOnText({ fullText: text, fullReasoning: '' }) : undefined,
 		}).then((response) => {
@@ -472,42 +387,17 @@ class CloudLLMRouterService extends Disposable implements ICloudLLMRouterService
 				contentFull: response.content?.length < 2000 ? response.content : '(truncated)',
 			});
 
-			// Build tool lookup for parsing
-			const toolOfToolName: { [name: string]: InternalToolInfo | undefined } = {};
-			if (internalTools) {
-				for (const t of internalTools) { toolOfToolName[t.name] = t; }
-			}
-
-			// Check for native tool calls FIRST (from API response)
-			let nativeToolCall: RawToolCallObj | null = null;
-			if (response.toolCalls && response.toolCalls.length > 0) {
-				console.log('[CloudLLMRouter] 🔧 Native tool calls received from API:', response.toolCalls.length);
-				nativeToolCall = parseNativeToolCalls(response.toolCalls, toolOfToolName);
-			}
-
-			if (nativeToolCall) {
-				// Use native tool calls - bypass XML parsing
-				console.log('[CloudLLMRouter] ✅ Using native tool calls');
-				onFinalMessage({
-					fullText: response.content,
-					fullReasoning: '',
-					anthropicReasoning: null,
-					toolCall: nativeToolCall,
-				});
-			} else {
-				// Fall back to XML parsing (for compatibility or if no native tools)
-				wrappedOnFinalMessage({
-					fullText: response.content,
-					fullReasoning: '',
-					anthropicReasoning: null,
-				});
-			}
+			// Parse tool calls from XML in the response text (ANTML format)
+			wrappedOnFinalMessage({
+				fullText: response.content,
+				fullReasoning: '',
+				anthropicReasoning: null,
+			});
 
 			console.log('[CloudLLMRouter] Cloud request completed:', {
 				creditsUsed: response.creditsUsed,
 				creditsRemaining: response.creditsRemaining,
 				tokensUsed: response.usage.totalTokens,
-				hasNativeToolCalls: !!nativeToolCall,
 			});
 		}).catch((error) => {
 			const message = error instanceof Error ? error.message : 'Cloud request failed';

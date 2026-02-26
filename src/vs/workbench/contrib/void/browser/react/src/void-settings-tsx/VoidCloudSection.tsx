@@ -111,7 +111,7 @@ export const VoidCloudSection = () => {
 	}, [refreshBalance]);
 
 	const handleBuyCredits = useCallback(
-		async (pack: "starter" | "pro") => {
+		async (pack: "starter" | "pro" | "power") => {
 			try {
 				const nativeHostService = accessor.get("INativeHostService");
 				const checkoutUrl = await createCheckoutSession(pack);
@@ -284,7 +284,19 @@ export const VoidCloudSection = () => {
 										</div>
 										<div className="font-medium">Pro</div>
 										<div className="text-void-fg-3 text-xs">
-											1.4M tokens • $60
+											2M tokens • $65
+										</div>
+									</button>
+									<button
+										className="flex-1 bg-void-bg-1 hover:bg-void-bg-3 border border-void-border-1 rounded p-2 text-center transition-colors relative"
+										onClick={() => handleBuyCredits("power")}
+									>
+										<div className="absolute -top-2 right-2 bg-blue-600 text-white text-[10px] px-1.5 py-0.5 rounded">
+											39% off
+										</div>
+										<div className="font-medium">Power</div>
+										<div className="text-void-fg-3 text-xs">
+											5M tokens • $130
 										</div>
 									</button>
 								</div>

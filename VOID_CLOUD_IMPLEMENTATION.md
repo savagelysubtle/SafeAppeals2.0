@@ -86,8 +86,9 @@ Void Cloud is a **credit-based LLM access service** that allows Void users to ac
 │  ─────────────────────────────                                 │
 │  • No API keys needed                                          │
 │  • Purchase credit packs:                                       │
-│    • $10 → 250,000 tokens                                      │
-│    • $25 → 750,000 tokens (25% bonus)                          │
+│    • $30 → 700,000 tokens                                      │
+│    • $65 → 2,000,000 tokens (save 24%)                         │
+│    • $130 → 5,000,000 tokens (save 39%)                        │
 │  • Credits never expire                                         │
 │  • Perfect for: convenience seekers, teams, enterprises         │
 │                                                                 │
@@ -101,7 +102,7 @@ Void Cloud is a **credit-based LLM access service** that allows Void users to ac
 | Credit Unit              | 1 credit = 1 token                                              |
 | Pricing Model            | Pay-As-You-Go only (no subscriptions for MVP)                   |
 | Margin                   | 25-30% markup on provider costs                                 |
-| Credit Packs             | $10 (250K tokens), $25 (750K tokens)                            |
+| Credit Packs             | $30 (700K), $65 (2M), $130 (5M)                                 |
 | LLM Proxy                | Self-hosted LiteLLM                                             |
 | Database                 | Supabase (PostgreSQL)                                           |
 | Auth                     | Supabase Auth with Google SSO                                   |
@@ -373,17 +374,18 @@ const PROVIDER_COSTS = {
 // Credit Pack Pricing
 const CREDIT_PACKS = {
 	starter: {
-		price_usd: 10.0,
-		credits: 250_000, // $0.04 per 1K tokens
-		value_usd: 7.5, // At $15/M blended cost
-		margin: "33%",
+		price_usd: 30.0,
+		credits: 700_000,
 	},
 	pro: {
-		price_usd: 25.0,
-		credits: 750_000, // $0.033 per 1K tokens (17% discount)
-		value_usd: 18.75,
-		margin: "33%",
-		bonus: "25% more tokens",
+		price_usd: 65.0,
+		credits: 2_000_000,
+		bonus: "save 24%",
+	},
+	power: {
+		price_usd: 130.0,
+		credits: 5_000_000,
+		bonus: "save 39%",
 	},
 };
 ```
@@ -393,7 +395,7 @@ const CREDIT_PACKS = {
 ```
 MVP (Now):
   - BYOK: Free forever
-  - Cloud PAYG: $10 / $25 packs
+  - Cloud PAYG: $30 / $65 / $130 packs
 
 Future:
   - Cloud Subscription: $15/mo for 500K tokens + rollover
@@ -561,6 +563,7 @@ STRIPE_SECRET_KEY=sk_live_...
 STRIPE_WEBHOOK_SECRET=whsec_...
 STRIPE_STARTER_PRICE_ID=price_...
 STRIPE_PRO_PRICE_ID=price_...
+STRIPE_POWER_PRICE_ID=price_...
 
 # LiteLLM (internal)
 LITELLM_URL=http://litellm-service:4000
@@ -594,8 +597,9 @@ DEEPSEEK_API_KEY=sk-...
 # 1. Create Stripe account at https://stripe.com
 
 # 2. Create Products:
-#    - "Void Cloud Starter" - $10 one-time
-#    - "Void Cloud Pro" - $25 one-time
+#    - "Void Cloud Starter" - $30 one-time
+#    - "Void Cloud Pro" - $65 one-time
+#    - "Void Cloud Power" - $130 one-time
 
 # 3. Get Price IDs for each product
 
@@ -4174,6 +4178,7 @@ STRIPE_SECRET_KEY=sk_live_...
 STRIPE_WEBHOOK_SECRET=whsec_...
 STRIPE_STARTER_PRICE_ID=price_...
 STRIPE_PRO_PRICE_ID=price_...
+STRIPE_POWER_PRICE_ID=price_...
 
 # LiteLLM (internal Railway service URL)
 LITELLM_URL=http://litellm-service.railway.internal:4000
@@ -4341,6 +4346,7 @@ STRIPE_SECRET_KEY=sk_test_xxx
 STRIPE_WEBHOOK_SECRET=whsec_xxx
 STRIPE_STARTER_PRICE_ID=price_xxx
 STRIPE_PRO_PRICE_ID=price_xxx
+STRIPE_POWER_PRICE_ID=price_xxx
 
 # LiteLLM
 LITELLM_URL=http://localhost:4000

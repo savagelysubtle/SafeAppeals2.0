@@ -180,7 +180,7 @@ Backend infrastructure for AI, billing, and web search services.
 
 **Key Features:**
 
-- Token-based credit system ($30 = 700K tokens, $60 = 1.4M tokens)
+- Token-based credit system ($30 = 700K tokens, $65 = 2M tokens, $130 = 5M tokens)
 - Multi-provider AI routing via LiteLLM (OpenAI, Anthropic, Google)
 - Web search integration with Brave Search API
 - Stripe payment processing for credit purchases

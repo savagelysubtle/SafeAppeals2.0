@@ -13,9 +13,9 @@ import { DOCXViewerInputSerializer } from './docxViewer/docxViewerInputSerialize
 import { PDFViewerEditor } from './pdfViewer/pdfViewerEditor.js';
 import { PDFViewerInput } from './pdfViewer/pdfViewerInput.js';
 import { PDFViewerInputSerializer } from './pdfViewer/pdfViewerInputSerializer.js';
-import { XLSXViewerEditor } from './xlsxViewer/xlsxViewerEditor.js';
-import { XLSXViewerInput } from './xlsxViewer/xlsxViewerInput.js';
-import { XLSXViewerInputSerializer } from './xlsxViewer/xlsxViewerInputSerializer.js';
+import { XLSXRustViewerEditor } from './xlsxRustViewer/xlsxRustViewerEditor.js';
+import { XLSXRustViewerInput } from './xlsxRustViewer/xlsxRustViewerInput.js';
+import { XLSXRustViewerInputSerializer } from './xlsxRustViewer/xlsxRustViewerInputSerializer.js';
 // Import PDF Quick Edit actions (registers Ctrl+K handler)
 import { Disposable } from '../../../../../base/common/lifecycle.js';
 import { Schemas } from '../../../../../base/common/network.js';
@@ -27,7 +27,7 @@ import { PDFContentExtractor } from './pdfViewer/pdfContentExtractor.js';
 import './pdfViewer/pdfQuickEditActions.js';
 // Import PDF Annotation Service (registers the singleton)
 import './pdfViewer/pdfAnnotationService.js';
-import { XLSXContentExtractor } from './xlsxViewer/xlsxContentExtractor.js';
+import { XLSXContentExtractor } from './xlsxRustViewer/xlsxContentExtractor.js';
 
 // Register PDF Viewer Editor Pane
 Registry.as<IEditorPaneRegistry>(EditorExtensions.EditorPane)
@@ -69,18 +69,18 @@ Registry.as<IEditorFactoryRegistry>(EditorFactoryExtensions.EditorFactory)
 Registry.as<IEditorPaneRegistry>(EditorExtensions.EditorPane)
 	.registerEditorPane(
 		EditorPaneDescriptor.create(
-			XLSXViewerEditor,
-			XLSXViewerEditor.ID,
+			XLSXRustViewerEditor,
+			XLSXRustViewerEditor.ID,
 			'XLSX Viewer'
 		),
-		[new SyncDescriptor(XLSXViewerInput)]
+		[new SyncDescriptor(XLSXRustViewerInput)]
 	);
 
-// Register XLSX Viewer Input Serializer
+// Register XLSX Rust Viewer Input Serializer
 Registry.as<IEditorFactoryRegistry>(EditorFactoryExtensions.EditorFactory)
 	.registerEditorSerializer(
-		XLSXViewerInputSerializer.ID,
-		XLSXViewerInputSerializer
+		XLSXRustViewerInputSerializer.ID,
+		XLSXRustViewerInputSerializer
 	);
 
 // Register PDF editor resolver
@@ -165,7 +165,7 @@ class DOCXResolverContribution extends Disposable {
 Registry.as<IWorkbenchContributionsRegistry>(WorkbenchExtensions.Workbench)
 	.registerWorkbenchContribution(DOCXResolverContribution, LifecyclePhase.Restored);
 
-// Register XLSX editor resolver
+// Register XLSX editor resolver (Rust-based viewer, sole handler for xlsx/xls)
 class XLSXResolverContribution extends Disposable {
 	constructor(
 		@IEditorResolverService editorResolverService: IEditorResolverService,
@@ -174,15 +174,15 @@ class XLSXResolverContribution extends Disposable {
 	) {
 		super();
 
-		// Register XLSX content extractor
+		// Register XLSX content extractor (for AI text extraction)
 		const xlsxExtractor = instantiationService.createInstance(XLSXContentExtractor);
 		documentViewerService.registerExtractor(['xlsx', 'xls'], xlsxExtractor);
 
-		// Register XLSX editor as exclusive (no text editor option)
+		// Register XLSX editor as exclusive
 		this._register(editorResolverService.registerEditor(
 			`**/*.{xlsx,xls}`,
 			{
-				id: XLSXViewerEditor.ID,
+				id: XLSXRustViewerEditor.ID,
 				label: 'XLSX Viewer',
 				priority: RegisteredEditorPriority.exclusive
 			},
@@ -198,7 +198,7 @@ class XLSXResolverContribution extends Disposable {
 			},
 			{
 				createEditorInput: ({ resource }) => {
-					const editor = instantiationService.createInstance(XLSXViewerInput, resource);
+					const editor = instantiationService.createInstance(XLSXRustViewerInput, resource);
 					return { editor };
 				}
 			}
@@ -208,6 +208,28 @@ class XLSXResolverContribution extends Disposable {
 
 Registry.as<IWorkbenchContributionsRegistry>(WorkbenchExtensions.Workbench)
 	.registerWorkbenchContribution(XLSXResolverContribution, LifecyclePhase.Restored);
+
+// --- Browser Panel Registration ---
+import { BrowserEditor } from '../browserPanel/browserEditor.js';
+import { BrowserInput } from '../browserPanel/browserInput.js';
+import { BrowserInputSerializer } from '../browserPanel/browserInputSerializer.js';
+import '../browserPanel/browserService.js';
+
+Registry.as<IEditorPaneRegistry>(EditorExtensions.EditorPane)
+	.registerEditorPane(
+		EditorPaneDescriptor.create(
+			BrowserEditor,
+			BrowserEditor.ID,
+			'Browser'
+		),
+		[new SyncDescriptor(BrowserInput)]
+	);
+
+Registry.as<IEditorFactoryRegistry>(EditorFactoryExtensions.EditorFactory)
+	.registerEditorSerializer(
+		BrowserInputSerializer.ID,
+		BrowserInputSerializer
+	);
 
 // --- Image Viewer Registration ---
 import { ImageViewerEditor } from './imageViewer/imageViewerEditor.js';

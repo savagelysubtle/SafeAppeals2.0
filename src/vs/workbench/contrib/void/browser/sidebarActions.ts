@@ -3,6 +3,7 @@
  *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
  *--------------------------------------------------------------------------------------*/
 
+import { Codicon } from '../../../../base/common/codicons.js';
 import { KeyCode, KeyMod } from '../../../../base/common/keyCodes.js';
 
 
@@ -29,7 +30,7 @@ import { VOID_CTRL_L_ACTION_ID } from './actionIDs.js';
 import { IChatThreadService } from './chatThreadService.js';
 import { DOCXViewerInput } from './documentViewers/docxViewer/docxViewerInput.js';
 import { PDFViewerInput } from './documentViewers/pdfViewer/pdfViewerInput.js';
-import { XLSXViewerInput } from './documentViewers/xlsxViewer/xlsxViewerInput.js';
+import { XLSXRustViewerInput } from './documentViewers/xlsxRustViewer/xlsxRustViewerInput.js';
 import { VOID_VIEW_CONTAINER_ID, VOID_VIEW_ID } from './sidebarPane.js';
 import { VOID_TOGGLE_SETTINGS_ACTION_ID } from './voidSettingsPane.js';
 
@@ -311,8 +312,8 @@ ${selectedText}
 		}
 
 		// Check for XLSX viewer
-		if (activePane?.input instanceof XLSXViewerInput) {
-			const xlsxInput = activePane.input as XLSXViewerInput;
+		if (activePane?.input instanceof XLSXRustViewerInput) {
+			const xlsxInput = activePane.input as XLSXRustViewerInput;
 			const notificationService = accessor.get(INotificationService);
 
 			try {
@@ -490,6 +491,36 @@ registerAction2(class extends Action2 {
 	}
 })
 
+
+// Open Browser
+registerAction2(class extends Action2 {
+	constructor() {
+		super({
+			id: 'void.openBrowser',
+			title: localize2('voidOpenBrowser', 'SafeAppeals: Open Browser'),
+			icon: Codicon.globe,
+			f1: true,
+			menu: [
+				{
+					id: MenuId.LayoutControlMenuSubmenu,
+					group: 'z_end',
+					order: -1,
+				},
+				{
+					id: MenuId.LayoutControlMenu,
+					when: ContextKeyExpr.equals('config.workbench.layoutControl.type', 'both'),
+					group: 'z_end',
+					order: -1,
+				}
+			]
+		});
+	}
+	async run(accessor: ServicesAccessor): Promise<void> {
+		const editorService = accessor.get(IEditorService)
+		const { BrowserInput } = await import('./browserPanel/browserInput.js')
+		editorService.openEditor(new BrowserInput(), { pinned: true })
+	}
+})
 
 // Settings gear
 registerAction2(class extends Action2 {
