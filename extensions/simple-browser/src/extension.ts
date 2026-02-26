@@ -15,16 +15,12 @@ declare class URL {
 const openApiCommand = 'simpleBrowser.api.open';
 const showCommand = 'simpleBrowser.show';
 
-const enabledHosts = new Set<string>([
+const localHosts = new Set<string>([
 	'localhost',
-	// localhost IPv4
 	'127.0.0.1',
-	// localhost IPv6
 	'[0:0:0:0:0:0:0:1]',
 	'[::1]',
-	// all interfaces IPv4
 	'0.0.0.0',
-	// all interfaces IPv6
 	'[0:0:0:0:0:0:0:0]',
 	'[::]'
 ]);
@@ -64,15 +60,14 @@ export function activate(context: vscode.ExtensionContext) {
 
 	context.subscriptions.push(vscode.window.registerExternalUriOpener(openerId, {
 		canOpenExternalUri(uri: vscode.Uri) {
-			// We have to replace the IPv6 hosts with IPv4 because URL can't handle IPv6.
 			const originalUri = new URL(uri.toString(true));
-			if (enabledHosts.has(originalUri.hostname)) {
+			if (localHosts.has(originalUri.hostname)) {
 				return isWeb()
 					? vscode.ExternalUriOpenerPriority.Default
 					: vscode.ExternalUriOpenerPriority.Option;
 			}
 
-			return vscode.ExternalUriOpenerPriority.None;
+			return vscode.ExternalUriOpenerPriority.Option;
 		},
 		openExternalUri(resolveUri: vscode.Uri) {
 			return manager.show(resolveUri, {

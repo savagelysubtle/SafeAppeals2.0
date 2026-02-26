@@ -9,7 +9,7 @@ import { MultiSearchResult, WebSearchResult } from '../../common/tools/toolsServ
 const CLOUD_WEB_SEARCH_TIMEOUT_MS = 30000; // 30 second timeout
 
 // Credit costs for web search (in tokens/credits)
-// Token pack pricing: $30 = 700K tokens, $60 = 1.4M tokens
+// Token pack pricing: $30 = 700K tokens, $65 = 2M tokens, $130 = 5M tokens
 // Therefore: 1 token = $0.0000428
 // To charge ~1 penny ($0.01) per search: $0.01 / $0.0000428 = 233 tokens
 // We round to 250 tokens for clean math + margin

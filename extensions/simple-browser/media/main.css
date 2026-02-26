@@ -34,6 +34,7 @@ textarea {
 	color: var(--vscode-input-foreground);
 	outline-color: var(--vscode-input-border);
 	background-color: var(--vscode-input-background);
+	border-radius: 3px;
 }
 
 input::placeholder,
@@ -58,7 +59,8 @@ button:hover:not(:disabled) {
 }
 
 button:disabled {
-	opacity: 0.5;
+	opacity: 0.3;
+	cursor: default;
 }
 
 input:focus,
@@ -68,7 +70,9 @@ button:focus {
 
 .header {
 	display: flex;
+	align-items: center;
 	margin: 0.4em 1em;
+	gap: 4px;
 }
 
 .url-input {
@@ -85,6 +89,7 @@ button:focus {
 }
 
 .content {
+	position: relative;
 	width: 100%;
 	height: 100%;
 	display: flex;
@@ -95,7 +100,28 @@ iframe {
 	width: 100%;
 	height: 100%;
 	border: none;
-	background: white; /* Browsers default to a white background */
+	background: white;
+}
+
+.loading-indicator {
+	display: none;
+	position: absolute;
+	top: 0;
+	left: 0;
+	right: 0;
+	height: 3px;
+	z-index: 10;
+	background: var(--vscode-progressBar-background);
+	animation: loading-pulse 1.5s ease-in-out infinite;
+}
+
+.loading-indicator.visible {
+	display: block;
+}
+
+@keyframes loading-pulse {
+	0%, 100% { opacity: 0.4; }
+	50% { opacity: 1; }
 }
 
 .iframe-focused-alert {

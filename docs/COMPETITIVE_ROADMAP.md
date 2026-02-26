@@ -38,6 +38,7 @@
 - [x] **DocuSign e-signature integration** (JWT Grant auth, envelope creation/tracking)
 - [x] **Time Tracker** (UTBMS codes, 6-min billing, LEDES export, per-workspace SQLite)
 - [x] **Audio Recording + Playback + Transcription** (Whisper distil-large-v3.5, local/offline, inline playback, per-workspace storage)
+- [x] **Embedded Web Browser** (full Chromium via WebContentsView, Google-compatible, bookmarks bar, history, downloads, DevTools)
 
 ---
 
@@ -286,6 +287,7 @@
 | Client Portal                       | ❌ Phase 4  | ✅   | ✅       | ❌        | ❌     |
 | Billing/Invoicing                   | ❌ Phase 5  | ✅   | ✅       | ❌        | ❌     |
 | **Audio Recording + Playback + Transcription** | ✅          | ❌   | ❌       | ❌        | ❌     |
+| **Embedded Web Browser**            | ✅          | ❌   | ❌       | ❌        | ❌     |
 | **Case Law Citator (Web Search)**   | ✅          | ✅   | ❌       | ❌        | ❌     |
 
 ---
@@ -385,4 +387,4 @@ For a competitive v1.0 launch, you need:
 
 ---
 
-_Last updated: February 3, 2026_
+_Last updated: February 18, 2026_

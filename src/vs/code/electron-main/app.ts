@@ -154,6 +154,7 @@ import { VoidMainUpdateService } from '../../workbench/contrib/void/electron-mai
 import { XLSXExtractorChannel } from '../../workbench/contrib/void/electron-main/xlsxExtractorChannel.js';
 import { AudioRecorderChannel } from '../../workbench/contrib/void/electron-main/audioRecorder/audioRecorderChannel.js';
 import { AudioRecorderMainService } from '../../workbench/contrib/void/electron-main/audioRecorder/audioRecorderMainService.js';
+import { BrowserPanelChannel } from '../../workbench/contrib/void/electron-main/browserPanelChannel.js';
 /**
  * The main VS Code application. There will only ever be one instance,
  * even if the user starts many instances (e.g. from the command line).
@@ -440,8 +441,13 @@ export class CodeApplication extends Disposable {
 				this.auxiliaryWindowsMainService?.registerWindow(contents);
 			}
 
-			// Block any in-page navigation
-			contents.on('will-navigate', event => {
+			// Block any in-page navigation (except the embedded browser panel)
+			contents.on('will-navigate', (event, url) => {
+				if (contents.session === session.fromPartition('persist:void-browser-v2')) {
+					this.logService.trace(`[void-browser] will-navigate ALLOWED: ${url}`);
+					return;
+				}
+
 				this.logService.error('webContents#will-navigate: Prevented webcontent navigation');
 
 				event.preventDefault();
@@ -449,27 +455,30 @@ export class CodeApplication extends Disposable {
 
 			// All Windows: only allow about:blank auxiliary windows to open
 			// For all other URLs, delegate to the OS.
-			contents.setWindowOpenHandler(details => {
+			// Skip for the embedded browser panel – it manages its own window-open handler.
+			if (contents.session !== session.fromPartition('persist:void-browser-v2')) {
+				contents.setWindowOpenHandler(details => {
 
-				// about:blank windows can open as window witho our default options
-				if (details.url === 'about:blank') {
-					this.logService.trace('[aux window] webContents#setWindowOpenHandler: Allowing auxiliary window to open on about:blank');
+					// about:blank windows can open as window witho our default options
+					if (details.url === 'about:blank') {
+						this.logService.trace('[aux window] webContents#setWindowOpenHandler: Allowing auxiliary window to open on about:blank');
 
-					return {
-						action: 'allow',
-						overrideBrowserWindowOptions: this.auxiliaryWindowsMainService?.createWindow(details)
-					};
-				}
+						return {
+							action: 'allow',
+							overrideBrowserWindowOptions: this.auxiliaryWindowsMainService?.createWindow(details)
+						};
+					}
 
-				// Any other URL: delegate to OS
-				else {
-					this.logService.trace(`webContents#setWindowOpenHandler: Prevented opening window with URL ${details.url}}`);
+					// Any other URL: delegate to OS
+					else {
+						this.logService.trace(`webContents#setWindowOpenHandler: Prevented opening window with URL ${details.url}}`);
 
-					this.nativeHostMainService?.openExternal(undefined, details.url);
+						this.nativeHostMainService?.openExternal(undefined, details.url);
 
-					return { action: 'deny' };
-				}
-			});
+						return { action: 'deny' };
+					}
+				});
+			}
 		});
 
 		//#endregion
@@ -1343,6 +1352,10 @@ export class CodeApplication extends Disposable {
 		const audioRecorderMainService = new AudioRecorderMainService(accessor.get(ILogService));
 		const audioRecorderChannel = new AudioRecorderChannel(audioRecorderMainService);
 		mainProcessElectronServer.registerChannel('void-channel-audio-recorder', audioRecorderChannel);
+
+		// Void Browser Panel service (WebContentsView-based browser)
+		const browserPanelChannel = new BrowserPanelChannel();
+		mainProcessElectronServer.registerChannel('void-channel-browser-panel', browserPanelChannel);
 
 		// Extension Host Debug Broadcasting
 		const electronExtensionHostDebugBroadcastChannel = new ElectronExtensionHostDebugBroadcastChannel(accessor.get(IWindowsMainService));

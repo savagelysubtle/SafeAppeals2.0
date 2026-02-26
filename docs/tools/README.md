@@ -1,153 +1,108 @@
 # Tools System Documentation
 
-Comprehensive documentation for the Void VSCode extension's tool calling system, including XML parsing, schema validation, and tool execution frameworks.
+Documentation for the Void VSCode extension's tool calling system, including tool definitions, execution, and approval workflows.
 
 ## Overview
 
-The Tools System enables AI agents to interact with the development environment through structured tool calls. It provides a robust framework for:
+The Tools System enables AI agents to interact with the development environment through structured tool calls. It provides:
 
-- **Tool Call Parsing**: Extracting tool calls from LLM streaming responses using XML and native APIs
-- **Schema Validation**: Runtime validation of tool parameters with comprehensive error reporting
+- **Tool Call Parsing**: Extracting tool calls from LLM streaming responses using ANTML format
 - **Tool Execution**: Safe execution of tools with approval workflows and error handling
-- **Approval System**: Categorizing tools by risk level (edits, terminal, MCP, RAG)
+- **Approval System**: Categorizing tools by risk level (edits, terminal, MCP)
 
 ## Architecture
 
-### Core Components
-
-```
-tools/
+```text
+common/tools/
 ├── index.ts              # Main exports and type re-exports
 ├── toolsServiceTypes.ts  # Tool definitions, parameters, and results
-├── toolSchemaValidator.ts # Schema validation and error handling
-└── xml-parsing/          # XML parsing system documentation
+└── README.md
+
+common/prompt/
+├── prompts.ts            # Tool definitions (builtinTools) and descriptions
+└── systemPrompt.ts       # System prompt construction
+
+browser/tools/
+└── toolsService.ts       # Tool execution and parameter validation
 ```
 
-### Tool Categories
+Parameter validation is handled inline in `toolsService.ts` via per-operation switch cases. There is no separate schema validation class.
 
-#### File System Tools
+## Tool Categories
 
-- **Read operations**: `read_file`, `ls_dir`, `get_dir_tree`, `search_*`
-- **Write operations**: `edit_file`, `rewrite_file`, `create_file_or_folder`, `delete_file_or_folder`
-- **Document editing**: `edit_document` for rich text document manipulation
+### File System (Read)
 
-#### Terminal Tools
+`read_file`, `ls_dir`, `get_dir_tree`, `search_pathnames_only`, `search_for_files`, `search_in_file`, `read_lint_errors`
 
-- **Command execution**: `run_command` for one-off commands
-- **Persistent terminals**: `open_persistent_terminal`, `run_persistent_command`, `kill_persistent_terminal`
+### File System (Write)
 
-#### Information Retrieval Tools
+`edit_file`, `rewrite_file`, `create_file_or_folder`, `delete_file_or_folder`
 
-- **RAG system**: `rag_index_document`, `rag_search_policy`, `rag_search_workspace`, `rag_search_all`, `rag_get_stats`
-  - `rag_search_policy` - Search policy manuals only
-  - `rag_search_workspace` - Search case files only
-  - `rag_search_all` - Search BOTH policy manuals AND case files
-- **Web search**: `web_search`, `multi_link_search` for internet research
+### Document Editing
 
-#### External Integrations
+`edit_document` supports:
 
-- **MCP tools**: Model Context Protocol for third-party tool integrations
+- **DOCX**: `insert_text`, `replace_text`, `format_text`, `insert_table`, `insert_page_break`, `set_margins`
+- **XLSX cell**: `set_cell_value`, `set_cell_formula`, `format_cell`, `insert_row`, `insert_column`, `delete_row`, `delete_column`
+- **XLSX table**: `create_table`, `rename_table`, `set_table_style`, `toggle_table_filter`, `set_totals_row`, `convert_table_to_range`
+- **XLSX chart**: `insert_chart`, `delete_chart`
 
-## Quick Start
+### Terminal
 
-```typescript
-import {
-	BuiltinToolCallParams,
-	BuiltinToolResultType,
-	ToolSchemaValidator,
-} from "./tools/index.js";
+`run_command`, `open_persistent_terminal`, `run_persistent_command`, `kill_persistent_terminal`
 
-// Create a schema validator
-const validator = new ToolSchemaValidator();
+### RAG
 
-// Validate tool parameters
-const result = validator.validateToolCall("read_file", {
-	uri: "file:///path/to/file.txt",
-	startLine: 1,
-	endLine: 10,
-});
+`rag_index_document`, `rag_search_reference`, `rag_search_workspace`, `rag_search_all`, `rag_get_stats`
 
-if (result.success) {
-	// Execute the tool
-	const toolResult = await executeTool(result.data);
-}
-```
+### Web Search
+
+`web_search`, `multi_link_search`
+
+### Timeline
+
+`timeline_add_event`, `timeline_update_event`, `timeline_delete_event`, `timeline_get_events`, `timeline_link_document`, `timeline_get_deadlines`
+
+### External
+
+MCP tools (Model Context Protocol)
 
 ## Tool Approval System
 
 Tools are categorized by approval requirements:
 
-```typescript
-const approvalTypeOfBuiltinToolName = {
-	create_file_or_folder: "edits", // Requires edit approval
-	run_command: "terminal", // Requires terminal approval
-	rag_search_policy: undefined, // No approval needed (read-only)
-} as const;
+- **`edits`**: `create_file_or_folder`, `delete_file_or_folder`, `rewrite_file`, `edit_file`, `edit_document`
+- **`terminal`**: `run_command`, `run_persistent_command`, `open_persistent_terminal`, `kill_persistent_terminal`
+- **`MCP tools`**: All MCP tools
+
+No approval needed: read operations, RAG tools, web search, timeline tools.
+
+## ANTML Format
+
+Tool calls use the ANTML XML format:
+
+```xml
+<function_calls>
+<invoke name="read_file">
+<parameter name="uri">file:///path/to/file.txt</parameter>
+</invoke>
+</function_calls>
 ```
 
-**Approval Categories:**
+## Quick Start
 
-- **`edits`**: File system modifications
-- **`terminal`**: Command execution and terminal management
-- **`MCP tools`**: Third-party integrations
-- **`RAG tools`**: Information retrieval (typically no approval needed)
-
-## XML Parsing System
-
-The system uses a multi-level XML parsing approach for robust tool call extraction:
-
-### Parser Hierarchy
-
-1. **Custom Parser**: Fast parsing for well-formed XML
-2. **Streaming Parser**: Handles incomplete/malformed XML from streaming responses
-3. **Regex Fallback**: Last resort extraction for severely malformed content
-4. **Failure Reporting**: Detailed error analysis and reporting
-
-### Key Features
-
-- **Streaming support**: Processes partial XML as it arrives
-- **Error recovery**: Continues parsing despite malformed sections
-- **Performance metrics**: Tracks parsing success rates and performance
-- **Structured logging**: Comprehensive error reporting and debugging
-
-## Schema Validation
-
-### Validation Features
-
-- **Type checking**: Validates parameter types (string, number, boolean, URI)
-- **Constraint validation**: Min/max values, regex patterns, custom validators
-- **Required field checking**: Ensures mandatory parameters are present
-- **Error aggregation**: Collects all validation errors (non-failing fast)
-
-### Performance Optimizations
-
-- **Compiled validators**: Pre-compiled validation functions (75x faster)
-- **Caching**: Validator instances cached per tool type
-- **Metrics collection**: Performance monitoring and error tracking
+```typescript
+import {
+  BuiltinToolCallParams,
+  BuiltinToolResultType,
+  approvalTypeOfBuiltinToolName,
+} from './tools/index.js';
+```
 
 ## Documentation
 
-- [Tool Types Reference](./tool-types-reference.md) - Complete tool definitions and parameters
-- [Schema Validation Guide](./schema-validation-guide.md) - Validation system usage and extension
-- [XML Parsing System](./xml-parsing-system.md) - Comprehensive XML parsing documentation
-- [Usage Examples](./examples.md) - Practical integration examples
-- [Developer Guide](./developer-guide.md) - Extending the tools system
-- [Migration Guide](./migration-guide.md) - Tool system evolution and migration
-
-### XML Parsing Research
-
-- [Parser Improvements Summary](./xml-parsing-research/parser-improvements-summary.md)
-- [Comprehensive Research](./xml-parsing-research/comprehensive-research.md)
-- [Deep Research Findings](./xml-parsing-research/deep-research-findings.md)
-- [Current Implementation Analysis](./xml-parsing-research/current-analysis.md)
-
-## Tool Lifecycle
-
-### 1. Tool Call Generation
-
-LLM generates tool calls in XML format:
-
-```xml
-<tool_call name="read_file">
-  <parameter name="uri">file:///path/to/file.txt
-```
+- [Tool Types Reference](./tool-types-reference.md)
+- [Tool Execution Guide](./tool-execution-guide.md)
+- [API Reference](./api-reference.md)
+- [Developer Guide](./developer-guide.md)
+- [XML Parsing System](./xml-parsing-system.md)
