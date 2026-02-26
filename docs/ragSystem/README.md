@@ -75,15 +75,16 @@ Each chunk includes:
 - **Model**: Xenova/all-MiniLM-L6-v2
 - **Dimensions**: 384
 - **Size**: ~23MB
+- **Output**: `Float32Array` (typed arrays for memory efficiency)
 - **Features**: Offline processing, no API costs
 
 #### Processing Pipeline
 ```
-Input Text → Tokenization → Mean Pooling → Normalization → Vector Output
+Input Text → Tokenization → Mean Pooling → Normalization → Float32Array Output
 ```
 
 #### Batching Strategy
-- Batch size: 25 texts per processing batch
+- Batch size: 50 texts per processing batch (v2.1, was 25)
 - Memory monitoring during embedding generation
 - Automatic garbage collection hints
 
@@ -138,11 +139,13 @@ CREATE VIRTUAL TABLE chunks_fts USING fts5(
 )
 ```
 
-#### Vector Storage
-- **Backend**: Persistent Chroma adapter using SQLite
-- **Scope Separation**: Policy manuals vs workspace documents
-- **Persistence**: Embeddings survive application restarts
-- **Memory Cache**: Fast search with disk backup
+#### Vector Storage (v2.1)
+- **Backend**: Persistent SQLite adapter with binary BLOB storage
+- **In-Memory**: `Float32Array` vectors in Map cache with O(1) document count lookup
+- **Similarity**: Dot product on pre-normalized vectors (faster than cosine)
+- **Persistence**: Embeddings survive application restarts via persistent SQLite connection
+- **Transactions**: Batch inserts/deletes wrapped in SQLite transactions
+- **Migration**: Backwards-compatible auto-migration from JSON TEXT to binary BLOB
 
 ## Search and Retrieval
 
@@ -172,9 +175,8 @@ CREATE VIRTUAL TABLE chunks_fts USING fts5(
 - **Features**: Full-text search with relevance scoring
 
 #### Vector Semantic Search
-- **Similarity**: Cosine similarity with preprocessing
+- **Similarity**: Dot product on pre-normalized Float32Array vectors
 - **Threshold**: Dynamic threshold (0.07-0.15) for retrieval
-- **Diversity**: Maximal Marginal Relevance (MMR) with λ=0.7
 
 #### Reciprocal Rank Fusion (RRF)
 ```
@@ -190,10 +192,11 @@ RRF Score = (1/(k+r)) where:
 - **Purpose**: Query-chunk relevance scoring
 - **Input**: Query + chunk text pairs
 - **Output**: Refined relevance scores
+- **Short-circuit**: Automatically skipped when candidate count ≤ topN
 
 #### Processing Flow
 ```
-Raw Results (4x limit) → Cross-Encoder Scoring → Top-K Selection
+Raw Results (4x limit) → Short-circuit check → Cross-Encoder Scoring (if needed) → Top-K Selection
 ```
 
 ## API Reference
@@ -318,34 +321,44 @@ The RAG system integrates with Void settings:
 
 ### Memory Management
 
-#### Ingestion Optimizations
+#### Ingestion Optimizations (v2.1)
 - **File Size Limits**: 100MB maximum per document
-- **Batch Processing**: 50 chunks per embedding batch
+- **Batch Processing**: 50 chunks per embedding batch with Float32Array output
+- **Batch Transactions**: Chunk and embedding inserts wrapped in SQLite transactions
+- **Async File I/O**: Streaming file hash via `createReadStream` (non-blocking)
 - **Memory Monitoring**: Heap usage tracking during processing
 - **Garbage Collection**: Explicit GC hints after large operations
+- **Deduplication**: File watcher debouncing (500ms) + concurrent-indexing guard
 
 #### Search Optimizations
 - **Parallel Processing**: BM25 and vector search run concurrently
-- **Caching Strategy**: In-memory embeddings with disk persistence
-- **Result Limiting**: 4x over-retrieval for reranking efficiency
+- **Caching Strategy**: In-memory Float32Array embeddings with binary BLOB disk persistence
+- **Dot Product**: Faster than cosine similarity on pre-normalized vectors
+- **Reranker Short-circuit**: Skips cross-encoder when candidates ≤ topN
+- **Cached Workspace**: Workspace instance resolution cached across calls
+- **Map Lookups**: O(1) context assembly replaces `.find()` loops
 
 ### Database Optimizations
 
 #### Indexing Strategy
+- **Persistent Connection**: Single SQLite connection opened once and reused
+- **Binary BLOB Vectors**: ~60% smaller than JSON TEXT serialization
 - **Compound Indexes**: Optimized for common query patterns
 - **FTS5 Triggers**: Automatic synchronization between chunks and search index
 - **Foreign Keys**: Cascading deletes maintain data integrity
+- **Consolidated DDL**: All table/index creation in a single `db.exec()` call
 
 #### Query Performance
 - **Prepared Statements**: SQL injection prevention and performance
 - **Scope Filtering**: SQL-level filtering reduces result sets
+- **Regex Escaping**: Query input escaped in `highlightQuery()` to prevent injection
 - **Pagination Ready**: Support for large result set handling
 
 ### Model Optimizations
 
 #### Embedding Model
-- **Quantization**: Automatic model quantization for smaller footprint
-- **Batch Processing**: Optimal batch sizes for GPU/CPU utilization
+- **Float32Array Output**: Typed arrays for memory-efficient vector storage
+- **Batch Processing**: 50 texts/batch (optimal for CPU utilization)
 - **Cache Management**: Model files cached locally for fast loading
 
 ## Troubleshooting
@@ -484,4 +497,4 @@ When a workspace opens (if `ragAutoIndexCaseFiles` setting is true):
 
 ---
 
-*This documentation covers the RAG system implementation as of December 2025. For the latest changes, refer to the codebase and commit history.*
+*This documentation covers the RAG system implementation as of February 2026 (v2.1 Performance Overhaul). For the latest changes, refer to the codebase and commit history.*

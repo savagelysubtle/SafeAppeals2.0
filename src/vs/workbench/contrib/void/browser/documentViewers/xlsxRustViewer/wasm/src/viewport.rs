@@ -61,11 +61,16 @@ impl ViewportManager {
             merged_cells: sheet.merged_cells.clone(),
             col_widths: sheet.col_widths.clone(),
             row_heights: sheet.row_heights.clone(),
+            hidden_cols: sheet.hidden_cols.clone(),
+            hidden_rows: sheet.hidden_rows.clone(),
+            col_outline_groups: sheet.col_outline_groups.clone(),
+            row_outline_groups: sheet.row_outline_groups.clone(),
             conditional_formats: sheet.conditional_formats.clone(),
             data_validations: sheet.data_validations.clone(),
             hyperlinks: sheet.hyperlinks.clone(),
             charts: sheet.charts.clone(),
             sparklines: sheet.sparklines.clone(),
+            page_setup: sheet.page_setup.clone(),
         };
 
         let json = serde_json::to_string(&viewport_sheet).map_err(|e| JsError::new(&e.to_string()))?;

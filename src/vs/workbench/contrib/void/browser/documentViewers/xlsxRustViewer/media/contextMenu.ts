@@ -39,6 +39,11 @@ export class ContextMenu {
 	private currentSelection: ContextMenuSelectionRange | null = null;
 	private getTableAtCell: ((row: number, col: number) => TableInfo | null) | null = null;
 	private getHyperlinkAtCell: ((row: number, col: number) => HyperlinkDef | undefined) | null = null;
+	private getPivotAtCell: ((row: number, col: number) => number) | null = null;
+	private _isColHidden: ((col: number) => boolean) | null = null;
+	private _isRowHidden: ((row: number) => boolean) | null = null;
+	private _hasHiddenCols: (() => boolean) | null = null;
+	private _hasHiddenRows: (() => boolean) | null = null;
 
 	constructor(container: HTMLElement, onAction: (event: ContextMenuEvent) => void) {
 		this.onAction = onAction;
@@ -68,6 +73,24 @@ export class ContextMenu {
 	/** Register a function that returns the hyperlink (if any) at a cell */
 	setHyperlinkDetector(fn: (row: number, col: number) => HyperlinkDef | undefined) {
 		this.getHyperlinkAtCell = fn;
+	}
+
+	/** Register a function that returns the pivot index (-1 if none) at a cell */
+	setPivotDetector(fn: (row: number, col: number) => number) {
+		this.getPivotAtCell = fn;
+	}
+
+	/** Register callbacks for hidden column/row state detection */
+	setHiddenDetectors(
+		isColHidden: (col: number) => boolean,
+		isRowHidden: (row: number) => boolean,
+		hasHiddenCols: () => boolean,
+		hasHiddenRows: () => boolean,
+	) {
+		this._isColHidden = isColHidden;
+		this._isRowHidden = isRowHidden;
+		this._hasHiddenCols = hasHiddenCols;
+		this._hasHiddenRows = hasHiddenRows;
 	}
 
 	show(x: number, y: number, row: number, col: number, headerType?: 'col' | 'row', selectionRange?: ContextMenuSelectionRange) {
@@ -127,6 +150,14 @@ export class ContextMenu {
 			const autoFitItem: MenuItem = multiColSelected
 				? { action: 'autoFitSelectedCols', label: 'Auto-Fit Selected Columns' }
 				: { action: 'colWidthAuto', label: 'Auto-Fit Column Width' };
+			const isHidden = this._isColHidden ? this._isColHidden(col) : false;
+			const hasHidden = this._hasHiddenCols ? this._hasHiddenCols() : false;
+			const hideUnhideItems: (MenuItem | null)[] = isHidden
+				? [{ action: 'unhideCol', label: `Unhide Column ${colName}` }]
+				: [{ action: 'hideCol', label: `Hide Column ${colName}` }];
+			if (hasHidden) {
+				hideUnhideItems.push({ action: 'unhideAllCols', label: 'Unhide All Columns' });
+			}
 			items = [
 				{ action: 'insertColLeft', label: `Insert Column Left` },
 				{ action: 'insertColRight', label: `Insert Column Right` },
@@ -134,7 +165,10 @@ export class ContextMenu {
 				{ action: 'deleteCol', label: `Delete Column ${colName}` },
 				{ action: 'clearCol', label: `Clear Column ${colName}` },
 				null,
-				{ action: 'hideCol', label: `Hide Column ${colName}` },
+				...hideUnhideItems,
+				null,
+				{ action: 'groupCols', label: 'Group Selected Columns' },
+				{ action: 'ungroupCols', label: 'Ungroup Selected Columns' },
 				null,
 				autoFitItem,
 				null,
@@ -146,6 +180,14 @@ export class ContextMenu {
 			const autoFitItem: MenuItem = multiRowSelected
 				? { action: 'autoFitSelectedRows', label: 'Auto-Fit Selected Rows' }
 				: { action: 'rowHeightAuto', label: 'Auto-Fit Row Height' };
+			const isHidden = this._isRowHidden ? this._isRowHidden(row) : false;
+			const hasHidden = this._hasHiddenRows ? this._hasHiddenRows() : false;
+			const hideUnhideItems: (MenuItem | null)[] = isHidden
+				? [{ action: 'unhideRow', label: `Unhide Row ${row + 1}` }]
+				: [{ action: 'hideRow', label: `Hide Row ${row + 1}` }];
+			if (hasHidden) {
+				hideUnhideItems.push({ action: 'unhideAllRows', label: 'Unhide All Rows' });
+			}
 			items = [
 				{ action: 'insertRowAbove', label: 'Insert Row Above' },
 				{ action: 'insertRowBelow', label: 'Insert Row Below' },
@@ -153,7 +195,10 @@ export class ContextMenu {
 				{ action: 'deleteRow', label: `Delete Row ${row + 1}` },
 				{ action: 'clearRow', label: `Clear Row ${row + 1}` },
 				null,
-				{ action: 'hideRow', label: `Hide Row ${row + 1}` },
+				...hideUnhideItems,
+				null,
+				{ action: 'groupRows', label: 'Group Selected Rows' },
+				{ action: 'ungroupRows', label: 'Ungroup Selected Rows' },
 				null,
 				autoFitItem,
 			];
@@ -189,6 +234,7 @@ export class ContextMenu {
 				...hyperlinkItems,
 				null,
 				{ action: 'defineName', label: 'Define Name...' },
+				{ action: 'insertPivotTable', label: 'Insert PivotTable...' },
 				null,
 				{ action: 'sortAZ', label: 'Sort A to Z' },
 				{ action: 'sortZA', label: 'Sort Z to A' },
@@ -213,6 +259,17 @@ export class ContextMenu {
 				items.push({ action: 'tableConvertToRange', label: 'Convert to Range' });
 				items.push(null);
 				items.push({ action: 'tableDelete', label: `Delete Table "${tableInfo.name}"` });
+			}
+
+			// Check if cell is inside a pivot table output zone
+			const pivotIndex = this.getPivotAtCell ? this.getPivotAtCell(row, col) : -1;
+			if (pivotIndex >= 0) {
+				items.push(null);
+				items.push({ action: 'refreshPivot', label: 'Refresh PivotTable' });
+				items.push({ action: 'editPivot', label: 'Edit PivotTable...' });
+				items.push({ action: 'drillDown', label: 'Show Details (Drill Down)' });
+				items.push(null);
+				items.push({ action: 'deletePivot', label: 'Delete PivotTable' });
 			}
 		}
 
