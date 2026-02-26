@@ -1,6 +1,6 @@
 "use strict";
 (() => {
-  // src/vs/workbench/contrib/void/browser/documentViewers/pdfViewer/media/wasm/pdf_viewer.js
+  // wasm/pdf_viewer.js
   var PdfRenderer = class {
     __destroy_into_raw() {
       const ptr = this.__wbg_ptr;
@@ -633,7 +633,7 @@ ${val.stack}`;
     return __wbg_finalize_init(instance, module);
   }
 
-  // src/vs/workbench/contrib/void/browser/documentViewers/pdfViewer/media/renderer.ts
+  // renderer.ts
   var PdfCanvasRenderer = class {
     constructor(canvas, textLayer, renderContainer) {
       this.highlightLayer = null;
@@ -746,7 +746,7 @@ ${val.stack}`;
     }
   };
 
-  // src/vs/workbench/contrib/void/browser/documentViewers/pdfViewer/media/sidebar.ts
+  // sidebar.ts
   var Sidebar = class {
     constructor(thumbnailsContainer, outlineContainer, bookmarksContainer, onNavigate) {
       this.thumbnailsContainer = thumbnailsContainer;
@@ -869,7 +869,7 @@ ${val.stack}`;
     }
   };
 
-  // src/vs/workbench/contrib/void/browser/documentViewers/pdfViewer/media/annotations.ts
+  // annotations.ts
   var COLOR_MAP = {
     yellow: "rgba(255, 235, 59, 0.4)",
     green: "rgba(76, 175, 80, 0.4)",
@@ -1230,7 +1230,7 @@ ${val.stack}`;
     }
   };
 
-  // src/vs/workbench/contrib/void/browser/documentViewers/pdfViewer/media/signatures.ts
+  // signatures.ts
   var SignatureManager = class {
     constructor(getCurrentPage, getScale, getPdfUri, postMessage, annotationManager2) {
       // Canvas state
@@ -1783,7 +1783,7 @@ ${val.stack}`;
     }
   };
 
-  // src/vs/workbench/contrib/void/browser/documentViewers/pdfViewer/media/continuousScroll.ts
+  // continuousScroll.ts
   var ContinuousScrollManager = class {
     constructor(scrollContainer, pageCount2, pageDimensions2, scale2, renderPageImageData, getTextBlocks, onPageChange) {
       this.scrollContainer = scrollContainer;
@@ -1940,7 +1940,7 @@ ${val.stack}`;
     }
   };
 
-  // src/vs/workbench/contrib/void/browser/documentViewers/pdfViewer/media/forms.ts
+  // forms.ts
   var FormOverlayManager = class {
     constructor(renderContainer) {
       this.renderContainer = renderContainer;
@@ -2035,7 +2035,7 @@ ${val.stack}`;
     }
   };
 
-  // src/vs/workbench/contrib/void/browser/documentViewers/pdfViewer/media/main.ts
+  // main.ts
   var vscode = acquireVsCodeApi();
   var previousState = vscode.getState() || {};
   var pdfRenderer = null;

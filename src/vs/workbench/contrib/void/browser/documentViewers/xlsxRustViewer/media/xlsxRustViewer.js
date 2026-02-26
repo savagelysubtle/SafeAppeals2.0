@@ -916,6 +916,12 @@
     constructor(container) {
       this.width = 0;
       this.height = 0;
+      // Zoom state
+      this._zoomScale = 1;
+      this._viewWidth = 1;
+      // width / _zoomScale (logical viewport)
+      this._viewHeight = 1;
+      // height / _zoomScale
       // Viewport state
       this.scrollTop = 0;
       this.scrollLeft = 0;
@@ -958,10 +964,19 @@
       this.tables = [];
       // Filter state: hidden rows (rows excluded by column filters)
       this._hiddenRows = /* @__PURE__ */ new Set();
+      // Explicitly hidden columns (set by user via Hide Column)
+      this._hiddenCols = /* @__PURE__ */ new Set();
+      // Explicitly hidden rows (set by user via Hide Row, separate from filter-hidden)
+      this._explicitHiddenRows = /* @__PURE__ */ new Set();
+      // Outline/group definitions
+      this._colOutlineGroups = [];
+      this._rowOutlineGroups = [];
       // Active filters: key = "tableName:colIndex", value = set of allowed cell values
       this._activeFilters = /* @__PURE__ */ new Map();
       // HTML filter arrow buttons overlaid on table header cells
       this._filterButtons = [];
+      // Outline group collapse/expand buttons (DOM overlay)
+      this._outlineButtons = [];
       // Formula display cache: "row:col" -> display string
       this.formulaResults = {};
       // Data validation: "row:col" -> DataValidationDef (precomputed map for O(1) lookup)
@@ -1049,7 +1064,7 @@
           const rect = this._hScrollbar.getBoundingClientRect();
           const clickRatio = (e.clientX - rect.left) / rect.width;
           const virtualW = this.getVirtualWidth();
-          const viewW = this.width - (this._showHeaders ? this.headerWidth : 0);
+          const viewW = this._viewWidth - (this._showHeaders ? this.headerWidth : 0);
           const hMaxScroll = virtualW - viewW;
           this.scrollLeft = Math.max(0, Math.min(hMaxScroll, clickRatio * hMaxScroll));
           this.updateHScrollbar();
@@ -1060,7 +1075,7 @@
         if (!this._hScrollDragging) return;
         const trackWidth = this._hScrollbar.clientWidth;
         const virtualW = this.getVirtualWidth();
-        const viewW = this.width - (this._showHeaders ? this.headerWidth : 0);
+        const viewW = this._viewWidth - (this._showHeaders ? this.headerWidth : 0);
         const hMaxScroll = virtualW - viewW;
         const hRatio = Math.min(1, viewW / virtualW);
         const thumbW = Math.max(30, trackWidth * hRatio);
@@ -1123,7 +1138,7 @@
     /** Update the HTML horizontal scrollbar thumb position and size */
     updateHScrollbar() {
       const virtualW = this.getVirtualWidth();
-      const viewW = this.width - (this._showHeaders ? this.headerWidth : 0);
+      const viewW = this._viewWidth - (this._showHeaders ? this.headerWidth : 0);
       const trackWidth = this._hScrollbar.clientWidth;
       const hRatio = Math.min(1, viewW / virtualW);
       const thumbW = Math.max(30, trackWidth * hRatio);
@@ -1147,8 +1162,13 @@
       this.colWidths = {};
       this.rowHeights = {};
       this._hiddenRows.clear();
+      this._hiddenCols.clear();
+      this._explicitHiddenRows.clear();
+      this._colOutlineGroups = [];
+      this._rowOutlineGroups = [];
       this._activeFilters.clear();
       this._clearFilterButtons();
+      this._clearOutlineButtons();
       this._clearCfCache();
       this._validationOfCell.clear();
       this._invalidCells.clear();
@@ -1190,6 +1210,30 @@
           this.rowHeights[Number(k)] = v;
         }
       }
+      this._hiddenCols.clear();
+      if (sheet?.hidden_cols) {
+        for (const c of sheet.hidden_cols) {
+          this._hiddenCols.add(Number(c));
+        }
+      }
+      this._explicitHiddenRows.clear();
+      if (sheet?.hidden_rows) {
+        for (const r of sheet.hidden_rows) {
+          this._explicitHiddenRows.add(Number(r));
+        }
+      }
+      this._colOutlineGroups = (sheet?.col_outline_groups ?? []).map((g) => ({
+        start: g.start,
+        end_inclusive: g.end_inclusive,
+        level: g.level,
+        collapsed: g.collapsed
+      }));
+      this._rowOutlineGroups = (sheet?.row_outline_groups ?? []).map((g) => ({
+        start: g.start,
+        end_inclusive: g.end_inclusive,
+        level: g.level,
+        collapsed: g.collapsed
+      }));
       this._buildValidationMap();
       this._buildHyperlinkMap();
     }
@@ -1234,8 +1278,13 @@
       this.selectionRange = null;
       this.formulaResults = {};
       this._hiddenRows.clear();
+      this._hiddenCols.clear();
+      this._explicitHiddenRows.clear();
+      this._colOutlineGroups = [];
+      this._rowOutlineGroups = [];
       this._activeFilters.clear();
       this._clearFilterButtons();
+      this._clearOutlineButtons();
       this._clearCfCache();
       this._validationOfCell.clear();
       this._invalidCells.clear();
@@ -1296,13 +1345,14 @@
       this._colPos = new Array(nc + 1);
       this._colPos[0] = 0;
       for (let c = 0; c < nc; c++) {
-        this._colPos[c + 1] = this._colPos[c] + (this.colWidths[c] ?? this.colWidth);
+        const w = this._hiddenCols.has(c) ? 0 : this.colWidths[c] ?? this.colWidth;
+        this._colPos[c + 1] = this._colPos[c] + w;
       }
       const nr = Math.max(minRows + 1, 1101);
       this._rowPos = new Array(nr + 1);
       this._rowPos[0] = 0;
       for (let r = 0; r < nr; r++) {
-        const h = this._hiddenRows.has(r) ? 0 : this.rowHeights[r] ?? this.rowHeight;
+        const h = this._hiddenRows.has(r) || this._explicitHiddenRows.has(r) ? 0 : this.rowHeights[r] ?? this.rowHeight;
         this._rowPos[r + 1] = this._rowPos[r] + h;
       }
       this._layoutDirty = false;
@@ -1327,14 +1377,14 @@
       if (row + 1 >= this._rowPos.length) this.ensureLayout(void 0, row + 50);
       return (this._rowPos[row + 1] ?? this._rowPos[row] + this.rowHeight) - (this._rowPos[row] ?? 0);
     }
-    /** Convert mouse event to canvas drawing coordinates (accounts for any display/buffer mismatch). */
+    /** Convert mouse event to canvas drawing coordinates (accounts for zoom and display/buffer mismatch). */
     mouseToCanvas(e) {
       const rect = this.canvas.getBoundingClientRect();
       const sx = e.clientX - rect.left;
       const sy = e.clientY - rect.top;
       return {
-        x: rect.width > 0 ? sx * this.width / rect.width : sx,
-        y: rect.height > 0 ? sy * this.height / rect.height : sy
+        x: rect.width > 0 ? sx * this._viewWidth / rect.width : sx,
+        y: rect.height > 0 ? sy * this._viewHeight / rect.height : sy
       };
     }
     getData() {
@@ -1366,6 +1416,23 @@
           }
         }
       }
+      if (this.data?.sheets?.[this._activeSheetIndex]) {
+        const sheet = this.data.sheets[this._activeSheetIndex];
+        sheet.hidden_cols = Array.from(this._hiddenCols);
+        sheet.hidden_rows = Array.from(this._explicitHiddenRows);
+        sheet.col_outline_groups = this._colOutlineGroups.map((g) => ({
+          start: g.start,
+          end_inclusive: g.end_inclusive,
+          level: g.level,
+          collapsed: g.collapsed
+        }));
+        sheet.row_outline_groups = this._rowOutlineGroups.map((g) => ({
+          start: g.start,
+          end_inclusive: g.end_inclusive,
+          level: g.level,
+          collapsed: g.collapsed
+        }));
+      }
       return this.data;
     }
     setLoading(loading) {
@@ -1374,6 +1441,41 @@
     }
     getSelectedRange() {
       return this.selectionRange;
+    }
+    getZoom() {
+      return this._zoomScale;
+    }
+    setZoom(scale) {
+      this._zoomScale = Math.max(0.25, Math.min(4, scale));
+      this.resize();
+      if (this.onZoomChanged) this.onZoomChanged(this._zoomScale);
+    }
+    zoomIn() {
+      const presets = _CanvasRenderer.ZOOM_PRESETS;
+      const next = presets.find((p) => p > this._zoomScale + 0.01);
+      this.setZoom(next ?? presets[presets.length - 1]);
+    }
+    zoomOut() {
+      const presets = _CanvasRenderer.ZOOM_PRESETS;
+      const prev = [...presets].reverse().find((p) => p < this._zoomScale - 0.01);
+      this.setZoom(prev ?? presets[0]);
+    }
+    zoomToFit() {
+      if (!this.data?.sheets?.[this._activeSheetIndex]) return;
+      const sheet = this.data.sheets[this._activeSheetIndex];
+      const usedCols = sheet.col_count ?? 10;
+      const usedRows = sheet.row_count ?? 20;
+      const effHeaderWidth = this._showHeaders ? this.headerWidth : 0;
+      const effHeaderHeight = this._showHeaders ? this.headerHeight : 0;
+      const availW = this.width - effHeaderWidth;
+      const availH = this.height - effHeaderHeight;
+      this.ensureLayout(usedCols + 1, usedRows + 1);
+      const contentW = this._colPos[usedCols] ?? availW;
+      const contentH = this._rowPos[usedRows] ?? availH;
+      if (contentW <= 0 || contentH <= 0) return;
+      const scaleW = availW / contentW;
+      const scaleH = availH / contentH;
+      this.setZoom(Math.min(scaleW, scaleH, 4));
     }
     /** Compute aggregate statistics (sum, avg, count, min, max) for the current selection. */
     getSelectionStats() {
@@ -1959,6 +2061,14 @@
     // --- Event Handlers ---
     handleWheel(e) {
       e.preventDefault();
+      if (e.ctrlKey || e.metaKey) {
+        if (e.deltaY > 0) {
+          this.zoomOut();
+        } else {
+          this.zoomIn();
+        }
+        return;
+      }
       if (e.shiftKey) {
         this.scrollLeft += e.deltaY;
       } else {
@@ -1990,7 +2100,7 @@
       if (sbHit) {
         e.preventDefault();
         const effHeaderHeight = this._showHeaders ? this.headerHeight : 0;
-        const viewH = this.height - effHeaderHeight;
+        const viewH = this._viewHeight - effHeaderHeight;
         const virtualH = this.getVirtualHeight();
         const vMaxScroll = virtualH - viewH;
         const clickRatio = (my - effHeaderHeight) / viewH;
@@ -2468,7 +2578,7 @@
     hitTestScrollbar(canvasX, canvasY) {
       const sb = this._scrollbarSize;
       const effHeaderHeight = this._showHeaders ? this.headerHeight : 0;
-      if (canvasX >= this.width - sb && canvasY >= effHeaderHeight) {
+      if (canvasX >= this._viewWidth - sb && canvasY >= effHeaderHeight) {
         return { axis: "v" };
       }
       return null;
@@ -2505,7 +2615,7 @@
       if (this._scrollbarDragging) {
         const rect = this.canvas.getBoundingClientRect();
         const effHeaderHeight = this._showHeaders ? this.headerHeight : 0;
-        const viewH = this.height - effHeaderHeight;
+        const viewH = this._viewHeight - effHeaderHeight;
         const virtualH = this.getVirtualHeight();
         const vMaxScroll = virtualH - viewH;
         const vRatio = Math.min(1, viewH / virtualH);
@@ -2704,7 +2814,7 @@
         while (col < this._colPos.length - 1 && this._colPos[col + 1] <= this.scrollLeft) col++;
         while (col < this._colPos.length - 1) {
           const borderX = this.headerWidth + this._colPos[col + 1] - this.scrollLeft;
-          if (borderX > this.width + threshold) break;
+          if (borderX > this._viewWidth + threshold) break;
           if (Math.abs(x - borderX) < threshold) {
             return { type: "col", index: col };
           }
@@ -2716,7 +2826,7 @@
         while (row < this._rowPos.length - 1 && this._rowPos[row + 1] <= this.scrollTop) row++;
         while (row < this._rowPos.length - 1) {
           const borderY = this.headerHeight + this._rowPos[row + 1] - this.scrollTop;
-          if (borderY > this.height + threshold) break;
+          if (borderY > this._viewHeight + threshold) break;
           if (Math.abs(y - borderY) < threshold) {
             return { type: "row", index: row };
           }
@@ -2744,7 +2854,7 @@
           const cellRight = this.cx(c) - this.scrollLeft + effHeaderWidth + this.cw(c);
           const btnLeft = cellRight - 18;
           const btnTop = hdrY;
-          const visible = btnLeft > effHeaderWidth - 10 && btnTop >= effHeaderHeight - 2 && btnTop + hdrRowH > effHeaderHeight && cellRight <= this.width + 10;
+          const visible = btnLeft > effHeaderWidth - 10 && btnTop >= effHeaderHeight - 2 && btnTop + hdrRowH > effHeaderHeight && cellRight <= this._viewWidth + 10;
           let btn;
           if (btnIdx < this._filterButtons.length) {
             btn = this._filterButtons[btnIdx];
@@ -2784,6 +2894,92 @@
         btn.remove();
       }
       this._filterButtons = [];
+    }
+    /** Remove all outline group buttons from the DOM. */
+    _clearOutlineButtons() {
+      for (const btn of this._outlineButtons) {
+        btn.remove();
+      }
+      this._outlineButtons = [];
+    }
+    /** Update outline collapse/expand DOM buttons for visible row groups. */
+    _updateOutlineButtons() {
+      const wrapper = this._wrapper;
+      const hasRowGroups = this._rowOutlineGroups.length > 0;
+      const hasColGroups = this._colOutlineGroups.length > 0;
+      if (!hasRowGroups && !hasColGroups) {
+        this._clearOutlineButtons();
+        return;
+      }
+      let btnIdx = 0;
+      if (this._showHeaders) {
+        for (let gi = 0; gi < this._rowOutlineGroups.length; gi++) {
+          const group = this._rowOutlineGroups[gi];
+          const lastRow = group.end_inclusive;
+          const y = this.ry(lastRow + 1) - this.scrollTop + this.headerHeight;
+          if (y < this.headerHeight || y > this._viewHeight) continue;
+          let btn;
+          if (btnIdx < this._outlineButtons.length) {
+            btn = this._outlineButtons[btnIdx];
+          } else {
+            btn = document.createElement("button");
+            btn.style.cssText = "position:absolute;width:14px;height:14px;padding:0;font-size:10px;line-height:1;background:#e8e8e8;border:1px solid #aaa;cursor:pointer;z-index:10;display:flex;align-items:center;justify-content:center;";
+            wrapper.appendChild(btn);
+            this._outlineButtons.push(btn);
+          }
+          btn.textContent = group.collapsed ? "+" : "\u2212";
+          btn.title = group.collapsed ? "Expand group" : "Collapse group";
+          btn.style.left = "2px";
+          btn.style.top = `${y - 7}px`;
+          btn.style.display = "flex";
+          const capturedIndex = gi;
+          btn.onclick = (e) => {
+            e.stopPropagation();
+            if (this._rowOutlineGroups[capturedIndex].collapsed) {
+              this.expandRowGroup(capturedIndex);
+            } else {
+              this.collapseRowGroup(capturedIndex);
+            }
+          };
+          btnIdx++;
+        }
+      }
+      if (this._showHeaders) {
+        for (let gi = 0; gi < this._colOutlineGroups.length; gi++) {
+          const group = this._colOutlineGroups[gi];
+          const lastCol = group.end_inclusive;
+          const x = this.cx(lastCol + 1) - this.scrollLeft + this.headerWidth;
+          if (x < this.headerWidth || x > this._viewWidth) continue;
+          let btn;
+          if (btnIdx < this._outlineButtons.length) {
+            btn = this._outlineButtons[btnIdx];
+          } else {
+            btn = document.createElement("button");
+            btn.style.cssText = "position:absolute;width:14px;height:14px;padding:0;font-size:10px;line-height:1;background:#e8e8e8;border:1px solid #aaa;cursor:pointer;z-index:10;display:flex;align-items:center;justify-content:center;";
+            wrapper.appendChild(btn);
+            this._outlineButtons.push(btn);
+          }
+          btn.textContent = group.collapsed ? "+" : "\u2212";
+          btn.title = group.collapsed ? "Expand group" : "Collapse group";
+          btn.style.left = `${x - 7}px`;
+          btn.style.top = "2px";
+          btn.style.display = "flex";
+          const capturedIndex = gi;
+          btn.onclick = (e) => {
+            e.stopPropagation();
+            if (this._colOutlineGroups[capturedIndex].collapsed) {
+              this.expandColGroup(capturedIndex);
+            } else {
+              this.collapseColGroup(capturedIndex);
+            }
+          };
+          btnIdx++;
+        }
+      }
+      while (this._outlineButtons.length > btnIdx) {
+        const old = this._outlineButtons.pop();
+        old.remove();
+      }
     }
     /** Get unique cell values for a column within a table's data range (excludes header/totals). */
     getColumnUniqueValues(tableName, colIndex) {
@@ -3034,18 +3230,18 @@
       const cellLeft = this.cx(col);
       const cellRight = cellLeft + this.cw(col);
       const viewportTop = this.scrollTop;
-      const viewportBottom = this.scrollTop + (this.height - effHeaderHeight);
+      const viewportBottom = this.scrollTop + (this._viewHeight - effHeaderHeight);
       if (cellTop < viewportTop) {
         this.scrollTop = cellTop;
       } else if (cellBottom > viewportBottom) {
-        this.scrollTop = cellBottom - (this.height - effHeaderHeight);
+        this.scrollTop = cellBottom - (this._viewHeight - effHeaderHeight);
       }
       const viewportLeft = this.scrollLeft;
-      const viewportRight = this.scrollLeft + (this.width - effHeaderWidth);
+      const viewportRight = this.scrollLeft + (this._viewWidth - effHeaderWidth);
       if (cellLeft < viewportLeft) {
         this.scrollLeft = cellLeft;
       } else if (cellRight > viewportRight) {
-        this.scrollLeft = cellRight - (this.width - effHeaderWidth);
+        this.scrollLeft = cellRight - (this._viewWidth - effHeaderWidth);
       }
       this.updateHScrollbar();
     }
@@ -3055,12 +3251,14 @@
       const scrollbarH = this._hScrollbar?.offsetHeight ?? 0;
       this.width = Math.round(rect.width);
       this.height = Math.round(rect.height) - scrollbarH;
+      this._viewWidth = this.width / this._zoomScale;
+      this._viewHeight = this.height / this._zoomScale;
       const dpr = window.devicePixelRatio || 1;
       this.canvas.width = this.width * dpr;
       this.canvas.height = this.height * dpr;
       this.canvas.style.width = `${this.width}px`;
       this.canvas.style.height = `${this.height}px`;
-      this.ctx.scale(dpr, dpr);
+      this.ctx.scale(dpr * this._zoomScale, dpr * this._zoomScale);
       this._layoutDirty = true;
       this.render();
       this.updateHScrollbar();
@@ -3069,13 +3267,13 @@
     render() {
       this._clearCfCache();
       this.ctx.fillStyle = "#ffffff";
-      this.ctx.fillRect(0, 0, this.width, this.height);
+      this.ctx.fillRect(0, 0, this._viewWidth, this._viewHeight);
       if (this._loading) {
         this.ctx.fillStyle = "#888";
         this.ctx.font = "14px system-ui, -apple-system, sans-serif";
         this.ctx.textAlign = "center";
         this.ctx.textBaseline = "middle";
-        this.ctx.fillText("Loading...", this.width / 2, this.height / 2);
+        this.ctx.fillText("Loading...", this._viewWidth / 2, this._viewHeight / 2);
         return;
       }
       if (!this.data || !this.data.sheets || this.data.sheets.length === 0) {
@@ -3083,7 +3281,7 @@
         this.ctx.font = "14px system-ui, -apple-system, sans-serif";
         this.ctx.textAlign = "center";
         this.ctx.textBaseline = "middle";
-        this.ctx.fillText("No data to display. Open an XLSX file or start typing.", this.width / 2, this.height / 2);
+        this.ctx.fillText("No data to display. Open an XLSX file or start typing.", this._viewWidth / 2, this._viewHeight / 2);
         return;
       }
       const sheet = this.data.sheets[this._activeSheetIndex];
@@ -3093,13 +3291,13 @@
       let startRow = 0;
       while (startRow < this._rowPos.length - 1 && this._rowPos[startRow + 1] <= this.scrollTop) startRow++;
       let endRow = startRow;
-      const viewBottom = this.scrollTop + this.height;
+      const viewBottom = this.scrollTop + this._viewHeight;
       while (endRow < this._rowPos.length - 1 && this._rowPos[endRow] < viewBottom) endRow++;
       endRow = Math.min(endRow + 1, this._rowPos.length - 1);
       let startCol = 0;
       while (startCol < this._colPos.length - 1 && this._colPos[startCol + 1] <= this.scrollLeft) startCol++;
       let endCol = startCol;
-      const viewRight = this.scrollLeft + this.width;
+      const viewRight = this.scrollLeft + this._viewWidth;
       while (endCol < this._colPos.length - 1 && this._colPos[endCol] < viewRight) endCol++;
       endCol = Math.min(endCol + 1, this._colPos.length - 1);
       this.ctx.save();
@@ -3265,7 +3463,7 @@
         const tc = getTableColors(table.style_name);
         this.ctx.save();
         this.ctx.beginPath();
-        this.ctx.rect(effHeaderWidth, effHeaderHeight, this.width - effHeaderWidth, this.height - effHeaderHeight);
+        this.ctx.rect(effHeaderWidth, effHeaderHeight, this._viewWidth - effHeaderWidth, this._viewHeight - effHeaderHeight);
         this.ctx.clip();
         if (table.banded_rows) {
           const dataStartRow = table.has_header_row ? tr.start_row + 1 : tr.start_row;
@@ -3357,7 +3555,7 @@
         const mcH = this.ry(mc.endRow + 1) - this.ry(mc.startRow);
         this.ctx.save();
         this.ctx.beginPath();
-        this.ctx.rect(effHeaderWidth, effHeaderHeight, this.width - effHeaderWidth, this.height - effHeaderHeight);
+        this.ctx.rect(effHeaderWidth, effHeaderHeight, this._viewWidth - effHeaderWidth, this._viewHeight - effHeaderHeight);
         this.ctx.clip();
         const cellStyle = this.getCellStyle(mc.startRow, mc.startCol);
         this.ctx.fillStyle = cellStyle?.fillColor || "#ffffff";
@@ -3397,7 +3595,7 @@
       if (this._findMatches.length > 0) {
         this.ctx.save();
         this.ctx.beginPath();
-        this.ctx.rect(effHeaderWidth, effHeaderHeight, this.width - effHeaderWidth, this.height - effHeaderHeight);
+        this.ctx.rect(effHeaderWidth, effHeaderHeight, this._viewWidth - effHeaderWidth, this._viewHeight - effHeaderHeight);
         this.ctx.clip();
         for (let fi = 0; fi < this._findMatches.length; fi++) {
           const fm = this._findMatches[fi];
@@ -3415,11 +3613,11 @@
       if (this._showHeaders) {
         const selNorm = this.selectionRange ? this.normalizeRange(this.selectionRange) : null;
         this.ctx.fillStyle = "#f3f3f3";
-        this.ctx.fillRect(0, this.headerHeight, this.headerWidth, this.height - this.headerHeight);
+        this.ctx.fillRect(0, this.headerHeight, this.headerWidth, this._viewHeight - this.headerHeight);
         this.ctx.strokeStyle = "#cccccc";
         this.ctx.beginPath();
         this.ctx.moveTo(this.headerWidth, 0);
-        this.ctx.lineTo(this.headerWidth, this.height);
+        this.ctx.lineTo(this.headerWidth, this._viewHeight);
         this.ctx.stroke();
         this.ctx.font = "12px system-ui, -apple-system, sans-serif";
         for (let r = startRow; r < endRow; r++) {
@@ -3442,12 +3640,22 @@
           this.ctx.lineTo(this.headerWidth, y + rowH);
           this.ctx.stroke();
         }
+        for (let r = startRow; r < endRow; r++) {
+          if (this._explicitHiddenRows.has(r)) continue;
+          if (r > 0 && this._explicitHiddenRows.has(r - 1)) {
+            const y = this.ry(r) - this.scrollTop + this.headerHeight;
+            this.ctx.fillStyle = "#1565c0";
+            this.ctx.font = "bold 9px sans-serif";
+            this.ctx.textAlign = "center";
+            this.ctx.fillText("\u25B2\u25BC", this.headerWidth / 2, y + 6);
+          }
+        }
         this.ctx.fillStyle = "#f3f3f3";
-        this.ctx.fillRect(this.headerWidth, 0, this.width - this.headerWidth, this.headerHeight);
+        this.ctx.fillRect(this.headerWidth, 0, this._viewWidth - this.headerWidth, this.headerHeight);
         this.ctx.strokeStyle = "#cccccc";
         this.ctx.beginPath();
         this.ctx.moveTo(0, this.headerHeight);
-        this.ctx.lineTo(this.width, this.headerHeight);
+        this.ctx.lineTo(this._viewWidth, this.headerHeight);
         this.ctx.stroke();
         for (let c = startCol; c < endCol; c++) {
           const colW = this.cw(c);
@@ -3469,6 +3677,16 @@
           this.ctx.lineTo(x + colW, this.headerHeight);
           this.ctx.stroke();
         }
+        for (let c = startCol; c < endCol; c++) {
+          if (this._hiddenCols.has(c)) continue;
+          if (c > 0 && this._hiddenCols.has(c - 1)) {
+            const x = this.cx(c) - this.scrollLeft + this.headerWidth;
+            this.ctx.fillStyle = "#1565c0";
+            this.ctx.font = "bold 9px sans-serif";
+            this.ctx.textAlign = "center";
+            this.ctx.fillText("\u25C4\u25BA", x + 6, this.headerHeight / 2);
+          }
+        }
         this.ctx.fillStyle = "#e0e0e0";
         this.ctx.fillRect(0, 0, this.headerWidth, this.headerHeight);
         this.ctx.strokeStyle = "#cccccc";
@@ -3477,7 +3695,7 @@
       if (this._formulaMode && this._formulaRanges.length > 0) {
         this.ctx.save();
         this.ctx.beginPath();
-        this.ctx.rect(effHeaderWidth, effHeaderHeight, this.width - effHeaderWidth, this.height - effHeaderHeight);
+        this.ctx.rect(effHeaderWidth, effHeaderHeight, this._viewWidth - effHeaderWidth, this._viewHeight - effHeaderHeight);
         this.ctx.clip();
         for (const fRange of this._formulaRanges) {
           const norm = this.normalizeRange(fRange);
@@ -3503,7 +3721,7 @@
         const selH = this.ry(norm.endRow + 1) - this.ry(norm.startRow);
         this.ctx.save();
         this.ctx.beginPath();
-        this.ctx.rect(effHeaderWidth, effHeaderHeight, this.width - effHeaderWidth, this.height - effHeaderHeight);
+        this.ctx.rect(effHeaderWidth, effHeaderHeight, this._viewWidth - effHeaderWidth, this._viewHeight - effHeaderHeight);
         this.ctx.clip();
         this.ctx.strokeStyle = "#0078d7";
         this.ctx.lineWidth = 2;
@@ -3542,10 +3760,10 @@
           const frozenRowsH = this.ry(this._freezeRow);
           this.ctx.save();
           this.ctx.beginPath();
-          this.ctx.rect(effHeaderWidth, effHeaderHeight, this.width - effHeaderWidth, frozenRowsH);
+          this.ctx.rect(effHeaderWidth, effHeaderHeight, this._viewWidth - effHeaderWidth, frozenRowsH);
           this.ctx.clip();
           this.ctx.fillStyle = "#ffffff";
-          this.ctx.fillRect(effHeaderWidth, effHeaderHeight, this.width - effHeaderWidth, frozenRowsH);
+          this.ctx.fillRect(effHeaderWidth, effHeaderHeight, this._viewWidth - effHeaderWidth, frozenRowsH);
           for (let r = 0; r < this._freezeRow; r++) {
             const frzRowH = this.rh(r);
             const y = this.ry(r) + effHeaderHeight;
@@ -3579,10 +3797,10 @@
           const frozenColsW = this.cx(this._freezeCol);
           this.ctx.save();
           this.ctx.beginPath();
-          this.ctx.rect(effHeaderWidth, effHeaderHeight, frozenColsW, this.height - effHeaderHeight);
+          this.ctx.rect(effHeaderWidth, effHeaderHeight, frozenColsW, this._viewHeight - effHeaderHeight);
           this.ctx.clip();
           this.ctx.fillStyle = "#ffffff";
-          this.ctx.fillRect(effHeaderWidth, effHeaderHeight, frozenColsW, this.height - effHeaderHeight);
+          this.ctx.fillRect(effHeaderWidth, effHeaderHeight, frozenColsW, this._viewHeight - effHeaderHeight);
           for (let r = startRow; r < endRow; r++) {
             const frzRH = this.rh(r);
             const y = this.ry(r) - this.scrollTop + effHeaderHeight;
@@ -3656,7 +3874,7 @@
           this.ctx.lineWidth = 2;
           this.ctx.beginPath();
           this.ctx.moveTo(0, freezeY);
-          this.ctx.lineTo(this.width, freezeY);
+          this.ctx.lineTo(this._viewWidth, freezeY);
           this.ctx.stroke();
           this.ctx.lineWidth = 1;
         }
@@ -3666,7 +3884,7 @@
           this.ctx.lineWidth = 2;
           this.ctx.beginPath();
           this.ctx.moveTo(freezeX, 0);
-          this.ctx.lineTo(freezeX, this.height);
+          this.ctx.lineTo(freezeX, this._viewHeight);
           this.ctx.stroke();
           this.ctx.lineWidth = 1;
         }
@@ -3675,6 +3893,7 @@
       this.drawScrollbars();
       this.ctx.restore();
       this._syncFilterButtons();
+      this._updateOutlineButtons();
       if (this.onScrollChanged) this.onScrollChanged();
     }
     /** Draw page break indicator lines and, in preview mode, page number watermarks. */
@@ -3688,25 +3907,25 @@
       const ctx = this.ctx;
       ctx.save();
       ctx.beginPath();
-      ctx.rect(effHeaderWidth, effHeaderHeight, this.width - effHeaderWidth, this.height - effHeaderHeight);
+      ctx.rect(effHeaderWidth, effHeaderHeight, this._viewWidth - effHeaderWidth, this._viewHeight - effHeaderHeight);
       ctx.clip();
       ctx.setLineDash([4, 3]);
       ctx.lineWidth = 1.5;
       ctx.strokeStyle = this._pageBreakPreview ? "#1565c0" : "#90caf9";
       for (const breakRow of row_breaks) {
         const y = this.ry(breakRow) - this.scrollTop + effHeaderHeight;
-        if (y < effHeaderHeight || y > this.height) continue;
+        if (y < effHeaderHeight || y > this._viewHeight) continue;
         ctx.beginPath();
         ctx.moveTo(effHeaderWidth, y);
-        ctx.lineTo(this.width, y);
+        ctx.lineTo(this._viewWidth, y);
         ctx.stroke();
       }
       for (const breakCol of col_breaks) {
         const x = this.cx(breakCol) - this.scrollLeft + effHeaderWidth;
-        if (x < effHeaderWidth || x > this.width) continue;
+        if (x < effHeaderWidth || x > this._viewWidth) continue;
         ctx.beginPath();
         ctx.moveTo(x, effHeaderHeight);
-        ctx.lineTo(x, this.height);
+        ctx.lineTo(x, this._viewHeight);
         ctx.stroke();
       }
       ctx.setLineDash([]);
@@ -3728,7 +3947,7 @@
             const midCol = Math.floor((startCol + endCol) / 2);
             const cx = this.cx(midCol) - this.scrollLeft + effHeaderWidth;
             const cy = this.ry(midRow) - this.scrollTop + effHeaderHeight;
-            if (cx > effHeaderWidth && cx < this.width && cy > effHeaderHeight && cy < this.height) {
+            if (cx > effHeaderWidth && cx < this._viewWidth && cy > effHeaderHeight && cy < this._viewHeight) {
               ctx.fillText(`Page ${pageNum}`, cx, cy);
             }
             pageNum++;
@@ -3744,7 +3963,7 @@
       if (!sheet?.sparklines || sheet.sparklines.length === 0) return;
       this.ctx.save();
       this.ctx.beginPath();
-      this.ctx.rect(effHeaderWidth, effHeaderHeight, this.width - effHeaderWidth, this.height - effHeaderHeight);
+      this.ctx.rect(effHeaderWidth, effHeaderHeight, this._viewWidth - effHeaderWidth, this._viewHeight - effHeaderHeight);
       this.ctx.clip();
       for (const spark of sheet.sparklines) {
         const loc = this.parseSparklineCellRef(spark.location);
@@ -3754,7 +3973,7 @@
         const cellW = this.cw(loc.col);
         const cellH = this.rh(loc.row);
         if (cellX + cellW < effHeaderWidth || cellY + cellH < effHeaderHeight) continue;
-        if (cellX > this.width || cellY > this.height) continue;
+        if (cellX > this._viewWidth || cellY > this._viewHeight) continue;
         const values = this.resolveSparklineData(spark.data_range, sheet);
         if (values.length === 0) continue;
         const color2 = spark.color || "#4472C4";
@@ -3868,15 +4087,15 @@
       const minThumb = this._scrollbarMinThumb;
       const virtualH = this.getVirtualHeight();
       const effHeaderHeight = this._showHeaders ? this.headerHeight : 0;
-      const viewH = this.height - effHeaderHeight;
+      const viewH = this._viewHeight - effHeaderHeight;
       const vTrackTop = effHeaderHeight;
       const vTrackHeight = viewH;
       this.ctx.fillStyle = "#e8e8e8";
-      this.ctx.fillRect(this.width - sb, vTrackTop, sb, vTrackHeight);
+      this.ctx.fillRect(this._viewWidth - sb, vTrackTop, sb, vTrackHeight);
       this.ctx.strokeStyle = "#ccc";
       this.ctx.beginPath();
-      this.ctx.moveTo(this.width - sb, vTrackTop);
-      this.ctx.lineTo(this.width - sb, vTrackTop + vTrackHeight);
+      this.ctx.moveTo(this._viewWidth - sb, vTrackTop);
+      this.ctx.lineTo(this._viewWidth - sb, vTrackTop + vTrackHeight);
       this.ctx.stroke();
       const vRatio = Math.min(1, viewH / virtualH);
       const vThumbH = Math.max(minThumb, vTrackHeight * vRatio);
@@ -3884,7 +4103,7 @@
       const vThumbTop = vMaxScroll > 0 ? vTrackTop + this.scrollTop / vMaxScroll * (vTrackHeight - vThumbH) : vTrackTop;
       this.ctx.fillStyle = this._scrollbarDragging === "v" ? "#666" : "#999";
       this.ctx.beginPath();
-      this.roundRect(this.width - sb + 2, vThumbTop + 1, sb - 4, vThumbH - 2, 4);
+      this.roundRect(this._viewWidth - sb + 2, vThumbTop + 1, sb - 4, vThumbH - 2, 4);
       this.ctx.fill();
     }
     /** Draw a rounded rectangle path */
@@ -5165,12 +5384,142 @@
       return this.rowHeights[row] ?? this.rowHeight;
     }
     setColWidth(col, width) {
-      this.colWidths[col] = Math.max(20, Math.round(width));
+      if (width <= 0) {
+        this.hideColumn(col);
+        return;
+      }
+      this._hiddenCols.delete(col);
+      this.colWidths[col] = Math.max(2, Math.round(width));
       this._layoutDirty = true;
       this.render();
     }
     setRowHeight(row, height) {
-      this.rowHeights[row] = Math.max(10, Math.round(height));
+      if (height <= 0) {
+        this.hideRow(row);
+        return;
+      }
+      this._explicitHiddenRows.delete(row);
+      this.rowHeights[row] = Math.max(2, Math.round(height));
+      this._layoutDirty = true;
+      this.render();
+    }
+    // --- Hide / Unhide ---
+    hideColumn(col) {
+      this._hiddenCols.add(col);
+      this._layoutDirty = true;
+      this.render();
+    }
+    unhideColumn(col) {
+      this._hiddenCols.delete(col);
+      this._layoutDirty = true;
+      this.render();
+    }
+    unhideAllCols() {
+      this._hiddenCols.clear();
+      this._layoutDirty = true;
+      this.render();
+    }
+    hideRow(row) {
+      this._explicitHiddenRows.add(row);
+      this._layoutDirty = true;
+      this.render();
+    }
+    unhideRow(row) {
+      this._explicitHiddenRows.delete(row);
+      this._layoutDirty = true;
+      this.render();
+    }
+    unhideAllRows() {
+      this._explicitHiddenRows.clear();
+      this._layoutDirty = true;
+      this.render();
+    }
+    isColHidden(col) {
+      return this._hiddenCols.has(col);
+    }
+    isRowHidden(row) {
+      return this._explicitHiddenRows.has(row);
+    }
+    getHiddenCols() {
+      return new Set(this._hiddenCols);
+    }
+    getHiddenRows() {
+      return new Set(this._explicitHiddenRows);
+    }
+    // --- Outline Groups ---
+    setColOutlineGroups(groups) {
+      this._colOutlineGroups = groups;
+      this.render();
+    }
+    setRowOutlineGroups(groups) {
+      this._rowOutlineGroups = groups;
+      this.render();
+    }
+    getColOutlineGroups() {
+      return this._colOutlineGroups;
+    }
+    getRowOutlineGroups() {
+      return this._rowOutlineGroups;
+    }
+    addColOutlineGroup(start, end_inclusive) {
+      const level = 1;
+      this._colOutlineGroups.push({ start, end_inclusive, level, collapsed: false });
+      this.render();
+    }
+    addRowOutlineGroup(start, end_inclusive) {
+      const level = 1;
+      this._rowOutlineGroups.push({ start, end_inclusive, level, collapsed: false });
+      this.render();
+    }
+    removeColOutlineGroup(start, end_inclusive) {
+      this._colOutlineGroups = this._colOutlineGroups.filter(
+        (g) => !(g.start === start && g.end_inclusive === end_inclusive)
+      );
+      this.render();
+    }
+    removeRowOutlineGroup(start, end_inclusive) {
+      this._rowOutlineGroups = this._rowOutlineGroups.filter(
+        (g) => !(g.start === start && g.end_inclusive === end_inclusive)
+      );
+      this.render();
+    }
+    collapseRowGroup(groupIndex) {
+      const group = this._rowOutlineGroups[groupIndex];
+      if (!group) return;
+      group.collapsed = true;
+      for (let r = group.start; r <= group.end_inclusive; r++) {
+        this._explicitHiddenRows.add(r);
+      }
+      this._layoutDirty = true;
+      this.render();
+    }
+    expandRowGroup(groupIndex) {
+      const group = this._rowOutlineGroups[groupIndex];
+      if (!group) return;
+      group.collapsed = false;
+      for (let r = group.start; r <= group.end_inclusive; r++) {
+        this._explicitHiddenRows.delete(r);
+      }
+      this._layoutDirty = true;
+      this.render();
+    }
+    collapseColGroup(groupIndex) {
+      const group = this._colOutlineGroups[groupIndex];
+      if (!group) return;
+      group.collapsed = true;
+      for (let c = group.start; c <= group.end_inclusive; c++) {
+        this._hiddenCols.add(c);
+      }
+      this._layoutDirty = true;
+      this.render();
+    }
+    expandColGroup(groupIndex) {
+      const group = this._colOutlineGroups[groupIndex];
+      if (!group) return;
+      group.collapsed = false;
+      for (let c = group.start; c <= group.end_inclusive; c++) {
+        this._hiddenCols.delete(c);
+      }
       this._layoutDirty = true;
       this.render();
     }
@@ -5424,6 +5773,8 @@
       return count;
     }
   };
+  // --- Zoom ---
+  _CanvasRenderer.ZOOM_PRESETS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 2, 3, 4];
   // ─── Auto-Fill Engine ──────────────────────────────────────────────────────
   // Thin black cross cursor for the fill handle (matches Excel)
   // eslint-disable-next-line @typescript-eslint/naming-convention
@@ -5506,6 +5857,8 @@
     condFormat: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"><rect x="1" y="1" width="6" height="14" rx="1"/><rect x="9" y="1" width="6" height="14" rx="1"/><rect x="1" y="1" width="6" height="5" fill="#ff6b6b" opacity=".6" rx="1"/><rect x="1" y="6" width="6" height="4" fill="#ffd93d" opacity=".6"/><rect x="1" y="10" width="6" height="5" fill="#6bcb77" opacity=".6" rx="1"/><rect x="9" y="1" width="6" height="14" rx="1"/><rect x="10" y="3" width="4" height="2" fill="#4472c4" opacity=".7" rx=".5"/><rect x="10" y="7" width="2.5" height="2" fill="#4472c4" opacity=".7" rx=".5"/><rect x="10" y="11" width="1" height="2" fill="#4472c4" opacity=".7" rx=".5"/></svg>',
     dataValid: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="1" width="14" height="14" rx="1"/><line x1="1" y1="5" x2="15" y2="5"/><line x1="5.5" y1="1" x2="5.5" y2="15"/><path d="M8 8l1.5 1.5L12 7" stroke="#4472c4" stroke-width="1.5"/><rect x="6" y="6" width="7" height="7" rx=".5" stroke="#4472c4" opacity=".3" stroke-dasharray="1.5 1"/></svg>',
     circleInvalid: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"><ellipse cx="8" cy="8" rx="6" ry="5" stroke="#cc0000" stroke-dasharray="2 1.5"/><line x1="5" y1="8" x2="11" y2="8" stroke="#cc0000"/></svg>',
+    group: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"><rect x="1" y="3" width="14" height="10" rx="1"/><line x1="1" y1="7" x2="15" y2="7"/><line x1="1" y1="11" x2="15" y2="11"/><rect x="3" y="5" width="4" height="4" fill="currentColor" opacity=".2"/><rect x="9" y="5" width="4" height="4" fill="currentColor" opacity=".2"/><path d="M5 2v2M11 2v2" stroke-width="1.5"/></svg>',
+    ungroup: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"><rect x="1" y="3" width="14" height="10" rx="1" stroke-dasharray="2 1.5"/><line x1="1" y1="7" x2="15" y2="7" stroke-dasharray="2 1.5"/><line x1="1" y1="11" x2="15" y2="11" stroke-dasharray="2 1.5"/><path d="M5 2v2M11 2v2" stroke-width="1.5"/></svg>',
     chart: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="1" width="14" height="14" rx="1"/><rect x="3" y="9" width="2" height="5" fill="#4472C4" stroke="none" rx=".3"/><rect x="7" y="5" width="2" height="9" fill="#ED7D31" stroke="none" rx=".3"/><rect x="11" y="7" width="2" height="7" fill="#70AD47" stroke="none" rx=".3"/></svg>',
     hyperlink: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 9.5a3.5 3.5 0 0 0 4.95 0l2-2a3.5 3.5 0 0 0-4.95-4.95L7.5 3.5"/><path d="M9.5 6.5a3.5 3.5 0 0 0-4.95 0l-2 2a3.5 3.5 0 0 0 4.95 4.95L8.5 12.5"/></svg>',
     nameManager: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"><rect x="1" y="3" width="14" height="10" rx="1"/><line x1="1" y1="6" x2="15" y2="6"/><line x1="5.5" y1="3" x2="5.5" y2="13"/><path d="M3 9h1M7.5 9h4M7.5 11h2.5" stroke-width="1"/></svg>',
@@ -5513,7 +5866,10 @@
     fillDown: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="12" height="4" rx="0.5" fill="currentColor" opacity="0.2"/><rect x="2" y="2" width="12" height="12" rx="0.5"/><path d="M8 7v5M5.5 10l2.5 2.5 2.5-2.5"/></svg>',
     fillRight: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="4" height="12" rx="0.5" fill="currentColor" opacity="0.2"/><rect x="2" y="2" width="12" height="12" rx="0.5"/><path d="M7 8h5M10 5.5l2.5 2.5-2.5 2.5"/></svg>',
     flashFill: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2L4 9h4l-1 5 5-7h-4z" fill="currentColor" opacity="0.25"/><path d="M9 2L4 9h4l-1 5 5-7h-4z"/></svg>',
-    pivotTable: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.1"><rect x="1" y="1" width="14" height="14" rx="1"/><line x1="1" y1="5" x2="15" y2="5"/><line x1="1" y1="9" x2="15" y2="9"/><line x1="1" y1="13" x2="15" y2="13"/><line x1="5.5" y1="1" x2="5.5" y2="15"/><rect x="1" y="1" width="4.5" height="4" fill="currentColor" opacity=".3" rx="1"/><rect x="5.5" y="1" width="9.5" height="4" fill="currentColor" opacity=".15" rx="1"/><rect x="1" y="5" width="4.5" height="4" fill="currentColor" opacity=".15"/><path d="M11 11.5l-2 2m0 0l2 2m-2-2h4" stroke="#4472C4" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>'
+    pivotTable: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.1"><rect x="1" y="1" width="14" height="14" rx="1"/><line x1="1" y1="5" x2="15" y2="5"/><line x1="1" y1="9" x2="15" y2="9"/><line x1="1" y1="13" x2="15" y2="13"/><line x1="5.5" y1="1" x2="5.5" y2="15"/><rect x="1" y="1" width="4.5" height="4" fill="currentColor" opacity=".3" rx="1"/><rect x="5.5" y="1" width="9.5" height="4" fill="currentColor" opacity=".15" rx="1"/><rect x="1" y="5" width="4.5" height="4" fill="currentColor" opacity=".15"/><path d="M11 11.5l-2 2m0 0l2 2m-2-2h4" stroke="#4472C4" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    zoomIn: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"><circle cx="7" cy="7" r="5"/><line x1="10.5" y1="10.5" x2="14" y2="14"/><line x1="5" y1="7" x2="9" y2="7"/><line x1="7" y1="5" x2="7" y2="9"/></svg>',
+    zoomOut: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"><circle cx="7" cy="7" r="5"/><line x1="10.5" y1="10.5" x2="14" y2="14"/><line x1="5" y1="7" x2="9" y2="7"/></svg>',
+    zoomFit: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="12" height="12" rx="1"/><path d="M5 8h6M8 5v6"/><path d="M2 6V2h4M10 2h4v4M14 10v4h-4M6 14H2v-4"/></svg>'
   };
   var LIGHT_STYLES = [
     ["TableStyleLight1", { header: "#000000", band: "#f7f7f7", label: "Black" }],
@@ -6038,6 +6394,31 @@
       viewsBody.appendChild(this.toggleBtn(IC.pageBreak, "Page Break\nPreview", "pageBreakPreview", false));
       views.insertBefore(viewsBody, views.lastChild);
       panel.appendChild(views);
+      const zoomGrp = this.group("Zoom");
+      const zoomBody = this.el("div", "group-body");
+      zoomBody.appendChild(this.tallBtn(IC.zoomIn, "Zoom\nIn", "zoomIn"));
+      zoomBody.appendChild(this.tallBtn(IC.zoomOut, "Zoom\nOut", "zoomOut"));
+      const zoomStack = this.el("div", "btn-col gap-6");
+      zoomStack.appendChild(this.iconBtn(IC.zoomFit, "100%", "zoomReset", "Reset to 100%"));
+      zoomStack.appendChild(this.iconBtn(IC.zoomFit, "Fit", "zoomToFit", "Zoom to Fit"));
+      const presetSel = document.createElement("select");
+      presetSel.title = "Preset Zoom";
+      presetSel.style.cssText = "font-size:11px;border:1px solid #ccc;border-radius:3px;padding:1px 2px;cursor:pointer;background:var(--vscode-editor-background,#fff);color:inherit;";
+      for (const [pct, action] of [["50%", "zoom50"], ["75%", "zoom75"], ["100%", "zoom100"], ["125%", "zoom125"], ["150%", "zoom150"], ["200%", "zoom200"]]) {
+        const opt = document.createElement("option");
+        opt.value = action;
+        opt.textContent = pct;
+        presetSel.appendChild(opt);
+      }
+      presetSel.value = "zoom100";
+      presetSel.addEventListener("change", () => {
+        this.onAction({ action: presetSel.value });
+        presetSel.value = "zoom100";
+      });
+      zoomStack.appendChild(presetSel);
+      zoomBody.appendChild(zoomStack);
+      zoomGrp.insertBefore(zoomBody, zoomGrp.lastChild);
+      panel.appendChild(zoomGrp);
       return panel;
     }
     // ======================= DATA TAB =======================
@@ -6066,6 +6447,14 @@
       editBody.appendChild(this.tallBtn(IC.clear, "Clear", "clear"));
       edit.insertBefore(editBody, edit.lastChild);
       panel.appendChild(edit);
+      const outlineGroup = this.group("Outline");
+      const outlineBody = this.el("div", "group-body");
+      outlineBody.appendChild(this.tallBtn(IC.group, "Group\nRows", "groupRows"));
+      outlineBody.appendChild(this.tallBtn(IC.group, "Group\nColumns", "groupCols"));
+      outlineBody.appendChild(this.tallBtn(IC.ungroup, "Ungroup\nRows", "ungroupRows"));
+      outlineBody.appendChild(this.tallBtn(IC.ungroup, "Ungroup\nColumns", "ungroupCols"));
+      outlineGroup.insertBefore(outlineBody, outlineGroup.lastChild);
+      panel.appendChild(outlineGroup);
       const pvGroup = this.group("PivotTable");
       const pvBody = this.el("div", "group-body");
       pvBody.appendChild(this.tallBtn(IC.pivotTable, "Refresh\nAll", "refreshAllPivots"));
@@ -6281,6 +6670,10 @@
       this.getTableAtCell = null;
       this.getHyperlinkAtCell = null;
       this.getPivotAtCell = null;
+      this._isColHidden = null;
+      this._isRowHidden = null;
+      this._hasHiddenCols = null;
+      this._hasHiddenRows = null;
       this.onAction = onAction;
       this.menu = document.createElement("div");
       this.menu.className = "xlsx-context-menu";
@@ -6306,6 +6699,13 @@
     /** Register a function that returns the pivot index (-1 if none) at a cell */
     setPivotDetector(fn) {
       this.getPivotAtCell = fn;
+    }
+    /** Register callbacks for hidden column/row state detection */
+    setHiddenDetectors(isColHidden, isRowHidden, hasHiddenCols, hasHiddenRows) {
+      this._isColHidden = isColHidden;
+      this._isRowHidden = isRowHidden;
+      this._hasHiddenCols = hasHiddenCols;
+      this._hasHiddenRows = hasHiddenRows;
     }
     show(x, y, row, col, headerType, selectionRange) {
       this.currentRow = row;
@@ -6348,6 +6748,12 @@
       const multiRowSelected = sel && Math.abs(sel.endRow - sel.startRow) > 0;
       if (headerType === "col") {
         const autoFitItem = multiColSelected ? { action: "autoFitSelectedCols", label: "Auto-Fit Selected Columns" } : { action: "colWidthAuto", label: "Auto-Fit Column Width" };
+        const isHidden = this._isColHidden ? this._isColHidden(col) : false;
+        const hasHidden = this._hasHiddenCols ? this._hasHiddenCols() : false;
+        const hideUnhideItems = isHidden ? [{ action: "unhideCol", label: `Unhide Column ${colName}` }] : [{ action: "hideCol", label: `Hide Column ${colName}` }];
+        if (hasHidden) {
+          hideUnhideItems.push({ action: "unhideAllCols", label: "Unhide All Columns" });
+        }
         items = [
           { action: "insertColLeft", label: `Insert Column Left` },
           { action: "insertColRight", label: `Insert Column Right` },
@@ -6355,7 +6761,10 @@
           { action: "deleteCol", label: `Delete Column ${colName}` },
           { action: "clearCol", label: `Clear Column ${colName}` },
           null,
-          { action: "hideCol", label: `Hide Column ${colName}` },
+          ...hideUnhideItems,
+          null,
+          { action: "groupCols", label: "Group Selected Columns" },
+          { action: "ungroupCols", label: "Ungroup Selected Columns" },
           null,
           autoFitItem,
           null,
@@ -6364,6 +6773,12 @@
         ];
       } else if (headerType === "row") {
         const autoFitItem = multiRowSelected ? { action: "autoFitSelectedRows", label: "Auto-Fit Selected Rows" } : { action: "rowHeightAuto", label: "Auto-Fit Row Height" };
+        const isHidden = this._isRowHidden ? this._isRowHidden(row) : false;
+        const hasHidden = this._hasHiddenRows ? this._hasHiddenRows() : false;
+        const hideUnhideItems = isHidden ? [{ action: "unhideRow", label: `Unhide Row ${row + 1}` }] : [{ action: "hideRow", label: `Hide Row ${row + 1}` }];
+        if (hasHidden) {
+          hideUnhideItems.push({ action: "unhideAllRows", label: "Unhide All Rows" });
+        }
         items = [
           { action: "insertRowAbove", label: "Insert Row Above" },
           { action: "insertRowBelow", label: "Insert Row Below" },
@@ -6371,7 +6786,10 @@
           { action: "deleteRow", label: `Delete Row ${row + 1}` },
           { action: "clearRow", label: `Clear Row ${row + 1}` },
           null,
-          { action: "hideRow", label: `Hide Row ${row + 1}` },
+          ...hideUnhideItems,
+          null,
+          { action: "groupRows", label: "Group Selected Rows" },
+          { action: "ungroupRows", label: "Ungroup Selected Rows" },
           null,
           autoFitItem
         ];
@@ -25497,7 +25915,6 @@
   var CsvImportDialog = class {
     constructor(container, onAction) {
       this._rawContent = "";
-      this._fileName = "";
       this.container = container;
       this.onAction = onAction;
       this._build();
@@ -25531,7 +25948,9 @@
         justifyContent: "space-between",
         alignItems: "center"
       });
-      titleBar.textContent = "Import CSV / TSV";
+      this._titleText = document.createElement("span");
+      this._titleText.textContent = "Import CSV / TSV";
+      titleBar.appendChild(this._titleText);
       const closeBtn = document.createElement("button");
       closeBtn.textContent = "\u2715";
       Object.assign(closeBtn.style, { background: "none", border: "none", cursor: "pointer", color: "inherit", fontSize: "16px" });
@@ -25727,7 +26146,7 @@
     /** Called by main.ts when extension host returns file content. */
     previewFile(content, fileName) {
       this._rawContent = content;
-      this._fileName = fileName;
+      this._titleText.textContent = fileName ? `Import: ${fileName}` : "Import CSV / TSV";
       if (fileName.endsWith(".tsv") || fileName.endsWith(".tab")) {
         this.delimTab.checked = true;
       } else {
@@ -25823,6 +26242,12 @@
       if (!renderer) return -1;
       return renderer.getPivotZoneAtCell(row, col);
     });
+    contextMenu.setHiddenDetectors(
+      (col) => renderer ? renderer.isColHidden(col) : false,
+      (row) => renderer ? renderer.isRowHidden(row) : false,
+      () => renderer ? renderer.getHiddenCols().size > 0 : false,
+      () => renderer ? renderer.getHiddenRows().size > 0 : false
+    );
     renderer.onHyperlinkClick = (url, isInternal) => {
       if (isInternal) {
         navigateToInternalLink(url);
@@ -26543,6 +26968,37 @@
       case "pageBreakPreview":
         renderer.setPageBreakPreview(event.value === "1");
         break;
+      // Zoom
+      case "zoomIn":
+        renderer.zoomIn();
+        break;
+      case "zoomOut":
+        renderer.zoomOut();
+        break;
+      case "zoomReset":
+        renderer.setZoom(1);
+        break;
+      case "zoomToFit":
+        renderer.zoomToFit();
+        break;
+      case "zoom50":
+        renderer.setZoom(0.5);
+        break;
+      case "zoom75":
+        renderer.setZoom(0.75);
+        break;
+      case "zoom100":
+        renderer.setZoom(1);
+        break;
+      case "zoom125":
+        renderer.setZoom(1.25);
+        break;
+      case "zoom150":
+        renderer.setZoom(1.5);
+        break;
+      case "zoom200":
+        renderer.setZoom(2);
+        break;
       // Data
       case "sortAZ":
         renderer.sortColumn(true);
@@ -26556,6 +27012,47 @@
         renderer.clearSelectedCells();
         markDirty();
         break;
+      // Outline (Group / Ungroup) from ribbon — operates on current row/col selection
+      case "groupRows": {
+        const selRG = renderer.getSelectedRange();
+        if (selRG) {
+          const gsr = Math.min(selRG.startRow, selRG.endRow);
+          const ger = Math.max(selRG.startRow, selRG.endRow);
+          renderer.addRowOutlineGroup(gsr, ger);
+          markDirty();
+        }
+        break;
+      }
+      case "ungroupRows": {
+        const selURG = renderer.getSelectedRange();
+        if (selURG) {
+          const ugsr = Math.min(selURG.startRow, selURG.endRow);
+          const uger = Math.max(selURG.startRow, selURG.endRow);
+          renderer.removeRowOutlineGroup(ugsr, uger);
+          markDirty();
+        }
+        break;
+      }
+      case "groupCols": {
+        const selCG = renderer.getSelectedRange();
+        if (selCG) {
+          const gsc = Math.min(selCG.startCol, selCG.endCol);
+          const gec = Math.max(selCG.startCol, selCG.endCol);
+          renderer.addColOutlineGroup(gsc, gec);
+          markDirty();
+        }
+        break;
+      }
+      case "ungroupCols": {
+        const selUCG = renderer.getSelectedRange();
+        if (selUCG) {
+          const ugsc = Math.min(selUCG.startCol, selUCG.endCol);
+          const ugec = Math.max(selUCG.startCol, selUCG.endCol);
+          renderer.removeColOutlineGroup(ugsc, ugec);
+          markDirty();
+        }
+        break;
+      }
       // Fill
       case "fillDown":
         renderer.fillDown();
@@ -27402,18 +27899,88 @@
         break;
       case "hideCol":
         if (renderer) {
-          renderer.setColWidth(event.col, 0);
-          renderer.render();
+          renderer.hideColumn(event.col);
+          markDirty();
+        }
+        break;
+      case "unhideCol":
+        if (renderer) {
+          renderer.unhideColumn(event.col);
+          markDirty();
+        }
+        break;
+      case "unhideAllCols":
+        if (renderer) {
+          renderer.unhideAllCols();
           markDirty();
         }
         break;
       case "hideRow":
         if (renderer) {
-          renderer.setRowHeight(event.row, 0);
-          renderer.render();
+          renderer.hideRow(event.row);
           markDirty();
         }
         break;
+      case "unhideRow":
+        if (renderer) {
+          renderer.unhideRow(event.row);
+          markDirty();
+        }
+        break;
+      case "unhideAllRows":
+        if (renderer) {
+          renderer.unhideAllRows();
+          markDirty();
+        }
+        break;
+      case "groupCols": {
+        if (renderer) {
+          const selForGroup = renderer.getSelectedRange();
+          if (selForGroup) {
+            const gsc = Math.min(selForGroup.startCol, selForGroup.endCol);
+            const gec = Math.max(selForGroup.startCol, selForGroup.endCol);
+            renderer.addColOutlineGroup(gsc, gec);
+            markDirty();
+          }
+        }
+        break;
+      }
+      case "ungroupCols": {
+        if (renderer) {
+          const selForUngroup = renderer.getSelectedRange();
+          if (selForUngroup) {
+            const ugsc = Math.min(selForUngroup.startCol, selForUngroup.endCol);
+            const ugec = Math.max(selForUngroup.startCol, selForUngroup.endCol);
+            renderer.removeColOutlineGroup(ugsc, ugec);
+            markDirty();
+          }
+        }
+        break;
+      }
+      case "groupRows": {
+        if (renderer) {
+          const selForGRow = renderer.getSelectedRange();
+          if (selForGRow) {
+            const gsr = Math.min(selForGRow.startRow, selForGRow.endRow);
+            const ger = Math.max(selForGRow.startRow, selForGRow.endRow);
+            renderer.addRowOutlineGroup(gsr, ger);
+            markDirty();
+          }
+        }
+        break;
+      }
+      case "ungroupRows": {
+        if (renderer) {
+          const selForUGRow = renderer.getSelectedRange();
+          if (selForUGRow) {
+            const ugsr = Math.min(selForUGRow.startRow, selForUGRow.endRow);
+            const uger = Math.max(selForUGRow.startRow, selForUGRow.endRow);
+            renderer.removeRowOutlineGroup(ugsr, uger);
+            markDirty();
+          }
+        }
+        break;
+      }
       case "colWidthAuto":
         if (renderer) {
           renderer.autoFitColumn(event.col);
@@ -28546,6 +29113,9 @@
       updateFormulaBar(row, col);
       updateStatusBar();
     };
+    renderer.onZoomChanged = (scale) => {
+      updateZoomDisplay(scale);
+    };
     renderer.onFormulaRangeSelect = (row, col) => {
       handleFormulaPointClick(row, col);
     };
@@ -28596,14 +29166,66 @@
   }
   var statusBarEl = document.getElementById("status-bar");
   var visibleStats = /* @__PURE__ */ new Set(["average", "count", "sum"]);
+  var zoomSlider = null;
+  var zoomLabel = null;
+  var statusStatsEl = null;
+  function initStatusBarZoomControls() {
+    if (!statusBarEl) return;
+    statusBarEl.innerHTML = "";
+    const zoomCtrl = document.createElement("div");
+    zoomCtrl.className = "zoom-controls";
+    const zoomMinusBtn = document.createElement("button");
+    zoomMinusBtn.className = "zoom-btn";
+    zoomMinusBtn.textContent = "\u2212";
+    zoomMinusBtn.title = "Zoom Out";
+    zoomMinusBtn.addEventListener("click", () => {
+      if (renderer) renderer.zoomOut();
+    });
+    const slider = document.createElement("input");
+    slider.type = "range";
+    slider.className = "zoom-slider";
+    slider.min = "25";
+    slider.max = "400";
+    slider.step = "5";
+    slider.value = "100";
+    slider.title = "Zoom";
+    slider.addEventListener("input", () => {
+      if (renderer) renderer.setZoom(parseInt(slider.value) / 100);
+    });
+    const label = document.createElement("span");
+    label.className = "zoom-label";
+    label.textContent = "100%";
+    const zoomPlusBtn = document.createElement("button");
+    zoomPlusBtn.className = "zoom-btn";
+    zoomPlusBtn.textContent = "+";
+    zoomPlusBtn.title = "Zoom In";
+    zoomPlusBtn.addEventListener("click", () => {
+      if (renderer) renderer.zoomIn();
+    });
+    zoomCtrl.appendChild(zoomMinusBtn);
+    zoomCtrl.appendChild(slider);
+    zoomCtrl.appendChild(label);
+    zoomCtrl.appendChild(zoomPlusBtn);
+    statusBarEl.appendChild(zoomCtrl);
+    zoomSlider = slider;
+    zoomLabel = label;
+    const statsDiv = document.createElement("div");
+    statsDiv.style.cssText = "display:flex;align-items:center;gap:16px;";
+    statusBarEl.appendChild(statsDiv);
+    statusStatsEl = statsDiv;
+  }
+  function updateZoomDisplay(scale) {
+    if (zoomSlider) zoomSlider.value = String(Math.round(scale * 100));
+    if (zoomLabel) zoomLabel.textContent = `${Math.round(scale * 100)}%`;
+  }
   function formatStat(n) {
     if (Number.isInteger(n)) return String(n);
     return parseFloat(n.toPrecision(10)).toString();
   }
   function updateStatusBar() {
-    if (!renderer || !statusBarEl) return;
+    if (!renderer || !statusStatsEl) return;
     const stats = renderer.getSelectionStats();
-    statusBarEl.innerHTML = "";
+    statusStatsEl.innerHTML = "";
     if (!stats) return;
     const items = [
       { key: "average", label: "Average", value: stats.count > 0 ? formatStat(stats.avg) : "" },
@@ -28618,7 +29240,7 @@
       const el = document.createElement("span");
       el.className = "status-item";
       el.textContent = `${item.label}: ${item.value}`;
-      statusBarEl.appendChild(el);
+      statusStatsEl.appendChild(el);
     }
   }
   function showStatusBarContextMenu(x, y) {
@@ -28697,6 +29319,7 @@
     };
     setTimeout(() => document.addEventListener("mousedown", close), 0);
   }
+  initStatusBarZoomControls();
   if (statusBarEl) {
     statusBarEl.addEventListener("contextmenu", (e) => {
       e.preventDefault();

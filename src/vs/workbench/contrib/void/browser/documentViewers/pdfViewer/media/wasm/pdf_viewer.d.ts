@@ -19,6 +19,11 @@ export class PdfRenderer {
     /**
      * Extract text from a page with bounding boxes.
      * Returns JSON array: [{text, x, y, width, height, font_size}]
+     *
+     * Uses three strategies in priority order:
+     * 1. Page objects API (iterates text objects with bounds - works even without system fonts)
+     * 2. Text page chars API (character-level bounds)
+     * 3. Text page segments API (segment-level bounds)
      */
     get_page_text(index: number): string;
     /**

@@ -1,3 +1,5 @@
+/* @ts-self-types="./pdf_viewer.d.ts" */
+
 export class PdfRenderer {
     __destroy_into_raw() {
         const ptr = this.__wbg_ptr;
