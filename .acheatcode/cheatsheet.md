@@ -7,22 +7,24 @@
 ### Complete Build (Production Windows)
 
 ```bash
-bun run gulp setup-python && bun run buildreact && bun run compile-build-ci && bun run compile-extensions-build && bun run gulp bundle-vscode && bun run gulp vscode-win32-x64-ci && bun run gulp vscode-win32-x64-inno-updater && bun run gulp vscode-win32-x64-user-setup
+bun run gulp setup-python && bun run buildreact && bun run build-wasm && bun run build-xlsx-viewer && bun run build-pdf-wasm && bun run compile-build-ci && bun run compile-extensions-build && bun run gulp bundle-vscode && bun run gulp vscode-win32-x64-ci && bun run gulp vscode-win32-x64-inno-updater && bun run gulp vscode-win32-x64-user-setup
 ```
 
 > **📝 Note**:
 >
 > - `setup-python` prepares the Python virtual environment (`python/.venv`) which is bundled into the production build
+> - `build-wasm` + `build-xlsx-viewer` compile the XLSX Rust viewer (Rust→WASM, then TS→JS bundle)
+> - `build-pdf-wasm` compiles the PDF Rust viewer (Rust→WASM via wasm-bindgen, then TS→JS bundle) — runs `wasm/build.ps1`
 > - `compile-extensions-build` compiles all extensions (themes, time-tracker, etc.) for production packaging
 
 ### Complete Build (Production macOS)
 
 ```bash
 # For Apple Silicon (M1/M2/M3)
-bun run gulp setup-python && bun run buildreact && bun run compile-build-ci && bun run compile-extensions-build && bun run gulp bundle-vscode && bun run gulp vscode-darwin-arm64-ci
+bun run gulp setup-python && bun run buildreact && bun run build-wasm && bun run build-xlsx-viewer && bash src/vs/workbench/contrib/void/browser/documentViewers/pdfViewer/wasm/build.sh && bun run compile-build-ci && bun run compile-extensions-build && bun run gulp bundle-vscode && bun run gulp vscode-darwin-arm64-ci
 
 # For Intel Macs
-bun run gulp setup-python && bun run buildreact && bun run compile-build-ci && bun run compile-extensions-build && bun run gulp bundle-vscode && bun run gulp vscode-darwin-x64-ci
+bun run gulp setup-python && bun run buildreact && bun run build-wasm && bun run build-xlsx-viewer && bash src/vs/workbench/contrib/void/browser/documentViewers/pdfViewer/wasm/build.sh && bun run compile-build-ci && bun run compile-extensions-build && bun run gulp bundle-vscode && bun run gulp vscode-darwin-x64-ci
 
 # Universal App (both architectures - requires building both first)
 VSCODE_ARCH=universal node build/darwin/create-universal-app.js ../
@@ -37,7 +39,7 @@ VSCODE_ARCH=universal node build/darwin/create-universal-app.js ../
 ### Complete Build (Production Linux)
 
 ```bash
-bun run gulp setup-python && bun run buildreact && bun run compile-build-ci && bun run compile-extensions-build && bun run gulp bundle-vscode && bun run gulp vscode-linux-x64-ci
+bun run gulp setup-python && bun run buildreact && bun run build-wasm && bun run build-xlsx-viewer && bash src/vs/workbench/contrib/void/browser/documentViewers/pdfViewer/wasm/build.sh && bun run compile-build-ci && bun run compile-extensions-build && bun run gulp bundle-vscode && bun run gulp vscode-linux-x64-ci
 ```
 
 > **📝 Linux Notes**:
@@ -73,6 +75,10 @@ bun run buildreact
 # XLSX Rust Viewer (Rust → WASM + TS → JS bundle)
 bun run build-wasm            # Compile Rust crate to WASM via wasm-pack
 bun run build-xlsx-viewer     # Bundle webview TS into xlsxRustViewer.js via esbuild
+
+# PDF Rust Viewer (Rust → WASM + TS → JS bundle, Windows)
+bun run build-pdf-wasm        # Full PDF build: cargo+wasm-bindgen→WASM, then TS→JS (runs wasm/build.ps1)
+bun run build-pdf-viewer      # TS bundle only (pdfRustViewer.js) — skip if already ran build-pdf-wasm
 
 # Run any gulp command with proper Node.js flags
 bun run gulp <task>
@@ -152,6 +158,8 @@ bun run compile            # Compile VS Code
 bun run watchd             # Watch mode (background)
 bun run build-wasm         # Compile Rust XLSX viewer to WASM
 bun run build-xlsx-viewer  # Bundle XLSX Rust Viewer webview JS
+bun run build-pdf-wasm     # Full PDF viewer build: Rust→WASM + TS→JS (Windows, runs build.ps1)
+bun run build-pdf-viewer   # PDF viewer TS bundle only (pdfRustViewer.js)
 ./scripts/code.sh          # Launch VS Code
 ```
 
@@ -219,7 +227,7 @@ Packages included: `pdf2image`, `Pillow`, `pytesseract`, `ocrmypdf`
 cd build/win32/tools && .\download-tesseract.ps1 && .\download-poppler.ps1 && cd ../../..
 
 # 2. Build installer (standard production build)
-bun run gulp setup-python && bun run buildreact && bun run compile-build-ci && bun run compile-extensions-build && bun run gulp bundle-vscode && bun run gulp vscode-win32-x64-ci && bun run gulp vscode-win32-x64-inno-updater && bun run gulp vscode-win32-x64-user-setup
+bun run gulp setup-python && bun run buildreact && bun run build-wasm && bun run build-xlsx-viewer && bun run build-pdf-wasm && bun run compile-build-ci && bun run compile-extensions-build && bun run gulp bundle-vscode && bun run gulp vscode-win32-x64-ci && bun run gulp vscode-win32-x64-inno-updater && bun run gulp vscode-win32-x64-user-setup
 ```
 
 ## 🎙️ Audio Transcription Dependencies

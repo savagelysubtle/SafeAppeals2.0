@@ -18,6 +18,7 @@
     "buildreact": "cd ./src/vs/workbench/contrib/void/browser/react/ && node build.js && cd ../../../../../../../",
     "build-wasm": "cd src/vs/workbench/contrib/void/browser/documentViewers/xlsxRustViewer/wasm && wasm-pack build --target web --out-dir ../media/wasm --no-typescript",
     "build-xlsx-viewer": "node src/vs/workbench/contrib/void/browser/documentViewers/xlsxRustViewer/media/build.mjs",
+    "build-pdf-wasm": "cd src/vs/workbench/contrib/void/browser/documentViewers/pdfViewer/wasm && powershell -ExecutionPolicy Bypass -File ./build.ps1",
     "build-pdf-viewer": "node src/vs/workbench/contrib/void/browser/documentViewers/pdfViewer/media/build.mjs",
     "watchreact": "cd ./src/vs/workbench/contrib/void/browser/react/ && bun run build.js --watch && cd ../../../../../../../",
     "watchreactd": "deemon bun run watchreact",

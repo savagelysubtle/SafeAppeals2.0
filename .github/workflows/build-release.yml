@@ -7,9 +7,8 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version tag (e.g., v1.4.9)'
+        description: 'Version tag (e.g., v1.5.0)'
         required: true
-        default: 'v1.4.9'
 
 env:
   NODE_VERSION: '20'
@@ -17,14 +16,101 @@ env:
 
 jobs:
   # ============================================
-  # Windows x64 Build
+  # Pre-build: WASM artifacts (platform-agnostic)
   # ============================================
-  build-windows:
-    runs-on: windows-latest
-    timeout-minutes: 60
+  build-wasm-artifacts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Cache Cargo registry and build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            src/vs/workbench/contrib/void/browser/documentViewers/xlsxRustViewer/wasm/target
+            src/vs/workbench/contrib/void/browser/documentViewers/pdfViewer/wasm/target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: Install wasm-pack
+        run: cargo install wasm-pack --locked
+
+      - name: Install wasm-bindgen-cli
+        run: cargo install wasm-bindgen-cli --locked
+
+      - name: Setup Node.js (for esbuild)
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Install esbuild
+        run: npm install esbuild
+        working-directory: src/vs/workbench/contrib/void/browser/documentViewers/xlsxRustViewer/media
+
+      - name: Build XLSX Rust Viewer WASM
+        run: wasm-pack build --target web --out-dir ../media/wasm --no-typescript
+        working-directory: src/vs/workbench/contrib/void/browser/documentViewers/xlsxRustViewer/wasm
+
+      - name: Build XLSX Viewer JS bundle
+        run: node build.mjs
+        working-directory: src/vs/workbench/contrib/void/browser/documentViewers/xlsxRustViewer/media
+
+      - name: Build PDF Viewer WASM
+        working-directory: src/vs/workbench/contrib/void/browser/documentViewers/pdfViewer/wasm
+        run: |
+          cargo build --target wasm32-unknown-unknown --release
+          mkdir -p pkg
+          wasm-bindgen \
+            --target web \
+            --out-dir pkg/ \
+            target/wasm32-unknown-unknown/release/pdf_viewer.wasm
+          mkdir -p ../media/wasm
+          cp pkg/pdf_viewer_bg.wasm ../media/wasm/
+          cp pkg/pdf_viewer.js ../media/wasm/
+          if [ -f pkg/pdf_viewer.d.ts ]; then
+            cp pkg/pdf_viewer.d.ts ../media/wasm/
+          fi
+
+      - name: Build PDF Viewer JS bundle
+        run: node build.mjs
+        working-directory: src/vs/workbench/contrib/void/browser/documentViewers/pdfViewer/media
+
+      - name: Upload WASM artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: wasm-artifacts
+          retention-days: 1
+          path: |
+            src/vs/workbench/contrib/void/browser/documentViewers/xlsxRustViewer/media/wasm/
+            src/vs/workbench/contrib/void/browser/documentViewers/xlsxRustViewer/media/xlsxRustViewer.js
+            src/vs/workbench/contrib/void/browser/documentViewers/pdfViewer/media/wasm/
+
+  # ============================================
+  # Windows x64 Build
+  # ============================================
+  build-windows:
+    needs: build-wasm-artifacts
+    runs-on: windows-latest
+    timeout-minutes: 90
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download WASM artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: wasm-artifacts
+          path: .
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -59,8 +145,19 @@ jobs:
       - name: Build React components
         run: npm run buildreact
 
-      - name: Compile TypeScript (CI mode - no mangling)
+      - name: Setup Python venv
+        run: npm run gulp setup-python
+
+      - name: Stamp commit SHA into product.json
+        env:
+          COMMIT_SHA: ${{ github.sha }}
+        run: node -e "const fs=require('fs');const p=JSON.parse(fs.readFileSync('product.json','utf8'));p.commit=process.env.COMMIT_SHA;fs.writeFileSync('product.json',JSON.stringify(p,null,'\t')+'\n')"
+
+      - name: Compile TypeScript (CI mode)
         run: npm run compile-build-ci
+
+      - name: Compile extensions
+        run: npm run compile-extensions-build
 
       - name: Bundle VS Code
         run: npm run gulp bundle-vscode
@@ -80,7 +177,7 @@ jobs:
         run: |
           $version = "${{ github.ref_name }}"
           if ($version -eq "") { $version = "${{ github.event.inputs.version }}" }
-          if ($version -eq "") { $version = "v1.4.9" }
+          if ($version -eq "") { $version = "v0.0.0" }
           $version = $version -replace "^v", ""
           echo "VERSION=$version" >> $env:GITHUB_OUTPUT
 
@@ -88,7 +185,11 @@ jobs:
         shell: pwsh
         run: |
           $version = "${{ steps.get_version.outputs.VERSION }}"
-          Move-Item ".build/win32-x64/user-setup/VSCodeSetup.exe" ".build/win32-x64/user-setup/SafeAppealsNavigator-$version-win32-x64-user-setup.exe"
+          $setupDir = ".build/win32-x64/user-setup"
+          $exe = Get-ChildItem "$setupDir/*.exe" | Select-Object -First 1
+          if ($exe) {
+            Move-Item $exe.FullName "$setupDir/SafeAppealsNavigator-$version-win32-x64-user-setup.exe"
+          }
 
       - name: Upload Windows Installer
         uses: actions/upload-artifact@v4
@@ -114,11 +215,18 @@ jobs:
   # macOS x64 (Intel) Build
   # ============================================
   build-macos-x64:
-    runs-on: macos-13  # Intel Mac
-    timeout-minutes: 60
+    needs: build-wasm-artifacts
+    runs-on: macos-13
+    timeout-minutes: 90
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+      - name: Download WASM artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: wasm-artifacts
+          path: .
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -152,8 +260,19 @@ jobs:
       - name: Build React components
         run: npm run buildreact
 
-      - name: Compile TypeScript (CI mode - no mangling)
+      - name: Setup Python venv
+        run: npm run gulp setup-python
+
+      - name: Stamp commit SHA into product.json
+        env:
+          COMMIT_SHA: ${{ github.sha }}
+        run: node -e "const fs=require('fs');const p=JSON.parse(fs.readFileSync('product.json','utf8'));p.commit=process.env.COMMIT_SHA;fs.writeFileSync('product.json',JSON.stringify(p,null,'\t')+'\n')"
+
+      - name: Compile TypeScript (CI mode)
         run: npm run compile-build-ci
+
+      - name: Compile extensions
+        run: npm run compile-extensions-build
 
       - name: Bundle VS Code
         run: npm run gulp bundle-vscode
@@ -166,7 +285,7 @@ jobs:
         run: |
           version="${{ github.ref_name }}"
           if [ -z "$version" ]; then version="${{ github.event.inputs.version }}"; fi
-          if [ -z "$version" ]; then version="v1.4.9"; fi
+          if [ -z "$version" ]; then version="v0.0.0"; fi
           version="${version#v}"
           echo "VERSION=$version" >> $GITHUB_OUTPUT
 
@@ -187,11 +306,18 @@ jobs:
   # macOS ARM64 (Apple Silicon) Build
   # ============================================
   build-macos-arm64:
-    runs-on: macos-14  # Apple Silicon Mac
-    timeout-minutes: 60
+    needs: build-wasm-artifacts
+    runs-on: macos-14
+    timeout-minutes: 90
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+      - name: Download WASM artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: wasm-artifacts
+          path: .
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -225,8 +351,19 @@ jobs:
       - name: Build React components
         run: npm run buildreact
 
-      - name: Compile TypeScript (CI mode - no mangling)
+      - name: Setup Python venv
+        run: npm run gulp setup-python
+
+      - name: Stamp commit SHA into product.json
+        env:
+          COMMIT_SHA: ${{ github.sha }}
+        run: node -e "const fs=require('fs');const p=JSON.parse(fs.readFileSync('product.json','utf8'));p.commit=process.env.COMMIT_SHA;fs.writeFileSync('product.json',JSON.stringify(p,null,'\t')+'\n')"
+
+      - name: Compile TypeScript (CI mode)
         run: npm run compile-build-ci
+
+      - name: Compile extensions
+        run: npm run compile-extensions-build
 
       - name: Bundle VS Code
         run: npm run gulp bundle-vscode
@@ -239,7 +376,7 @@ jobs:
         run: |
           version="${{ github.ref_name }}"
           if [ -z "$version" ]; then version="${{ github.event.inputs.version }}"; fi
-          if [ -z "$version" ]; then version="v1.4.9"; fi
+          if [ -z "$version" ]; then version="v0.0.0"; fi
           version="${version#v}"
           echo "VERSION=$version" >> $GITHUB_OUTPUT
 
@@ -260,11 +397,18 @@ jobs:
   # Linux x64 Build
   # ============================================
   build-linux:
+    needs: build-wasm-artifacts
     runs-on: ubuntu-22.04
-    timeout-minutes: 60
+    timeout-minutes: 90
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+      - name: Download WASM artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: wasm-artifacts
+          path: .
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -312,8 +456,19 @@ jobs:
       - name: Build React components
         run: npm run buildreact
 
-      - name: Compile TypeScript (CI mode - no mangling)
+      - name: Setup Python venv
+        run: npm run gulp setup-python
+
+      - name: Stamp commit SHA into product.json
+        env:
+          COMMIT_SHA: ${{ github.sha }}
+        run: node -e "const fs=require('fs');const p=JSON.parse(fs.readFileSync('product.json','utf8'));p.commit=process.env.COMMIT_SHA;fs.writeFileSync('product.json',JSON.stringify(p,null,'\t')+'\n')"
+
+      - name: Compile TypeScript (CI mode)
         run: npm run compile-build-ci
+
+      - name: Compile extensions
+        run: npm run compile-extensions-build
 
       - name: Bundle VS Code
         run: npm run gulp bundle-vscode
@@ -326,7 +481,7 @@ jobs:
         run: |
           version="${{ github.ref_name }}"
           if [ -z "$version" ]; then version="${{ github.event.inputs.version }}"; fi
-          if [ -z "$version" ]; then version="v1.4.9"; fi
+          if [ -z "$version" ]; then version="v0.0.0"; fi
           version="${version#v}"
           echo "VERSION=$version" >> $GITHUB_OUTPUT
 
@@ -358,7 +513,7 @@ jobs:
         run: |
           version="${{ github.ref_name }}"
           if [ -z "$version" ]; then version="${{ github.event.inputs.version }}"; fi
-          if [ -z "$version" ]; then version="v1.4.9"; fi
+          if [ -z "$version" ]; then version="v0.0.0"; fi
           version="${version#v}"
           echo "VERSION=$version" >> $GITHUB_OUTPUT
 
@@ -367,20 +522,21 @@ jobs:
         with:
           path: ./artifacts
 
-      - name: List artifacts
-        run: |
-          echo "Downloaded artifacts:"
-          find ./artifacts -type f -name "*"
-
       - name: Prepare release assets
         run: |
           mkdir -p release-assets
-          # Find and copy all release files
           find ./artifacts -name "*.exe" -exec cp {} release-assets/ \;
           find ./artifacts -name "*.zip" -exec cp {} release-assets/ \;
           find ./artifacts -name "*.tar.gz" -exec cp {} release-assets/ \;
           echo "Release assets:"
           ls -la release-assets/
+
+      - name: Generate SHA256 checksums
+        working-directory: release-assets
+        run: |
+          sha256sum * > SHA256SUMS.txt
+          echo "SHA256 checksums:"
+          cat SHA256SUMS.txt
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
@@ -388,35 +544,30 @@ jobs:
           tag_name: ${{ github.ref_name || github.event.inputs.version }}
           name: Safe Appeals Navigator v${{ steps.get_version.outputs.VERSION }}
           body: |
-            ## 🎉 Safe Appeals Navigator v${{ steps.get_version.outputs.VERSION }}
+            ## Safe Appeals Navigator v${{ steps.get_version.outputs.VERSION }}
 
-            Safe Appeals Navigator is a VSCode fork combining AI-powered code editing with specialized legal research and case management tools for workers' compensation appeals.
-
-            ### 📦 Downloads
+            ### Downloads
 
             | Platform | File | Description |
             |----------|------|-------------|
             | **Windows** | `SafeAppealsNavigator-${{ steps.get_version.outputs.VERSION }}-win32-x64-user-setup.exe` | Installer (recommended) |
             | **Windows** | `SafeAppealsNavigator-${{ steps.get_version.outputs.VERSION }}-win32-x64-portable.zip` | Portable version |
             | **macOS Intel** | `SafeAppealsNavigator-${{ steps.get_version.outputs.VERSION }}-darwin-x64.zip` | For Intel Macs |
-            | **macOS Apple Silicon** | `SafeAppealsNavigator-${{ steps.get_version.outputs.VERSION }}-darwin-arm64.zip` | For M1/M2/M3 Macs |
+            | **macOS Apple Silicon** | `SafeAppealsNavigator-${{ steps.get_version.outputs.VERSION }}-darwin-arm64.zip` | For M1/M2/M3/M4 Macs |
             | **Linux** | `SafeAppealsNavigator-${{ steps.get_version.outputs.VERSION }}-linux-x64.tar.gz` | Linux x64 |
 
-            ### ✨ Key Features
-            - AI Agent Mode for code editing assistance
-            - Legal Research Tools for workers' compensation cases
-            - Case Organizer for managing case profiles and documents
-            - Custom SafeAppeals-branded themes
-
-            ### 💻 System Requirements
+            ### System Requirements
             - **Windows**: Windows 10 or later (64-bit)
             - **macOS**: macOS 10.15 or later
             - **Linux**: Ubuntu 18.04+, Fedora 32+, or equivalent
 
-            ### 📝 Installation
+            ### Installation
             - **Windows**: Run the `.exe` installer (no admin required for user setup)
             - **macOS**: Extract the `.zip` and drag to Applications
             - **Linux**: Extract the `.tar.gz` and run `./safe-appeals-navigator`
+
+            ### Integrity
+            Verify downloads with the `SHA256SUMS.txt` file included in this release.
 
           draft: false
           prerelease: false

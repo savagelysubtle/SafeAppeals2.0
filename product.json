@@ -31,6 +31,10 @@
 	"linuxIconName": "safe-appeals-navigator",
 	"licenseFileName": "LICENSE.txt",
 	"reportIssueUrl": "https://github.com/savagelysubtle/SafeAppeals2.0/issues/new",
+	"quality": "stable",
+	"updateUrl": "https://safeappeals.com",
+	"releaseNotesUrl": "https://github.com/savagelysubtle/SafeAppeals2.0/releases",
+	"downloadUrl": "https://github.com/savagelysubtle/SafeAppeals2.0/releases/latest",
 	"nodejsRepository": "https://nodejs.org",
 	"urlProtocol": "safe-appeals-navigator",
 	"extensionsGallery": {
