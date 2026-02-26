@@ -237,6 +237,61 @@ pub struct DefinedNameDef {
     pub hidden: bool,
 }
 
+// --- Pivot Table Types ---
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct PivotFieldDef {
+    pub name: String,
+    pub source_col: u32,
+    pub area: String, // "row", "column", "value", "filter"
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub aggregation: Option<String>, // "sum", "count", "average", "min", "max"
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub group_by: Option<String>, // "none", "day", "month", "quarter", "year"
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub custom_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sort_order: Option<String>, // "asc", "desc", "none"
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub number_format: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct PivotCalcFieldDef {
+    pub name: String,
+    pub formula: String, // e.g. "'Revenue' - 'Cost'"
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct PivotFilterValueDef {
+    pub field_name: String,
+    pub included_values: Vec<String>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct PivotTableDef {
+    pub name: String,
+    pub source_sheet: String,
+    pub source_range: String, // "A1:F100"
+    pub dest_sheet: String,
+    pub dest_cell: String, // "A1" -- top-left of output
+    pub fields: Vec<PivotFieldDef>,
+    #[serde(default)]
+    pub calc_fields: Vec<PivotCalcFieldDef>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub style_name: Option<String>,
+    #[serde(default)]
+    pub show_grand_total_rows: bool,
+    #[serde(default)]
+    pub show_grand_total_cols: bool,
+    #[serde(default)]
+    pub show_subtotals: bool,
+    #[serde(default)]
+    pub compact_layout: bool,
+    #[serde(default)]
+    pub filter_values: Vec<PivotFilterValueDef>,
+}
+
 // --- Chart Types ---
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -339,6 +394,68 @@ pub struct SparklineDefinition {
     pub last_point: bool,
 }
 
+// --- Page Setup ---
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct PageSetupDef {
+    #[serde(default = "default_orientation")]
+    pub orientation: String,       // "portrait" | "landscape"
+    #[serde(default)]
+    pub paper_size: u8,            // Excel paper size index (1=Letter, 9=A4, 5=Legal)
+    #[serde(default = "default_scale")]
+    pub scale: u16,                // print scale 10-400, default 100
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fit_to_width: Option<u16>, // fit-to-width pages (0=auto)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fit_to_height: Option<u16>,
+    #[serde(default = "default_margin_lr")]
+    pub margin_left: f64,
+    #[serde(default = "default_margin_lr")]
+    pub margin_right: f64,
+    #[serde(default = "default_margin_tb")]
+    pub margin_top: f64,
+    #[serde(default = "default_margin_tb")]
+    pub margin_bottom: f64,
+    #[serde(default = "default_margin_hf")]
+    pub margin_header: f64,
+    #[serde(default = "default_margin_hf")]
+    pub margin_footer: f64,
+    #[serde(default)]
+    pub header: String,
+    #[serde(default)]
+    pub footer: String,
+    #[serde(default)]
+    pub print_area: String,        // e.g. "A1:H50" or empty
+    #[serde(default)]
+    pub print_titles_rows: String, // e.g. "1:2"
+    #[serde(default)]
+    pub print_titles_cols: String, // e.g. "A:B"
+    #[serde(default)]
+    pub row_breaks: Vec<u32>,
+    #[serde(default)]
+    pub col_breaks: Vec<u32>,
+    #[serde(default)]
+    pub print_gridlines: bool,
+    #[serde(default)]
+    pub center_horizontally: bool,
+    #[serde(default)]
+    pub center_vertically: bool,
+}
+
+fn default_orientation() -> String { "portrait".to_string() }
+fn default_scale() -> u16 { 100 }
+fn default_margin_lr() -> f64 { 0.7 }
+fn default_margin_tb() -> f64 { 0.75 }
+fn default_margin_hf() -> f64 { 0.3 }
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct OutlineGroupDef {
+    pub start: u32,
+    pub end_inclusive: u32,
+    pub level: u8,
+    pub collapsed: bool,
+}
+
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct SheetData {
     pub name: String,
@@ -354,6 +471,14 @@ pub struct SheetData {
     #[serde(default)]
     pub row_heights: HashMap<u32, f64>,
     #[serde(default)]
+    pub hidden_cols: Vec<u32>,
+    #[serde(default)]
+    pub hidden_rows: Vec<u32>,
+    #[serde(default)]
+    pub col_outline_groups: Vec<OutlineGroupDef>,
+    #[serde(default)]
+    pub row_outline_groups: Vec<OutlineGroupDef>,
+    #[serde(default)]
     pub conditional_formats: Vec<ConditionalFormatRule>,
     #[serde(default)]
     pub data_validations: Vec<DataValidationDef>,
@@ -363,6 +488,8 @@ pub struct SheetData {
     pub charts: Vec<ChartDefinition>,
     #[serde(default)]
     pub sparklines: Vec<SparklineDefinition>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub page_setup: Option<PageSetupDef>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -370,6 +497,33 @@ pub struct WorkbookModel {
     pub sheets: Vec<SheetData>,
     #[serde(default)]
     pub defined_names: Vec<DefinedNameDef>,
+    #[serde(default)]
+    pub pivot_tables: Vec<PivotTableDef>,
+}
+
+/// Merge consecutive single-row/col outline group entries at the same level into range groups.
+fn merge_outline_groups(groups: &[OutlineGroupDef]) -> Vec<OutlineGroupDef> {
+    if groups.is_empty() {
+        return Vec::new();
+    }
+    // Sort by level then start
+    let mut sorted = groups.to_vec();
+    sorted.sort_by_key(|g| (g.level, g.start));
+
+    let mut merged: Vec<OutlineGroupDef> = Vec::new();
+    for g in sorted {
+        if let Some(last) = merged.last_mut() {
+            if last.level == g.level && last.end_inclusive + 1 == g.start {
+                last.end_inclusive = g.end_inclusive;
+                if g.collapsed {
+                    last.collapsed = true;
+                }
+                continue;
+            }
+        }
+        merged.push(g);
+    }
+    merged
 }
 
 // --- WASM Parser ---
@@ -437,11 +591,16 @@ impl XlsxParser {
                     merged_cells: Vec::new(),
                     col_widths: HashMap::new(),
                     row_heights: HashMap::new(),
+                    hidden_cols: Vec::new(),
+                    hidden_rows: Vec::new(),
+                    col_outline_groups: Vec::new(),
+                    row_outline_groups: Vec::new(),
                     conditional_formats: Vec::new(),
                     data_validations: Vec::new(),
                     hyperlinks: Vec::new(),
                     charts: Vec::new(),
                     sparklines: Vec::new(),
+                    page_setup: None,
                 });
             }
         }
@@ -456,6 +615,11 @@ impl XlsxParser {
 
         // Parse merged cells and column/row dimensions from the XLSX zip
         parse_sheet_metadata_from_zip(data, &mut sheets);
+
+        // Merge consecutive single-row outline groups into range groups
+        for sheet in &mut sheets {
+            sheet.row_outline_groups = merge_outline_groups(&sheet.row_outline_groups);
+        }
 
         // Parse cell styles from xl/styles.xml and apply to cells
         parse_cell_styles_from_zip(data, &mut sheets);
@@ -481,7 +645,13 @@ impl XlsxParser {
         // Parse defined names (named ranges) from xl/workbook.xml
         let defined_names = parse_defined_names_from_zip(data);
 
-        let model = WorkbookModel { sheets, defined_names };
+        // Extract pivot table configs from our custom xl/voidPivotTables.json
+        let pivot_tables = parse_void_pivot_tables_from_zip(data);
+
+        // Parse page setup (margins, orientation, headers/footers, breaks, etc.)
+        parse_page_setup_from_zip(data, &mut sheets);
+
+        let model = WorkbookModel { sheets, defined_names, pivot_tables };
         let json = serde_json::to_string(&model).map_err(|e| JsError::new(&e.to_string()))?;
         self.model = Some(model);
 
@@ -526,6 +696,31 @@ fn extract_void_charts(data: &[u8], sheets: &mut [SheetData]) {
             }
         }
     }
+}
+
+// --- Custom Pivot Table JSON Extraction ---
+
+/// Extract pivot table configs from our custom xl/voidPivotTables.json stored in the XLSX zip.
+fn parse_void_pivot_tables_from_zip(data: &[u8]) -> Vec<PivotTableDef> {
+    let cursor = Cursor::new(data);
+    let mut archive = match zip::ZipArchive::new(cursor) {
+        Ok(a) => a,
+        Err(_) => return Vec::new(),
+    };
+
+    let mut json_bytes = Vec::new();
+    {
+        let mut entry = match archive.by_name("xl/voidPivotTables.json") {
+            Ok(e) => e,
+            Err(_) => return Vec::new(),
+        };
+        use std::io::Read;
+        if entry.read_to_end(&mut json_bytes).is_err() {
+            return Vec::new();
+        }
+    }
+
+    serde_json::from_slice(&json_bytes).unwrap_or_default()
 }
 
 // --- Table XML Parsing ---
@@ -1348,6 +1543,8 @@ fn parse_sheet_metadata_from_zip(data: &[u8], sheets: &mut Vec<SheetData>) {
                             let mut min_col: Option<u32> = None;
                             let mut max_col: Option<u32> = None;
                             let mut width: Option<f64> = None;
+                            let mut hidden = false;
+                            let mut outline_level: u8 = 0;
                             for attr in e.attributes().flatten() {
                                 let key = attr.key.as_ref();
                                 let val = attr.unescape_value().unwrap_or_default().to_string();
@@ -1355,20 +1552,39 @@ fn parse_sheet_metadata_from_zip(data: &[u8], sheets: &mut Vec<SheetData>) {
                                     b"min" => min_col = val.parse().ok(),
                                     b"max" => max_col = val.parse().ok(),
                                     b"width" => width = val.parse().ok(),
+                                    b"hidden" => hidden = val == "1",
+                                    b"outlineLevel" => outline_level = val.parse().unwrap_or(0),
                                     _ => {}
                                 }
                             }
-                            if let (Some(mn), Some(mx), Some(w)) = (min_col, max_col, width) {
-                                // Excel col widths are in character units; approximate to pixels
-                                let px = (w * 7.5).round();
-                                for c in mn..=mx {
-                                    sheet.col_widths.insert(c.saturating_sub(1), px);
+                            if let (Some(mn), Some(mx)) = (min_col, max_col) {
+                                if let Some(w) = width {
+                                    // Excel col widths are in character units; approximate to pixels
+                                    let px = (w * 7.5).round();
+                                    for c in mn..=mx {
+                                        sheet.col_widths.insert(c.saturating_sub(1), px);
+                                    }
+                                }
+                                if hidden {
+                                    for c in mn..=mx {
+                                        sheet.hidden_cols.push(c.saturating_sub(1));
+                                    }
+                                }
+                                if outline_level > 0 {
+                                    sheet.col_outline_groups.push(OutlineGroupDef {
+                                        start: mn.saturating_sub(1),
+                                        end_inclusive: mx.saturating_sub(1),
+                                        level: outline_level,
+                                        collapsed: hidden,
+                                    });
                                 }
                             }
                         } else if tag.as_ref() == b"row" {
                             let mut row_idx: Option<u32> = None;
                             let mut height: Option<f64> = None;
                             let mut custom_height = false;
+                            let mut hidden = false;
+                            let mut outline_level: u8 = 0;
                             for attr in e.attributes().flatten() {
                                 let key = attr.key.as_ref();
                                 let val = attr.unescape_value().unwrap_or_default().to_string();
@@ -1376,14 +1592,32 @@ fn parse_sheet_metadata_from_zip(data: &[u8], sheets: &mut Vec<SheetData>) {
                                     b"r" => row_idx = val.parse().ok(),
                                     b"ht" => height = val.parse().ok(),
                                     b"customHeight" => custom_height = val == "1",
+                                    b"hidden" => hidden = val == "1",
+                                    b"outlineLevel" => outline_level = val.parse().unwrap_or(0),
                                     _ => {}
                                 }
                             }
-                            if custom_height {
-                                if let (Some(r), Some(h)) = (row_idx, height) {
-                                    // Excel row heights are in points; approximate to pixels
-                                    let px = (h * 1.333).round();
-                                    sheet.row_heights.insert(r.saturating_sub(1), px);
+                            if let Some(r) = row_idx {
+                                let r0 = r.saturating_sub(1);
+                                if custom_height {
+                                    if let Some(h) = height {
+                                        // Excel row heights are in points; approximate to pixels
+                                        let px = (h * 1.333).round();
+                                        sheet.row_heights.insert(r0, px);
+                                    }
+                                }
+                                if hidden {
+                                    sheet.hidden_rows.push(r0);
+                                }
+                                if outline_level > 0 {
+                                    // Accumulate into row_outline_groups; we merge consecutive rows later
+                                    // For simplicity, store one-row groups; merge in post-processing
+                                    sheet.row_outline_groups.push(OutlineGroupDef {
+                                        start: r0,
+                                        end_inclusive: r0,
+                                        level: outline_level,
+                                        collapsed: hidden,
+                                    });
                                 }
                             }
                         }
@@ -1408,6 +1642,8 @@ fn parse_sheet_metadata_from_zip(data: &[u8], sheets: &mut Vec<SheetData>) {
                             let mut min_col: Option<u32> = None;
                             let mut max_col: Option<u32> = None;
                             let mut width: Option<f64> = None;
+                            let mut hidden = false;
+                            let mut outline_level: u8 = 0;
                             for attr in e.attributes().flatten() {
                                 let key = attr.key.as_ref();
                                 let val = attr.unescape_value().unwrap_or_default().to_string();
@@ -1415,13 +1651,30 @@ fn parse_sheet_metadata_from_zip(data: &[u8], sheets: &mut Vec<SheetData>) {
                                     b"min" => min_col = val.parse().ok(),
                                     b"max" => max_col = val.parse().ok(),
                                     b"width" => width = val.parse().ok(),
+                                    b"hidden" => hidden = val == "1",
+                                    b"outlineLevel" => outline_level = val.parse().unwrap_or(0),
                                     _ => {}
                                 }
                             }
-                            if let (Some(mn), Some(mx), Some(w)) = (min_col, max_col, width) {
-                                let px = (w * 7.5).round();
-                                for c in mn..=mx {
-                                    sheet.col_widths.insert(c.saturating_sub(1), px);
+                            if let (Some(mn), Some(mx)) = (min_col, max_col) {
+                                if let Some(w) = width {
+                                    let px = (w * 7.5).round();
+                                    for c in mn..=mx {
+                                        sheet.col_widths.insert(c.saturating_sub(1), px);
+                                    }
+                                }
+                                if hidden {
+                                    for c in mn..=mx {
+                                        sheet.hidden_cols.push(c.saturating_sub(1));
+                                    }
+                                }
+                                if outline_level > 0 {
+                                    sheet.col_outline_groups.push(OutlineGroupDef {
+                                        start: mn.saturating_sub(1),
+                                        end_inclusive: mx.saturating_sub(1),
+                                        level: outline_level,
+                                        collapsed: hidden,
+                                    });
                                 }
                             }
                         }
@@ -3099,4 +3352,285 @@ fn extract_table_refs_from_rels(rels_xml: &str) -> Vec<String> {
         buf.clear();
     }
     refs
+}
+
+// --- Page Setup Parser ---
+
+/// Parse page setup settings from each worksheet XML and populate sheet.page_setup.
+fn parse_page_setup_from_zip(data: &[u8], sheets: &mut [SheetData]) {
+    let cursor = Cursor::new(data);
+    let mut archive = match zip::ZipArchive::new(cursor) {
+        Ok(a) => a,
+        Err(_) => return,
+    };
+
+    let sheet_name_order = parse_sheet_name_order(&mut archive);
+
+    let file_names: Vec<String> = (0..archive.len())
+        .filter_map(|i| archive.by_index(i).ok().map(|f| f.name().to_string()))
+        .collect();
+
+    let mut worksheet_files: Vec<&String> = file_names.iter()
+        .filter(|f| f.starts_with("xl/worksheets/sheet") && f.ends_with(".xml") && !f.contains("_rels"))
+        .collect();
+    worksheet_files.sort();
+
+    for (idx, ws_file) in worksheet_files.iter().enumerate() {
+        let sheet_name = match sheet_name_order.get(idx) {
+            Some(n) => n.clone(),
+            None => continue,
+        };
+
+        let sheet = match sheets.iter_mut().find(|s| s.name == sheet_name) {
+            Some(s) => s,
+            None => continue,
+        };
+
+        if let Ok(mut file) = archive.by_name(ws_file) {
+            let mut content = String::new();
+            if file.read_to_string(&mut content).is_err() { continue; }
+
+            let mut setup = PageSetupDef {
+                orientation: default_orientation(),
+                paper_size: 1,
+                scale: default_scale(),
+                fit_to_width: None,
+                fit_to_height: None,
+                margin_left: default_margin_lr(),
+                margin_right: default_margin_lr(),
+                margin_top: default_margin_tb(),
+                margin_bottom: default_margin_tb(),
+                margin_header: default_margin_hf(),
+                margin_footer: default_margin_hf(),
+                header: String::new(),
+                footer: String::new(),
+                print_area: String::new(),
+                print_titles_rows: String::new(),
+                print_titles_cols: String::new(),
+                row_breaks: Vec::new(),
+                col_breaks: Vec::new(),
+                print_gridlines: false,
+                center_horizontally: false,
+                center_vertically: false,
+            };
+
+            let mut has_any = false;
+            let mut reader = quick_xml::Reader::from_str(&content);
+            let mut buf = Vec::new();
+            let mut in_header_footer = false;
+            let mut in_odd_header = false;
+            let mut in_odd_footer = false;
+            let mut in_row_breaks = false;
+            let mut in_col_breaks = false;
+            let mut text_buf = String::new();
+
+            loop {
+                match reader.read_event_into(&mut buf) {
+                    Ok(quick_xml::events::Event::Empty(ref e)) |
+                    Ok(quick_xml::events::Event::Start(ref e)) => {
+                        let local = local_name(e.name().as_ref()).to_vec();
+                        match local.as_slice() {
+                            b"pageSetup" => {
+                                has_any = true;
+                                for attr in e.attributes().flatten() {
+                                    let key = attr.key.as_ref();
+                                    let val = attr.unescape_value().unwrap_or_default().to_string();
+                                    match local_name(key) {
+                                        b"orientation" => {
+                                            setup.orientation = if val == "landscape" { "landscape".to_string() } else { "portrait".to_string() };
+                                        }
+                                        b"paperSize" => { if let Ok(n) = val.parse::<u8>() { setup.paper_size = n; } }
+                                        b"scale" => { if let Ok(n) = val.parse::<u16>() { setup.scale = n; } }
+                                        b"fitToWidth" => { if let Ok(n) = val.parse::<u16>() { setup.fit_to_width = Some(n); } }
+                                        b"fitToHeight" => { if let Ok(n) = val.parse::<u16>() { setup.fit_to_height = Some(n); } }
+                                        _ => {}
+                                    }
+                                }
+                            }
+                            b"pageMargins" => {
+                                has_any = true;
+                                for attr in e.attributes().flatten() {
+                                    let key = attr.key.as_ref();
+                                    let val = attr.unescape_value().unwrap_or_default().to_string();
+                                    if let Ok(f) = val.parse::<f64>() {
+                                        match local_name(key) {
+                                            b"left"   => setup.margin_left = f,
+                                            b"right"  => setup.margin_right = f,
+                                            b"top"    => setup.margin_top = f,
+                                            b"bottom" => setup.margin_bottom = f,
+                                            b"header" => setup.margin_header = f,
+                                            b"footer" => setup.margin_footer = f,
+                                            _ => {}
+                                        }
+                                    }
+                                }
+                            }
+                            b"printOptions" => {
+                                has_any = true;
+                                for attr in e.attributes().flatten() {
+                                    let key = attr.key.as_ref();
+                                    let val = attr.unescape_value().unwrap_or_default().to_string();
+                                    let is_true = val == "1" || val == "true";
+                                    match local_name(key) {
+                                        b"gridLines" => setup.print_gridlines = is_true,
+                                        b"horizontalCentered" => setup.center_horizontally = is_true,
+                                        b"verticalCentered" => setup.center_vertically = is_true,
+                                        _ => {}
+                                    }
+                                }
+                            }
+                            b"headerFooter" => { in_header_footer = true; }
+                            b"oddHeader" if in_header_footer => { in_odd_header = true; text_buf.clear(); }
+                            b"oddFooter"  if in_header_footer => { in_odd_footer = true; text_buf.clear(); }
+                            b"rowBreaks" => { in_row_breaks = true; }
+                            b"colBreaks" => { in_col_breaks = true; }
+                            b"brk" if in_row_breaks => {
+                                for attr in e.attributes().flatten() {
+                                    if local_name(attr.key.as_ref()) == b"id" {
+                                        if let Ok(n) = attr.unescape_value().unwrap_or_default().parse::<u32>() {
+                                            if n > 0 { setup.row_breaks.push(n); has_any = true; }
+                                        }
+                                    }
+                                }
+                            }
+                            b"brk" if in_col_breaks => {
+                                for attr in e.attributes().flatten() {
+                                    if local_name(attr.key.as_ref()) == b"id" {
+                                        if let Ok(n) = attr.unescape_value().unwrap_or_default().parse::<u32>() {
+                                            if n > 0 { setup.col_breaks.push(n); has_any = true; }
+                                        }
+                                    }
+                                }
+                            }
+                            _ => {}
+                        }
+                    }
+                    Ok(quick_xml::events::Event::Text(ref e)) => {
+                        if let Ok(text) = e.unescape() {
+                            if in_odd_header || in_odd_footer { text_buf.push_str(&text); }
+                        }
+                    }
+                    Ok(quick_xml::events::Event::End(ref e)) => {
+                        let local = local_name(e.name().as_ref()).to_vec();
+                        match local.as_slice() {
+                            b"headerFooter" => { in_header_footer = false; }
+                            b"oddHeader" => {
+                                if !text_buf.is_empty() { setup.header = text_buf.trim().to_string(); has_any = true; }
+                                in_odd_header = false; text_buf.clear();
+                            }
+                            b"oddFooter" => {
+                                if !text_buf.is_empty() { setup.footer = text_buf.trim().to_string(); has_any = true; }
+                                in_odd_footer = false; text_buf.clear();
+                            }
+                            b"rowBreaks" => { in_row_breaks = false; }
+                            b"colBreaks" => { in_col_breaks = false; }
+                            _ => {}
+                        }
+                    }
+                    Ok(quick_xml::events::Event::Eof) => break,
+                    Err(_) => break,
+                    _ => {}
+                }
+                buf.clear();
+            }
+
+            if has_any { sheet.page_setup = Some(setup); }
+        }
+    }
+
+    // Second pass: pull _xlnm.Print_Area and _xlnm.Print_Titles from workbook.xml.
+    // We read everything into owned Strings first so that the ZipArchive borrow
+    // is fully dropped before we mutably borrow `sheets` in the parsing loop.
+    let sheet_name_order2: Vec<String>;
+    let wb_content: String;
+    {
+        let c = Cursor::new(data);
+        let mut a = match zip::ZipArchive::new(c) { Ok(a) => a, Err(_) => return };
+        sheet_name_order2 = parse_sheet_name_order(&mut a);
+        let mut s = String::new();
+        if let Ok(mut f) = a.by_name("xl/workbook.xml") {
+            let _ = f.read_to_string(&mut s);
+        }
+        wb_content = s;
+    }
+    if !wb_content.is_empty() {
+        let content = &wb_content;
+        {
+            let mut reader = quick_xml::Reader::from_str(content);
+            let mut buf = Vec::new();
+            let mut in_defined_names = false;
+            let mut dn_name = String::new();
+            let mut dn_sheet_id: Option<u32> = None;
+            let mut in_dn = false;
+
+            loop {
+                match reader.read_event_into(&mut buf) {
+                    Ok(quick_xml::events::Event::Start(ref e)) => {
+                        let local = local_name(e.name().as_ref()).to_vec();
+                        if local.as_slice() == b"definedNames" {
+                            in_defined_names = true;
+                        } else if local.as_slice() == b"definedName" && in_defined_names {
+                            dn_name.clear(); dn_sheet_id = None;
+                            for attr in e.attributes().flatten() {
+                                let key = local_name(attr.key.as_ref()).to_vec();
+                                let val = attr.unescape_value().unwrap_or_default().to_string();
+                                match key.as_slice() {
+                                    b"name" => dn_name = val,
+                                    b"localSheetId" => dn_sheet_id = val.parse().ok(),
+                                    _ => {}
+                                }
+                            }
+                            in_dn = true;
+                        }
+                    }
+                    Ok(quick_xml::events::Event::Text(ref e)) => {
+                        if in_dn && (dn_name == "_xlnm.Print_Area" || dn_name == "_xlnm.Print_Titles") {
+                            if let Ok(text) = e.unescape() {
+                                let formula = text.trim().to_string();
+                                let target_name = dn_sheet_id
+                                    .and_then(|id| sheet_name_order2.get(id as usize).cloned());
+                                if let Some(sh_name) = target_name {
+                                    if let Some(sheet) = sheets.iter_mut().find(|s| s.name == sh_name) {
+                                        let ps = sheet.page_setup.get_or_insert_with(|| PageSetupDef {
+                                            orientation: default_orientation(), paper_size: 1,
+                                            scale: default_scale(), fit_to_width: None, fit_to_height: None,
+                                            margin_left: default_margin_lr(), margin_right: default_margin_lr(),
+                                            margin_top: default_margin_tb(), margin_bottom: default_margin_tb(),
+                                            margin_header: default_margin_hf(), margin_footer: default_margin_hf(),
+                                            header: String::new(), footer: String::new(),
+                                            print_area: String::new(), print_titles_rows: String::new(),
+                                            print_titles_cols: String::new(), row_breaks: Vec::new(),
+                                            col_breaks: Vec::new(), print_gridlines: false,
+                                            center_horizontally: false, center_vertically: false,
+                                        });
+                                        if dn_name == "_xlnm.Print_Area" {
+                                            ps.print_area = formula.split('!').last().unwrap_or(&formula).replace('$', "");
+                                        } else {
+                                            for part in formula.split(',') {
+                                                let p = part.split('!').last().unwrap_or(part).replace('$', "");
+                                                if p.chars().all(|c| c.is_numeric() || c == ':') {
+                                                    ps.print_titles_rows = p;
+                                                } else if p.chars().all(|c| c.is_alphabetic() || c == ':') {
+                                                    ps.print_titles_cols = p;
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    Ok(quick_xml::events::Event::End(ref e)) => {
+                        let local = local_name(e.name().as_ref()).to_vec();
+                        if local.as_slice() == b"definedNames" { in_defined_names = false; }
+                        else if local.as_slice() == b"definedName" { in_dn = false; }
+                    }
+                    Ok(quick_xml::events::Event::Eof) => break,
+                    Err(_) => break,
+                    _ => {}
+                }
+                buf.clear();
+            }
+        }
+    }
 }

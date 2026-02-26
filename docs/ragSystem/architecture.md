@@ -90,7 +90,7 @@ The RAG (Retrieval-Augmented Generation) system is a sophisticated document inde
   - Vector similarity search
   - Reciprocal Rank Fusion (RRF)
   - Result ranking and filtering
-- **Algorithm**: BM25 + Cosine Similarity → RRF → Cross-encoder reranking
+- **Algorithm**: BM25 + Dot Product Similarity → RRF → Cross-encoder reranking (with short-circuit when candidates ≤ topN)
 
 ### 3. Storage Components
 
@@ -99,23 +99,24 @@ The RAG (Retrieval-Augmented Generation) system is a sophisticated document inde
 - **Location**: `src/vs/workbench/contrib/void/common/ragVectorAdapter.ts`
 - **Responsibilities**:
   - Local embedding model management
-  - SQLite-based vector persistence
-  - Cosine similarity calculations
-  - Memory/disk caching
-  - Embedding existence verification
+  - Persistent SQLite connection (opened once, reused)
+  - Dot product similarity on pre-normalized vectors
+  - In-memory `Float32Array` cache with binary BLOB disk storage
+  - O(1) document embedding count via `countOfDocId` Map
 - **Features**:
   - Offline embeddings (no API required)
   - Persistent storage across restarts
-  - Batch processing for performance
-  - MMR (Maximal Marginal Relevance) diversity
-  - `hasDocumentEmbeddings()` for integrity verification
+  - Batch inserts within SQLite transactions
+  - Concurrent-indexing guard (prevents duplicate processing)
+  - `hasDocumentEmbeddings()` for O(1) integrity verification
+  - Backwards-compatible migration from JSON TEXT to binary BLOB vectors
 
 #### LocalEmbeddingService
 - **Purpose**: Text-to-vector conversion
 - **Location**: `src/vs/workbench/contrib/void/common/ragLocalEmbeddings.ts`
 - **Responsibilities**:
   - Xenova/transformers.js pipeline management
-  - Batch embedding generation
+  - Batch embedding generation returning `Float32Array` (memory-efficient typed arrays)
   - Model caching and memory management
 - **Model**: all-MiniLM-L6-v2 (384D, ~23MB)
 
@@ -160,12 +161,12 @@ FTS5 Index Update
    - Hierarchical chunk creation (child + parent)
    - Metadata enrichment (sections, breadcrumbs)
 4. **Embedding Generation**:
-   - Batch processing (25 texts/batch)
-   - Mean pooling + normalization
+   - Batch processing (50 texts/batch)
+   - Mean pooling + normalization → `Float32Array` output
    - Memory monitoring and GC hints
 5. **Storage**:
-   - SQLite document/chunk records
-   - Vector embeddings persistence
+   - SQLite document/chunk records (batch inserts within transactions)
+   - Vector embeddings persisted as binary BLOBs (not JSON text)
    - FTS5 keyword index updates
 
 ### Search Pipeline
@@ -194,11 +195,11 @@ Result Presentation
 
 2. **Hybrid Retrieval**:
    - **BM25 Search**: Keyword matching via FTS5
-   - **Vector Search**: Semantic similarity via embeddings
+   - **Vector Search**: Dot product similarity on pre-normalized `Float32Array` vectors
    - **RRF Fusion**: Rank combination (k=20 for legal precision)
-   - **MMR Diversity**: λ=0.7 balance of relevance/diversity
 
 3. **Reranking**:
+   - Short-circuit: skipped when candidate count ≤ topN (avoids expensive cross-encoder inference)
    - Cross-encoder scoring of top candidates
    - Query-chunk relevance assessment
    - Final ranking by semantic relevance
@@ -281,7 +282,7 @@ CREATE INDEX idx_chunks_parent ON chunks(parent_chunk_id);
 ```sql
 CREATE TABLE embeddings (
     id TEXT PRIMARY KEY,      -- Chunk ID
-    vector TEXT NOT NULL,     -- JSON array of floats
+    vector BLOB NOT NULL,     -- Binary Float32Array (was JSON TEXT before v2.1)
     metadata TEXT NOT NULL    -- JSON metadata
 );
 ```
@@ -289,10 +290,14 @@ CREATE TABLE embeddings (
 **In-Memory Cache:**
 ```typescript
 private embeddings: Map<string, {
-    vector: number[];
+    vector: Float32Array;           // Typed array for memory efficiency
     metadata: Record<string, any>;
 }> = new Map();
+
+private countOfDocId: Map<string, number> = new Map(); // O(1) embedding count lookup
 ```
+
+> **Migration Note**: The vector adapter automatically detects and migrates legacy JSON TEXT vectors to binary BLOB format on load.
 
 ### RAG Storage Scopes
 
@@ -543,20 +548,25 @@ isDocumentIndexed(uri)
 **Indexing Performance:**
 - File size validation (<100MB)
 - Memory monitoring during processing
-- Batch embedding generation (25 texts/batch)
-- Parallel processing where possible
+- Batch embedding generation (50 texts/batch) returning `Float32Array`
+- Batch SQLite inserts within transactions (chunk and embedding writes)
+- Async streaming file hashing (no blocking `readFileSync`)
+- File watcher debouncing (500ms) to prevent duplicate indexing on Windows
+- Concurrent-indexing guard in both browser and main process
 
 **Search Performance:**
-- In-memory embedding cache
+- In-memory `Float32Array` embedding cache with dot product similarity
 - FTS5 for fast keyword search
-- Vector similarity with early termination
-- Cross-encoder reranking of top candidates only
+- Reranker short-circuit when candidates ≤ topN
+- Cached workspace instance resolution
+- Map-based O(1) context assembly (replaces `.find()` loops)
 
 **Storage Performance:**
-- SQLite WAL mode for concurrent access
+- Persistent SQLite connection (opened once, reused for lifetime)
+- Binary BLOB vector storage (replaces JSON TEXT serialization)
 - Indexes on frequently queried columns
 - FTS5 for full-text search acceleration
-- Vector storage with efficient serialization
+- O(1) document embedding count via `countOfDocId` Map
 
 ### Monitoring and Metrics
 
@@ -700,6 +710,6 @@ RAG_MODEL_CACHE=/custom/models
 
 ---
 
-*Architecture documentation last updated: January 2026*
+*Architecture documentation last updated: February 2026 (v2.1 Performance Overhaul)*
 
 

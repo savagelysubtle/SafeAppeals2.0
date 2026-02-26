@@ -190,7 +190,7 @@ export class XLSXRustViewerEditor extends EditorPane {
 				break;
 
 			case 'print':
-				this.handlePrint(data.imageData);
+				this.handlePrint(data.imageData, data.printHtml);
 				break;
 
 			case 'exportImage':
@@ -209,6 +209,14 @@ export class XLSXRustViewerEditor extends EditorPane {
 				if (typeof data.url === 'string') {
 					this.openerService.open(URI.parse(data.url), { openExternal: true }).catch(() => {});
 				}
+				break;
+
+			case 'exportFile':
+				this.handleExportFile(data.content, data.format, data.defaultName);
+				break;
+
+			case 'importFile':
+				this.handleImportFile(data.formats || ['csv', 'tsv', 'txt']);
 				break;
 
 			case 'error':
@@ -269,12 +277,12 @@ export class XLSXRustViewerEditor extends EditorPane {
 	 * Open a print-ready HTML page in the default browser with the canvas snapshot.
 	 * Writes a temp HTML file because data: URIs don't work with openExternal on Windows.
 	 */
-	private async handlePrint(imageDataUrl: string): Promise<void> {
+	private async handlePrint(imageDataUrl: string, printHtmlOverride?: string): Promise<void> {
 		if (!imageDataUrl) return;
 
 		try {
 			const fileName = this._currentInput?.getName() ?? 'Spreadsheet';
-			const printHtml = [
+			const printHtml = printHtmlOverride ?? [
 				'<!DOCTYPE html><html><head><meta charset="utf-8">',
 				`<title>Print - ${fileName}</title>`,
 				'<style>',
@@ -346,6 +354,65 @@ export class XLSXRustViewerEditor extends EditorPane {
 			}
 		} catch (error) {
 			console.error('[XLSX Rust Viewer] Export failed:', error);
+		}
+	}
+
+	/**
+	 * Export text content (CSV, HTML) to a file chosen via Save dialog.
+	 */
+	private async handleExportFile(content: string, format: string, defaultName: string): Promise<void> {
+		if (!content) return;
+
+		const filterMap: Record<string, { name: string; extensions: string[] }> = {
+			csv: { name: 'CSV (Comma Separated)', extensions: ['csv'] },
+			html: { name: 'HTML Document', extensions: ['html', 'htm'] },
+		};
+		const filter = filterMap[format] ?? { name: 'Text File', extensions: ['txt'] };
+
+		const parentUri = this._currentInput
+			? URI.joinPath(this._currentInput.resource, '..')
+			: undefined;
+		const defaultUri = parentUri
+			? URI.joinPath(parentUri, defaultName)
+			: undefined;
+
+		try {
+			const result = await this.fileDialogService.showSaveDialog({
+				title: `Export as ${filter.name}`,
+				defaultUri,
+				filters: [filter],
+			});
+			if (result) {
+				await this.fileService.writeFile(result, VSBuffer.fromString(content));
+				console.log('[XLSX Rust Viewer] Exported to:', result.toString());
+			}
+		} catch (error) {
+			console.error('[XLSX Rust Viewer] Export file failed:', error);
+		}
+	}
+
+	/**
+	 * Show an open-file dialog and send the file content back to the webview for import.
+	 */
+	private async handleImportFile(formats: string[]): Promise<void> {
+		try {
+			const result = await this.fileDialogService.showOpenDialog({
+				title: 'Import File',
+				canSelectMany: false,
+				filters: [
+					{ name: 'Delimited Text', extensions: formats },
+				],
+			});
+			if (!result || result.length === 0) return;
+
+			const fileUri = result[0];
+			const fileContent = await this.fileService.readFile(fileUri);
+			const text = fileContent.value.toString();
+			const fileName = fileUri.path.replace(/^.*[\\/]/, '');
+
+			this.webview?.postMessage({ type: 'fileContent', content: text, fileName });
+		} catch (error) {
+			console.error('[XLSX Rust Viewer] Import file failed:', error);
 		}
 	}
 
@@ -488,7 +555,7 @@ export class XLSXRustViewerEditor extends EditorPane {
 			scrollbar-width: thin;
 		}
 		#status-bar {
-			display: flex; align-items: center; justify-content: flex-end;
+			display: flex; align-items: center; justify-content: space-between;
 			gap: 16px; padding: 0 12px;
 			height: 22px; flex-shrink: 0;
 			background: var(--vscode-statusBar-background, #007acc);
@@ -497,6 +564,14 @@ export class XLSXRustViewerEditor extends EditorPane {
 		}
 		.status-item { cursor: pointer; padding: 0 4px; border-radius: 2px; }
 		.status-item:hover { background: rgba(255,255,255,0.15); }
+		.zoom-controls { display: flex; align-items: center; gap: 4px; }
+		.zoom-btn {
+			background: none; border: none; color: inherit; cursor: pointer;
+			padding: 0 3px; font-size: 14px; line-height: 1; border-radius: 2px;
+		}
+		.zoom-btn:hover { background: rgba(255,255,255,0.2); }
+		.zoom-slider { width: 70px; height: 2px; cursor: pointer; accent-color: rgba(255,255,255,0.8); }
+		.zoom-label { min-width: 34px; text-align: center; font-size: 11px; }
 		.sheet-tab {
 			padding: 0 16px; border: none; border-right: 1px solid var(--vscode-panel-border, #3c3c3c);
 			background: transparent;
@@ -673,6 +748,18 @@ export class XLSXRustViewerEditor extends EditorPane {
 			font-family: inherit;
 		}
 		.ribbon-select:focus { border-color: var(--vscode-focusBorder, #007acc); }
+		.ribbon-select-sm { width: 90px; font-size: 11px; height: 20px; padding: 1px 4px; }
+		.ribbon-num-input {
+			width: 44px; height: 20px; padding: 1px 4px; font-size: 11px;
+			border: 1px solid var(--vscode-input-border, #3c3c3c);
+			background: var(--vscode-input-background, #3c3c3c);
+			color: var(--vscode-input-foreground, #ccc);
+			border-radius: 3px; outline: none; font-family: inherit;
+		}
+		.ribbon-inline-label { font-size: 11px; color: #aaa; white-space: nowrap; }
+		.ribbon-label-row { display: flex; align-items: center; gap: 4px; }
+		.small-btn { display: flex; align-items: center; gap: 4px; padding: 2px 6px; height: 22px; font-size: 11px; }
+		.small-btn .btn-icon.sm svg { width: 12px; height: 12px; }
 		.font-select { width: 120px; }
 		.size-select { width: 50px; }
 		.num-select { width: 100px; }

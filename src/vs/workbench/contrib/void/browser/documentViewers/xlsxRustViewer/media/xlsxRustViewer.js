@@ -4,7 +4,7 @@
   var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
   var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "symbol" ? key + "" : key, value);
 
-  // wasm/xlsx_rust_viewer.js
+  // src/vs/workbench/contrib/void/browser/documentViewers/xlsxRustViewer/media/wasm/xlsx_rust_viewer.js
   var import_meta = {};
   var ContextMenuManager = class {
     __destroy_into_raw() {
@@ -521,7 +521,7 @@
       }
     }
     constructor() {
-      const ret = wasm.viewportmanager_new();
+      const ret = wasm.contextmenumanager_new();
       this.__wbg_ptr = ret >>> 0;
       ViewportManagerFinalization.register(this, this.__wbg_ptr, this);
       return this;
@@ -834,7 +834,7 @@
     return __wbg_finalize_init(instance, module);
   }
 
-  // renderer.ts
+  // src/vs/workbench/contrib/void/browser/documentViewers/xlsxRustViewer/media/renderer.ts
   var TABLE_COLORS = {
     // --- Light styles (1-21): 3 groups of 7 accent colors, increasingly visible banding ---
     // Group 1 (1-7): very subtle banding
@@ -944,6 +944,9 @@
       // View toggles
       this._showGridlines = true;
       this._showHeaders = true;
+      this._pageBreakPreview = false;
+      // Page setup per sheet (keyed by sheet name)
+      this._pageSetupBySheet = /* @__PURE__ */ new Map();
       // Freeze panes
       this._freezeRow = 0;
       this._freezeCol = 0;
@@ -977,6 +980,8 @@
       this._hyperlinkTooltip = null;
       // Callback fired on Ctrl+Click of a hyperlink cell
       this.onHyperlinkClick = null;
+      // Pivot table output zones (for context menu detection and double-click drill-down)
+      this._pivotZones = [];
       // Merged cells: array of ranges
       this.mergedCells = [];
       // Per-column widths and per-row heights (sparse, only overrides)
@@ -1401,6 +1406,19 @@
         max: count > 0 ? max : 0
       };
     }
+    /** Set pivot table output zones for context-menu detection. */
+    setPivotZones(zones) {
+      this._pivotZones = zones;
+    }
+    /** Returns the pivot index if the cell is inside a pivot output zone, or -1. */
+    getPivotZoneAtCell(row, col) {
+      for (const z of this._pivotZones) {
+        if (row >= z.startRow && row <= z.endRow && col >= z.startCol && col <= z.endCol) {
+          return z.pivotIndex;
+        }
+      }
+      return -1;
+    }
     selectAll() {
       this.selectedCell = { row: 0, col: 0 };
       this.selectionRange = { startRow: 0, startCol: 0, endRow: 999, endCol: 99 };
@@ -1705,6 +1723,19 @@
     }
     toggleHeaders() {
       this._showHeaders = !this._showHeaders;
+      this.render();
+    }
+    setPageBreakPreview(on) {
+      this._pageBreakPreview = on;
+      this.render();
+    }
+    /** Store page setup (breaks) for a sheet so they can be rendered. */
+    setSheetPageSetup(sheetName, setup) {
+      if (setup) {
+        this._pageSetupBySheet.set(sheetName, setup);
+      } else {
+        this._pageSetupBySheet.delete(sheetName);
+      }
       this.render();
     }
     freezePanes() {
@@ -3640,10 +3671,71 @@
           this.ctx.lineWidth = 1;
         }
       }
+      this._drawPageBreaks(effHeaderWidth, effHeaderHeight);
       this.drawScrollbars();
       this.ctx.restore();
       this._syncFilterButtons();
       if (this.onScrollChanged) this.onScrollChanged();
+    }
+    /** Draw page break indicator lines and, in preview mode, page number watermarks. */
+    _drawPageBreaks(effHeaderWidth, effHeaderHeight) {
+      const sheet = this.data?.sheets?.[this._activeSheetIndex];
+      if (!sheet) return;
+      const setup = this._pageSetupBySheet.get(sheet.name);
+      if (!setup) return;
+      const { row_breaks, col_breaks } = setup;
+      if (row_breaks.length === 0 && col_breaks.length === 0) return;
+      const ctx = this.ctx;
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(effHeaderWidth, effHeaderHeight, this.width - effHeaderWidth, this.height - effHeaderHeight);
+      ctx.clip();
+      ctx.setLineDash([4, 3]);
+      ctx.lineWidth = 1.5;
+      ctx.strokeStyle = this._pageBreakPreview ? "#1565c0" : "#90caf9";
+      for (const breakRow of row_breaks) {
+        const y = this.ry(breakRow) - this.scrollTop + effHeaderHeight;
+        if (y < effHeaderHeight || y > this.height) continue;
+        ctx.beginPath();
+        ctx.moveTo(effHeaderWidth, y);
+        ctx.lineTo(this.width, y);
+        ctx.stroke();
+      }
+      for (const breakCol of col_breaks) {
+        const x = this.cx(breakCol) - this.scrollLeft + effHeaderWidth;
+        if (x < effHeaderWidth || x > this.width) continue;
+        ctx.beginPath();
+        ctx.moveTo(x, effHeaderHeight);
+        ctx.lineTo(x, this.height);
+        ctx.stroke();
+      }
+      ctx.setLineDash([]);
+      if (this._pageBreakPreview) {
+        ctx.font = "bold 22px system-ui";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillStyle = "rgba(100,149,237,0.18)";
+        const rowBounds = [0, ...row_breaks.slice().sort((a, b) => a - b)];
+        const colBounds = [0, ...col_breaks.slice().sort((a, b) => a - b)];
+        let pageNum = 1;
+        for (let ri = 0; ri < rowBounds.length; ri++) {
+          for (let ci = 0; ci < colBounds.length; ci++) {
+            const startRow = rowBounds[ri];
+            const endRow = ri + 1 < rowBounds.length ? rowBounds[ri + 1] : startRow + 30;
+            const startCol = colBounds[ci];
+            const endCol = ci + 1 < colBounds.length ? colBounds[ci + 1] : startCol + 10;
+            const midRow = Math.floor((startRow + endRow) / 2);
+            const midCol = Math.floor((startCol + endCol) / 2);
+            const cx = this.cx(midCol) - this.scrollLeft + effHeaderWidth;
+            const cy = this.ry(midRow) - this.scrollTop + effHeaderHeight;
+            if (cx > effHeaderWidth && cx < this.width && cy > effHeaderHeight && cy < this.height) {
+              ctx.fillText(`Page ${pageNum}`, cx, cy);
+            }
+            pageNum++;
+          }
+        }
+      }
+      ctx.restore();
     }
     /** Draw sparkline mini-charts inside cells */
     drawSparklines(effHeaderWidth, effHeaderHeight) {
@@ -5371,7 +5463,7 @@
   ];
   var CanvasRenderer = _CanvasRenderer;
 
-  // ribbon.ts
+  // src/vs/workbench/contrib/void/browser/documentViewers/xlsxRustViewer/media/ribbon.ts
   var IC = {
     paste: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor"><rect x="3" y="5" width="10" height="10" rx="1" stroke-width="1.2"/><path d="M6 5V3a1.5 1.5 0 013 0v2" stroke-width="1.2"/><line x1="6" y1="9" x2="10" y2="9" stroke-width="1"/><line x1="6" y1="11.5" x2="10" y2="11.5" stroke-width="1"/></svg>',
     cut: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2"><circle cx="5" cy="12" r="2"/><circle cx="11" cy="12" r="2"/><path d="M6.5 10.5L10 3M9.5 10.5L6 3"/></svg>',
@@ -5381,6 +5473,7 @@
     save: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M13 15H3a1 1 0 01-1-1V2a1 1 0 011-1h8l3 3v10a1 1 0 01-1 1z"/><path d="M5 1v4h5V1"/><rect x="4" y="9" width="8" height="5" rx=".5"/></svg>',
     print: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M4 5V1h8v4"/><rect x="2" y="5" width="12" height="6" rx="1"/><path d="M4 9v5h8V9"/><circle cx="11" cy="7.5" r=".5" fill="currentColor"/></svg>',
     exportPdf: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"><path d="M9 1H3a1 1 0 00-1 1v12a1 1 0 001 1h10a1 1 0 001-1V6z"/><path d="M9 1v5h5"/><path d="M8 13l3-3m0 0v3m0-3H8"/></svg>',
+    import: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"><path d="M9 1H3a1 1 0 00-1 1v12a1 1 0 001 1h10a1 1 0 001-1V6z"/><path d="M9 1v5h5"/><path d="M8 7l-3 3m0 0v-3m0 3h3"/></svg>',
     alignL: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><line x1="2" y1="3" x2="14" y2="3"/><line x1="2" y1="6.5" x2="10" y2="6.5"/><line x1="2" y1="10" x2="14" y2="10"/><line x1="2" y1="13" x2="10" y2="13"/></svg>',
     alignC: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><line x1="2" y1="3" x2="14" y2="3"/><line x1="4" y1="6.5" x2="12" y2="6.5"/><line x1="2" y1="10" x2="14" y2="10"/><line x1="4" y1="13" x2="12" y2="13"/></svg>',
     alignR: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><line x1="2" y1="3" x2="14" y2="3"/><line x1="6" y1="6.5" x2="14" y2="6.5"/><line x1="2" y1="10" x2="14" y2="10"/><line x1="6" y1="13" x2="14" y2="13"/></svg>',
@@ -5393,6 +5486,14 @@
     sortAsc: '<svg viewBox="0 0 16 16" fill="currentColor" stroke="none"><text x="1" y="6.5" font-size="6" font-weight="600" font-family="system-ui">A</text><text x="1" y="13" font-size="6" font-weight="600" font-family="system-ui">Z</text><path d="M12 3v10M12 13l-2.5-3h5z" stroke="currentColor" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>',
     sortDesc: '<svg viewBox="0 0 16 16" fill="currentColor" stroke="none"><text x="1" y="6.5" font-size="6" font-weight="600" font-family="system-ui">Z</text><text x="1" y="13" font-size="6" font-weight="600" font-family="system-ui">A</text><path d="M12 3v10M12 13l-2.5-3h5z" stroke="currentColor" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>',
     clear: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"><path d="M2 4h12M5 4V2.5a.5.5 0 01.5-.5h5a.5.5 0 01.5.5V4"/><path d="M3.5 4l1 10.5h7L12.5 4"/><line x1="6.5" y1="7" x2="6.5" y2="12"/><line x1="9.5" y1="7" x2="9.5" y2="12"/></svg>',
+    orientation: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"><rect x="2" y="1" width="8" height="10" rx="1"/><path d="M10 1l3 3v11H6v-2" stroke-linecap="round"/><path d="M10 1v3h3"/></svg>',
+    margins: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"><rect x="1" y="1" width="14" height="14" rx="1"/><rect x="3" y="3" width="10" height="10" stroke-dasharray="2 1.5"/></svg>',
+    pageBreak: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"><line x1="1" y1="8" x2="15" y2="8" stroke-dasharray="2 2" stroke="#4472C4"/><line x1="1" y1="4" x2="15" y2="4"/><line x1="1" y1="12" x2="15" y2="12"/></svg>',
+    printArea: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"><rect x="2" y="2" width="12" height="12" rx="1"/><rect x="4" y="4" width="8" height="8" stroke="#4472C4" stroke-width="1.5" stroke-dasharray="2 1"/></svg>',
+    printTitles: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"><rect x="1" y="1" width="14" height="14" rx="1"/><rect x="1" y="1" width="14" height="4" fill="currentColor" opacity=".2" rx="1"/><rect x="1" y="1" width="4" height="14" fill="currentColor" opacity=".15" rx="1"/></svg>',
+    scaleToFit: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="2" width="14" height="12" rx="1"/><path d="M4 8h8M8 4v8"/><path d="M6 6L4 8l2 2M10 6l2 2-2 2"/></svg>',
+    pageSetupDlg: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"><rect x="2" y="1" width="10" height="13" rx="1"/><path d="M12 1l3 3v12H5v-2"/><path d="M12 1v3h3"/><line x1="5" y1="6" x2="10" y2="6"/><line x1="5" y1="9" x2="10" y2="9"/><line x1="5" y1="12" x2="8" y2="12"/></svg>',
+    printPreview: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"><rect x="2" y="2" width="12" height="14" rx="1"/><line x1="5" y1="6" x2="11" y2="6"/><line x1="5" y1="9" x2="11" y2="9"/><line x1="5" y1="12" x2="8" y2="12"/><circle cx="11" cy="12" r="2.5"/><line x1="12.8" y1="13.8" x2="14.5" y2="15.5"/></svg>',
     gridlines: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.1"><rect x="1" y="1" width="14" height="14" rx="1"/><line x1="1" y1="5.5" x2="15" y2="5.5"/><line x1="1" y1="10.5" x2="15" y2="10.5"/><line x1="5.5" y1="1" x2="5.5" y2="15"/><line x1="10.5" y1="1" x2="10.5" y2="15"/></svg>',
     headers: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.1"><rect x="1" y="1" width="14" height="14" rx="1"/><line x1="1" y1="5.5" x2="15" y2="5.5"/><line x1="5.5" y1="1" x2="5.5" y2="15"/><rect x="1" y="1" width="4.5" height="4.5" fill="currentColor" opacity=".2"/><rect x="1" y="5.5" width="4.5" height="9.5" fill="currentColor" opacity=".1"/><rect x="5.5" y="1" width="9.5" height="4.5" fill="currentColor" opacity=".1"/></svg>',
     freeze: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"><line x1="8" y1="1" x2="8" y2="15"/><line x1="1" y1="8" x2="15" y2="8"/><line x1="3" y1="3" x2="13" y2="13"/><line x1="13" y1="3" x2="3" y2="13"/><circle cx="8" cy="8" r="1.5" fill="currentColor"/></svg>',
@@ -5411,7 +5512,8 @@
     defineName: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"><rect x="1" y="3" width="10" height="10" rx="1"/><line x1="1" y1="6" x2="11" y2="6"/><path d="M13 5v8M13 9h2" stroke-width="1.4"/></svg>',
     fillDown: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="12" height="4" rx="0.5" fill="currentColor" opacity="0.2"/><rect x="2" y="2" width="12" height="12" rx="0.5"/><path d="M8 7v5M5.5 10l2.5 2.5 2.5-2.5"/></svg>',
     fillRight: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="4" height="12" rx="0.5" fill="currentColor" opacity="0.2"/><rect x="2" y="2" width="12" height="12" rx="0.5"/><path d="M7 8h5M10 5.5l2.5 2.5-2.5 2.5"/></svg>',
-    flashFill: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2L4 9h4l-1 5 5-7h-4z" fill="currentColor" opacity="0.25"/><path d="M9 2L4 9h4l-1 5 5-7h-4z"/></svg>'
+    flashFill: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2L4 9h4l-1 5 5-7h-4z" fill="currentColor" opacity="0.25"/><path d="M9 2L4 9h4l-1 5 5-7h-4z"/></svg>',
+    pivotTable: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.1"><rect x="1" y="1" width="14" height="14" rx="1"/><line x1="1" y1="5" x2="15" y2="5"/><line x1="1" y1="9" x2="15" y2="9"/><line x1="1" y1="13" x2="15" y2="13"/><line x1="5.5" y1="1" x2="5.5" y2="15"/><rect x="1" y="1" width="4.5" height="4" fill="currentColor" opacity=".3" rx="1"/><rect x="5.5" y="1" width="9.5" height="4" fill="currentColor" opacity=".15" rx="1"/><rect x="1" y="5" width="4.5" height="4" fill="currentColor" opacity=".15"/><path d="M11 11.5l-2 2m0 0l2 2m-2-2h4" stroke="#4472C4" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>'
   };
   var LIGHT_STYLES = [
     ["TableStyleLight1", { header: "#000000", band: "#f7f7f7", label: "Black" }],
@@ -5504,8 +5606,8 @@
       this.container.className = "xlsx-ribbon";
       const tabBar = this.el("div", "ribbon-tab-bar");
       const tabsLeft = this.el("div", "ribbon-tabs-left");
-      for (const name of ["Home", "Insert", "Formulas", "View", "Data"]) {
-        const key = name.toLowerCase();
+      for (const name of ["Home", "Insert", "Formulas", "Page Layout", "View", "Data"]) {
+        const key = name.toLowerCase().replace(" ", "-");
         const btn = this.el("button", `ribbon-tab${key === this.activeTab ? " active" : ""}`);
         btn.textContent = name;
         btn.onclick = () => this.switchTab(key);
@@ -5516,13 +5618,15 @@
       const fileOps = this.el("div", "ribbon-file-ops");
       fileOps.appendChild(this.iconBtn(IC.save, "Save", "save", "Ctrl+S"));
       fileOps.appendChild(this.iconBtn(IC.print, "Print", "print", "Ctrl+P"));
-      fileOps.appendChild(this.iconBtn(IC.exportPdf, "Export", "exportPDF"));
+      fileOps.appendChild(this._buildExportDropdown());
+      fileOps.appendChild(this.iconBtn(IC.import, "Import CSV/TSV", "importCSV"));
       tabBar.appendChild(fileOps);
       this.container.appendChild(tabBar);
       const content = this.el("div", "ribbon-content");
       content.appendChild(this.buildHomeTab());
       content.appendChild(this.buildInsertTab());
       content.appendChild(this.buildFormulasTab());
+      content.appendChild(this.buildPageLayoutTab());
       content.appendChild(this.buildViewTab());
       content.appendChild(this.buildDataTab());
       this.container.appendChild(content);
@@ -5671,6 +5775,11 @@
     // ======================= INSERT TAB =======================
     buildInsertTab() {
       const panel = this.tabPanel("insert", false);
+      const pivotGroup = this.group("PivotTable");
+      const pivotBody = this.el("div", "group-body");
+      pivotBody.appendChild(this.tallBtn(IC.pivotTable, "PivotTable", "insertPivotTable"));
+      pivotGroup.insertBefore(pivotBody, pivotGroup.lastChild);
+      panel.appendChild(pivotGroup);
       const chartGroup = this.group("Charts");
       const chartBody = this.el("div", "group-body");
       chartBody.appendChild(this.tallBtn(IC.chart, "Chart", "insertChart"));
@@ -5793,6 +5902,121 @@
       panel.appendChild(namesGroup);
       return panel;
     }
+    // ======================= PAGE LAYOUT TAB =======================
+    buildPageLayoutTab() {
+      const panel = this.tabPanel("page-layout", false);
+      const pg = this.group("Page Setup");
+      const pgBody = this.el("div", "group-body");
+      const marginsSel = this.el("div", "btn-col gap-4");
+      const marginsLbl = this.el("div", "ribbon-btn-label");
+      marginsLbl.textContent = "Margins";
+      const marginsDropdown = this.selectEl("pageMargins", ["Normal", "Wide", "Narrow", "Custom..."], "Normal", "ribbon-select-sm");
+      marginsSel.appendChild(this.el("span", "btn-icon").cloneNode(false));
+      const marginsWrap = this.el("div", "btn-col gap-2");
+      const marginsIcon = document.createElement("div");
+      marginsIcon.innerHTML = IC.margins;
+      marginsIcon.className = "btn-icon";
+      marginsWrap.appendChild(marginsIcon);
+      marginsWrap.appendChild(marginsLbl);
+      marginsWrap.appendChild(marginsDropdown);
+      pgBody.appendChild(marginsWrap);
+      const orientWrap = this.el("div", "btn-col gap-2");
+      const orientLbl = this.el("div", "ribbon-btn-label");
+      orientLbl.textContent = "Orientation";
+      const orientIcon = document.createElement("div");
+      orientIcon.innerHTML = IC.orientation;
+      orientIcon.className = "btn-icon";
+      const orientDropdown = this.selectEl("pageOrientation", ["Portrait", "Landscape"], "Portrait", "ribbon-select-sm");
+      orientWrap.appendChild(orientIcon);
+      orientWrap.appendChild(orientLbl);
+      orientWrap.appendChild(orientDropdown);
+      pgBody.appendChild(orientWrap);
+      const sizeWrap = this.el("div", "btn-col gap-2");
+      const sizeLbl = this.el("div", "ribbon-btn-label");
+      sizeLbl.textContent = "Size";
+      const sizeIcon = document.createElement("div");
+      sizeIcon.innerHTML = IC.pageSetupDlg;
+      sizeIcon.className = "btn-icon";
+      const sizeDropdown = this.selectEl("paperSize", ["Letter", "A4", "Legal", "A3", "Tabloid"], "Letter", "ribbon-select-sm");
+      sizeWrap.appendChild(sizeIcon);
+      sizeWrap.appendChild(sizeLbl);
+      sizeWrap.appendChild(sizeDropdown);
+      pgBody.appendChild(sizeWrap);
+      pg.insertBefore(pgBody, pg.lastChild);
+      panel.appendChild(pg);
+      const paGrp = this.group("Print Area");
+      const paBody = this.el("div", "group-body");
+      paBody.appendChild(this.smallBtn(IC.printArea, "Set Print Area", "setPrintArea"));
+      paBody.appendChild(this.smallBtn(IC.printArea, "Clear Print Area", "clearPrintArea"));
+      paGrp.insertBefore(paBody, paGrp.lastChild);
+      panel.appendChild(paGrp);
+      const pbGrp = this.group("Breaks");
+      const pbBody = this.el("div", "group-body btn-col gap-4");
+      pbBody.appendChild(this.smallBtn(IC.pageBreak, "Insert Page Break", "insertPageBreak"));
+      pbBody.appendChild(this.smallBtn(IC.pageBreak, "Remove Page Break", "removePageBreak"));
+      pbBody.appendChild(this.smallBtn(IC.pageBreak, "Reset All Breaks", "resetPageBreaks"));
+      pbGrp.insertBefore(pbBody, pbGrp.lastChild);
+      panel.appendChild(pbGrp);
+      const ptGrp = this.group("Print Titles");
+      const ptBody = this.el("div", "group-body");
+      ptBody.appendChild(this.tallBtn(IC.printTitles, "Print\nTitles", "printTitles"));
+      ptGrp.insertBefore(ptBody, ptGrp.lastChild);
+      panel.appendChild(ptGrp);
+      const sfGrp = this.group("Scale to Fit");
+      const sfBody = this.el("div", "group-body btn-col gap-4");
+      const widthWrap = this.el("div", "ribbon-label-row");
+      const widthLbl = document.createElement("span");
+      widthLbl.textContent = "Width:";
+      widthLbl.className = "ribbon-inline-label";
+      const widthSel = this.selectEl("fitToWidth", ["Automatic", "1", "2", "3", "4", "5", "6", "7", "8", "9"], "Automatic", "ribbon-select-sm");
+      widthWrap.appendChild(widthLbl);
+      widthWrap.appendChild(widthSel);
+      sfBody.appendChild(widthWrap);
+      const heightWrap = this.el("div", "ribbon-label-row");
+      const heightLbl = document.createElement("span");
+      heightLbl.textContent = "Height:";
+      heightLbl.className = "ribbon-inline-label";
+      const heightSel = this.selectEl("fitToHeight", ["Automatic", "1", "2", "3", "4", "5", "6", "7", "8", "9"], "Automatic", "ribbon-select-sm");
+      heightWrap.appendChild(heightLbl);
+      heightWrap.appendChild(heightSel);
+      sfBody.appendChild(heightWrap);
+      const scaleWrap = this.el("div", "ribbon-label-row");
+      const scaleLbl = document.createElement("span");
+      scaleLbl.textContent = "Scale:";
+      scaleLbl.className = "ribbon-inline-label";
+      const scaleInput = document.createElement("input");
+      scaleInput.type = "number";
+      scaleInput.min = "10";
+      scaleInput.max = "400";
+      scaleInput.value = "100";
+      scaleInput.className = "ribbon-num-input";
+      scaleInput.title = "Print scale (10\u2013400%)";
+      const scalePct = document.createElement("span");
+      scalePct.textContent = "%";
+      scalePct.className = "ribbon-inline-label";
+      scaleInput.onchange = () => this.onAction({ action: "printScale", value: scaleInput.value });
+      scaleWrap.appendChild(scaleLbl);
+      scaleWrap.appendChild(scaleInput);
+      scaleWrap.appendChild(scalePct);
+      sfBody.appendChild(scaleWrap);
+      sfGrp.insertBefore(sfBody, sfGrp.lastChild);
+      panel.appendChild(sfGrp);
+      const soGrp = this.group("Sheet Options");
+      const soBody = this.el("div", "group-body btn-col gap-4");
+      soBody.appendChild(this.toggleBtn(IC.gridlines, "Print Gridlines", "printGridlines", false));
+      soBody.appendChild(this.toggleBtn(IC.headers, "Print Headings", "printHeadings", false));
+      soBody.appendChild(this.toggleBtn(IC.headers, "Center Horiz.", "centerHorizontally", false));
+      soBody.appendChild(this.toggleBtn(IC.headers, "Center Vert.", "centerVertically", false));
+      soGrp.insertBefore(soBody, soGrp.lastChild);
+      panel.appendChild(soGrp);
+      const dlgGrp = this.group("");
+      const dlgBody = this.el("div", "group-body btn-col gap-6");
+      dlgBody.appendChild(this.tallBtn(IC.pageSetupDlg, "Page\nSetup", "pageSetupDialog"));
+      dlgBody.appendChild(this.tallBtn(IC.printPreview, "Print\nPreview", "printPreview"));
+      dlgGrp.insertBefore(dlgBody, dlgGrp.lastChild);
+      panel.appendChild(dlgGrp);
+      return panel;
+    }
     // ======================= VIEW TAB =======================
     buildViewTab() {
       const panel = this.tabPanel("view", false);
@@ -5809,6 +6033,11 @@
       winBody.appendChild(this.tallBtn(IC.freeze, "Freeze\nPanes", "freezePanes"));
       win.insertBefore(winBody, win.lastChild);
       panel.appendChild(win);
+      const views = this.group("Workbook Views");
+      const viewsBody = this.el("div", "group-body btn-col gap-6");
+      viewsBody.appendChild(this.toggleBtn(IC.pageBreak, "Page Break\nPreview", "pageBreakPreview", false));
+      views.insertBefore(viewsBody, views.lastChild);
+      panel.appendChild(views);
       return panel;
     }
     // ======================= DATA TAB =======================
@@ -5837,6 +6066,11 @@
       editBody.appendChild(this.tallBtn(IC.clear, "Clear", "clear"));
       edit.insertBefore(editBody, edit.lastChild);
       panel.appendChild(edit);
+      const pvGroup = this.group("PivotTable");
+      const pvBody = this.el("div", "group-body");
+      pvBody.appendChild(this.tallBtn(IC.pivotTable, "Refresh\nAll", "refreshAllPivots"));
+      pvGroup.insertBefore(pvBody, pvGroup.lastChild);
+      panel.appendChild(pvGroup);
       return panel;
     }
     // ======================= TAB SWITCHING =======================
@@ -5877,6 +6111,87 @@
       b.title = label.replace("\n", " ");
       b.onclick = () => this.onAction({ action });
       return b;
+    }
+    /** Small button: icon + label side-by-side (compact) */
+    smallBtn(svg, label, action) {
+      const b = document.createElement("button");
+      b.className = "ribbon-btn small-btn";
+      b.innerHTML = `<span class="btn-icon sm">${svg}</span><span class="btn-label">${label}</span>`;
+      b.title = label;
+      b.onclick = () => this.onAction({ action });
+      return b;
+    }
+    /** Export dropdown button (Export as CSV / HTML / PDF / PNG) */
+    _buildExportDropdown() {
+      const wrapper = document.createElement("div");
+      Object.assign(wrapper.style, { position: "relative", display: "inline-flex", alignItems: "center" });
+      const mainBtn = document.createElement("button");
+      mainBtn.className = "ribbon-btn icon-only-btn";
+      mainBtn.innerHTML = `<span class="btn-icon">${IC.exportPdf}</span>`;
+      mainBtn.title = "Export";
+      mainBtn.onclick = () => {
+        menu.style.display = menu.style.display === "block" ? "none" : "block";
+      };
+      const chevron = document.createElement("button");
+      chevron.className = "ribbon-btn icon-only-btn";
+      chevron.style.padding = "0 2px";
+      chevron.title = "Export options";
+      chevron.innerHTML = '<svg viewBox="0 0 8 8" fill="currentColor" style="width:8px;height:8px"><path d="M1 2.5l3 3 3-3"/></svg>';
+      chevron.onclick = () => {
+        menu.style.display = menu.style.display === "block" ? "none" : "block";
+      };
+      const menu = document.createElement("div");
+      Object.assign(menu.style, {
+        display: "none",
+        position: "absolute",
+        top: "100%",
+        right: "0",
+        background: "var(--vscode-menu-background, #1e1e1e)",
+        border: "1px solid var(--vscode-menu-border, #555)",
+        borderRadius: "4px",
+        boxShadow: "0 4px 16px rgba(0,0,0,0.5)",
+        zIndex: "9999",
+        minWidth: "160px",
+        padding: "4px 0",
+        fontSize: "13px"
+      });
+      const addItem = (label, action) => {
+        const item = document.createElement("button");
+        item.textContent = label;
+        Object.assign(item.style, {
+          display: "block",
+          width: "100%",
+          padding: "5px 14px",
+          background: "none",
+          border: "none",
+          cursor: "pointer",
+          color: "var(--vscode-menu-foreground, #d4d4d4)",
+          textAlign: "left",
+          fontSize: "13px"
+        });
+        item.onmouseenter = () => {
+          item.style.background = "var(--vscode-menu-selectionBackground, #0e639c)";
+        };
+        item.onmouseleave = () => {
+          item.style.background = "none";
+        };
+        item.onclick = () => {
+          menu.style.display = "none";
+          this.onAction({ action });
+        };
+        menu.appendChild(item);
+      };
+      addItem("Export as CSV", "exportCSV");
+      addItem("Export as HTML", "exportHTML");
+      addItem("Export as PDF (HTML)", "exportPDF");
+      addItem("Export as PNG", "exportPNG");
+      document.addEventListener("click", (e) => {
+        if (!wrapper.contains(e.target)) menu.style.display = "none";
+      });
+      wrapper.appendChild(mainBtn);
+      wrapper.appendChild(chevron);
+      wrapper.appendChild(menu);
+      return wrapper;
     }
     /** Format button (styled text, e.g., B I U S) */
     fmtBtn(label, action, extraClass) {
@@ -5957,7 +6272,7 @@
     }
   };
 
-  // contextMenu.ts
+  // src/vs/workbench/contrib/void/browser/documentViewers/xlsxRustViewer/media/contextMenu.ts
   var ContextMenu = class {
     constructor(container, onAction) {
       this.currentRow = 0;
@@ -5965,6 +6280,7 @@
       this.currentSelection = null;
       this.getTableAtCell = null;
       this.getHyperlinkAtCell = null;
+      this.getPivotAtCell = null;
       this.onAction = onAction;
       this.menu = document.createElement("div");
       this.menu.className = "xlsx-context-menu";
@@ -5986,6 +6302,10 @@
     /** Register a function that returns the hyperlink (if any) at a cell */
     setHyperlinkDetector(fn) {
       this.getHyperlinkAtCell = fn;
+    }
+    /** Register a function that returns the pivot index (-1 if none) at a cell */
+    setPivotDetector(fn) {
+      this.getPivotAtCell = fn;
     }
     show(x, y, row, col, headerType, selectionRange) {
       this.currentRow = row;
@@ -6083,6 +6403,7 @@
           ...hyperlinkItems,
           null,
           { action: "defineName", label: "Define Name..." },
+          { action: "insertPivotTable", label: "Insert PivotTable..." },
           null,
           { action: "sortAZ", label: "Sort A to Z" },
           { action: "sortZA", label: "Sort Z to A" }
@@ -6104,6 +6425,15 @@
           items.push({ action: "tableConvertToRange", label: "Convert to Range" });
           items.push(null);
           items.push({ action: "tableDelete", label: `Delete Table "${tableInfo.name}"` });
+        }
+        const pivotIndex = this.getPivotAtCell ? this.getPivotAtCell(row, col) : -1;
+        if (pivotIndex >= 0) {
+          items.push(null);
+          items.push({ action: "refreshPivot", label: "Refresh PivotTable" });
+          items.push({ action: "editPivot", label: "Edit PivotTable..." });
+          items.push({ action: "drillDown", label: "Show Details (Drill Down)" });
+          items.push(null);
+          items.push({ action: "deletePivot", label: "Delete PivotTable" });
         }
       }
       for (const item of items) {
@@ -6148,7 +6478,7 @@
     }
   };
 
-  // filterDropdown.ts
+  // src/vs/workbench/contrib/void/browser/documentViewers/xlsxRustViewer/media/filterDropdown.ts
   var FilterDropdown = class {
     constructor(parent, onAction) {
       this.tableName = "";
@@ -6337,7 +6667,7 @@
     }
   };
 
-  // conditionalFormatDialog.ts
+  // src/vs/workbench/contrib/void/browser/documentViewers/xlsxRustViewer/media/conditionalFormatDialog.ts
   var RULE_TYPES = [
     // Highlight Cells Rules
     { label: "Greater Than", value: "cellIs:greaterThan", category: "Highlight Cells Rules" },
@@ -6894,7 +7224,7 @@
     }
   };
 
-  // validationDialog.ts
+  // src/vs/workbench/contrib/void/browser/documentViewers/xlsxRustViewer/media/validationDialog.ts
   var VALIDATION_TYPES = [
     { label: "Any Value", value: "any" },
     { label: "Whole Number", value: "whole" },
@@ -7415,7 +7745,7 @@
     }
   };
 
-  // formatCellsDialog.ts
+  // src/vs/workbench/contrib/void/browser/documentViewers/xlsxRustViewer/media/formatCellsDialog.ts
   var FONT_FAMILIES = [
     "Calibri",
     "Arial",
@@ -8130,7 +8460,7 @@
     }
   };
 
-  // hyperlinkDialog.ts
+  // src/vs/workbench/contrib/void/browser/documentViewers/xlsxRustViewer/media/hyperlinkDialog.ts
   var HyperlinkDialog = class {
     constructor(container, onAction) {
       this.tabButtons = /* @__PURE__ */ new Map();
@@ -8528,7 +8858,7 @@
     }
   };
 
-  // nameManagerDialog.ts
+  // src/vs/workbench/contrib/void/browser/documentViewers/xlsxRustViewer/media/nameManagerDialog.ts
   var NameManagerDialog = class {
     // -1 = creating new
     constructor(container, onAction) {
@@ -8969,7 +9299,7 @@
     }
   };
 
-  // ../../../../../../../../../node_modules/@kurkle/color/dist/color.esm.js
+  // node_modules/@kurkle/color/dist/color.esm.js
   function round(v) {
     return v + 0.5 | 0;
   }
@@ -9526,7 +9856,7 @@
     }
   };
 
-  // ../../../../../../../../../node_modules/chart.js/dist/chunks/helpers.dataset.js
+  // node_modules/chart.js/dist/chunks/helpers.dataset.js
   function noop() {
   }
   var uid = /* @__PURE__ */ (() => {
@@ -11939,7 +12269,7 @@
     };
   }
 
-  // ../../../../../../../../../node_modules/chart.js/dist/chart.js
+  // node_modules/chart.js/dist/chart.js
   var Animator = class {
     constructor() {
       this._request = null;
@@ -22775,7 +23105,7 @@
   __publicField(TimeSeriesScale, "id", "timeseries");
   __publicField(TimeSeriesScale, "defaults", TimeScale.defaults);
 
-  // chartManager.ts
+  // src/vs/workbench/contrib/void/browser/documentViewers/xlsxRustViewer/media/chartManager.ts
   Chart.register(
     BarController,
     LineController,
@@ -23199,7 +23529,7 @@
     return DEFAULT_COLORS[index2 % DEFAULT_COLORS.length];
   }
 
-  // chartWizardDialog.ts
+  // src/vs/workbench/contrib/void/browser/documentViewers/xlsxRustViewer/media/chartWizardDialog.ts
   var CHART_TYPES = [
     { id: "column", label: "Column", icon: "\u2581\u2583\u2585\u2587" },
     { id: "bar", label: "Bar", icon: "\u2590\u2590\u2590" },
@@ -23464,7 +23794,7 @@
     }
   };
 
-  // pasteSpecialDialog.ts
+  // src/vs/workbench/contrib/void/browser/documentViewers/xlsxRustViewer/media/pasteSpecialDialog.ts
   var PasteSpecialDialog = class {
     constructor(container, onAction) {
       this.container = container;
@@ -23696,7 +24026,1735 @@
     }
   };
 
-  // main.ts
+  // src/vs/workbench/contrib/void/browser/documentViewers/xlsxRustViewer/media/pivotTableDialog.ts
+  var AGGREGATIONS = ["sum", "count", "average", "min", "max", "product", "countNums"];
+  var PIVOT_STYLES = [
+    { id: "PivotStyleMedium", label: "Medium (Blue)" },
+    { id: "PivotStyleLight", label: "Light" },
+    { id: "PivotStyleDark", label: "Dark" }
+  ];
+  var PivotTableDialog = class {
+    constructor(_parent, onAction) {
+      // Dialog state
+      this.allHeaders = [];
+      this.sourceRange = "";
+      this.sourceSheet = "";
+      this.sheetNames = [];
+      // Field placements
+      this.fieldAreas = /* @__PURE__ */ new Map();
+      this.fieldAggregation = /* @__PURE__ */ new Map();
+      this.fieldGroupBy = /* @__PURE__ */ new Map();
+      this.fieldSortOrder = /* @__PURE__ */ new Map();
+      this.filterValues = /* @__PURE__ */ new Map();
+      // field -> included values
+      this.calcFields = [];
+      this.areaEls = null;
+      // Dragging state
+      this.dragFieldName = null;
+      this.onAction = onAction;
+      this.overlay = document.createElement("div");
+      this.overlay.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,0.6);display:none;z-index:10000;align-items:center;justify-content:center;";
+      this.overlay.addEventListener("mousedown", (e) => {
+        if (e.target === this.overlay) this.hide();
+      });
+      this.dialog = document.createElement("div");
+      this.dialog.style.cssText = [
+        "background:#252526;color:#ccc;border:1px solid #555;border-radius:4px;",
+        "display:flex;flex-direction:column;width:780px;max-height:90vh;overflow:hidden;",
+        "font-family:var(--vscode-font-family,sans-serif);font-size:12px;"
+      ].join("");
+      this.overlay.appendChild(this.dialog);
+      document.body.appendChild(this.overlay);
+    }
+    // ---------------------------------------------------------------------------
+    // Public API
+    // ---------------------------------------------------------------------------
+    show(sourceHeaders, sourceRange, sourceSheet, sheetNames, existingConfig, editIndex, numericHeaders) {
+      this.allHeaders = sourceHeaders;
+      this.sourceRange = sourceRange;
+      this.sourceSheet = sourceSheet;
+      this.sheetNames = sheetNames;
+      this.editIndex = editIndex;
+      this.fieldAreas.clear();
+      this.fieldAggregation.clear();
+      this.fieldGroupBy.clear();
+      this.fieldSortOrder.clear();
+      this.filterValues.clear();
+      this.calcFields = [];
+      for (const h of sourceHeaders) this.fieldAreas.set(h, "none");
+      if (existingConfig) {
+        for (const f of existingConfig.fields) {
+          if (sourceHeaders.includes(f.name)) {
+            this.fieldAreas.set(f.name, f.area);
+            if (f.aggregation) this.fieldAggregation.set(f.name, f.aggregation);
+            if (f.group_by) this.fieldGroupBy.set(f.name, f.group_by);
+            if (f.sort_order) this.fieldSortOrder.set(f.name, f.sort_order);
+          }
+        }
+        for (const fv of existingConfig.filter_values ?? []) {
+          this.filterValues.set(fv.field_name, fv.included_values);
+        }
+        this.calcFields = existingConfig.calc_fields ? [...existingConfig.calc_fields] : [];
+      } else if (numericHeaders && numericHeaders.length > 0) {
+        let assignedRow = false;
+        for (const h of sourceHeaders) {
+          if (numericHeaders.includes(h)) {
+            this.fieldAreas.set(h, "value");
+          } else if (!assignedRow) {
+            this.fieldAreas.set(h, "row");
+            assignedRow = true;
+          }
+        }
+      }
+      this._buildUI(existingConfig);
+      this.overlay.style.display = "flex";
+    }
+    hide() {
+      this.overlay.style.display = "none";
+      this.dialog.innerHTML = "";
+    }
+    isVisible() {
+      return this.overlay.style.display !== "none";
+    }
+    // ---------------------------------------------------------------------------
+    // UI construction
+    // ---------------------------------------------------------------------------
+    _buildUI(existingConfig) {
+      this.dialog.innerHTML = "";
+      const titleBar = document.createElement("div");
+      titleBar.style.cssText = "background:#37373d;padding:8px 12px;font-weight:bold;font-size:13px;display:flex;justify-content:space-between;align-items:center;cursor:move;";
+      titleBar.textContent = existingConfig ? "Edit PivotTable" : "Create PivotTable";
+      const closeBtn = document.createElement("button");
+      closeBtn.textContent = "\u2715";
+      closeBtn.style.cssText = "background:none;border:none;color:#ccc;cursor:pointer;font-size:14px;padding:0 4px;";
+      closeBtn.onclick = () => this.hide();
+      titleBar.appendChild(closeBtn);
+      this.dialog.appendChild(titleBar);
+      this._makeDraggable(titleBar);
+      const body = document.createElement("div");
+      body.style.cssText = "display:flex;flex:1;overflow:hidden;padding:12px;gap:12px;min-height:400px;";
+      const leftPanel = document.createElement("div");
+      leftPanel.style.cssText = "width:200px;flex-shrink:0;display:flex;flex-direction:column;gap:8px;";
+      const leftLabel = document.createElement("div");
+      leftLabel.style.cssText = "font-weight:bold;color:#ddd;font-size:11px;text-transform:uppercase;";
+      leftLabel.textContent = "Field List";
+      leftPanel.appendChild(leftLabel);
+      this.fieldListEl = document.createElement("div");
+      this.fieldListEl.style.cssText = "flex:1;overflow-y:auto;background:#1e1e1e;border:1px solid #444;border-radius:3px;padding:4px;display:flex;flex-direction:column;gap:2px;";
+      leftPanel.appendChild(this.fieldListEl);
+      body.appendChild(leftPanel);
+      const rightPanel = document.createElement("div");
+      rightPanel.style.cssText = "flex:1;display:flex;flex-direction:column;gap:8px;";
+      const areasGrid = document.createElement("div");
+      areasGrid.style.cssText = "display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;gap:8px;flex:1;";
+      const filterEl = this._buildAreaBox("Filters", "filter");
+      const columnEl = this._buildAreaBox("Columns", "column");
+      const rowEl = this._buildAreaBox("Rows", "row");
+      const valueEl = this._buildAreaBox("Values", "value");
+      this.areaEls = { row: rowEl, column: columnEl, value: valueEl, filter: filterEl };
+      areasGrid.appendChild(filterEl);
+      areasGrid.appendChild(columnEl);
+      areasGrid.appendChild(rowEl);
+      areasGrid.appendChild(valueEl);
+      rightPanel.appendChild(areasGrid);
+      const optionsRow = document.createElement("div");
+      optionsRow.style.cssText = "display:flex;flex-wrap:wrap;gap:16px;align-items:center;padding:8px 0;border-top:1px solid #444;";
+      this.showGrandRowsCheck = this._checkbox("Grand Total Rows", existingConfig?.show_grand_total_rows ?? true);
+      this.showGrandColsCheck = this._checkbox("Grand Total Columns", existingConfig?.show_grand_total_cols ?? false);
+      this.showSubtotalsCheck = this._checkbox("Subtotals", existingConfig?.show_subtotals ?? false);
+      optionsRow.appendChild(this.showGrandRowsCheck.parentElement);
+      optionsRow.appendChild(this.showGrandColsCheck.parentElement);
+      optionsRow.appendChild(this.showSubtotalsCheck.parentElement);
+      const styleWrap = this._labeledControl("Style", () => {
+        this.styleSelect = document.createElement("select");
+        this.styleSelect.style.cssText = "background:#3c3c3c;color:#ccc;border:1px solid #555;padding:2px 4px;border-radius:2px;";
+        for (const s of PIVOT_STYLES) {
+          const opt = document.createElement("option");
+          opt.value = s.id;
+          opt.textContent = s.label;
+          if (existingConfig?.style_name === s.id) opt.selected = true;
+          this.styleSelect.appendChild(opt);
+        }
+        return this.styleSelect;
+      });
+      optionsRow.appendChild(styleWrap);
+      rightPanel.appendChild(areasGrid);
+      rightPanel.appendChild(optionsRow);
+      const destRow = document.createElement("div");
+      destRow.style.cssText = "display:flex;gap:12px;align-items:center;border-top:1px solid #444;padding-top:8px;";
+      const destSheetWrap = this._labeledControl("Destination Sheet", () => {
+        this.destSheetSelect = document.createElement("select");
+        this.destSheetSelect.style.cssText = "background:#3c3c3c;color:#ccc;border:1px solid #555;padding:2px 4px;border-radius:2px;";
+        const newOpt = document.createElement("option");
+        newOpt.value = "__new__";
+        newOpt.textContent = "+ New Sheet";
+        this.destSheetSelect.appendChild(newOpt);
+        for (const s of this.sheetNames) {
+          const opt = document.createElement("option");
+          opt.value = s;
+          opt.textContent = s;
+          if (existingConfig?.dest_sheet === s) opt.selected = true;
+          this.destSheetSelect.appendChild(opt);
+        }
+        return this.destSheetSelect;
+      });
+      const destCellWrap = this._labeledControl("Cell", () => {
+        this.destCellInput = document.createElement("input");
+        this.destCellInput.type = "text";
+        this.destCellInput.value = existingConfig?.dest_cell ?? "A1";
+        this.destCellInput.style.cssText = "background:#3c3c3c;color:#ccc;border:1px solid #555;padding:2px 4px;width:60px;border-radius:2px;";
+        return this.destCellInput;
+      });
+      destRow.appendChild(destSheetWrap);
+      destRow.appendChild(destCellWrap);
+      rightPanel.appendChild(destRow);
+      body.appendChild(rightPanel);
+      this.dialog.appendChild(body);
+      const footer = document.createElement("div");
+      footer.style.cssText = "display:flex;justify-content:space-between;padding:10px 12px;border-top:1px solid #444;gap:8px;";
+      const leftFooter = document.createElement("div");
+      leftFooter.style.cssText = "display:flex;gap:8px;";
+      if (existingConfig) {
+        const delBtn = this._btn("Delete PivotTable", "#c0392b");
+        delBtn.onclick = () => {
+          this.onAction({ action: "delete", editIndex: this.editIndex });
+          this.hide();
+        };
+        const refreshBtn = this._btn("Refresh", "#5a5a5a");
+        refreshBtn.onclick = () => {
+          this.onAction({ action: "refresh", editIndex: this.editIndex });
+          this.hide();
+        };
+        leftFooter.appendChild(delBtn);
+        leftFooter.appendChild(refreshBtn);
+      }
+      footer.appendChild(leftFooter);
+      const rightFooter = document.createElement("div");
+      rightFooter.style.cssText = "display:flex;gap:8px;";
+      const cancelBtn = this._btn("Cancel", "#5a5a5a");
+      cancelBtn.onclick = () => {
+        this.onAction({ action: "cancel" });
+        this.hide();
+      };
+      const okBtn = this._btn("OK", "#0e639c");
+      okBtn.onclick = () => this._submit();
+      rightFooter.appendChild(cancelBtn);
+      rightFooter.appendChild(okBtn);
+      footer.appendChild(rightFooter);
+      this.dialog.appendChild(footer);
+      this._renderFieldList();
+      this._renderAreas();
+    }
+    // ---------------------------------------------------------------------------
+    // Field list rendering
+    // ---------------------------------------------------------------------------
+    _renderFieldList() {
+      this.fieldListEl.innerHTML = "";
+      const unplacedFields = this.allHeaders.filter((h) => this.fieldAreas.get(h) === "none");
+      if (unplacedFields.length === 0) {
+        const empty = document.createElement("div");
+        empty.style.cssText = "color:#666;padding:8px;text-align:center;font-size:11px;";
+        empty.textContent = "All fields placed";
+        this.fieldListEl.appendChild(empty);
+        return;
+      }
+      for (const h of unplacedFields) {
+        const chip = this._fieldChip(h, "none");
+        this.fieldListEl.appendChild(chip);
+      }
+    }
+    _renderAreas() {
+      if (!this.areaEls) return;
+      for (const area of ["row", "column", "value", "filter"]) {
+        const el = this.areaEls[area];
+        const chipsContainer = el.querySelector(".chips-container");
+        if (!chipsContainer) continue;
+        chipsContainer.innerHTML = "";
+        const fieldsInArea = this.allHeaders.filter((h) => this.fieldAreas.get(h) === area);
+        for (const h of fieldsInArea) {
+          chipsContainer.appendChild(this._fieldChip(h, area));
+        }
+      }
+    }
+    // ---------------------------------------------------------------------------
+    // Field chip
+    // ---------------------------------------------------------------------------
+    _fieldChip(name, area) {
+      const chip = document.createElement("div");
+      chip.style.cssText = [
+        "display:flex;align-items:center;justify-content:space-between;",
+        "background:#3c3c3c;border:1px solid #555;border-radius:3px;",
+        "padding:3px 6px;font-size:11px;cursor:grab;gap:4px;"
+      ].join("");
+      chip.draggable = true;
+      const label = document.createElement("span");
+      label.style.cssText = "flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;";
+      if (area === "value") {
+        const agg = this.fieldAggregation.get(name) ?? "sum";
+        const aggLabel = agg.charAt(0).toUpperCase() + agg.slice(1);
+        label.textContent = `${aggLabel} of ${name}`;
+      } else {
+        label.textContent = name;
+      }
+      chip.appendChild(label);
+      if (area !== "none") {
+        const settingsBtn = document.createElement("button");
+        settingsBtn.textContent = "\u25BE";
+        settingsBtn.style.cssText = "background:none;border:none;color:#aaa;cursor:pointer;padding:0 2px;font-size:10px;";
+        settingsBtn.onclick = (e) => {
+          e.stopPropagation();
+          this._showFieldPopover(name, area, settingsBtn);
+        };
+        chip.appendChild(settingsBtn);
+        const removeBtn = document.createElement("button");
+        removeBtn.textContent = "\u2715";
+        removeBtn.style.cssText = "background:none;border:none;color:#888;cursor:pointer;padding:0 2px;font-size:10px;";
+        removeBtn.onclick = (e) => {
+          e.stopPropagation();
+          this.fieldAreas.set(name, "none");
+          this._renderFieldList();
+          this._renderAreas();
+        };
+        chip.appendChild(removeBtn);
+      }
+      chip.addEventListener("dragstart", () => {
+        this.dragFieldName = name;
+        chip.style.opacity = "0.5";
+      });
+      chip.addEventListener("dragend", () => {
+        chip.style.opacity = "1";
+        this.dragFieldName = null;
+      });
+      return chip;
+    }
+    // ---------------------------------------------------------------------------
+    // Area box with drop zone
+    // ---------------------------------------------------------------------------
+    _buildAreaBox(label, area) {
+      const box = document.createElement("div");
+      box.style.cssText = "display:flex;flex-direction:column;border:1px solid #444;border-radius:3px;overflow:hidden;";
+      const header = document.createElement("div");
+      header.style.cssText = "background:#2d2d30;padding:4px 8px;font-weight:bold;font-size:11px;color:#9cdcfe;";
+      header.textContent = label;
+      box.appendChild(header);
+      const chipsContainer = document.createElement("div");
+      chipsContainer.className = "chips-container";
+      chipsContainer.style.cssText = "flex:1;overflow-y:auto;padding:4px;display:flex;flex-direction:column;gap:2px;min-height:60px;";
+      box.appendChild(chipsContainer);
+      box.addEventListener("dragover", (e) => {
+        e.preventDefault();
+        box.style.borderColor = "#0e639c";
+      });
+      box.addEventListener("dragleave", () => {
+        box.style.borderColor = "#444";
+      });
+      box.addEventListener("drop", (e) => {
+        e.preventDefault();
+        box.style.borderColor = "#444";
+        if (this.dragFieldName) {
+          this.fieldAreas.set(this.dragFieldName, area);
+          if (area === "value" && !this.fieldAggregation.has(this.dragFieldName)) {
+            this.fieldAggregation.set(this.dragFieldName, "sum");
+          }
+          this._renderFieldList();
+          this._renderAreas();
+        }
+      });
+      return box;
+    }
+    // ---------------------------------------------------------------------------
+    // Field configuration popover
+    // ---------------------------------------------------------------------------
+    _showFieldPopover(name, area, anchor) {
+      document.querySelector(".pivot-field-popover")?.remove();
+      const popover = document.createElement("div");
+      popover.className = "pivot-field-popover";
+      popover.style.cssText = [
+        "position:fixed;background:#252526;border:1px solid #555;border-radius:4px;",
+        "padding:10px;min-width:180px;z-index:20000;display:flex;flex-direction:column;gap:8px;",
+        "box-shadow:0 4px 12px rgba(0,0,0,0.5);"
+      ].join("");
+      const rect = anchor.getBoundingClientRect();
+      popover.style.left = `${Math.min(rect.left, window.innerWidth - 200)}px`;
+      popover.style.top = `${rect.bottom + 4}px`;
+      if (area === "value") {
+        const aggLabel = document.createElement("div");
+        aggLabel.style.cssText = "font-size:11px;font-weight:bold;color:#9cdcfe;";
+        aggLabel.textContent = "Summarize Values By";
+        popover.appendChild(aggLabel);
+        const currentAgg = this.fieldAggregation.get(name) ?? "sum";
+        for (const agg of AGGREGATIONS) {
+          const row = document.createElement("div");
+          row.style.cssText = "display:flex;align-items:center;gap:6px;cursor:pointer;padding:3px 0;";
+          const radio = document.createElement("input");
+          radio.type = "radio";
+          radio.name = "agg";
+          radio.value = agg;
+          radio.checked = agg === currentAgg;
+          radio.style.cursor = "pointer";
+          radio.onchange = () => {
+            this.fieldAggregation.set(name, agg);
+            this._renderAreas();
+            popover.remove();
+          };
+          const l = document.createElement("label");
+          l.textContent = agg.charAt(0).toUpperCase() + agg.slice(1);
+          l.style.cursor = "pointer";
+          l.onclick = () => {
+            radio.click();
+          };
+          row.appendChild(radio);
+          row.appendChild(l);
+          popover.appendChild(row);
+        }
+      } else if (area === "row" || area === "column") {
+        const sortLabel = document.createElement("div");
+        sortLabel.style.cssText = "font-size:11px;font-weight:bold;color:#9cdcfe;";
+        sortLabel.textContent = "Sort";
+        popover.appendChild(sortLabel);
+        for (const [val, lab] of [["asc", "A \u2192 Z"], ["desc", "Z \u2192 A"], ["none", "No Sort"]]) {
+          const row = document.createElement("div");
+          row.style.cssText = "display:flex;align-items:center;gap:6px;cursor:pointer;";
+          const radio = document.createElement("input");
+          radio.type = "radio";
+          radio.name = "sort";
+          radio.value = val;
+          radio.checked = (this.fieldSortOrder.get(name) ?? "none") === val;
+          radio.onchange = () => {
+            this.fieldSortOrder.set(name, val);
+            popover.remove();
+          };
+          const l = document.createElement("label");
+          l.textContent = lab;
+          l.onclick = () => radio.click();
+          row.appendChild(radio);
+          row.appendChild(l);
+          popover.appendChild(row);
+        }
+        const grpLabel = document.createElement("div");
+        grpLabel.style.cssText = "font-size:11px;font-weight:bold;color:#9cdcfe;margin-top:6px;";
+        grpLabel.textContent = "Group By";
+        popover.appendChild(grpLabel);
+        for (const [val, lab] of [["none", "None"], ["day", "Day"], ["month", "Month"], ["quarter", "Quarter"], ["year", "Year"]]) {
+          const row = document.createElement("div");
+          row.style.cssText = "display:flex;align-items:center;gap:6px;cursor:pointer;";
+          const radio = document.createElement("input");
+          radio.type = "radio";
+          radio.name = "grp";
+          radio.value = val;
+          radio.checked = (this.fieldGroupBy.get(name) ?? "none") === val;
+          radio.onchange = () => {
+            this.fieldGroupBy.set(name, val);
+            popover.remove();
+          };
+          const l = document.createElement("label");
+          l.textContent = lab;
+          l.onclick = () => radio.click();
+          row.appendChild(radio);
+          row.appendChild(l);
+          popover.appendChild(row);
+        }
+      } else if (area === "filter") {
+        const filterLabel = document.createElement("div");
+        filterLabel.style.cssText = "font-size:11px;font-weight:bold;color:#9cdcfe;";
+        filterLabel.textContent = "Include values (comma-separated):";
+        popover.appendChild(filterLabel);
+        const textarea = document.createElement("textarea");
+        textarea.rows = 3;
+        textarea.value = (this.filterValues.get(name) ?? []).join(", ");
+        textarea.style.cssText = "background:#3c3c3c;color:#ccc;border:1px solid #555;border-radius:2px;width:100%;resize:vertical;font-size:11px;";
+        textarea.placeholder = "Leave empty to include all";
+        popover.appendChild(textarea);
+        const applyBtn = this._btn("Apply", "#0e639c");
+        applyBtn.onclick = () => {
+          const vals = textarea.value.split(",").map((v) => v.trim()).filter((v) => v);
+          if (vals.length > 0) {
+            this.filterValues.set(name, vals);
+          } else {
+            this.filterValues.delete(name);
+          }
+          popover.remove();
+        };
+        popover.appendChild(applyBtn);
+      }
+      const closePopover = (e) => {
+        if (!popover.contains(e.target)) {
+          popover.remove();
+          document.removeEventListener("mousedown", closePopover);
+        }
+      };
+      document.body.appendChild(popover);
+      setTimeout(() => document.addEventListener("mousedown", closePopover), 50);
+    }
+    // ---------------------------------------------------------------------------
+    // Submit
+    // ---------------------------------------------------------------------------
+    _submit() {
+      const fields = [];
+      for (const [name, area] of this.fieldAreas) {
+        if (area === "none") continue;
+        const colIndex = this.allHeaders.indexOf(name);
+        if (colIndex === -1) continue;
+        const rangeStart = this._parseSourceRangeStartCol();
+        fields.push({
+          name,
+          source_col: rangeStart + colIndex,
+          area,
+          aggregation: area === "value" ? this.fieldAggregation.get(name) ?? "sum" : void 0,
+          group_by: area === "row" || area === "column" ? this.fieldGroupBy.get(name) ?? "none" : void 0,
+          sort_order: area === "row" || area === "column" ? this.fieldSortOrder.get(name) ?? "none" : void 0
+        });
+      }
+      const filterValuesArr = [];
+      for (const [field_name, included_values] of this.filterValues) {
+        filterValuesArr.push({ field_name, included_values });
+      }
+      const destSheet = this.destSheetSelect.value === "__new__" ? `Pivot_${Date.now()}` : this.destSheetSelect.value;
+      const config = {
+        name: `PivotTable${this.editIndex != null ? this.editIndex + 1 : ""}`,
+        source_sheet: this.sourceSheet,
+        source_range: this.sourceRange,
+        dest_sheet: destSheet,
+        dest_cell: this.destCellInput.value || "A1",
+        fields,
+        calc_fields: this.calcFields,
+        style_name: this.styleSelect.value,
+        show_grand_total_rows: this.showGrandRowsCheck.checked,
+        show_grand_total_cols: this.showGrandColsCheck.checked,
+        show_subtotals: this.showSubtotalsCheck.checked,
+        compact_layout: false,
+        filter_values: filterValuesArr
+      };
+      const isNew = this.destSheetSelect.value === "__new__";
+      if (isNew) {
+        config._createNewSheet = true;
+      }
+      this.onAction({
+        action: this.editIndex != null ? "update" : "create",
+        config,
+        editIndex: this.editIndex
+      });
+      this.hide();
+    }
+    _parseSourceRangeStartCol() {
+      const m = this.sourceRange.match(/^([A-Za-z]+)/);
+      if (!m) return 0;
+      let col = 0;
+      for (const ch of m[1].toUpperCase()) col = col * 26 + (ch.charCodeAt(0) - 64);
+      return col - 1;
+    }
+    // ---------------------------------------------------------------------------
+    // Helpers
+    // ---------------------------------------------------------------------------
+    _btn(label, bg) {
+      const btn = document.createElement("button");
+      btn.textContent = label;
+      btn.style.cssText = `background:${bg};color:#fff;border:none;padding:5px 12px;border-radius:3px;cursor:pointer;font-size:12px;`;
+      return btn;
+    }
+    _checkbox(label, defaultValue) {
+      const wrap = document.createElement("label");
+      wrap.style.cssText = "display:flex;align-items:center;gap:4px;cursor:pointer;font-size:11px;";
+      const cb = document.createElement("input");
+      cb.type = "checkbox";
+      cb.checked = defaultValue;
+      cb.style.cursor = "pointer";
+      const span = document.createElement("span");
+      span.textContent = label;
+      wrap.appendChild(cb);
+      wrap.appendChild(span);
+      Object.defineProperty(cb, "_wrapEl", { value: wrap });
+      document.createElement("span").appendChild(wrap);
+      return cb;
+    }
+    _labeledControl(label, buildFn) {
+      const wrap = document.createElement("div");
+      wrap.style.cssText = "display:flex;flex-direction:column;gap:3px;";
+      const l = document.createElement("label");
+      l.style.cssText = "font-size:10px;color:#9cdcfe;";
+      l.textContent = label;
+      wrap.appendChild(l);
+      wrap.appendChild(buildFn());
+      return wrap;
+    }
+    _makeDraggable(handle) {
+      let startX = 0, startY = 0, origLeft = 0, origTop = 0;
+      handle.addEventListener("mousedown", (e) => {
+        const rect = this.dialog.getBoundingClientRect();
+        startX = e.clientX;
+        startY = e.clientY;
+        origLeft = rect.left;
+        origTop = rect.top;
+        this.dialog.style.position = "absolute";
+        this.overlay.style.alignItems = "flex-start";
+        this.overlay.style.justifyContent = "flex-start";
+        this.dialog.style.left = `${origLeft}px`;
+        this.dialog.style.top = `${origTop}px`;
+        const onMove = (me) => {
+          this.dialog.style.left = `${origLeft + me.clientX - startX}px`;
+          this.dialog.style.top = `${origTop + me.clientY - startY}px`;
+        };
+        const onUp = () => {
+          document.removeEventListener("mousemove", onMove);
+          document.removeEventListener("mouseup", onUp);
+        };
+        document.addEventListener("mousemove", onMove);
+        document.addEventListener("mouseup", onUp);
+      });
+    }
+  };
+
+  // src/vs/workbench/contrib/void/browser/documentViewers/xlsxRustViewer/media/pivotTableEngine.ts
+  function serialToDate(serial) {
+    let s = Math.floor(serial);
+    if (s <= 0) return [1900, 1, 1];
+    if (s === 60) return [1900, 2, 29];
+    if (s < 60) s += 1;
+    const jd = s + 2415018;
+    const l = jd + 68569;
+    const n = Math.floor(4 * l / 146097);
+    const lAdj = l - Math.floor((146097 * n + 3) / 4);
+    const i = Math.floor(4e3 * (lAdj + 1) / 1461001);
+    const lAdj2 = lAdj - Math.floor(1461 * i / 4) + 31;
+    const j = Math.floor(80 * lAdj2 / 2447);
+    const day = lAdj2 - Math.floor(2447 * j / 80);
+    const lAdj3 = Math.floor(j / 11);
+    const month = j + 2 - 12 * lAdj3;
+    const year = 100 * (n - 49) + i + lAdj3;
+    return [year, month, day];
+  }
+  function groupDateSerial(serial, groupBy) {
+    const [year, month] = serialToDate(serial);
+    if (groupBy === "year") return String(year);
+    if (groupBy === "quarter") return `Q${Math.ceil(month / 3)} ${year}`;
+    if (groupBy === "month") {
+      const MONTHS = [
+        "Jan",
+        "Feb",
+        "Mar",
+        "Apr",
+        "May",
+        "Jun",
+        "Jul",
+        "Aug",
+        "Sep",
+        "Oct",
+        "Nov",
+        "Dec"
+      ];
+      return `${MONTHS[month - 1]} ${year}`;
+    }
+    if (groupBy === "day") {
+      return `${year}-${String(month).padStart(2, "0")}-${String(serialToDate(serial)[2]).padStart(2, "0")}`;
+    }
+    return String(serial);
+  }
+  function aggregate(values, fn) {
+    if (values.length === 0) return null;
+    switch (fn) {
+      case "sum":
+        return values.reduce((a, b) => a + b, 0);
+      case "count":
+        return values.length;
+      case "average":
+        return values.reduce((a, b) => a + b, 0) / values.length;
+      case "min":
+        return Math.min(...values);
+      case "max":
+        return Math.max(...values);
+      case "product":
+        return values.reduce((a, b) => a * b, 1);
+      case "countNums":
+        return values.length;
+      // already filtered to numeric
+      default:
+        return values.reduce((a, b) => a + b, 0);
+    }
+  }
+  function parseCellRefZeroBased(ref) {
+    const m = ref.toUpperCase().match(/^([A-Z]+)(\d+)$/);
+    if (!m) return { row: 0, col: 0 };
+    let col = 0;
+    for (const ch of m[1]) col = col * 26 + (ch.charCodeAt(0) - 64);
+    return { row: parseInt(m[2]) - 1, col: col - 1 };
+  }
+  function parseCellRangeZeroBased(range) {
+    const parts = range.split(":");
+    if (parts.length === 2) {
+      const s2 = parseCellRefZeroBased(parts[0]);
+      const e = parseCellRefZeroBased(parts[1]);
+      return { startRow: s2.row, startCol: s2.col, endRow: e.row, endCol: e.col };
+    }
+    const s = parseCellRefZeroBased(parts[0]);
+    return { startRow: s.row, startCol: s.col, endRow: s.row, endCol: s.col };
+  }
+  function evalCalcField(formula, aggregatedRow) {
+    let expr = formula.replace(/'([^']+)'/g, (_match, name) => {
+      const val = aggregatedRow.get(name);
+      return val != null ? String(val) : "0";
+    });
+    if (!/^[\d\s+\-*/().]+$/.test(expr)) return null;
+    try {
+      return Function(`"use strict"; return (${expr})`)();
+    } catch {
+      return null;
+    }
+  }
+  function headerStyle(styleName) {
+    if (styleName === "PivotStyleDark") {
+      return { bold: true, fill_color: "#1F3864", text_color: "#FFFFFF", alignment: "center" };
+    }
+    if (styleName === "PivotStyleLight") {
+      return { bold: true, fill_color: "#D9E1F2", text_color: "#000000", alignment: "center" };
+    }
+    return { bold: true, fill_color: "#4472C4", text_color: "#FFFFFF", alignment: "center" };
+  }
+  function grandTotalStyle(styleName) {
+    if (styleName === "PivotStyleDark") {
+      return { bold: true, fill_color: "#1A2D4A", text_color: "#FFFFFF" };
+    }
+    if (styleName === "PivotStyleLight") {
+      return { bold: true, fill_color: "#9DC3E6" };
+    }
+    return { bold: true, fill_color: "#2E75B6", text_color: "#FFFFFF" };
+  }
+  function altRowStyle(rowIndex, styleName) {
+    if (rowIndex % 2 === 1) return void 0;
+    if (styleName === "PivotStyleDark") return { fill_color: "#212F3C" };
+    if (styleName === "PivotStyleLight") return { fill_color: "#EEF3FB" };
+    return { fill_color: "#EEF3FB" };
+  }
+  function computePivotTable(sourceData, config, _formulaResults) {
+    const range = parseCellRangeZeroBased(config.source_range);
+    const headers = [];
+    for (let c = range.startCol; c <= range.endCol; c++) {
+      const cell = sourceData[range.startRow]?.[c];
+      headers.push(cell?.value ?? `Col${c - range.startCol + 1}`);
+    }
+    const colIndexOfField = /* @__PURE__ */ new Map();
+    for (const field of config.fields) {
+      colIndexOfField.set(field.name, field.source_col);
+    }
+    const dataRows = [];
+    for (let r = range.startRow + 1; r <= range.endRow; r++) {
+      const rowData = sourceData[r];
+      if (!rowData) continue;
+      const values = [];
+      for (let c = range.startCol; c <= range.endCol; c++) {
+        values.push(rowData[c]?.value ?? "");
+      }
+      if (values.every((v) => v === "")) continue;
+      dataRows.push({ values, sourceRow: r - range.startRow });
+    }
+    const filterMap = /* @__PURE__ */ new Map();
+    for (const fv of config.filter_values ?? []) {
+      filterMap.set(fv.field_name, new Set(fv.included_values.map((v) => v.toLowerCase())));
+    }
+    const filteredRows = dataRows.filter((row) => {
+      for (const [fieldName, allowed] of filterMap) {
+        const field = config.fields.find((f) => f.name === fieldName);
+        if (!field) continue;
+        const colOffset = field.source_col - range.startCol;
+        const val = row.values[colOffset] ?? "";
+        if (!allowed.has(val.toLowerCase())) return false;
+      }
+      return true;
+    });
+    const rowFields = config.fields.filter((f) => f.area === "row");
+    const colFields = config.fields.filter((f) => f.area === "column");
+    const valueFields = config.fields.filter((f) => f.area === "value");
+    const calcFieldDefs = config.calc_fields ?? [];
+    const valueColNames = [
+      ...valueFields.map((f) => f.custom_name ?? `${f.aggregation ?? "Sum"} of ${f.name}`),
+      ...calcFieldDefs.map((f) => f.name)
+    ];
+    function getFieldValue(row, field) {
+      const colOffset = field.source_col - range.startCol;
+      let val = row.values[colOffset] ?? "";
+      if (field.group_by && field.group_by !== "none") {
+        const num = parseFloat(val);
+        if (!isNaN(num)) {
+          val = groupDateSerial(num, field.group_by);
+        }
+      }
+      return val;
+    }
+    function keyStr(key) {
+      return key.join("\0");
+    }
+    const rowGroupOrder = [];
+    const rowGroupSet = /* @__PURE__ */ new Set();
+    const colGroupOrder = [];
+    const colGroupSet = /* @__PURE__ */ new Set();
+    for (const row of filteredRows) {
+      if (rowFields.length > 0) {
+        const k = keyStr(rowFields.map((f) => getFieldValue(row, f)));
+        if (!rowGroupSet.has(k)) {
+          rowGroupSet.add(k);
+          rowGroupOrder.push(k);
+        }
+      }
+      if (colFields.length > 0) {
+        const k = keyStr(colFields.map((f) => getFieldValue(row, f)));
+        if (!colGroupSet.has(k)) {
+          colGroupSet.add(k);
+          colGroupOrder.push(k);
+        }
+      }
+    }
+    const effectiveRowKeys = rowGroupOrder.length > 0 ? rowGroupOrder : [""];
+    const effectiveColKeys = colGroupOrder.length > 0 ? colGroupOrder : [""];
+    function sortKeys(keys, field) {
+      if (!field || field.sort_order === "none") return keys;
+      const sorted = [...keys].sort();
+      return field.sort_order === "desc" ? sorted.reverse() : sorted;
+    }
+    const sortedRowKeys = sortKeys(effectiveRowKeys, rowFields[0]);
+    const sortedColKeys = sortKeys(effectiveColKeys, colFields[0]);
+    const accumulator = /* @__PURE__ */ new Map();
+    for (const row of filteredRows) {
+      const rk = rowFields.length > 0 ? keyStr(rowFields.map((f) => getFieldValue(row, f))) : "";
+      const ck = colFields.length > 0 ? keyStr(colFields.map((f) => getFieldValue(row, f))) : "";
+      if (!accumulator.has(rk)) accumulator.set(rk, /* @__PURE__ */ new Map());
+      const byCol = accumulator.get(rk);
+      if (!byCol.has(ck)) {
+        byCol.set(ck, valueFields.map(() => []));
+      }
+      const numArrays = byCol.get(ck);
+      for (let vi = 0; vi < valueFields.length; vi++) {
+        const vf = valueFields[vi];
+        const colOffset = vf.source_col - range.startCol;
+        const rawVal = row.values[colOffset] ?? "";
+        const num = parseFloat(rawVal);
+        if (!isNaN(num)) {
+          numArrays[vi].push(num);
+        }
+      }
+    }
+    const numColGroups = sortedColKeys.length;
+    const numValueCols = valueColNames.length;
+    const numRowFieldCols = Math.max(rowFields.length, 1);
+    const numHeaderRows = Math.max(1, colFields.length);
+    const totalCols = numRowFieldCols + numColGroups * numValueCols + (config.show_grand_total_cols ? numValueCols : 0);
+    const outRows = [];
+    function emptyCell() {
+      return { value: "", dataType: "null" };
+    }
+    for (let hi = 0; hi < numHeaderRows; hi++) {
+      const headerRow = [];
+      for (let rf = 0; rf < numRowFieldCols; rf++) {
+        if (hi === numHeaderRows - 1 && rf < rowFields.length) {
+          headerRow.push({
+            value: rowFields[rf].custom_name ?? rowFields[rf].name,
+            dataType: "s",
+            isHeader: true,
+            style: headerStyle(config.style_name)
+          });
+        } else {
+          headerRow.push({ ...emptyCell(), isHeader: true, style: headerStyle(config.style_name) });
+        }
+      }
+      for (const ck of sortedColKeys) {
+        const colKeyParts = ck.split("\0");
+        for (let vi = 0; vi < numValueCols; vi++) {
+          let label;
+          if (numColGroups === 1 && ck === "") {
+            label = hi === numHeaderRows - 1 ? valueColNames[vi] : "";
+          } else if (hi < colFields.length) {
+            label = vi === 0 ? colKeyParts[hi] ?? "" : "";
+          } else {
+            label = valueColNames[vi];
+          }
+          headerRow.push({
+            value: label,
+            dataType: "s",
+            isHeader: true,
+            style: headerStyle(config.style_name)
+          });
+        }
+      }
+      if (config.show_grand_total_cols) {
+        for (let vi = 0; vi < numValueCols; vi++) {
+          headerRow.push({
+            value: hi === numHeaderRows - 1 ? `Grand Total (${valueColNames[vi]})` : "",
+            dataType: "s",
+            isHeader: true,
+            style: grandTotalStyle(config.style_name)
+          });
+        }
+      }
+      outRows.push(headerRow);
+    }
+    let dataRowIndex = 0;
+    for (const rk of sortedRowKeys) {
+      const rowKeyParts = rk.split("\0");
+      const dataRow = [];
+      const alt = altRowStyle(dataRowIndex, config.style_name);
+      for (let rf = 0; rf < numRowFieldCols; rf++) {
+        dataRow.push({
+          value: rowKeyParts[rf] ?? "",
+          dataType: "s",
+          style: alt
+        });
+      }
+      const grandTotals = valueFields.map(() => []);
+      for (const ck of sortedColKeys) {
+        const byCol = accumulator.get(rk);
+        const numArrays = byCol?.get(ck) ?? valueFields.map(() => []);
+        const aggValues = [];
+        for (let vi = 0; vi < valueFields.length; vi++) {
+          const result = aggregate(numArrays[vi], valueFields[vi].aggregation ?? "sum");
+          aggValues.push(result);
+          if (result != null) grandTotals[vi].push(result);
+        }
+        const aggMap = /* @__PURE__ */ new Map();
+        for (let vi = 0; vi < valueFields.length; vi++) {
+          aggMap.set(valueFields[vi].name, aggValues[vi]);
+        }
+        const calcValues = calcFieldDefs.map((cf) => evalCalcField(cf.formula, aggMap));
+        const allValues = [...aggValues, ...calcValues];
+        for (let vi = 0; vi < numValueCols; vi++) {
+          const v = allValues[vi];
+          dataRow.push({
+            value: v != null ? String(Math.round(v * 1e10) / 1e10) : "",
+            dataType: v != null ? "n" : "null",
+            style: alt
+          });
+        }
+      }
+      if (config.show_grand_total_cols) {
+        for (let vi = 0; vi < valueFields.length; vi++) {
+          const gt = aggregate(grandTotals[vi], valueFields[vi].aggregation ?? "sum");
+          dataRow.push({
+            value: gt != null ? String(Math.round(gt * 1e10) / 1e10) : "",
+            dataType: gt != null ? "n" : "null",
+            isGrandTotal: true,
+            style: grandTotalStyle(config.style_name)
+          });
+        }
+        for (const _cf of calcFieldDefs) {
+          dataRow.push({ value: "", dataType: "null", isGrandTotal: true, style: grandTotalStyle(config.style_name) });
+        }
+      }
+      outRows.push(dataRow);
+      dataRowIndex++;
+    }
+    if (config.show_grand_total_rows && sortedRowKeys.length > 0) {
+      const gtRow = [];
+      for (let rf = 0; rf < numRowFieldCols; rf++) {
+        gtRow.push({
+          value: rf === 0 ? "Grand Total" : "",
+          dataType: "s",
+          isGrandTotal: true,
+          style: grandTotalStyle(config.style_name)
+        });
+      }
+      for (const ck of sortedColKeys) {
+        for (let vi = 0; vi < valueFields.length; vi++) {
+          const allNums = [];
+          for (const rk of sortedRowKeys) {
+            const numArrays = accumulator.get(rk)?.get(ck) ?? [];
+            for (const n of numArrays[vi] ?? []) allNums.push(n);
+          }
+          const gt = aggregate(allNums, valueFields[vi].aggregation ?? "sum");
+          gtRow.push({
+            value: gt != null ? String(Math.round(gt * 1e10) / 1e10) : "",
+            dataType: gt != null ? "n" : "null",
+            isGrandTotal: true,
+            style: grandTotalStyle(config.style_name)
+          });
+        }
+        for (const _cf of calcFieldDefs) {
+          gtRow.push({ value: "", dataType: "null", isGrandTotal: true, style: grandTotalStyle(config.style_name) });
+        }
+      }
+      if (config.show_grand_total_cols) {
+        for (let vi = 0; vi < valueFields.length; vi++) {
+          const allNums = [];
+          for (const rk of sortedRowKeys) {
+            for (const ck of sortedColKeys) {
+              const numArrays = accumulator.get(rk)?.get(ck) ?? [];
+              for (const n of numArrays[vi] ?? []) allNums.push(n);
+            }
+          }
+          const gt = aggregate(allNums, valueFields[vi].aggregation ?? "sum");
+          gtRow.push({
+            value: gt != null ? String(Math.round(gt * 1e10) / 1e10) : "",
+            dataType: gt != null ? "n" : "null",
+            isGrandTotal: true,
+            style: grandTotalStyle(config.style_name)
+          });
+        }
+        for (const _cf of calcFieldDefs) {
+          gtRow.push({ value: "", dataType: "null", isGrandTotal: true, style: grandTotalStyle(config.style_name) });
+        }
+      }
+      outRows.push(gtRow);
+    }
+    const rowCount = outRows.length;
+    const colCount = totalCols;
+    for (const row of outRows) {
+      while (row.length < colCount) row.push(emptyCell());
+    }
+    return { cells: outRows, rowCount, colCount };
+  }
+
+  // src/vs/workbench/contrib/void/browser/documentViewers/xlsxRustViewer/media/pageSetupDialog.ts
+  var PAPER_SIZES = [
+    { label: 'Letter (8.5" x 11")', id: 1 },
+    { label: 'Letter Small (8.5" x 11")', id: 2 },
+    { label: 'Tabloid (11" x 17")', id: 3 },
+    { label: 'Ledger (17" x 11")', id: 4 },
+    { label: 'Legal (8.5" x 14")', id: 5 },
+    { label: 'Statement (5.5" x 8.5")', id: 6 },
+    { label: 'Executive (7.25" x 10.5")', id: 7 },
+    { label: "A3 (297mm x 420mm)", id: 8 },
+    { label: "A4 (210mm x 297mm)", id: 9 },
+    { label: "A4 Small (210mm x 297mm)", id: 10 },
+    { label: "A5 (148mm x 210mm)", id: 11 },
+    { label: "B4 (250mm x 354mm)", id: 12 },
+    { label: "B5 (182mm x 257mm)", id: 13 }
+  ];
+  var HEADER_FOOTER_PRESETS = [
+    { label: "(none)", value: "" },
+    { label: "Page 1", value: "&CPage &P" },
+    { label: "Page 1 of ?", value: "&CPage &P of &N" },
+    { label: "Filename", value: "&C&F" },
+    { label: "Filename & Date", value: "&L&F&RDate: &D" },
+    { label: "Sheet Name", value: "&C&A" },
+    { label: "Page Number (right)", value: "&RPage &P" },
+    { label: "Custom...", value: "__custom__" }
+  ];
+  function defaultSetup() {
+    return {
+      orientation: "portrait",
+      paper_size: 1,
+      scale: 100,
+      fit_to_width: void 0,
+      fit_to_height: void 0,
+      margin_left: 0.7,
+      margin_right: 0.7,
+      margin_top: 0.75,
+      margin_bottom: 0.75,
+      margin_header: 0.3,
+      margin_footer: 0.3,
+      header: "",
+      footer: "",
+      print_area: "",
+      print_titles_rows: "",
+      print_titles_cols: "",
+      row_breaks: [],
+      col_breaks: [],
+      print_gridlines: false,
+      center_horizontally: false,
+      center_vertically: false
+    };
+  }
+  var PageSetupDialog = class {
+    constructor(_parent, onAction) {
+      this.setup = defaultSetup();
+      // Tab references
+      this.tabs = [
+        { label: "Page", key: "page" },
+        { label: "Margins", key: "margins" },
+        { label: "Header/Footer", key: "header-footer" },
+        { label: "Sheet", key: "sheet" }
+      ];
+      this.activeTabKey = "page";
+      this.tabBtns = /* @__PURE__ */ new Map();
+      this.tabPanels = /* @__PURE__ */ new Map();
+      this.onAction = onAction;
+      this.overlay = document.createElement("div");
+      this.overlay.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,0.55);display:none;z-index:10001;align-items:center;justify-content:center;";
+      this.overlay.addEventListener("mousedown", (e) => {
+        if (e.target === this.overlay) this._cancel();
+      });
+      this.dialog = document.createElement("div");
+      this.dialog.style.cssText = [
+        "background:#252526;color:#ccc;border:1px solid #555;border-radius:4px;",
+        "display:flex;flex-direction:column;width:520px;max-height:90vh;",
+        "font-family:var(--vscode-font-family,sans-serif);font-size:12px;"
+      ].join("");
+      this.overlay.appendChild(this.dialog);
+      document.body.appendChild(this.overlay);
+    }
+    show(setup) {
+      this.setup = { ...defaultSetup(), ...setup };
+      this._buildUI();
+      this.overlay.style.display = "flex";
+    }
+    hide() {
+      this.overlay.style.display = "none";
+      this.dialog.innerHTML = "";
+      this.tabBtns.clear();
+      this.tabPanels.clear();
+    }
+    // -----------------------------------------------------------------------
+    _buildUI() {
+      this.dialog.innerHTML = "";
+      this.tabBtns.clear();
+      this.tabPanels.clear();
+      const title = document.createElement("div");
+      title.style.cssText = "padding:10px 14px 8px;font-weight:600;font-size:13px;border-bottom:1px solid #444;flex-shrink:0;";
+      title.textContent = "Page Setup";
+      this.dialog.appendChild(title);
+      const tabBar = document.createElement("div");
+      tabBar.style.cssText = "display:flex;border-bottom:1px solid #444;background:#1e1e1e;flex-shrink:0;";
+      for (const { label, key } of this.tabs) {
+        const btn = document.createElement("button");
+        btn.textContent = label;
+        btn.style.cssText = "padding:6px 14px;background:none;border:none;color:#ccc;cursor:pointer;font-size:12px;border-bottom:2px solid transparent;";
+        if (key === this.activeTabKey) {
+          btn.style.borderBottomColor = "#4fc3f7";
+          btn.style.color = "#fff";
+        }
+        btn.onclick = () => this._switchTab(key);
+        this.tabBtns.set(key, btn);
+        tabBar.appendChild(btn);
+      }
+      this.dialog.appendChild(tabBar);
+      const body = document.createElement("div");
+      body.style.cssText = "flex:1;overflow-y:auto;min-height:200px;";
+      for (const { key } of this.tabs) {
+        const panel = document.createElement("div");
+        panel.style.cssText = `display:${key === this.activeTabKey ? "block" : "none"};padding:16px;`;
+        this.tabPanels.set(key, panel);
+        body.appendChild(panel);
+      }
+      this.dialog.appendChild(body);
+      this._buildPageTab();
+      this._buildMarginsTab();
+      this._buildHeaderFooterTab();
+      this._buildSheetTab();
+      const footer = document.createElement("div");
+      footer.style.cssText = "display:flex;justify-content:flex-end;gap:8px;padding:10px 14px;border-top:1px solid #444;flex-shrink:0;";
+      const okBtn = document.createElement("button");
+      okBtn.textContent = "OK";
+      okBtn.style.cssText = "padding:4px 16px;background:#0078d4;color:#fff;border:none;border-radius:3px;cursor:pointer;font-size:12px;";
+      okBtn.onclick = () => this._apply();
+      const cancelBtn = document.createElement("button");
+      cancelBtn.textContent = "Cancel";
+      cancelBtn.style.cssText = "padding:4px 14px;background:#3c3c3c;color:#ccc;border:1px solid #555;border-radius:3px;cursor:pointer;font-size:12px;";
+      cancelBtn.onclick = () => this._cancel();
+      footer.appendChild(cancelBtn);
+      footer.appendChild(okBtn);
+      this.dialog.appendChild(footer);
+    }
+    _switchTab(key) {
+      this.tabBtns.get(this.activeTabKey).style.borderBottomColor = "transparent";
+      this.tabBtns.get(this.activeTabKey).style.color = "#ccc";
+      this.tabPanels.get(this.activeTabKey).style.display = "none";
+      this.activeTabKey = key;
+      this.tabBtns.get(key).style.borderBottomColor = "#4fc3f7";
+      this.tabBtns.get(key).style.color = "#fff";
+      this.tabPanels.get(key).style.display = "block";
+    }
+    // -----------------------------------------------------------------------
+    // PAGE TAB
+    // -----------------------------------------------------------------------
+    _buildPageTab() {
+      const panel = this.tabPanels.get("page");
+      const s = this.setup;
+      const orientSec = this._section("Orientation");
+      const portraitBtn = this._radioBtn("Portrait", "orient", s.orientation === "portrait", () => {
+        s.orientation = "portrait";
+      });
+      const landscapeBtn = this._radioBtn("Landscape", "orient", s.orientation === "landscape", () => {
+        s.orientation = "landscape";
+      });
+      orientSec.appendChild(this._row(portraitBtn, landscapeBtn));
+      panel.appendChild(orientSec);
+      const scaleSec = this._section("Scaling");
+      const useScale = !s.fit_to_width && !s.fit_to_height;
+      const scaleRadio = this._radioBtn("Adjust to:", "scale-mode", useScale, () => {
+        s.fit_to_width = void 0;
+        s.fit_to_height = void 0;
+        scaleInput.disabled = false;
+        fitWInput.disabled = true;
+        fitHInput.disabled = true;
+      });
+      const scaleInput = document.createElement("input");
+      scaleInput.type = "number";
+      scaleInput.min = "10";
+      scaleInput.max = "400";
+      scaleInput.value = String(s.scale);
+      scaleInput.disabled = !useScale;
+      scaleInput.style.cssText = "width:55px;margin:0 4px;";
+      scaleInput.className = "dialog-input";
+      scaleInput.onchange = () => {
+        s.scale = parseInt(scaleInput.value) || 100;
+      };
+      const scalePct = document.createElement("span");
+      scalePct.textContent = "% normal size";
+      const fitRadio = this._radioBtn("Fit to:", "scale-mode", !useScale, () => {
+        s.fit_to_width = parseInt(fitWInput.value) || 1;
+        s.fit_to_height = parseInt(fitHInput.value) || 1;
+        scaleInput.disabled = true;
+        fitWInput.disabled = false;
+        fitHInput.disabled = false;
+      });
+      const fitWInput = document.createElement("input");
+      fitWInput.type = "number";
+      fitWInput.min = "1";
+      fitWInput.max = "99";
+      fitWInput.value = String(s.fit_to_width ?? 1);
+      fitWInput.disabled = useScale;
+      fitWInput.style.cssText = "width:40px;margin:0 4px;";
+      fitWInput.className = "dialog-input";
+      fitWInput.onchange = () => {
+        s.fit_to_width = parseInt(fitWInput.value) || 1;
+      };
+      const fitMid = document.createElement("span");
+      fitMid.textContent = "page(s) wide by";
+      const fitHInput = document.createElement("input");
+      fitHInput.type = "number";
+      fitHInput.min = "0";
+      fitHInput.max = "99";
+      fitHInput.value = String(s.fit_to_height ?? 1);
+      fitHInput.disabled = useScale;
+      fitHInput.style.cssText = "width:40px;margin:0 4px;";
+      fitHInput.className = "dialog-input";
+      fitHInput.onchange = () => {
+        s.fit_to_height = parseInt(fitHInput.value) || 1;
+      };
+      const fitTall = document.createElement("span");
+      fitTall.textContent = "tall";
+      scaleSec.appendChild(this._row(scaleRadio, scaleInput, scalePct));
+      scaleSec.appendChild(this._row(fitRadio, fitWInput, fitMid, fitHInput, fitTall));
+      panel.appendChild(scaleSec);
+      const paperSec = this._section("Paper size");
+      const paperSel = document.createElement("select");
+      paperSel.className = "dialog-input";
+      paperSel.style.cssText = "width:100%;";
+      for (const p of PAPER_SIZES) {
+        const o = document.createElement("option");
+        o.value = String(p.id);
+        o.textContent = p.label;
+        if (p.id === s.paper_size) o.selected = true;
+        paperSel.appendChild(o);
+      }
+      paperSel.onchange = () => {
+        s.paper_size = parseInt(paperSel.value);
+      };
+      paperSec.appendChild(paperSel);
+      panel.appendChild(paperSec);
+      const fpnSec = this._section("First page number");
+      const fpnInput = document.createElement("input");
+      fpnInput.type = "text";
+      fpnInput.value = "Auto";
+      fpnInput.className = "dialog-input";
+      fpnInput.style.cssText = "width:70px;";
+      fpnInput.title = "Auto or a specific page number";
+      fpnSec.appendChild(fpnInput);
+      panel.appendChild(fpnSec);
+    }
+    // -----------------------------------------------------------------------
+    // MARGINS TAB
+    // -----------------------------------------------------------------------
+    _buildMarginsTab() {
+      const panel = this.tabPanels.get("margins");
+      const s = this.setup;
+      const fields = [
+        { label: "Top:", key: "margin_top" },
+        { label: "Bottom:", key: "margin_bottom" },
+        { label: "Left:", key: "margin_left" },
+        { label: "Right:", key: "margin_right" },
+        { label: "Header:", key: "margin_header" },
+        { label: "Footer:", key: "margin_footer" }
+      ];
+      const grid = document.createElement("div");
+      grid.style.cssText = "display:grid;grid-template-columns:1fr 1fr;gap:10px;";
+      for (const { label, key } of fields) {
+        const wrap = document.createElement("div");
+        const lbl = document.createElement("div");
+        lbl.textContent = label;
+        lbl.style.cssText = "margin-bottom:3px;color:#aaa;font-size:11px;";
+        const inp = document.createElement("input");
+        inp.type = "number";
+        inp.step = "0.05";
+        inp.min = "0";
+        inp.value = String(s[key].toFixed(2));
+        inp.className = "dialog-input";
+        inp.style.cssText = "width:100%;";
+        inp.onchange = () => {
+          s[key] = parseFloat(inp.value) || 0;
+        };
+        wrap.appendChild(lbl);
+        wrap.appendChild(inp);
+        grid.appendChild(wrap);
+      }
+      panel.appendChild(grid);
+      const centerSec = this._section("Center on page");
+      const chkH = this._checkbox("Horizontally", s.center_horizontally, (v) => {
+        s.center_horizontally = v;
+      });
+      const chkV = this._checkbox("Vertically", s.center_vertically, (v) => {
+        s.center_vertically = v;
+      });
+      centerSec.appendChild(this._row(chkH, chkV));
+      panel.appendChild(centerSec);
+      const preview = document.createElement("div");
+      preview.style.cssText = "margin-top:14px;width:120px;height:160px;border:1px solid #555;position:relative;background:#2d2d2d;margin-left:auto;margin-right:auto;";
+      const inner = document.createElement("div");
+      inner.style.cssText = "position:absolute;inset:16px 14px 16px 14px;border:1px dashed #4472c4;background:#333;";
+      preview.appendChild(inner);
+      panel.appendChild(preview);
+    }
+    // -----------------------------------------------------------------------
+    // HEADER/FOOTER TAB
+    // -----------------------------------------------------------------------
+    _buildHeaderFooterTab() {
+      const panel = this.tabPanels.get("header-footer");
+      const s = this.setup;
+      const hint = document.createElement("div");
+      hint.style.cssText = "color:#aaa;font-size:11px;margin-bottom:10px;";
+      hint.textContent = "Format codes: &L left  &C center  &R right  &P page#  &N total pages  &D date  &T time  &F filename  &A sheet name";
+      panel.appendChild(hint);
+      const headerSec = this._section("Header");
+      const headerPreset = document.createElement("select");
+      headerPreset.className = "dialog-input";
+      headerPreset.style.cssText = "width:100%;margin-bottom:6px;";
+      for (const p of HEADER_FOOTER_PRESETS) {
+        const o = document.createElement("option");
+        o.value = p.value;
+        o.textContent = p.label;
+        if (p.value === s.header || p.value === "__custom__" && !HEADER_FOOTER_PRESETS.some((x) => x.value === s.header)) o.selected = true;
+        headerPreset.appendChild(o);
+      }
+      const headerInput = document.createElement("textarea");
+      headerInput.value = s.header;
+      headerInput.rows = 2;
+      headerInput.className = "dialog-input";
+      headerInput.style.cssText = "width:100%;resize:vertical;font-family:monospace;";
+      headerPreset.onchange = () => {
+        if (headerPreset.value !== "__custom__") {
+          headerInput.value = headerPreset.value;
+          s.header = headerPreset.value;
+        }
+      };
+      headerInput.onchange = () => {
+        s.header = headerInput.value;
+      };
+      headerSec.appendChild(headerPreset);
+      headerSec.appendChild(headerInput);
+      panel.appendChild(headerSec);
+      const footerSec = this._section("Footer");
+      const footerPreset = document.createElement("select");
+      footerPreset.className = "dialog-input";
+      footerPreset.style.cssText = "width:100%;margin-bottom:6px;";
+      for (const p of HEADER_FOOTER_PRESETS) {
+        const o = document.createElement("option");
+        o.value = p.value;
+        o.textContent = p.label;
+        if (p.value === s.footer) o.selected = true;
+        footerPreset.appendChild(o);
+      }
+      const footerInput = document.createElement("textarea");
+      footerInput.value = s.footer;
+      footerInput.rows = 2;
+      footerInput.className = "dialog-input";
+      footerInput.style.cssText = "width:100%;resize:vertical;font-family:monospace;";
+      footerPreset.onchange = () => {
+        if (footerPreset.value !== "__custom__") {
+          footerInput.value = footerPreset.value;
+          s.footer = footerPreset.value;
+        }
+      };
+      footerInput.onchange = () => {
+        s.footer = footerInput.value;
+      };
+      footerSec.appendChild(footerPreset);
+      footerSec.appendChild(footerInput);
+      panel.appendChild(footerSec);
+    }
+    // -----------------------------------------------------------------------
+    // SHEET TAB
+    // -----------------------------------------------------------------------
+    _buildSheetTab() {
+      const panel = this.tabPanels.get("sheet");
+      const s = this.setup;
+      const paSec = this._section("Print area");
+      const paInput = document.createElement("input");
+      paInput.type = "text";
+      paInput.value = s.print_area;
+      paInput.placeholder = "e.g. A1:H50";
+      paInput.className = "dialog-input";
+      paInput.style.cssText = "width:100%;";
+      paInput.onchange = () => {
+        s.print_area = paInput.value.trim().replace(/\$/g, "");
+      };
+      paSec.appendChild(paInput);
+      panel.appendChild(paSec);
+      const ptSec = this._section("Print titles");
+      const ptRowWrap = document.createElement("div");
+      ptRowWrap.style.marginBottom = "6px";
+      const ptRowLbl = document.createElement("div");
+      ptRowLbl.textContent = "Rows to repeat at top:";
+      ptRowLbl.style.cssText = "color:#aaa;font-size:11px;margin-bottom:3px;";
+      const ptRowInput = document.createElement("input");
+      ptRowInput.type = "text";
+      ptRowInput.value = s.print_titles_rows;
+      ptRowInput.placeholder = "e.g. 1:2";
+      ptRowInput.className = "dialog-input";
+      ptRowInput.style.cssText = "width:100%;";
+      ptRowInput.onchange = () => {
+        s.print_titles_rows = ptRowInput.value.trim();
+      };
+      ptRowWrap.appendChild(ptRowLbl);
+      ptRowWrap.appendChild(ptRowInput);
+      const ptColWrap = document.createElement("div");
+      const ptColLbl = document.createElement("div");
+      ptColLbl.textContent = "Columns to repeat at left:";
+      ptColLbl.style.cssText = "color:#aaa;font-size:11px;margin-bottom:3px;";
+      const ptColInput = document.createElement("input");
+      ptColInput.type = "text";
+      ptColInput.value = s.print_titles_cols;
+      ptColInput.placeholder = "e.g. A:B";
+      ptColInput.className = "dialog-input";
+      ptColInput.style.cssText = "width:100%;";
+      ptColInput.onchange = () => {
+        s.print_titles_cols = ptColInput.value.trim();
+      };
+      ptColWrap.appendChild(ptColLbl);
+      ptColWrap.appendChild(ptColInput);
+      ptSec.appendChild(ptRowWrap);
+      ptSec.appendChild(ptColWrap);
+      panel.appendChild(ptSec);
+      const optSec = this._section("Print");
+      const chkGrid = this._checkbox("Gridlines", s.print_gridlines, (v) => {
+        s.print_gridlines = v;
+      });
+      optSec.appendChild(chkGrid);
+      panel.appendChild(optSec);
+      const orderSec = this._section("Page order");
+      const downOverBtn = this._radioBtn("Down, then over", "page-order", true, () => {
+      });
+      const overDownBtn = this._radioBtn("Over, then down", "page-order", false, () => {
+      });
+      orderSec.appendChild(this._row(downOverBtn, overDownBtn));
+      panel.appendChild(orderSec);
+    }
+    // -----------------------------------------------------------------------
+    // Helpers
+    // -----------------------------------------------------------------------
+    _section(title) {
+      const sec = document.createElement("div");
+      sec.style.cssText = "margin-bottom:14px;";
+      if (title) {
+        const lbl = document.createElement("div");
+        lbl.textContent = title;
+        lbl.style.cssText = "font-size:11px;color:#aaa;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;border-bottom:1px solid #3c3c3c;padding-bottom:3px;";
+        sec.appendChild(lbl);
+      }
+      return sec;
+    }
+    _row(...items) {
+      const row = document.createElement("div");
+      row.style.cssText = "display:flex;align-items:center;gap:6px;margin-bottom:4px;flex-wrap:wrap;";
+      for (const i of items) row.appendChild(i);
+      return row;
+    }
+    _radioBtn(label, group, checked, onChange) {
+      const lbl = document.createElement("label");
+      lbl.style.cssText = "display:flex;align-items:center;gap:4px;cursor:pointer;";
+      const inp = document.createElement("input");
+      inp.type = "radio";
+      inp.name = group;
+      inp.checked = checked;
+      inp.onchange = () => {
+        if (inp.checked) onChange();
+      };
+      const span = document.createElement("span");
+      span.textContent = label;
+      lbl.appendChild(inp);
+      lbl.appendChild(span);
+      return lbl;
+    }
+    _checkbox(label, checked, onChange) {
+      const lbl = document.createElement("label");
+      lbl.style.cssText = "display:flex;align-items:center;gap:4px;cursor:pointer;margin-right:10px;";
+      const inp = document.createElement("input");
+      inp.type = "checkbox";
+      inp.checked = checked;
+      inp.onchange = () => onChange(inp.checked);
+      const span = document.createElement("span");
+      span.textContent = label;
+      lbl.appendChild(inp);
+      lbl.appendChild(span);
+      return lbl;
+    }
+    _apply() {
+      this.onAction({ action: "apply", setup: { ...this.setup } });
+      this.hide();
+    }
+    _cancel() {
+      this.onAction({ action: "cancel" });
+      this.hide();
+    }
+  };
+
+  // src/vs/workbench/contrib/void/browser/documentViewers/xlsxRustViewer/media/csvImportDialog.ts
+  var CsvImportDialog = class {
+    constructor(container, onAction) {
+      this._rawContent = "";
+      this._fileName = "";
+      this.container = container;
+      this.onAction = onAction;
+      this._build();
+    }
+    _build() {
+      this.dialog = document.createElement("div");
+      Object.assign(this.dialog.style, {
+        display: "none",
+        position: "fixed",
+        top: "60px",
+        left: "50%",
+        transform: "translateX(-50%)",
+        width: "560px",
+        maxWidth: "95vw",
+        background: "#1e1e1e",
+        border: "1px solid #555",
+        borderRadius: "6px",
+        boxShadow: "0 8px 32px rgba(0,0,0,0.6)",
+        zIndex: "9999",
+        fontFamily: "var(--vscode-font-family, system-ui, sans-serif)",
+        fontSize: "13px",
+        color: "var(--vscode-editor-foreground, #d4d4d4)"
+      });
+      const titleBar = document.createElement("div");
+      Object.assign(titleBar.style, {
+        padding: "10px 14px",
+        borderBottom: "1px solid #444",
+        fontWeight: "600",
+        fontSize: "14px",
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "center"
+      });
+      titleBar.textContent = "Import CSV / TSV";
+      const closeBtn = document.createElement("button");
+      closeBtn.textContent = "\u2715";
+      Object.assign(closeBtn.style, { background: "none", border: "none", cursor: "pointer", color: "inherit", fontSize: "16px" });
+      closeBtn.onclick = () => this.close();
+      titleBar.appendChild(closeBtn);
+      this.dialog.appendChild(titleBar);
+      const body = document.createElement("div");
+      body.style.padding = "14px";
+      const delimLabel = document.createElement("div");
+      delimLabel.textContent = "Delimiter";
+      Object.assign(delimLabel.style, { fontWeight: "600", marginBottom: "6px" });
+      body.appendChild(delimLabel);
+      const delimRow = document.createElement("div");
+      Object.assign(delimRow.style, { display: "flex", gap: "14px", flexWrap: "wrap", marginBottom: "10px", alignItems: "center" });
+      const makeDelimRadio = (value, label) => {
+        const wrapper = document.createElement("label");
+        Object.assign(wrapper.style, { display: "flex", alignItems: "center", gap: "4px", cursor: "pointer" });
+        const input = document.createElement("input");
+        input.type = "radio";
+        input.name = "csv-delim";
+        input.value = value;
+        input.onchange = () => this._updatePreview();
+        wrapper.appendChild(input);
+        wrapper.appendChild(document.createTextNode(label));
+        delimRow.appendChild(wrapper);
+        return input;
+      };
+      this.delimComma = makeDelimRadio(",", "Comma");
+      this.delimTab = makeDelimRadio("	", "Tab");
+      this.delimSemicolon = makeDelimRadio(";", "Semicolon");
+      this.delimPipe = makeDelimRadio("|", "Pipe");
+      this.delimCustom = makeDelimRadio("custom", "Custom:");
+      this.delimComma.checked = true;
+      this.customDelimInput = document.createElement("input");
+      this.customDelimInput.type = "text";
+      this.customDelimInput.maxLength = 1;
+      Object.assign(this.customDelimInput.style, {
+        width: "32px",
+        background: "#2d2d2d",
+        border: "1px solid #555",
+        borderRadius: "3px",
+        color: "inherit",
+        padding: "2px 4px",
+        fontSize: "12px"
+      });
+      this.customDelimInput.oninput = () => {
+        this.delimCustom.checked = true;
+        this._updatePreview();
+      };
+      delimRow.appendChild(this.customDelimInput);
+      body.appendChild(delimRow);
+      const optRow = document.createElement("div");
+      Object.assign(optRow.style, { display: "flex", gap: "20px", marginBottom: "12px", alignItems: "center" });
+      const makeCheckbox = (label) => {
+        const wrapper = document.createElement("label");
+        Object.assign(wrapper.style, { display: "flex", alignItems: "center", gap: "6px", cursor: "pointer" });
+        const input = document.createElement("input");
+        input.type = "checkbox";
+        input.onchange = () => this._updatePreview();
+        wrapper.appendChild(input);
+        wrapper.appendChild(document.createTextNode(label));
+        optRow.appendChild(wrapper);
+        return input;
+      };
+      this.hasHeaderCheck = makeCheckbox("First row is header");
+      this.newSheetCheck = makeCheckbox("Import to new sheet");
+      body.appendChild(optRow);
+      const previewLabel = document.createElement("div");
+      previewLabel.textContent = "Preview (first 8 rows):";
+      Object.assign(previewLabel.style, { fontWeight: "600", marginBottom: "6px" });
+      body.appendChild(previewLabel);
+      this.previewTable = document.createElement("div");
+      Object.assign(this.previewTable.style, {
+        border: "1px solid #444",
+        borderRadius: "4px",
+        overflow: "auto",
+        maxHeight: "200px",
+        marginBottom: "14px",
+        background: "#252526"
+      });
+      body.appendChild(this.previewTable);
+      const btnRow = document.createElement("div");
+      Object.assign(btnRow.style, { display: "flex", justifyContent: "flex-end", gap: "8px" });
+      const cancelBtn = document.createElement("button");
+      cancelBtn.textContent = "Cancel";
+      Object.assign(cancelBtn.style, this._btnStyle(false));
+      cancelBtn.onclick = () => this.close();
+      this.importBtn = document.createElement("button");
+      this.importBtn.textContent = "Import";
+      Object.assign(this.importBtn.style, this._btnStyle(true));
+      this.importBtn.onclick = () => this._doImport();
+      btnRow.appendChild(cancelBtn);
+      btnRow.appendChild(this.importBtn);
+      body.appendChild(btnRow);
+      this.dialog.appendChild(body);
+      this.container.appendChild(this.dialog);
+    }
+    _btnStyle(primary) {
+      return {
+        padding: "5px 16px",
+        border: primary ? "none" : "1px solid #555",
+        borderRadius: "3px",
+        cursor: "pointer",
+        background: primary ? "#0e639c" : "transparent",
+        color: "inherit",
+        fontSize: "13px"
+      };
+    }
+    _getDelimiter() {
+      if (this.delimTab.checked) return "	";
+      if (this.delimSemicolon.checked) return ";";
+      if (this.delimPipe.checked) return "|";
+      if (this.delimCustom.checked) return this.customDelimInput.value || ",";
+      return ",";
+    }
+    /** Full RFC-4180-ish CSV parser that handles quoted fields. */
+    _parseCsv(text, delim) {
+      const rows = [];
+      const lines = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n");
+      for (const line of lines) {
+        if (line === "" && rows.length === lines.length - 1) continue;
+        const cells = [];
+        let i = 0;
+        while (i <= line.length) {
+          if (i === line.length) {
+            cells.push("");
+            break;
+          }
+          if (line[i] === '"') {
+            let field = "";
+            i++;
+            while (i < line.length) {
+              if (line[i] === '"') {
+                if (line[i + 1] === '"') {
+                  field += '"';
+                  i += 2;
+                } else {
+                  i++;
+                  break;
+                }
+              } else {
+                field += line[i++];
+              }
+            }
+            cells.push(field);
+            if (line[i] === delim) i++;
+          } else {
+            const end = line.indexOf(delim, i);
+            if (end === -1) {
+              cells.push(line.slice(i));
+              i = line.length + 1;
+            } else {
+              cells.push(line.slice(i, end));
+              i = end + 1;
+            }
+          }
+        }
+        rows.push(cells);
+      }
+      return rows;
+    }
+    _updatePreview() {
+      const delim = this._getDelimiter();
+      const allRows = this._parseCsv(this._rawContent, delim);
+      const isHeader = this.hasHeaderCheck.checked;
+      const previewRows = allRows.slice(0, isHeader ? 9 : 8);
+      const table = document.createElement("table");
+      Object.assign(table.style, {
+        borderCollapse: "collapse",
+        width: "100%",
+        fontSize: "12px"
+      });
+      previewRows.forEach((row, ri) => {
+        const tr = document.createElement("tr");
+        tr.style.borderBottom = "1px solid #3a3a3a";
+        row.forEach((cell) => {
+          const td = document.createElement(isHeader && ri === 0 ? "th" : "td");
+          td.textContent = cell;
+          Object.assign(td.style, {
+            padding: "3px 8px",
+            borderRight: "1px solid #3a3a3a",
+            whiteSpace: "nowrap",
+            fontWeight: isHeader && ri === 0 ? "600" : "normal",
+            background: isHeader && ri === 0 ? "#2a3a4a" : "transparent"
+          });
+          tr.appendChild(td);
+        });
+        table.appendChild(tr);
+      });
+      this.previewTable.innerHTML = "";
+      this.previewTable.appendChild(table);
+    }
+    /** Called by main.ts when extension host returns file content. */
+    previewFile(content, fileName) {
+      this._rawContent = content;
+      this._fileName = fileName;
+      if (fileName.endsWith(".tsv") || fileName.endsWith(".tab")) {
+        this.delimTab.checked = true;
+      } else {
+        this.delimComma.checked = true;
+      }
+      this._updatePreview();
+      this.show();
+    }
+    _doImport() {
+      const delim = this._getDelimiter();
+      let allRows = this._parseCsv(this._rawContent, delim);
+      if (this.hasHeaderCheck.checked) {
+        allRows = allRows.slice(1);
+      }
+      this.onAction({ action: "import", rows: allRows, newSheet: this.newSheetCheck.checked });
+      this.close();
+    }
+    show() {
+      this.dialog.style.display = "block";
+    }
+    close() {
+      this.dialog.style.display = "none";
+      this.onAction({ action: "close", rows: [], newSheet: false });
+    }
+  };
+
+  // src/vs/workbench/contrib/void/browser/documentViewers/xlsxRustViewer/media/main.ts
   var vscode = acquireVsCodeApi();
   var currentFileUri = "";
   var parser = null;
@@ -23714,7 +25772,12 @@
   var chartManager = null;
   var chartWizard = null;
   var psDialog = null;
+  var pivotDialog = null;
+  var pageSetupDialog = null;
+  var csvImportDialog = null;
   var ribbon = null;
+  var pivotTables = [];
+  var pivotOutputCache = /* @__PURE__ */ new Map();
   var definedNames = [];
   async function initialize() {
     console.log("[XLSX Rust Viewer] Initializing...");
@@ -23749,9 +25812,16 @@
     hlDialog = new HyperlinkDialog(document.body, handleHlDialogAction);
     nmDialog = new NameManagerDialog(document.body, handleNmDialogAction);
     psDialog = new PasteSpecialDialog(document.body, handlePsDialogAction);
+    pivotDialog = new PivotTableDialog(document.body, handlePivotDialogAction);
+    pageSetupDialog = new PageSetupDialog(document.body, handlePageSetupDialogAction);
+    csvImportDialog = new CsvImportDialog(document.body, handleCsvImportDialogAction);
     contextMenu.setHyperlinkDetector((row, col) => {
       if (!renderer) return void 0;
       return renderer.getHyperlinkForCell(row, col);
+    });
+    contextMenu.setPivotDetector((row, col) => {
+      if (!renderer) return -1;
+      return renderer.getPivotZoneAtCell(row, col);
     });
     renderer.onHyperlinkClick = (url, isInternal) => {
       if (isInternal) {
@@ -23815,6 +25885,11 @@
           handleApplyEdits(message.operations);
         }
         break;
+      case "fileContent":
+        if (message.content && csvImportDialog) {
+          csvImportDialog.previewFile(message.content, message.fileName || "");
+        }
+        break;
     }
   });
   async function handleLoad(base64Data) {
@@ -23849,6 +25924,15 @@
           console.warn("[XLSX Rust Viewer] Named ranges init failed:", e);
         }
       }
+      pivotTables = model.pivot_tables ?? [];
+      pivotOutputCache.clear();
+      if (pivotTables.length > 0) {
+        for (let pi = 0; pi < pivotTables.length; pi++) {
+          _computeAndWritePivot(pi, model);
+        }
+      }
+      _syncPivotZones();
+      _syncPageSetups();
       restoreChartState();
       evaluateFormulas();
       buildSheetTabs();
@@ -23898,6 +25982,7 @@
         evaluateFormulas();
         buildSheetTabs();
         syncChartOverlays();
+        _syncPivotZones();
       };
       tab.addEventListener("contextmenu", (e) => {
         e.preventDefault();
@@ -23918,16 +26003,30 @@
     const menu = document.createElement("div");
     menu.id = "sheet-tab-menu";
     menu.className = "xlsx-context-menu";
-    menu.style.cssText = `position:fixed;left:${x}px;top:${y}px;z-index:10000;`;
+    menu.style.cssText = "position:fixed;left:-9999px;top:-9999px;z-index:10000;";
+    const data = renderer?.getData();
+    const sheetName = data?.sheets?.[sheetIdx]?.name ?? "";
+    const isOnlySheet = (data?.sheets?.length ?? 1) <= 1;
     const items = [
       { label: "Rename Sheet", action: () => renameSheet(sheetIdx) },
-      { label: "Delete Sheet", action: () => deleteSheet(sheetIdx) },
       { label: "Duplicate Sheet", action: () => duplicateSheet(sheetIdx) },
-      { label: "Add Sheet", action: () => addSheet() }
+      { label: "Add Sheet", action: () => addSheet() },
+      { label: "Delete Sheet", action: () => deleteSheet(sheetIdx), danger: true, disabled: isOnlySheet }
     ];
     for (const item of items) {
+      if (item.disabled) {
+        const el2 = document.createElement("div");
+        el2.className = "ctx-item";
+        el2.style.cssText = "opacity:0.4;cursor:default;pointer-events:none;";
+        el2.innerHTML = `<span class="ctx-label">${item.label}</span>`;
+        menu.appendChild(el2);
+        continue;
+      }
       const el = document.createElement("div");
       el.className = "ctx-item";
+      if (item.danger) {
+        el.style.color = "#f48771";
+      }
       el.innerHTML = `<span class="ctx-label">${item.label}</span>`;
       el.onclick = () => {
         menu.remove();
@@ -23936,12 +26035,19 @@
       menu.appendChild(el);
     }
     document.body.appendChild(menu);
+    const menuH = menu.offsetHeight;
+    const menuW = menu.offsetWidth;
+    const safeX = Math.min(x, window.innerWidth - menuW - 4);
+    const safeY = y - menuH - 4;
+    menu.style.left = `${safeX}px`;
+    menu.style.top = `${Math.max(4, safeY)}px`;
     const close = (e) => {
       if (!menu.contains(e.target)) {
         menu.remove();
         document.removeEventListener("mousedown", close);
       }
     };
+    void sheetName;
     setTimeout(() => document.addEventListener("mousedown", close), 0);
   }
   function addSheet() {
@@ -23959,12 +26065,50 @@
     if (!renderer) return;
     const data = renderer.getData();
     if (!data?.sheets || data.sheets.length <= 1) return;
-    data.sheets.splice(idx, 1);
-    const newIdx = Math.min(idx, data.sheets.length - 1);
-    renderer.setActiveSheetIndex(newIdx);
-    renderer.updateModel(data);
-    buildSheetTabs();
-    markDirty();
+    const sheetName = data.sheets[idx].name;
+    const overlay = document.createElement("div");
+    overlay.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:20000;";
+    const box = document.createElement("div");
+    box.style.cssText = "background:var(--vscode-editor-background,#1e1e1e);border:1px solid var(--vscode-focusBorder,#007acc);border-radius:6px;padding:20px 24px;min-width:300px;box-shadow:0 4px 16px rgba(0,0,0,0.4);";
+    box.innerHTML = `
+		<div style="color:var(--vscode-foreground,#ccc);font-size:13px;font-weight:600;margin-bottom:8px;">Delete Sheet</div>
+		<div style="color:var(--vscode-descriptionForeground,#999);font-size:12px;margin-bottom:16px;">
+			Delete "<strong style="color:var(--vscode-foreground,#ccc)">${sheetName}</strong>"? This cannot be undone.
+		</div>
+		<div style="display:flex;gap:8px;justify-content:flex-end;">
+			<button id="del-cancel" style="padding:4px 12px;font-size:12px;background:transparent;color:var(--vscode-foreground,#ccc);border:1px solid #555;border-radius:3px;cursor:pointer;">Cancel</button>
+			<button id="del-confirm" style="padding:4px 12px;font-size:12px;background:#c0392b;color:#fff;border:none;border-radius:3px;cursor:pointer;">Delete</button>
+		</div>`;
+    overlay.appendChild(box);
+    document.body.appendChild(overlay);
+    const cancel = () => overlay.remove();
+    const confirm2 = () => {
+      overlay.remove();
+      if (!renderer) return;
+      const d = renderer.getData();
+      if (!d?.sheets || d.sheets.length <= 1) return;
+      d.sheets.splice(idx, 1);
+      const surviving = pivotTables.filter((pt) => pt.source_sheet !== sheetName && pt.dest_sheet !== sheetName);
+      const removedIndices = [];
+      pivotTables.forEach((pt, i) => {
+        if (pt.source_sheet === sheetName || pt.dest_sheet === sheetName) removedIndices.push(i);
+      });
+      pivotTables.length = 0;
+      surviving.forEach((pt) => pivotTables.push(pt));
+      removedIndices.forEach((i) => pivotOutputCache.delete(i));
+      if (d.pivot_tables) d.pivot_tables = surviving;
+      const newIdx = Math.min(idx, d.sheets.length - 1);
+      renderer.setActiveSheetIndex(newIdx);
+      renderer.updateModel(d);
+      buildSheetTabs();
+      _syncPivotZones();
+      markDirty();
+    };
+    box.querySelector("#del-cancel").addEventListener("click", cancel);
+    box.querySelector("#del-confirm").addEventListener("click", confirm2);
+    overlay.addEventListener("mousedown", (e) => {
+      if (e.target === overlay) cancel();
+    });
   }
   function renameSheet(idx) {
     if (!renderer) return;
@@ -24331,6 +26475,61 @@
       case "defineName":
         showDefineNameDialog();
         break;
+      // Page Layout
+      case "pageMargins":
+        handlePageMarginsChange(event.value ?? "Normal");
+        break;
+      case "pageOrientation":
+        handlePageOrientationChange(event.value ?? "Portrait");
+        break;
+      case "paperSize":
+        handlePaperSizeChange(event.value ?? "Letter");
+        break;
+      case "setPrintArea":
+        handleSetPrintArea();
+        break;
+      case "clearPrintArea":
+        handleClearPrintArea();
+        break;
+      case "insertPageBreak":
+        handleInsertPageBreak();
+        break;
+      case "removePageBreak":
+        handleRemovePageBreak();
+        break;
+      case "resetPageBreaks":
+        handleResetPageBreaks();
+        break;
+      case "printTitles":
+        pageSetupDialog?.show(getActiveSheetPageSetup());
+        break;
+      case "fitToWidth":
+        handleFitToWidth(event.value ?? "Automatic");
+        break;
+      case "fitToHeight":
+        handleFitToHeight(event.value ?? "Automatic");
+        break;
+      case "printScale":
+        handlePrintScale(parseInt(event.value ?? "100"));
+        break;
+      case "printGridlines":
+        handlePageSetupToggle("print_gridlines", event.value === "1");
+        break;
+      case "printHeadings":
+        break;
+      // informational only
+      case "centerHorizontally":
+        handlePageSetupToggle("center_horizontally", event.value === "1");
+        break;
+      case "centerVertically":
+        handlePageSetupToggle("center_vertically", event.value === "1");
+        break;
+      case "pageSetupDialog":
+        pageSetupDialog?.show(getActiveSheetPageSetup());
+        break;
+      case "printPreview":
+        handlePrintPreview();
+        break;
       // View
       case "gridlines":
         renderer.toggleGridlines();
@@ -24340,6 +26539,9 @@
         break;
       case "freezePanes":
         renderer.freezePanes();
+        break;
+      case "pageBreakPreview":
+        renderer.setPageBreakPreview(event.value === "1");
         break;
       // Data
       case "sortAZ":
@@ -24385,7 +26587,10 @@
         }
         break;
       }
-      case "exportPDF": {
+      case "exportPDF":
+        handleExportPDF();
+        break;
+      case "exportPNG": {
         const exportCanvas = document.querySelector("canvas");
         if (exportCanvas) {
           const dataUrl = exportCanvas.toDataURL("image/png");
@@ -24393,6 +26598,22 @@
         }
         break;
       }
+      case "exportCSV":
+        handleExportCSV();
+        break;
+      case "exportHTML":
+        handleExportHTML();
+        break;
+      case "importCSV":
+        handleImportCSV();
+        break;
+      // Pivot table operations
+      case "insertPivotTable":
+        showPivotTableDialog();
+        break;
+      case "refreshAllPivots":
+        refreshAllPivotTables();
+        break;
       // Table operations (from Insert and Data tabs)
       case "createTable": {
         if (!renderer) break;
@@ -25300,6 +27521,28 @@
           }
         }
         break;
+      // Pivot table context menu actions
+      case "insertPivotTable":
+        showPivotTableDialog();
+        break;
+      case "refreshPivot": {
+        const pIdx = renderer ? renderer.getPivotZoneAtCell(event.row, event.col) : -1;
+        if (pIdx >= 0) refreshPivotTable(pIdx);
+        break;
+      }
+      case "editPivot": {
+        const epIdx = renderer ? renderer.getPivotZoneAtCell(event.row, event.col) : -1;
+        if (epIdx >= 0) showPivotTableDialog(epIdx);
+        break;
+      }
+      case "deletePivot": {
+        const dpIdx = renderer ? renderer.getPivotZoneAtCell(event.row, event.col) : -1;
+        if (dpIdx >= 0) deletePivotTable(dpIdx);
+        break;
+      }
+      case "drillDown":
+        drillDownPivot(event.row, event.col);
+        break;
     }
   }
   function handleTableAction(action, params) {
@@ -25471,11 +27714,50 @@
       return;
     }
     try {
+      if (typeof navigator.clipboard.read === "function") {
+        try {
+          const items = await navigator.clipboard.read();
+          for (const item of items) {
+            if (item.types.includes("text/html")) {
+              const blob = await item.getType("text/html");
+              const html = await blob.text();
+              const parsed = parseHtmlTable(html);
+              if (parsed) {
+                renderer.pasteData(parsed);
+                markDirty();
+                return;
+              }
+            }
+          }
+        } catch {
+        }
+      }
       const text = await navigator.clipboard.readText();
       renderer.pasteData(text);
       markDirty();
     } catch {
       console.warn("[XLSX Rust Viewer] Clipboard read not available");
+    }
+  }
+  function parseHtmlTable(html) {
+    try {
+      const doc = new DOMParser().parseFromString(html, "text/html");
+      const table = doc.querySelector("table");
+      if (!table) return null;
+      const rows = [];
+      for (const tr of Array.from(table.querySelectorAll("tr"))) {
+        const cells = [];
+        for (const cell of Array.from(tr.querySelectorAll("td,th"))) {
+          const colspan = parseInt(cell.getAttribute("colspan") || "1", 10);
+          const text = cell.innerText ?? cell.textContent ?? "";
+          cells.push(text.trim());
+          for (let c = 1; c < colspan; c++) cells.push("");
+        }
+        rows.push(cells.join("	"));
+      }
+      return rows.join("\n");
+    } catch {
+      return null;
     }
   }
   function handlePasteSpecial() {
@@ -25749,6 +28031,404 @@
         }
       }
     }
+  }
+  function _getPivotSourceHeaders(sheetIndex, rangeStr) {
+    if (!renderer) return [];
+    const data = renderer.getData();
+    const sheet = data?.sheets?.[sheetIndex];
+    if (!sheet) return [];
+    const parsed = parseCellRange(rangeStr);
+    if (!parsed) return [];
+    const { startRow, startCol, endCol } = parsed;
+    const headers = [];
+    for (let c = startCol; c <= endCol; c++) {
+      const cell = sheet.cells?.[startRow]?.[c];
+      headers.push(cell?.value || `Column${c - startCol + 1}`);
+    }
+    return headers;
+  }
+  function _getPivotNumericHeaders(sheetIndex, rangeStr) {
+    if (!renderer) return [];
+    const data = renderer.getData();
+    const sheet = data?.sheets?.[sheetIndex];
+    if (!sheet) return [];
+    const parsed = parseCellRange(rangeStr);
+    if (!parsed) return [];
+    const { startRow, startCol, endCol, endRow } = parsed;
+    const numericHeaders = [];
+    const sampleEnd = Math.min(startRow + 5, endRow);
+    for (let c = startCol; c <= endCol; c++) {
+      let numericCount = 0;
+      let totalCount = 0;
+      for (let r = startRow + 1; r <= sampleEnd; r++) {
+        const cell = sheet.cells?.[r]?.[c];
+        if (cell && cell.value !== "" && cell.value !== void 0) {
+          totalCount++;
+          if (cell.data_type === "n" || !isNaN(Number(cell.value)) && String(cell.value).trim() !== "") {
+            numericCount++;
+          }
+        }
+      }
+      const headerCell = sheet.cells?.[startRow]?.[c];
+      const headerName = headerCell?.value || `Column${c - startCol + 1}`;
+      if (totalCount > 0 && numericCount / totalCount >= 0.7) {
+        numericHeaders.push(headerName);
+      }
+    }
+    return numericHeaders;
+  }
+  function _autoDetectPivotRange(sheetIndex, row, col) {
+    if (!renderer) return "A1:D10";
+    const data = renderer.getData();
+    const sheet = data?.sheets?.[sheetIndex];
+    if (!sheet) return "A1:D10";
+    for (const t of sheet.tables ?? []) {
+      const tr = parseCellRange(t.range);
+      if (tr && row >= tr.startRow && row <= tr.endRow && col >= tr.startCol && col <= tr.endCol) {
+        return t.range;
+      }
+    }
+    let r0 = row;
+    let c0 = col;
+    while (r0 > 0 && sheet.cells?.[r0 - 1]?.[col]?.value) r0--;
+    while (c0 > 0 && sheet.cells?.[row]?.[c0 - 1]?.value) c0--;
+    let r1 = row;
+    let c1 = col;
+    while (sheet.cells?.[r1 + 1]?.[c0]?.value) r1++;
+    while (sheet.cells?.[r0]?.[c1 + 1]?.value) c1++;
+    for (let c = c0; c <= c1 + 10; c++) {
+      if (sheet.cells?.[r0]?.[c]?.value) c1 = c;
+      else break;
+    }
+    for (let r = r0; r <= r1 + 100; r++) {
+      let hasData = false;
+      for (let c = c0; c <= c1; c++) {
+        if (sheet.cells?.[r]?.[c]?.value) {
+          hasData = true;
+          break;
+        }
+      }
+      if (hasData) r1 = r;
+      else break;
+    }
+    return `${getColName(c0)}${r0 + 1}:${getColName(c1)}${r1 + 1}`;
+  }
+  function _computeAndWritePivot(pivotIndex, model) {
+    if (!renderer) return;
+    const data = model ?? renderer.getData();
+    if (!data?.sheets) return;
+    const config = pivotTables[pivotIndex];
+    if (!config) return;
+    const srcSheetIdx = data.sheets.findIndex((s) => s.name === config.source_sheet);
+    if (srcSheetIdx < 0) {
+      console.warn("[Pivot] Source sheet not found:", config.source_sheet);
+      return;
+    }
+    const srcSheet = data.sheets[srcSheetIdx];
+    const sourceData = {};
+    const srcRange = parseCellRange(config.source_range);
+    if (!srcRange) return;
+    for (let r = srcRange.startRow; r <= srcRange.endRow; r++) {
+      if (!srcSheet.cells?.[r]) continue;
+      sourceData[r] = {};
+      for (let c = srcRange.startCol; c <= srcRange.endCol; c++) {
+        const cell = srcSheet.cells[r]?.[c];
+        if (cell) sourceData[r][c] = { value: cell.value ?? "", data_type: cell.data_type ?? "s" };
+      }
+    }
+    const output = computePivotTable(sourceData, config);
+    pivotOutputCache.set(pivotIndex, output);
+    let destSheetIdx = data.sheets.findIndex((s) => s.name === config.dest_sheet);
+    if (destSheetIdx < 0) {
+      const newSheet = {
+        name: config.dest_sheet,
+        cells: {},
+        row_count: 100,
+        col_count: 26,
+        tables: [],
+        merged_cells: [],
+        charts: [],
+        sparklines: []
+      };
+      data.sheets.push(newSheet);
+      destSheetIdx = data.sheets.length - 1;
+    }
+    const destSheet = data.sheets[destSheetIdx];
+    const destCellParsed = parseCellRef(config.dest_cell);
+    const destRow = destCellParsed?.row ?? 0;
+    const destCol = destCellParsed?.col ?? 0;
+    const prevOutput = model ? null : pivotOutputCache.get(pivotIndex);
+    const clearRows = prevOutput ? prevOutput.rowCount + 5 : output.rowCount + 5;
+    const clearCols = prevOutput ? prevOutput.colCount + 5 : output.colCount + 5;
+    for (let r = destRow; r < destRow + clearRows; r++) {
+      if (!destSheet.cells?.[r]) continue;
+      for (let c = destCol; c < destCol + clearCols; c++) {
+        delete destSheet.cells[r][c];
+      }
+    }
+    for (let r = 0; r < output.rowCount; r++) {
+      const row = destRow + r;
+      if (!destSheet.cells) destSheet.cells = {};
+      if (!destSheet.cells[row]) destSheet.cells[row] = {};
+      for (let c = 0; c < output.colCount; c++) {
+        const col = destCol + c;
+        const cell = output.cells[r]?.[c];
+        if (!cell || cell.value === "") continue;
+        destSheet.cells[row][col] = {
+          value: cell.value,
+          data_type: cell.dataType,
+          style: cell.style ? _camelToSnakeStyle(cell.style) : null
+        };
+      }
+    }
+    destSheet.row_count = Math.max(destSheet.row_count ?? 0, destRow + output.rowCount + 1);
+    destSheet.col_count = Math.max(destSheet.col_count ?? 0, destCol + output.colCount + 1);
+  }
+  function _camelToSnakeStyle(style) {
+    const out = {};
+    for (const [k, v] of Object.entries(style)) {
+      const snake = k.replace(/[A-Z]/g, (m) => "_" + m.toLowerCase());
+      out[snake] = v;
+    }
+    return out;
+  }
+  function _syncPivotZones() {
+    if (!renderer) return;
+    const data = renderer.getData();
+    if (!data?.sheets) {
+      renderer.setPivotZones([]);
+      return;
+    }
+    const zones = [];
+    for (let pi = 0; pi < pivotTables.length; pi++) {
+      const config = pivotTables[pi];
+      const output = pivotOutputCache.get(pi);
+      if (!output) continue;
+      const destSheet = data.sheets.findIndex((s) => s.name === config.dest_sheet);
+      if (destSheet < 0) continue;
+      if (destSheet !== renderer.getActiveSheetIndex()) continue;
+      const destCellParsed = parseCellRef(config.dest_cell);
+      const destRow = destCellParsed?.row ?? 0;
+      const destCol = destCellParsed?.col ?? 0;
+      zones.push({
+        startRow: destRow,
+        startCol: destCol,
+        endRow: destRow + output.rowCount - 1,
+        endCol: destCol + output.colCount - 1,
+        pivotIndex: pi
+      });
+    }
+    renderer.setPivotZones(zones);
+  }
+  function showPivotTableDialog(editIndex) {
+    if (!renderer || !pivotDialog) return;
+    const data = renderer.getData();
+    if (!data?.sheets) return;
+    const sheetNames = data.sheets.map((s) => s.name);
+    const activeSheetIdx = renderer.getActiveSheetIndex();
+    if (editIndex !== void 0 && pivotTables[editIndex]) {
+      const config = pivotTables[editIndex];
+      const srcIdx = data.sheets.findIndex((s) => s.name === config.source_sheet);
+      const headers = _getPivotSourceHeaders(srcIdx >= 0 ? srcIdx : activeSheetIdx, config.source_range);
+      pivotDialog.show(headers, config.source_range, config.source_sheet, sheetNames, config, editIndex);
+    } else {
+      const sel = renderer.getSelectedRange();
+      let sourceRange;
+      const isSingleCell = !sel || sel.startRow === sel.endRow && sel.startCol === sel.endCol;
+      if (isSingleCell) {
+        const r = sel?.startRow ?? 0;
+        const c = sel?.startCol ?? 0;
+        sourceRange = _autoDetectPivotRange(activeSheetIdx, r, c);
+      } else {
+        const c1 = getColName(Math.min(sel.startCol, sel.endCol)) + (Math.min(sel.startRow, sel.endRow) + 1);
+        const c2 = getColName(Math.max(sel.startCol, sel.endCol)) + (Math.max(sel.startRow, sel.endRow) + 1);
+        sourceRange = `${c1}:${c2}`;
+      }
+      const headers = _getPivotSourceHeaders(activeSheetIdx, sourceRange);
+      const numericHeaders = _getPivotNumericHeaders(activeSheetIdx, sourceRange);
+      const sourceSheet = data.sheets[activeSheetIdx]?.name ?? "Sheet1";
+      pivotDialog.show(headers, sourceRange, sourceSheet, sheetNames, void 0, void 0, numericHeaders);
+    }
+  }
+  function _navigateToPivotDest(config) {
+    if (!renderer) return;
+    const data = renderer.getData();
+    if (!data?.sheets) return;
+    const destIdx = data.sheets.findIndex((s) => s.name === config.dest_sheet);
+    if (destIdx >= 0 && destIdx !== renderer.getActiveSheetIndex()) {
+      renderer.setActiveSheetIndex(destIdx);
+    }
+    buildSheetTabs();
+    syncChartOverlays();
+    _syncPivotZones();
+  }
+  function handlePivotDialogAction(event) {
+    if (!renderer) return;
+    const data = renderer.getData();
+    if (!data) return;
+    if (!data.pivot_tables) data.pivot_tables = [];
+    switch (event.action) {
+      case "create":
+        if (event.config) {
+          pivotTables.push(event.config);
+          data.pivot_tables.push(event.config);
+          const newIdx = pivotTables.length - 1;
+          _computeAndWritePivot(newIdx);
+          renderer.updateModel(data);
+          _navigateToPivotDest(event.config);
+          markDirty();
+        }
+        break;
+      case "update":
+        if (event.config && event.editIndex !== void 0 && event.editIndex < pivotTables.length) {
+          pivotTables[event.editIndex] = event.config;
+          data.pivot_tables[event.editIndex] = event.config;
+          _computeAndWritePivot(event.editIndex);
+          renderer.updateModel(data);
+          _navigateToPivotDest(event.config);
+          markDirty();
+        }
+        break;
+      case "delete":
+        if (event.editIndex !== void 0) {
+          deletePivotTable(event.editIndex);
+        }
+        break;
+      case "refresh":
+        if (event.editIndex !== void 0) {
+          refreshPivotTable(event.editIndex);
+        }
+        break;
+      case "cancel":
+        break;
+    }
+  }
+  function refreshPivotTable(pivotIndex) {
+    if (!renderer) return;
+    _computeAndWritePivot(pivotIndex);
+    renderer.render();
+    _syncPivotZones();
+    markDirty();
+  }
+  function refreshAllPivotTables() {
+    for (let i = 0; i < pivotTables.length; i++) {
+      _computeAndWritePivot(i);
+    }
+    if (renderer) {
+      renderer.render();
+      _syncPivotZones();
+    }
+    markDirty();
+  }
+  function deletePivotTable(pivotIndex) {
+    if (!renderer) return;
+    const data = renderer.getData();
+    if (!data?.sheets) return;
+    const config = pivotTables[pivotIndex];
+    if (!config) return;
+    const output = pivotOutputCache.get(pivotIndex);
+    if (output) {
+      const destSheetIdx = data.sheets.findIndex((s) => s.name === config.dest_sheet);
+      if (destSheetIdx >= 0) {
+        const destSheet = data.sheets[destSheetIdx];
+        const destCellParsed = parseCellRef(config.dest_cell);
+        const destRow = destCellParsed?.row ?? 0;
+        const destCol = destCellParsed?.col ?? 0;
+        for (let r = destRow; r < destRow + output.rowCount; r++) {
+          if (!destSheet.cells?.[r]) continue;
+          for (let c = destCol; c < destCol + output.colCount; c++) {
+            delete destSheet.cells[r][c];
+          }
+        }
+      }
+      pivotOutputCache.delete(pivotIndex);
+    }
+    pivotTables.splice(pivotIndex, 1);
+    if (data.pivot_tables) data.pivot_tables.splice(pivotIndex, 1);
+    const newCache = /* @__PURE__ */ new Map();
+    for (const [idx, out] of pivotOutputCache.entries()) {
+      if (idx > pivotIndex) newCache.set(idx - 1, out);
+      else if (idx < pivotIndex) newCache.set(idx, out);
+    }
+    pivotOutputCache.clear();
+    for (const [idx, out] of newCache.entries()) pivotOutputCache.set(idx, out);
+    renderer.updateModel(data);
+    _syncPivotZones();
+    markDirty();
+  }
+  function drillDownPivot(row, col) {
+    if (!renderer) return;
+    const pivotIndex = renderer.getPivotZoneAtCell(row, col);
+    if (pivotIndex < 0) return;
+    const output = pivotOutputCache.get(pivotIndex);
+    const config = pivotTables[pivotIndex];
+    if (!output || !config) return;
+    const data = renderer.getData();
+    if (!data?.sheets) return;
+    const destCellParsed = parseCellRef(config.dest_cell);
+    const destRow = destCellParsed?.row ?? 0;
+    const destCol = destCellParsed?.col ?? 0;
+    const outR = row - destRow;
+    const outC = col - destCol;
+    if (outR < 0 || outC < 0 || outR >= output.rowCount || outC >= output.colCount) return;
+    const pivotCell = output.cells[outR]?.[outC];
+    if (!pivotCell?.sourceRows || pivotCell.sourceRows.length === 0) {
+      console.log("[Pivot] No source rows for drill-down on this cell");
+      return;
+    }
+    const srcSheetIdx = data.sheets.findIndex((s) => s.name === config.source_sheet);
+    if (srcSheetIdx < 0) return;
+    const srcSheet = data.sheets[srcSheetIdx];
+    const srcRange = parseCellRange(config.source_range);
+    if (!srcRange) return;
+    let drillName = `PivotDrill_${pivotIndex + 1}`;
+    let drillCounter = 1;
+    while (data.sheets.some((s) => s.name === drillName)) {
+      drillCounter++;
+      drillName = `PivotDrill_${pivotIndex + 1}_${drillCounter}`;
+    }
+    const drillSheet = {
+      name: drillName,
+      cells: {},
+      row_count: pivotCell.sourceRows.length + 2,
+      col_count: srcRange.endCol - srcRange.startCol + 1,
+      tables: [],
+      merged_cells: [],
+      charts: [],
+      sparklines: []
+    };
+    for (let c = srcRange.startCol; c <= srcRange.endCol; c++) {
+      const headerCell = srcSheet.cells?.[srcRange.startRow]?.[c];
+      const destC = c - srcRange.startCol;
+      if (!drillSheet.cells[0]) drillSheet.cells[0] = {};
+      drillSheet.cells[0][destC] = {
+        value: headerCell?.value ?? `Col${destC + 1}`,
+        data_type: headerCell?.data_type ?? "s",
+        style: { bold: true }
+      };
+    }
+    let drillRow = 1;
+    for (const srcRowOffset of pivotCell.sourceRows) {
+      const actualSrcRow = srcRange.startRow + srcRowOffset;
+      if (!drillSheet.cells[drillRow]) drillSheet.cells[drillRow] = {};
+      for (let c = srcRange.startCol; c <= srcRange.endCol; c++) {
+        const srcCell = srcSheet.cells?.[actualSrcRow]?.[c];
+        if (!srcCell) continue;
+        const destC = c - srcRange.startCol;
+        drillSheet.cells[drillRow][destC] = {
+          value: srcCell.value,
+          data_type: srcCell.data_type,
+          style: null
+        };
+      }
+      drillRow++;
+    }
+    data.sheets.push(drillSheet);
+    renderer.updateModel(data);
+    renderer.setActiveSheetIndex(data.sheets.length - 1);
+    _syncPivotZones();
+    buildSheetTabs();
+    markDirty();
   }
   function parseCellRange(ref) {
     let range = ref;
@@ -26394,6 +29074,325 @@
       });
     }
   });
+  function _syncPageSetups() {
+    if (!renderer) return;
+    const data = renderer.getData();
+    if (!data?.sheets) return;
+    for (const sheet of data.sheets) {
+      const ps = sheet.page_setup;
+      if (ps) {
+        renderer.setSheetPageSetup(sheet.name, {
+          row_breaks: ps.row_breaks ?? [],
+          col_breaks: ps.col_breaks ?? []
+        });
+      } else {
+        renderer.setSheetPageSetup(sheet.name, null);
+      }
+    }
+  }
+  function getActiveSheetPageSetup() {
+    if (!renderer) return {};
+    const data = renderer.getData();
+    if (!data?.sheets) return {};
+    const sheet = data.sheets[renderer.getActiveSheetIndex()];
+    return sheet?.page_setup ?? {};
+  }
+  function _applyPageSetup(patch) {
+    if (!renderer) return;
+    const data = renderer.getData();
+    if (!data?.sheets) return;
+    const sheet = data.sheets[renderer.getActiveSheetIndex()];
+    if (!sheet) return;
+    if (!sheet.page_setup) {
+      sheet.page_setup = {
+        orientation: "portrait",
+        paper_size: 1,
+        scale: 100,
+        margin_left: 0.7,
+        margin_right: 0.7,
+        margin_top: 0.75,
+        margin_bottom: 0.75,
+        margin_header: 0.3,
+        margin_footer: 0.3,
+        header: "",
+        footer: "",
+        print_area: "",
+        print_titles_rows: "",
+        print_titles_cols: "",
+        row_breaks: [],
+        col_breaks: [],
+        print_gridlines: false,
+        center_horizontally: false,
+        center_vertically: false
+      };
+    }
+    Object.assign(sheet.page_setup, patch);
+    _syncPageSetups();
+    markDirty();
+  }
+  function handlePageSetupDialogAction(event) {
+    if (event.action === "apply" && event.setup) {
+      _applyPageSetup(event.setup);
+    }
+  }
+  function handlePageMarginsChange(preset) {
+    const presets = {
+      "Normal": { margin_left: 0.7, margin_right: 0.7, margin_top: 0.75, margin_bottom: 0.75, margin_header: 0.3, margin_footer: 0.3 },
+      "Wide": { margin_left: 1, margin_right: 1, margin_top: 1, margin_bottom: 1, margin_header: 0.5, margin_footer: 0.5 },
+      "Narrow": { margin_left: 0.25, margin_right: 0.25, margin_top: 0.75, margin_bottom: 0.75, margin_header: 0.3, margin_footer: 0.3 }
+    };
+    if (preset === "Custom...") {
+      pageSetupDialog?.show(getActiveSheetPageSetup());
+      return;
+    }
+    const p = presets[preset];
+    if (p) _applyPageSetup(p);
+  }
+  function handlePageOrientationChange(value) {
+    _applyPageSetup({ orientation: value.toLowerCase() });
+  }
+  function handlePaperSizeChange(value) {
+    const sizeMap = { "Letter": 1, "A4": 9, "Legal": 5, "A3": 8, "Tabloid": 3 };
+    const id = sizeMap[value] ?? 1;
+    _applyPageSetup({ paper_size: id });
+  }
+  function handleSetPrintArea() {
+    if (!renderer) return;
+    const sel = renderer.getSelectedRange();
+    if (!sel) return;
+    const c1 = getColName(Math.min(sel.startCol, sel.endCol)) + (Math.min(sel.startRow, sel.endRow) + 1);
+    const c2 = getColName(Math.max(sel.startCol, sel.endCol)) + (Math.max(sel.startRow, sel.endRow) + 1);
+    _applyPageSetup({ print_area: `${c1}:${c2}` });
+  }
+  function handleClearPrintArea() {
+    _applyPageSetup({ print_area: "" });
+  }
+  function handleInsertPageBreak() {
+    if (!renderer) return;
+    const cell = renderer.getSelectedCell();
+    if (!cell) return;
+    const ps = getActiveSheetPageSetup();
+    const rowBreaks = [...ps.row_breaks ?? []];
+    if (!rowBreaks.includes(cell.row) && cell.row > 0) rowBreaks.push(cell.row);
+    rowBreaks.sort((a, b) => a - b);
+    _applyPageSetup({ row_breaks: rowBreaks });
+  }
+  function handleRemovePageBreak() {
+    if (!renderer) return;
+    const cell = renderer.getSelectedCell();
+    if (!cell) return;
+    const ps = getActiveSheetPageSetup();
+    const rowBreaks = (ps.row_breaks ?? []).filter((r) => r !== cell.row);
+    _applyPageSetup({ row_breaks: rowBreaks });
+  }
+  function handleResetPageBreaks() {
+    _applyPageSetup({ row_breaks: [], col_breaks: [] });
+  }
+  function handleFitToWidth(value) {
+    if (value === "Automatic") {
+      _applyPageSetup({ fit_to_width: void 0 });
+    } else {
+      _applyPageSetup({ fit_to_width: parseInt(value) || 1, fit_to_height: getActiveSheetPageSetup().fit_to_height ?? 1 });
+    }
+  }
+  function handleFitToHeight(value) {
+    if (value === "Automatic") {
+      _applyPageSetup({ fit_to_height: void 0 });
+    } else {
+      _applyPageSetup({ fit_to_height: parseInt(value) || 1, fit_to_width: getActiveSheetPageSetup().fit_to_width ?? 1 });
+    }
+  }
+  function handlePrintScale(scale) {
+    if (!isNaN(scale) && scale >= 10 && scale <= 400) {
+      _applyPageSetup({ scale, fit_to_width: void 0, fit_to_height: void 0 });
+    }
+  }
+  function handlePageSetupToggle(key, value) {
+    _applyPageSetup({ [key]: value });
+  }
+  function handlePrintPreview() {
+    if (!renderer) return;
+    const canvas = document.querySelector("canvas");
+    if (!canvas) return;
+    const data = renderer.getData();
+    const sheet = data?.sheets?.[renderer.getActiveSheetIndex()];
+    const ps = sheet?.page_setup;
+    const fileName = sheet?.name ?? "Spreadsheet";
+    const today = (/* @__PURE__ */ new Date()).toLocaleDateString();
+    const headerText = ps ? _resolveHFCode(ps.header, { sheet: sheet?.name ?? "", date: today, page: 1, pages: 1 }) : "";
+    const footerText = ps ? _resolveHFCode(ps.footer, { sheet: sheet?.name ?? "", date: today, page: 1, pages: 1 }) : "";
+    const orientation = ps?.orientation === "landscape" ? "landscape" : "portrait";
+    const dataUrl = canvas.toDataURL("image/png");
+    const printHtml = [
+      '<!DOCTYPE html><html><head><meta charset="utf-8">',
+      `<title>Print Preview - ${fileName}</title>`,
+      "<style>",
+      `@media print { @page { margin:0.75in; size:${orientation}; } body { margin:0; } }`,
+      "body { background:#e0e0e0; display:flex; flex-direction:column; align-items:center; padding:20px; font-family:system-ui,sans-serif; }",
+      ".page { background:#fff; margin:12px; padding:20px; box-shadow:0 2px 8px rgba(0,0,0,.2); page-break-after:always; }",
+      `.page-header { text-align:center; font-size:12px; color:#555; border-bottom:1px solid #ccc; padding-bottom:4px; margin-bottom:8px; }`,
+      `.page-footer { text-align:center; font-size:12px; color:#555; border-top:1px solid #ccc; padding-top:4px; margin-top:8px; }`,
+      "img { max-width:100%; }",
+      "</style></head><body>",
+      '<div class="page">',
+      headerText ? `<div class="page-header">${headerText}</div>` : "",
+      `<img src="${dataUrl}" />`,
+      footerText ? `<div class="page-footer">${footerText}</div>` : "",
+      "</div>",
+      "<script>window.onload = function() { window.print(); }<\/script>",
+      "</body></html>"
+    ].join("");
+    vscode.postMessage({ type: "print", imageData: dataUrl, printHtml });
+  }
+  function _resolveHFCode(template, ctx) {
+    return template.replace(/&A/gi, ctx.sheet).replace(/&D/gi, ctx.date).replace(/&T/gi, (/* @__PURE__ */ new Date()).toLocaleTimeString()).replace(/&P/gi, String(ctx.page)).replace(/&N/gi, String(ctx.pages)).replace(/&F/gi, ctx.sheet).replace(/&L/gi, "").replace(/&C/gi, "").replace(/&R/gi, "");
+  }
+  function csvEscape(value) {
+    if (value.includes(",") || value.includes('"') || value.includes("\n") || value.includes("\r")) {
+      return '"' + value.replace(/"/g, '""') + '"';
+    }
+    return value;
+  }
+  function handleExportCSV() {
+    if (!renderer) return;
+    const data = renderer.getData();
+    const sheetIdx = renderer.getActiveSheetIndex();
+    const sheet = data?.sheets?.[sheetIdx];
+    if (!sheet) return;
+    const cells = sheet.cells ?? {};
+    const rowKeys = Object.keys(cells).map(Number).sort((a, b) => a - b);
+    if (rowKeys.length === 0) return;
+    const maxRow = rowKeys[rowKeys.length - 1] + 1;
+    let maxCol = 0;
+    for (const rk of rowKeys) {
+      const colKeys = Object.keys(cells[rk]).map(Number);
+      for (const ck of colKeys) {
+        if (ck >= maxCol) maxCol = ck + 1;
+      }
+    }
+    const lines = [];
+    for (let r = 0; r < maxRow; r++) {
+      const rowCells = [];
+      for (let c = 0; c < maxCol; c++) {
+        const cell = cells[r]?.[c];
+        const val = cell ? cell.formatted ?? cell.value ?? "" : "";
+        rowCells.push(csvEscape(String(val)));
+      }
+      lines.push(rowCells.join(","));
+    }
+    const content = lines.join("\r\n");
+    const defaultName = (sheet.name || "Sheet1").replace(/[^\w\s-]/g, "_");
+    vscode.postMessage({ type: "exportFile", content, format: "csv", defaultName: `${defaultName}.csv` });
+  }
+  function handleExportHTML() {
+    if (!renderer) return;
+    const data = renderer.getData();
+    const sheetIdx = renderer.getActiveSheetIndex();
+    const sheet = data?.sheets?.[sheetIdx];
+    if (!sheet) return;
+    const cells = sheet.cells ?? {};
+    const rowKeys = Object.keys(cells).map(Number).sort((a, b) => a - b);
+    if (rowKeys.length === 0) return;
+    const maxRow = rowKeys[rowKeys.length - 1] + 1;
+    let maxCol = 0;
+    for (const rk of rowKeys) {
+      const colKeys = Object.keys(cells[rk]).map(Number);
+      for (const ck of colKeys) {
+        if (ck >= maxCol) maxCol = ck + 1;
+      }
+    }
+    const htmlRows = [];
+    for (let r = 0; r < maxRow; r++) {
+      const rowCells = [];
+      for (let c = 0; c < maxCol; c++) {
+        const cell = cells[r]?.[c];
+        const val = cell ? cell["formatted"] ?? cell["value"] ?? "" : "";
+        const style = _cellToInlineStyle(cell);
+        rowCells.push(`<td style="${style}">${_escapeHtml(String(val))}</td>`);
+      }
+      htmlRows.push(`<tr>${rowCells.join("")}</tr>`);
+    }
+    const sheetName = sheet.name ?? "Sheet";
+    const tableHtml = [
+      '<!DOCTYPE html><html><head><meta charset="utf-8">',
+      `<title>${_escapeHtml(sheetName)}</title>`,
+      "<style>",
+      "body { font-family: Calibri, Arial, sans-serif; padding: 16px; }",
+      "table { border-collapse: collapse; }",
+      "td { border: 1px solid #d0d0d0; padding: 4px 8px; min-width: 48px; }",
+      "</style></head><body>",
+      `<h2>${_escapeHtml(sheetName)}</h2>`,
+      "<table>",
+      htmlRows.join("\n"),
+      "</table></body></html>"
+    ].join("\n");
+    const defaultName = sheetName.replace(/[^\w\s-]/g, "_");
+    vscode.postMessage({ type: "exportFile", content: tableHtml, format: "html", defaultName: `${defaultName}.html` });
+  }
+  function _escapeHtml(s) {
+    return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  }
+  function _cellToInlineStyle(cell) {
+    if (!cell) return "";
+    const parts = [];
+    if (cell["bold"]) parts.push("font-weight:bold");
+    if (cell["italic"]) parts.push("font-style:italic");
+    if (cell["underline"]) parts.push("text-decoration:underline");
+    if (typeof cell["font_color"] === "string" && cell["font_color"]) parts.push(`color:${cell["font_color"]}`);
+    if (typeof cell["bg_color"] === "string" && cell["bg_color"]) parts.push(`background-color:${cell["bg_color"]}`);
+    const align = cell["align"] ?? cell["h_align"];
+    if (typeof align === "string" && align) parts.push(`text-align:${align}`);
+    return parts.join(";");
+  }
+  function handleExportPDF() {
+    if (!renderer) return;
+    const canvas = document.querySelector("canvas");
+    if (!canvas) return;
+    const data = renderer.getData();
+    const sheetIdx = renderer.getActiveSheetIndex();
+    const sheet = data?.sheets?.[sheetIdx];
+    const ps = sheet?.page_setup;
+    const fileName = sheet?.name ?? "Spreadsheet";
+    const today = (/* @__PURE__ */ new Date()).toLocaleDateString();
+    const headerText = ps ? _resolveHFCode(ps.header, { sheet: sheet?.name ?? "", date: today, page: 1, pages: 1 }) : "";
+    const footerText = ps ? _resolveHFCode(ps.footer, { sheet: sheet?.name ?? "", date: today, page: 1, pages: 1 }) : "";
+    const orientation = ps?.orientation === "landscape" ? "landscape" : "portrait";
+    const dataUrl = canvas.toDataURL("image/png");
+    const printHtml = [
+      '<!DOCTYPE html><html><head><meta charset="utf-8">',
+      `<title>${_escapeHtml(fileName)}</title>`,
+      "<style>",
+      `@media print { @page { margin:0.75in; size:${orientation}; } body { margin:0; } }`,
+      "body { background:#e0e0e0; display:flex; flex-direction:column; align-items:center; padding:20px; font-family:system-ui,sans-serif; }",
+      ".page { background:#fff; margin:12px; padding:20px; box-shadow:0 2px 8px rgba(0,0,0,.2); page-break-after:always; }",
+      ".page-header { text-align:center; font-size:12px; color:#555; border-bottom:1px solid #ccc; padding-bottom:4px; margin-bottom:8px; }",
+      ".page-footer { text-align:center; font-size:12px; color:#555; border-top:1px solid #ccc; padding-top:4px; margin-top:8px; }",
+      "img { max-width:100%; }",
+      "</style></head><body>",
+      '<div class="page">',
+      headerText ? `<div class="page-header">${headerText}</div>` : "",
+      `<img src="${dataUrl}" />`,
+      footerText ? `<div class="page-footer">${footerText}</div>` : "",
+      "</div>",
+      "</body></html>"
+    ].join("");
+    const defaultName = fileName.replace(/[^\w\s-]/g, "_");
+    vscode.postMessage({ type: "exportFile", content: printHtml, format: "html", defaultName: `${defaultName}-print.html` });
+  }
+  function handleImportCSV() {
+    vscode.postMessage({ type: "importFile", formats: ["csv", "tsv", "txt"] });
+  }
+  function handleCsvImportDialogAction(event) {
+    if (!renderer) return;
+    if (event.action === "close") return;
+    const { rows, newSheet } = event;
+    if (newSheet) {
+      addSheet();
+    }
+    const tsv = rows.map((r) => r.join("	")).join("\n");
+    renderer.pasteData(tsv);
+    markDirty();
+  }
 })();
 /*! Bundled license information:
 

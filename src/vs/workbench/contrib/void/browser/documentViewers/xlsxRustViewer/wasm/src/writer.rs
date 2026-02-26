@@ -12,7 +12,7 @@ use rust_xlsxwriter::{
     DataValidation, DataValidationRule, DataValidationErrorStyle, Formula,
     Url,
 };
-use crate::parser::{WorkbookModel, ConditionalFormatRule, DataValidationDef, HyperlinkDef, ChartDefinition, DefinedNameDef};
+use crate::parser::{WorkbookModel, ConditionalFormatRule, DataValidationDef, HyperlinkDef, ChartDefinition, DefinedNameDef, PivotTableDef, PageSetupDef};
 
 #[wasm_bindgen]
 extern "C" {
@@ -223,6 +223,12 @@ impl XlsxWriter {
                     .map_err(|e| JsError::new(&e.to_string()))?;
             }
 
+            // Write hidden columns
+            for col_idx in &sheet_data.hidden_cols {
+                worksheet.set_column_hidden(*col_idx as u16)
+                    .map_err(|e| JsError::new(&e.to_string()))?;
+            }
+
             // Write row heights
             for (row_idx, height) in &sheet_data.row_heights {
                 // Convert pixels back to points
@@ -230,6 +236,15 @@ impl XlsxWriter {
                 worksheet.set_row_height(*row_idx, points)
                     .map_err(|e| JsError::new(&e.to_string()))?;
             }
+
+            // Write hidden rows
+            for row_idx in &sheet_data.hidden_rows {
+                worksheet.set_row_hidden(*row_idx)
+                    .map_err(|e| JsError::new(&e.to_string()))?;
+            }
+
+            // Note: rust_xlsxwriter 0.80 does not expose group_rows/group_columns APIs.
+            // Outline group metadata is stored in the model for in-app rendering only.
 
             // Write conditional formatting rules
             for cf_rule in &sheet_data.conditional_formats {
@@ -253,10 +268,19 @@ impl XlsxWriter {
             // Charts are NOT written via rust_xlsxwriter (its Chart API produces
             // invalid OOXML in the WASM target). Instead we post-process the ZIP
             // with inject_chart_files() below.
+
+            // Write page setup settings
+            if let Some(ps) = &sheet_data.page_setup {
+                write_page_setup(worksheet, ps);
+            }
         }
 
         // Write defined names (named ranges)
         for dn in &model.defined_names {
+            // Skip _xlnm built-in names — page setup handles Print_Area and Print_Titles
+            if dn.hidden || dn.name.starts_with("_xlnm.") {
+                continue;
+            }
             write_defined_name(&mut workbook, dn, &model);
         }
 
@@ -268,8 +292,16 @@ impl XlsxWriter {
             .map(|s| (s.name.clone(), s.charts.clone()))
             .collect();
 
+        // Inject pivot table config as custom JSON part
+        let mid_buf = if !model.pivot_tables.is_empty() {
+            inject_pivot_tables_json(&base_buf, &model.pivot_tables)
+                .unwrap_or(base_buf)
+        } else {
+            base_buf
+        };
+
         if charts_by_sheet.is_empty() {
-            return Ok(base_buf);
+            return Ok(mid_buf);
         }
 
         for (sheet_name, charts) in &charts_by_sheet {
@@ -287,7 +319,7 @@ impl XlsxWriter {
             }
         }
 
-        let result = inject_chart_files(&base_buf, &charts_by_sheet)
+        let result = inject_chart_files(&mid_buf, &charts_by_sheet)
             .map_err(|e| JsError::new(&e))?;
 
         Ok(result)
@@ -296,10 +328,6 @@ impl XlsxWriter {
 
 /// Write a defined name (named range) to the workbook.
 fn write_defined_name(workbook: &mut Workbook, dn: &DefinedNameDef, model: &WorkbookModel) {
-    // Skip hidden built-in names (e.g. _xlnm.Print_Area) to avoid conflicts
-    if dn.hidden || dn.name.starts_with("_xlnm.") {
-        return;
-    }
 
     // Build the full name string. For sheet-scoped names, rust_xlsxwriter
     // requires the prefix "SheetName!Name".
@@ -1257,6 +1285,57 @@ fn extract_xml_attr(xml_fragment: &str, attr: &str) -> Option<String> {
 // XLSX ZIP Injection
 // =============================================================================
 
+/// Inject pivot table config JSON into the XLSX zip as xl/voidPivotTables.json.
+fn inject_pivot_tables_json(xlsx_bytes: &[u8], pivot_tables: &[PivotTableDef]) -> Result<Vec<u8>, String> {
+    use std::io::{Read, Write, Cursor};
+    use zip::write::SimpleFileOptions;
+
+    let json = serde_json::to_vec(pivot_tables)
+        .map_err(|e| format!("pivot tables JSON error: {e}"))?;
+
+    let reader = Cursor::new(xlsx_bytes);
+    let mut archive = zip::ZipArchive::new(reader)
+        .map_err(|e| format!("zip open error: {e}"))?;
+
+    let mut out_buf: Vec<u8> = Vec::with_capacity(xlsx_bytes.len() + json.len() + 256);
+    {
+        let cursor = Cursor::new(&mut out_buf);
+        let mut writer = zip::ZipWriter::new(cursor);
+        let opts = SimpleFileOptions::default()
+            .compression_method(zip::CompressionMethod::Deflated);
+
+        // Copy all existing entries (skip old voidPivotTables.json if present)
+        for i in 0..archive.len() {
+            let mut entry = archive.by_index(i)
+                .map_err(|e| format!("zip entry error: {e}"))?;
+            if entry.name() == "xl/voidPivotTables.json" {
+                continue;
+            }
+            let entry_opts = SimpleFileOptions::default()
+                .compression_method(entry.compression());
+            writer.start_file(entry.name().to_owned(), entry_opts)
+                .map_err(|e| format!("zip write start error: {e}"))?;
+            let mut buf = Vec::new();
+            entry.read_to_end(&mut buf)
+                .map_err(|e| format!("zip read error: {e}"))?;
+            writer.write_all(&buf)
+                .map_err(|e| format!("zip write error: {e}"))?;
+        }
+
+        // Add the new pivot tables JSON
+        writer.start_file("xl/voidPivotTables.json", opts)
+            .map_err(|e| format!("zip add pivot json error: {e}"))?;
+        writer.write_all(&json)
+            .map_err(|e| format!("zip write pivot json error: {e}"))?;
+
+        writer.finish().map_err(|e| format!("zip finish error: {e}"))?;
+    }
+
+    Ok(out_buf)
+}
+
+// =============================================================================
+
 /// Post-process an XLSX ZIP to inject proper OOXML chart files.
 /// Also stores xl/voidCharts.json as a sidecar for our viewer's metadata.
 fn inject_chart_files(
@@ -1515,4 +1594,131 @@ fn inject_chart_files(
     log(&format!("[Rust Writer] Chart injection complete, output {} bytes", out_buf.len()));
 
     Ok(out_buf)
+}
+
+/// Apply page setup settings to a rust_xlsxwriter worksheet.
+fn write_page_setup(worksheet: &mut rust_xlsxwriter::Worksheet, ps: &PageSetupDef) {
+    // Orientation
+    if ps.orientation == "landscape" {
+        let _ = worksheet.set_landscape();
+    } else {
+        let _ = worksheet.set_portrait();
+    }
+
+    // Paper size (only if non-zero; 0 means unset)
+    if ps.paper_size > 0 {
+        let _ = worksheet.set_paper_size(ps.paper_size.into());
+    }
+
+    // Scale vs Fit-to-pages (mutually exclusive; fit-to takes priority if set)
+    if ps.fit_to_width.is_some() || ps.fit_to_height.is_some() {
+        let w = ps.fit_to_width.unwrap_or(1);
+        let h = ps.fit_to_height.unwrap_or(1);
+        let _ = worksheet.set_print_fit_to_pages(w, h);
+    } else if ps.scale != 100 && ps.scale > 0 {
+        let _ = worksheet.set_print_scale(ps.scale);
+    }
+
+    // Margins: set_margins(left, right, top, bottom, header, footer)
+    let _ = worksheet.set_margins(
+        ps.margin_left,
+        ps.margin_right,
+        ps.margin_top,
+        ps.margin_bottom,
+        ps.margin_header,
+        ps.margin_footer,
+    );
+
+    // Header / Footer
+    if !ps.header.is_empty() {
+        let _ = worksheet.set_header(&ps.header);
+    }
+    if !ps.footer.is_empty() {
+        let _ = worksheet.set_footer(&ps.footer);
+    }
+
+    // Gridlines
+    if ps.print_gridlines {
+        let _ = worksheet.set_print_gridlines(true);
+    }
+
+    // Centering
+    if ps.center_horizontally {
+        let _ = worksheet.set_print_center_horizontally(true);
+    }
+    if ps.center_vertically {
+        let _ = worksheet.set_print_center_vertically(true);
+    }
+
+    // Print area
+    if !ps.print_area.is_empty() {
+        if let Some((r1, c1, r2, c2)) = parse_range_to_rc(&ps.print_area) {
+            let _ = worksheet.set_print_area(r1, c1, r2, c2);
+        }
+    }
+
+    // Repeat rows (print titles)
+    if !ps.print_titles_rows.is_empty() {
+        if let Some((r1, r2)) = parse_row_range(&ps.print_titles_rows) {
+            let _ = worksheet.set_repeat_rows(r1, r2);
+        }
+    }
+
+    // Repeat columns (print titles)
+    if !ps.print_titles_cols.is_empty() {
+        if let Some((c1, c2)) = parse_col_range(&ps.print_titles_cols) {
+            let _ = worksheet.set_repeat_columns(c1, c2);
+        }
+    }
+
+    // Manual row page breaks
+    if !ps.row_breaks.is_empty() {
+        let breaks: Vec<u32> = ps.row_breaks.clone();
+        let _ = worksheet.set_page_breaks(&breaks);
+    }
+}
+
+/// Parse a cell range like "A1:H50" into (first_row, first_col, last_row, last_col) 0-based.
+fn parse_range_to_rc(range: &str) -> Option<(u32, u16, u32, u16)> {
+    let parts: Vec<&str> = range.split(':').collect();
+    if parts.len() != 2 { return None; }
+    let (r1, c1) = parse_cell_ref_rc(parts[0])?;
+    let (r2, c2) = parse_cell_ref_rc(parts[1])?;
+    Some((r1, c1, r2, c2))
+}
+
+fn parse_cell_ref_rc(cell: &str) -> Option<(u32, u16)> {
+    let col_str: String = cell.chars().take_while(|c| c.is_alphabetic()).collect();
+    let row_str: String = cell.chars().skip_while(|c| c.is_alphabetic()).collect();
+    let col = col_letters_to_idx(&col_str)?;
+    let row: u32 = row_str.parse::<u32>().ok()?.saturating_sub(1);
+    Some((row, col as u16))
+}
+
+fn col_letters_to_idx(s: &str) -> Option<u32> {
+    if s.is_empty() { return None; }
+    let mut idx = 0u32;
+    for c in s.chars() {
+        let d = (c as u32).checked_sub('A' as u32)? + 1;
+        idx = idx * 26 + d;
+    }
+    Some(idx.saturating_sub(1))
+}
+
+/// Parse a row range like "1:3" into 0-based (first_row, last_row).
+fn parse_row_range(s: &str) -> Option<(u32, u32)> {
+    let parts: Vec<&str> = s.split(':').collect();
+    if parts.len() != 2 { return None; }
+    let r1: u32 = parts[0].parse::<u32>().ok()?.saturating_sub(1);
+    let r2: u32 = parts[1].parse::<u32>().ok()?.saturating_sub(1);
+    Some((r1, r2))
+}
+
+/// Parse a column range like "A:C" into 0-based (first_col, last_col).
+fn parse_col_range(s: &str) -> Option<(u16, u16)> {
+    let parts: Vec<&str> = s.split(':').collect();
+    if parts.len() != 2 { return None; }
+    let c1 = col_letters_to_idx(parts[0])? as u16;
+    let c2 = col_letters_to_idx(parts[1])? as u16;
+    Some((c1, c2))
 }

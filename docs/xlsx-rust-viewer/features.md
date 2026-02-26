@@ -1,6 +1,6 @@
 # XLSX Rust Viewer — Feature Tracker
 
-> **Last updated**: 2026-02-20
+> **Last updated**: 2026-02-21
 >
 > This document tracks all implemented features and catalogs features from Excel/Google Sheets that could be implemented next. Organized into two sections: what we **have** and what we **could add**.
 
@@ -379,36 +379,36 @@
 
 ### Cell Borders
 
-- [ ] Border style picker (thin, medium, thick, dashed, dotted, double)
-- [ ] Border color picker
-- [ ] Apply border to: top, bottom, left, right, all, outside, inside
-- [ ] Draw borders mode
-- [ ] Erase borders mode
-- [ ] Diagonal borders
+- [x] Border style picker (thin, medium, thick, dashed, dotted, double)
+- [x] Border color picker
+- [x] Apply border to: top, bottom, left, right, all, outside, inside
+- [x] Draw borders mode
+- [x] Erase borders mode
+- [x] Diagonal borders
 
 ### Pivot Tables
 
-- [ ] Create PivotTable from data range
-- [ ] Drag-and-drop field builder (Rows, Columns, Values, Filters)
-- [ ] Value aggregation (Sum, Count, Average, Min, Max)
-- [ ] Group rows by date/text
-- [ ] Drill down (double-click to see source data)
-- [ ] PivotTable styles
-- [ ] Refresh data
-- [ ] Calculated fields
+- [x] Create PivotTable from data range
+- [x] Drag-and-drop field builder (Rows, Columns, Values, Filters)
+- [x] Value aggregation (Sum, Count, Average, Min, Max)
+- [x] Group rows by date/text
+- [x] Drill down (double-click to see source data)
+- [x] PivotTable styles
+- [x] Refresh data
+- [x] Calculated fields
 
 ### Page Layout & Print Setup
 
-- [ ] Page margins (top, bottom, left, right)
-- [ ] Page orientation (portrait/landscape)
-- [ ] Paper size selection
-- [ ] Headers and footers
-- [ ] Print area selection
-- [ ] Page breaks (insert, remove, preview)
-- [ ] Print titles (repeat rows/columns on every page)
-- [ ] Scale to fit (width, height, percentage)
-- [ ] Print preview
-- [ ] Gridline printing toggle
+- [x] Page margins (top, bottom, left, right)
+- [x] Page orientation (portrait/landscape)
+- [x] Paper size selection
+- [x] Headers and footers
+- [x] Print area selection
+- [x] Page breaks (insert, remove, preview)
+- [x] Print titles (repeat rows/columns on every page)
+- [x] Scale to fit (width, height, percentage)
+- [x] Print preview
+- [x] Gridline printing toggle
 
 ### Freeze / Split Panes Enhancements
 
@@ -425,19 +425,19 @@
 
 ### Import / Export Formats
 
-- [ ] Export as CSV
-- [ ] Export as PDF
-- [ ] Import CSV (with delimiter options)
-- [ ] Import TSV
-- [ ] Export as HTML table
-- [ ] Import from clipboard (HTML table paste)
+- [x] Export as CSV
+- [x] Export as PDF
+- [x] Import CSV (with delimiter options)
+- [x] Import TSV
+- [x] Export as HTML table
+- [x] Import from clipboard (HTML table paste)
 
 ### Conditional Row/Column Visibility
 
-- [ ] Unhide column (right-click hidden column boundary)
-- [ ] Unhide row (right-click hidden row boundary)
-- [ ] Unhide all rows/columns
-- [ ] Group rows/columns (outline) with collapse/expand
+- [x] Unhide column (right-click hidden column boundary)
+- [x] Unhide row (right-click hidden row boundary)
+- [x] Unhide all rows/columns
+- [x] Group rows/columns (outline) with collapse/expand
 
 ### Cell Protection & Sheet Protection
 
@@ -448,10 +448,10 @@
 
 ### Zoom
 
-- [ ] Zoom in / out (slider or dropdown: 50%, 75%, 100%, 125%, 150%, 200%)
-- [ ] Zoom to fit selection
-- [ ] Zoom to fit page width
-- [ ] Ctrl+Mouse wheel to zoom
+- [x] Zoom in / out (slider or dropdown: 50%, 75%, 100%, 125%, 150%, 200%)
+- [x] Zoom to fit selection
+- [x] Zoom to fit page width
+- [x] Ctrl+Mouse wheel to zoom
 
 ### Advanced Selection
 
@@ -540,24 +540,44 @@
 
 ## Feature Count Summary
 
-| Category               | Implemented        | Not Implemented                          |
-| ---------------------- | ------------------ | ---------------------------------------- |
-| File Operations        | 5                  | ~10 (CSV, PDF export, import)            |
-| Sheet Management       | 7                  | ~5 (unhide, protect, group)              |
-| Cell Editing           | 7                  | ~8 (auto-fill, paste special)            |
-| Selection & Navigation | 10                 | ~10 (advanced, Go To)                    |
-| Formatting             | 14                 | ~12 (borders, diagonal)                  |
-| Number Formatting      | 5                  | ~5 (custom formats)                      |
-| Row/Column Ops         | 12                 | ~8 (unhide, group, auto-fit content)     |
-| Tables                 | 17                 | ~8 (calculated cols, slicers)            |
-| Table Filtering        | 9                  | 0 (feature-complete for basic filtering) |
-| Formulas               | 20 functions       | ~200+ (Excel has 500+)                   |
-| Find & Replace         | 5                  | 0 (feature-complete)                     |
-| View Controls          | 5                  | ~8 (zoom, split panes)                   |
-| Charts & Visualization | 12                 | ~3 (combo charts, advanced styling)      |
-| Data Validation        | 0                  | ~10 (entire feature area)                |
-| Comments               | 0                  | ~7 (entire feature area)                 |
-| Hyperlinks             | 0                  | ~5 (entire feature area)                 |
-| Conditional Formatting | 8                  | 0 (feature-complete for basic rules)     |
-| Pivot Tables           | 0                  | ~8 (entire feature area)                 |
-| **TOTAL**              | **~130+ features** | **~170+ potential features**             |
+> Phase 2 implemented features are included below. Counts reflect all `[x]` items in Part 2 plus all Part 1 sections.
+
+| Category                        | Implemented        | Not Implemented                            |
+| ------------------------------- | ------------------ | ------------------------------------------ |
+| File Operations                 | 11                 | ~4 (templates, recent files, advanced PDF) |
+| Sheet Management                | 7                  | ~5 (unhide, protect, group/outline)        |
+| Cell Editing                    | 23                 | ~3 (structured refs, multi-cell fill)      |
+| Auto-Fill / Fill Series         | 8 ✅ (Phase 2)     | 0 (feature-complete)                       |
+| Paste Special                   | 7 ✅ (Phase 2)     | 0 (feature-complete)                       |
+| Selection & Navigation          | 10                 | ~10 (Ctrl+Click, Go To, advanced)          |
+| Formatting (Font/Align/Borders) | 20                 | ~4 (text rotation, indent levels)          |
+| Cell Borders                    | 6 ✅ (Phase 2)     | 0 (feature-complete)                       |
+| Number Formatting               | 5                  | ~5 (custom format editor)                  |
+| Row/Column Ops                  | 15                 | ~5 (unhide, outline groups, multi-sort)    |
+| Column/Row Auto-Fit             | 4 ✅ (Phase 2)     | 0 (feature-complete)                       |
+| Tables                          | 17                 | ~5 (calculated cols, slicers, auto-expand) |
+| Table Filtering                 | 9                  | 0 (feature-complete)                       |
+| Formulas                        | ~120 functions     | ~380+ (Excel has 500+)                     |
+| Named Ranges                    | 5 ✅ (Phase 2)     | 0 (feature-complete)                       |
+| Find & Replace                  | 5                  | 0 (feature-complete)                       |
+| View Controls & Status Bar      | 13                 | ~8 (zoom, split panes)                     |
+| Charts & Visualization          | 12                 | ~3 (advanced styling)                      |
+| Sparklines                      | 3                  | 0 (feature-complete)                       |
+| Conditional Formatting          | 8                  | 0 (feature-complete)                       |
+| Data Validation                 | 10 ✅ (Phase 2)    | 0 (feature-complete)                       |
+| Hyperlinks                      | 5 ✅ (Phase 2)     | 0 (feature-complete)                       |
+| Pivot Tables                    | 8 ✅ (Phase 2)     | 0 (feature-complete)                       |
+| Page Layout & Print Setup       | 10 ✅ (Phase 2)    | 0 (feature-complete)                       |
+| Import / Export Formats         | 6 ✅ (Phase 2)     | 0 (feature-complete)                       |
+| Comments / Notes                | 0                  | ~7 (entire feature area)                   |
+| Formula Auditing                | 0                  | ~6 (trace precedents, evaluate steps)      |
+| Advanced Selection              | 0                  | ~6 (Ctrl+Click, Go To Special)             |
+| Cell Protection                 | 0                  | ~4 (lock cells, protect sheet)             |
+| Zoom                            | 0                  | ~4 (slider, Ctrl+wheel)                    |
+| Array / Dynamic Formulas        | 0                  | ~6 (SORT, FILTER, UNIQUE, spill)           |
+| Images & Objects                | 0                  | ~6 (insert image, shapes, text boxes)      |
+| Form Controls                   | 0                  | ~5 (checkbox, dropdown, spinner)           |
+| Data Tools                      | 0                  | ~5 (Text to Columns, Remove Duplicates)    |
+| Power Query / Connections       | 0                  | ~4 (external import, transform pipeline)   |
+| Collaborative / Accessibility   | 0                  | ~10 (comments, sharing, screen reader)     |
+| **TOTAL**                       | **~310+ features** | **~90+ potential features remaining**      |

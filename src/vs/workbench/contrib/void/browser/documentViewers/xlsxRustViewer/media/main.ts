@@ -19,6 +19,10 @@ import { NameManagerDialog, NMDialogEvent, DefinedNameDef } from './nameManagerD
 import { ChartManager, ChartDefinition, RendererCoords } from './chartManager.js';
 import { ChartWizardDialog, ChartWizardEvent } from './chartWizardDialog.js';
 import { PasteSpecialDialog, PSDialogEvent } from './pasteSpecialDialog.js';
+import { PivotTableDialog, PivotDialogEvent, PivotTableDef } from './pivotTableDialog.js';
+import { computePivotTable, PivotOutput } from './pivotTableEngine.js';
+import { PageSetupDialog, PageSetupDef, PageSetupEvent } from './pageSetupDialog.js';
+import { CsvImportDialog, CsvImportEvent } from './csvImportDialog.js';
 
 // VS Code API (available in webview context)
 declare function acquireVsCodeApi(): { postMessage(msg: unknown): void; getState(): unknown; setState(state: unknown): void };
@@ -43,7 +47,15 @@ let nmDialog: NameManagerDialog | null = null;
 let chartManager: ChartManager | null = null;
 let chartWizard: ChartWizardDialog | null = null;
 let psDialog: PasteSpecialDialog | null = null;
+let pivotDialog: PivotTableDialog | null = null;
+let pageSetupDialog: PageSetupDialog | null = null;
+let csvImportDialog: CsvImportDialog | null = null;
 let ribbon: Ribbon | null = null;
+
+// Workbook-level pivot table configs (synced with model.pivot_tables)
+let pivotTables: PivotTableDef[] = [];
+// Last computed pivot output per pivot index (for drill-down)
+const pivotOutputCache: Map<number, PivotOutput> = new Map();
 
 // Workbook-level defined names (named ranges)
 let definedNames: DefinedNameDef[] = [];
@@ -105,11 +117,33 @@ async function initialize() {
 	// Initialize paste special dialog
 	psDialog = new PasteSpecialDialog(document.body, handlePsDialogAction);
 
+	// Initialize pivot table dialog
+	pivotDialog = new PivotTableDialog(document.body, handlePivotDialogAction);
+
+	// Initialize page setup dialog
+	pageSetupDialog = new PageSetupDialog(document.body, handlePageSetupDialogAction);
+
+	// Initialize CSV import dialog
+	csvImportDialog = new CsvImportDialog(document.body, handleCsvImportDialogAction);
+
 	// Register hyperlink detector for context menu
 	contextMenu.setHyperlinkDetector((row, col) => {
 		if (!renderer) return undefined;
 		return renderer.getHyperlinkForCell(row, col);
 	});
+
+	// Register pivot table detector for context menu
+	contextMenu.setPivotDetector((row, col) => {
+		if (!renderer) return -1;
+		return renderer.getPivotZoneAtCell(row, col);
+	});
+
+	contextMenu.setHiddenDetectors(
+		(col) => renderer ? renderer.isColHidden(col) : false,
+		(row) => renderer ? renderer.isRowHidden(row) : false,
+		() => renderer ? renderer.getHiddenCols().size > 0 : false,
+		() => renderer ? renderer.getHiddenRows().size > 0 : false,
+	);
 
 	// Wire Ctrl+Click callback for hyperlinks
 	renderer.onHyperlinkClick = (url, isInternal) => {
@@ -193,6 +227,12 @@ window.addEventListener('message', async (event) => {
 				handleApplyEdits(message.operations);
 			}
 			break;
+		case 'fileContent':
+			// Response from extension host for importFile request
+			if (message.content && csvImportDialog) {
+				csvImportDialog.previewFile(message.content, message.fileName || '');
+			}
+			break;
 	}
 });
 
@@ -240,6 +280,20 @@ async function handleLoad(base64Data: string) {
 				console.warn('[XLSX Rust Viewer] Named ranges init failed:', e);
 			}
 		}
+
+		// Load pivot table configs from the parsed model
+		pivotTables = (model.pivot_tables ?? []) as PivotTableDef[];
+		pivotOutputCache.clear();
+		// Re-compute all pivot tables from stored configs on load
+		if (pivotTables.length > 0) {
+			for (let pi = 0; pi < pivotTables.length; pi++) {
+				_computeAndWritePivot(pi, model);
+			}
+		}
+		_syncPivotZones();
+
+		// Sync page setup (page breaks etc.) to the renderer for visual indicators
+		_syncPageSetups();
 
 		// Restore chart state from webview persistence (fallback if ZIP didn't have them)
 		restoreChartState();
@@ -303,6 +357,7 @@ function buildSheetTabs() {
 			evaluateFormulas();
 			buildSheetTabs();
 			syncChartOverlays();
+			_syncPivotZones();
 		};
 		tab.addEventListener('contextmenu', (e) => {
 			e.preventDefault();
@@ -328,30 +383,57 @@ function showSheetTabMenu(x: number, y: number, sheetIdx: number) {
 	const menu = document.createElement('div');
 	menu.id = 'sheet-tab-menu';
 	menu.className = 'xlsx-context-menu';
-	menu.style.cssText = `position:fixed;left:${x}px;top:${y}px;z-index:10000;`;
+	// Position temporarily off-screen to measure height, then reposition above the tabs
+	menu.style.cssText = 'position:fixed;left:-9999px;top:-9999px;z-index:10000;';
 
-	const items = [
+	const data = renderer?.getData();
+	const sheetName = data?.sheets?.[sheetIdx]?.name ?? '';
+	const isOnlySheet = (data?.sheets?.length ?? 1) <= 1;
+
+	const items: Array<{ label: string; action: () => void; danger?: boolean; disabled?: boolean }> = [
 		{ label: 'Rename Sheet', action: () => renameSheet(sheetIdx) },
-		{ label: 'Delete Sheet', action: () => deleteSheet(sheetIdx) },
 		{ label: 'Duplicate Sheet', action: () => duplicateSheet(sheetIdx) },
 		{ label: 'Add Sheet', action: () => addSheet() },
+		{ label: 'Delete Sheet', action: () => deleteSheet(sheetIdx), danger: true, disabled: isOnlySheet },
 	];
 
 	for (const item of items) {
+		if (item.disabled) {
+			const el = document.createElement('div');
+			el.className = 'ctx-item';
+			el.style.cssText = 'opacity:0.4;cursor:default;pointer-events:none;';
+			el.innerHTML = `<span class="ctx-label">${item.label}</span>`;
+			menu.appendChild(el);
+			continue;
+		}
 		const el = document.createElement('div');
 		el.className = 'ctx-item';
+		if (item.danger) {
+			el.style.color = '#f48771';
+		}
 		el.innerHTML = `<span class="ctx-label">${item.label}</span>`;
 		el.onclick = () => { menu.remove(); item.action(); };
 		menu.appendChild(el);
 	}
 
 	document.body.appendChild(menu);
+
+	// Measure and position above the tab bar (opens upward)
+	const menuH = menu.offsetHeight;
+	const menuW = menu.offsetWidth;
+	const safeX = Math.min(x, window.innerWidth - menuW - 4);
+	const safeY = y - menuH - 4; // open above the click point
+	menu.style.left = `${safeX}px`;
+	menu.style.top = `${Math.max(4, safeY)}px`;
+
 	const close = (e: MouseEvent) => {
 		if (!menu.contains(e.target as Node)) {
 			menu.remove();
 			document.removeEventListener('mousedown', close);
 		}
 	};
+	// Suppress the unused variable warning
+	void sheetName;
 	setTimeout(() => document.addEventListener('mousedown', close), 0);
 }
 
@@ -371,12 +453,57 @@ function deleteSheet(idx: number) {
 	if (!renderer) return;
 	const data = renderer.getData();
 	if (!data?.sheets || data.sheets.length <= 1) return;
-	data.sheets.splice(idx, 1);
-	const newIdx = Math.min(idx, data.sheets.length - 1);
-	renderer.setActiveSheetIndex(newIdx);
-	renderer.updateModel(data);
-	buildSheetTabs();
-	markDirty();
+
+	const sheetName = data.sheets[idx].name;
+
+	// Show confirmation
+	const overlay = document.createElement('div');
+	overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:20000;';
+	const box = document.createElement('div');
+	box.style.cssText = 'background:var(--vscode-editor-background,#1e1e1e);border:1px solid var(--vscode-focusBorder,#007acc);border-radius:6px;padding:20px 24px;min-width:300px;box-shadow:0 4px 16px rgba(0,0,0,0.4);';
+	box.innerHTML = `
+		<div style="color:var(--vscode-foreground,#ccc);font-size:13px;font-weight:600;margin-bottom:8px;">Delete Sheet</div>
+		<div style="color:var(--vscode-descriptionForeground,#999);font-size:12px;margin-bottom:16px;">
+			Delete "<strong style="color:var(--vscode-foreground,#ccc)">${sheetName}</strong>"? This cannot be undone.
+		</div>
+		<div style="display:flex;gap:8px;justify-content:flex-end;">
+			<button id="del-cancel" style="padding:4px 12px;font-size:12px;background:transparent;color:var(--vscode-foreground,#ccc);border:1px solid #555;border-radius:3px;cursor:pointer;">Cancel</button>
+			<button id="del-confirm" style="padding:4px 12px;font-size:12px;background:#c0392b;color:#fff;border:none;border-radius:3px;cursor:pointer;">Delete</button>
+		</div>`;
+	overlay.appendChild(box);
+	document.body.appendChild(overlay);
+
+	const cancel = () => overlay.remove();
+	const confirm = () => {
+		overlay.remove();
+		if (!renderer) return;
+		const d = renderer.getData();
+		if (!d?.sheets || d.sheets.length <= 1) return;
+
+		d.sheets.splice(idx, 1);
+
+		// Remove pivot table configs that reference this sheet (source or dest)
+		const surviving = pivotTables.filter(pt => pt.source_sheet !== sheetName && pt.dest_sheet !== sheetName);
+		const removedIndices: number[] = [];
+		pivotTables.forEach((pt, i) => {
+			if (pt.source_sheet === sheetName || pt.dest_sheet === sheetName) removedIndices.push(i);
+		});
+		pivotTables.length = 0;
+		surviving.forEach(pt => pivotTables.push(pt));
+		removedIndices.forEach(i => pivotOutputCache.delete(i));
+		if (d.pivot_tables) d.pivot_tables = surviving;
+
+		const newIdx = Math.min(idx, d.sheets.length - 1);
+		renderer.setActiveSheetIndex(newIdx);
+		renderer.updateModel(d);
+		buildSheetTabs();
+		_syncPivotZones();
+		markDirty();
+	};
+
+	box.querySelector('#del-cancel')!.addEventListener('click', cancel);
+	box.querySelector('#del-confirm')!.addEventListener('click', confirm);
+	overlay.addEventListener('mousedown', e => { if (e.target === overlay) cancel(); });
 }
 
 function renameSheet(idx: number) {
@@ -691,15 +818,90 @@ function handleRibbonAction(event: RibbonEvent) {
 		case 'nameManager': showNameManagerDialog(); break;
 		case 'defineName': showDefineNameDialog(); break;
 
+		// Page Layout
+		case 'pageMargins': handlePageMarginsChange(event.value ?? 'Normal'); break;
+		case 'pageOrientation': handlePageOrientationChange(event.value ?? 'Portrait'); break;
+		case 'paperSize': handlePaperSizeChange(event.value ?? 'Letter'); break;
+		case 'setPrintArea': handleSetPrintArea(); break;
+		case 'clearPrintArea': handleClearPrintArea(); break;
+		case 'insertPageBreak': handleInsertPageBreak(); break;
+		case 'removePageBreak': handleRemovePageBreak(); break;
+		case 'resetPageBreaks': handleResetPageBreaks(); break;
+		case 'printTitles': pageSetupDialog?.show(getActiveSheetPageSetup()); break;
+		case 'fitToWidth': handleFitToWidth(event.value ?? 'Automatic'); break;
+		case 'fitToHeight': handleFitToHeight(event.value ?? 'Automatic'); break;
+		case 'printScale': handlePrintScale(parseInt(event.value ?? '100')); break;
+		case 'printGridlines': handlePageSetupToggle('print_gridlines', event.value === '1'); break;
+		case 'printHeadings': break; // informational only
+		case 'centerHorizontally': handlePageSetupToggle('center_horizontally', event.value === '1'); break;
+		case 'centerVertically': handlePageSetupToggle('center_vertically', event.value === '1'); break;
+		case 'pageSetupDialog': pageSetupDialog?.show(getActiveSheetPageSetup()); break;
+		case 'printPreview': handlePrintPreview(); break;
+
 		// View
 		case 'gridlines': renderer.toggleGridlines(); break;
 		case 'headers': renderer.toggleHeaders(); break;
 		case 'freezePanes': renderer.freezePanes(); break;
+		case 'pageBreakPreview': renderer.setPageBreakPreview(event.value === '1'); break;
+
+		// Zoom
+		case 'zoomIn':   renderer.zoomIn(); break;
+		case 'zoomOut':  renderer.zoomOut(); break;
+		case 'zoomReset': renderer.setZoom(1); break;
+		case 'zoomToFit': renderer.zoomToFit(); break;
+		case 'zoom50':   renderer.setZoom(0.5); break;
+		case 'zoom75':   renderer.setZoom(0.75); break;
+		case 'zoom100':  renderer.setZoom(1); break;
+		case 'zoom125':  renderer.setZoom(1.25); break;
+		case 'zoom150':  renderer.setZoom(1.5); break;
+		case 'zoom200':  renderer.setZoom(2); break;
 
 		// Data
 		case 'sortAZ': renderer.sortColumn(true); markDirty(); break;
 		case 'sortZA': renderer.sortColumn(false); markDirty(); break;
 		case 'clear': renderer.clearSelectedCells(); markDirty(); break;
+
+		// Outline (Group / Ungroup) from ribbon — operates on current row/col selection
+		case 'groupRows': {
+			const selRG = renderer.getSelectedRange();
+			if (selRG) {
+				const gsr = Math.min(selRG.startRow, selRG.endRow);
+				const ger = Math.max(selRG.startRow, selRG.endRow);
+				renderer.addRowOutlineGroup(gsr, ger);
+				markDirty();
+			}
+			break;
+		}
+		case 'ungroupRows': {
+			const selURG = renderer.getSelectedRange();
+			if (selURG) {
+				const ugsr = Math.min(selURG.startRow, selURG.endRow);
+				const uger = Math.max(selURG.startRow, selURG.endRow);
+				renderer.removeRowOutlineGroup(ugsr, uger);
+				markDirty();
+			}
+			break;
+		}
+		case 'groupCols': {
+			const selCG = renderer.getSelectedRange();
+			if (selCG) {
+				const gsc = Math.min(selCG.startCol, selCG.endCol);
+				const gec = Math.max(selCG.startCol, selCG.endCol);
+				renderer.addColOutlineGroup(gsc, gec);
+				markDirty();
+			}
+			break;
+		}
+		case 'ungroupCols': {
+			const selUCG = renderer.getSelectedRange();
+			if (selUCG) {
+				const ugsc = Math.min(selUCG.startCol, selUCG.endCol);
+				const ugec = Math.max(selUCG.startCol, selUCG.endCol);
+				renderer.removeColOutlineGroup(ugsc, ugec);
+				markDirty();
+			}
+			break;
+		}
 
 		// Fill
 		case 'fillDown': renderer.fillDown(); markDirty(); evaluateFormulas(); break;
@@ -721,8 +923,11 @@ function handleRibbonAction(event: RibbonEvent) {
 			}
 			break;
 		}
-		case 'exportPDF': {
-			// Capture canvas and route through extension host for export
+		case 'exportPDF':
+			handleExportPDF();
+			break;
+		case 'exportPNG': {
+			// Capture canvas and save as PNG
 			const exportCanvas = document.querySelector('canvas');
 			if (exportCanvas) {
 				const dataUrl = exportCanvas.toDataURL('image/png');
@@ -730,6 +935,19 @@ function handleRibbonAction(event: RibbonEvent) {
 			}
 			break;
 		}
+		case 'exportCSV':
+			handleExportCSV();
+			break;
+		case 'exportHTML':
+			handleExportHTML();
+			break;
+		case 'importCSV':
+			handleImportCSV();
+			break;
+
+		// Pivot table operations
+		case 'insertPivotTable': showPivotTableDialog(); break;
+		case 'refreshAllPivots': refreshAllPivotTables(); break;
 
 		// Table operations (from Insert and Data tabs)
 		case 'createTable': {
@@ -1449,18 +1667,88 @@ function handleContextMenuAction(event: ContextMenuEvent) {
 		break;
 	case 'hideCol':
 		if (renderer) {
-			renderer.setColWidth(event.col, 0);
-			renderer.render();
+			renderer.hideColumn(event.col);
+			markDirty();
+		}
+		break;
+	case 'unhideCol':
+		if (renderer) {
+			renderer.unhideColumn(event.col);
+			markDirty();
+		}
+		break;
+	case 'unhideAllCols':
+		if (renderer) {
+			renderer.unhideAllCols();
 			markDirty();
 		}
 		break;
 	case 'hideRow':
 		if (renderer) {
-			renderer.setRowHeight(event.row, 0);
-			renderer.render();
+			renderer.hideRow(event.row);
 			markDirty();
 		}
 		break;
+	case 'unhideRow':
+		if (renderer) {
+			renderer.unhideRow(event.row);
+			markDirty();
+		}
+		break;
+	case 'unhideAllRows':
+		if (renderer) {
+			renderer.unhideAllRows();
+			markDirty();
+		}
+		break;
+	case 'groupCols': {
+		if (renderer) {
+			const selForGroup = renderer.getSelectedRange();
+			if (selForGroup) {
+				const gsc = Math.min(selForGroup.startCol, selForGroup.endCol);
+				const gec = Math.max(selForGroup.startCol, selForGroup.endCol);
+				renderer.addColOutlineGroup(gsc, gec);
+				markDirty();
+			}
+		}
+		break;
+	}
+	case 'ungroupCols': {
+		if (renderer) {
+			const selForUngroup = renderer.getSelectedRange();
+			if (selForUngroup) {
+				const ugsc = Math.min(selForUngroup.startCol, selForUngroup.endCol);
+				const ugec = Math.max(selForUngroup.startCol, selForUngroup.endCol);
+				renderer.removeColOutlineGroup(ugsc, ugec);
+				markDirty();
+			}
+		}
+		break;
+	}
+	case 'groupRows': {
+		if (renderer) {
+			const selForGRow = renderer.getSelectedRange();
+			if (selForGRow) {
+				const gsr = Math.min(selForGRow.startRow, selForGRow.endRow);
+				const ger = Math.max(selForGRow.startRow, selForGRow.endRow);
+				renderer.addRowOutlineGroup(gsr, ger);
+				markDirty();
+			}
+		}
+		break;
+	}
+	case 'ungroupRows': {
+		if (renderer) {
+			const selForUGRow = renderer.getSelectedRange();
+			if (selForUGRow) {
+				const ugsr = Math.min(selForUGRow.startRow, selForUGRow.endRow);
+				const uger = Math.max(selForUGRow.startRow, selForUGRow.endRow);
+				renderer.removeRowOutlineGroup(ugsr, uger);
+				markDirty();
+			}
+		}
+		break;
+	}
 	case 'colWidthAuto':
 		if (renderer) {
 			renderer.autoFitColumn(event.col);
@@ -1572,6 +1860,29 @@ function handleContextMenuAction(event: ContextMenuEvent) {
 				markDirty();
 			}
 		}
+		break;
+
+	// Pivot table context menu actions
+	case 'insertPivotTable':
+		showPivotTableDialog();
+		break;
+	case 'refreshPivot': {
+		const pIdx = renderer ? renderer.getPivotZoneAtCell(event.row, event.col) : -1;
+		if (pIdx >= 0) refreshPivotTable(pIdx);
+		break;
+	}
+	case 'editPivot': {
+		const epIdx = renderer ? renderer.getPivotZoneAtCell(event.row, event.col) : -1;
+		if (epIdx >= 0) showPivotTableDialog(epIdx);
+		break;
+	}
+	case 'deletePivot': {
+		const dpIdx = renderer ? renderer.getPivotZoneAtCell(event.row, event.col) : -1;
+		if (dpIdx >= 0) deletePivotTable(dpIdx);
+		break;
+	}
+	case 'drillDown':
+		drillDownPivot(event.row, event.col);
 		break;
 	}
 }
@@ -1768,11 +2079,55 @@ async function handlePaste() {
 		return;
 	}
 	try {
+		// Try reading rich clipboard (HTML table detection)
+		if (typeof navigator.clipboard.read === 'function') {
+			try {
+				const items = await navigator.clipboard.read();
+				for (const item of items) {
+					if (item.types.includes('text/html')) {
+						const blob = await item.getType('text/html');
+						const html = await blob.text();
+						const parsed = parseHtmlTable(html);
+						if (parsed) {
+							renderer.pasteData(parsed);
+							markDirty();
+							return;
+						}
+					}
+				}
+			} catch {
+				// Clipboard.read() not available or denied – fall through to readText
+			}
+		}
 		const text = await navigator.clipboard.readText();
 		renderer.pasteData(text);
 		markDirty();
 	} catch {
 		console.warn('[XLSX Rust Viewer] Clipboard read not available');
+	}
+}
+
+/** Parse an HTML string looking for a <table> and convert it to TSV for pasteData(). */
+function parseHtmlTable(html: string): string | null {
+	try {
+		const doc = new DOMParser().parseFromString(html, 'text/html');
+		const table = doc.querySelector('table');
+		if (!table) return null;
+		const rows: string[] = [];
+		for (const tr of Array.from(table.querySelectorAll('tr'))) {
+			const cells: string[] = [];
+			for (const cell of Array.from(tr.querySelectorAll('td,th'))) {
+				const colspan = parseInt((cell as HTMLElement).getAttribute('colspan') || '1', 10);
+				const text = (cell as HTMLElement).innerText ?? (cell as HTMLElement).textContent ?? '';
+				cells.push(text.trim());
+				// Pad merged columns with empty cells
+				for (let c = 1; c < colspan; c++) cells.push('');
+			}
+			rows.push(cells.join('\t'));
+		}
+		return rows.join('\n');
+	} catch {
+		return null;
 	}
 }
 
@@ -2098,6 +2453,485 @@ function resolveChartData(chartDef: ChartDefinition, sheet: any) {
 	}
 }
 
+// ============================================================================
+// Pivot Table Wiring
+// ============================================================================
+
+/**
+ * Extract column header strings from row 0 of the source range on a sheet.
+ */
+function _getPivotSourceHeaders(sheetIndex: number, rangeStr: string): string[] {
+	if (!renderer) return [];
+	const data = renderer.getData();
+	const sheet = data?.sheets?.[sheetIndex];
+	if (!sheet) return [];
+	const parsed = parseCellRange(rangeStr);
+	if (!parsed) return [];
+	const { startRow, startCol, endCol } = parsed;
+	const headers: string[] = [];
+	for (let c = startCol; c <= endCol; c++) {
+		const cell = sheet.cells?.[startRow]?.[c];
+		headers.push(cell?.value || `Column${c - startCol + 1}`);
+	}
+	return headers;
+}
+
+/** Returns which headers appear to be numeric by sampling up to 5 data rows. */
+function _getPivotNumericHeaders(sheetIndex: number, rangeStr: string): string[] {
+	if (!renderer) return [];
+	const data = renderer.getData();
+	const sheet = data?.sheets?.[sheetIndex];
+	if (!sheet) return [];
+	const parsed = parseCellRange(rangeStr);
+	if (!parsed) return [];
+	const { startRow, startCol, endCol, endRow } = parsed;
+	const numericHeaders: string[] = [];
+	const sampleEnd = Math.min(startRow + 5, endRow);
+	for (let c = startCol; c <= endCol; c++) {
+		let numericCount = 0;
+		let totalCount = 0;
+		for (let r = startRow + 1; r <= sampleEnd; r++) {
+			const cell = sheet.cells?.[r]?.[c];
+			if (cell && cell.value !== '' && cell.value !== undefined) {
+				totalCount++;
+				if (cell.data_type === 'n' || (!isNaN(Number(cell.value)) && String(cell.value).trim() !== '')) {
+					numericCount++;
+				}
+			}
+		}
+		const headerCell = sheet.cells?.[startRow]?.[c];
+		const headerName = headerCell?.value || `Column${c - startCol + 1}`;
+		if (totalCount > 0 && numericCount / totalCount >= 0.7) {
+			numericHeaders.push(headerName);
+		}
+	}
+	return numericHeaders;
+}
+
+/** Try to find the contiguous data range containing the given cell. */
+function _autoDetectPivotRange(sheetIndex: number, row: number, col: number): string {
+	if (!renderer) return 'A1:D10';
+	const data = renderer.getData();
+	const sheet = data?.sheets?.[sheetIndex];
+	if (!sheet) return 'A1:D10';
+
+	// Check if this cell is inside a defined Table
+	for (const t of (sheet.tables ?? [])) {
+		const tr = parseCellRange(t.range);
+		if (tr && row >= tr.startRow && row <= tr.endRow && col >= tr.startCol && col <= tr.endCol) {
+			return t.range;
+		}
+	}
+
+	// Walk left/up to find the start of a contiguous data block
+	let r0 = row;
+	let c0 = col;
+	while (r0 > 0 && sheet.cells?.[r0 - 1]?.[col]?.value) r0--;
+	while (c0 > 0 && sheet.cells?.[row]?.[c0 - 1]?.value) c0--;
+
+	// Walk right/down to find the end
+	let r1 = row;
+	let c1 = col;
+	while (sheet.cells?.[r1 + 1]?.[c0]?.value) r1++;
+	while (sheet.cells?.[r0]?.[c1 + 1]?.value) c1++;
+
+	// Expand columns to the furthest non-empty header
+	for (let c = c0; c <= c1 + 10; c++) {
+		if (sheet.cells?.[r0]?.[c]?.value) c1 = c;
+		else break;
+	}
+	// Expand rows to the furthest non-empty row
+	for (let r = r0; r <= r1 + 100; r++) {
+		let hasData = false;
+		for (let c = c0; c <= c1; c++) {
+			if (sheet.cells?.[r]?.[c]?.value) { hasData = true; break; }
+		}
+		if (hasData) r1 = r; else break;
+	}
+
+	return `${getColName(c0)}${r0 + 1}:${getColName(c1)}${r1 + 1}`;
+}
+
+/**
+ * Compute pivot output for the config at pivotIndex and write cells to the dest sheet.
+ * Operates directly on the provided model object (or renderer.getData() if omitted).
+ */
+function _computeAndWritePivot(pivotIndex: number, model?: any) {
+	if (!renderer) return;
+	const data = model ?? renderer.getData();
+	if (!data?.sheets) return;
+	const config = pivotTables[pivotIndex];
+	if (!config) return;
+
+	// Find source sheet
+	const srcSheetIdx = data.sheets.findIndex((s: any) => s.name === config.source_sheet);
+	if (srcSheetIdx < 0) { console.warn('[Pivot] Source sheet not found:', config.source_sheet); return; }
+	const srcSheet = data.sheets[srcSheetIdx];
+
+	// Build source data map
+	const sourceData: Record<number, Record<number, { value: string; data_type: string }>> = {};
+	const srcRange = parseCellRange(config.source_range);
+	if (!srcRange) return;
+	for (let r = srcRange.startRow; r <= srcRange.endRow; r++) {
+		if (!srcSheet.cells?.[r]) continue;
+		sourceData[r] = {};
+		for (let c = srcRange.startCol; c <= srcRange.endCol; c++) {
+			const cell = srcSheet.cells[r]?.[c];
+			if (cell) sourceData[r][c] = { value: cell.value ?? '', data_type: cell.data_type ?? 's' };
+		}
+	}
+
+	// Compute pivot
+	const output = computePivotTable(sourceData, config);
+	pivotOutputCache.set(pivotIndex, output);
+
+	// Find / create destination sheet
+	let destSheetIdx = data.sheets.findIndex((s: any) => s.name === config.dest_sheet);
+	if (destSheetIdx < 0) {
+		// Create new sheet
+		const newSheet = {
+			name: config.dest_sheet,
+			cells: {},
+			row_count: 100,
+			col_count: 26,
+			tables: [],
+			merged_cells: [],
+			charts: [],
+			sparklines: [],
+		};
+		data.sheets.push(newSheet);
+		destSheetIdx = data.sheets.length - 1;
+	}
+	const destSheet = data.sheets[destSheetIdx];
+
+	// Parse destination cell
+	const destCellParsed = parseCellRef(config.dest_cell);
+	const destRow = destCellParsed?.row ?? 0;
+	const destCol = destCellParsed?.col ?? 0;
+
+	// Clear old pivot area before writing (use last cached output dimensions + 20 buffer)
+	const prevOutput = model ? null : pivotOutputCache.get(pivotIndex);
+	const clearRows = prevOutput ? prevOutput.rowCount + 5 : output.rowCount + 5;
+	const clearCols = prevOutput ? prevOutput.colCount + 5 : output.colCount + 5;
+	for (let r = destRow; r < destRow + clearRows; r++) {
+		if (!destSheet.cells?.[r]) continue;
+		for (let c = destCol; c < destCol + clearCols; c++) {
+			delete destSheet.cells[r][c];
+		}
+	}
+
+	// Write pivot output cells
+	for (let r = 0; r < output.rowCount; r++) {
+		const row = destRow + r;
+		if (!destSheet.cells) destSheet.cells = {};
+		if (!destSheet.cells[row]) destSheet.cells[row] = {};
+		for (let c = 0; c < output.colCount; c++) {
+			const col = destCol + c;
+			const cell = output.cells[r]?.[c];
+			if (!cell || cell.value === '') continue;
+			destSheet.cells[row][col] = {
+				value: cell.value,
+				data_type: cell.dataType,
+				style: cell.style ? _camelToSnakeStyle(cell.style) : null,
+			};
+		}
+	}
+	destSheet.row_count = Math.max(destSheet.row_count ?? 0, destRow + output.rowCount + 1);
+	destSheet.col_count = Math.max(destSheet.col_count ?? 0, destCol + output.colCount + 1);
+}
+
+/** Convert camelCase style keys to snake_case for the data model. */
+function _camelToSnakeStyle(style: Record<string, unknown>): Record<string, unknown> {
+	const out: Record<string, unknown> = {};
+	for (const [k, v] of Object.entries(style)) {
+		const snake = k.replace(/[A-Z]/g, m => '_' + m.toLowerCase());
+		out[snake] = v;
+	}
+	return out;
+}
+
+/** Update pivot zone tracking on the renderer after any pivot operation. */
+function _syncPivotZones() {
+	if (!renderer) return;
+	const data = renderer.getData();
+	if (!data?.sheets) { renderer.setPivotZones([]); return; }
+	const zones: Array<{ startRow: number; startCol: number; endRow: number; endCol: number; pivotIndex: number }> = [];
+	for (let pi = 0; pi < pivotTables.length; pi++) {
+		const config = pivotTables[pi];
+		const output = pivotOutputCache.get(pi);
+		if (!output) continue;
+		const destSheet = data.sheets.findIndex((s: any) => s.name === config.dest_sheet);
+		if (destSheet < 0) continue;
+		// Only show zone if we're on the dest sheet
+		if (destSheet !== renderer.getActiveSheetIndex()) continue;
+		const destCellParsed = parseCellRef(config.dest_cell);
+		const destRow = destCellParsed?.row ?? 0;
+		const destCol = destCellParsed?.col ?? 0;
+		zones.push({
+			startRow: destRow,
+			startCol: destCol,
+			endRow: destRow + output.rowCount - 1,
+			endCol: destCol + output.colCount - 1,
+			pivotIndex: pi,
+		});
+	}
+	renderer.setPivotZones(zones);
+}
+
+/** Show the pivot table dialog (for create or edit). */
+function showPivotTableDialog(editIndex?: number) {
+	if (!renderer || !pivotDialog) return;
+	const data = renderer.getData();
+	if (!data?.sheets) return;
+	const sheetNames = (data.sheets as any[]).map((s: any) => s.name as string);
+	const activeSheetIdx = renderer.getActiveSheetIndex();
+
+	if (editIndex !== undefined && pivotTables[editIndex]) {
+		// Edit existing: use stored config's source range/sheet
+		const config = pivotTables[editIndex];
+		const srcIdx = data.sheets.findIndex((s: any) => s.name === config.source_sheet);
+		const headers = _getPivotSourceHeaders(srcIdx >= 0 ? srcIdx : activeSheetIdx, config.source_range);
+		pivotDialog.show(headers, config.source_range, config.source_sheet, sheetNames, config, editIndex);
+	} else {
+		// New pivot: use current selection or auto-detect the data range
+		const sel = renderer.getSelectedRange();
+		let sourceRange: string;
+		const isSingleCell = !sel || (sel.startRow === sel.endRow && sel.startCol === sel.endCol);
+		if (isSingleCell) {
+			// Auto-detect the contiguous data block / table containing this cell
+			const r = sel?.startRow ?? 0;
+			const c = sel?.startCol ?? 0;
+			sourceRange = _autoDetectPivotRange(activeSheetIdx, r, c);
+		} else {
+			const c1 = getColName(Math.min(sel.startCol, sel.endCol)) + (Math.min(sel.startRow, sel.endRow) + 1);
+			const c2 = getColName(Math.max(sel.startCol, sel.endCol)) + (Math.max(sel.startRow, sel.endRow) + 1);
+			sourceRange = `${c1}:${c2}`;
+		}
+		const headers = _getPivotSourceHeaders(activeSheetIdx, sourceRange);
+		const numericHeaders = _getPivotNumericHeaders(activeSheetIdx, sourceRange);
+		const sourceSheet = data.sheets[activeSheetIdx]?.name ?? 'Sheet1';
+		pivotDialog.show(headers, sourceRange, sourceSheet, sheetNames, undefined, undefined, numericHeaders);
+	}
+}
+
+/** Navigate to the destination sheet of a pivot config and rebuild tabs. */
+function _navigateToPivotDest(config: PivotTableDef) {
+	if (!renderer) return;
+	const data = renderer.getData();
+	if (!data?.sheets) return;
+	const destIdx = data.sheets.findIndex((s: any) => s.name === config.dest_sheet);
+	if (destIdx >= 0 && destIdx !== renderer.getActiveSheetIndex()) {
+		renderer.setActiveSheetIndex(destIdx);
+	}
+	buildSheetTabs();
+	syncChartOverlays();
+	_syncPivotZones();
+}
+
+/** Handle events from the PivotTableDialog. */
+function handlePivotDialogAction(event: PivotDialogEvent) {
+	if (!renderer) return;
+	const data = renderer.getData();
+	if (!data) return;
+	if (!data.pivot_tables) data.pivot_tables = [];
+
+	switch (event.action) {
+		case 'create':
+			if (event.config) {
+				pivotTables.push(event.config);
+				data.pivot_tables.push(event.config);
+				const newIdx = pivotTables.length - 1;
+				_computeAndWritePivot(newIdx);
+				renderer.updateModel(data);
+				_navigateToPivotDest(event.config);
+				markDirty();
+			}
+			break;
+		case 'update':
+			if (event.config && event.editIndex !== undefined && event.editIndex < pivotTables.length) {
+				pivotTables[event.editIndex] = event.config;
+				data.pivot_tables[event.editIndex] = event.config;
+				_computeAndWritePivot(event.editIndex);
+				renderer.updateModel(data);
+				_navigateToPivotDest(event.config);
+				markDirty();
+			}
+			break;
+		case 'delete':
+			if (event.editIndex !== undefined) {
+				deletePivotTable(event.editIndex);
+			}
+			break;
+		case 'refresh':
+			if (event.editIndex !== undefined) {
+				refreshPivotTable(event.editIndex);
+			}
+			break;
+		case 'cancel':
+			break;
+	}
+}
+
+/** Refresh a single pivot table by re-computing from current source data. */
+function refreshPivotTable(pivotIndex: number) {
+	if (!renderer) return;
+	_computeAndWritePivot(pivotIndex);
+	renderer.render();
+	_syncPivotZones();
+	markDirty();
+}
+
+/** Refresh all pivot tables. */
+function refreshAllPivotTables() {
+	for (let i = 0; i < pivotTables.length; i++) {
+		_computeAndWritePivot(i);
+	}
+	if (renderer) {
+		renderer.render();
+		_syncPivotZones();
+	}
+	markDirty();
+}
+
+/** Delete a pivot table: clear output cells and remove config. */
+function deletePivotTable(pivotIndex: number) {
+	if (!renderer) return;
+	const data = renderer.getData();
+	if (!data?.sheets) return;
+	const config = pivotTables[pivotIndex];
+	if (!config) return;
+
+	// Clear output cells
+	const output = pivotOutputCache.get(pivotIndex);
+	if (output) {
+		const destSheetIdx = data.sheets.findIndex((s: any) => s.name === config.dest_sheet);
+		if (destSheetIdx >= 0) {
+			const destSheet = data.sheets[destSheetIdx];
+			const destCellParsed = parseCellRef(config.dest_cell);
+			const destRow = destCellParsed?.row ?? 0;
+			const destCol = destCellParsed?.col ?? 0;
+			for (let r = destRow; r < destRow + output.rowCount; r++) {
+				if (!destSheet.cells?.[r]) continue;
+				for (let c = destCol; c < destCol + output.colCount; c++) {
+					delete destSheet.cells[r][c];
+				}
+			}
+		}
+		pivotOutputCache.delete(pivotIndex);
+	}
+
+	// Remove config and re-index remaining pivot outputs
+	pivotTables.splice(pivotIndex, 1);
+	if (data.pivot_tables) data.pivot_tables.splice(pivotIndex, 1);
+
+	// Re-index pivot output cache (all indices > pivotIndex shift down by 1)
+	const newCache: Map<number, PivotOutput> = new Map();
+	for (const [idx, out] of pivotOutputCache.entries()) {
+		if (idx > pivotIndex) newCache.set(idx - 1, out);
+		else if (idx < pivotIndex) newCache.set(idx, out);
+	}
+	pivotOutputCache.clear();
+	for (const [idx, out] of newCache.entries()) pivotOutputCache.set(idx, out);
+
+	renderer.updateModel(data);
+	_syncPivotZones();
+	markDirty();
+}
+
+/** Drill down: create a new sheet with the source rows that contributed to the clicked cell. */
+function drillDownPivot(row: number, col: number) {
+	if (!renderer) return;
+	const pivotIndex = renderer.getPivotZoneAtCell(row, col);
+	if (pivotIndex < 0) return;
+
+	const output = pivotOutputCache.get(pivotIndex);
+	const config = pivotTables[pivotIndex];
+	if (!output || !config) return;
+
+	const data = renderer.getData();
+	if (!data?.sheets) return;
+
+	// Find the cell in the pivot output grid
+	const destCellParsed = parseCellRef(config.dest_cell);
+	const destRow = destCellParsed?.row ?? 0;
+	const destCol = destCellParsed?.col ?? 0;
+	const outR = row - destRow;
+	const outC = col - destCol;
+	if (outR < 0 || outC < 0 || outR >= output.rowCount || outC >= output.colCount) return;
+
+	const pivotCell = output.cells[outR]?.[outC];
+	if (!pivotCell?.sourceRows || pivotCell.sourceRows.length === 0) {
+		console.log('[Pivot] No source rows for drill-down on this cell');
+		return;
+	}
+
+	// Find source sheet and get headers
+	const srcSheetIdx = data.sheets.findIndex((s: any) => s.name === config.source_sheet);
+	if (srcSheetIdx < 0) return;
+	const srcSheet = data.sheets[srcSheetIdx];
+	const srcRange = parseCellRange(config.source_range);
+	if (!srcRange) return;
+
+	// Build drill-down sheet name
+	let drillName = `PivotDrill_${pivotIndex + 1}`;
+	let drillCounter = 1;
+	while (data.sheets.some((s: any) => s.name === drillName)) {
+		drillCounter++;
+		drillName = `PivotDrill_${pivotIndex + 1}_${drillCounter}`;
+	}
+
+	// Create new sheet with header row + matching source rows
+	const drillSheet: any = {
+		name: drillName,
+		cells: {},
+		row_count: pivotCell.sourceRows.length + 2,
+		col_count: srcRange.endCol - srcRange.startCol + 1,
+		tables: [],
+		merged_cells: [],
+		charts: [],
+		sparklines: [],
+	};
+
+	// Copy header row
+	for (let c = srcRange.startCol; c <= srcRange.endCol; c++) {
+		const headerCell = srcSheet.cells?.[srcRange.startRow]?.[c];
+		const destC = c - srcRange.startCol;
+		if (!drillSheet.cells[0]) drillSheet.cells[0] = {};
+		drillSheet.cells[0][destC] = {
+			value: headerCell?.value ?? `Col${destC + 1}`,
+			data_type: headerCell?.data_type ?? 's',
+			style: { bold: true },
+		};
+	}
+
+	// Copy matching source rows (sourceRows are 1-based indices relative to header)
+	let drillRow = 1;
+	for (const srcRowOffset of pivotCell.sourceRows) {
+		const actualSrcRow = srcRange.startRow + srcRowOffset;
+		if (!drillSheet.cells[drillRow]) drillSheet.cells[drillRow] = {};
+		for (let c = srcRange.startCol; c <= srcRange.endCol; c++) {
+			const srcCell = srcSheet.cells?.[actualSrcRow]?.[c];
+			if (!srcCell) continue;
+			const destC = c - srcRange.startCol;
+			drillSheet.cells[drillRow][destC] = {
+				value: srcCell.value,
+				data_type: srcCell.data_type,
+				style: null,
+			};
+		}
+		drillRow++;
+	}
+
+	data.sheets.push(drillSheet);
+	renderer.updateModel(data);
+	renderer.setActiveSheetIndex(data.sheets.length - 1);
+	_syncPivotZones();
+	buildSheetTabs();
+	markDirty();
+}
+
+// ============================================================================
+
 function parseCellRange(ref: string): { startRow: number; startCol: number; endRow: number; endCol: number } | null {
 	// Strip sheet name if present
 	let range = ref;
@@ -2250,6 +3084,11 @@ function setupRendererCallbacks() {
 		updateStatusBar();
 	};
 
+	// Zoom changed -> update status bar zoom display
+	renderer.onZoomChanged = (scale: number) => {
+		updateZoomDisplay(scale);
+	};
+
 	// Formula point-mode callbacks
 	renderer.onFormulaRangeSelect = (row: number, col: number) => {
 		handleFormulaPointClick(row, col);
@@ -2326,6 +3165,68 @@ const statusBarEl = document.getElementById('status-bar') as HTMLDivElement | nu
 // Which stat items are currently visible (persisted in memory)
 const visibleStats = new Set<string>(['average', 'count', 'sum']);
 
+// --- Zoom controls (left side of status bar) ---
+let zoomSlider: HTMLInputElement | null = null;
+let zoomLabel: HTMLSpanElement | null = null;
+let statusStatsEl: HTMLDivElement | null = null;
+
+function initStatusBarZoomControls() {
+	if (!statusBarEl) return;
+	statusBarEl.innerHTML = '';
+
+	// Left: zoom controls
+	const zoomCtrl = document.createElement('div');
+	zoomCtrl.className = 'zoom-controls';
+
+	const zoomMinusBtn = document.createElement('button');
+	zoomMinusBtn.className = 'zoom-btn';
+	zoomMinusBtn.textContent = '\u2212';
+	zoomMinusBtn.title = 'Zoom Out';
+	zoomMinusBtn.addEventListener('click', () => { if (renderer) renderer.zoomOut(); });
+
+	const slider = document.createElement('input');
+	slider.type = 'range';
+	slider.className = 'zoom-slider';
+	slider.min = '25';
+	slider.max = '400';
+	slider.step = '5';
+	slider.value = '100';
+	slider.title = 'Zoom';
+	slider.addEventListener('input', () => {
+		if (renderer) renderer.setZoom(parseInt(slider.value) / 100);
+	});
+
+	const label = document.createElement('span');
+	label.className = 'zoom-label';
+	label.textContent = '100%';
+
+	const zoomPlusBtn = document.createElement('button');
+	zoomPlusBtn.className = 'zoom-btn';
+	zoomPlusBtn.textContent = '+';
+	zoomPlusBtn.title = 'Zoom In';
+	zoomPlusBtn.addEventListener('click', () => { if (renderer) renderer.zoomIn(); });
+
+	zoomCtrl.appendChild(zoomMinusBtn);
+	zoomCtrl.appendChild(slider);
+	zoomCtrl.appendChild(label);
+	zoomCtrl.appendChild(zoomPlusBtn);
+	statusBarEl.appendChild(zoomCtrl);
+
+	zoomSlider = slider;
+	zoomLabel = label;
+
+	// Right: stats
+	const statsDiv = document.createElement('div');
+	statsDiv.style.cssText = 'display:flex;align-items:center;gap:16px;';
+	statusBarEl.appendChild(statsDiv);
+	statusStatsEl = statsDiv;
+}
+
+function updateZoomDisplay(scale: number) {
+	if (zoomSlider) zoomSlider.value = String(Math.round(scale * 100));
+	if (zoomLabel) zoomLabel.textContent = `${Math.round(scale * 100)}%`;
+}
+
 /** Format a number for display in the status bar (up to 10 significant digits). */
 function formatStat(n: number): string {
 	if (Number.isInteger(n)) return String(n);
@@ -2334,9 +3235,9 @@ function formatStat(n: number): string {
 }
 
 function updateStatusBar() {
-	if (!renderer || !statusBarEl) return;
+	if (!renderer || !statusStatsEl) return;
 	const stats = renderer.getSelectionStats();
-	statusBarEl.innerHTML = '';
+	statusStatsEl.innerHTML = '';
 	if (!stats) return;
 
 	// Only show stats when more than one cell is selected or there is a value
@@ -2354,7 +3255,7 @@ function updateStatusBar() {
 		const el = document.createElement('span');
 		el.className = 'status-item';
 		el.textContent = `${item.label}: ${item.value}`;
-		statusBarEl.appendChild(el);
+		statusStatsEl.appendChild(el);
 	}
 }
 
@@ -2440,6 +3341,8 @@ function showStatusBarContextMenu(x: number, y: number) {
 	};
 	setTimeout(() => document.addEventListener('mousedown', close), 0);
 }
+
+initStatusBarZoomControls();
 
 if (statusBarEl) {
 	statusBarEl.addEventListener('contextmenu', (e) => {
@@ -2923,3 +3826,376 @@ document.addEventListener('DOMContentLoaded', async () => {
 		});
 	}
 });
+
+// =============================================================================
+// PAGE SETUP HELPERS
+// =============================================================================
+
+/** Sync page break info from model to renderer for every sheet. */
+function _syncPageSetups() {
+	if (!renderer) return;
+	const data = renderer.getData();
+	if (!data?.sheets) return;
+	for (const sheet of data.sheets as any[]) {
+		const ps = sheet.page_setup;
+		if (ps) {
+			renderer.setSheetPageSetup(sheet.name, {
+				row_breaks: ps.row_breaks ?? [],
+				col_breaks: ps.col_breaks ?? [],
+			});
+		} else {
+			renderer.setSheetPageSetup(sheet.name, null);
+		}
+	}
+}
+
+/** Get the PageSetupDef for the currently active sheet. */
+function getActiveSheetPageSetup(): Partial<PageSetupDef> {
+	if (!renderer) return {};
+	const data = renderer.getData();
+	if (!data?.sheets) return {};
+	const sheet = data.sheets[renderer.getActiveSheetIndex()];
+	return (sheet?.page_setup as Partial<PageSetupDef>) ?? {};
+}
+
+/** Mutate the active sheet's page_setup and resync renderer + mark dirty. */
+function _applyPageSetup(patch: Partial<PageSetupDef>) {
+	if (!renderer) return;
+	const data = renderer.getData();
+	if (!data?.sheets) return;
+	const sheet = data.sheets[renderer.getActiveSheetIndex()];
+	if (!sheet) return;
+	if (!sheet.page_setup) {
+		sheet.page_setup = {
+			orientation: 'portrait', paper_size: 1, scale: 100,
+			margin_left: 0.7, margin_right: 0.7, margin_top: 0.75, margin_bottom: 0.75,
+			margin_header: 0.3, margin_footer: 0.3,
+			header: '', footer: '', print_area: '', print_titles_rows: '', print_titles_cols: '',
+			row_breaks: [], col_breaks: [], print_gridlines: false,
+			center_horizontally: false, center_vertically: false,
+		};
+	}
+	Object.assign(sheet.page_setup, patch);
+	_syncPageSetups();
+	markDirty();
+}
+
+function handlePageSetupDialogAction(event: PageSetupEvent) {
+	if (event.action === 'apply' && event.setup) {
+		_applyPageSetup(event.setup);
+	}
+}
+
+function handlePageMarginsChange(preset: string) {
+	const presets: Record<string, { margin_left: number; margin_right: number; margin_top: number; margin_bottom: number; margin_header: number; margin_footer: number }> = {
+		'Normal':  { margin_left: 0.7, margin_right: 0.7, margin_top: 0.75, margin_bottom: 0.75, margin_header: 0.3, margin_footer: 0.3 },
+		'Wide':    { margin_left: 1.0, margin_right: 1.0, margin_top: 1.0,  margin_bottom: 1.0,  margin_header: 0.5, margin_footer: 0.5 },
+		'Narrow':  { margin_left: 0.25, margin_right: 0.25, margin_top: 0.75, margin_bottom: 0.75, margin_header: 0.3, margin_footer: 0.3 },
+	};
+	if (preset === 'Custom...') { pageSetupDialog?.show(getActiveSheetPageSetup()); return; }
+	const p = presets[preset];
+	if (p) _applyPageSetup(p);
+}
+
+function handlePageOrientationChange(value: string) {
+	_applyPageSetup({ orientation: value.toLowerCase() });
+}
+
+function handlePaperSizeChange(value: string) {
+	const sizeMap: Record<string, number> = { 'Letter': 1, 'A4': 9, 'Legal': 5, 'A3': 8, 'Tabloid': 3 };
+	const id = sizeMap[value] ?? 1;
+	_applyPageSetup({ paper_size: id });
+}
+
+function handleSetPrintArea() {
+	if (!renderer) return;
+	const sel = renderer.getSelectedRange();
+	if (!sel) return;
+	const c1 = getColName(Math.min(sel.startCol, sel.endCol)) + (Math.min(sel.startRow, sel.endRow) + 1);
+	const c2 = getColName(Math.max(sel.startCol, sel.endCol)) + (Math.max(sel.startRow, sel.endRow) + 1);
+	_applyPageSetup({ print_area: `${c1}:${c2}` });
+}
+
+function handleClearPrintArea() {
+	_applyPageSetup({ print_area: '' });
+}
+
+function handleInsertPageBreak() {
+	if (!renderer) return;
+	const cell = renderer.getSelectedCell();
+	if (!cell) return;
+	const ps = getActiveSheetPageSetup() as PageSetupDef;
+	const rowBreaks = [...(ps.row_breaks ?? [])];
+	if (!rowBreaks.includes(cell.row) && cell.row > 0) rowBreaks.push(cell.row);
+	rowBreaks.sort((a, b) => a - b);
+	_applyPageSetup({ row_breaks: rowBreaks });
+}
+
+function handleRemovePageBreak() {
+	if (!renderer) return;
+	const cell = renderer.getSelectedCell();
+	if (!cell) return;
+	const ps = getActiveSheetPageSetup() as PageSetupDef;
+	const rowBreaks = (ps.row_breaks ?? []).filter((r: number) => r !== cell.row);
+	_applyPageSetup({ row_breaks: rowBreaks });
+}
+
+function handleResetPageBreaks() {
+	_applyPageSetup({ row_breaks: [], col_breaks: [] });
+}
+
+function handleFitToWidth(value: string) {
+	if (value === 'Automatic') {
+		_applyPageSetup({ fit_to_width: undefined });
+	} else {
+		_applyPageSetup({ fit_to_width: parseInt(value) || 1, fit_to_height: getActiveSheetPageSetup().fit_to_height ?? 1 });
+	}
+}
+
+function handleFitToHeight(value: string) {
+	if (value === 'Automatic') {
+		_applyPageSetup({ fit_to_height: undefined });
+	} else {
+		_applyPageSetup({ fit_to_height: parseInt(value) || 1, fit_to_width: getActiveSheetPageSetup().fit_to_width ?? 1 });
+	}
+}
+
+function handlePrintScale(scale: number) {
+	if (!isNaN(scale) && scale >= 10 && scale <= 400) {
+		_applyPageSetup({ scale, fit_to_width: undefined, fit_to_height: undefined });
+	}
+}
+
+function handlePageSetupToggle(key: keyof PageSetupDef, value: boolean) {
+	_applyPageSetup({ [key]: value });
+}
+
+/** Paginated Print Preview: renders each page section into a canvas and sends to extension host. */
+function handlePrintPreview() {
+	if (!renderer) return;
+	const canvas = document.querySelector('canvas') as HTMLCanvasElement | null;
+	if (!canvas) return;
+
+	const data = renderer.getData();
+	const sheet = data?.sheets?.[renderer.getActiveSheetIndex()];
+	const ps = sheet?.page_setup as PageSetupDef | undefined;
+
+	// Build paginated HTML with header/footer substitutions
+	const fileName = sheet?.name ?? 'Spreadsheet';
+	const today = new Date().toLocaleDateString();
+	const headerText = ps ? _resolveHFCode(ps.header, { sheet: sheet?.name ?? '', date: today, page: 1, pages: 1 }) : '';
+	const footerText = ps ? _resolveHFCode(ps.footer, { sheet: sheet?.name ?? '', date: today, page: 1, pages: 1 }) : '';
+	const orientation = ps?.orientation === 'landscape' ? 'landscape' : 'portrait';
+	const dataUrl = canvas.toDataURL('image/png');
+
+	const printHtml = [
+		'<!DOCTYPE html><html><head><meta charset="utf-8">',
+		`<title>Print Preview - ${fileName}</title>`,
+		'<style>',
+		`@media print { @page { margin:0.75in; size:${orientation}; } body { margin:0; } }`,
+		'body { background:#e0e0e0; display:flex; flex-direction:column; align-items:center; padding:20px; font-family:system-ui,sans-serif; }',
+		'.page { background:#fff; margin:12px; padding:20px; box-shadow:0 2px 8px rgba(0,0,0,.2); page-break-after:always; }',
+		`.page-header { text-align:center; font-size:12px; color:#555; border-bottom:1px solid #ccc; padding-bottom:4px; margin-bottom:8px; }`,
+		`.page-footer { text-align:center; font-size:12px; color:#555; border-top:1px solid #ccc; padding-top:4px; margin-top:8px; }`,
+		'img { max-width:100%; }',
+		'</style></head><body>',
+		'<div class="page">',
+		headerText ? `<div class="page-header">${headerText}</div>` : '',
+		`<img src="${dataUrl}" />`,
+		footerText ? `<div class="page-footer">${footerText}</div>` : '',
+		'</div>',
+		'<script>window.onload = function() { window.print(); }<\/script>',
+		'</body></html>',
+	].join('');
+
+	vscode.postMessage({ type: 'print', imageData: dataUrl, printHtml });
+}
+
+/** Substitute Excel header/footer codes with actual values. */
+function _resolveHFCode(template: string, ctx: { sheet: string; date: string; page: number; pages: number }): string {
+	return template
+		.replace(/&A/gi, ctx.sheet)
+		.replace(/&D/gi, ctx.date)
+		.replace(/&T/gi, new Date().toLocaleTimeString())
+		.replace(/&P/gi, String(ctx.page))
+		.replace(/&N/gi, String(ctx.pages))
+		.replace(/&F/gi, ctx.sheet)
+		.replace(/&L/gi, '').replace(/&C/gi, '').replace(/&R/gi, '');
+}
+
+// ─── Export as CSV ────────────────────────────────────────────────────────────
+
+function csvEscape(value: string): string {
+	if (value.includes(',') || value.includes('"') || value.includes('\n') || value.includes('\r')) {
+		return '"' + value.replace(/"/g, '""') + '"';
+	}
+	return value;
+}
+
+function handleExportCSV(): void {
+	if (!renderer) return;
+	const data = renderer.getData();
+	const sheetIdx = renderer.getActiveSheetIndex();
+	const sheet = data?.sheets?.[sheetIdx];
+	if (!sheet) return;
+
+	const cells: Record<number, Record<number, { value?: string; formatted?: string }>> = sheet.cells ?? {};
+	const rowKeys = Object.keys(cells).map(Number).sort((a, b) => a - b);
+	if (rowKeys.length === 0) return;
+
+	const maxRow = rowKeys[rowKeys.length - 1] + 1;
+	let maxCol = 0;
+	for (const rk of rowKeys) {
+		const colKeys = Object.keys(cells[rk]).map(Number);
+		for (const ck of colKeys) {
+			if (ck >= maxCol) maxCol = ck + 1;
+		}
+	}
+
+	const lines: string[] = [];
+	for (let r = 0; r < maxRow; r++) {
+		const rowCells: string[] = [];
+		for (let c = 0; c < maxCol; c++) {
+			const cell = cells[r]?.[c];
+			const val = cell ? (cell.formatted ?? cell.value ?? '') : '';
+			rowCells.push(csvEscape(String(val)));
+		}
+		lines.push(rowCells.join(','));
+	}
+
+	const content = lines.join('\r\n');
+	const defaultName = (sheet.name || 'Sheet1').replace(/[^\w\s-]/g, '_');
+	vscode.postMessage({ type: 'exportFile', content, format: 'csv', defaultName: `${defaultName}.csv` });
+}
+
+// ─── Export as HTML table ─────────────────────────────────────────────────────
+
+function handleExportHTML(): void {
+	if (!renderer) return;
+	const data = renderer.getData();
+	const sheetIdx = renderer.getActiveSheetIndex();
+	const sheet = data?.sheets?.[sheetIdx];
+	if (!sheet) return;
+
+	const cells: Record<number, Record<number, Record<string, unknown>>> = sheet.cells ?? {};
+	const rowKeys = Object.keys(cells).map(Number).sort((a, b) => a - b);
+	if (rowKeys.length === 0) return;
+
+	const maxRow = rowKeys[rowKeys.length - 1] + 1;
+	let maxCol = 0;
+	for (const rk of rowKeys) {
+		const colKeys = Object.keys(cells[rk]).map(Number);
+		for (const ck of colKeys) {
+			if (ck >= maxCol) maxCol = ck + 1;
+		}
+	}
+
+	const htmlRows: string[] = [];
+	for (let r = 0; r < maxRow; r++) {
+		const rowCells: string[] = [];
+		for (let c = 0; c < maxCol; c++) {
+			const cell = cells[r]?.[c];
+			const val = cell ? ((cell['formatted'] ?? cell['value'] ?? '') as string) : '';
+			const style = _cellToInlineStyle(cell);
+			rowCells.push(`<td style="${style}">${_escapeHtml(String(val))}</td>`);
+		}
+		htmlRows.push(`<tr>${rowCells.join('')}</tr>`);
+	}
+
+	const sheetName = sheet.name ?? 'Sheet';
+	const tableHtml = [
+		'<!DOCTYPE html><html><head><meta charset="utf-8">',
+		`<title>${_escapeHtml(sheetName)}</title>`,
+		'<style>',
+		'body { font-family: Calibri, Arial, sans-serif; padding: 16px; }',
+		'table { border-collapse: collapse; }',
+		'td { border: 1px solid #d0d0d0; padding: 4px 8px; min-width: 48px; }',
+		'</style></head><body>',
+		`<h2>${_escapeHtml(sheetName)}</h2>`,
+		'<table>',
+		htmlRows.join('\n'),
+		'</table></body></html>',
+	].join('\n');
+
+	const defaultName = sheetName.replace(/[^\w\s-]/g, '_');
+	vscode.postMessage({ type: 'exportFile', content: tableHtml, format: 'html', defaultName: `${defaultName}.html` });
+}
+
+function _escapeHtml(s: string): string {
+	return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+function _cellToInlineStyle(cell: Record<string, unknown> | undefined): string {
+	if (!cell) return '';
+	const parts: string[] = [];
+	if (cell['bold']) parts.push('font-weight:bold');
+	if (cell['italic']) parts.push('font-style:italic');
+	if (cell['underline']) parts.push('text-decoration:underline');
+	if (typeof cell['font_color'] === 'string' && cell['font_color']) parts.push(`color:${cell['font_color']}`);
+	if (typeof cell['bg_color'] === 'string' && cell['bg_color']) parts.push(`background-color:${cell['bg_color']}`);
+	const align = cell['align'] ?? cell['h_align'];
+	if (typeof align === 'string' && align) parts.push(`text-align:${align}`);
+	return parts.join(';');
+}
+
+// ─── Export as PDF (print-ready HTML) ────────────────────────────────────────
+
+function handleExportPDF(): void {
+	if (!renderer) return;
+	const canvas = document.querySelector('canvas') as HTMLCanvasElement | null;
+	if (!canvas) return;
+
+	const data = renderer.getData();
+	const sheetIdx = renderer.getActiveSheetIndex();
+	const sheet = data?.sheets?.[sheetIdx];
+	const ps = sheet?.page_setup as PageSetupDef | undefined;
+
+	const fileName = sheet?.name ?? 'Spreadsheet';
+	const today = new Date().toLocaleDateString();
+	const headerText = ps ? _resolveHFCode(ps.header, { sheet: sheet?.name ?? '', date: today, page: 1, pages: 1 }) : '';
+	const footerText = ps ? _resolveHFCode(ps.footer, { sheet: sheet?.name ?? '', date: today, page: 1, pages: 1 }) : '';
+	const orientation = ps?.orientation === 'landscape' ? 'landscape' : 'portrait';
+	const dataUrl = canvas.toDataURL('image/png');
+
+	const printHtml = [
+		'<!DOCTYPE html><html><head><meta charset="utf-8">',
+		`<title>${_escapeHtml(fileName)}</title>`,
+		'<style>',
+		`@media print { @page { margin:0.75in; size:${orientation}; } body { margin:0; } }`,
+		'body { background:#e0e0e0; display:flex; flex-direction:column; align-items:center; padding:20px; font-family:system-ui,sans-serif; }',
+		'.page { background:#fff; margin:12px; padding:20px; box-shadow:0 2px 8px rgba(0,0,0,.2); page-break-after:always; }',
+		'.page-header { text-align:center; font-size:12px; color:#555; border-bottom:1px solid #ccc; padding-bottom:4px; margin-bottom:8px; }',
+		'.page-footer { text-align:center; font-size:12px; color:#555; border-top:1px solid #ccc; padding-top:4px; margin-top:8px; }',
+		'img { max-width:100%; }',
+		'</style></head><body>',
+		'<div class="page">',
+		headerText ? `<div class="page-header">${headerText}</div>` : '',
+		`<img src="${dataUrl}" />`,
+		footerText ? `<div class="page-footer">${footerText}</div>` : '',
+		'</div>',
+		'</body></html>',
+	].join('');
+
+	const defaultName = fileName.replace(/[^\w\s-]/g, '_');
+	vscode.postMessage({ type: 'exportFile', content: printHtml, format: 'html', defaultName: `${defaultName}-print.html` });
+}
+
+// ─── Import CSV / TSV ─────────────────────────────────────────────────────────
+
+function handleImportCSV(): void {
+	// Request the extension host to open a file dialog and return the content
+	vscode.postMessage({ type: 'importFile', formats: ['csv', 'tsv', 'txt'] });
+}
+
+function handleCsvImportDialogAction(event: CsvImportEvent): void {
+	if (!renderer) return;
+	if (event.action === 'close') return;
+	const { rows, newSheet } = event;
+	if (newSheet) {
+		addSheet();
+	}
+	// Build TSV text from parsed rows and use pasteData
+	const tsv = rows.map(r => r.join('\t')).join('\n');
+	renderer.pasteData(tsv);
+	markDirty();
+}

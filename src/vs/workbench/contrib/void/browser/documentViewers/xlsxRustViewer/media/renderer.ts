@@ -226,6 +226,11 @@ export class CanvasRenderer {
     private width: number = 0;
     private height: number = 0;
 
+    // Zoom state
+    private _zoomScale: number = 1;
+    private _viewWidth: number = 1;   // width / _zoomScale (logical viewport)
+    private _viewHeight: number = 1;  // height / _zoomScale
+
     // Viewport state
     private scrollTop: number = 0;
     private scrollLeft: number = 0;
@@ -263,6 +268,10 @@ export class CanvasRenderer {
     // View toggles
     private _showGridlines: boolean = true;
     private _showHeaders: boolean = true;
+    private _pageBreakPreview: boolean = false;
+
+    // Page setup per sheet (keyed by sheet name)
+    private _pageSetupBySheet: Map<string, { row_breaks: number[]; col_breaks: number[] }> = new Map();
 
     // Freeze panes
     private _freezeRow: number = 0;
@@ -278,10 +287,19 @@ export class CanvasRenderer {
 
     // Filter state: hidden rows (rows excluded by column filters)
     private _hiddenRows: Set<number> = new Set();
+    // Explicitly hidden columns (set by user via Hide Column)
+    private _hiddenCols: Set<number> = new Set();
+    // Explicitly hidden rows (set by user via Hide Row, separate from filter-hidden)
+    private _explicitHiddenRows: Set<number> = new Set();
+    // Outline/group definitions
+    private _colOutlineGroups: Array<{ start: number; end_inclusive: number; level: number; collapsed: boolean }> = [];
+    private _rowOutlineGroups: Array<{ start: number; end_inclusive: number; level: number; collapsed: boolean }> = [];
     // Active filters: key = "tableName:colIndex", value = set of allowed cell values
     private _activeFilters: Map<string, Set<string>> = new Map();
     // HTML filter arrow buttons overlaid on table header cells
     private _filterButtons: HTMLButtonElement[] = [];
+    // Outline group collapse/expand buttons (DOM overlay)
+    private _outlineButtons: HTMLButtonElement[] = [];
 
     // Formula display cache: "row:col" -> display string
     private formulaResults: Record<string, { display: string; is_error: boolean; numeric: number | null }> = {};
@@ -306,6 +324,13 @@ export class CanvasRenderer {
     private _hyperlinkTooltip: HTMLDivElement | null = null;
     // Callback fired on Ctrl+Click of a hyperlink cell
     public onHyperlinkClick: ((url: string, isInternal: boolean) => void) | null = null;
+
+    // Pivot table output zones (for context menu detection and double-click drill-down)
+    private _pivotZones: Array<{
+        startRow: number; startCol: number;
+        endRow: number; endCol: number;
+        pivotIndex: number;
+    }> = [];
 
     // Merged cells: array of ranges
     private mergedCells: { startRow: number; startCol: number; endRow: number; endCol: number }[] = [];
@@ -353,6 +378,7 @@ export class CanvasRenderer {
     public onSelectionChanged?: (row: number, col: number) => void;
     public onCellEdit?: (row: number, col: number, value: string) => void;
     public onSheetChanged?: (index: number) => void;
+    public onZoomChanged?: (scale: number) => void;
     public onFormulaRangeSelect?: (row: number, col: number) => void;
     public onFormulaRangeDrag?: (startRow: number, startCol: number, endRow: number, endCol: number) => void;
     public onFormulaRangeDragEnd?: () => void;
@@ -402,7 +428,7 @@ export class CanvasRenderer {
                 const rect = this._hScrollbar.getBoundingClientRect();
                 const clickRatio = (e.clientX - rect.left) / rect.width;
                 const virtualW = this.getVirtualWidth();
-                const viewW = this.width - (this._showHeaders ? this.headerWidth : 0);
+                const viewW = this._viewWidth - (this._showHeaders ? this.headerWidth : 0);
                 const hMaxScroll = virtualW - viewW;
                 this.scrollLeft = Math.max(0, Math.min(hMaxScroll, clickRatio * hMaxScroll));
                 this.updateHScrollbar();
@@ -413,7 +439,7 @@ export class CanvasRenderer {
             if (!this._hScrollDragging) return;
             const trackWidth = this._hScrollbar.clientWidth;
             const virtualW = this.getVirtualWidth();
-            const viewW = this.width - (this._showHeaders ? this.headerWidth : 0);
+            const viewW = this._viewWidth - (this._showHeaders ? this.headerWidth : 0);
             const hMaxScroll = virtualW - viewW;
             const hRatio = Math.min(1, viewW / virtualW);
             const thumbW = Math.max(30, trackWidth * hRatio);
@@ -485,7 +511,7 @@ export class CanvasRenderer {
     /** Update the HTML horizontal scrollbar thumb position and size */
     private updateHScrollbar() {
         const virtualW = this.getVirtualWidth();
-        const viewW = this.width - (this._showHeaders ? this.headerWidth : 0);
+        const viewW = this._viewWidth - (this._showHeaders ? this.headerWidth : 0);
         const trackWidth = this._hScrollbar.clientWidth;
         const hRatio = Math.min(1, viewW / virtualW);
         const thumbW = Math.max(30, trackWidth * hRatio);
@@ -513,8 +539,13 @@ export class CanvasRenderer {
         this.colWidths = {};
         this.rowHeights = {};
         this._hiddenRows.clear();
+        this._hiddenCols.clear();
+        this._explicitHiddenRows.clear();
+        this._colOutlineGroups = [];
+        this._rowOutlineGroups = [];
         this._activeFilters.clear();
         this._clearFilterButtons();
+        this._clearOutlineButtons();
         this._clearCfCache();
         this._validationOfCell.clear();
         this._invalidCells.clear();
@@ -557,6 +588,26 @@ export class CanvasRenderer {
                 this.rowHeights[Number(k)] = v as number;
             }
         }
+        // Load hidden columns and rows
+        this._hiddenCols.clear();
+        if (sheet?.hidden_cols) {
+            for (const c of sheet.hidden_cols) {
+                this._hiddenCols.add(Number(c));
+            }
+        }
+        this._explicitHiddenRows.clear();
+        if (sheet?.hidden_rows) {
+            for (const r of sheet.hidden_rows) {
+                this._explicitHiddenRows.add(Number(r));
+            }
+        }
+        // Load outline groups
+        this._colOutlineGroups = (sheet?.col_outline_groups ?? []).map((g: any) => ({
+            start: g.start, end_inclusive: g.end_inclusive, level: g.level, collapsed: g.collapsed,
+        }));
+        this._rowOutlineGroups = (sheet?.row_outline_groups ?? []).map((g: any) => ({
+            start: g.start, end_inclusive: g.end_inclusive, level: g.level, collapsed: g.collapsed,
+        }));
         this._buildValidationMap();
         this._buildHyperlinkMap();
     }
@@ -587,8 +638,13 @@ export class CanvasRenderer {
         this.selectionRange = null;
         this.formulaResults = {};
         this._hiddenRows.clear();
+        this._hiddenCols.clear();
+        this._explicitHiddenRows.clear();
+        this._colOutlineGroups = [];
+        this._rowOutlineGroups = [];
         this._activeFilters.clear();
         this._clearFilterButtons();
+        this._clearOutlineButtons();
         this._clearCfCache();
         this._validationOfCell.clear();
         this._invalidCells.clear();
@@ -662,14 +718,15 @@ export class CanvasRenderer {
         this._colPos = new Array(nc + 1);
         this._colPos[0] = 0;
         for (let c = 0; c < nc; c++) {
-            this._colPos[c + 1] = this._colPos[c] + (this.colWidths[c] ?? this.colWidth);
+            const w = this._hiddenCols.has(c) ? 0 : (this.colWidths[c] ?? this.colWidth);
+            this._colPos[c + 1] = this._colPos[c] + w;
         }
 
         const nr = Math.max(minRows + 1, 1101);
         this._rowPos = new Array(nr + 1);
         this._rowPos[0] = 0;
         for (let r = 0; r < nr; r++) {
-            const h = this._hiddenRows.has(r) ? 0 : (this.rowHeights[r] ?? this.rowHeight);
+            const h = (this._hiddenRows.has(r) || this._explicitHiddenRows.has(r)) ? 0 : (this.rowHeights[r] ?? this.rowHeight);
             this._rowPos[r + 1] = this._rowPos[r] + h;
         }
 
@@ -700,14 +757,14 @@ export class CanvasRenderer {
         return (this._rowPos[row + 1] ?? (this._rowPos[row] + this.rowHeight)) - (this._rowPos[row] ?? 0);
     }
 
-    /** Convert mouse event to canvas drawing coordinates (accounts for any display/buffer mismatch). */
+    /** Convert mouse event to canvas drawing coordinates (accounts for zoom and display/buffer mismatch). */
     private mouseToCanvas(e: MouseEvent): { x: number; y: number } {
         const rect = this.canvas.getBoundingClientRect();
         const sx = e.clientX - rect.left;
         const sy = e.clientY - rect.top;
         return {
-            x: rect.width > 0 ? sx * this.width / rect.width : sx,
-            y: rect.height > 0 ? sy * this.height / rect.height : sy,
+            x: rect.width > 0 ? sx * this._viewWidth / rect.width : sx,
+            y: rect.height > 0 ? sy * this._viewHeight / rect.height : sy,
         };
     }
 
@@ -742,6 +799,18 @@ export class CanvasRenderer {
                 }
             }
         }
+        // Sync hidden cols/rows and outline groups back to model for saving
+        if (this.data?.sheets?.[this._activeSheetIndex]) {
+            const sheet = this.data.sheets[this._activeSheetIndex];
+            sheet.hidden_cols = Array.from(this._hiddenCols);
+            sheet.hidden_rows = Array.from(this._explicitHiddenRows);
+            sheet.col_outline_groups = this._colOutlineGroups.map(g => ({
+                start: g.start, end_inclusive: g.end_inclusive, level: g.level, collapsed: g.collapsed,
+            }));
+            sheet.row_outline_groups = this._rowOutlineGroups.map(g => ({
+                start: g.start, end_inclusive: g.end_inclusive, level: g.level, collapsed: g.collapsed,
+            }));
+        }
         return this.data;
     }
 
@@ -752,6 +821,50 @@ export class CanvasRenderer {
 
     getSelectedRange(): SelectionRange | null {
         return this.selectionRange;
+    }
+
+    // --- Zoom ---
+
+    private static readonly ZOOM_PRESETS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 2, 3, 4];
+
+    getZoom(): number {
+        return this._zoomScale;
+    }
+
+    setZoom(scale: number) {
+        this._zoomScale = Math.max(0.25, Math.min(4, scale));
+        this.resize();
+        if (this.onZoomChanged) this.onZoomChanged(this._zoomScale);
+    }
+
+    zoomIn() {
+        const presets = CanvasRenderer.ZOOM_PRESETS;
+        const next = presets.find(p => p > this._zoomScale + 0.01);
+        this.setZoom(next ?? presets[presets.length - 1]);
+    }
+
+    zoomOut() {
+        const presets = CanvasRenderer.ZOOM_PRESETS;
+        const prev = [...presets].reverse().find(p => p < this._zoomScale - 0.01);
+        this.setZoom(prev ?? presets[0]);
+    }
+
+    zoomToFit() {
+        if (!this.data?.sheets?.[this._activeSheetIndex]) return;
+        const sheet = this.data.sheets[this._activeSheetIndex];
+        const usedCols = sheet.col_count ?? 10;
+        const usedRows = sheet.row_count ?? 20;
+        const effHeaderWidth = this._showHeaders ? this.headerWidth : 0;
+        const effHeaderHeight = this._showHeaders ? this.headerHeight : 0;
+        const availW = this.width - effHeaderWidth;
+        const availH = this.height - effHeaderHeight;
+        this.ensureLayout(usedCols + 1, usedRows + 1);
+        const contentW = this._colPos[usedCols] ?? availW;
+        const contentH = this._rowPos[usedRows] ?? availH;
+        if (contentW <= 0 || contentH <= 0) return;
+        const scaleW = availW / contentW;
+        const scaleH = availH / contentH;
+        this.setZoom(Math.min(scaleW, scaleH, 4));
     }
 
     /** Compute aggregate statistics (sum, avg, count, min, max) for the current selection. */
@@ -791,6 +904,21 @@ export class CanvasRenderer {
             min: count > 0 ? min : 0,
             max: count > 0 ? max : 0,
         };
+    }
+
+    /** Set pivot table output zones for context-menu detection. */
+    setPivotZones(zones: Array<{ startRow: number; startCol: number; endRow: number; endCol: number; pivotIndex: number }>) {
+        this._pivotZones = zones;
+    }
+
+    /** Returns the pivot index if the cell is inside a pivot output zone, or -1. */
+    getPivotZoneAtCell(row: number, col: number): number {
+        for (const z of this._pivotZones) {
+            if (row >= z.startRow && row <= z.endRow && col >= z.startCol && col <= z.endCol) {
+                return z.pivotIndex;
+            }
+        }
+        return -1;
     }
 
     selectAll(): void {
@@ -1135,6 +1263,21 @@ export class CanvasRenderer {
         this.render();
     }
 
+    setPageBreakPreview(on: boolean): void {
+        this._pageBreakPreview = on;
+        this.render();
+    }
+
+    /** Store page setup (breaks) for a sheet so they can be rendered. */
+    setSheetPageSetup(sheetName: string, setup: { row_breaks: number[]; col_breaks: number[] } | null): void {
+        if (setup) {
+            this._pageSetupBySheet.set(sheetName, setup);
+        } else {
+            this._pageSetupBySheet.delete(sheetName);
+        }
+        this.render();
+    }
+
     freezePanes(): void {
         if (this._freezeRow > 0 || this._freezeCol > 0) {
             // If already frozen, unfreeze
@@ -1395,6 +1538,15 @@ export class CanvasRenderer {
 
     private handleWheel(e: WheelEvent) {
         e.preventDefault();
+        if (e.ctrlKey || e.metaKey) {
+            // Ctrl/Cmd+Wheel zooms
+            if (e.deltaY > 0) {
+                this.zoomOut();
+            } else {
+                this.zoomIn();
+            }
+            return;
+        }
         if (e.shiftKey) {
             // Shift+Wheel scrolls horizontally
             this.scrollLeft += e.deltaY;
@@ -1433,7 +1585,7 @@ export class CanvasRenderer {
         if (sbHit) {
             e.preventDefault();
             const effHeaderHeight = this._showHeaders ? this.headerHeight : 0;
-            const viewH = this.height - effHeaderHeight;
+            const viewH = this._viewHeight - effHeaderHeight;
             const virtualH = this.getVirtualHeight();
             const vMaxScroll = virtualH - viewH;
             // Jump to clicked position
@@ -2011,7 +2163,7 @@ export class CanvasRenderer {
         const effHeaderHeight = this._showHeaders ? this.headerHeight : 0;
 
         // Vertical scrollbar track
-        if (canvasX >= this.width - sb && canvasY >= effHeaderHeight) {
+        if (canvasX >= this._viewWidth - sb && canvasY >= effHeaderHeight) {
             return { axis: 'v' };
         }
         return null;
@@ -2052,7 +2204,7 @@ export class CanvasRenderer {
         if (this._scrollbarDragging) {
             const rect = this.canvas.getBoundingClientRect();
             const effHeaderHeight = this._showHeaders ? this.headerHeight : 0;
-            const viewH = this.height - effHeaderHeight;
+            const viewH = this._viewHeight - effHeaderHeight;
             const virtualH = this.getVirtualHeight();
             const vMaxScroll = virtualH - viewH;
             const vRatio = Math.min(1, viewH / virtualH);
@@ -2275,7 +2427,7 @@ export class CanvasRenderer {
             while (col < this._colPos.length - 1 && this._colPos[col + 1] <= this.scrollLeft) col++;
             while (col < this._colPos.length - 1) {
                 const borderX = this.headerWidth + this._colPos[col + 1] - this.scrollLeft;
-                if (borderX > this.width + threshold) break;
+                if (borderX > this._viewWidth + threshold) break;
                 if (Math.abs(x - borderX) < threshold) {
                     return { type: 'col', index: col };
                 }
@@ -2289,7 +2441,7 @@ export class CanvasRenderer {
             while (row < this._rowPos.length - 1 && this._rowPos[row + 1] <= this.scrollTop) row++;
             while (row < this._rowPos.length - 1) {
                 const borderY = this.headerHeight + this._rowPos[row + 1] - this.scrollTop;
-                if (borderY > this.height + threshold) break;
+                if (borderY > this._viewHeight + threshold) break;
                 if (Math.abs(y - borderY) < threshold) {
                     return { type: 'row', index: row };
                 }
@@ -2328,7 +2480,7 @@ export class CanvasRenderer {
                 const visible = btnLeft > effHeaderWidth - 10
                     && btnTop >= effHeaderHeight - 2
                     && btnTop + hdrRowH > effHeaderHeight
-                    && cellRight <= this.width + 10;
+                    && cellRight <= this._viewWidth + 10;
 
                 // Create or reuse button
                 let btn: HTMLButtonElement;
@@ -2379,6 +2531,107 @@ export class CanvasRenderer {
             btn.remove();
         }
         this._filterButtons = [];
+    }
+
+    /** Remove all outline group buttons from the DOM. */
+    private _clearOutlineButtons(): void {
+        for (const btn of this._outlineButtons) {
+            btn.remove();
+        }
+        this._outlineButtons = [];
+    }
+
+    /** Update outline collapse/expand DOM buttons for visible row groups. */
+    private _updateOutlineButtons(): void {
+        const wrapper = this._wrapper;
+        const hasRowGroups = this._rowOutlineGroups.length > 0;
+        const hasColGroups = this._colOutlineGroups.length > 0;
+
+        if (!hasRowGroups && !hasColGroups) {
+            this._clearOutlineButtons();
+            return;
+        }
+
+        let btnIdx = 0;
+
+        // Row outline groups: draw [-] or [+] button at the end of each group in the row header
+        if (this._showHeaders) {
+            for (let gi = 0; gi < this._rowOutlineGroups.length; gi++) {
+                const group = this._rowOutlineGroups[gi];
+                // Position button at the last row of the group
+                const lastRow = group.end_inclusive;
+                const y = this.ry(lastRow + 1) - this.scrollTop + this.headerHeight;
+                if (y < this.headerHeight || y > this._viewHeight) continue;
+
+                let btn: HTMLButtonElement;
+                if (btnIdx < this._outlineButtons.length) {
+                    btn = this._outlineButtons[btnIdx];
+                } else {
+                    btn = document.createElement('button');
+                    btn.style.cssText = 'position:absolute;width:14px;height:14px;padding:0;font-size:10px;line-height:1;background:#e8e8e8;border:1px solid #aaa;cursor:pointer;z-index:10;display:flex;align-items:center;justify-content:center;';
+                    wrapper.appendChild(btn);
+                    this._outlineButtons.push(btn);
+                }
+
+                btn.textContent = group.collapsed ? '+' : '\u2212';
+                btn.title = group.collapsed ? 'Expand group' : 'Collapse group';
+                btn.style.left = '2px';
+                btn.style.top = `${y - 7}px`;
+                btn.style.display = 'flex';
+                const capturedIndex = gi;
+                btn.onclick = (e) => {
+                    e.stopPropagation();
+                    if (this._rowOutlineGroups[capturedIndex].collapsed) {
+                        this.expandRowGroup(capturedIndex);
+                    } else {
+                        this.collapseRowGroup(capturedIndex);
+                    }
+                };
+                btnIdx++;
+            }
+        }
+
+        // Column outline groups: draw [-] or [+] button at the end of each group in the column header
+        if (this._showHeaders) {
+            for (let gi = 0; gi < this._colOutlineGroups.length; gi++) {
+                const group = this._colOutlineGroups[gi];
+                const lastCol = group.end_inclusive;
+                const x = this.cx(lastCol + 1) - this.scrollLeft + this.headerWidth;
+                if (x < this.headerWidth || x > this._viewWidth) continue;
+
+                let btn: HTMLButtonElement;
+                if (btnIdx < this._outlineButtons.length) {
+                    btn = this._outlineButtons[btnIdx];
+                } else {
+                    btn = document.createElement('button');
+                    btn.style.cssText = 'position:absolute;width:14px;height:14px;padding:0;font-size:10px;line-height:1;background:#e8e8e8;border:1px solid #aaa;cursor:pointer;z-index:10;display:flex;align-items:center;justify-content:center;';
+                    wrapper.appendChild(btn);
+                    this._outlineButtons.push(btn);
+                }
+
+                btn.textContent = group.collapsed ? '+' : '\u2212';
+                btn.title = group.collapsed ? 'Expand group' : 'Collapse group';
+                btn.style.left = `${x - 7}px`;
+                btn.style.top = '2px';
+                btn.style.display = 'flex';
+                const capturedIndex = gi;
+                btn.onclick = (e) => {
+                    e.stopPropagation();
+                    if (this._colOutlineGroups[capturedIndex].collapsed) {
+                        this.expandColGroup(capturedIndex);
+                    } else {
+                        this.collapseColGroup(capturedIndex);
+                    }
+                };
+                btnIdx++;
+            }
+        }
+
+        // Remove excess buttons
+        while (this._outlineButtons.length > btnIdx) {
+            const old = this._outlineButtons.pop()!;
+            old.remove();
+        }
     }
 
     /** Get unique cell values for a column within a table's data range (excludes header/totals). */
@@ -2688,21 +2941,21 @@ export class CanvasRenderer {
         const cellRight = cellLeft + this.cw(col);
 
         const viewportTop = this.scrollTop;
-        const viewportBottom = this.scrollTop + (this.height - effHeaderHeight);
+        const viewportBottom = this.scrollTop + (this._viewHeight - effHeaderHeight);
 
         if (cellTop < viewportTop) {
             this.scrollTop = cellTop;
         } else if (cellBottom > viewportBottom) {
-            this.scrollTop = cellBottom - (this.height - effHeaderHeight);
+            this.scrollTop = cellBottom - (this._viewHeight - effHeaderHeight);
         }
 
         const viewportLeft = this.scrollLeft;
-        const viewportRight = this.scrollLeft + (this.width - effHeaderWidth);
+        const viewportRight = this.scrollLeft + (this._viewWidth - effHeaderWidth);
 
         if (cellLeft < viewportLeft) {
             this.scrollLeft = cellLeft;
         } else if (cellRight > viewportRight) {
-            this.scrollLeft = cellRight - (this.width - effHeaderWidth);
+            this.scrollLeft = cellRight - (this._viewWidth - effHeaderWidth);
         }
         this.updateHScrollbar();
     }
@@ -2718,12 +2971,15 @@ export class CanvasRenderer {
         this.width = Math.round(rect.width);
         this.height = Math.round(rect.height) - scrollbarH;
 
+        this._viewWidth = this.width / this._zoomScale;
+        this._viewHeight = this.height / this._zoomScale;
+
         const dpr = window.devicePixelRatio || 1;
         this.canvas.width = this.width * dpr;
         this.canvas.height = this.height * dpr;
         this.canvas.style.width = `${this.width}px`;
         this.canvas.style.height = `${this.height}px`;
-        this.ctx.scale(dpr, dpr);
+        this.ctx.scale(dpr * this._zoomScale, dpr * this._zoomScale);
 
         this._layoutDirty = true;
         this.render();
@@ -2735,7 +2991,7 @@ export class CanvasRenderer {
     render() {
         this._clearCfCache();
         this.ctx.fillStyle = '#ffffff';
-        this.ctx.fillRect(0, 0, this.width, this.height);
+        this.ctx.fillRect(0, 0, this._viewWidth, this._viewHeight);
 
         // Loading state
         if (this._loading) {
@@ -2743,7 +2999,7 @@ export class CanvasRenderer {
             this.ctx.font = '14px system-ui, -apple-system, sans-serif';
             this.ctx.textAlign = 'center';
             this.ctx.textBaseline = 'middle';
-            this.ctx.fillText('Loading...', this.width / 2, this.height / 2);
+            this.ctx.fillText('Loading...', this._viewWidth / 2, this._viewHeight / 2);
             return;
         }
 
@@ -2753,7 +3009,7 @@ export class CanvasRenderer {
             this.ctx.font = '14px system-ui, -apple-system, sans-serif';
             this.ctx.textAlign = 'center';
             this.ctx.textBaseline = 'middle';
-            this.ctx.fillText('No data to display. Open an XLSX file or start typing.', this.width / 2, this.height / 2);
+            this.ctx.fillText('No data to display. Open an XLSX file or start typing.', this._viewWidth / 2, this._viewHeight / 2);
             return;
         }
 
@@ -2766,13 +3022,13 @@ export class CanvasRenderer {
         let startRow = 0;
         while (startRow < this._rowPos.length - 1 && this._rowPos[startRow + 1] <= this.scrollTop) startRow++;
         let endRow = startRow;
-        const viewBottom = this.scrollTop + this.height;
+        const viewBottom = this.scrollTop + this._viewHeight;
         while (endRow < this._rowPos.length - 1 && this._rowPos[endRow] < viewBottom) endRow++;
         endRow = Math.min(endRow + 1, this._rowPos.length - 1);
         let startCol = 0;
         while (startCol < this._colPos.length - 1 && this._colPos[startCol + 1] <= this.scrollLeft) startCol++;
         let endCol = startCol;
-        const viewRight = this.scrollLeft + this.width;
+        const viewRight = this.scrollLeft + this._viewWidth;
         while (endCol < this._colPos.length - 1 && this._colPos[endCol] < viewRight) endCol++;
         endCol = Math.min(endCol + 1, this._colPos.length - 1);
 
@@ -2984,7 +3240,7 @@ export class CanvasRenderer {
             // Clip to grid area
             this.ctx.save();
             this.ctx.beginPath();
-            this.ctx.rect(effHeaderWidth, effHeaderHeight, this.width - effHeaderWidth, this.height - effHeaderHeight);
+            this.ctx.rect(effHeaderWidth, effHeaderHeight, this._viewWidth - effHeaderWidth, this._viewHeight - effHeaderHeight);
             this.ctx.clip();
 
             // Banded rows (alternating fill using style band color)
@@ -3097,7 +3353,7 @@ export class CanvasRenderer {
             // Clear the merged area and redraw as single cell
             this.ctx.save();
             this.ctx.beginPath();
-            this.ctx.rect(effHeaderWidth, effHeaderHeight, this.width - effHeaderWidth, this.height - effHeaderHeight);
+            this.ctx.rect(effHeaderWidth, effHeaderHeight, this._viewWidth - effHeaderWidth, this._viewHeight - effHeaderHeight);
             this.ctx.clip();
 
             // Fill merged cell background
@@ -3150,7 +3406,7 @@ export class CanvasRenderer {
         if (this._findMatches.length > 0) {
             this.ctx.save();
             this.ctx.beginPath();
-            this.ctx.rect(effHeaderWidth, effHeaderHeight, this.width - effHeaderWidth, this.height - effHeaderHeight);
+            this.ctx.rect(effHeaderWidth, effHeaderHeight, this._viewWidth - effHeaderWidth, this._viewHeight - effHeaderHeight);
             this.ctx.clip();
             for (let fi = 0; fi < this._findMatches.length; fi++) {
                 const fm = this._findMatches[fi];
@@ -3172,12 +3428,12 @@ export class CanvasRenderer {
 
             // Row Headers (Left)
             this.ctx.fillStyle = '#f3f3f3';
-            this.ctx.fillRect(0, this.headerHeight, this.headerWidth, this.height - this.headerHeight);
+            this.ctx.fillRect(0, this.headerHeight, this.headerWidth, this._viewHeight - this.headerHeight);
 
             this.ctx.strokeStyle = '#cccccc';
             this.ctx.beginPath();
             this.ctx.moveTo(this.headerWidth, 0);
-            this.ctx.lineTo(this.headerWidth, this.height);
+            this.ctx.lineTo(this.headerWidth, this._viewHeight);
             this.ctx.stroke();
 
             this.ctx.font = '12px system-ui, -apple-system, sans-serif';
@@ -3206,14 +3462,27 @@ export class CanvasRenderer {
                 this.ctx.stroke();
             }
 
+            // Draw hidden row indicators: show ▲▼ at the top edge of a visible row when the preceding row is hidden
+            for (let r = startRow; r < endRow; r++) {
+                if (this._explicitHiddenRows.has(r)) continue;
+                // Is the row just before this one hidden?
+                if (r > 0 && this._explicitHiddenRows.has(r - 1)) {
+                    const y = this.ry(r) - this.scrollTop + this.headerHeight;
+                    this.ctx.fillStyle = '#1565c0';
+                    this.ctx.font = 'bold 9px sans-serif';
+                    this.ctx.textAlign = 'center';
+                    this.ctx.fillText('▲▼', this.headerWidth / 2, y + 6);
+                }
+            }
+
             // Column Headers (Top)
             this.ctx.fillStyle = '#f3f3f3';
-            this.ctx.fillRect(this.headerWidth, 0, this.width - this.headerWidth, this.headerHeight);
+            this.ctx.fillRect(this.headerWidth, 0, this._viewWidth - this.headerWidth, this.headerHeight);
 
             this.ctx.strokeStyle = '#cccccc';
             this.ctx.beginPath();
             this.ctx.moveTo(0, this.headerHeight);
-            this.ctx.lineTo(this.width, this.headerHeight);
+            this.ctx.lineTo(this._viewWidth, this.headerHeight);
             this.ctx.stroke();
 
             for (let c = startCol; c < endCol; c++) {
@@ -3241,6 +3510,19 @@ export class CanvasRenderer {
                 this.ctx.stroke();
             }
 
+            // Draw hidden column indicators: show ◄► at the left edge of a visible col when the preceding col is hidden
+            for (let c = startCol; c < endCol; c++) {
+                if (this._hiddenCols.has(c)) continue;
+                // Is the col just before this one hidden?
+                if (c > 0 && this._hiddenCols.has(c - 1)) {
+                    const x = this.cx(c) - this.scrollLeft + this.headerWidth;
+                    this.ctx.fillStyle = '#1565c0';
+                    this.ctx.font = 'bold 9px sans-serif';
+                    this.ctx.textAlign = 'center';
+                    this.ctx.fillText('◄►', x + 6, this.headerHeight / 2);
+                }
+            }
+
             // Corner Box
             this.ctx.fillStyle = '#e0e0e0';
             this.ctx.fillRect(0, 0, this.headerWidth, this.headerHeight);
@@ -3252,7 +3534,7 @@ export class CanvasRenderer {
         if (this._formulaMode && this._formulaRanges.length > 0) {
             this.ctx.save();
             this.ctx.beginPath();
-            this.ctx.rect(effHeaderWidth, effHeaderHeight, this.width - effHeaderWidth, this.height - effHeaderHeight);
+            this.ctx.rect(effHeaderWidth, effHeaderHeight, this._viewWidth - effHeaderWidth, this._viewHeight - effHeaderHeight);
             this.ctx.clip();
 
             for (const fRange of this._formulaRanges) {
@@ -3288,7 +3570,7 @@ export class CanvasRenderer {
             // Clip to the grid area (don't draw over headers)
             this.ctx.save();
             this.ctx.beginPath();
-            this.ctx.rect(effHeaderWidth, effHeaderHeight, this.width - effHeaderWidth, this.height - effHeaderHeight);
+            this.ctx.rect(effHeaderWidth, effHeaderHeight, this._viewWidth - effHeaderWidth, this._viewHeight - effHeaderHeight);
             this.ctx.clip();
 
             this.ctx.strokeStyle = '#0078d7';
@@ -3338,12 +3620,12 @@ export class CanvasRenderer {
                 const frozenRowsH = this.ry(this._freezeRow);
                 this.ctx.save();
                 this.ctx.beginPath();
-                this.ctx.rect(effHeaderWidth, effHeaderHeight, this.width - effHeaderWidth, frozenRowsH);
+                this.ctx.rect(effHeaderWidth, effHeaderHeight, this._viewWidth - effHeaderWidth, frozenRowsH);
                 this.ctx.clip();
 
                 // Fill white background for frozen area
                 this.ctx.fillStyle = '#ffffff';
-                this.ctx.fillRect(effHeaderWidth, effHeaderHeight, this.width - effHeaderWidth, frozenRowsH);
+                this.ctx.fillRect(effHeaderWidth, effHeaderHeight, this._viewWidth - effHeaderWidth, frozenRowsH);
 
                 for (let r = 0; r < this._freezeRow; r++) {
                     const frzRowH = this.rh(r);
@@ -3382,11 +3664,11 @@ export class CanvasRenderer {
                 const frozenColsW = this.cx(this._freezeCol);
                 this.ctx.save();
                 this.ctx.beginPath();
-                this.ctx.rect(effHeaderWidth, effHeaderHeight, frozenColsW, this.height - effHeaderHeight);
+                this.ctx.rect(effHeaderWidth, effHeaderHeight, frozenColsW, this._viewHeight - effHeaderHeight);
                 this.ctx.clip();
 
                 this.ctx.fillStyle = '#ffffff';
-                this.ctx.fillRect(effHeaderWidth, effHeaderHeight, frozenColsW, this.height - effHeaderHeight);
+                this.ctx.fillRect(effHeaderWidth, effHeaderHeight, frozenColsW, this._viewHeight - effHeaderHeight);
 
                 for (let r = startRow; r < endRow; r++) {
                     const frzRH = this.rh(r);
@@ -3469,7 +3751,7 @@ export class CanvasRenderer {
                 this.ctx.lineWidth = 2;
                 this.ctx.beginPath();
                 this.ctx.moveTo(0, freezeY);
-                this.ctx.lineTo(this.width, freezeY);
+                this.ctx.lineTo(this._viewWidth, freezeY);
                 this.ctx.stroke();
                 this.ctx.lineWidth = 1;
             }
@@ -3479,11 +3761,14 @@ export class CanvasRenderer {
                 this.ctx.lineWidth = 2;
                 this.ctx.beginPath();
                 this.ctx.moveTo(freezeX, 0);
-                this.ctx.lineTo(freezeX, this.height);
+                this.ctx.lineTo(freezeX, this._viewHeight);
                 this.ctx.stroke();
                 this.ctx.lineWidth = 1;
             }
         }
+
+        // --- Draw Page Break indicators ---
+        this._drawPageBreaks(effHeaderWidth, effHeaderHeight);
 
         // --- Draw Scrollbars ---
         this.drawScrollbars();
@@ -3493,8 +3778,86 @@ export class CanvasRenderer {
         // --- Sync filter arrow buttons over table headers ---
         this._syncFilterButtons();
 
+        // --- Sync outline group collapse/expand buttons ---
+        this._updateOutlineButtons();
+
         // Notify listeners that the canvas was repainted (e.g. for chart overlay repositioning)
         if (this.onScrollChanged) this.onScrollChanged();
+    }
+
+    /** Draw page break indicator lines and, in preview mode, page number watermarks. */
+    private _drawPageBreaks(effHeaderWidth: number, effHeaderHeight: number): void {
+        const sheet = this.data?.sheets?.[this._activeSheetIndex];
+        if (!sheet) return;
+        const setup = this._pageSetupBySheet.get(sheet.name);
+        if (!setup) return;
+
+        const { row_breaks, col_breaks } = setup;
+        if (row_breaks.length === 0 && col_breaks.length === 0) return;
+
+        const ctx = this.ctx;
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(effHeaderWidth, effHeaderHeight, this._viewWidth - effHeaderWidth, this._viewHeight - effHeaderHeight);
+        ctx.clip();
+
+        ctx.setLineDash([4, 3]);
+        ctx.lineWidth = 1.5;
+        ctx.strokeStyle = this._pageBreakPreview ? '#1565c0' : '#90caf9';
+
+        // Horizontal page breaks (row boundary lines)
+        for (const breakRow of row_breaks) {
+            const y = this.ry(breakRow) - this.scrollTop + effHeaderHeight;
+            if (y < effHeaderHeight || y > this._viewHeight) continue;
+            ctx.beginPath();
+            ctx.moveTo(effHeaderWidth, y);
+            ctx.lineTo(this._viewWidth, y);
+            ctx.stroke();
+        }
+
+        // Vertical page breaks (column boundary lines)
+        for (const breakCol of col_breaks) {
+            const x = this.cx(breakCol) - this.scrollLeft + effHeaderWidth;
+            if (x < effHeaderWidth || x > this._viewWidth) continue;
+            ctx.beginPath();
+            ctx.moveTo(x, effHeaderHeight);
+            ctx.lineTo(x, this._viewHeight);
+            ctx.stroke();
+        }
+
+        ctx.setLineDash([]);
+
+        // Page number watermarks in preview mode
+        if (this._pageBreakPreview) {
+            ctx.font = 'bold 22px system-ui';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillStyle = 'rgba(100,149,237,0.18)';
+
+            // Build sorted break lists with virtual start at 0
+            const rowBounds = [0, ...row_breaks.slice().sort((a, b) => a - b)];
+            const colBounds = [0, ...col_breaks.slice().sort((a, b) => a - b)];
+
+            let pageNum = 1;
+            for (let ri = 0; ri < rowBounds.length; ri++) {
+                for (let ci = 0; ci < colBounds.length; ci++) {
+                    const startRow = rowBounds[ri];
+                    const endRow = ri + 1 < rowBounds.length ? rowBounds[ri + 1] : startRow + 30;
+                    const startCol = colBounds[ci];
+                    const endCol = ci + 1 < colBounds.length ? colBounds[ci + 1] : startCol + 10;
+                    const midRow = Math.floor((startRow + endRow) / 2);
+                    const midCol = Math.floor((startCol + endCol) / 2);
+                    const cx = this.cx(midCol) - this.scrollLeft + effHeaderWidth;
+                    const cy = this.ry(midRow) - this.scrollTop + effHeaderHeight;
+                    if (cx > effHeaderWidth && cx < this._viewWidth && cy > effHeaderHeight && cy < this._viewHeight) {
+                        ctx.fillText(`Page ${pageNum}`, cx, cy);
+                    }
+                    pageNum++;
+                }
+            }
+        }
+
+        ctx.restore();
     }
 
     /** Draw sparkline mini-charts inside cells */
@@ -3505,7 +3868,7 @@ export class CanvasRenderer {
 
         this.ctx.save();
         this.ctx.beginPath();
-        this.ctx.rect(effHeaderWidth, effHeaderHeight, this.width - effHeaderWidth, this.height - effHeaderHeight);
+        this.ctx.rect(effHeaderWidth, effHeaderHeight, this._viewWidth - effHeaderWidth, this._viewHeight - effHeaderHeight);
         this.ctx.clip();
 
         for (const spark of sheet.sparklines) {
@@ -3521,7 +3884,7 @@ export class CanvasRenderer {
 
             // Skip if off-screen
             if (cellX + cellW < effHeaderWidth || cellY + cellH < effHeaderHeight) continue;
-            if (cellX > this.width || cellY > this.height) continue;
+            if (cellX > this._viewWidth || cellY > this._viewHeight) continue;
 
             // Parse data values from the data_range reference
             const values = this.resolveSparklineData(spark.data_range, sheet);
@@ -3654,19 +4017,19 @@ export class CanvasRenderer {
         const minThumb = this._scrollbarMinThumb;
         const virtualH = this.getVirtualHeight();
         const effHeaderHeight = this._showHeaders ? this.headerHeight : 0;
-        const viewH = this.height - effHeaderHeight;
+        const viewH = this._viewHeight - effHeaderHeight;
 
         // --- Vertical scrollbar (canvas-drawn) ---
         const vTrackTop = effHeaderHeight;
         const vTrackHeight = viewH;
         // Track background
         this.ctx.fillStyle = '#e8e8e8';
-        this.ctx.fillRect(this.width - sb, vTrackTop, sb, vTrackHeight);
+        this.ctx.fillRect(this._viewWidth - sb, vTrackTop, sb, vTrackHeight);
         // Track left border
         this.ctx.strokeStyle = '#ccc';
         this.ctx.beginPath();
-        this.ctx.moveTo(this.width - sb, vTrackTop);
-        this.ctx.lineTo(this.width - sb, vTrackTop + vTrackHeight);
+        this.ctx.moveTo(this._viewWidth - sb, vTrackTop);
+        this.ctx.lineTo(this._viewWidth - sb, vTrackTop + vTrackHeight);
         this.ctx.stroke();
         // Thumb
         const vRatio = Math.min(1, viewH / virtualH);
@@ -3677,7 +4040,7 @@ export class CanvasRenderer {
             : vTrackTop;
         this.ctx.fillStyle = this._scrollbarDragging === 'v' ? '#666' : '#999';
         this.ctx.beginPath();
-        this.roundRect(this.width - sb + 2, vThumbTop + 1, sb - 4, vThumbH - 2, 4);
+        this.roundRect(this._viewWidth - sb + 2, vThumbTop + 1, sb - 4, vThumbH - 2, 4);
         this.ctx.fill();
     }
 
@@ -5088,13 +5451,167 @@ export class CanvasRenderer {
     }
 
     setColWidth(col: number, width: number) {
-        this.colWidths[col] = Math.max(20, Math.round(width));
+        if (width <= 0) {
+            this.hideColumn(col);
+            return;
+        }
+        this._hiddenCols.delete(col);
+        this.colWidths[col] = Math.max(2, Math.round(width));
         this._layoutDirty = true;
         this.render();
     }
 
     setRowHeight(row: number, height: number) {
-        this.rowHeights[row] = Math.max(10, Math.round(height));
+        if (height <= 0) {
+            this.hideRow(row);
+            return;
+        }
+        this._explicitHiddenRows.delete(row);
+        this.rowHeights[row] = Math.max(2, Math.round(height));
+        this._layoutDirty = true;
+        this.render();
+    }
+
+    // --- Hide / Unhide ---
+
+    hideColumn(col: number): void {
+        this._hiddenCols.add(col);
+        this._layoutDirty = true;
+        this.render();
+    }
+
+    unhideColumn(col: number): void {
+        this._hiddenCols.delete(col);
+        this._layoutDirty = true;
+        this.render();
+    }
+
+    unhideAllCols(): void {
+        this._hiddenCols.clear();
+        this._layoutDirty = true;
+        this.render();
+    }
+
+    hideRow(row: number): void {
+        this._explicitHiddenRows.add(row);
+        this._layoutDirty = true;
+        this.render();
+    }
+
+    unhideRow(row: number): void {
+        this._explicitHiddenRows.delete(row);
+        this._layoutDirty = true;
+        this.render();
+    }
+
+    unhideAllRows(): void {
+        this._explicitHiddenRows.clear();
+        this._layoutDirty = true;
+        this.render();
+    }
+
+    isColHidden(col: number): boolean {
+        return this._hiddenCols.has(col);
+    }
+
+    isRowHidden(row: number): boolean {
+        return this._explicitHiddenRows.has(row);
+    }
+
+    getHiddenCols(): Set<number> {
+        return new Set(this._hiddenCols);
+    }
+
+    getHiddenRows(): Set<number> {
+        return new Set(this._explicitHiddenRows);
+    }
+
+    // --- Outline Groups ---
+
+    setColOutlineGroups(groups: Array<{ start: number; end_inclusive: number; level: number; collapsed: boolean }>): void {
+        this._colOutlineGroups = groups;
+        this.render();
+    }
+
+    setRowOutlineGroups(groups: Array<{ start: number; end_inclusive: number; level: number; collapsed: boolean }>): void {
+        this._rowOutlineGroups = groups;
+        this.render();
+    }
+
+    getColOutlineGroups(): Array<{ start: number; end_inclusive: number; level: number; collapsed: boolean }> {
+        return this._colOutlineGroups;
+    }
+
+    getRowOutlineGroups(): Array<{ start: number; end_inclusive: number; level: number; collapsed: boolean }> {
+        return this._rowOutlineGroups;
+    }
+
+    addColOutlineGroup(start: number, end_inclusive: number): void {
+        const level = 1;
+        this._colOutlineGroups.push({ start, end_inclusive, level, collapsed: false });
+        this.render();
+    }
+
+    addRowOutlineGroup(start: number, end_inclusive: number): void {
+        const level = 1;
+        this._rowOutlineGroups.push({ start, end_inclusive, level, collapsed: false });
+        this.render();
+    }
+
+    removeColOutlineGroup(start: number, end_inclusive: number): void {
+        this._colOutlineGroups = this._colOutlineGroups.filter(
+            g => !(g.start === start && g.end_inclusive === end_inclusive)
+        );
+        this.render();
+    }
+
+    removeRowOutlineGroup(start: number, end_inclusive: number): void {
+        this._rowOutlineGroups = this._rowOutlineGroups.filter(
+            g => !(g.start === start && g.end_inclusive === end_inclusive)
+        );
+        this.render();
+    }
+
+    collapseRowGroup(groupIndex: number): void {
+        const group = this._rowOutlineGroups[groupIndex];
+        if (!group) return;
+        group.collapsed = true;
+        for (let r = group.start; r <= group.end_inclusive; r++) {
+            this._explicitHiddenRows.add(r);
+        }
+        this._layoutDirty = true;
+        this.render();
+    }
+
+    expandRowGroup(groupIndex: number): void {
+        const group = this._rowOutlineGroups[groupIndex];
+        if (!group) return;
+        group.collapsed = false;
+        for (let r = group.start; r <= group.end_inclusive; r++) {
+            this._explicitHiddenRows.delete(r);
+        }
+        this._layoutDirty = true;
+        this.render();
+    }
+
+    collapseColGroup(groupIndex: number): void {
+        const group = this._colOutlineGroups[groupIndex];
+        if (!group) return;
+        group.collapsed = true;
+        for (let c = group.start; c <= group.end_inclusive; c++) {
+            this._hiddenCols.add(c);
+        }
+        this._layoutDirty = true;
+        this.render();
+    }
+
+    expandColGroup(groupIndex: number): void {
+        const group = this._colOutlineGroups[groupIndex];
+        if (!group) return;
+        group.collapsed = false;
+        for (let c = group.start; c <= group.end_inclusive; c++) {
+            this._hiddenCols.delete(c);
+        }
         this._layoutDirty = true;
         this.render();
     }
