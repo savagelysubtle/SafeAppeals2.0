@@ -766,7 +766,8 @@ export const availableTools = (chatMode: ChatMode | null, mcpTools: InternalTool
 		? ['read_file', 'edit_file', 'edit_document', 'create_file_or_folder', 'rag_search_reference', 'rag_search_workspace', 'rag_get_stats', 'web_search', 'multi_link_search', 'timeline_add_event', 'timeline_update_event', 'timeline_delete_event', 'timeline_get_events', 'timeline_link_document', 'timeline_get_deadlines'] as BuiltinToolName[]
 		: chatMode === 'research' ? (Object.keys(builtinTools) as BuiltinToolName[]).filter(toolName => !(toolName in approvalTypeOfBuiltinToolName))
 			: chatMode === 'case_manager' ? Object.keys(builtinTools) as BuiltinToolName[]
-				: undefined
+				: chatMode === 'blog_writer' ? Object.keys(builtinTools) as BuiltinToolName[]
+					: undefined
 
 	const effectiveBuiltinTools = builtinToolNames?.map(toolName => {
 		const tool = builtinTools[toolName]
@@ -779,7 +780,7 @@ export const availableTools = (chatMode: ChatMode | null, mcpTools: InternalTool
 
 	// Enable MCP tools in ALL modes (drafting, research, case_manager)
 	// This is important because drafting may need extended thinking, and native MCP tools work with extended thinking
-	const effectiveMCPTools = (chatMode === 'case_manager' || chatMode === 'research' || chatMode === 'drafting') ? mcpTools : undefined
+	const effectiveMCPTools = (chatMode === 'case_manager' || chatMode === 'research' || chatMode === 'drafting' || chatMode === 'blog_writer') ? mcpTools : undefined
 
 	const tools: InternalToolInfo[] | undefined = !(builtinToolNames || mcpTools) ? undefined
 		: [

@@ -155,6 +155,7 @@ import { XLSXExtractorChannel } from '../../workbench/contrib/void/electron-main
 import { AudioRecorderChannel } from '../../workbench/contrib/void/electron-main/audioRecorder/audioRecorderChannel.js';
 import { AudioRecorderMainService } from '../../workbench/contrib/void/electron-main/audioRecorder/audioRecorderMainService.js';
 import { BrowserPanelChannel } from '../../workbench/contrib/void/electron-main/browserPanelChannel.js';
+import { GrowthWriterChannel } from '../../workbench/contrib/void/electron-main/growthWriter/growthWriterChannel.js';
 /**
  * The main VS Code application. There will only ever be one instance,
  * even if the user starts many instances (e.g. from the command line).
@@ -1333,6 +1334,10 @@ export class CodeApplication extends Disposable {
 		// Void DocuSign JWT auth channel (for bundled integration key and JWT authentication)
 		const docuSignChannel = new DocuSignChannel(this.environmentMainService.userDataPath);
 		mainProcessElectronServer.registerChannel('void-channel-docusign', docuSignChannel);
+
+		// Void Growth Writer channel (marketing content engine)
+		const growthWriterChannel = new GrowthWriterChannel(this.environmentMainService.userDataPath, this.logService);
+		mainProcessElectronServer.registerChannel('void-channel-growth-writer', growthWriterChannel);
 
 		// Void Document Export service (for PDF export from viewers)
 		const documentExportChannel = new DocumentExportChannel(this.logService);

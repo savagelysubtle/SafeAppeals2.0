@@ -305,12 +305,14 @@ const nameOfChatMode = {
 	drafting: "Drafting",
 	research: "Research",
 	case_manager: "Case Manager",
+	blog_writer: "Blog Writer",
 };
 
 const detailOfChatMode = {
 	drafting: "Interactive document creation with guidance",
 	research: "Deep policy and case document analysis",
 	case_manager: "Proactive case workflow management",
+	blog_writer: "SEO content creation and social media strategy",
 };
 
 const ChatModeDropdown = ({ className }: { className: string }) => {
@@ -320,7 +322,7 @@ const ChatModeDropdown = ({ className }: { className: string }) => {
 	const settingsState = useSettingsState();
 
 	const options: ChatMode[] = useMemo(
-		() => ["drafting", "research", "case_manager"],
+		() => ["drafting", "research", "case_manager", "blog_writer"],
 		[]
 	);
 
