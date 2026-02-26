@@ -79,6 +79,27 @@ bun run build-wasm && bun run build-xlsx-viewer
 > **📁 WASM output**: `.../xlsxRustViewer/media/wasm/xlsx_rust_viewer_bg.wasm` (~10MB)
 > **📁 JS bundle**: `.../xlsxRustViewer/media/xlsxRustViewer.js` (~31KB)
 
+### PDF Rust Viewer (WASM)
+
+```bash
+# Full build: Rust → WASM (via cargo + wasm-bindgen) + TS → JS (Windows)
+bun run build-pdf-wasm
+# Equivalent to: cd .../pdfViewer/wasm && powershell -ExecutionPolicy Bypass -File ./build.ps1
+# Note: build.ps1 runs all steps including the TS bundle (build.mjs), so no need for build-pdf-viewer separately
+
+# macOS / Linux equivalent:
+bash src/vs/workbench/contrib/void/browser/documentViewers/pdfViewer/wasm/build.sh
+
+# TS bundle only (when Rust WASM artifacts are already built)
+bun run build-pdf-viewer
+# Equivalent to: node .../pdfViewer/media/build.mjs
+```
+
+> **📝 Prerequisites**: `cargo install wasm-bindgen-cli` and `rustup target add wasm32-unknown-unknown`
+> **📁 Source**: `src/vs/workbench/contrib/void/browser/documentViewers/pdfViewer/`
+> **📁 WASM output**: `.../pdfViewer/media/wasm/pdf_viewer_bg.wasm` + `pdf_viewer.js`
+> **📁 JS bundle**: `.../pdfViewer/media/pdfRustViewer.js`
+
 ### Extensions
 
 ```bash
@@ -395,6 +416,8 @@ src/vs/workbench/contrib/void/browser/react/            # React components
 src/vs/workbench/contrib/void/browser/documentViewers/  # Document viewers (PDF, DOCX, XLSX, Image)
   xlsxRustViewer/wasm/                                  # Rust WASM crate (calamine + rust_xlsxwriter + polars)
   xlsxRustViewer/media/                                 # Webview assets (JS bundle, WASM output)
+  pdfViewer/wasm/                                       # Rust WASM crate (pdfium via wasm-bindgen)
+  pdfViewer/media/                                      # Webview assets (JS bundle, pdfium.js, WASM output)
 build/                                                  # Build scripts
 scripts/                                                # Launch scripts
 extensions/                                             # Built-in extensions
@@ -445,8 +468,10 @@ bun run extensions-ci-pr
 bun run buildreact         # Build React components
 bun run compile            # Compile VS Code
 bun run watchd             # Watch mode (background)
-bun run build-wasm         # Compile Rust XLSX viewer to WASM
+bun run build-wasm         # Compile Rust XLSX viewer to WASM (wasm-pack)
 bun run build-xlsx-viewer  # Bundle XLSX Rust Viewer webview JS
+bun run build-pdf-wasm     # Full PDF viewer build: Rust→WASM + TS→JS (Windows, runs build.ps1)
+bun run build-pdf-viewer   # PDF viewer TS bundle only (pdfRustViewer.js)
 ./scripts/code.sh          # Launch VS Code
 ```
 
