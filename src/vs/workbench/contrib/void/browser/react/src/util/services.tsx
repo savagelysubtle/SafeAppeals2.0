@@ -91,6 +91,7 @@ import { IToolsService } from "../../../tools/toolsService.js";
 import { IVoidCloudService } from "../../../voidCloudService.js";
 import { IVoidCommandBarService } from "../../../voidCommandBarService.js";
 import { IAudioRecorderService } from "../../../../common/audioRecorder/IAudioRecorderService.js";
+import { IGrowthWriterService } from "../../../growthWriter/growthWriterService.js";
 
 // normally to do this you'd use a useEffect that calls .onDidChangeState(), but useEffect mounts too late and misses initial state changes
 
@@ -312,6 +313,7 @@ const getReactAccessor = (accessor: ServicesAccessor) => {
 		ICloudLLMRouterService: accessor.get(ICloudLLMRouterService),
 		IDocumentViewerService: accessor.get(IDocumentViewerService),
 		IAudioRecorderService: accessor.get(IAudioRecorderService),
+		IGrowthWriterService: accessor.get(IGrowthWriterService),
 	} as const;
 	return reactAccessor;
 };

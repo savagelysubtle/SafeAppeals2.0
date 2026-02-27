@@ -168,6 +168,12 @@ import { VoidCloudUrlHandler } from './voidCloudUrlHandler.js';
 import './docuSign/docuSignActions.js';
 import './docuSign/docuSignService.js';
 
+// Growth Writer extension (marketing content engine)
+import './growthWriter/growthWriterService.js';
+import './growthWriter/redditMonitorService.js';
+import './growthWriter/twitterService.js';
+import './growthWriter/growthWriter.contribution.js';
+
 // Ensure RAG workspace service starts
 import { IWorkbenchContributionsRegistry, Extensions as WorkbenchExtensions } from '../../../common/contributions.js';
 import { LifecyclePhase } from '../../../services/lifecycle/common/lifecycle.js';

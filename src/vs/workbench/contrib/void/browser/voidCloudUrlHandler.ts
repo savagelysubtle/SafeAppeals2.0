@@ -6,6 +6,7 @@
 import { Disposable } from '../../../../base/common/lifecycle.js';
 import { URI } from '../../../../base/common/uri.js';
 import { ILogService } from '../../../../platform/log/common/log.js';
+import { IMainProcessService } from '../../../../platform/ipc/common/mainProcessService.js';
 import { INotificationService, Severity } from '../../../../platform/notification/common/notification.js';
 import { IOpenURLOptions, IURLHandler, IURLService } from '../../../../platform/url/common/url.js';
 import { IWorkbenchContribution } from '../../../common/contributions.js';
@@ -19,6 +20,7 @@ import { IVoidCloudService } from './voidCloudService.js';
  * - safe-appeals-navigator://auth/callback - SafeAppeals Cloud (Google OAuth via Supabase)
  * - safe-appeals-navigator://docusign/callback - DocuSign OAuth (legacy) or JWT consent confirmation
  * - safe-appeals-navigator://docusign/consent - DocuSign JWT consent granted confirmation
+ * - safe-appeals-navigator://twitter/callback - Twitter/X OAuth PKCE callback (production only)
  *
  * Flow for OAuth:
  * 1. User clicks sign-in button
@@ -41,12 +43,13 @@ export class VoidCloudUrlHandler extends Disposable implements IWorkbenchContrib
 		@IURLService urlService: IURLService,
 		@IVoidCloudService private readonly cloudService: IVoidCloudService,
 		@IDocuSignService private readonly docuSignService: IDocuSignService,
+		@IMainProcessService private readonly mainProcessService: IMainProcessService,
 		@ILogService private readonly logService: ILogService,
 		@INotificationService private readonly notificationService: INotificationService,
 	) {
 		super();
 		this._register(urlService.registerHandler(this));
-		this.logService.info('VoidCloudUrlHandler: Registered for safe-appeals-navigator://auth/* and docusign/* URLs');
+		this.logService.info('VoidCloudUrlHandler: Registered for safe-appeals-navigator://auth/*, docusign/*, twitter/* URLs');
 	}
 
 	async handleURL(uri: URI, options?: IOpenURLOptions): Promise<boolean> {
@@ -64,6 +67,12 @@ export class VoidCloudUrlHandler extends Disposable implements IWorkbenchContrib
 		if (uri.authority === 'docusign') {
 			if (uri.path.startsWith('/callback')) {
 				return this._handleDocuSignCallback(uri);
+			}
+		}
+
+		if (uri.authority === 'twitter') {
+			if (uri.path.startsWith('/callback')) {
+				return this._handleTwitterCallback(uri);
 			}
 		}
 
@@ -171,6 +180,62 @@ export class VoidCloudUrlHandler extends Disposable implements IWorkbenchContrib
 				message: `Sign in failed: ${message}`,
 			});
 			this.cloudService.handleAuthError(message);
+			return true;
+		}
+	}
+
+	/**
+	 * Handle Twitter/X OAuth PKCE callback (production only).
+	 * URL format: safe-appeals-navigator://twitter/callback?code=xxx&state=yyy
+	 *
+	 * In dev mode (code.bat), the custom URI scheme is not registered,
+	 * so users must copy-paste the auth code from the redirect page instead.
+	 */
+	private async _handleTwitterCallback(uri: URI): Promise<boolean> {
+		this.logService.info('VoidCloudUrlHandler: Handling Twitter callback');
+
+		try {
+			const queryParams = new URLSearchParams(uri.query);
+
+			const error = queryParams.get('error');
+			const errorDescription = queryParams.get('error_description');
+			if (error) {
+				const message = errorDescription || error;
+				this.logService.error('VoidCloudUrlHandler: Twitter OAuth error', message);
+				this.notificationService.notify({
+					severity: Severity.Error,
+					message: `Twitter sign in failed: ${message}`,
+				});
+				return true;
+			}
+
+			const code = queryParams.get('code');
+			const state = queryParams.get('state');
+			if (!code || !state) {
+				this.logService.error('VoidCloudUrlHandler: Missing code or state in Twitter callback');
+				this.notificationService.notify({
+					severity: Severity.Error,
+					message: 'Twitter sign in failed: Missing authorization code or state.',
+				});
+				return true;
+			}
+
+			const channel = this.mainProcessService.getChannel('void-channel-growth-writer');
+			await channel.call('exchangeTwitterCode', { code, state });
+
+			this.notificationService.notify({
+				severity: Severity.Info,
+				message: 'Successfully connected to Twitter/X!',
+			});
+
+			return true;
+		} catch (error) {
+			const message = error instanceof Error ? error.message : 'Unknown error';
+			this.logService.error('VoidCloudUrlHandler: Failed to handle Twitter callback', error);
+			this.notificationService.notify({
+				severity: Severity.Error,
+				message: `Twitter sign in failed: ${message}`,
+			});
 			return true;
 		}
 	}

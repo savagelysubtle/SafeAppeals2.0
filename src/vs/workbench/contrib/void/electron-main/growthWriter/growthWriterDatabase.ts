@@ -126,6 +126,16 @@ export class GrowthWriterDatabaseService {
 		);
 	}
 
+	async getIdeaTitles(silo: Silo): Promise<string[]> {
+		if (!this.db) await this.initialize();
+
+		const rows = await this.allAsync<{ title: string }>(
+			'SELECT title FROM growth_blog_ideas WHERE silo = ?',
+			[silo]
+		);
+		return rows.map(r => r.title);
+	}
+
 	// ========== CAMPAIGNS CRUD ==========
 
 	async getCampaigns(filters?: { silo?: Silo; status?: CampaignStatus }): Promise<ICampaign[]> {
@@ -157,6 +167,32 @@ export class GrowthWriterDatabaseService {
 			campaign.blog_content, campaign.blog_cms_id, campaign.blog_url, campaign.status,
 			campaign.scheduled_for, campaign.generated_at, campaign.approved_at, campaign.published_at,
 			campaign.error_message]
+		);
+	}
+
+	async getCampaignById(id: string): Promise<ICampaign | undefined> {
+		if (!this.db) await this.initialize();
+		return this.getAsync<ICampaign>('SELECT * FROM growth_campaigns WHERE id = ?', [id]);
+	}
+
+	async getCampaignByIdeaId(ideaId: string): Promise<ICampaign | undefined> {
+		if (!this.db) await this.initialize();
+		return this.getAsync<ICampaign>('SELECT * FROM growth_campaigns WHERE blog_idea_id = ? ORDER BY created_at DESC LIMIT 1', [ideaId]);
+	}
+
+	async updateCampaignContent(id: string, blogTitle: string, blogSlug: string, blogContent: string, blogUrl: string): Promise<void> {
+		if (!this.db) await this.initialize();
+		await this.runAsync(
+			`UPDATE growth_campaigns SET blog_title = ?, blog_slug = ?, blog_content = ?, blog_url = ?, status = 'draft', generated_at = ? WHERE id = ?`,
+			[blogTitle, blogSlug, blogContent, blogUrl, new Date().toISOString(), id]
+		);
+	}
+
+	async updateCampaignPublished(id: string, blogCmsId: string, blogUrl: string): Promise<void> {
+		if (!this.db) await this.initialize();
+		await this.runAsync(
+			`UPDATE growth_campaigns SET blog_cms_id = ?, blog_url = ?, status = 'published', published_at = ? WHERE id = ?`,
+			[blogCmsId, blogUrl, new Date().toISOString(), id]
 		);
 	}
 

@@ -3,7 +3,7 @@
  *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
  *--------------------------------------------------------------------------------------*/
 
-import { IScheduleConfig, ISiloConfig, Silo } from './growthWriterTypes.js'
+import { IScheduleConfig, ISiloConfig, ISiloQuerySet, Silo } from './growthWriterTypes.js'
 
 // ============================================
 // SILO CONFIGURATION
@@ -96,7 +96,7 @@ export function buildUtmUrl(slug: string, source: string, medium: string, campai
 // BLOG CMS API
 // ============================================
 
-export const BLOG_CMS_API_URL = 'https://api.safeappeals.com/blog/posts'
+export const BLOG_CMS_API_URL_DEFAULT = 'https://void-cloud-production.up.railway.app/blog/posts'
 
 // ============================================
 // REDDIT API
@@ -161,7 +161,35 @@ Voice Rules:
 - Use concrete examples with realistic scenarios
 - Vary sentence length — mix short punchy sentences with longer explanatory ones
 - NO banned AI-detection phrases (game-changer, revolutionary, deep dive, unpack, etc.)
-- NO filler introductions — start with the problem or a compelling hook`
+- NO filler introductions — start with the problem or a compelling hook
+
+Formatting Rules (CRITICAL — follow these exactly):
+- Keep paragraphs SHORT: 2-4 sentences max. Never write a paragraph longer than 4 sentences.
+- Use <hr> between major H2 sections for visual separation.
+- Use <h3> subheadings within H2 sections to break up long sections.
+- Never have more than 3 consecutive plain paragraphs — break up with a list, callout, or blockquote.
+- Use bulleted and numbered lists generously for tips, steps, and comparisons.
+
+Rich HTML Elements (use these to create visual variety):
+- CALLOUT BOXES: <aside class="blog-callout"><strong>Pro Tip</strong><p>Content here.</p></aside>
+  Use for tips, important notes, or warnings. Add class "warning" for caution: <aside class="blog-callout warning">
+- KEY TAKEAWAYS: <div class="blog-key-takeaway"><p>The single most important point from this section.</p></div>
+  Place at the end of a major section to summarize the key insight.
+- PULL QUOTES: <blockquote class="blog-pull-quote">A striking statistic or memorable statement.</blockquote>
+  Use 1-2 per post for visual emphasis on important points.
+- COMPARISONS: <div class="blog-comparison"><div><strong>Without SafeAppeals</strong><p>Problem description.</p></div><div><strong>With SafeAppeals</strong><p>Solution description.</p></div></div>
+  Use when contrasting before/after or old way vs new way.
+- STEPS: <div class="blog-step" data-step="1"><strong>Step Title</strong><p>Step description.</p></div>
+  Use for sequential processes or walkthroughs.
+
+Example section structure:
+<h2>Section Title</h2>
+<p>Opening paragraph — 2-3 sentences setting up the problem.</p>
+<aside class="blog-callout"><strong>Did You Know</strong><p>A relevant stat or fact.</p></aside>
+<p>Explanation paragraph.</p>
+<ul><li>Point one</li><li>Point two</li><li>Point three</li></ul>
+<div class="blog-key-takeaway"><p>Summary of the key insight from this section.</p></div>
+<hr>`
 
 export const BLOG_USER_PROMPT_TEMPLATE = `Write a blog post for the "{silo}" audience ({audience}).
 
@@ -173,15 +201,25 @@ export const BLOG_USER_PROMPT_TEMPLATE = `Write a blog post for the "{silo}" aud
 {rag_context}
 
 **Requirements**:
-1. ~2000 words, HTML format
+1. ~2000 words, HTML format with rich visual structure
 2. Compelling H1 title (include primary keyword)
-3. Meta description (~155 chars) as an HTML comment at the top
-4. 4-6 H2 sections with descriptive, keyword-rich headings
+3. Meta description (~155 chars) as an HTML comment at the top: <!-- meta: Your description here -->
+4. 4-6 H2 sections with descriptive, keyword-rich headings, separated by <hr> tags
 5. At least 2 specific SafeAppeals features mentioned naturally
 6. End with a soft CTA — not "sign up now" but "if you're dealing with X, tools like SafeAppeals can help"
-7. Include 1-2 internal links where natural
+7. Include 1-2 internal links where natural (e.g. <a href="/docs">documentation</a>, <a href="/blog">more guides</a>)
 
-Output the complete HTML content only, no markdown wrapper.`
+**Formatting (MANDATORY — the page will look broken without these)**:
+8. Short paragraphs ONLY — 2-4 sentences max per <p> tag
+9. Include at least 2 callout boxes: <aside class="blog-callout"><strong>Title</strong><p>Content</p></aside>
+10. Include at least 1 key takeaway: <div class="blog-key-takeaway"><p>Summary insight</p></div>
+11. Include at least 1 pull quote: <blockquote class="blog-pull-quote">Striking statement</blockquote>
+12. Use at least 2 bulleted or numbered lists throughout the post
+13. Alternate between paragraphs, lists, callouts, and other elements — never more than 3 plain paragraphs in a row
+14. When showing a process or workflow, use step boxes: <div class="blog-step" data-step="1"><strong>Title</strong><p>Description</p></div>
+15. When comparing before/after or two approaches, use: <div class="blog-comparison"><div><strong>Label A</strong><p>Content</p></div><div><strong>Label B</strong><p>Content</p></div></div>
+
+Output the complete HTML content only, no markdown wrapper, no \`\`\`html fences.`
 
 export const REDDIT_COMMENT_SYSTEM_PROMPT = `You are a helpful Reddit user who happens to use SafeAppeals for document organization. You are NOT a marketer — you are genuinely trying to help.
 
@@ -288,3 +326,67 @@ export const DEFAULT_FEW_SHOT_EXAMPLES: Record<Silo, { blogExcerpt: string; redd
 		],
 	},
 }
+
+// ============================================
+// RAG MULTI-QUERY TEMPLATES (Phase 2)
+// ============================================
+
+export const queryTemplatesOfSilo: Record<Silo, (topic: string) => ISiloQuerySet> = {
+	lawyers: (topic) => ({
+		featureQuery: `SafeAppeals features for ${topic} in legal case management`,
+		workflowQuery: `how lawyers use SafeAppeals to ${topic}`,
+		painPointQuery: `problems lawyers face with ${topic} and how SafeAppeals solves them`,
+		differentiatorQuery: `how SafeAppeals compares to alternatives for legal ${topic}`,
+	}),
+	researchers: (topic) => ({
+		featureQuery: `SafeAppeals features for ${topic} in academic research`,
+		workflowQuery: `how researchers use SafeAppeals to ${topic}`,
+		painPointQuery: `challenges researchers face with ${topic} and SafeAppeals helps`,
+		differentiatorQuery: `how SafeAppeals differs from other tools for research ${topic}`,
+	}),
+	students: (topic) => ({
+		featureQuery: `SafeAppeals features for ${topic} in student workflows`,
+		workflowQuery: `how students use SafeAppeals to ${topic}`,
+		painPointQuery: `student struggles with ${topic} that SafeAppeals addresses`,
+		differentiatorQuery: `why SafeAppeals is better than alternatives for student ${topic}`,
+	}),
+	business: (topic) => ({
+		featureQuery: `SafeAppeals features for ${topic} in business consulting`,
+		workflowQuery: `how business professionals use SafeAppeals to ${topic}`,
+		painPointQuery: `business document challenges with ${topic} and SafeAppeals solutions`,
+		differentiatorQuery: `SafeAppeals advantages over competitors for business ${topic}`,
+	}),
+}
+
+// ============================================
+// IDEA GENERATION PROMPTS (Phase 2)
+// ============================================
+
+export const IDEA_GENERATION_SYSTEM_PROMPT = `You are a content strategist for SafeAppeals, a document organization and AI workspace tool. Your job is to generate blog post ideas that will attract and help a specific audience.
+
+Rules:
+- Each idea must be grounded in real product capabilities from the provided RAG context
+- Mix content types: product-focused ("How SafeAppeals helps with X"), educational ("N tips for Y"), and problem-solving ("Why Z happens and how to fix it")
+- Ideas should range from beginner-friendly to advanced
+- Titles must be specific and SEO-friendly (include searchable phrases)
+- NO generic marketing fluff — every idea should address a real pain point
+- Prioritize topics with high search intent (questions people actually ask)
+
+Output ONLY a valid JSON array. Each element must have these fields:
+- "title": string (the blog post title, SEO-optimized)
+- "description": string (1-2 sentence summary of what the post covers)
+- "keywords": string (comma-separated target keywords)
+- "content_angle": "product" | "educational" | "problem_solving"
+- "priority": number (1-10, higher = more valuable/timely)`
+
+export const IDEA_GENERATION_USER_PROMPT_TEMPLATE = `Generate {count} blog post ideas for the "{silo}" audience ({audience}).
+
+**Content angle focus**: {contentAngle}
+
+**SafeAppeals product context (use this to ground ideas in real features)**:
+{rag_context}
+
+**Existing blog ideas to AVOID duplicating** (generate different topics):
+{existing_titles}
+
+Generate exactly {count} unique blog post ideas as a JSON array. Each idea should address a different aspect of how SafeAppeals helps this audience.`

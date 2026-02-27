@@ -215,4 +215,104 @@ export interface IGrowthWriterChannelCommand {
 	// Platform auth
 	getPlatformAuth: { platform: Platform }
 	upsertPlatformAuth: Partial<IPlatformAuth> & { platform: Platform }
+
+	// Semantic dedup (Phase 2)
+	checkSemanticDuplicate: { workspaceId: string; newTitle: string; silo: Silo }
+	getIdeaTitles: { workspaceId: string; silo: Silo }
+
+	// Blog generation pipeline (Phase 3)
+	updateCampaignContent: { id: string; blog_title: string; blog_slug: string; blog_content: string; blog_url: string }
+	publishBlog: { campaignId: string }
+
+	// Reddit integration (Phase 4)
+	authenticateReddit: { clientId: string; clientSecret: string; username: string; password: string }
+	monitorSubreddits: { subreddits: string[]; limit?: number; after?: string }
+	searchSubreddit: { subreddit: string; query: string; time?: string }
+	postRedditComment: { thingId: string; text: string }
+	getRedditAccountHealth: {}
+	storeRedditCredentials: { clientId: string; clientSecret: string; username: string; password: string }
+	loadRedditCredentials: {}
+
+	// Twitter integration (Phase 5)
+	startTwitterAuth: { clientId: string; clientSecret?: string; redirectUri?: string }
+	exchangeTwitterCode: { code: string; state: string }
+	postTweet: { socialPostId: string; text: string }
+	postThread: { tweets: Array<{ socialPostId: string; text: string }> }
+	getTweetMetrics: { tweetId: string }
+	getTwitterMe: {}
+	refreshTwitterTokens: {}
+	storeTwitterTokens: { accessToken: string; refreshToken: string; expiresAt: number; clientId: string }
+	loadTwitterTokens: {}
+}
+
+// ============================================
+// REDDIT API TYPES (Phase 4)
+// ============================================
+
+export interface IRedditPost {
+	id: string
+	name: string
+	subreddit: string
+	title: string
+	selftext: string
+	url: string
+	score: number
+	num_comments: number
+	created_utc: number
+	author: string
+	permalink: string
+}
+
+export interface IRedditAccountHealth {
+	username: string
+	karma: number
+	warmupStartedAt: string | null
+	warmupComplete: boolean
+	removalCount: number
+	lastRemovalAt: string | null
+}
+
+// ============================================
+// CMS PUBLISH RESULT (Phase 3)
+// ============================================
+
+export interface ICMSPublishResult {
+	id: string
+	slug: string
+	url: string
+}
+
+// ============================================
+// RAG QUERY TYPES (Phase 2)
+// ============================================
+
+export interface ISiloQuerySet {
+	featureQuery: string
+	workflowQuery: string
+	painPointQuery: string
+	differentiatorQuery: string
+}
+
+// ============================================
+// TWITTER API TYPES (Phase 5)
+// ============================================
+
+export interface ITwitterAuthResult {
+	accessToken: string
+	refreshToken: string
+	expiresAt: number
+}
+
+export interface ITweetResult {
+	id: string
+	text: string
+}
+
+export interface ITweetMetrics {
+	retweet_count: number
+	reply_count: number
+	like_count: number
+	quote_count: number
+	impression_count: number
+	bookmark_count: number
 }

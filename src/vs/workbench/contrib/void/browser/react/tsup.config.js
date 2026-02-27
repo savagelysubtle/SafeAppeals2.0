@@ -20,6 +20,8 @@ export default defineConfig({
 		'./src2/timeline-tsx/index.tsx',
 		'./src2/email-dashboard-tsx/index.tsx',
 		'./src2/audio-recorder-tsx/index.tsx',
+		'./src2/growth-writer-sidebar-tsx/index.tsx',
+		'./src2/growth-writer-editor-tsx/index.tsx',
 	],
 	outDir: './out',
 	format: ['esm'],
