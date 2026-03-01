@@ -55,11 +55,12 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
 
-      - name: Install esbuild
+      - name: Install JS build dependencies
         run: |
-          npm install -g esbuild
+          npm install -g esbuild chart.js
           mkdir -p node_modules
           ln -s "$(npm root -g)/esbuild" node_modules/esbuild
+          ln -s "$(npm root -g)/chart.js" node_modules/chart.js
 
       - name: Build XLSX Rust Viewer WASM
         run: wasm-pack build --target web --out-dir ../media/wasm --no-typescript
