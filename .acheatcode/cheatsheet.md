@@ -246,10 +246,10 @@ bun run download-whisper-model
 
 > **Note**: These are automatically downloaded during `node build/lib/preLaunch.js` (first-time setup) and bundled into the installer.
 
-| Component | Size | Purpose | Location |
-|-----------|------|---------|----------|
-| **FFmpeg** | ~150MB | Audio format conversion (m4a/mp3 → WAV) | `resources/ffmpeg/{platform}/` |
-| **Whisper Model** | ~1.5GB | AI speech-to-text transcription | `resources/models/whisper/distil-large-v3.5/` |
+| Component         | Size   | Purpose                                 | Location                                      |
+| ----------------- | ------ | --------------------------------------- | --------------------------------------------- |
+| **FFmpeg**        | ~150MB | Audio format conversion (m4a/mp3 → WAV) | `resources/ffmpeg/{platform}/`                |
+| **Whisper Model** | ~1.5GB | AI speech-to-text transcription         | `resources/models/whisper/distil-large-v3.5/` |
 
 ### Manual Installation (Development)
 

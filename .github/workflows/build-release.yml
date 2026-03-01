@@ -543,8 +543,24 @@ jobs:
         with:
           tag_name: ${{ github.ref_name || github.event.inputs.version }}
           name: Safe Appeals Navigator v${{ steps.get_version.outputs.VERSION }}
+          body_path: ''
           body: |
             ## Safe Appeals Navigator v${{ steps.get_version.outputs.VERSION }}
+
+            See [CHANGELOG.md](https://github.com/savagelysubtle/SafeAppeals2.0/blob/main/CHANGELOG.md) for detailed release notes.
+
+            ### Highlights
+
+            - **XLSX Viewer**: Complete Rust/WASM rewrite with charts, formulas, data validation, and AI table tools
+            - **PDF Viewer**: Complete Rust/WASM rewrite with annotations, AI integration, and native export
+            - **Integrated Browser**: Full in-app web browsing with navigation controls
+            - **RAG v2.1**: Overhauled vector search pipeline, micro database architecture, hybrid search with cross-encoder reranking
+            - **Audio Transcription**: Whisper-powered speech-to-text with FFmpeg integration
+            - **Case Timeline**: Event tracker with document linking, calendar view, and PDF export
+            - **DOCX Viewer**: MS Word-like features, pagination, ribbon interface, and auto-save
+            - **File Conversion**: Multi-format document conversion with Python/Docling backend
+            - **OCR Support**: Bundled Tesseract and Poppler for image text extraction
+            - **Cloud Services**: SafeAppeals Cloud backend, LLM routing, Brave Search Pro integration
 
             ### Downloads
 

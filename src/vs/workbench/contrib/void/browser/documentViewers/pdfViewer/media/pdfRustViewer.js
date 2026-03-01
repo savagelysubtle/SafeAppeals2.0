@@ -19,6 +19,24 @@
       wasm.pdfrenderer_close(this.__wbg_ptr);
     }
     /**
+     * Detect interactive form fields (widget annotations) on a page.
+     * Returns JSON array: [{x, y, width, height, field_type, field_name}]
+     * Coordinates are in PDF points with top-left origin (y is flipped from PDF space).
+     * @param {number} index
+     * @returns {string}
+     */
+    get_form_fields(index) {
+      const ret = wasm.pdfrenderer_get_form_fields(this.__wbg_ptr, index);
+      if (ret[3]) {
+        throw takeFromExternrefTable0(ret[2]);
+      }
+      var v1 = getCachedStringFromWasm0(ret[0], ret[1]);
+      if (ret[0] !== 0) {
+        wasm.__wbindgen_free(ret[0], ret[1], 1);
+      }
+      return v1;
+    }
+    /**
      * Get document outline as JSON tree.
      * @returns {string}
      */
