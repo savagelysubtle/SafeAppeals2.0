@@ -4,12 +4,23 @@ interface IPCChannel {
 	call<T = unknown>(command: string, arg?: unknown): Promise<T>
 }
 
+export interface SchedulerState {
+	enabled: boolean
+	running: boolean
+	lastRunAt: string | null
+	nextRunAt: string | null
+	pendingActions: string[]
+}
+
 export interface GrowthWriterContextType {
 	channel: IPCChannel
 	openView: (viewType: string, viewData?: Record<string, string>) => void
 	workspaceId: string
 	generateIdeas?: (silo: string, count?: number) => Promise<BlogIdea[]>
 	generateBlogForIdea?: (ideaId: string) => Promise<Campaign>
+	schedulerState?: SchedulerState
+	setSchedulerEnabled?: (enabled: boolean) => void
+	runSchedulerNow?: () => Promise<void>
 }
 
 export const GrowthWriterContext = createContext<GrowthWriterContextType | null>(null)
@@ -71,6 +82,7 @@ export interface RedditOpportunity {
 
 export const SILO_LABELS: Record<string, string> = {
 	lawyers: 'Lawyers',
+	workers_comp: "Workers' Comp",
 	researchers: 'Researchers',
 	students: 'Students',
 	business: 'Business',
@@ -78,6 +90,7 @@ export const SILO_LABELS: Record<string, string> = {
 
 export const SILO_COLORS: Record<string, string> = {
 	lawyers: '#3b82f6',
+	workers_comp: '#ef4444',
 	researchers: '#8b5cf6',
 	students: '#f59e0b',
 	business: '#10b981',

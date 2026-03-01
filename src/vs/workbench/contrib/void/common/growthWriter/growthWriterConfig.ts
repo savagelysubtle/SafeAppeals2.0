@@ -15,11 +15,24 @@ export const SILO_CONFIGS: Record<Silo, ISiloConfig> = {
 		displayName: 'Legal Professionals',
 		audience: 'Lawyers, paralegals, and legal advocates',
 		contentAngle: 'Case document organization, appeal workflows, legal file management',
-		subreddits: ['LawFirm', 'legaladvicecanada', 'lawyers', 'WorkersComp', 'paralegal'],
+		subreddits: ['LawFirm', 'legaladvicecanada', 'lawyers', 'paralegal'],
 		monitorKeywords: [
 			'organize case files', 'document management law', 'legal paperwork',
 			'case file organization', 'legal document management', 'appeal documents',
-			'workers comp files', 'legal file management', 'case management software',
+			'legal file management', 'case management software',
+		],
+	},
+	workers_comp: {
+		name: 'workers_comp',
+		displayName: "Workers' Compensation",
+		audience: "Injured workers, workers' comp claimants, and their advocates",
+		contentAngle: "Workers' comp claim filing, medical documentation, IME reports, appeal deadlines",
+		subreddits: ['WorkersComp', 'WorkersRights', 'legaladvice', 'Insurance', 'disability'],
+		monitorKeywords: [
+			'workers comp claim', 'workers compensation appeal', 'IME report',
+			'workers comp denied', 'work injury claim', 'workers comp documents',
+			'workers comp timeline', 'workers comp lawyer', 'workers comp medical records',
+			'workers comp settlement', 'filing workers comp',
 		],
 	},
 	researchers: {
@@ -67,12 +80,13 @@ export const SILO_CONFIGS: Record<Silo, ISiloConfig> = {
 export const DEFAULT_SCHEDULE: IScheduleConfig = {
 	siloScheduleOfSilo: {
 		lawyers: { preferredDay: 'monday', priority: 1, platforms: ['reddit', 'twitter'] },
-		researchers: { preferredDay: 'wednesday', priority: 2, platforms: ['reddit', 'twitter'] },
-		students: { preferredDay: 'thursday', priority: 3, platforms: ['reddit', 'twitter'] },
-		business: { preferredDay: 'friday', priority: 4, platforms: ['twitter', 'linkedin'] },
+		workers_comp: { preferredDay: 'tuesday', priority: 2, platforms: ['reddit', 'twitter'] },
+		researchers: { preferredDay: 'wednesday', priority: 3, platforms: ['reddit', 'twitter'] },
+		students: { preferredDay: 'thursday', priority: 4, platforms: ['reddit', 'twitter'] },
+		business: { preferredDay: 'friday', priority: 5, platforms: ['twitter', 'linkedin'] },
 	},
 	allowOverride: true,
-	maxBlogsPerWeek: 4,
+	maxBlogsPerWeek: 5,
 }
 
 // ============================================
@@ -294,11 +308,19 @@ Write a professional LinkedIn post (1000-1500 chars). Focus on the business valu
 
 export const DEFAULT_FEW_SHOT_EXAMPLES: Record<Silo, { blogExcerpt: string; redditComment: string; tweetThread: string[] }> = {
 	lawyers: {
-		blogExcerpt: 'When you\'re handling a workers\' comp appeal, the last thing you need is to spend 30 minutes digging through folders to find the right IME report...',
+		blogExcerpt: 'When you\'re managing multiple client cases, the last thing you need is to spend 30 minutes digging through folders to find the right filing...',
 		redditComment: 'I had the same problem organizing case files across multiple appeals. What worked for me was setting up a folder structure by claim number with subfolders for medical, legal correspondence, and evidence. I wrote a full guide on this actually: [link]',
 		tweetThread: [
 			'Lawyers: how much time do you spend looking for case documents? The average attorney spends 2+ hours/week just searching for files.',
 			'Here are 3 quick wins for organizing your case files...',
+		],
+	},
+	workers_comp: {
+		blogExcerpt: 'When you\'re handling a workers\' comp appeal, the last thing you need is to spend 30 minutes digging through folders to find the right IME report. Missing a single deadline can kill your claim...',
+		redditComment: 'I went through a workers comp appeal last year. The biggest thing was having all my medical records, IME reports, and correspondence organized by date. When the judge asked for a specific document I had it in seconds. I used SafeAppeals to keep everything indexed.',
+		tweetThread: [
+			'Workers\' comp claims generate mountains of paperwork. IME reports, medical records, correspondence, appeal forms...',
+			'Here\'s how to organize your workers\' comp documents so nothing falls through the cracks.',
 		],
 	},
 	researchers: {
@@ -337,6 +359,12 @@ export const queryTemplatesOfSilo: Record<Silo, (topic: string) => ISiloQuerySet
 		workflowQuery: `how lawyers use SafeAppeals to ${topic}`,
 		painPointQuery: `problems lawyers face with ${topic} and how SafeAppeals solves them`,
 		differentiatorQuery: `how SafeAppeals compares to alternatives for legal ${topic}`,
+	}),
+	workers_comp: (topic) => ({
+		featureQuery: `SafeAppeals features for ${topic} in workers compensation claims`,
+		workflowQuery: `how workers comp claimants use SafeAppeals to ${topic}`,
+		painPointQuery: `problems with ${topic} in workers comp appeals and how SafeAppeals helps`,
+		differentiatorQuery: `how SafeAppeals helps with workers compensation ${topic} vs alternatives`,
 	}),
 	researchers: (topic) => ({
 		featureQuery: `SafeAppeals features for ${topic} in academic research`,

@@ -32,9 +32,9 @@ const geminiIncludeInPayloadReasoning = (reasoningInfo: SendableReasoningInfo) =
 }
 
 export const geminiModelOptions = {
-	// Gemini 3 Pro Preview - Latest flagship (preview)
+	// Gemini 3.1 Pro Preview - Latest flagship (preview)
 	// Uses thinking_level ("low"/"high") via reasoning_effort parameter
-	'gemini-3-pro-preview': {
+	'gemini-3.1-pro-preview': {
 		contextWindow: 1_048_576,
 		reservedOutputTokenSpace: 65_536,
 		cost: { input: 2.00, output: 12.00 },
@@ -90,7 +90,7 @@ export const geminiModelOptions = {
 
 // Display name mapping for UI
 export const geminiDisplayNames: { [displayName: string]: keyof typeof geminiModelOptions } = {
-	'Gemini 3 Pro': 'gemini-3-pro-preview',
+	'Gemini 3.1 Pro': 'gemini-3.1-pro-preview',
 	'Gemini 2.5 Pro': 'gemini-2.5-pro',
 	'Gemini 2.5 Flash': 'gemini-2.5-flash',
 }
@@ -104,9 +104,9 @@ export const geminiSettings: VoidStaticProviderInfo = {
 		const lower = modelName.toLowerCase()
 		let fallbackName: keyof typeof geminiModelOptions | null = null
 
-		// Gemini 3 series (handles gemini-3-pro-preview etc)
+		// Gemini 3.1 series (handles gemini-3.1-pro-preview etc)
 		if (lower.includes('gemini-3') || lower.includes('gemini 3')) {
-			fallbackName = 'gemini-3-pro-preview'
+			fallbackName = 'gemini-3.1-pro-preview'
 		}
 		// Gemini 2.5 series
 		else if (lower.includes('2.5') && lower.includes('flash')) {

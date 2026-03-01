@@ -122,6 +122,31 @@ export const BlogEditor: React.FC<BlogEditorProps> = ({ viewData }) => {
 		}
 	}
 
+	const handleMarkPublished = async () => {
+		const cId = campaign?.id || campaignId
+		if (!cId) return
+		try {
+			await channel.call('updateCampaignStatus', { workspaceId, campaignId: cId, status: 'published' })
+			await loadCampaign(cId)
+		} catch (err) {
+			console.error('[GrowthWriter] Mark published failed:', err)
+		}
+	}
+
+	const handleDelete = async () => {
+		const cId = campaign?.id || campaignId
+		if (!cId) return
+		try {
+			await channel.call('deleteCampaign', { workspaceId, campaignId: cId })
+			if (idea) {
+				await channel.call('updateIdeaStatus', { workspaceId, ideaId: idea.id, status: 'pending' })
+			}
+			openView('blog-ideas')
+		} catch (err) {
+			console.error('[GrowthWriter] Delete failed:', err)
+		}
+	}
+
 	if (loading) {
 		return <div style={{ padding: '20px' }}>Loading...</div>
 	}
@@ -247,9 +272,19 @@ export const BlogEditor: React.FC<BlogEditorProps> = ({ viewData }) => {
 				flexShrink: 0,
 			}}>
 				<EditorButton label="Save" onClick={handleSave} />
-				<EditorButton label="Approve" onClick={handleApprove} primary />
-				<EditorButton label={publishing ? 'Publishing...' : 'Publish'} onClick={handlePublish} disabled={publishing} primary />
+				{campaign.status === 'failed' ? (
+					<>
+						<EditorButton label="Re-approve" onClick={handleApprove} primary />
+						<EditorButton label="Mark as Published" onClick={handleMarkPublished} />
+					</>
+				) : campaign.status === 'published' ? null : (
+					<>
+						<EditorButton label="Approve" onClick={handleApprove} primary />
+						<EditorButton label={publishing ? 'Publishing...' : 'Publish'} onClick={handlePublish} disabled={publishing} primary />
+					</>
+				)}
 				<div style={{ flex: 1 }} />
+				<EditorButton label="Delete" onClick={handleDelete} danger />
 				<EditorButton
 					label={showPreview ? 'Hide Preview' : 'Show Preview'}
 					onClick={() => setShowPreview(!showPreview)}
@@ -300,29 +335,23 @@ const HtmlPreview: React.FC<{ content: string }> = ({ content }) => {
 	const previewRef = useRef<HTMLDivElement>(null)
 	useEffect(() => {
 		if (!previewRef.current) return
+		const el = previewRef.current
+		while (el.firstChild) el.removeChild(el.firstChild)
+		if (!content) return
 		try {
-			const policy = (globalThis as any).trustedTypes?.createPolicy?.('growthWriterPreview', {
-				createHTML: (s: string) => s,
+			const parser = new DOMParser()
+			const doc = parser.parseFromString(content, 'text/html')
+			Array.from(doc.body.childNodes).forEach(node => {
+				el.appendChild(document.importNode(node, true))
 			})
-			previewRef.current.innerHTML = policy ? policy.createHTML(content) : content
 		} catch {
-			try {
-				previewRef.current.textContent = ''
-				const parser = new DOMParser()
-				const doc = parser.parseFromString(content, 'text/html')
-				while (previewRef.current.firstChild) previewRef.current.removeChild(previewRef.current.firstChild)
-				Array.from(doc.body.childNodes).forEach(node => {
-					previewRef.current!.appendChild(document.importNode(node, true))
-				})
-			} catch {
-				previewRef.current.textContent = content
-			}
+			el.textContent = content
 		}
 	}, [content])
 	return <div ref={previewRef} style={{ fontSize: '14px', lineHeight: '1.7' }} />
 }
 
-const EditorButton: React.FC<{ label: string; onClick: () => void; primary?: boolean; disabled?: boolean }> = ({ label, onClick, primary, disabled }) => {
+const EditorButton: React.FC<{ label: string; onClick: () => void; primary?: boolean; danger?: boolean; disabled?: boolean }> = ({ label, onClick, primary, danger, disabled }) => {
 	return (
 		<button
 			onClick={onClick}
@@ -332,9 +361,9 @@ const EditorButton: React.FC<{ label: string; onClick: () => void; primary?: boo
 				fontSize: '12px',
 				borderRadius: '4px',
 				cursor: disabled ? 'default' : 'pointer',
-				border: primary ? 'none' : '1px solid var(--vscode-button-border, transparent)',
-				backgroundColor: primary ? 'var(--vscode-button-background)' : 'var(--vscode-button-secondaryBackground)',
-				color: primary ? 'var(--vscode-button-foreground)' : 'var(--vscode-button-secondaryForeground)',
+				border: primary || danger ? 'none' : '1px solid var(--vscode-button-border, transparent)',
+				backgroundColor: danger ? '#b91c1c' : primary ? 'var(--vscode-button-background)' : 'var(--vscode-button-secondaryBackground)',
+				color: danger ? '#ffffff' : primary ? 'var(--vscode-button-foreground)' : 'var(--vscode-button-secondaryForeground)',
 				opacity: disabled ? 0.6 : 1,
 			}}
 		>

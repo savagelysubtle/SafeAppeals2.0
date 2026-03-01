@@ -608,6 +608,53 @@ export class GrowthWriterChannel implements IServerChannel {
 			}
 		}
 
+		case 'deleteIdea': {
+			const { workspaceId, ideaId } = arg;
+			const instance = await this.getOrCreateInstance(workspaceId);
+			await instance.deleteIdea(ideaId);
+			return;
+		}
+
+		case 'deleteCampaign': {
+			const { workspaceId, campaignId } = arg;
+			const instance = await this.getOrCreateInstance(workspaceId);
+			await instance.deleteCampaign(campaignId);
+			return;
+		}
+
+		// ========== SCHEDULER QUERIES ==========
+
+		case 'getPendingIdeaCount': {
+			const { workspaceId, silo } = arg;
+			const instance = await this.getOrCreateInstance(workspaceId);
+			return instance.getPendingIdeaCountBySilo(silo);
+		}
+
+		case 'getTopPendingIdea': {
+			const { workspaceId, silo } = arg;
+			const instance = await this.getOrCreateInstance(workspaceId);
+			return instance.getTopPendingIdea(silo);
+		}
+
+		case 'getCampaignsForSiloInWeek': {
+			const { workspaceId, silo, startDate, endDate } = arg;
+			const instance = await this.getOrCreateInstance(workspaceId);
+			return instance.getCampaignsForSiloInDateRange(silo, startDate, endDate);
+		}
+
+		case 'getApprovedReadyToPublish': {
+			const { workspaceId } = arg;
+			const instance = await this.getOrCreateInstance(workspaceId);
+			return instance.getApprovedCampaignsReadyToPublish(new Date().toISOString());
+		}
+
+		case 'scheduleCampaign': {
+			const { workspaceId, campaignId, scheduledFor } = arg;
+			const instance = await this.getOrCreateInstance(workspaceId);
+			await instance.scheduleCampaign(campaignId, scheduledFor);
+			return;
+		}
+
 		default:
 				throw new Error(`GrowthWriterChannel: Unknown command: ${command}`);
 			}

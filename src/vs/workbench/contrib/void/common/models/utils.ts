@@ -187,7 +187,7 @@ export const createExtensiveModelOptionsFallback = (providerModelOptions: Record
 		const { anthropic, gemini, xai, openai } = providerModelOptions
 
 		// Gemini fallbacks - synced with LiteLLM (shorthand names)
-		if (lower.includes('gemini-3') || lower.includes('gemini 3')) return toFallback(gemini, 'gemini-3-pro' as any)
+		if (lower.includes('gemini-3') || lower.includes('gemini 3')) return toFallback(gemini, 'gemini-3.1-pro' as any)
 		if (lower.includes('gemini') && (lower.includes('2.5') || lower.includes('2-5'))) return toFallback(gemini, 'gemini-2.5-pro' as any)
 		if (lower.includes('gemini') && (lower.includes('1.5') || lower.includes('1-5'))) return toFallback(gemini, 'gemini-1.5-pro' as any)
 

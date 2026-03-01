@@ -98,7 +98,7 @@ export const defaultModelsOfProvider = {
 	],
 	// Google Gemini - synced with LiteLLM config
 	gemini: [
-		'gemini-3-pro',
+		'gemini-3.1-pro',
 		'gemini-2.5-pro',
 		'gemini-2.5-flash',
 

@@ -1,9 +1,9 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import { useAccessor } from '../util/services.js'
-import { GrowthWriterContext } from '../growth-writer-shared/GrowthWriterContext.js'
+import { GrowthWriterContext, SchedulerState } from '../growth-writer-shared/GrowthWriterContext.js'
 import { CampaignQueue } from './CampaignQueue.js'
-import { RedditOpsFeed } from './RedditOpsFeed.js'
 import { QuickStats } from './QuickStats.js'
+import { SchedulerStatus } from './SchedulerStatus.js'
 
 interface GrowthWriterSidebarProps {
 	openView: (viewType: string, viewData?: Record<string, string>) => void
@@ -21,17 +21,61 @@ export const GrowthWriterSidebar: React.FC<GrowthWriterSidebarProps> = ({ openVi
 		}
 	}, [accessor])
 
-	const ctx = useMemo(() => ({ channel, openView, workspaceId }), [channel, openView, workspaceId])
+	const [schedulerState, setSchedulerState] = useState<SchedulerState>({
+		enabled: true,
+		running: false,
+		lastRunAt: null,
+		nextRunAt: null,
+		pendingActions: [],
+	})
+
+	useEffect(() => {
+		try {
+			const scheduler = accessor.get('IBlogSchedulerService')
+			if (scheduler) {
+				setSchedulerState(scheduler.state)
+				const disposable = scheduler.onDidChangeState((state: SchedulerState) => {
+					setSchedulerState(state)
+				})
+				return () => disposable.dispose()
+			}
+		} catch {
+			// Scheduler not available yet
+		}
+	}, [accessor])
+
+	const setSchedulerEnabled = useCallback((enabled: boolean) => {
+		try {
+			const scheduler = accessor.get('IBlogSchedulerService')
+			if (scheduler) scheduler.setEnabled(enabled)
+		} catch { /* noop */ }
+	}, [accessor])
+
+	const runSchedulerNow = useCallback(async () => {
+		try {
+			const scheduler = accessor.get('IBlogSchedulerService')
+			if (scheduler) await scheduler.runNow()
+		} catch { /* noop */ }
+	}, [accessor])
+
+	const ctx = useMemo(() => ({
+		channel,
+		openView,
+		workspaceId,
+		schedulerState,
+		setSchedulerEnabled,
+		runSchedulerNow,
+	}), [channel, openView, workspaceId, schedulerState, setSchedulerEnabled, runSchedulerNow])
 
 	return (
 		<GrowthWriterContext.Provider value={ctx}>
 			<div style={{ display: 'flex', flexDirection: 'column', gap: '2px', height: '100%', color: 'var(--vscode-foreground)' }}>
 				<QuickActions openView={openView} />
+				<CollapsibleSection title="Scheduler" defaultOpen>
+					<SchedulerStatus />
+				</CollapsibleSection>
 				<CollapsibleSection title="Campaign Queue" defaultOpen>
 					<CampaignQueue />
-				</CollapsibleSection>
-				<CollapsibleSection title="Reddit Opportunities" defaultOpen>
-					<RedditOpsFeed />
 				</CollapsibleSection>
 				<CollapsibleSection title="Quick Stats" defaultOpen>
 					<QuickStats />
@@ -47,7 +91,6 @@ const QuickActions: React.FC<{ openView: (viewType: string, viewData?: Record<st
 			<ActionButton label="Blog Ideas" onClick={() => openView('blog-ideas')} />
 			<ActionButton label="Schedule" onClick={() => openView('schedule')} />
 			<ActionButton label="History" onClick={() => openView('history')} />
-			<ActionButton label="Accounts" onClick={() => openView('account-health')} />
 		</div>
 	)
 }
@@ -103,7 +146,7 @@ const CollapsibleSection: React.FC<CollapsibleSectionProps> = ({ title, defaultO
 					borderTop: '1px solid var(--vscode-sideBarSectionHeader-border, transparent)',
 				}}
 			>
-				<span style={{ transform: open ? 'rotate(90deg)' : 'rotate(0deg)', transition: 'transform 0.15s', fontSize: '12px' }}>▶</span>
+				<span style={{ transform: open ? 'rotate(90deg)' : 'rotate(0deg)', transition: 'transform 0.15s', fontSize: '12px' }}>&#9654;</span>
 				{title}
 			</button>
 			{open && (

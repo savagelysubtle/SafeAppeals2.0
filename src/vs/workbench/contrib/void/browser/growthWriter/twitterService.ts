@@ -6,7 +6,7 @@
 import { Disposable } from '../../../../../base/common/lifecycle.js';
 import { generateUuid } from '../../../../../base/common/uuid.js';
 import { IChannel } from '../../../../../base/parts/ipc/common/ipc.js';
-import { InstantiationType, registerSingleton } from '../../../../../platform/instantiation/common/extensions.js';
+// import { InstantiationType, registerSingleton } from '../../../../../platform/instantiation/common/extensions.js';
 import { createDecorator } from '../../../../../platform/instantiation/common/instantiation.js';
 import { IMainProcessService } from '../../../../../platform/ipc/common/mainProcessService.js';
 import { ILogService } from '../../../../../platform/log/common/log.js';
@@ -82,7 +82,7 @@ type ContentType = typeof CONTENT_TYPES[number]
 // SERVICE IMPLEMENTATION
 // ============================================
 
-class TwitterService extends Disposable implements ITwitterService {
+export class TwitterService extends Disposable implements ITwitterService {
 	readonly _serviceBrand: undefined;
 
 	private readonly _channel: IChannel;
@@ -563,4 +563,5 @@ class TwitterService extends Disposable implements ITwitterService {
 	}
 }
 
-registerSingleton(ITwitterService, TwitterService, InstantiationType.Delayed);
+// Disabled: Twitter integration removed from automated workflow
+// registerSingleton(ITwitterService, TwitterService, InstantiationType.Delayed);

@@ -202,7 +202,7 @@ reasoningCapabilities: {
 // 'high' → thinking_level: 'high' (maximizes reasoning depth)
 // 'low' → thinking_level: 'low' (minimizes latency)
 {
-  "model": "gemini/gemini-3-pro-preview",
+  "model": "gemini/gemini-3.1-pro-preview",
   "reasoning_effort": "high"  // → thinking_level: "high"
 }
 ```

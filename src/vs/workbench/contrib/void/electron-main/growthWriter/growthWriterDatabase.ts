@@ -126,6 +126,28 @@ export class GrowthWriterDatabaseService {
 		);
 	}
 
+	async deleteIdea(id: string): Promise<void> {
+		if (!this.db) await this.initialize();
+		await this.runAsync('DELETE FROM growth_blog_ideas WHERE id = ?', [id]);
+	}
+
+	async getPendingIdeaCountBySilo(silo: Silo): Promise<number> {
+		if (!this.db) await this.initialize();
+		const row = await this.getAsync<{ count: number }>(
+			'SELECT COUNT(*) as count FROM growth_blog_ideas WHERE silo = ? AND status = ?',
+			[silo, 'pending']
+		);
+		return row?.count ?? 0;
+	}
+
+	async getTopPendingIdea(silo: Silo): Promise<IBlogIdea | undefined> {
+		if (!this.db) await this.initialize();
+		return this.getAsync<IBlogIdea>(
+			'SELECT * FROM growth_blog_ideas WHERE silo = ? AND status = ? ORDER BY priority DESC, created_at ASC LIMIT 1',
+			[silo, 'pending']
+		);
+	}
+
 	async getIdeaTitles(silo: Silo): Promise<string[]> {
 		if (!this.db) await this.initialize();
 
@@ -193,6 +215,35 @@ export class GrowthWriterDatabaseService {
 		await this.runAsync(
 			`UPDATE growth_campaigns SET blog_cms_id = ?, blog_url = ?, status = 'published', published_at = ? WHERE id = ?`,
 			[blogCmsId, blogUrl, new Date().toISOString(), id]
+		);
+	}
+
+	async deleteCampaign(id: string): Promise<void> {
+		if (!this.db) await this.initialize();
+		await this.runAsync('DELETE FROM growth_campaigns WHERE id = ?', [id]);
+	}
+
+	async getCampaignsForSiloInDateRange(silo: Silo, startDate: string, endDate: string): Promise<ICampaign[]> {
+		if (!this.db) await this.initialize();
+		return this.allAsync<ICampaign>(
+			'SELECT * FROM growth_campaigns WHERE silo = ? AND created_at >= ? AND created_at <= ? ORDER BY created_at DESC',
+			[silo, startDate, endDate]
+		);
+	}
+
+	async getApprovedCampaignsReadyToPublish(beforeDate: string): Promise<ICampaign[]> {
+		if (!this.db) await this.initialize();
+		return this.allAsync<ICampaign>(
+			'SELECT * FROM growth_campaigns WHERE status = ? AND scheduled_for IS NOT NULL AND scheduled_for <= ? ORDER BY scheduled_for ASC',
+			['approved', beforeDate]
+		);
+	}
+
+	async scheduleCampaign(id: string, scheduledFor: string): Promise<void> {
+		if (!this.db) await this.initialize();
+		await this.runAsync(
+			'UPDATE growth_campaigns SET scheduled_for = ? WHERE id = ?',
+			[scheduledFor, id]
 		);
 	}
 

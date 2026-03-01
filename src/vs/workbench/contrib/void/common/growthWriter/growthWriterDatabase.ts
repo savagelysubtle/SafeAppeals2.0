@@ -8,7 +8,7 @@ export const GROWTH_DB_NAME = 'growth_writer.db'
 export const CREATE_BLOG_IDEAS_TABLE = `
 CREATE TABLE IF NOT EXISTS growth_blog_ideas (
     id TEXT PRIMARY KEY,
-    silo TEXT NOT NULL CHECK (silo IN ('lawyers', 'researchers', 'students', 'business')),
+    silo TEXT NOT NULL CHECK (silo IN ('lawyers', 'workers_comp', 'researchers', 'students', 'business')),
     title TEXT NOT NULL,
     description TEXT,
     keywords TEXT,
@@ -29,7 +29,7 @@ CREATE INDEX IF NOT EXISTS idx_ideas_silo_status ON growth_blog_ideas(silo, stat
 export const CREATE_CAMPAIGNS_TABLE = `
 CREATE TABLE IF NOT EXISTS growth_campaigns (
     id TEXT PRIMARY KEY,
-    silo TEXT NOT NULL CHECK (silo IN ('lawyers', 'researchers', 'students', 'business')),
+    silo TEXT NOT NULL CHECK (silo IN ('lawyers', 'workers_comp', 'researchers', 'students', 'business')),
     blog_idea_id TEXT REFERENCES growth_blog_ideas(id),
     blog_title TEXT,
     blog_slug TEXT,
@@ -83,7 +83,7 @@ CREATE INDEX IF NOT EXISTS idx_social_hash ON growth_social_posts(content_hash);
 export const CREATE_SUBREDDIT_CONFIG_TABLE = `
 CREATE TABLE IF NOT EXISTS growth_subreddit_config (
     id TEXT PRIMARY KEY,
-    silo TEXT NOT NULL CHECK (silo IN ('lawyers', 'researchers', 'students', 'business')),
+    silo TEXT NOT NULL CHECK (silo IN ('lawyers', 'workers_comp', 'researchers', 'students', 'business')),
     subreddit_name TEXT NOT NULL,
     display_name TEXT,
     rules_summary TEXT,

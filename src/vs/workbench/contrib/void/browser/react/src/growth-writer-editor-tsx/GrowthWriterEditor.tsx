@@ -3,22 +3,16 @@ import { useAccessor } from '../util/services.js'
 import { GrowthWriterContext, BlogIdea, Campaign } from '../growth-writer-shared/GrowthWriterContext.js'
 import { BlogEditor } from './BlogEditor.js'
 import { BlogIdeasTable } from './BlogIdeasTable.js'
-import { SocialPostsEditor } from './SocialPostsEditor.js'
-import { RedditCommentEditor } from './RedditCommentEditor.js'
 import { ScheduleCalendar } from './ScheduleCalendar.js'
 import { HistoryMetrics } from './HistoryMetrics.js'
-import { AccountHealth } from './AccountHealth.js'
 
-type ViewType = 'blog-editor' | 'social-posts' | 'reddit-comment' | 'blog-ideas' | 'schedule' | 'history' | 'account-health'
+type ViewType = 'blog-editor' | 'blog-ideas' | 'schedule' | 'history'
 
 const VIEWS: Record<ViewType, React.ComponentType<{ viewData?: Record<string, string> }>> = {
 	'blog-editor': BlogEditor,
-	'social-posts': SocialPostsEditor,
-	'reddit-comment': RedditCommentEditor,
 	'blog-ideas': BlogIdeasTable,
 	'schedule': ScheduleCalendar,
 	'history': HistoryMetrics,
-	'account-health': AccountHealth,
 }
 
 interface GrowthWriterEditorProps {

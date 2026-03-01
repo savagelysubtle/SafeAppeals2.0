@@ -1336,7 +1336,7 @@ export class CodeApplication extends Disposable {
 		mainProcessElectronServer.registerChannel('void-channel-docusign', docuSignChannel);
 
 		// Void Growth Writer channel (marketing content engine)
-		const growthWriterChannel = new GrowthWriterChannel(this.environmentMainService.userDataPath, this.logService);
+		const growthWriterChannel = new GrowthWriterChannel(this.environmentMainService.userRoamingDataHome.fsPath, this.logService);
 		mainProcessElectronServer.registerChannel('void-channel-growth-writer', growthWriterChannel);
 
 		// Void Document Export service (for PDF export from viewers)

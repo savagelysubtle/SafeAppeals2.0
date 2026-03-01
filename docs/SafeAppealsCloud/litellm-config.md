@@ -57,9 +57,9 @@ model_list:
   # ============================================
   # GOOGLE GEMINI MODELS
   # ============================================
-  - model_name: gemini-3-pro-preview
+  - model_name: gemini-3.1-pro-preview
     litellm_params:
-      model: gemini/gemini-3-pro-preview
+      model: gemini/gemini-3.1-pro-preview
       api_key: os.environ/GOOGLE_API_KEY
     model_info:
       input_cost_per_token: 0.000002    # $2/MTok

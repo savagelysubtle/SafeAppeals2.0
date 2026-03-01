@@ -77,7 +77,7 @@ gemini: {
 ```
 
 **Key Models (December 2025):**
-- `gemini-3-pro-preview`: Latest flagship (1M context, $2.00/$12.00)
+- `gemini-3.1-pro-preview`: Latest flagship (1M context, $2.00/$12.00)
   - **Effort-based reasoning**: `reasoning_effort: 'high'` → `thinking_level: 'high'`
 - `gemini-2.5-pro`: Production ready (1M context, $1.25/$10.00)
   - **Budget-based reasoning**: `thinking.budget_tokens: 24576`
@@ -90,8 +90,8 @@ gemini: {
 - Massive 1M token context windows
 
 **LiteLLM API Model Names:**
-- `gemini-3-pro` → `gemini/gemini-3-pro-preview`
-- `gemini-3-pro-preview` → `gemini/gemini-3-pro-preview`
+- `gemini-3.1-pro` → `gemini/gemini-3.1-pro-preview`
+- `gemini-3.1-pro-preview` → `gemini/gemini-3.1-pro-preview`
 - `gemini-2.5-pro` → `gemini/gemini-2.5-pro`
 - `gemini-2.5-flash` → `gemini/gemini-2.5-flash`
 

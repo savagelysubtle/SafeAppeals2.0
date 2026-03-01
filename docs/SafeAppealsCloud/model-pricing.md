@@ -28,7 +28,7 @@ Synced with `void-cloud/litellm/config.yaml`:
 | `gpt-5.2-pro` | OpenAI | $21.00 | $168.00 | Complex reasoning, 400K context |
 | `claude-opus-4-5` | Anthropic | $5.00 | $25.00 | Premium flagship |
 | `claude-sonnet-4-5` | Anthropic | $3.00 | $15.00 | Best balance quality/speed |
-| `gemini-3-pro-preview` | Google | $2.00 | $12.00 | Latest Google flagship |
+| `gemini-3.1-pro-preview` | Google | $2.00 | $12.00 | Latest Google flagship |
 | `gemini-2.5-pro` | Google | $1.25 | $10.00 | Production ready |
 | `gemini-2.5-flash` | Google | $0.15 | $0.60 | High-volume, fast |
 
@@ -49,7 +49,7 @@ Kept for historical usage logs:
 | `gpt-5` | OpenAI | ⚫ Inactive | `gpt-5.2` |
 | `gpt-5-mini` | OpenAI | ⚫ Inactive | - |
 | `gpt-5-nano` | OpenAI | ⚫ Inactive | - |
-| `gemini-3-pro` | Google | ⚫ Inactive | `gemini-3-pro-preview` |
+| `gemini-3.1-pro` | Google | ⚫ Inactive | `gemini-3.1-pro-preview` |
 | `claude-opus-4-1` | Anthropic | ⚫ Inactive | `claude-opus-4-5` |
 
 ## How Pricing Works

@@ -80,6 +80,18 @@ export const BlogIdeasTable: React.FC<BlogIdeasTableProps> = () => {
 		}
 	}
 
+	const handleBulkDelete = async () => {
+		try {
+			for (const id of selectedIds) {
+				await channel.call('deleteIdea', { workspaceId, ideaId: id })
+			}
+			setSelectedIds(new Set())
+			await loadIdeas()
+		} catch (err) {
+			console.error('[GrowthWriter] Bulk delete failed:', err)
+		}
+	}
+
 	const toggleSelect = (id: string) => {
 		setSelectedIds(prev => {
 			const next = new Set(prev)
@@ -216,6 +228,7 @@ export const BlogIdeasTable: React.FC<BlogIdeasTableProps> = () => {
 				<span>{selectedIds.size} selected</span>
 				<button onClick={() => handleBulkAction('approved')} style={bulkBtnStyle}>Approve</button>
 				<button onClick={() => handleBulkAction('rejected')} style={bulkBtnStyle}>Reject</button>
+				<button onClick={handleBulkDelete} style={{ ...bulkBtnStyle, backgroundColor: '#b91c1c', color: '#ffffff', border: 'none' }}>Delete</button>
 				{selectedIds.size === 1 && (
 					<button onClick={() => {
 						const ideaId = Array.from(selectedIds)[0]

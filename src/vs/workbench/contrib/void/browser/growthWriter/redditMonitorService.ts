@@ -6,7 +6,7 @@
 import { Disposable } from '../../../../../base/common/lifecycle.js';
 import { generateUuid } from '../../../../../base/common/uuid.js';
 import { IChannel } from '../../../../../base/parts/ipc/common/ipc.js';
-import { InstantiationType, registerSingleton } from '../../../../../platform/instantiation/common/extensions.js';
+// import { InstantiationType, registerSingleton } from '../../../../../platform/instantiation/common/extensions.js';
 import { createDecorator } from '../../../../../platform/instantiation/common/instantiation.js';
 import { IMainProcessService } from '../../../../../platform/ipc/common/mainProcessService.js';
 import { ILogService } from '../../../../../platform/log/common/log.js';
@@ -82,7 +82,7 @@ const MAX_REMOVAL_RATE = 0.10
 // SERVICE IMPLEMENTATION
 // ============================================
 
-class RedditMonitorService extends Disposable implements IRedditMonitorService {
+export class RedditMonitorService extends Disposable implements IRedditMonitorService {
 	readonly _serviceBrand: undefined;
 
 	private readonly _channel: IChannel;
@@ -538,4 +538,5 @@ class RedditMonitorService extends Disposable implements IRedditMonitorService {
 	}
 }
 
-registerSingleton(IRedditMonitorService, RedditMonitorService, InstantiationType.Delayed);
+// Disabled: Reddit integration removed from automated workflow
+// registerSingleton(IRedditMonitorService, RedditMonitorService, InstantiationType.Delayed);

@@ -5,6 +5,7 @@ import { StatusBadge } from '../growth-writer-shared/StatusBadge.js'
 
 const SCHEDULE_DAYS: Record<string, string> = {
 	lawyers: 'Monday',
+	workers_comp: 'Tuesday',
 	researchers: 'Wednesday',
 	students: 'Thursday',
 	business: 'Friday',

@@ -7,7 +7,7 @@
 // CORE UNION TYPES
 // ============================================
 
-export type Silo = 'lawyers' | 'researchers' | 'students' | 'business'
+export type Silo = 'lawyers' | 'workers_comp' | 'researchers' | 'students' | 'business'
 
 export type ContentAngle = 'product' | 'educational' | 'problem_solving'
 
@@ -145,6 +145,18 @@ export interface IScheduleConfig {
 	siloScheduleOfSilo: Record<Silo, ISiloSchedule>
 	allowOverride: boolean
 	maxBlogsPerWeek: number
+}
+
+// ============================================
+// SCHEDULER STATE
+// ============================================
+
+export interface ISchedulerState {
+	enabled: boolean
+	running: boolean
+	lastRunAt: string | null
+	nextRunAt: string | null
+	pendingActions: string[]
 }
 
 // ============================================

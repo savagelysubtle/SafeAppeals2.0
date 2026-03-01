@@ -1,3 +1,4 @@
+import './blogSchedulerService.js'
 import { Registry } from '../../../../../platform/registry/common/platform.js'
 import { IViewContainersRegistry, IViewsRegistry, Extensions as ViewExtensions, ViewContainerLocation } from '../../../../common/views.js'
 import { SyncDescriptor } from '../../../../../platform/instantiation/common/descriptors.js'

@@ -19,7 +19,7 @@ This module manages configurations for 15+ AI providers including OpenAI, Anthro
 | **OpenAI**    | `gpt-5.2`, `gpt-5`, `gpt-5.1-codex-max` | `reasoning_effort: 'high'`                            | Effort-based |
 | **Anthropic** | `claude-opus-4-5`                       | `reasoning_effort: 'high'`                            | Effort-based |
 | **Anthropic** | `claude-sonnet-4-5`                     | `thinking.budget_tokens: 8192`                        | Budget-based |
-| **Gemini**    | `gemini-3-pro-preview`                  | `reasoning_effort: 'high'` → `thinking_level: 'high'` | Effort-based |
+| **Gemini**    | `gemini-3.1-pro-preview`                  | `reasoning_effort: 'high'` → `thinking_level: 'high'` | Effort-based |
 | **Gemini**    | `gemini-2.5-pro`, `gemini-2.5-flash`    | `thinking.budget_tokens: 24576`                       | Budget-based |
 
 ## Quick Usage

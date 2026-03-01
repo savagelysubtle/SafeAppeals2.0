@@ -28,6 +28,7 @@ import {
 } from '../../common/growthWriter/growthWriterTypes.js';
 import {
 	SILO_CONFIGS,
+	DEFAULT_SCHEDULE,
 	queryTemplatesOfSilo,
 	IDEA_GENERATION_SYSTEM_PROMPT,
 	IDEA_GENERATION_USER_PROMPT_TEMPLATE,
@@ -248,7 +249,17 @@ class GrowthWriterService extends Disposable implements IGrowthWriterService {
 			// 10. Mark idea as used
 			await this.updateIdeaStatus(ideaId, 'used')
 
-			this.logService.info(`[GrowthWriterService] Blog draft generated: "${blogTitle}" (${htmlContent.length} chars)`)
+			// 11. Auto-schedule for the silo's preferred day
+			const scheduledFor = this._getNextSiloDay(idea.silo)
+			if (scheduledFor) {
+				await this._channel.call('scheduleCampaign', {
+					workspaceId,
+					campaignId,
+					scheduledFor,
+				})
+			}
+
+			this.logService.info(`[GrowthWriterService] Blog draft generated: "${blogTitle}" (${htmlContent.length} chars), scheduled: ${scheduledFor}`)
 
 			return {
 				...campaign,
@@ -257,6 +268,7 @@ class GrowthWriterService extends Disposable implements IGrowthWriterService {
 				blog_content: htmlContent,
 				blog_url: blogUrl,
 				status: 'draft',
+				scheduled_for: scheduledFor,
 				generated_at: new Date().toISOString(),
 				created_at: new Date().toISOString(),
 			}
@@ -352,6 +364,26 @@ class GrowthWriterService extends Disposable implements IGrowthWriterService {
 	// ============================================
 	// RAG CONTEXT GATHERING
 	// ============================================
+
+	private _getNextSiloDay(silo: Silo): string | null {
+		const schedule = DEFAULT_SCHEDULE.siloScheduleOfSilo[silo]
+		if (!schedule) return null
+
+		const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'] as const
+		const targetDay = dayNames.indexOf(schedule.preferredDay as typeof dayNames[number])
+		if (targetDay === -1) return null
+
+		const now = new Date()
+		const currentDay = now.getDay()
+		let daysAhead = targetDay - currentDay
+		if (daysAhead < 0) daysAhead += 7
+		if (daysAhead === 0) daysAhead = 0
+
+		const target = new Date(now)
+		target.setDate(now.getDate() + daysAhead)
+		target.setHours(9, 0, 0, 0)
+		return target.toISOString()
+	}
 
 	private async gatherRAGContext(silo: Silo, topic: string): Promise<string> {
 		const workspaceId = this.ensureWorkspace()
