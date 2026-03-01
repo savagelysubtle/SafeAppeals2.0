@@ -24,6 +24,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          submodules: false
 
       - name: Setup Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -54,8 +56,7 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
 
       - name: Install esbuild
-        run: npm install esbuild
-        working-directory: src/vs/workbench/contrib/void/browser/documentViewers/xlsxRustViewer/media
+        run: npm install --no-save esbuild
 
       - name: Build XLSX Rust Viewer WASM
         run: wasm-pack build --target web --out-dir ../media/wasm --no-typescript
@@ -105,6 +106,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          submodules: false
 
       - name: Download WASM artifacts
         uses: actions/download-artifact@v4
@@ -221,6 +224,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          submodules: false
 
       - name: Download WASM artifacts
         uses: actions/download-artifact@v4
@@ -312,6 +317,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          submodules: false
 
       - name: Download WASM artifacts
         uses: actions/download-artifact@v4
@@ -403,6 +410,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          submodules: false
 
       - name: Download WASM artifacts
         uses: actions/download-artifact@v4
