@@ -56,7 +56,11 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
 
       - name: Install esbuild
-        run: npm install --no-save esbuild
+        run: |
+          mkdir -p .esbuild-tmp && cd .esbuild-tmp
+          npm init -y > /dev/null 2>&1
+          npm install esbuild
+          echo "NODE_PATH=$(pwd)/node_modules" >> $GITHUB_ENV
 
       - name: Build XLSX Rust Viewer WASM
         run: wasm-pack build --target web --out-dir ../media/wasm --no-typescript
