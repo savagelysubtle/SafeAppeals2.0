@@ -9,6 +9,12 @@ export class PdfRenderer {
      */
     close(): void;
     /**
+     * Detect interactive form fields (widget annotations) on a page.
+     * Returns JSON array: [{x, y, width, height, field_type, field_name}]
+     * Coordinates are in PDF points with top-left origin (y is flipped from PDF space).
+     */
+    get_form_fields(index: number): string;
+    /**
      * Get document outline as JSON tree.
      */
     get_outline(): string;
@@ -76,6 +82,7 @@ export interface InitOutput {
     readonly memory: WebAssembly.Memory;
     readonly __wbg_pdfrenderer_free: (a: number, b: number) => void;
     readonly pdfrenderer_close: (a: number) => void;
+    readonly pdfrenderer_get_form_fields: (a: number, b: number) => [number, number, number, number];
     readonly pdfrenderer_get_outline: (a: number) => [number, number, number, number];
     readonly pdfrenderer_get_page_dimensions: (a: number, b: number) => [number, number, number, number];
     readonly pdfrenderer_get_page_text: (a: number, b: number) => [number, number, number, number];
