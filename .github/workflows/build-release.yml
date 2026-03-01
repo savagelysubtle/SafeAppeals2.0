@@ -58,7 +58,8 @@ jobs:
       - name: Install esbuild
         run: |
           npm install -g esbuild
-          echo "NODE_PATH=$(npm root -g)" >> $GITHUB_ENV
+          mkdir -p node_modules
+          ln -s "$(npm root -g)/esbuild" node_modules/esbuild
 
       - name: Build XLSX Rust Viewer WASM
         run: wasm-pack build --target web --out-dir ../media/wasm --no-typescript
