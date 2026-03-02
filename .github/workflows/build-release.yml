@@ -154,8 +154,13 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Fetch Electron and prebuilts
-        run: node build/lib/preLaunch.js
+      - name: Download Electron
+        run: npm run electron
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Fetch built-in extensions
+        run: node -e "require('./build/lib/builtInExtensions').getBuiltInExtensions()"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -281,8 +286,13 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Fetch Electron and prebuilts
-        run: node build/lib/preLaunch.js
+      - name: Download Electron
+        run: npm run electron
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Fetch built-in extensions
+        run: node -e "require('./build/lib/builtInExtensions').getBuiltInExtensions()"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -384,8 +394,13 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Fetch Electron and prebuilts
-        run: node build/lib/preLaunch.js
+      - name: Download Electron
+        run: npm run electron
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Fetch built-in extensions
+        run: node -e "require('./build/lib/builtInExtensions').getBuiltInExtensions()"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -501,8 +516,13 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Fetch Electron and prebuilts
-        run: node build/lib/preLaunch.js
+      - name: Download Electron
+        run: npm run electron
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Fetch built-in extensions
+        run: node -e "require('./build/lib/builtInExtensions').getBuiltInExtensions()"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
