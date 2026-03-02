@@ -190,6 +190,12 @@ jobs:
       - name: Add Inno Updater
         run: npm run gulp vscode-win32-x64-inno-updater
 
+      - name: Download OCR tools (Tesseract + Poppler)
+        shell: pwsh
+        run: |
+          & build\win32\tools\download-tesseract.ps1
+          & build\win32\tools\download-poppler.ps1
+
       - name: Create Windows Installer
         run: npm run gulp vscode-win32-x64-user-setup
 
