@@ -285,6 +285,7 @@ exports.compileNativeExtensionsBuildTask = compileNativeExtensionsBuildTask;
  */
 const compileAllExtensionsBuildTask = task.define('compile-extensions-build', task.series(
 	cleanExtensionsBuildTask,
+	compileExtensionsBuildLegacyTask,
 	bundleMarketplaceExtensionsBuildTask,
 	task.define('bundle-extensions-build', () => ext.packageAllLocalExtensionsStream(false, false).pipe(gulp.dest('.build'))),
 ));
@@ -297,6 +298,7 @@ gulp.task(task.define('extensions-ci', task.series(compileNonNativeExtensionsBui
 
 const compileExtensionsBuildPullRequestTask = task.define('compile-extensions-build-pr', task.series(
 	cleanExtensionsBuildTask,
+	compileExtensionsBuildLegacyTask,
 	bundleMarketplaceExtensionsBuildTask,
 	task.define('bundle-extensions-build-pr', () => ext.packageAllLocalExtensionsStream(false, true).pipe(gulp.dest('.build'))),
 ));
