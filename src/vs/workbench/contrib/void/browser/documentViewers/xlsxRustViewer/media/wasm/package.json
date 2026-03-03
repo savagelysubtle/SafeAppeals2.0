@@ -1,0 +1,13 @@
+{
+  "name": "xlsx_rust_viewer",
+  "type": "module",
+  "version": "0.1.0",
+  "files": [
+    "xlsx_rust_viewer_bg.wasm",
+    "xlsx_rust_viewer.js"
+  ],
+  "main": "xlsx_rust_viewer.js",
+  "sideEffects": [
+    "./snippets/*"
+  ]
+}
