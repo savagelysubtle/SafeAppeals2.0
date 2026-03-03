@@ -147,6 +147,15 @@ jobs:
           npm_config_arch: x64
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Fix broken @electron/node-gyp
+        shell: pwsh
+        run: |
+          npm install -g node-gyp
+          $globalBin = (npm root -g) -replace 'node_modules$', 'node_modules/.bin'
+          if (Test-Path "node_modules/.bin/node-gyp.cmd") { Remove-Item -Force "node_modules/.bin/node-gyp.cmd" }
+          if (Test-Path "node_modules/.bin/node-gyp") { Remove-Item -Force "node_modules/.bin/node-gyp" }
+          Copy-Item "$globalBin/node-gyp*" "node_modules/.bin/" -Force
+
       - name: Run postinstall and rebuild native modules
         run: |
           node build/npm/postinstall.js
@@ -285,6 +294,12 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Fix broken @electron/node-gyp
+        run: |
+          npm install -g node-gyp
+          rm -f node_modules/.bin/node-gyp
+          ln -s "$(which node-gyp)" node_modules/.bin/node-gyp
+
       - name: Run postinstall and rebuild native modules
         run: |
           node build/npm/postinstall.js
@@ -392,6 +407,12 @@ jobs:
         run: npm install --ignore-scripts --no-audit --no-fund --force
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Fix broken @electron/node-gyp
+        run: |
+          npm install -g node-gyp
+          rm -f node_modules/.bin/node-gyp
+          ln -s "$(which node-gyp)" node_modules/.bin/node-gyp
 
       - name: Run postinstall and rebuild native modules
         run: |
@@ -514,6 +535,12 @@ jobs:
         run: npm install --ignore-scripts --no-audit --no-fund --force
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Fix broken @electron/node-gyp
+        run: |
+          npm install -g node-gyp
+          rm -f node_modules/.bin/node-gyp
+          ln -s "$(which node-gyp)" node_modules/.bin/node-gyp
 
       - name: Run postinstall and rebuild native modules
         run: |
