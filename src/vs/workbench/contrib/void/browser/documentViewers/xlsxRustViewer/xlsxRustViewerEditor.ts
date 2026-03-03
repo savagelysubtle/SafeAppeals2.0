@@ -489,7 +489,7 @@ export class XLSXRustViewerEditor extends EditorPane {
 <html lang="en">
 <head>
 	<meta charset="UTF-8">
-	<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'nonce-${nonce}' 'wasm-unsafe-eval' vscode-resource:; style-src 'unsafe-inline' vscode-resource:; connect-src https:;">
+	<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'nonce-${nonce}' 'wasm-unsafe-eval' vscode-resource:; style-src 'unsafe-inline' vscode-resource:; connect-src https: vscode-resource:;">
 	<meta name="viewport" content="width=device-width, initial-scale=1.0">
 	<title>XLSX Rust Viewer</title>
 	<style>
