@@ -142,7 +142,7 @@ jobs:
             ${{ runner.os }}-node-
 
       - name: Install dependencies
-        run: npm install --ignore-scripts --no-audit --no-fund
+        run: npm install --ignore-scripts --no-audit --no-fund --force
         env:
           npm_config_arch: x64
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -281,7 +281,7 @@ jobs:
             ${{ runner.os }}-x64-node-
 
       - name: Install dependencies
-        run: npm install --ignore-scripts --no-audit --no-fund
+        run: npm install --ignore-scripts --no-audit --no-fund --force
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -389,7 +389,7 @@ jobs:
             ${{ runner.os }}-arm64-node-
 
       - name: Install dependencies
-        run: npm install --ignore-scripts --no-audit --no-fund
+        run: npm install --ignore-scripts --no-audit --no-fund --force
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -511,7 +511,7 @@ jobs:
             ${{ runner.os }}-node-
 
       - name: Install dependencies
-        run: npm install --ignore-scripts --no-audit --no-fund
+        run: npm install --ignore-scripts --no-audit --no-fund --force
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
