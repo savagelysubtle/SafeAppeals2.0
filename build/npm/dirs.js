@@ -32,6 +32,7 @@ const dirs = [
 	'extensions/ipynb',
 	'extensions/emmet',
 	'extensions/php-language-features',
+	'extensions/notebook-renderers',
 	'extensions/npm',
 	'extensions/github',
 	'extensions/github-authentication',
