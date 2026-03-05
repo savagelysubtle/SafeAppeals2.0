@@ -60,6 +60,9 @@ const pivotOutputCache: Map<number, PivotOutput> = new Map();
 // Workbook-level defined names (named ranges)
 let definedNames: DefinedNameDef[] = [];
 
+// WASM binary received from the host process (bypasses service worker fetch)
+let wasmBinaryData: ArrayBuffer | null = null;
+
 async function initialize() {
 	console.log('[XLSX Rust Viewer] Initializing...');
 
@@ -170,19 +173,26 @@ async function initialize() {
 		filterDropdown.show(screenX, screenY, tableName, colIndex, colName, uniqueValues, currentFilter);
 	};
 
-	// Get WASM URL from data attribute injected by the editor
+	// Get WASM URL from data attribute as fallback
 	const configEl = document.getElementById('config');
 	const wasmUrl = configEl?.getAttribute('data-wasm-url');
 
-	if (!wasmUrl) {
-		console.error('[XLSX Rust Viewer] No WASM URL provided');
+	// Prefer host-provided WASM binary (bypasses service worker issues in production)
+	const wasmSource: BufferSource | string | undefined = wasmBinaryData ?? wasmUrl ?? undefined;
+
+	if (!wasmSource) {
+		console.error('[XLSX Rust Viewer] No WASM source available (neither host binary nor URL)');
 		renderer.setLoading(false);
 		return;
 	}
 
 	try {
-		// Initialize WASM module - fetch binary and init
-		await init(wasmUrl);
+		if (wasmBinaryData) {
+			console.log('[XLSX Rust Viewer] Initializing WASM from host-provided binary');
+		} else {
+			console.log('[XLSX Rust Viewer] Initializing WASM from URL (fallback)');
+		}
+		await init(wasmSource);
 		init_panic_hook();
 
 		// Create Rust instances
@@ -207,6 +217,15 @@ window.addEventListener('message', async (event) => {
 	console.log('[XLSX Rust Viewer] Received message:', message.type);
 
 	switch (message.type) {
+		case 'wasmBinary': {
+			const binaryString = atob(message.data);
+			const bytes = new Uint8Array(binaryString.length);
+			for (let i = 0; i < binaryString.length; i++) {
+				bytes[i] = binaryString.charCodeAt(i);
+			}
+			wasmBinaryData = bytes.buffer;
+			break;
+		}
 		case 'loadXLSX':
 			currentFileUri = message.xlsxUri || '';
 			await handleLoad(message.data);
