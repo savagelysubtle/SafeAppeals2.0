@@ -26198,6 +26198,7 @@
   var pivotTables = [];
   var pivotOutputCache = /* @__PURE__ */ new Map();
   var definedNames = [];
+  var wasmBinaryData = null;
   async function initialize() {
     console.log("[XLSX Rust Viewer] Initializing...");
     const canvasContainer = document.getElementById("canvas-container");
@@ -26265,13 +26266,19 @@
     };
     const configEl = document.getElementById("config");
     const wasmUrl = configEl?.getAttribute("data-wasm-url");
-    if (!wasmUrl) {
-      console.error("[XLSX Rust Viewer] No WASM URL provided");
+    const wasmSource = wasmBinaryData ?? wasmUrl ?? void 0;
+    if (!wasmSource) {
+      console.error("[XLSX Rust Viewer] No WASM source available (neither host binary nor URL)");
       renderer.setLoading(false);
       return;
     }
     try {
-      await __wbg_init(wasmUrl);
+      if (wasmBinaryData) {
+        console.log("[XLSX Rust Viewer] Initializing WASM from host-provided binary");
+      } else {
+        console.log("[XLSX Rust Viewer] Initializing WASM from URL (fallback)");
+      }
+      await __wbg_init(wasmSource);
       init_panic_hook();
       parser = new XlsxParser();
       writer = new XlsxWriter();
@@ -26290,6 +26297,15 @@
     const message = event.data;
     console.log("[XLSX Rust Viewer] Received message:", message.type);
     switch (message.type) {
+      case "wasmBinary": {
+        const binaryString = atob(message.data);
+        const bytes = new Uint8Array(binaryString.length);
+        for (let i = 0; i < binaryString.length; i++) {
+          bytes[i] = binaryString.charCodeAt(i);
+        }
+        wasmBinaryData = bytes.buffer;
+        break;
+      }
       case "loadXLSX":
         currentFileUri = message.xlsxUri || "";
         await handleLoad(message.data);
