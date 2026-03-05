@@ -5,9 +5,11 @@
 
 import { Emitter, Event } from '../../../../base/common/event.js';
 import { Disposable } from '../../../../base/common/lifecycle.js';
+import { IChannel } from '../../../../base/parts/ipc/common/ipc.js';
 import { IEnvironmentService } from '../../../../platform/environment/common/environment.js';
 import { InstantiationType, registerSingleton } from '../../../../platform/instantiation/common/extensions.js';
 import { createDecorator } from '../../../../platform/instantiation/common/instantiation.js';
+import { IMainProcessService } from '../../../../platform/ipc/common/mainProcessService.js';
 import { INativeHostService } from '../../../../platform/native/common/native.js';
 import { INotificationService, Severity } from '../../../../platform/notification/common/notification.js';
 import { IStorageService, StorageScope, StorageTarget } from '../../../../platform/storage/common/storage.js';
@@ -24,6 +26,15 @@ import {
 	CreditPack,
 } from '../common/voidCloudTypes.js';
 import { IVoidSettingsService } from '../common/voidSettingsService.js';
+
+// IPC proxy response type (matches CloudProxyChannel in electron-main)
+interface CloudProxyResponse {
+	ok: boolean;
+	status: number;
+	statusText: string;
+	headers: Record<string, string>;
+	body: string;
+}
 
 // Storage keys
 const CLOUD_SESSION_KEY = 'void.cloud.session';
@@ -164,6 +175,9 @@ class VoidCloudService extends Disposable implements IVoidCloudService {
 	private _isOnline: boolean = true;
 	private _lowCreditsWarningShown: boolean = false;
 
+	// IPC channel to proxy HTTP requests through the main process (bypasses CORS)
+	private readonly _cloudProxyChannel: IChannel;
+
 	// Events
 	private readonly _onAuthStateChange = this._register(new Emitter<CloudAuthChangeEvent>());
 	readonly onAuthStateChange = this._onAuthStateChange.event;
@@ -184,8 +198,10 @@ class VoidCloudService extends Disposable implements IVoidCloudService {
 		@IMetricsService private readonly metricsService: IMetricsService,
 		@IEnvironmentService private readonly environmentService: IEnvironmentService,
 		@INotificationService private readonly notificationService: INotificationService,
+		@IMainProcessService mainProcessService: IMainProcessService,
 	) {
 		super();
+		this._cloudProxyChannel = mainProcessService.getChannel('void-channel-cloud-proxy');
 		this._loadStoredSession();
 		this._setupNetworkMonitoring();
 	}
@@ -414,18 +430,16 @@ class VoidCloudService extends Disposable implements IVoidCloudService {
 		timeoutMs: number = DEFAULT_REQUEST_TIMEOUT_MS,
 		externalSignal?: AbortSignal
 	): Promise<T> {
-		// Check if online
 		if (!this._isOnline) {
 			throw new Error('No network connection. Please check your internet and try again.');
 		}
 
-		// Check if already aborted
 		if (externalSignal?.aborted) {
 			throw new Error('Request was cancelled');
 		}
 
 		const url = `${this.apiUrl}${endpoint}`;
-		console.log('[VoidCloudService] _apiRequest to:', url);
+		console.log('[VoidCloudService] _apiRequest (via IPC proxy) to:', url);
 
 		const headers: Record<string, string> = {
 			'Content-Type': 'application/json',
@@ -433,51 +447,79 @@ class VoidCloudService extends Disposable implements IVoidCloudService {
 			...(options.headers as Record<string, string> || {}),
 		};
 
-		// Add auth header if signed in
 		if (this._authState.session?.accessToken) {
 			headers['Authorization'] = `Bearer ${this._authState.session.accessToken}`;
 		}
 
-		// Create abort controller for timeout
-		const timeoutController = new AbortController();
-		const timeoutId = setTimeout(() => {
-			timeoutController.abort();
-		}, timeoutMs);
-
-		// Combine signals if external signal provided
-		const combinedSignal = externalSignal
-			? this._combineAbortSignals(timeoutController.signal, externalSignal)
-			: timeoutController.signal;
-
 		try {
-			const response = await fetch(url, {
-				...options,
+			// Route through main process IPC to bypass browser CORS restrictions.
+			// Node.js fetch in electron-main has no CORS policy.
+			const proxyPromise = this._cloudProxyChannel.call<CloudProxyResponse>('fetch', {
+				url,
+				method: (options.method as string) || 'GET',
 				headers,
-				signal: combinedSignal,
+				body: options.body as string | undefined,
+				timeoutMs,
 			});
 
-			clearTimeout(timeoutId);
+			// Race against external abort signal if provided
+			let response: CloudProxyResponse;
+			if (externalSignal) {
+				response = await Promise.race([
+					proxyPromise,
+					new Promise<never>((_, reject) => {
+						if (externalSignal.aborted) {
+							reject(new Error('Request was cancelled'));
+						}
+						externalSignal.addEventListener('abort', () => reject(new Error('Request was cancelled')), { once: true });
+					}),
+				]);
+			} else {
+				response = await proxyPromise;
+			}
+
+			// Handle timeout/network errors returned by the main process proxy
+			if (response.status === 0) {
+				if (response.statusText === 'AbortError') {
+					this._trackApiError(endpoint, 'timeout', `Request timed out after ${timeoutMs / 1000}s`);
+					throw new Error(`Request timed out after ${timeoutMs / 1000}s. Please try again.`);
+				}
+				// Network error from main process - retry
+				if (retryCount < MAX_API_RETRIES) {
+					const delay = INITIAL_RETRY_DELAY_MS * Math.pow(2, retryCount);
+					console.warn(`[VoidCloudService] Network error on ${endpoint}: ${response.body}, retrying in ${delay}ms (attempt ${retryCount + 1}/${MAX_API_RETRIES})`);
+					await new Promise(resolve => setTimeout(resolve, delay));
+					return this._apiRequest(endpoint, options, retryCount + 1, timeoutMs, externalSignal);
+				}
+				this._trackApiError(endpoint, 'network', response.body);
+				throw new Error(response.body || 'Network error');
+			}
 
 			if (!response.ok) {
-				const errorData = await response.json().catch(() => ({})) as { error?: CloudApiError };
+				const errorData = (() => { try { return JSON.parse(response.body); } catch { return {}; } })() as { error?: CloudApiError };
 
-				// Handle specific error codes
+				// Log full response body on server errors to diagnose 503s etc.
+				if (response.status >= 500) {
+					console.error(`[VoidCloudService] Server error ${response.status} on ${endpoint}:`, {
+						statusText: response.statusText,
+						bodyPreview: response.body.substring(0, 1000),
+						parsedError: errorData.error,
+						retryCount,
+					});
+				}
+
 				if (response.status === 401) {
-					// Try to refresh session (only on first attempt)
 					if (retryCount === 0) {
 						const refreshed = await this.refreshSession();
 						if (refreshed) {
-							// Retry the request with new token
 							return this._apiRequest(endpoint, options, retryCount + 1, timeoutMs, externalSignal);
 						}
 					}
-					// Sign out if refresh failed
 					await this.signOut();
 					this._trackApiError(endpoint, 'auth', 'Session expired');
 					throw new Error('Session expired. Please sign in again.');
 				}
 
-				// Retry on server errors (5xx) with exponential backoff
 				if (response.status >= 500 && retryCount < MAX_API_RETRIES) {
 					const delay = INITIAL_RETRY_DELAY_MS * Math.pow(2, retryCount);
 					console.log(`[VoidCloudService] Server error ${response.status}, retrying in ${delay}ms (attempt ${retryCount + 1}/${MAX_API_RETRIES})`);
@@ -485,46 +527,40 @@ class VoidCloudService extends Disposable implements IVoidCloudService {
 					return this._apiRequest(endpoint, options, retryCount + 1, timeoutMs, externalSignal);
 				}
 
-				// Rate limit handling (429)
 				if (response.status === 429 && retryCount < MAX_API_RETRIES) {
-					const retryAfter = response.headers.get('Retry-After');
+					const retryAfter = response.headers['retry-after'];
 					const delay = retryAfter ? parseInt(retryAfter, 10) * 1000 : INITIAL_RETRY_DELAY_MS * Math.pow(2, retryCount);
 					console.log(`[VoidCloudService] Rate limited, retrying in ${delay}ms`);
 					await new Promise(resolve => setTimeout(resolve, delay));
 					return this._apiRequest(endpoint, options, retryCount + 1, timeoutMs, externalSignal);
 				}
 
-				// Track final HTTP error
-				const errorMessage = errorData.error?.message || `API request failed: ${response.status}`;
+				// Include response body snippet in error for diagnostics
+				const serverMessage = errorData.error?.message;
+				const bodySnippet = !serverMessage ? ` [body: ${response.body.substring(0, 200)}]` : '';
+				const errorMessage = serverMessage || `API request failed: ${response.status}${bodySnippet}`;
 				this._trackApiError(endpoint, `http_${response.status}`, errorMessage);
 				throw new Error(errorMessage);
 			}
 
-			return response.json() as Promise<T>;
+			return JSON.parse(response.body) as T;
 		} catch (error) {
-			clearTimeout(timeoutId);
-
-			// Handle abort errors
-			if (error instanceof Error && error.name === 'AbortError') {
-				if (externalSignal?.aborted) {
-					throw new Error('Request was cancelled');
-				}
-				// Track timeout errors
-				this._trackApiError(endpoint, 'timeout', `Request timed out after ${timeoutMs / 1000}s`);
-				throw new Error(`Request timed out after ${timeoutMs / 1000}s. Please try again.`);
+			if (error instanceof Error && error.message === 'Request was cancelled') {
+				throw error;
 			}
 
-			// Handle network errors with retry
-			if (error instanceof TypeError && error.message === 'Failed to fetch' && retryCount < MAX_API_RETRIES) {
-				const delay = INITIAL_RETRY_DELAY_MS * Math.pow(2, retryCount);
-				console.log(`[VoidCloudService] Network error, retrying in ${delay}ms (attempt ${retryCount + 1}/${MAX_API_RETRIES})`);
-				await new Promise(resolve => setTimeout(resolve, delay));
-				return this._apiRequest(endpoint, options, retryCount + 1, timeoutMs, externalSignal);
-			}
-
-			// Track final error if all retries exhausted
 			if (error instanceof Error) {
-				this._trackApiError(endpoint, 'network', error.message);
+				const bodySize = options.body ? (typeof options.body === 'string' ? options.body.length : 0) : 0;
+				console.error(`[VoidCloudService] Request failed for ${endpoint}:`, {
+					error: error.message,
+					errorType: error.constructor.name,
+					bodySize,
+					timeout: timeoutMs,
+					retryCount,
+				});
+				if (retryCount >= MAX_API_RETRIES) {
+					this._trackApiError(endpoint, 'network', error.message);
+				}
 			}
 			throw error;
 		}
@@ -538,19 +574,6 @@ class VoidCloudService extends Disposable implements IVoidCloudService {
 			message,
 			isOnline: this._isOnline,
 		});
-	}
-
-	// Helper to combine multiple abort signals
-	private _combineAbortSignals(...signals: AbortSignal[]): AbortSignal {
-		const controller = new AbortController();
-		for (const signal of signals) {
-			if (signal.aborted) {
-				controller.abort();
-				return controller.signal;
-			}
-			signal.addEventListener('abort', () => controller.abort(), { once: true });
-		}
-		return controller.signal;
 	}
 
 	// ============================================
@@ -660,20 +683,22 @@ class VoidCloudService extends Disposable implements IVoidCloudService {
 		googleProviderRefreshToken?: string
 	): Promise<void> {
 		try {
-			// For implicit flow, we have the tokens directly
-			// We need to get user info from the API
-			const response = await fetch(`${this.apiUrl}/auth/me`, {
+			// Route through main process IPC to bypass CORS
+			const response = await this._cloudProxyChannel.call<CloudProxyResponse>('fetch', {
+				url: `${this.apiUrl}/auth/me`,
+				method: 'GET',
 				headers: {
 					'Authorization': `Bearer ${accessToken}`,
 					'Content-Type': 'application/json',
 				},
+				timeoutMs: DEFAULT_REQUEST_TIMEOUT_MS,
 			});
 
 			if (!response.ok) {
 				throw new Error('Failed to get user info');
 			}
 
-			const user = await response.json() as {
+			const user = JSON.parse(response.body) as {
 				id: string;
 				email: string;
 				displayName: string | null;
@@ -810,9 +835,6 @@ class VoidCloudService extends Disposable implements IVoidCloudService {
 			throw new Error(`Insufficient credits. Need ~${estimatedTokens}, have ${this._creditBalance}`);
 		}
 
-		console.log('[VoidCloudService] Making API request to /llm/chat...');
-		console.log('[VoidCloudService] Tools included:', params.tools?.length ?? 0, 'toolChoice:', params.toolChoice ?? 'auto');
-
 		// Build request body with optional tools
 		const requestBody: Record<string, unknown> = {
 			model: params.model,
@@ -822,11 +844,20 @@ class VoidCloudService extends Disposable implements IVoidCloudService {
 			stream: false, // TODO: Implement streaming
 		};
 
-		// Add native tool calling if tools are provided
 		if (params.tools && params.tools.length > 0) {
 			requestBody.tools = params.tools;
 			requestBody.tool_choice = params.toolChoice ?? 'auto';
 		}
+
+		const bodyJson = JSON.stringify(requestBody);
+		console.log('[VoidCloudService] Sending /llm/chat:', {
+			model: params.model,
+			messageCount: params.messages.length,
+			bodySize: bodyJson.length,
+			maxTokens: params.maxTokens,
+			temperature: params.temperature,
+			tools: params.tools?.length ?? 0,
+		});
 
 		const response = await this._apiRequest<{
 			choices: { message: { content: string; tool_calls?: Array<{ id: string; type: string; function: { name: string; arguments: string } }> } }[];
@@ -841,7 +872,7 @@ class VoidCloudService extends Disposable implements IVoidCloudService {
 			};
 		}>('/llm/chat', {
 			method: 'POST',
-			body: JSON.stringify(requestBody),
+			body: bodyJson,
 		}, 0, LLM_REQUEST_TIMEOUT_MS, abortSignal);
 
 		// Extract tool calls from native API response
@@ -902,26 +933,18 @@ class VoidCloudService extends Disposable implements IVoidCloudService {
 		return this._creditBalance < LOW_CREDITS_WARNING_THRESHOLD && this._creditBalance > 0;
 	}
 
-	// Health check - verifies API connectivity
 	async checkHealth(): Promise<boolean> {
 		if (!this._isOnline) {
 			return false;
 		}
 
 		try {
-			// Use a lightweight endpoint with short timeout
-			const controller = new AbortController();
-			const timeoutId = setTimeout(() => controller.abort(), HEALTH_CHECK_TIMEOUT_MS);
-
-			const response = await fetch(`${this.apiUrl}/health`, {
+			const response = await this._cloudProxyChannel.call<CloudProxyResponse>('fetch', {
+				url: `${this.apiUrl}/health`,
 				method: 'GET',
-				headers: {
-					'X-Client-Version': CLIENT_VERSION,
-				},
-				signal: controller.signal,
+				headers: { 'X-Client-Version': CLIENT_VERSION },
+				timeoutMs: HEALTH_CHECK_TIMEOUT_MS,
 			});
-
-			clearTimeout(timeoutId);
 			return response.ok;
 		} catch (error) {
 			console.warn('[VoidCloudService] Health check failed:', error);

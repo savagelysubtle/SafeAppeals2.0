@@ -134,6 +134,7 @@ import { DOCXCreatorChannel } from '../../workbench/contrib/void/electron-main/d
 // Email dashboard
 import { BraveSearchChannel } from '../../workbench/contrib/void/electron-main/braveSearchChannel.js';
 import { CalendarChannel } from '../../workbench/contrib/void/electron-main/calendar/calendarChannel.js';
+import { CloudProxyChannel } from '../../workbench/contrib/void/electron-main/cloudProxyChannel.js';
 import { ChatThreadStorageChannel } from '../../workbench/contrib/void/electron-main/chat/chatThreadStorageChannel.js';
 import { DevAuthServerService } from '../../workbench/contrib/void/electron-main/devAuthServer.js';
 import { DocumentExportChannel } from '../../workbench/contrib/void/electron-main/documentExportChannel.js';
@@ -1321,6 +1322,10 @@ export class CodeApplication extends Disposable {
 		// Void Brave Search service (for web search tools)
 		const braveSearchChannel = new BraveSearchChannel();
 		mainProcessElectronServer.registerChannel('void-channel-brave-search', braveSearchChannel);
+
+		// Void Cloud Proxy - routes HTTP requests through main process to bypass browser CORS
+		const cloudProxyChannel = new CloudProxyChannel();
+		mainProcessElectronServer.registerChannel('void-channel-cloud-proxy', cloudProxyChannel);
 
 		// Void Timeline Export service (for PDF export)
 		const timelineExportChannel = new TimelineExportChannel(this.logService);
