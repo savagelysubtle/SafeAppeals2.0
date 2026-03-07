@@ -8,7 +8,7 @@ import type { SendableReasoningInfo, VoidStaticModelInfo, VoidStaticProviderInfo
 // ============================================================================
 // OPENAI GPT MODELS
 // https://platform.openai.com/docs/pricing
-// Synced with LiteLLM config - December 2025
+// Synced with LiteLLM config - March 2026
 // ============================================================================
 
 // Helper for reasoning payload
@@ -21,6 +21,24 @@ const openAICompatIncludeInPayloadReasoning = (reasoningInfo: SendableReasoningI
 }
 
 export const openAIModelOptions = {
+	// GPT-5.4 - Most capable model for professional work (Mar 2026)
+	// Uses reasoning_effort: "none" | "low" | "medium" | "high" | "xhigh"
+	'gpt-5.4': {
+		contextWindow: 1_050_000,
+		reservedOutputTokenSpace: 16_384,
+		cost: { input: 2.50, output: 15.00, cache_read: 0.25 },
+		downloadable: false,
+		supportsFIM: false,
+		supportsVision: true,
+		specialToolFormat: 'openai-style',
+		supportsSystemMessage: 'developer-role',
+		reasoningCapabilities: {
+			supportsReasoning: true,
+			canIOReasoning: true,
+			maxReasoningEffort: 'xhigh',
+			reasoningReservedOutputTokenSpace: 32_768,
+		},
+	},
 	// GPT-5.2 - Flagship model for coding and agentic tasks (Dec 2025)
 	// Uses reasoning_effort: "low" | "medium" | "high"
 	'gpt-5.2': {
@@ -79,6 +97,7 @@ export const openAIModelOptions = {
 
 // Display name mapping for UI
 export const openAIDisplayNames: { [displayName: string]: keyof typeof openAIModelOptions } = {
+	'GPT-5.4': 'gpt-5.4',
 	'GPT-5.2': 'gpt-5.2',
 	'GPT-5': 'gpt-5',
 	'GPT-5.1 Codex Max': 'gpt-5.1-codex-max',
@@ -90,8 +109,12 @@ export const openAISettings: VoidStaticProviderInfo = {
 		const lower = modelName.toLowerCase()
 		let fallbackName: keyof typeof openAIModelOptions | null = null
 
+		// GPT-5.4 variants
+		if (lower.includes('gpt-5.4') || lower.includes('gpt5.4')) {
+			fallbackName = 'gpt-5.4'
+		}
 		// GPT-5.2 variants
-		if (lower.includes('gpt-5.2') || lower.includes('gpt5.2')) {
+		else if (lower.includes('gpt-5.2') || lower.includes('gpt5.2')) {
 			fallbackName = 'gpt-5.2'
 		}
 		// GPT-5.1 Codex Max
