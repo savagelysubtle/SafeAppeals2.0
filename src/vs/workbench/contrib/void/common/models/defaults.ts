@@ -71,22 +71,25 @@ export const defaultProviderSettings = {
 
 // ============================================================================
 // DEFAULT MODELS OF PROVIDER
-// Synced with LiteLLM config - December 2024
+// Synced with LiteLLM config - March 2026
 // Using shorthand names (matching LiteLLM model_name for routing)
 // ============================================================================
 
 export const defaultModelsOfProvider = {
-	// OpenAI - synced with LiteLLM config (December 2024)
+	// OpenAI - synced with LiteLLM config (March 2026)
 	// Shorthand names only - LiteLLM handles routing to latest versions
 	openAI: [
+		'gpt-5.4',
 		'gpt-5.2',
 		'gpt-5.1-codex-max',
 		'gpt-5',
 	],
 	// Anthropic - synced with LiteLLM config (shorthand names)
 	anthropic: [
-		'claude-opus-4.5',     // Claude Opus 4.5 (Premium)
-		'claude-sonnet-4.5',   // Claude Sonnet 4.5 (Best balance)
+		'claude-opus-4.6',     // Claude Opus 4.6 (Most intelligent)
+		'claude-sonnet-4.6',   // Claude Sonnet 4.6 (Best balance)
+		'claude-opus-4.5',     // Claude Opus 4.5 (Legacy)
+		'claude-sonnet-4.5',   // Claude Sonnet 4.5 (Legacy)
 	],
 	// xAI - not in LiteLLM config, keeping for direct xAI API usage
 	xAI: [

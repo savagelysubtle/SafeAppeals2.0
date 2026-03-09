@@ -205,12 +205,15 @@ class CloudLLMRouterService extends Disposable implements ICloudLLMRouterService
 	// 1:1 mapping - app names match LiteLLM model_name values
 	private readonly cloudModelMapping: Record<string, string> = {
 		// Anthropic (matches litellm/config.yaml model_name)
+		'claude-opus-4.6': 'claude-opus-4.6',
+		'claude-sonnet-4.6': 'claude-sonnet-4.6',
 		'claude-opus-4.5': 'claude-opus-4.5',
 		'claude-sonnet-4.5': 'claude-sonnet-4.5',
 		'claude-opus-4.1': 'claude-opus-4.1',
 		'claude-sonnet-4': 'claude-sonnet-4',
 		'claude-haiku-4.5': 'claude-haiku-4.5',
 		// OpenAI (matches litellm/config.yaml model_name)
+		'gpt-5.4': 'gpt-5.4',
 		'gpt-5.2': 'gpt-5.2',
 		'gpt-5': 'gpt-5',
 		'gpt-5-mini': 'gpt-5-mini',

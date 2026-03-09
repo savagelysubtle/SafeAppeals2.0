@@ -151,7 +151,7 @@ export const openAICompatIncludeInPayloadReasoning = (reasoningState: SendableRe
 
 // ============================================================================
 // EXTENSIVE MODEL OPTIONS FALLBACK (for unrecognized models)
-// Synced with LiteLLM config - December 2024
+// Synced with LiteLLM config - March 2026
 // Using shorthand model names
 // ============================================================================
 
@@ -192,12 +192,14 @@ export const createExtensiveModelOptionsFallback = (providerModelOptions: Record
 		if (lower.includes('gemini') && (lower.includes('1.5') || lower.includes('1-5'))) return toFallback(gemini, 'gemini-1.5-pro' as any)
 
 		// Anthropic fallbacks - synced with LiteLLM (shorthand names)
+		if (lower.includes('opus-4-6') || lower.includes('opus-4.6') || lower.includes('opus 4.6')) return toFallback(anthropic, 'claude-opus-4.6' as any)
+		if (lower.includes('sonnet-4-6') || lower.includes('sonnet-4.6') || lower.includes('sonnet 4.6')) return toFallback(anthropic, 'claude-sonnet-4.6' as any)
 		if (lower.includes('opus-4-5') || lower.includes('opus-4.5') || lower.includes('opus 4.5')) return toFallback(anthropic, 'claude-opus-4.5' as any)
 		if (lower.includes('sonnet-4-5') || lower.includes('sonnet-4.5') || lower.includes('sonnet 4.5')) return toFallback(anthropic, 'claude-sonnet-4.5' as any)
 		if (lower.includes('opus-4-1') || lower.includes('opus-4.1') || lower.includes('opus 4.1')) return toFallback(anthropic, 'claude-opus-4.1' as any)
 		if (lower.includes('haiku-4-5') || lower.includes('haiku-4.5') || lower.includes('haiku 4.5')) return toFallback(anthropic, 'claude-haiku-4.5' as any)
 		if (lower.includes('claude') && lower.includes('sonnet') && lower.includes('4')) return toFallback(anthropic, 'claude-sonnet-4' as any)
-		if (lower.includes('claude')) return toFallback(anthropic, 'claude-sonnet-4.5' as any) // default to Sonnet 4.5
+		if (lower.includes('claude')) return toFallback(anthropic, 'claude-sonnet-4.6' as any) // default to Sonnet 4.6
 
 		// xAI fallbacks
 		if (lower.includes('grok2') || lower.includes('grok-2')) return toFallback(xai, 'grok-2' as any)
@@ -234,8 +236,9 @@ export const createExtensiveModelOptionsFallback = (providerModelOptions: Record
 
 		if (lower.includes('quasar') || lower.includes('quaser')) return toFallback(openSourceModelOptions_assumingOAICompat, 'quasar')
 
-		// OpenAI fallbacks - synced with LiteLLM (December 2024)
+		// OpenAI fallbacks - synced with LiteLLM (March 2026)
 		// Shorthand names only - LiteLLM handles routing to latest versions
+		if (lower.includes('gpt-5.4') || lower.includes('gpt5.4')) return toFallback(openai, 'gpt-5.4' as any)
 		if (lower.includes('gpt-5.2') || lower.includes('gpt5.2')) return toFallback(openai, 'gpt-5.2' as any)
 		if (lower.includes('gpt-5-nano') || lower.includes('gpt-5 nano')) return toFallback(openai, 'gpt-5-nano' as any)
 		if (lower.includes('gpt-5-mini') || lower.includes('gpt-5 mini')) return toFallback(openai, 'gpt-5-mini' as any)

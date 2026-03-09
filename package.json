@@ -1,6 +1,6 @@
 {
   "name": "safe-appeals",
-  "version": "1.99.3",
+  "version": "2.0.0",
   "distro": "21c8d8ea1e46d97c5639a7cabda6c0e063cc8dd5",
   "displayName": "Safe Appeals",
   "author": {
@@ -98,7 +98,6 @@
     "@floating-ui/react": "^0.27.8",
     "@google/genai": "^0.13.0",
     "@huggingface/transformers": "^3.0.0",
-    "@img/sharp-win32-x64": "^0.34.5",
     "@kutalia/whisper-node-addon": "^1.1.0",
     "@langchain/core": "^0.3.15",
     "@langchain/openai": "^0.3.10",
@@ -360,6 +359,7 @@
     "url": "https://github.com/microsoft/vscode/issues"
   },
   "optionalDependencies": {
+    "@img/sharp-win32-x64": "^0.34.5",
     "@parcel/watcher": "^2.5.1",
     "windows-foreground-love": "0.5.0"
   }

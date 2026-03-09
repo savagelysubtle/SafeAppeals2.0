@@ -13,9 +13,20 @@ void-cloud/litellm/config.yaml
 ```yaml
 # LiteLLM Proxy Configuration
 # Docs: https://docs.litellm.ai/docs/proxy/configs
-# Last Updated: December 2025
+# Last Updated: March 2026
 
 model_list:
+  # ============================================
+  # OPENAI GPT-5.4 (Released Mar 5, 2026)
+  # ============================================
+  - model_name: gpt-5.4
+    litellm_params:
+      model: openai/gpt-5.4
+      api_key: os.environ/OPENAI_API_KEY
+    model_info:
+      input_cost_per_token: 0.0000025    # $2.50/MTok
+      output_cost_per_token: 0.000015    # $15/MTok
+
   # ============================================
   # OPENAI GPT-5.2 MODELS (Released Dec 11, 2025)
   # ============================================
@@ -36,7 +47,26 @@ model_list:
       output_cost_per_token: 0.000168    # $168/MTok
 
   # ============================================
-  # ANTHROPIC CLAUDE 4.5 MODELS
+  # ANTHROPIC CLAUDE 4.6 MODELS (Released Feb 2026)
+  # ============================================
+  - model_name: claude-opus-4-6
+    litellm_params:
+      model: anthropic/claude-opus-4-6
+      api_key: os.environ/ANTHROPIC_API_KEY
+    model_info:
+      input_cost_per_token: 0.000005    # $5/MTok
+      output_cost_per_token: 0.000025   # $25/MTok
+
+  - model_name: claude-sonnet-4-6
+    litellm_params:
+      model: anthropic/claude-sonnet-4-6
+      api_key: os.environ/ANTHROPIC_API_KEY
+    model_info:
+      input_cost_per_token: 0.000003    # $3/MTok
+      output_cost_per_token: 0.000015   # $15/MTok
+
+  # ============================================
+  # ANTHROPIC CLAUDE 4.5 MODELS (Legacy)
   # ============================================
   - model_name: claude-opus-4-5
     litellm_params:

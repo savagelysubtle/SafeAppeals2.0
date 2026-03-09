@@ -506,7 +506,7 @@ impl PdfRenderer {
         let mut fields: Vec<FormField> = Vec::new();
 
         for annotation in page.annotations().iter() {
-            if annotation.annotation_type() == PdfAnnotationType::Widget {
+            if annotation.annotation_type() == PdfPageAnnotationType::Widget {
                 if let Ok(bounds) = annotation.bounds() {
                     let x = bounds.left().value as f64;
                     let top = bounds.top().value as f64;

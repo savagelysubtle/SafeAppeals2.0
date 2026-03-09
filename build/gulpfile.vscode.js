@@ -159,7 +159,7 @@ const vscodeResourceIncludes = [
 	// Document Viewers (PDF, DOCX, XLSX, Image)
 	'out-build/vs/workbench/contrib/void/browser/documentViewers/pdfViewer/media/**/*',
 	'out-build/vs/workbench/contrib/void/browser/documentViewers/docxViewer/media/**/*',
-	'out-build/vs/workbench/contrib/void/browser/documentViewers/xlsxViewer/media/**/*',
+	'out-build/vs/workbench/contrib/void/browser/documentViewers/xlsxRustViewer/media/**/*',
 ];
 
 const vscodeResources = [

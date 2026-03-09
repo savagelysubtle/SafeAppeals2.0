@@ -1,0 +1,3 @@
+[submodule "void-cloud"]
+	path = void-cloud
+	url = https://github.com/savagelysubtle/void-cloud.git

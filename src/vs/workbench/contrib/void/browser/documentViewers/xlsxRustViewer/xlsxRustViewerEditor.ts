@@ -108,6 +108,9 @@ export class XLSXRustViewerEditor extends EditorPane {
 			// Load webview HTML
 			this.webview.setHtml(this.getWebviewHTML());
 
+			// Send WASM binary from host side to bypass service worker issues in production
+			this.sendWasmBinary();
+
 			// Layout if we have dimensions
 			if (this._dimension) {
 				this.webview.layoutWebviewOverElement(this._element, this._dimension);
@@ -156,6 +159,27 @@ export class XLSXRustViewerEditor extends EditorPane {
 
 		} catch (error) {
 			console.error('[XLSX Rust Viewer] Failed to load XLSX:', error);
+		}
+	}
+
+	private async sendWasmBinary(): Promise<void> {
+		if (!this.webview) {
+			return;
+		}
+		try {
+			const wasmUri = URI.joinPath(this.getMediaUri(), 'wasm', 'xlsx_rust_viewer_bg.wasm');
+			const wasmContent = await this.fileService.readFile(wasmUri);
+			const uint8Array = new Uint8Array(wasmContent.value.buffer);
+			let base64 = '';
+			const chunkSize = 8192;
+			for (let i = 0; i < uint8Array.length; i += chunkSize) {
+				const chunk = uint8Array.subarray(i, Math.min(i + chunkSize, uint8Array.length));
+				base64 += String.fromCharCode.apply(null, Array.from(chunk));
+			}
+			const base64Data = btoa(base64);
+			this.webview?.postMessage({ type: 'wasmBinary', data: base64Data });
+		} catch (error) {
+			console.error('[XLSX Rust Viewer] Failed to send WASM binary:', error);
 		}
 	}
 
@@ -489,7 +513,7 @@ export class XLSXRustViewerEditor extends EditorPane {
 <html lang="en">
 <head>
 	<meta charset="UTF-8">
-	<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'nonce-${nonce}' 'wasm-unsafe-eval' vscode-resource:; style-src 'unsafe-inline' vscode-resource:; connect-src https:;">
+	<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'nonce-${nonce}' 'wasm-unsafe-eval' vscode-resource:; style-src 'unsafe-inline' vscode-resource:; connect-src https: vscode-resource:;">
 	<meta name="viewport" content="width=device-width, initial-scale=1.0">
 	<title>XLSX Rust Viewer</title>
 	<style>

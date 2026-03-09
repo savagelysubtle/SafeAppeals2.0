@@ -1,8 +1,9 @@
 {
 	"nameShort": "Safe Appeals",
 	"nameLong": "Safe Appeals",
-	"voidVersion": "1.4.9",
-	"voidRelease": "0044",
+	"version": "1.95.0",
+	"voidVersion": "2.0.0",
+	"voidRelease": "0045",
 	"commit": "21c8d8ea1e46d97c5639a7cabda6c0e063cc8dd5",
 	"applicationName": "safe-appeals-navigator",
 	"dataFolderName": ".safe-appeals-navigator",
