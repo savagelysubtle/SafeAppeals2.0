@@ -75,8 +75,9 @@ Each model entry looks like:
 
 **Naming in config.yaml:**
 - `model_name` uses dots for Anthropic: `claude-opus-4.6` (matches cloud router)
-- `litellm_params.model` uses provider prefix + hyphens: `anthropic/claude-opus-4-6-YYYYMMDD`
-- OpenAI models use dots everywhere: `gpt-5.4` / `openai/gpt-5.4-YYYY-MM-DD`
+- `litellm_params.model` uses provider prefix + hyphens: `anthropic/claude-opus-4-6` (NO date suffix for 4.x!)
+- OpenAI models: `model_name` uses dots (`gpt-5.4`), `litellm_params.model` may use dated snapshots (`openai/gpt-5.4-2026-03-05`)
+- **ALWAYS verify the exact API model ID from official docs** — never guess date suffixes
 
 ### 5. Model Fallback Matching
 
@@ -316,7 +317,11 @@ Cross-check:
 - `supportsSystemMessage: 'separated'` (system message is a separate API field)
 - `specialToolFormat: 'anthropic-style'`
 - Reasoning: Opus uses effort-based, Sonnet uses budget-based
-- **Naming convention**: App model key uses hyphens (`claude-opus-4-6`), cloud mapping uses dots (`claude-opus-4.6`), LiteLLM `model` uses full dated name (`anthropic/claude-opus-4-6-20260301`)
+- **Naming convention**:
+  - App model key uses hyphens: `claude-opus-4-6`
+  - Cloud mapping / LiteLLM `model_name` uses dots: `claude-opus-4.6`
+  - LiteLLM `litellm_params.model`: `anthropic/claude-opus-4-6` (NO date suffix for 4.x models!)
+  - **CRITICAL**: Claude 4.x models do NOT use date suffixes in their API IDs. The API ID is just `claude-opus-4-6`, NOT `claude-opus-4-6-20260205`. Only older 3.x models used dated suffixes like `claude-3-5-sonnet-20241022`.
 - Cost includes `cache_read` and `cache_write` fields
 - `max_tokens` is REQUIRED in API calls
 - Extended thinking requires `temperature: 1`
