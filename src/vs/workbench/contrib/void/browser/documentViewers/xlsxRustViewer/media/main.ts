@@ -62,6 +62,8 @@ let definedNames: DefinedNameDef[] = [];
 
 // WASM binary received from the host process (bypasses service worker fetch)
 let wasmBinaryData: ArrayBuffer | null = null;
+let wasmBinaryResolve: (() => void) | null = null;
+const wasmBinaryReady = new Promise<void>(resolve => { wasmBinaryResolve = resolve; });
 
 async function initialize() {
 	console.log('[XLSX Rust Viewer] Initializing...');
@@ -177,12 +179,21 @@ async function initialize() {
 	const configEl = document.getElementById('config');
 	const wasmUrl = configEl?.getAttribute('data-wasm-url');
 
-	// Prefer host-provided WASM binary (bypasses service worker issues in production)
+	// Wait briefly for host-provided WASM binary before falling back to URL
+	if (!wasmBinaryData) {
+		console.log('[XLSX Rust Viewer] Waiting for host WASM binary...');
+		await Promise.race([
+			wasmBinaryReady,
+			new Promise<void>(resolve => setTimeout(resolve, 3000))
+		]);
+	}
+
 	const wasmSource: BufferSource | string | undefined = wasmBinaryData ?? wasmUrl ?? undefined;
 
 	if (!wasmSource) {
 		console.error('[XLSX Rust Viewer] No WASM source available (neither host binary nor URL)');
 		renderer.setLoading(false);
+		renderer.setError('WASM module not found. Run: bun run build-wasm');
 		return;
 	}
 
@@ -207,6 +218,7 @@ async function initialize() {
 		const message = e instanceof Error ? e.message : String(e);
 		console.error('[XLSX Rust Viewer] WASM init failed:', message);
 		renderer.setLoading(false);
+		renderer.setError('WASM init failed: ' + message);
 		vscode.postMessage({ type: 'error', message });
 	}
 }
@@ -223,7 +235,11 @@ window.addEventListener('message', async (event) => {
 			for (let i = 0; i < binaryString.length; i++) {
 				bytes[i] = binaryString.charCodeAt(i);
 			}
-			wasmBinaryData = bytes.buffer;
+			wasmBinaryData = bytes.buffer as ArrayBuffer;
+			if (wasmBinaryResolve) {
+				wasmBinaryResolve();
+				wasmBinaryResolve = null;
+			}
 			break;
 		}
 		case 'loadXLSX':
@@ -324,7 +340,10 @@ async function handleLoad(base64Data: string) {
 	} catch (e: unknown) {
 		const message = e instanceof Error ? e.message : String(e);
 		console.error('[XLSX Rust Viewer] Load failed:', message);
-		if (renderer) renderer.setLoading(false);
+		if (renderer) {
+			renderer.setLoading(false);
+			renderer.setError('Failed to load file: ' + message);
+		}
 		vscode.postMessage({ type: 'error', message });
 	}
 }
