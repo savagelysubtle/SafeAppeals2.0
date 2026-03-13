@@ -114,30 +114,16 @@ export const BlogIdeasTable: React.FC<BlogIdeasTableProps> = () => {
 	}
 
 	return (
-		<div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+		<div className="flex flex-col h-full">
 			{/* Toolbar */}
-			<div style={{
-				display: 'flex',
-				alignItems: 'center',
-				gap: '8px',
-				padding: '12px 16px',
-				borderBottom: '1px solid var(--vscode-panel-border)',
-				flexWrap: 'wrap',
-			}}>
-				<span style={{ fontWeight: 600, fontSize: '14px' }}>Blog Ideas</span>
-				<div style={{ flex: 1 }} />
+			<div className="flex items-center gap-2 px-4 py-3 border-b border-[var(--vscode-panel-border)] flex-wrap">
+				<span className="font-semibold text-sm">Blog Ideas</span>
+				<div className="flex-1" />
 				<SiloSelector value={filterSilo} onChange={setFilterSilo} includeAll />
 				<select
 					value={filterStatus}
 					onChange={e => setFilterStatus(e.target.value)}
-					style={{
-						backgroundColor: 'var(--vscode-input-background)',
-						color: 'var(--vscode-input-foreground)',
-						border: '1px solid var(--vscode-input-border)',
-						borderRadius: '4px',
-						padding: '4px 8px',
-						fontSize: '12px',
-					}}
+					className="bg-[var(--vscode-input-background)] text-[var(--vscode-input-foreground)] border border-[var(--vscode-input-border)] rounded px-2 py-1 text-xs"
 				>
 					<option value="all">All Status</option>
 					<option value="pending">Pending</option>
@@ -145,134 +131,84 @@ export const BlogIdeasTable: React.FC<BlogIdeasTableProps> = () => {
 					<option value="rejected">Rejected</option>
 					<option value="used">Used</option>
 				</select>
-			<div ref={generateDropdownRef} style={{ position: 'relative' }}>
-				<button
-					onClick={() => !generating && setShowGenerateDropdown(prev => !prev)}
-					disabled={generating}
-					style={{
-						padding: '4px 12px',
-						fontSize: '12px',
-						borderRadius: '4px',
-						cursor: generating ? 'default' : 'pointer',
-						border: 'none',
-						backgroundColor: 'var(--vscode-button-background)',
-						color: 'var(--vscode-button-foreground)',
-						opacity: generating ? 0.6 : 1,
-						display: 'inline-flex',
-						alignItems: 'center',
-						gap: '4px',
-					}}
-				>
-					{generating ? 'Generating...' : 'Generate More'}
-					{!generating && <span style={{ fontSize: '10px' }}>&#9662;</span>}
-				</button>
-				{showGenerateDropdown && (
-					<div style={{
-						position: 'absolute',
-						top: '100%',
-						right: 0,
-						marginTop: '4px',
-						backgroundColor: 'var(--vscode-menu-background, var(--vscode-dropdown-background))',
-						border: '1px solid var(--vscode-menu-border, var(--vscode-dropdown-border))',
-						borderRadius: '4px',
-						boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
-						zIndex: 100,
-						minWidth: '160px',
-						overflow: 'hidden',
-					}}>
-						{Object.entries(SILO_LABELS).map(([key, label]) => (
-							<button
-								key={key}
-								onClick={() => handleGenerate(key)}
-								style={{
-									display: 'flex',
-									alignItems: 'center',
-									gap: '8px',
-									width: '100%',
-									padding: '8px 12px',
-									fontSize: '12px',
-									border: 'none',
-									backgroundColor: 'transparent',
-									color: 'var(--vscode-menu-foreground, var(--vscode-dropdown-foreground))',
-									cursor: 'pointer',
-									textAlign: 'left',
-								}}
-								onMouseEnter={e => { e.currentTarget.style.backgroundColor = 'var(--vscode-list-hoverBackground)' }}
-								onMouseLeave={e => { e.currentTarget.style.backgroundColor = 'transparent' }}
-							>
-								<span style={{
-									width: '8px',
-									height: '8px',
-									borderRadius: '50%',
-									backgroundColor: SILO_COLORS[key] || '#6b7280',
-									flexShrink: 0,
-								}} />
-								{label}
-							</button>
-						))}
-					</div>
-				)}
-			</div>
+				<div ref={generateDropdownRef} className="relative">
+					<button
+						onClick={() => !generating && setShowGenerateDropdown(prev => !prev)}
+						disabled={generating}
+						className={`px-3 py-1 text-xs rounded border-none bg-[var(--vscode-button-background)] text-[var(--vscode-button-foreground)] inline-flex items-center gap-1 transition-opacity ${generating ? 'opacity-60 cursor-default' : 'cursor-pointer hover:opacity-90'
+							}`}
+					>
+						{generating ? 'Generating...' : 'Generate More'}
+						{!generating && <span className="text-[10px]">&#9662;</span>}
+					</button>
+					{showGenerateDropdown && (
+						<div className="absolute top-full right-0 mt-1 bg-[var(--vscode-menu-background,var(--vscode-dropdown-background))] border border-[var(--vscode-menu-border,var(--vscode-dropdown-border))] rounded shadow-[0_4px_12px_rgba(0,0,0,0.3)] z-[100] min-w-[160px] overflow-hidden">
+							{Object.entries(SILO_LABELS).map(([key, label]) => (
+								<button
+									key={key}
+									onClick={() => handleGenerate(key)}
+									className="flex items-center gap-2 w-full px-3 py-2 text-xs border-none bg-transparent text-[var(--vscode-menu-foreground,var(--vscode-dropdown-foreground))] cursor-pointer text-left hover:bg-[var(--vscode-list-hoverBackground)]"
+								>
+									<span style={{ backgroundColor: SILO_COLORS[key] || '#6b7280' }} className="w-2 h-2 rounded-full shrink-0" />
+									{label}
+								</button>
+							))}
+						</div>
+					)}
+				</div>
 			</div>
 
 			{/* Bulk Actions */}
 			{selectedIds.size > 0 && (
-				<div style={{
-					display: 'flex',
-					alignItems: 'center',
-					gap: '8px',
-					padding: '6px 16px',
-					backgroundColor: 'var(--vscode-editor-selectionBackground)',
-					fontSize: '12px',
-				}}>
-				<span>{selectedIds.size} selected</span>
-				<button onClick={() => handleBulkAction('approved')} style={bulkBtnStyle}>Approve</button>
-				<button onClick={() => handleBulkAction('rejected')} style={bulkBtnStyle}>Reject</button>
-				<button onClick={handleBulkDelete} style={{ ...bulkBtnStyle, backgroundColor: '#b91c1c', color: '#ffffff', border: 'none' }}>Delete</button>
-				{selectedIds.size === 1 && (
-					<button onClick={() => {
-						const ideaId = Array.from(selectedIds)[0]
-						const idea = ideas.find(i => i.id === ideaId)
-						if (idea) openView('blog-editor', { ideaId, label: idea.title })
-					}} style={{ ...bulkBtnStyle, backgroundColor: 'var(--vscode-button-background)', color: 'var(--vscode-button-foreground)', border: 'none' }}>Generate Blog</button>
-				)}
+				<div className="flex items-center gap-2 px-4 py-1.5 bg-[var(--vscode-editor-selectionBackground)] text-xs">
+					<span>{selectedIds.size} selected</span>
+					<button onClick={() => handleBulkAction('approved')} className="px-2 py-0.5 text-[11px] rounded border border-[var(--vscode-button-border,transparent)] bg-[var(--vscode-button-secondaryBackground)] text-[var(--vscode-button-secondaryForeground)] cursor-pointer hover:opacity-90">Approve</button>
+					<button onClick={() => handleBulkAction('rejected')} className="px-2 py-0.5 text-[11px] rounded border border-[var(--vscode-button-border,transparent)] bg-[var(--vscode-button-secondaryBackground)] text-[var(--vscode-button-secondaryForeground)] cursor-pointer hover:opacity-90">Reject</button>
+					<button onClick={handleBulkDelete} className="px-2 py-0.5 text-[11px] rounded border-none bg-red-700 text-white cursor-pointer hover:bg-red-800">Delete</button>
+					{selectedIds.size === 1 && (
+						<button onClick={() => {
+							const ideaId = Array.from(selectedIds)[0]
+							const idea = ideas.find(i => i.id === ideaId)
+							if (idea) openView('blog-editor', { ideaId, label: idea.title })
+						}} className="px-2 py-0.5 text-[11px] rounded border-none bg-[var(--vscode-button-background)] text-[var(--vscode-button-foreground)] cursor-pointer hover:opacity-90">Generate Blog</button>
+					)}
 				</div>
 			)}
 
 			{/* Table */}
-			<div style={{ flex: 1, overflow: 'auto' }}>
-				<table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
-					<thead>
-						<tr style={{ borderBottom: '1px solid var(--vscode-panel-border)', position: 'sticky', top: 0, backgroundColor: 'var(--vscode-editor-background)' }}>
-							<th style={thStyle}>
+			<div className="flex-1 overflow-auto">
+				<table className="w-full border-collapse text-xs">
+					<thead className="sticky top-0 bg-[var(--vscode-editor-background)] z-10 shadow-[0_1px_0_var(--vscode-panel-border)]">
+						<tr>
+							<th className="px-3 py-2 text-left font-semibold text-[11px] uppercase tracking-wider text-[var(--vscode-descriptionForeground)]">
 								<input type="checkbox" checked={selectedIds.size === filteredIdeas.length && filteredIdeas.length > 0} onChange={toggleSelectAll} />
 							</th>
-							<th style={thStyle}>Title</th>
-							<th style={thStyle}>Silo</th>
-							<th style={thStyle}>Angle</th>
-							<th style={thStyle}>Status</th>
-							<th style={thStyle}>Created</th>
+							<th className="px-3 py-2 text-left font-semibold text-[11px] uppercase tracking-wider text-[var(--vscode-descriptionForeground)]">Title</th>
+							<th className="px-3 py-2 text-left font-semibold text-[11px] uppercase tracking-wider text-[var(--vscode-descriptionForeground)]">Silo</th>
+							<th className="px-3 py-2 text-left font-semibold text-[11px] uppercase tracking-wider text-[var(--vscode-descriptionForeground)]">Angle</th>
+							<th className="px-3 py-2 text-left font-semibold text-[11px] uppercase tracking-wider text-[var(--vscode-descriptionForeground)]">Status</th>
+							<th className="px-3 py-2 text-left font-semibold text-[11px] uppercase tracking-wider text-[var(--vscode-descriptionForeground)]">Created</th>
 						</tr>
 					</thead>
 					<tbody>
 						{filteredIdeas.map(idea => (
 							<tr
 								key={idea.id}
-								style={{ borderBottom: '1px solid var(--vscode-panel-border)', cursor: 'pointer' }}
+								className="border-b border-[var(--vscode-panel-border)] cursor-pointer hover:bg-[var(--vscode-list-hoverBackground)] transition-colors"
 								onClick={() => openView('blog-editor', { ideaId: idea.id, label: idea.title })}
 							>
-								<td style={tdStyle} onClick={e => { e.stopPropagation(); toggleSelect(idea.id) }}>
+								<td className="px-3 py-2.5" onClick={e => { e.stopPropagation(); toggleSelect(idea.id) }}>
 									<input type="checkbox" checked={selectedIds.has(idea.id)} readOnly />
 								</td>
-								<td style={{ ...tdStyle, fontWeight: 500, maxWidth: '300px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+								<td className="px-3 py-2.5 font-medium max-w-[300px] overflow-hidden text-ellipsis whitespace-nowrap">
 									{idea.title}
 								</td>
-								<td style={tdStyle}><SiloBadge silo={idea.silo} /></td>
-								<td style={{ ...tdStyle, maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--vscode-descriptionForeground)' }}>
+								<td className="px-3 py-2.5"><SiloBadge silo={idea.silo} /></td>
+								<td className="px-3 py-2.5 max-w-[200px] overflow-hidden text-ellipsis whitespace-nowrap text-[var(--vscode-descriptionForeground)]">
 									{idea.content_angle}
 								</td>
-								<td style={tdStyle}><StatusBadge status={idea.status} /></td>
-								<td style={{ ...tdStyle, color: 'var(--vscode-descriptionForeground)' }}>
+								<td className="px-3 py-2.5"><StatusBadge status={idea.status} /></td>
+								<td className="px-3 py-2.5 text-[var(--vscode-descriptionForeground)]">
 									{idea.created_at ? new Date(idea.created_at).toLocaleDateString() : ''}
 								</td>
 							</tr>
@@ -280,35 +216,11 @@ export const BlogIdeasTable: React.FC<BlogIdeasTableProps> = () => {
 					</tbody>
 				</table>
 				{filteredIdeas.length === 0 && (
-					<div style={{ padding: '20px', textAlign: 'center', color: 'var(--vscode-descriptionForeground)' }}>
+					<div className="p-5 text-center text-[var(--vscode-descriptionForeground)]">
 						No ideas found. Try generating some.
 					</div>
 				)}
 			</div>
 		</div>
 	)
-}
-
-const thStyle: React.CSSProperties = {
-	padding: '8px 12px',
-	textAlign: 'left',
-	fontWeight: 600,
-	fontSize: '11px',
-	textTransform: 'uppercase',
-	letterSpacing: '0.05em',
-	color: 'var(--vscode-descriptionForeground)',
-}
-
-const tdStyle: React.CSSProperties = {
-	padding: '8px 12px',
-}
-
-const bulkBtnStyle: React.CSSProperties = {
-	padding: '2px 8px',
-	fontSize: '11px',
-	borderRadius: '3px',
-	border: '1px solid var(--vscode-button-border, transparent)',
-	backgroundColor: 'var(--vscode-button-secondaryBackground)',
-	color: 'var(--vscode-button-secondaryForeground)',
-	cursor: 'pointer',
 }

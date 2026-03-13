@@ -48,7 +48,7 @@ export const QuickStats: React.FC = () => {
 	}, [loadStats])
 
 	return (
-		<div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+		<div className="flex flex-col gap-1">
 			<StatRow label="Published" value={String(stats.campaignsPublished)} onClick={() => openView('history')} />
 			<StatRow label="Drafts" value={String(stats.campaignsDraft)} onClick={() => openView('schedule')} />
 			<StatRow label="Approved" value={String(stats.campaignsApproved)} hint="ready to publish" />
@@ -61,19 +61,12 @@ const StatRow: React.FC<{ label: string; value: string; hint?: string; onClick?:
 	return (
 		<div
 			onClick={onClick}
-			style={{
-				display: 'flex',
-				alignItems: 'center',
-				justifyContent: 'space-between',
-				fontSize: '12px',
-				padding: '2px 0',
-				cursor: onClick ? 'pointer' : 'default',
-			}}
+			className={`flex items-center justify-between text-xs py-0.5 ${onClick ? 'cursor-pointer hover:bg-[var(--vscode-list-hoverBackground)] rounded px-1 -mx-1' : 'cursor-default'}`}
 		>
-			<span style={{ color: 'var(--vscode-foreground)' }}>{label}</span>
+			<span className="text-[var(--vscode-foreground)]">{label}</span>
 			<span>
-				<span style={{ fontWeight: 600 }}>{value}</span>
-				{hint && <span style={{ color: 'var(--vscode-descriptionForeground)', fontSize: '10px', marginLeft: '4px' }}>{hint}</span>}
+				<span className="font-semibold">{value}</span>
+				{hint && <span className="text-[var(--vscode-descriptionForeground)] text-[10px] ml-1">{hint}</span>}
 			</span>
 		</div>
 	)

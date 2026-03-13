@@ -42,7 +42,7 @@ export const CampaignQueue: React.FC = () => {
 	}
 
 	return (
-		<div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+		<div className="flex flex-col gap-1">
 			{campaigns.slice(0, 8).map(campaign => (
 				<CampaignRow key={campaign.id} campaign={campaign} onClick={() => {
 					openView('blog-editor', { campaignId: campaign.id, label: campaign.blog_title || campaign.silo })
@@ -53,31 +53,19 @@ export const CampaignQueue: React.FC = () => {
 }
 
 const CampaignRow: React.FC<{ campaign: Campaign; onClick: () => void }> = ({ campaign, onClick }) => {
-	const [hovered, setHovered] = useState(false)
 	const day = SCHEDULE_DAYS[campaign.silo] || ''
 
 	return (
 		<div
 			onClick={onClick}
-			onMouseEnter={() => setHovered(true)}
-			onMouseLeave={() => setHovered(false)}
-			style={{
-				display: 'flex',
-				alignItems: 'center',
-				gap: '6px',
-				padding: '4px 6px',
-				borderRadius: '3px',
-				cursor: 'pointer',
-				backgroundColor: hovered ? 'var(--vscode-list-hoverBackground)' : 'transparent',
-				fontSize: '12px',
-			}}
+			className="flex items-center gap-2 p-1.5 rounded cursor-pointer hover:bg-[var(--vscode-list-hoverBackground)] text-xs transition-colors"
 		>
 			<SiloBadge silo={campaign.silo} />
-			<span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+			<span className="flex-1 overflow-hidden text-ellipsis whitespace-nowrap">
 				{campaign.blog_title || 'Untitled'}
 			</span>
 			<StatusBadge status={campaign.status} />
-			{day && <span style={{ fontSize: '10px', color: 'var(--vscode-descriptionForeground)' }}>{day}</span>}
+			{day && <span className="text-[10px] text-[var(--vscode-descriptionForeground)]">{day}</span>}
 		</div>
 	)
 }

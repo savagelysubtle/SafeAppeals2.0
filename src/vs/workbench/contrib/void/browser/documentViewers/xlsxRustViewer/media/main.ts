@@ -177,7 +177,33 @@ async function initialize() {
 	const configEl = document.getElementById('config');
 	const wasmUrl = configEl?.getAttribute('data-wasm-url');
 
-	// Prefer host-provided WASM binary (bypasses service worker issues in production)
+	// Wait for host-provided WASM binary if it hasn't arrived yet.
+	// sendWasmBinary() on the host is async and may not have finished reading
+	// the file before DOMContentLoaded fires, especially under I/O load (e.g. indexing).
+	if (!wasmBinaryData) {
+		console.log('[XLSX Rust Viewer] Waiting for host WASM binary...');
+		await new Promise<void>((resolve) => {
+			const timeout = setTimeout(() => {
+				console.warn('[XLSX Rust Viewer] Timed out waiting for host WASM binary, falling back to URL');
+				resolve();
+			}, 10000);
+			const check = (event: MessageEvent) => {
+				if (event.data?.type === 'wasmBinary') {
+					clearTimeout(timeout);
+					window.removeEventListener('message', check);
+					const binaryString = atob(event.data.data);
+					const bytes = new Uint8Array(binaryString.length);
+					for (let i = 0; i < binaryString.length; i++) {
+						bytes[i] = binaryString.charCodeAt(i);
+					}
+					wasmBinaryData = bytes.buffer;
+					resolve();
+				}
+			};
+			window.addEventListener('message', check);
+		});
+	}
+
 	const wasmSource: BufferSource | string | undefined = wasmBinaryData ?? wasmUrl ?? undefined;
 
 	if (!wasmSource) {

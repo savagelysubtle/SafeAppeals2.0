@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------*/
 
 import React from 'react';
-import { IconLoading } from '../SidebarChat.js';
+import { IconLoading } from './icons.js';
 import { BuiltinToolName, BuiltinToolCallParams } from '../../../../common/tools/toolsServiceTypes.js';
 import { builtinToolNames } from '../../../../common/prompt/prompts.js';
 import { ChatMessage } from '../../../../common/chatThreadServiceTypes.js';

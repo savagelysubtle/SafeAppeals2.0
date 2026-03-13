@@ -69,7 +69,7 @@ export const GrowthWriterSidebar: React.FC<GrowthWriterSidebarProps> = ({ openVi
 
 	return (
 		<GrowthWriterContext.Provider value={ctx}>
-			<div style={{ display: 'flex', flexDirection: 'column', gap: '2px', height: '100%', color: 'var(--vscode-foreground)' }}>
+			<div className="flex flex-col gap-1 h-full text-[var(--vscode-foreground)]">
 				<QuickActions openView={openView} />
 				<CollapsibleSection title="Scheduler" defaultOpen>
 					<SchedulerStatus />
@@ -87,7 +87,7 @@ export const GrowthWriterSidebar: React.FC<GrowthWriterSidebarProps> = ({ openVi
 
 const QuickActions: React.FC<{ openView: (viewType: string, viewData?: Record<string, string>) => void }> = ({ openView }) => {
 	return (
-		<div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', padding: '8px' }}>
+		<div className="flex flex-wrap gap-1.5 p-3">
 			<ActionButton label="Blog Ideas" onClick={() => openView('blog-ideas')} />
 			<ActionButton label="Schedule" onClick={() => openView('schedule')} />
 			<ActionButton label="History" onClick={() => openView('history')} />
@@ -96,21 +96,10 @@ const QuickActions: React.FC<{ openView: (viewType: string, viewData?: Record<st
 }
 
 const ActionButton: React.FC<{ label: string; onClick: () => void }> = ({ label, onClick }) => {
-	const [hovered, setHovered] = useState(false)
 	return (
 		<button
 			onClick={onClick}
-			onMouseEnter={() => setHovered(true)}
-			onMouseLeave={() => setHovered(false)}
-			style={{
-				padding: '4px 10px',
-				fontSize: '11px',
-				border: '1px solid var(--vscode-button-border, transparent)',
-				borderRadius: '4px',
-				cursor: 'pointer',
-				backgroundColor: hovered ? 'var(--vscode-button-hoverBackground)' : 'var(--vscode-button-secondaryBackground)',
-				color: 'var(--vscode-button-secondaryForeground)',
-			}}
+			className="px-3 py-1 text-xs border border-[var(--vscode-button-border,transparent)] rounded cursor-pointer bg-[var(--vscode-button-secondaryBackground)] text-[var(--vscode-button-secondaryForeground)] hover:bg-[var(--vscode-button-hoverBackground)] transition-colors"
 		>
 			{label}
 		</button>
@@ -129,28 +118,13 @@ const CollapsibleSection: React.FC<CollapsibleSectionProps> = ({ title, defaultO
 		<div>
 			<button
 				onClick={() => setOpen(!open)}
-				style={{
-					display: 'flex',
-					alignItems: 'center',
-					gap: '4px',
-					width: '100%',
-					padding: '6px 8px',
-					fontSize: '11px',
-					fontWeight: 600,
-					textTransform: 'uppercase',
-					letterSpacing: '0.05em',
-					border: 'none',
-					cursor: 'pointer',
-					backgroundColor: 'var(--vscode-sideBarSectionHeader-background)',
-					color: 'var(--vscode-sideBarSectionHeader-foreground)',
-					borderTop: '1px solid var(--vscode-sideBarSectionHeader-border, transparent)',
-				}}
+				className="flex items-center gap-1.5 w-full px-2 py-1.5 text-[11px] font-semibold uppercase tracking-wider border-none cursor-pointer bg-[var(--vscode-sideBarSectionHeader-background)] text-[var(--vscode-sideBarSectionHeader-foreground)] border-t border-[var(--vscode-sideBarSectionHeader-border,transparent)] hover:bg-[var(--vscode-list-hoverBackground)] transition-colors"
 			>
-				<span style={{ transform: open ? 'rotate(90deg)' : 'rotate(0deg)', transition: 'transform 0.15s', fontSize: '12px' }}>&#9654;</span>
+				<span className="text-xs transition-transform duration-150" style={{ transform: open ? 'rotate(90deg)' : 'rotate(0deg)' }}>&#9654;</span>
 				{title}
 			</button>
 			{open && (
-				<div style={{ padding: '4px 8px' }}>
+				<div className="p-2">
 					{children}
 				</div>
 			)}

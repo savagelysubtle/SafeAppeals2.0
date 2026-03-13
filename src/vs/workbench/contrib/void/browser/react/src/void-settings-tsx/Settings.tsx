@@ -48,7 +48,7 @@ import {
 import { TransferEditorType } from "../../../extensionTransferTypes.js";
 import { ChatMarkdownRender } from "../markdown/ChatMarkdownRender.js";
 import ErrorBoundary from "../sidebar-tsx/ErrorBoundary.js";
-import { IconLoading } from "../sidebar-tsx/SidebarChat.js";
+import { IconLoading } from "../sidebar-tsx/tool-renderers/icons.js";
 import "../styles.css";
 import {
 	VoidButtonBgDarken,

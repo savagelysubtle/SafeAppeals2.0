@@ -46,34 +46,26 @@ export const SchedulerStatus: React.FC = () => {
 	const isRunning = schedulerState.running || runningManual
 
 	return (
-		<div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+		<div className="flex flex-col gap-2">
 			{/* Enable/Disable Toggle */}
-			<div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-				<span style={{ fontSize: '12px' }}>Auto-schedule</span>
+			<div className="flex items-center justify-between">
+				<span className="text-xs">Auto-schedule</span>
 				<button
 					onClick={() => setSchedulerEnabled(!schedulerState.enabled)}
-					style={{
-						padding: '2px 8px',
-						fontSize: '10px',
-						borderRadius: '10px',
-						border: 'none',
-						cursor: 'pointer',
-						backgroundColor: schedulerState.enabled ? '#16a34a' : 'var(--vscode-button-secondaryBackground)',
-						color: schedulerState.enabled ? '#ffffff' : 'var(--vscode-button-secondaryForeground)',
-						fontWeight: 600,
-					}}
+					className={`px-2 py-0.5 text-[10px] rounded-full border-none cursor-pointer font-semibold transition-colors ${schedulerState.enabled ? 'bg-green-600 text-white hover:bg-green-700' : 'bg-[var(--vscode-button-secondaryBackground)] text-[var(--vscode-button-secondaryForeground)] hover:bg-[var(--vscode-button-hoverBackground)]'
+						}`}
 				>
 					{schedulerState.enabled ? 'ON' : 'OFF'}
 				</button>
 			</div>
 
 			{/* Status Info */}
-			<div style={{ display: 'flex', flexDirection: 'column', gap: '2px', fontSize: '11px', color: 'var(--vscode-descriptionForeground)' }}>
-				<div style={{ display: 'flex', justifyContent: 'space-between' }}>
+			<div className="flex flex-col gap-0.5 text-[11px] text-[var(--vscode-descriptionForeground)]">
+				<div className="flex justify-between">
 					<span>Last run</span>
 					<span>{timeAgo(schedulerState.lastRunAt)}</span>
 				</div>
-				<div style={{ display: 'flex', justifyContent: 'space-between' }}>
+				<div className="flex justify-between">
 					<span>Next run</span>
 					<span>{schedulerState.enabled ? timeUntil(schedulerState.nextRunAt) : 'disabled'}</span>
 				</div>
@@ -81,25 +73,17 @@ export const SchedulerStatus: React.FC = () => {
 
 			{/* Running Indicator */}
 			{isRunning && (
-				<div style={{
-					fontSize: '11px',
-					padding: '4px 8px',
-					borderRadius: '4px',
-					backgroundColor: 'var(--vscode-editor-selectionBackground)',
-					display: 'flex',
-					alignItems: 'center',
-					gap: '6px',
-				}}>
-					<span style={{ animation: 'pulse 1.5s infinite', width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#3b82f6', display: 'inline-block' }} />
+				<div className="text-[11px] px-2 py-1 rounded bg-[var(--vscode-editor-selectionBackground)] flex items-center gap-1.5">
+					<span className="w-1.5 h-1.5 rounded-full bg-blue-500 inline-block animate-pulse" />
 					Running...
 				</div>
 			)}
 
 			{/* Recent Actions */}
 			{schedulerState.pendingActions.length > 0 && (
-				<div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+				<div className="flex flex-col gap-0.5">
 					{schedulerState.pendingActions.slice(0, 4).map((action, i) => (
-						<div key={i} style={{ fontSize: '10px', color: 'var(--vscode-descriptionForeground)', padding: '1px 0' }}>
+						<div key={i} className="text-[10px] text-[var(--vscode-descriptionForeground)] py-px">
 							{action}
 						</div>
 					))}
@@ -110,17 +94,8 @@ export const SchedulerStatus: React.FC = () => {
 			<button
 				onClick={handleRunNow}
 				disabled={isRunning}
-				style={{
-					padding: '3px 8px',
-					fontSize: '11px',
-					border: '1px solid var(--vscode-button-border, transparent)',
-					borderRadius: '3px',
-					cursor: isRunning ? 'default' : 'pointer',
-					backgroundColor: 'var(--vscode-button-secondaryBackground)',
-					color: 'var(--vscode-button-secondaryForeground)',
-					opacity: isRunning ? 0.6 : 1,
-					alignSelf: 'flex-start',
-				}}
+				className={`px-2 py-1 text-[11px] border border-[var(--vscode-button-border,transparent)] rounded bg-[var(--vscode-button-secondaryBackground)] text-[var(--vscode-button-secondaryForeground)] self-start transition-opacity ${isRunning ? 'opacity-60 cursor-default' : 'cursor-pointer hover:bg-[var(--vscode-button-hoverBackground)]'
+					}`}
 			>
 				{isRunning ? 'Running...' : 'Run Now'}
 			</button>

@@ -107,6 +107,8 @@ import {
     toolNameToDesc,
     type ToolHeaderParams
 } from "./tool-renderers/index.js";
+import { IconLoading } from "./tool-renderers/icons.js";
+export { IconLoading };
 
 export const IconX = ({
 	size,
@@ -207,31 +209,6 @@ export const IconWarning = ({
 			/>
 		</svg>
 	);
-};
-
-export const IconLoading = ({ className = "" }: { className?: string }) => {
-	const [loadingText, setLoadingText] = useState(".");
-
-	useEffect(() => {
-		let intervalId;
-
-		// Function to handle the animation
-		const toggleLoadingText = () => {
-			if (loadingText === "...") {
-				setLoadingText(".");
-			} else {
-				setLoadingText(loadingText + ".");
-			}
-		};
-
-		// Start the animation loop
-		intervalId = setInterval(toggleLoadingText, 300);
-
-		// Cleanup function to clear the interval when component unmounts
-		return () => clearInterval(intervalId);
-	}, [loadingText, setLoadingText]);
-
-	return <div className={`${className}`}>{loadingText}</div>;
 };
 
 // Message Actions Component

@@ -1250,6 +1250,7 @@ export class RAGFileService {
 			this.logService.info(`[RAGFileService] Loaded workbook with ${workbook.SheetNames.length} sheets`);
 
 			// Apply operations
+			const modifiedSheets = new Set<string>();
 			for (const op of operations) {
 				// Resolve sheet name
 				let sheetName: string;
@@ -1274,6 +1275,7 @@ export class RAGFileService {
 								t: typeof op.value === 'number' ? 'n' : 's',
 								v: op.value
 							};
+							modifiedSheets.add(sheetName);
 							this.logService.info(`[RAGFileService] Set ${sheetName}!${op.cell} = ${op.value}`);
 						}
 						break;
@@ -1284,10 +1286,32 @@ export class RAGFileService {
 								t: 'n',
 								f: op.formula
 							};
+							modifiedSheets.add(sheetName);
 							this.logService.info(`[RAGFileService] Set ${sheetName}!${op.cell} = ${op.formula}`);
 						}
 						break;
 				}
+			}
+
+			// Recalculate !ref for each modified sheet so all written cells are visible
+			for (const sheetName of modifiedSheets) {
+				const worksheet = workbook.Sheets[sheetName];
+				const cellKeys = Object.keys(worksheet).filter(k => !k.startsWith('!'));
+				if (cellKeys.length === 0) continue;
+
+				let minRow = Infinity, maxRow = -1, minCol = Infinity, maxCol = -1;
+				for (const key of cellKeys) {
+					const cell = XLSX.utils.decode_cell(key);
+					if (cell.r < minRow) minRow = cell.r;
+					if (cell.r > maxRow) maxRow = cell.r;
+					if (cell.c < minCol) minCol = cell.c;
+					if (cell.c > maxCol) maxCol = cell.c;
+				}
+				worksheet['!ref'] = XLSX.utils.encode_range(
+					{ r: minRow, c: minCol },
+					{ r: maxRow, c: maxCol }
+				);
+				this.logService.info(`[RAGFileService] Updated ${sheetName} !ref to ${worksheet['!ref']}`);
 			}
 
 			// Write back to file

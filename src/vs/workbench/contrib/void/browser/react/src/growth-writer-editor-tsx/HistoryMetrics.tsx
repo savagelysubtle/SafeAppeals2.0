@@ -76,15 +76,15 @@ export const HistoryMetrics: React.FC<HistoryMetricsProps> = () => {
 	}
 
 	return (
-		<div style={{ padding: '16px' }}>
-			<div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
-				<h2 style={{ fontSize: '16px', fontWeight: 600, margin: 0 }}>History & Metrics</h2>
-				<div style={{ flex: 1 }} />
+		<div className="p-4">
+			<div className="flex items-center gap-3 mb-4">
+				<h2 className="text-base font-semibold m-0">History & Metrics</h2>
+				<div className="flex-1" />
 				<SiloSelector value={filterSilo} onChange={setFilterSilo} includeAll />
 			</div>
 
 			{/* Summary Cards */}
-			<div style={{ display: 'flex', gap: '12px', marginBottom: '24px' }}>
+			<div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-6">
 				<SummaryCard label="Campaigns Published" value={String(totalCampaigns)} />
 				<SummaryCard label="Total Impressions" value={formatNumber(totalImpressions)} />
 				<SummaryCard label="Total Likes" value={formatNumber(totalLikes)} />
@@ -92,57 +92,53 @@ export const HistoryMetrics: React.FC<HistoryMetricsProps> = () => {
 
 			{/* Campaigns Table */}
 			{filtered.length === 0 ? (
-				<div style={{ color: 'var(--vscode-descriptionForeground)', textAlign: 'center', padding: '40px' }}>
+				<div className="text-[var(--vscode-descriptionForeground)] text-center p-10">
 					No published campaigns yet.
 				</div>
 			) : (
-				<table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
-					<thead>
-						<tr style={{ borderBottom: '1px solid var(--vscode-panel-border)' }}>
-							<th style={thStyle}>Silo</th>
-							<th style={thStyle}>Title</th>
-							<th style={thStyle}>Published</th>
-							<th style={thStyle}>Tweets</th>
-							<th style={thStyle}>Reddit</th>
-							<th style={thStyle}>Impressions</th>
-							<th style={thStyle}>Likes</th>
-						</tr>
-					</thead>
-					<tbody>
-						{filtered.map(c => (
-							<tr
-								key={c.id}
-								style={{ borderBottom: '1px solid var(--vscode-panel-border)', cursor: 'pointer' }}
-							onClick={() => openView('social-posts', { campaignId: c.id, label: c.blog_title || c.silo })}
-						>
-							<td style={tdStyle}><SiloBadge silo={c.silo} /></td>
-							<td style={{ ...tdStyle, fontWeight: 500 }}>{c.blog_title || 'Untitled'}</td>
-								<td style={{ ...tdStyle, color: 'var(--vscode-descriptionForeground)' }}>
-									{c.published_at ? new Date(c.published_at).toLocaleDateString() : '-'}
-								</td>
-								<td style={tdStyle}>{c.tweetCount}</td>
-								<td style={tdStyle}>{c.redditCount}</td>
-								<td style={tdStyle}>{formatNumber(c.totalImpressions)}</td>
-								<td style={tdStyle}>{formatNumber(c.totalLikes)}</td>
+				<div className="overflow-x-auto">
+					<table className="w-full border-collapse text-xs">
+						<thead>
+							<tr className="border-b border-[var(--vscode-panel-border)]">
+								<th className="px-3 py-2 text-left font-semibold text-[11px] uppercase tracking-wider text-[var(--vscode-descriptionForeground)]">Silo</th>
+								<th className="px-3 py-2 text-left font-semibold text-[11px] uppercase tracking-wider text-[var(--vscode-descriptionForeground)]">Title</th>
+								<th className="px-3 py-2 text-left font-semibold text-[11px] uppercase tracking-wider text-[var(--vscode-descriptionForeground)]">Published</th>
+								<th className="px-3 py-2 text-left font-semibold text-[11px] uppercase tracking-wider text-[var(--vscode-descriptionForeground)]">Tweets</th>
+								<th className="px-3 py-2 text-left font-semibold text-[11px] uppercase tracking-wider text-[var(--vscode-descriptionForeground)]">Reddit</th>
+								<th className="px-3 py-2 text-left font-semibold text-[11px] uppercase tracking-wider text-[var(--vscode-descriptionForeground)]">Impressions</th>
+								<th className="px-3 py-2 text-left font-semibold text-[11px] uppercase tracking-wider text-[var(--vscode-descriptionForeground)]">Likes</th>
 							</tr>
-						))}
-					</tbody>
-				</table>
+						</thead>
+						<tbody>
+							{filtered.map(c => (
+								<tr
+									key={c.id}
+									className="border-b border-[var(--vscode-panel-border)] cursor-pointer hover:bg-[var(--vscode-list-hoverBackground)] transition-colors"
+									onClick={() => openView('social-posts', { campaignId: c.id, label: c.blog_title || c.silo })}
+								>
+									<td className="px-3 py-2.5"><SiloBadge silo={c.silo} /></td>
+									<td className="px-3 py-2.5 font-medium">{c.blog_title || 'Untitled'}</td>
+									<td className="px-3 py-2.5 text-[var(--vscode-descriptionForeground)]">
+										{c.published_at ? new Date(c.published_at).toLocaleDateString() : '-'}
+									</td>
+									<td className="px-3 py-2.5">{c.tweetCount}</td>
+									<td className="px-3 py-2.5">{c.redditCount}</td>
+									<td className="px-3 py-2.5">{formatNumber(c.totalImpressions)}</td>
+									<td className="px-3 py-2.5">{formatNumber(c.totalLikes)}</td>
+								</tr>
+							))}
+						</tbody>
+					</table>
+				</div>
 			)}
 		</div>
 	)
 }
 
 const SummaryCard: React.FC<{ label: string; value: string }> = ({ label, value }) => (
-	<div style={{
-		flex: 1,
-		padding: '16px',
-		borderRadius: '8px',
-		border: '1px solid var(--vscode-panel-border)',
-		textAlign: 'center',
-	}}>
-		<div style={{ fontSize: '24px', fontWeight: 700, marginBottom: '4px' }}>{value}</div>
-		<div style={{ fontSize: '12px', color: 'var(--vscode-descriptionForeground)' }}>{label}</div>
+	<div className="p-4 rounded-lg border border-[var(--vscode-panel-border)] text-center bg-[var(--vscode-editor-background)]">
+		<div className="text-2xl font-bold mb-1">{value}</div>
+		<div className="text-xs text-[var(--vscode-descriptionForeground)]">{label}</div>
 	</div>
 )
 
@@ -152,16 +148,3 @@ function formatNumber(n: number): string {
 	return String(n)
 }
 
-const thStyle: React.CSSProperties = {
-	padding: '8px 12px',
-	textAlign: 'left',
-	fontWeight: 600,
-	fontSize: '11px',
-	textTransform: 'uppercase',
-	letterSpacing: '0.05em',
-	color: 'var(--vscode-descriptionForeground)',
-}
-
-const tdStyle: React.CSSProperties = {
-	padding: '8px 12px',
-}
