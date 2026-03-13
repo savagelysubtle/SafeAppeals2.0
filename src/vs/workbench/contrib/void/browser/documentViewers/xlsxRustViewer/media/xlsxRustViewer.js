@@ -61,68 +61,60 @@
       wasm.__wbg_formulaengine_free(ptr, 0);
     }
     /**
-     * Evaluate all formula cells across all sheets.
-     * `all_sheets_json` is: { "SheetName": { "row": { "col": { "value": "...", "data_type": "..." } } } }
-     * `active_sheet` is the sheet to return results for.
+     * Evaluate all formula cells in the sheet.
      * Returns JSON: { "row:col": { "display": "...", "is_error": bool, "numeric": number|null } }
-     * @param {string} all_sheets_json
-     * @param {string} active_sheet
+     * @param {string} cells_json
      * @returns {string}
      */
-    evaluate_all(all_sheets_json, active_sheet) {
-      let deferred4_0;
-      let deferred4_1;
+    evaluate_all(cells_json) {
+      let deferred3_0;
+      let deferred3_1;
       try {
-        const ptr0 = passStringToWasm0(all_sheets_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const ptr0 = passStringToWasm0(cells_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
         const len0 = WASM_VECTOR_LEN;
-        const ptr1 = passStringToWasm0(active_sheet, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-        const len1 = WASM_VECTOR_LEN;
-        const ret = wasm.formulaengine_evaluate_all(this.__wbg_ptr, ptr0, len0, ptr1, len1);
-        var ptr3 = ret[0];
-        var len3 = ret[1];
+        const ret = wasm.formulaengine_evaluate_all(this.__wbg_ptr, ptr0, len0);
+        var ptr2 = ret[0];
+        var len2 = ret[1];
         if (ret[3]) {
-          ptr3 = 0;
-          len3 = 0;
+          ptr2 = 0;
+          len2 = 0;
           throw takeFromExternrefTable0(ret[2]);
         }
-        deferred4_0 = ptr3;
-        deferred4_1 = len3;
-        return getStringFromWasm0(ptr3, len3);
+        deferred3_0 = ptr2;
+        deferred3_1 = len2;
+        return getStringFromWasm0(ptr2, len2);
       } finally {
-        wasm.__wbindgen_free(deferred4_0, deferred4_1, 1);
+        wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
       }
     }
     /**
      * Evaluate a single cell's formula.
-     * `all_sheets_json` is: { "SheetName": { "row": { "col": { "value": "...", "data_type": "..." } } } }
-     * `active_sheet` is the name of the sheet containing the cell.
+     * `cells_json` is the cells object: { "0": { "0": { "value": "...", "data_type": "..." }, ... }, ... }
+     * Returns JSON: { "value": "...", "display": "..." }
      * @param {number} row
      * @param {number} col
-     * @param {string} all_sheets_json
-     * @param {string} active_sheet
+     * @param {string} cells_json
      * @returns {string}
      */
-    evaluate_cell(row, col, all_sheets_json, active_sheet) {
-      let deferred4_0;
-      let deferred4_1;
+    evaluate_cell(row, col, cells_json) {
+      let deferred3_0;
+      let deferred3_1;
       try {
-        const ptr0 = passStringToWasm0(all_sheets_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const ptr0 = passStringToWasm0(cells_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
         const len0 = WASM_VECTOR_LEN;
-        const ptr1 = passStringToWasm0(active_sheet, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-        const len1 = WASM_VECTOR_LEN;
-        const ret = wasm.formulaengine_evaluate_cell(this.__wbg_ptr, row, col, ptr0, len0, ptr1, len1);
-        var ptr3 = ret[0];
-        var len3 = ret[1];
+        const ret = wasm.formulaengine_evaluate_cell(this.__wbg_ptr, row, col, ptr0, len0);
+        var ptr2 = ret[0];
+        var len2 = ret[1];
         if (ret[3]) {
-          ptr3 = 0;
-          len3 = 0;
+          ptr2 = 0;
+          len2 = 0;
           throw takeFromExternrefTable0(ret[2]);
         }
-        deferred4_0 = ptr3;
-        deferred4_1 = len3;
-        return getStringFromWasm0(ptr3, len3);
+        deferred3_0 = ptr2;
+        deferred3_1 = len2;
+        return getStringFromWasm0(ptr2, len2);
       } finally {
-        wasm.__wbindgen_free(deferred4_0, deferred4_1, 1);
+        wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
       }
     }
     /**
@@ -156,19 +148,6 @@
       this.__wbg_ptr = ret >>> 0;
       FormulaEngineFinalization.register(this, this.__wbg_ptr, this);
       return this;
-    }
-    /**
-     * Register named ranges from the workbook model.
-     * `json` is an array of { name, formula, local_sheet_id?, hidden? } objects.
-     * @param {string} json
-     */
-    set_named_ranges(json) {
-      const ptr0 = passStringToWasm0(json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-      const len0 = WASM_VECTOR_LEN;
-      const ret = wasm.formulaengine_set_named_ranges(this.__wbg_ptr, ptr0, len0);
-      if (ret[1]) {
-        throw takeFromExternrefTable0(ret[0]);
-      }
     }
   };
   if (Symbol.dispose) FormulaEngine.prototype[Symbol.dispose] = FormulaEngine.prototype.free;
@@ -282,7 +261,7 @@
       }
     }
     constructor() {
-      const ret = wasm.contextmenumanager_new();
+      const ret = wasm.tableops_new();
       this.__wbg_ptr = ret >>> 0;
       TableOpsFinalization.register(this, this.__wbg_ptr, this);
       return this;
@@ -521,7 +500,7 @@
       }
     }
     constructor() {
-      const ret = wasm.contextmenumanager_new();
+      const ret = wasm.viewportmanager_new();
       this.__wbg_ptr = ret >>> 0;
       ViewportManagerFinalization.register(this, this.__wbg_ptr, this);
       return this;
@@ -1016,8 +995,9 @@
       // Find state
       this._findMatches = [];
       this._findMatchIndex = -1;
-      // Loading / empty state
+      // Loading / empty / error state
       this._loading = true;
+      this._errorMessage = null;
       // Scrollbar state
       this._scrollbarSize = 14;
       this._scrollbarMinThumb = 30;
@@ -1176,6 +1156,7 @@
       this._layoutDirty = true;
       this._syncFromActiveSheet();
       this._loading = false;
+      this._errorMessage = null;
       this.cancelCellEdit();
       this.render();
       this.updateHScrollbar();
@@ -1437,6 +1418,10 @@
     }
     setLoading(loading) {
       this._loading = loading;
+      this.render();
+    }
+    setError(message) {
+      this._errorMessage = message;
       this.render();
     }
     getSelectedRange() {
@@ -3268,6 +3253,14 @@
       this._clearCfCache();
       this.ctx.fillStyle = "#ffffff";
       this.ctx.fillRect(0, 0, this._viewWidth, this._viewHeight);
+      if (this._errorMessage) {
+        this.ctx.fillStyle = "#f48771";
+        this.ctx.font = "14px system-ui, -apple-system, sans-serif";
+        this.ctx.textAlign = "center";
+        this.ctx.textBaseline = "middle";
+        this.ctx.fillText(this._errorMessage, this._viewWidth / 2, this._viewHeight / 2);
+        return;
+      }
       if (this._loading) {
         this.ctx.fillStyle = "#888";
         this.ctx.font = "14px system-ui, -apple-system, sans-serif";
@@ -26199,6 +26192,10 @@
   var pivotOutputCache = /* @__PURE__ */ new Map();
   var definedNames = [];
   var wasmBinaryData = null;
+  var wasmBinaryResolve = null;
+  var wasmBinaryReady = new Promise((resolve2) => {
+    wasmBinaryResolve = resolve2;
+  });
   async function initialize() {
     console.log("[XLSX Rust Viewer] Initializing...");
     const canvasContainer = document.getElementById("canvas-container");
@@ -26266,10 +26263,18 @@
     };
     const configEl = document.getElementById("config");
     const wasmUrl = configEl?.getAttribute("data-wasm-url");
+    if (!wasmBinaryData) {
+      console.log("[XLSX Rust Viewer] Waiting for host WASM binary...");
+      await Promise.race([
+        wasmBinaryReady,
+        new Promise((resolve2) => setTimeout(resolve2, 3e3))
+      ]);
+    }
     const wasmSource = wasmBinaryData ?? wasmUrl ?? void 0;
     if (!wasmSource) {
       console.error("[XLSX Rust Viewer] No WASM source available (neither host binary nor URL)");
       renderer.setLoading(false);
+      renderer.setError("WASM module not found. Run: bun run build-wasm");
       return;
     }
     try {
@@ -26290,6 +26295,7 @@
       const message = e instanceof Error ? e.message : String(e);
       console.error("[XLSX Rust Viewer] WASM init failed:", message);
       renderer.setLoading(false);
+      renderer.setError("WASM init failed: " + message);
       vscode.postMessage({ type: "error", message });
     }
   }
@@ -26304,6 +26310,10 @@
           bytes[i] = binaryString.charCodeAt(i);
         }
         wasmBinaryData = bytes.buffer;
+        if (wasmBinaryResolve) {
+          wasmBinaryResolve();
+          wasmBinaryResolve = null;
+        }
         break;
       }
       case "loadXLSX":
@@ -26381,7 +26391,10 @@
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
       console.error("[XLSX Rust Viewer] Load failed:", message);
-      if (renderer) renderer.setLoading(false);
+      if (renderer) {
+        renderer.setLoading(false);
+        renderer.setError("Failed to load file: " + message);
+      }
       vscode.postMessage({ type: "error", message });
     }
   }

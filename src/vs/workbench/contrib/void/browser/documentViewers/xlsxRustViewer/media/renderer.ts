@@ -357,8 +357,9 @@ export class CanvasRenderer {
     private _findMatches: { row: number; col: number }[] = [];
     private _findMatchIndex: number = -1;
 
-    // Loading / empty state
+    // Loading / empty / error state
     private _loading: boolean = true;
+    private _errorMessage: string | null = null;
 
     // Scrollbar state
     private readonly _scrollbarSize = 14;
@@ -553,6 +554,7 @@ export class CanvasRenderer {
         this._layoutDirty = true;
         this._syncFromActiveSheet();
         this._loading = false;
+        this._errorMessage = null;
         this.cancelCellEdit();
         this.render();
         this.updateHScrollbar();
@@ -816,6 +818,11 @@ export class CanvasRenderer {
 
     setLoading(loading: boolean) {
         this._loading = loading;
+        this.render();
+    }
+
+    setError(message: string | null) {
+        this._errorMessage = message;
         this.render();
     }
 
@@ -2992,6 +2999,16 @@ export class CanvasRenderer {
         this._clearCfCache();
         this.ctx.fillStyle = '#ffffff';
         this.ctx.fillRect(0, 0, this._viewWidth, this._viewHeight);
+
+        // Error state
+        if (this._errorMessage) {
+            this.ctx.fillStyle = '#f48771';
+            this.ctx.font = '14px system-ui, -apple-system, sans-serif';
+            this.ctx.textAlign = 'center';
+            this.ctx.textBaseline = 'middle';
+            this.ctx.fillText(this._errorMessage, this._viewWidth / 2, this._viewHeight / 2);
+            return;
+        }
 
         // Loading state
         if (this._loading) {
