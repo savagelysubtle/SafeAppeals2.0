@@ -51,6 +51,10 @@ build/win32/tools/tesseract/
 
 .env
 
+# Workspace files
+*.code-workspace
+!extensions/**/*.code-workspace
+
 # Rust/WASM build artifacts
 **/wasm/target/
 **/wasm/pkg/
