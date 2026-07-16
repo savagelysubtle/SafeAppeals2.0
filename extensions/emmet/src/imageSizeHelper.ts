@@ -5,12 +5,12 @@
 
 // Based on @sergeche's work on the emmet plugin for atom
 
+import * as path from 'path';
 import * as http from 'http';
 import * as https from 'https';
+import { URL } from 'url';
 import { imageSize } from 'image-size';
 import { ISizeCalculationResult } from 'image-size/dist/types/interface';
-import * as path from 'path';
-import { URL } from 'url';
 
 const reUrl = /^https?:/;
 export type ImageInfoWithScale = {
@@ -75,7 +75,7 @@ function getImageSizeFromURL(urlStr: string): Promise<ImageInfoWithScale | undef
 
 			const trySize = (chunks: Buffer[]) => {
 				try {
-					const size: ISizeCalculationResult = imageSize(Buffer.concat(chunks as Uint8Array[], bufSize));
+					const size: ISizeCalculationResult = imageSize(Buffer.concat(chunks, bufSize));
 					resp.removeListener('data', onData);
 					resp.destroy(); // no need to read further
 					resolve(sizeForFileName(path.basename(urlPath), size));

@@ -2,15 +2,12 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
-
-// @ts-check
-
 import path from 'path';
 import { spawn } from 'child_process';
 import { promises as fs } from 'fs';
 
 const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm';
-const rootDir = path.resolve(__dirname, '..', '..');
+const rootDir = path.resolve(import.meta.dirname, '..', '..');
 
 function runProcess(command: string, args: ReadonlyArray<string> = []) {
 	return new Promise<void>((resolve, reject) => {
@@ -36,7 +33,28 @@ async function ensureNodeModules() {
 }
 
 async function getElectron() {
+	// `npm run electron` deletes and re-downloads `.build/electron` on every
+	// invocation. When preLaunch runs repeatedly (e.g. once per integration test
+	// section) this is both wasteful and a source of flaky failures on Windows,
+	// where the just-exited Electron process can still hold file locks while the
+	// directory is being removed and re-extracted. Skip the refresh when the
+	// already-present Electron matches the expected version; any detection
+	// failure falls back to a (re)download to preserve the previous behavior.
+	if (await isExpectedElectronInstalled()) {
+		return;
+	}
 	await runProcess(npm, ['run', 'electron']);
+}
+
+async function isExpectedElectronInstalled(): Promise<boolean> {
+	try {
+		const { getElectronVersion } = await import('./util.ts');
+		const { electronVersion } = getElectronVersion();
+		const installedVersion = (await fs.readFile(path.join(rootDir, '.build', 'electron', 'version'), 'utf8')).trim().replace(/^v/, '');
+		return installedVersion === electronVersion;
+	} catch {
+		return false;
+	}
 }
 
 async function ensureCompiled() {
@@ -45,55 +63,17 @@ async function ensureCompiled() {
 	}
 }
 
-async function ensureFFmpeg() {
-	// Download FFmpeg binaries for audio transcription
-	const ffmpegMarker = path.join(rootDir, 'resources', 'ffmpeg', '.download-complete');
-	try {
-		await fs.stat(ffmpegMarker);
-		console.log('[preLaunch] FFmpeg binaries already downloaded');
-	} catch {
-		console.log('[preLaunch] Downloading FFmpeg binaries...');
-		const scriptPath = path.join(rootDir, 'scripts', 'download-ffmpeg.js');
-		try {
-			await fs.stat(scriptPath);
-			await runProcess('node', [scriptPath]);
-		} catch (err) {
-			console.warn('[preLaunch] FFmpeg download script not found or failed. FFmpeg can be installed manually: winget install FFmpeg');
-		}
-	}
-}
-
-async function ensureWhisperModel() {
-	// Download Whisper model for audio transcription (~1.5GB)
-	const modelMarker = path.join(rootDir, 'resources', 'models', 'whisper', 'distil-large-v3.5', '.download-complete');
-	try {
-		await fs.stat(modelMarker);
-		console.log('[preLaunch] Whisper model already downloaded');
-	} catch {
-		console.log('[preLaunch] Downloading Whisper model (~1.5GB)...');
-		const scriptPath = path.join(rootDir, 'scripts', 'download-whisper-model.js');
-		try {
-			await fs.stat(scriptPath);
-			await runProcess('node', [scriptPath]);
-		} catch (err) {
-			console.warn('[preLaunch] Whisper model download failed. Run manually: node scripts/download-whisper-model.js');
-		}
-	}
-}
-
 async function main() {
 	await ensureNodeModules();
 	await getElectron();
 	await ensureCompiled();
-	await ensureFFmpeg();
-	await ensureWhisperModel();
 
 	// Can't require this until after dependencies are installed
-	const { getBuiltInExtensions } = require('./builtInExtensions');
+	const { getBuiltInExtensions } = await import('./builtInExtensions.ts');
 	await getBuiltInExtensions();
 }
 
-if (require.main === module) {
+if (import.meta.main) {
 	main().catch(err => {
 		console.error(err);
 		process.exit(1);

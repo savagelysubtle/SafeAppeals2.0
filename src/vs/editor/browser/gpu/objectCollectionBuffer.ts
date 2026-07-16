@@ -20,7 +20,7 @@ export interface IObjectCollectionBuffer<T extends ObjectCollectionBufferPropert
 	/**
 	 * The underlying buffer. This **should not** be modified externally.
 	 */
-	readonly buffer: ArrayBuffer;
+	readonly buffer: ArrayBufferLike;
 	/**
 	 * A view of the underlying buffer. This **should not** be modified externally.
 	 */
@@ -79,7 +79,7 @@ export function createObjectCollectionBuffer<T extends ObjectCollectionBufferPro
 }
 
 class ObjectCollectionBuffer<T extends ObjectCollectionBufferPropertySpec[]> extends Disposable implements IObjectCollectionBuffer<T> {
-	buffer: ArrayBuffer;
+	buffer: ArrayBufferLike;
 	view: Float32Array;
 
 	get bufferUsedSize() {
@@ -110,10 +110,9 @@ class ObjectCollectionBuffer<T extends ObjectCollectionBufferPropertySpec[]> ext
 	) {
 		super();
 
-	this.view = new Float32Array(capacity * propertySpecs.length);
-	const viewBuffer = this.view.buffer;
-	this.buffer = viewBuffer as ArrayBuffer;
-	this._entrySize = propertySpecs.length;
+		this.view = new Float32Array(capacity * propertySpecs.length);
+		this.buffer = this.view.buffer;
+		this._entrySize = propertySpecs.length;
 		for (let i = 0; i < propertySpecs.length; i++) {
 			const spec = {
 				offset: i,
@@ -155,12 +154,11 @@ class ObjectCollectionBuffer<T extends ObjectCollectionBufferPropertySpec[]> ext
 
 	private _expandBuffer() {
 		this.capacity *= 2;
-	const newView = new Float32Array(this.capacity * this._entrySize);
-	newView.set(this.view);
-	this.view = newView;
-	const newBuffer = this.view.buffer;
-	this.buffer = newBuffer as ArrayBuffer;
-}
+		const newView = new Float32Array(this.capacity * this._entrySize);
+		newView.set(this.view);
+		this.view = newView;
+		this.buffer = this.view.buffer;
+	}
 }
 
 class ObjectCollectionBufferEntry<T extends ObjectCollectionBufferPropertySpec[]> extends Disposable implements IObjectCollectionBufferEntry<T> {

@@ -1,14 +1,23 @@
 @echo off
-setlocal EnableDelayedExpansion
+setlocal
 
 title VSCode Dev
 
 pushd %~dp0\..
 
 :: Get electron, compile, built-in extensions
-if "%VSCODE_SKIP_PRELAUNCH%"=="" node build/lib/preLaunch.js
+if "%VSCODE_SKIP_PRELAUNCH%"=="" (
+	node build/lib/preLaunch.ts || (
+		echo Failed to prepare VS Code for launch ^(build/lib/preLaunch.ts^). 1>&2
+		exit /b 1
+	)
+)
 
-set CODE=".build\electron\Safe Appeals Navigator.exe"
+set "NAMESHORT="
+for /f "tokens=2 delims=:," %%a in ('findstr /R /C:"\"nameShort\":.*" product.json') do if not defined NAMESHORT set "NAMESHORT=%%~a"
+set NAMESHORT=%NAMESHORT: "=%
+set NAMESHORT=%NAMESHORT:"=%.exe
+set CODE=".build\electron\%NAMESHORT%"
 
 :: Manage built-in extensions
 if "%~1"=="--builtin" goto builtin
@@ -20,26 +29,6 @@ set VSCODE_CLI=1
 set ELECTRON_ENABLE_LOGGING=1
 set ELECTRON_ENABLE_STACK_DUMPING=1
 
-:: Enable garbage collection for better memory management with large PDFs
-set ELECTRON_RUN_AS_NODE=
-set NODE_OPTIONS=--expose-gc --max-old-space-size=4096
-
-:: Load environment variables from .env file if it exists
-if exist ".env" (
-    echo Loading environment from .env file...
-    for /f "usebackq eol=# tokens=1,* delims==" %%a in (".env") do (
-        if not "%%a"=="" (
-            set "%%a=%%b"
-            echo   Loaded: %%a
-        )
-    )
-    echo.
-    echo DocuSign env vars:
-    echo   DOCUSIGN_INTEGRATION_KEY=!DOCUSIGN_INTEGRATION_KEY!
-    echo   DOCUSIGN_ENVIRONMENT=!DOCUSIGN_ENVIRONMENT!
-    echo.
-)
-
 set DISABLE_TEST_EXTENSION="--disable-extension=vscode.vscode-api-tests"
 for %%A in (%*) do (
 	if "%%~A"=="--extensionTestsPath" (
@@ -48,7 +37,6 @@ for %%A in (%*) do (
 )
 
 :: Launch Code
-
 %CODE% . %DISABLE_TEST_EXTENSION% %*
 goto end
 

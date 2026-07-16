@@ -13,24 +13,25 @@ import { IStorageService } from '../../../../platform/storage/common/storage.js'
 import { IContextMenuService } from '../../../../platform/contextview/browser/contextView.js';
 import { IKeybindingService } from '../../../../platform/keybinding/common/keybinding.js';
 import { IInstantiationService } from '../../../../platform/instantiation/common/instantiation.js';
-// import { TogglePanelAction } from './panelActions.js'; // Panel functionality disabled
+import { TogglePanelAction } from './panelActions.js';
 import { IThemeService } from '../../../../platform/theme/common/themeService.js';
 import { PANEL_BACKGROUND, PANEL_BORDER, PANEL_TITLE_BORDER, PANEL_ACTIVE_TITLE_FOREGROUND, PANEL_INACTIVE_TITLE_FOREGROUND, PANEL_ACTIVE_TITLE_BORDER, PANEL_DRAG_AND_DROP_BORDER, PANEL_TITLE_BADGE_BACKGROUND, PANEL_TITLE_BADGE_FOREGROUND } from '../../../common/theme.js';
 import { contrastBorder } from '../../../../platform/theme/common/colorRegistry.js';
 import { INotificationService } from '../../../../platform/notification/common/notification.js';
 import { Dimension } from '../../../../base/browser/dom.js';
 import { IContextKeyService } from '../../../../platform/contextkey/common/contextkey.js';
-import { assertIsDefined } from '../../../../base/common/types.js';
+import { assertReturnsDefined } from '../../../../base/common/types.js';
 import { IExtensionService } from '../../../services/extensions/common/extensions.js';
-import { IViewDescriptorService } from '../../../common/views.js';
+import { IViewDescriptorService, ViewContainerLocation } from '../../../common/views.js';
 import { HoverPosition } from '../../../../base/browser/ui/hover/hoverWidget.js';
 import { IMenuService, MenuId } from '../../../../platform/actions/common/actions.js';
 import { AbstractPaneCompositePart, CompositeBarPosition } from '../paneCompositePart.js';
-// import { ICommandService } from '../../../../platform/commands/common/commands.js'; // Panel functionality disabled
+import { ICommandService } from '../../../../platform/commands/common/commands.js';
 import { getContextMenuActions } from '../../../../platform/actions/browser/menuEntryActionViewItem.js';
 import { IPaneCompositeBarOptions } from '../paneCompositeBar.js';
 import { IHoverService } from '../../../../platform/hover/browser/hover.js';
 import { IConfigurationService } from '../../../../platform/configuration/common/configuration.js';
+import { Extensions } from '../../panecomposite.js';
 
 export class PanelPart extends AbstractPaneCompositePart {
 
@@ -51,12 +52,12 @@ export class PanelPart extends AbstractPaneCompositePart {
 		const activeComposite = this.getActivePaneComposite();
 
 		if (!activeComposite) {
-			return;
+			return undefined;
 		}
 
 		const width = activeComposite.getOptimalWidth();
 		if (typeof width !== 'number') {
-			return;
+			return undefined;
 		}
 
 		return Math.max(width, 300);
@@ -78,12 +79,13 @@ export class PanelPart extends AbstractPaneCompositePart {
 		@IViewDescriptorService viewDescriptorService: IViewDescriptorService,
 		@IContextKeyService contextKeyService: IContextKeyService,
 		@IExtensionService extensionService: IExtensionService,
+		@ICommandService private commandService: ICommandService,
 		@IMenuService menuService: IMenuService,
-		@IConfigurationService private configurationService: IConfigurationService
+		@IConfigurationService configurationService: IConfigurationService
 	) {
 		super(
 			Parts.PANEL_PART,
-			{ hasTitle: true },
+			{ hasTitle: true, trailingSeparator: true },
 			PanelPart.activePanelSettingsKey,
 			ActivePanelContext.bindTo(contextKeyService),
 			PanelFocusContext.bindTo(contextKeyService),
@@ -91,6 +93,9 @@ export class PanelPart extends AbstractPaneCompositePart {
 			'panel',
 			undefined,
 			PANEL_TITLE_BORDER,
+			ViewContainerLocation.Panel,
+			Extensions.Panels,
+			MenuId.PanelTitle,
 			notificationService,
 			storageService,
 			contextMenuService,
@@ -103,6 +108,7 @@ export class PanelPart extends AbstractPaneCompositePart {
 			contextKeyService,
 			extensionService,
 			menuService,
+			configurationService,
 		);
 
 		this._register(this.configurationService.onDidChangeConfiguration(e => {
@@ -115,16 +121,15 @@ export class PanelPart extends AbstractPaneCompositePart {
 	override updateStyles(): void {
 		super.updateStyles();
 
-		const container = assertIsDefined(this.getContainer());
+		const container = assertReturnsDefined(this.getContainer());
 		container.style.backgroundColor = this.getColor(PANEL_BACKGROUND) || '';
 		const borderColor = this.getColor(PANEL_BORDER) || this.getColor(contrastBorder) || '';
 		container.style.borderLeftColor = borderColor;
 		container.style.borderRightColor = borderColor;
 		container.style.borderBottomColor = borderColor;
 
-		const title = this.getTitleArea();
-		if (title) {
-			title.style.borderTopColor = this.getColor(PANEL_BORDER) || this.getColor(contrastBorder) || '';
+		if (this.titleArea) {
+			this.titleArea.style.borderTopColor = this.getColor(PANEL_BORDER) || this.getColor(contrastBorder) || '';
 		}
 	}
 
@@ -184,8 +189,7 @@ export class PanelPart extends AbstractPaneCompositePart {
 			new SubmenuAction('workbench.action.panel.position', localize('panel position', "Panel Position"), positionActions),
 			new SubmenuAction('workbench.action.panel.align', localize('align panel', "Align Panel"), alignActions),
 			toggleShowLabelsAction,
-			// Panel functionality disabled - TogglePanelAction removed
-			// toAction({ id: TogglePanelAction.ID, label: localize('hidePanel', "Hide Panel"), run: () => this.commandService.executeCommand(TogglePanelAction.ID) }),
+			toAction({ id: TogglePanelAction.ID, label: localize('hidePanel', "Hide Panel"), run: () => this.commandService.executeCommand(TogglePanelAction.ID) }),
 		]);
 	}
 

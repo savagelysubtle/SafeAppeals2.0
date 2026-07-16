@@ -3,9 +3,9 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { bootstrapESM } from './bootstrap-esm.js';
-import { devInjectNodeModuleLookupPath, removeGlobalNodeJsModuleLookupPaths } from './bootstrap-node.js';
 import * as performance from './vs/base/common/performance.js';
+import { removeGlobalNodeJsModuleLookupPaths, devInjectNodeModuleLookupPath } from './bootstrap-node.js';
+import { bootstrapESM } from './bootstrap-esm.js';
 
 performance.mark('code/fork/start');
 
@@ -123,7 +123,7 @@ function pipeLoggingToParent(): void {
 
 		Object.defineProperty(stream, 'write', {
 			set: () => { },
-			get: () => (chunk: string | Buffer | Uint8Array, encoding: BufferEncoding | undefined, callback: ((err?: Error | null | undefined) => void) | undefined) => {
+			get: () => (chunk: string | Buffer | Uint8Array, encoding: BufferEncoding | undefined, callback: ((err?: Error | null) => void) | undefined) => {
 				buf += chunk.toString(encoding);
 				const eol = buf.length > MAX_STREAM_BUFFER_LENGTH ? buf.length : buf.lastIndexOf('\n');
 				if (eol !== -1) {
@@ -131,7 +131,7 @@ function pipeLoggingToParent(): void {
 					buf = buf.slice(eol + 1);
 				}
 
-				original.call(stream, chunk as string | Uint8Array, encoding, callback);
+				original.call(stream, chunk, encoding, callback);
 			},
 		});
 	}
@@ -184,9 +184,9 @@ function configureCrashReporter(): void {
 	const crashReporterProcessType = process.env['VSCODE_CRASH_REPORTER_PROCESS_TYPE'];
 	if (crashReporterProcessType) {
 		try {
-			//@ts-ignore
+			//@ts-expect-error
 			if (process['crashReporter'] && typeof process['crashReporter'].addExtraParameter === 'function' /* Electron only */) {
-				//@ts-ignore
+				//@ts-expect-error
 				process['crashReporter'].addExtraParameter('processType', crashReporterProcessType);
 			}
 		} catch (error) {

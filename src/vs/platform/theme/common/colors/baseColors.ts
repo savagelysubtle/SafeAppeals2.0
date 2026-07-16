@@ -14,6 +14,10 @@ export const foreground = registerColor('foreground',
 	{ dark: '#CCCCCC', light: '#616161', hcDark: '#FFFFFF', hcLight: '#292929' },
 	nls.localize('foreground', "Overall foreground color. This color is only used if not overridden by a component."));
 
+export const strongForeground = registerColor('strongForeground',
+	{ dark: '#FFFFFF', light: '#000000', hcDark: '#FFFFFF', hcLight: '#000000' },
+	nls.localize('strongForeground', "Highest-contrast foreground color, intended for text or icons that need maximum legibility across various backgrounds. This color is only used if not overridden by a component."));
+
 export const disabledForeground = registerColor('disabledForeground',
 	{ dark: '#CCCCCC80', light: '#61616180', hcDark: '#A5A5A5', hcLight: '#7F7F7F' },
 	nls.localize('disabledForeground', "Overall foreground for disabled elements. This color is only used if not overridden by a component."));
@@ -31,11 +35,11 @@ export const iconForeground = registerColor('icon.foreground',
 	nls.localize('iconForeground', "The default color for icons in the workbench."));
 
 export const focusBorder = registerColor('focusBorder',
-	{ dark: '#A6E22E', light: '#4F9E1F', hcDark: '#A6E22E', hcLight: '#0B3D0B' },
+	{ dark: '#007FD4', light: '#0090F1', hcDark: '#F38518', hcLight: '#006BBD' },
 	nls.localize('focusBorder', "Overall border color for focused elements. This color is only used if not overridden by a component."));
 
 export const contrastBorder = registerColor('contrastBorder',
-	{ light: null, dark: null, hcDark: '#6FC3DF', hcLight: '#0B3D0B' },
+	{ light: null, dark: null, hcDark: '#6FC3DF', hcLight: '#0F4A85' },
 	nls.localize('contrastBorder', "An extra border around elements to separate them from others for greater contrast."));
 
 export const activeContrastBorder = registerColor('contrastActiveBorder',
@@ -50,11 +54,11 @@ export const selectionBackground = registerColor('selection.background',
 // ------ text link
 
 export const textLinkForeground = registerColor('textLink.foreground',
-	{ light: '#4F9E1F', dark: '#A6E22E', hcDark: '#A6E22E', hcLight: '#0B3D0B' },
+	{ light: '#006AB1', dark: '#3794FF', hcDark: '#21A6FF', hcLight: '#0F4A85' },
 	nls.localize('textLinkForeground', "Foreground color for links in text."));
 
 export const textLinkActiveForeground = registerColor('textLink.activeForeground',
-	{ light: '#4F9E1F', dark: '#A6E22E', hcDark: '#A6E22E', hcLight: '#0B3D0B' },
+	{ light: '#006AB1', dark: '#3794FF', hcDark: '#21A6FF', hcLight: '#0F4A85' },
 	nls.localize('textLinkActiveForeground', "Foreground color for links in text when clicked on and on mouse hover."));
 
 export const textSeparatorForeground = registerColor('textSeparator.foreground',
@@ -65,13 +69,15 @@ export const textSeparatorForeground = registerColor('textSeparator.foreground',
 // ------ text preformat
 
 export const textPreformatForeground = registerColor('textPreformat.foreground',
-	{ light: '#A31515', dark: '#D7BA7D', hcDark: '#000000', hcLight: '#FFFFFF' },
+	{ light: '#A31515', dark: '#D7BA7D', hcDark: '#FFFFFF', hcLight: '#FFFFFF' },
 	nls.localize('textPreformatForeground', "Foreground color for preformatted text segments."));
 
 export const textPreformatBackground = registerColor('textPreformat.background',
-	{ light: '#0000001A', dark: '#FFFFFF1A', hcDark: '#FFFFFF', hcLight: '#0B3D0B' },
+	{ light: '#0000001A', dark: '#FFFFFF1A', hcDark: null, hcLight: '#09345f' },
 	nls.localize('textPreformatBackground', "Background color for preformatted text segments."));
-
+export const textPreformatBorder = registerColor('textPreformat.border',
+	{ light: null, dark: null, hcDark: contrastBorder, hcLight: null },
+	nls.localize('textPreformatBorder', "Border color for preformatted text segments."));
 
 // ------ text block quote
 
@@ -80,7 +86,7 @@ export const textBlockQuoteBackground = registerColor('textBlockQuote.background
 	nls.localize('textBlockQuoteBackground', "Background color for block quotes in text."));
 
 export const textBlockQuoteBorder = registerColor('textBlockQuote.border',
-	{ light: '#A6E22E80', dark: '#A6E22E80', hcDark: Color.white, hcLight: '#292929' },
+	{ light: '#007acc80', dark: '#007acc80', hcDark: Color.white, hcLight: '#292929' },
 	nls.localize('textBlockQuoteBorder', "Border color for block quotes in text."));
 
 

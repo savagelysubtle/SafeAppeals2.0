@@ -1,6 +1,0 @@
-.vscode
-node_modules
-package-lock.json
-bun.lock
-*.md
-!README.md

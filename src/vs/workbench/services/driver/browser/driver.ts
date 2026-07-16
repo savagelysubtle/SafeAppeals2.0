@@ -3,8 +3,6 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-/// <reference path="../../../../../typings/editContext.d.ts" />
-
 import { getClientArea, getTopLeftOffset, isHTMLDivElement, isHTMLTextAreaElement } from '../../../../base/browser/dom.js';
 import { mainWindow } from '../../../../base/browser/window.js';
 import { coalesce } from '../../../../base/common/arrays.js';
@@ -44,6 +42,7 @@ export class BrowserWindowDriver implements IWindowDriver {
 	}
 
 	async setValue(selector: string, text: string): Promise<void> {
+		// eslint-disable-next-line no-restricted-syntax
 		const element = mainWindow.document.querySelector(selector);
 
 		if (!element) {
@@ -58,6 +57,7 @@ export class BrowserWindowDriver implements IWindowDriver {
 	}
 
 	async isActiveElement(selector: string): Promise<boolean> {
+		// eslint-disable-next-line no-restricted-syntax
 		const element = mainWindow.document.querySelector(selector);
 
 		if (element !== mainWindow.document.activeElement) {
@@ -80,6 +80,7 @@ export class BrowserWindowDriver implements IWindowDriver {
 	}
 
 	async getElements(selector: string, recursive: boolean): Promise<IElement[]> {
+		// eslint-disable-next-line no-restricted-syntax
 		const query = mainWindow.document.querySelectorAll(selector);
 		const result: IElement[] = [];
 		for (let i = 0; i < query.length; i++) {
@@ -130,6 +131,7 @@ export class BrowserWindowDriver implements IWindowDriver {
 	}
 
 	async typeInEditor(selector: string, text: string): Promise<void> {
+		// eslint-disable-next-line no-restricted-syntax
 		const element = mainWindow.document.querySelector(selector);
 
 		if (!element) {
@@ -168,6 +170,7 @@ export class BrowserWindowDriver implements IWindowDriver {
 	}
 
 	async getEditorSelection(selector: string): Promise<{ selectionStart: number; selectionEnd: number }> {
+		// eslint-disable-next-line no-restricted-syntax
 		const element = mainWindow.document.querySelector(selector);
 		if (!element) {
 			throw new Error(`Editor not found: ${selector}`);
@@ -186,12 +189,14 @@ export class BrowserWindowDriver implements IWindowDriver {
 	}
 
 	async getTerminalBuffer(selector: string): Promise<string[]> {
+		// eslint-disable-next-line no-restricted-syntax
 		const element = mainWindow.document.querySelector(selector);
 
 		if (!element) {
 			throw new Error(`Terminal not found: ${selector}`);
 		}
 
+		// eslint-disable-next-line local/code-no-any-casts, @typescript-eslint/no-explicit-any
 		const xterm = (element as any).xterm;
 
 		if (!xterm) {
@@ -207,12 +212,14 @@ export class BrowserWindowDriver implements IWindowDriver {
 	}
 
 	async writeInTerminal(selector: string, text: string): Promise<void> {
+		// eslint-disable-next-line no-restricted-syntax
 		const element = mainWindow.document.querySelector(selector);
 
 		if (!element) {
 			throw new Error(`Element not found: ${selector}`);
 		}
 
+		// eslint-disable-next-line local/code-no-any-casts, @typescript-eslint/no-explicit-any
 		const xterm = (element as any).xterm as (XtermTerminal | undefined);
 
 		if (!xterm) {
@@ -238,6 +245,7 @@ export class BrowserWindowDriver implements IWindowDriver {
 	}
 
 	protected async _getElementXY(selector: string, offset?: { x: number; y: number }): Promise<{ x: number; y: number }> {
+		// eslint-disable-next-line no-restricted-syntax
 		const element = mainWindow.document.querySelector(selector);
 
 		if (!element) {
@@ -261,11 +269,6 @@ export class BrowserWindowDriver implements IWindowDriver {
 
 		return { x, y };
 	}
-
-	async exitApplication(): Promise<void> {
-		// No-op in web
-	}
-
 }
 
 export function registerWindowDriver(instantiationService: IInstantiationService): void {

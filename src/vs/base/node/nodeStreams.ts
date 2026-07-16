@@ -28,18 +28,18 @@ export class StreamSplitter extends Transform {
 		}
 	}
 
-	override _transform(chunk: Buffer, _encoding: string, callback: (error?: Error | null, data?: any) => void): void {
+	override _transform(chunk: Buffer, _encoding: string, callback: (error?: Error | null, data?: Buffer) => void): void {
 		if (!this.buffer) {
 			this.buffer = chunk;
 		} else {
-			this.buffer = Buffer.concat([this.buffer as Uint8Array<ArrayBuffer>, chunk as Uint8Array<ArrayBuffer>]);
+			this.buffer = Buffer.concat([this.buffer, chunk]);
 		}
 
 		let offset = 0;
 		while (offset < this.buffer.length) {
 			const index = typeof this.splitter === 'number'
 				? this.buffer.indexOf(this.splitter, offset)
-				: binaryIndexOf(this.buffer as Uint8Array<ArrayBuffer>, this.splitter as Uint8Array<ArrayBuffer>, offset);
+				: binaryIndexOf(this.buffer, this.splitter, offset);
 			if (index === -1) {
 				break;
 			}
@@ -52,7 +52,7 @@ export class StreamSplitter extends Transform {
 		callback();
 	}
 
-	override _flush(callback: (error?: Error | null, data?: any) => void): void {
+	override _flush(callback: (error?: Error | null, data?: Buffer) => void): void {
 		if (this.buffer) {
 			this.push(this.buffer);
 		}

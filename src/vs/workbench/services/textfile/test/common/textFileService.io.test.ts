@@ -8,7 +8,7 @@ import { ITextFileService, snapshotToString, TextFileOperationError, TextFileOpe
 import { URI } from '../../../../../base/common/uri.js';
 import { join, basename } from '../../../../../base/common/path.js';
 import { UTF16le, UTF8_with_bom, UTF16be, UTF8, UTF16le_BOM, UTF16be_BOM, UTF8_BOM } from '../../common/encoding.js';
-import { bufferToStream, VSBuffer, toUint8ArrayWithArrayBuffer } from '../../../../../base/common/buffer.js';
+import { bufferToStream, VSBuffer } from '../../../../../base/common/buffer.js';
 import { createTextModel } from '../../../../../editor/test/common/testTextModel.js';
 import { ITextSnapshot, DefaultEndOfLine } from '../../../../../editor/common/model.js';
 import { isWindows } from '../../../../../base/common/platform.js';
@@ -559,7 +559,7 @@ export default function createSuite(params: Params) {
 		if (rawFile instanceof VSBuffer) {
 			rawFileVSBuffer = rawFile;
 		} else {
-			rawFileVSBuffer = VSBuffer.wrap(toUint8ArrayWithArrayBuffer(rawFile));
+			rawFileVSBuffer = VSBuffer.wrap(rawFile);
 		}
 
 		const factory = await createTextBufferFactoryFromStream(await service.getDecodedStream(resource, bufferToStream(rawFileVSBuffer), { encoding }));

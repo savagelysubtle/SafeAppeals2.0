@@ -3,14 +3,14 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import * as crypto from 'crypto';
-import * as fs from 'fs';
-import * as http from 'http';
-import * as os from 'os';
-import * as path from 'path';
 import { Disposable } from 'vscode';
 import { ITerminalEnvironmentProvider } from '../terminal';
 import { toDisposable } from '../util';
+import * as path from 'path';
+import * as http from 'http';
+import * as os from 'os';
+import * as fs from 'fs';
+import * as crypto from 'crypto';
 
 function getIPCHandlePath(id: string): string {
 	if (process.platform === 'win32') {
@@ -25,7 +25,7 @@ function getIPCHandlePath(id: string): string {
 }
 
 export interface IIPCHandler {
-	handle(request: any): Promise<any>;
+	handle(request: unknown): Promise<unknown>;
 }
 
 export async function createIPCServer(context?: string): Promise<IPCServer> {
@@ -34,7 +34,7 @@ export async function createIPCServer(context?: string): Promise<IPCServer> {
 
 	if (!context) {
 		const buffer = await new Promise<Buffer>((c, e) => crypto.randomBytes(20, (err, buf) => err ? e(err) : c(buf)));
-		hash.update(buffer as Uint8Array<ArrayBuffer>);
+		hash.update(buffer);
 	} else {
 		hash.update(context);
 	}
@@ -96,7 +96,7 @@ export class IPCServer implements IIPCServer, ITerminalEnvironmentProvider, Disp
 		const chunks: Buffer[] = [];
 		req.on('data', d => chunks.push(d));
 		req.on('end', () => {
-			const request = JSON.parse(Buffer.concat(chunks as Uint8Array<ArrayBuffer>[]).toString('utf8'));
+			const request = JSON.parse(Buffer.concat(chunks).toString('utf8'));
 			handler.handle(request).then(result => {
 				res.writeHead(200);
 				res.end(JSON.stringify(result));

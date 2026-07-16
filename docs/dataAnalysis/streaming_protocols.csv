@@ -1,5 +1,0 @@
-Protocol,Bidirectional,Reconnection,Tool Call Support,Error Recovery,VSCode Compatibility,Common Edge Cases
-Server-Sent Events (SSE),No,Automatic,Partial chunks,Good,Native,"Tool call JSON split across chunks, incomplete function arguments"
-WebSocket,Yes,Manual,Full messages,Excellent,Extension required,"Connection drops during tool execution, message ordering issues"
-HTTP Streaming,No,Automatic,Partial chunks,Limited,Native,"Buffer overflow with large responses, incomplete streaming data"
-Custom Protocol,Variable,Variable,Variable,Variable,Extension dependent,"Provider-specific quirks, authentication timeouts"

@@ -5,7 +5,7 @@
 
 import { ChildProcess, fork, ForkOptions } from 'child_process';
 import { createCancelablePromise, Delayer } from '../../../common/async.js';
-import { VSBuffer, toUint8ArrayWithArrayBuffer } from '../../../common/buffer.js';
+import { VSBuffer } from '../../../common/buffer.js';
 import { CancellationToken } from '../../../common/cancellation.js';
 import { isRemoteConsoleLog, log } from '../../../common/console.js';
 import * as errors from '../../../common/errors.js';
@@ -29,7 +29,7 @@ export class Server<TContext extends string> extends IPCServer<TContext> {
 					process.send?.((<Buffer>r.buffer).toString('base64'));
 				} catch (e) { /* not much to do */ }
 			},
-			onMessage: Event.fromNodeEventEmitter(process, 'message', msg => VSBuffer.wrap(toUint8ArrayWithArrayBuffer(Buffer.from(msg, 'base64'))))
+			onMessage: Event.fromNodeEventEmitter(process, 'message', msg => VSBuffer.wrap(Buffer.from(msg, 'base64')))
 		}, ctx);
 
 		process.once('disconnect', () => this.dispose());
@@ -93,7 +93,7 @@ export class Client implements IChannelClient, IDisposable {
 	readonly onDidProcessExit = this._onDidProcessExit.event;
 
 	constructor(private modulePath: string, private options: IIPCOptions) {
-		const timeout = options && options.timeout ? options.timeout : 60000;
+		const timeout = options.timeout || 60000;
 		this.disposeDelayer = new Delayer<void>(timeout);
 		this.child = null;
 		this._client = null;
@@ -174,24 +174,24 @@ export class Client implements IChannelClient, IDisposable {
 
 	private get client(): IPCClient {
 		if (!this._client) {
-			const args = this.options && this.options.args ? this.options.args : [];
+			const args = this.options.args || [];
 			const forkOpts: ForkOptions = Object.create(null);
 
 			forkOpts.env = { ...deepClone(process.env), 'VSCODE_PARENT_PID': String(process.pid) };
 
-			if (this.options && this.options.env) {
+			if (this.options.env) {
 				forkOpts.env = { ...forkOpts.env, ...this.options.env };
 			}
 
-			if (this.options && this.options.freshExecArgv) {
+			if (this.options.freshExecArgv) {
 				forkOpts.execArgv = [];
 			}
 
-			if (this.options && typeof this.options.debug === 'number') {
+			if (typeof this.options.debug === 'number') {
 				forkOpts.execArgv = ['--nolazy', '--inspect=' + this.options.debug];
 			}
 
-			if (this.options && typeof this.options.debugBrk === 'number') {
+			if (typeof this.options.debugBrk === 'number') {
 				forkOpts.execArgv = ['--nolazy', '--inspect-brk=' + this.options.debugBrk];
 			}
 
@@ -217,11 +217,11 @@ export class Client implements IChannelClient, IDisposable {
 				}
 
 				// Anything else goes to the outside
-				onMessageEmitter.fire(VSBuffer.wrap(toUint8ArrayWithArrayBuffer(Buffer.from(msg, 'base64'))));
+				onMessageEmitter.fire(VSBuffer.wrap(Buffer.from(msg, 'base64')));
 			});
 
 			const sender = this.options.useQueue ? createQueuedSender(this.child) : this.child;
-			const send = (r: VSBuffer) => this.child && this.child.connected && sender.send((<Buffer>r.buffer).toString('base64'));
+			const send = (r: VSBuffer) => this.child?.connected && sender.send((<Buffer>r.buffer).toString('base64'));
 			const onMessage = onMessageEmitter.event;
 			const protocol = { send, onMessage };
 

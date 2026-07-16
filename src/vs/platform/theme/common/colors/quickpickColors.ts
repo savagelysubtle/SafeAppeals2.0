@@ -11,7 +11,7 @@ import { registerColor, oneOf } from '../colorUtils.js';
 
 // Import the colors we need
 import { editorWidgetBackground, editorWidgetForeground } from './editorColors.js';
-import { listActiveSelectionBackground, listActiveSelectionForeground, listActiveSelectionIconForeground } from './listColors.js';
+import { listActiveSelectionBackground, listActiveSelectionForeground, listActiveSelectionIconForeground, listFocusHighlightForeground } from './listColors.js';
 
 
 export const quickInputBackground = registerColor('quickInput.background',
@@ -27,11 +27,11 @@ export const quickInputTitleBackground = registerColor('quickInputTitle.backgrou
 	nls.localize('pickerTitleBackground', "Quick picker title background color. The quick picker widget is the container for pickers like the command palette."));
 
 export const pickerGroupForeground = registerColor('pickerGroup.foreground',
-	{ dark: '#A6E22E', light: '#4F9E1F', hcDark: Color.white, hcLight: '#0B3D0B' },
+	{ dark: '#3794FF', light: '#0066BF', hcDark: Color.white, hcLight: '#0F4A85' },
 	nls.localize('pickerGroupForeground', "Quick picker color for grouping labels."));
 
 export const pickerGroupBorder = registerColor('pickerGroup.border',
-	{ dark: '#1F3A12', light: '#B7E67A', hcDark: Color.white, hcLight: '#0B3D0B' },
+	{ dark: '#3F3F46', light: '#CCCEDB', hcDark: Color.white, hcLight: '#0F4A85' },
 	nls.localize('pickerGroupBorder', "Quick picker color for grouping borders."));
 
 export const _deprecatedQuickInputListFocusBackground = registerColor('quickInput.list.focusBackground',
@@ -49,3 +49,7 @@ export const quickInputListFocusIconForeground = registerColor('quickInputList.f
 export const quickInputListFocusBackground = registerColor('quickInputList.focusBackground',
 	{ dark: oneOf(_deprecatedQuickInputListFocusBackground, listActiveSelectionBackground), light: oneOf(_deprecatedQuickInputListFocusBackground, listActiveSelectionBackground), hcDark: null, hcLight: null },
 	nls.localize('quickInput.listFocusBackground', "Quick picker background color for the focused item."));
+
+export const quickInputListFocusHighlightForeground = registerColor('quickInputList.focusHighlightForeground',
+	listFocusHighlightForeground,
+	nls.localize('quickInput.listFocusHighlightForeground', "Quick picker foreground color of the match highlights on the focused item."));

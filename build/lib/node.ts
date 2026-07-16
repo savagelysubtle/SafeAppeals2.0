@@ -6,9 +6,14 @@
 import path from 'path';
 import fs from 'fs';
 
-const root = path.dirname(path.dirname(__dirname));
-const pkg = JSON.parse(fs.readFileSync(path.join(root, 'remote', 'package.json'), 'utf8'));
-const version = pkg.nodeBuild?.nodeVersion || '20.18.3';
+const root = path.dirname(path.dirname(import.meta.dirname));
+const npmrcPath = path.join(root, 'remote', '.npmrc');
+const npmrc = fs.readFileSync(npmrcPath, 'utf8');
+const version = /^target="(.*)"$/m.exec(npmrc)?.[1];
+
+if (!version) {
+	throw new Error('Failed to extract Node version from .npmrc');
+}
 
 const platform = process.platform;
 const arch = process.arch;

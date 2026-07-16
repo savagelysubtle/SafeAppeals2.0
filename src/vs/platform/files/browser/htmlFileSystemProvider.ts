@@ -219,12 +219,11 @@ export class HTMLFileSystemProvider extends Disposable implements IFileSystemPro
 				}
 			}
 
-	// Write to target overwriting any existing contents
-	const writable = await handle.createWritable();
-	const writeData = content as Uint8Array<ArrayBuffer>;
-	await writable.write(writeData);
-		await writable.close();
-	} catch (error) {
+			// Write to target overwriting any existing contents
+			const writable = await handle.createWritable();
+			await writable.write(content as Uint8Array<ArrayBuffer>);
+			await writable.close();
+		} catch (error) {
 			throw this.toFileSystemProviderError(error);
 		}
 	}
@@ -309,6 +308,7 @@ export class HTMLFileSystemProvider extends Disposable implements IFileSystemPro
 			return;
 		}
 
+		// eslint-disable-next-line local/code-no-any-casts, @typescript-eslint/no-explicit-any
 		const observer = new (globalThis as any).FileSystemObserver((records: FileSystemObserverRecord[]) => {
 			if (disposables.isDisposed) {
 				return;

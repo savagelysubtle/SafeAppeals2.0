@@ -19,7 +19,7 @@ export class IPCClient {
 		this.ipcHandlePath = ipcHandlePath;
 	}
 
-	call(request: any): Promise<any> {
+	call(request: unknown): Promise<unknown> {
 		const opts: http.RequestOptions = {
 			socketPath: this.ipcHandlePath,
 			path: `/${this.handlerName}`,
@@ -34,7 +34,7 @@ export class IPCClient {
 
 				const chunks: Buffer[] = [];
 				res.on('data', d => chunks.push(d));
-				res.on('end', () => c(JSON.parse(Buffer.concat(chunks as Uint8Array<ArrayBuffer>[]).toString('utf8'))));
+				res.on('end', () => c(JSON.parse(Buffer.concat(chunks).toString('utf8'))));
 			});
 
 			req.on('error', err => e(err));

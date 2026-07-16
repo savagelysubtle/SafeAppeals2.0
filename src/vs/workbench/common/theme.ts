@@ -168,8 +168,8 @@ export const TAB_DRAG_AND_DROP_BORDER = registerColor('tab.dragAndDropBorder', {
 //#region Tab Modified Border
 
 export const TAB_ACTIVE_MODIFIED_BORDER = registerColor('tab.activeModifiedBorder', {
-	dark: '#5FAA2A',
-	light: '#8CD94A',
+	dark: '#3399CC',
+	light: '#33AAEE',
 	hcDark: null,
 	hcLight: contrastBorder
 }, localize('tabActiveModifiedBorder', "Border on the top of modified active tabs in an active group. Tabs are the containers for editors in the editor area. Multiple tabs can be opened in one editor group. There can be multiple editor groups."));
@@ -239,7 +239,7 @@ export const EDITOR_DRAG_AND_DROP_BACKGROUND = registerColor('editorGroup.dropBa
 	dark: Color.fromHex('#53595D').transparent(0.5),
 	light: Color.fromHex('#2677CB').transparent(0.18),
 	hcDark: null,
-	hcLight: Color.fromHex('#0B3D0B').transparent(0.50)
+	hcLight: Color.fromHex('#0F4A85').transparent(0.50)
 }, localize('editorDragAndDropBackground', "Background color when dragging editors around. The color should have transparency so that the editor contents can still shine through."));
 
 export const EDITOR_DROP_INTO_PROMPT_FOREGROUND = registerColor('editorGroup.dropIntoPromptForeground', editorWidgetForeground, localize('editorDropIntoPromptForeground', "Foreground color of text shown over editors when dragging files. This text informs the user that they can hold shift to drop into the editor."));
@@ -291,15 +291,15 @@ export const STATUS_BAR_FOREGROUND = registerColor('statusBar.foreground', {
 export const STATUS_BAR_NO_FOLDER_FOREGROUND = registerColor('statusBar.noFolderForeground', STATUS_BAR_FOREGROUND, localize('statusBarNoFolderForeground', "Status bar foreground color when no folder is opened. The status bar is shown in the bottom of the window."));
 
 export const STATUS_BAR_BACKGROUND = registerColor('statusBar.background', {
-	dark: '#A6E22E',
-	light: '#A6E22E',
+	dark: '#007ACC',
+	light: '#007ACC',
 	hcDark: null,
 	hcLight: null,
 }, localize('statusBarBackground', "Status bar background color when a workspace or folder is opened. The status bar is shown in the bottom of the window."));
 
 export const STATUS_BAR_NO_FOLDER_BACKGROUND = registerColor('statusBar.noFolderBackground', {
-	dark: '#8CBF22',
-	light: '#8CBF22',
+	dark: '#68217A',
+	light: '#68217A',
 	hcDark: null,
 	hcLight: null,
 }, localize('statusBarNoFolderBackground', "Status bar background color when no folder is opened. The status bar is shown in the bottom of the window."));
@@ -336,18 +336,18 @@ export const STATUS_BAR_ITEM_FOCUS_BORDER = registerColor('statusBarItem.focusBo
 
 export const STATUS_BAR_ITEM_HOVER_BACKGROUND = registerColor('statusBarItem.hoverBackground', {
 	dark: Color.white.transparent(0.12),
-	light: Color.white.transparent(0.12),
-	hcDark: Color.white.transparent(0.12),
-	hcLight: Color.black.transparent(0.12)
+	light: Color.black.transparent(0.12),
+	hcDark: Color.black,
+	hcLight: Color.white
 }, localize('statusBarItemHoverBackground', "Status bar item background color when hovering. The status bar is shown in the bottom of the window."));
 
 export const STATUS_BAR_ITEM_HOVER_FOREGROUND = registerColor('statusBarItem.hoverForeground', STATUS_BAR_FOREGROUND, localize('statusBarItemHoverForeground', "Status bar item foreground color when hovering. The status bar is shown in the bottom of the window."));
 
 export const STATUS_BAR_ITEM_COMPACT_HOVER_BACKGROUND = registerColor('statusBarItem.compactHoverBackground', {
-	dark: Color.white.transparent(0.20),
-	light: Color.white.transparent(0.20),
-	hcDark: Color.white.transparent(0.20),
-	hcLight: Color.black.transparent(0.20)
+	dark: Color.white.transparent(0.12),
+	light: Color.black.transparent(0.12),
+	hcDark: Color.black,
+	hcLight: Color.white
 }, localize('statusBarItemCompactHoverBackground', "Status bar item background color when hovering an item that contains two hovers. The status bar is shown in the bottom of the window."));
 
 export const STATUS_BAR_PROMINENT_ITEM_FOREGROUND = registerColor('statusBarItem.prominentForeground', STATUS_BAR_FOREGROUND, localize('statusBarProminentItemForeground', "Status bar prominent items foreground color. Prominent items stand out from other status bar entries to indicate importance. The status bar is shown in the bottom of the window."));
@@ -439,10 +439,10 @@ export const ACTIVITY_BAR_DRAG_AND_DROP_BORDER = registerColor('activityBar.drop
 }, localize('activityBarDragAndDropBorder', "Drag and drop feedback color for the activity bar items. The activity bar is showing on the far left or right and allows to switch between views of the side bar."));
 
 export const ACTIVITY_BAR_BADGE_BACKGROUND = registerColor('activityBarBadge.background', {
-	dark: '#A6E22E',
-	light: '#A6E22E',
+	dark: '#007ACC',
+	light: '#007ACC',
 	hcDark: '#000000',
-	hcLight: '#A6E22E'
+	hcLight: '#0F4A85'
 }, localize('activityBarBadgeBackground', "Activity notification badge background color. The activity bar is showing on the far left or right and allows to switch between views of the side bar."));
 
 export const ACTIVITY_BAR_BADGE_FOREGROUND = registerColor('activityBarBadge.foreground', Color.white, localize('activityBarBadgeForeground', "Activity notification badge foreground color. The activity bar is showing on the far left or right and allows to switch between views of the side bar."));
@@ -549,6 +549,11 @@ export const PANEL_STICKY_SCROLL_BORDER = registerColor('panelStickyScroll.borde
 export const PANEL_STICKY_SCROLL_SHADOW = registerColor('panelStickyScroll.shadow', scrollbarShadow, localize('panelStickyScrollShadow', "Shadow color of sticky scroll in the panel."));
 
 
+// < --- Browser --- >
+
+export const BROWSER_BORDER = registerColor('browser.border', TAB_BORDER, localize('browserBorder', "Border color for integrated browser pages."));
+
+
 // < --- Profiles --- >
 
 export const PROFILE_BADGE_BACKGROUND = registerColor('profileBadge.background', {
@@ -594,9 +599,8 @@ export const STATUS_BAR_OFFLINE_ITEM_HOVER_BACKGROUND = registerColor('statusBar
 	hcLight: null
 }, localize('statusBarOfflineItemHoverBackground', "Status bar item background hover color when the workbench is offline."));
 
-export const EXTENSION_BADGE_REMOTE_BACKGROUND = registerColor('extensionBadge.remoteBackground', ACTIVITY_BAR_BADGE_BACKGROUND, localize('extensionBadge.remoteBackground', "Background color for the remote badge in the extensions view."));
-
-export const EXTENSION_BADGE_REMOTE_FOREGROUND = registerColor('extensionBadge.remoteForeground', ACTIVITY_BAR_BADGE_FOREGROUND, localize('extensionBadge.remoteForeground', "Foreground color for the remote badge in the extensions view."));
+export const EXTENSION_BADGE_BACKGROUND = registerColor('extensionBadge.remoteBackground', ACTIVITY_BAR_BADGE_BACKGROUND, localize('extensionBadge.remoteBackground', "Background color for the remote badge in the extensions view."));
+export const EXTENSION_BADGE_FOREGROUND = registerColor('extensionBadge.remoteForeground', ACTIVITY_BAR_BADGE_FOREGROUND, localize('extensionBadge.remoteForeground', "Foreground color for the remote badge in the extensions view."));
 
 
 // < --- Side Bar --- >

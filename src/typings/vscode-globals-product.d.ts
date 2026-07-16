@@ -27,20 +27,20 @@ declare global {
 	 */
 	var _VSCODE_PACKAGE_JSON: Record<string, any>;
 
-	// Extend globalThis to allow index access
-	interface Window {
-		_VSCODE_FILE_ROOT?: string;
-		_VSCODE_CSS_LOAD?: (module: string) => void;
-		_VSCODE_PRODUCT_JSON?: Record<string, any>;
-		_VSCODE_PACKAGE_JSON?: Record<string, any>;
-		_VSCODE_NLS_MESSAGES?: string[];
-		_VSCODE_NLS_LANGUAGE?: string | undefined;
-		_VSCODE_WEB_PACKAGE_TTP?: any;
-		workerttPolicy?: TrustedTypePolicy;
-		MonacoBootstrapWindow?: any;
-		require?: any;
-	}
+	/**
+	 * Used to disable CSS import map loading during development. Needed
+	 * when a bundler is used that loads the css directly.
+	 * @deprecated Avoid using this variable.
+	*/
+	var _VSCODE_DISABLE_CSS_IMPORT_MAP: boolean | undefined;
 
+	/**
+	 * If this variable is set, and the source code references another module
+	 * via import, the (relative) module should be referenced (instead of the
+	 * JS module in the out folder).
+	 * @deprecated Avoid using this variable.
+	*/
+	var _VSCODE_USE_RELATIVE_IMPORTS: boolean | undefined;
 }
 
 // fake export to make global work

@@ -15,30 +15,3 @@
 @vscode/windows-registry/*.txt
 @vscode/windows-registry/package.json
 !@vscode/windows-registry/dist/index.d.ts
-
-# Whisper node addon - exclude Windows and Linux binaries on macOS
-@kutalia/whisper-node-addon/dist/win32-x64/**
-@kutalia/whisper-node-addon/dist/linux-x64/**
-
-# node-pty prebuilds - exclude non-macOS
-node-pty/prebuilds/win32-x64/**
-node-pty/prebuilds/win32-arm64/**
-node-pty/prebuilds/linux-x64/**
-
-# bare-fs prebuilds - exclude non-macOS
-bare-fs/prebuilds/win32-*/**
-bare-fs/prebuilds/linux-*/**
-bare-fs/prebuilds/android-*/**
-bare-fs/prebuilds/ios-*/**
-
-# bare-os prebuilds - exclude non-macOS
-bare-os/prebuilds/win32-*/**
-bare-os/prebuilds/linux-*/**
-bare-os/prebuilds/android-*/**
-bare-os/prebuilds/ios-*/**
-
-# bare-url prebuilds - exclude non-macOS
-bare-url/prebuilds/win32-*/**
-bare-url/prebuilds/linux-*/**
-bare-url/prebuilds/android-*/**
-bare-url/prebuilds/ios-*/**

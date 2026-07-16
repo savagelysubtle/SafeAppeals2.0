@@ -3,19 +3,21 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { KeyCode, KeyMod } from '../../../../base/common/keyCodes.js';
-import { isEqual } from '../../../../base/common/resources.js';
-import { URI } from '../../../../base/common/uri.js';
+import { KeyChord, KeyCode, KeyMod } from '../../../../base/common/keyCodes.js';
 import { ITextResourceConfigurationService } from '../../../../editor/common/services/textResourceConfiguration.js';
 import { localize, localize2 } from '../../../../nls.js';
 import { MenuId, MenuRegistry } from '../../../../platform/actions/common/actions.js';
 import { ContextKeyExpr } from '../../../../platform/contextkey/common/contextkey.js';
 import { ServicesAccessor } from '../../../../platform/instantiation/common/instantiation.js';
 import { KeybindingsRegistry, KeybindingWeight } from '../../../../platform/keybinding/common/keybindingsRegistry.js';
-import { TextDiffEditor } from './textDiffEditor.js';
-import { ActiveCompareEditorCanSwapContext, TextCompareEditorActiveContext, TextCompareEditorVisibleContext } from '../../../common/contextkeys.js';
+import { ActiveCompareEditorCanSwapContext, ActiveCustomEditorDiffCanToggleLayoutContext, TextCompareEditorActiveContext, TextCompareEditorVisibleContext } from '../../../common/contextkeys.js';
 import { DiffEditorInput } from '../../../common/editor/diffEditorInput.js';
 import { IEditorService } from '../../../services/editor/common/editorService.js';
+import { IUntypedEditorInput } from '../../../common/editor.js';
+import { EditorContextKeys } from '../../../../editor/common/editorContextKeys.js';
+import { isDiffEditor } from '../../../../editor/browser/editorBrowser.js';
+import { EditorInput } from '../../../common/editor/editorInput.js';
+import { getActiveTextDiffEditor, IDiffEditorCommandsService } from './diffEditorCommandsService.js';
 
 export const TOGGLE_DIFF_SIDE_BY_SIDE = 'toggle.diff.renderSideBySide';
 export const GOTO_NEXT_CHANGE = 'workbench.action.compareEditor.nextChange';
@@ -28,6 +30,39 @@ export const TOGGLE_DIFF_IGNORE_TRIM_WHITESPACE = 'toggle.diff.ignoreTrimWhitesp
 export const DIFF_SWAP_SIDES = 'workbench.action.compareEditor.swapSides';
 
 export function registerDiffEditorCommands(): void {
+	KeybindingsRegistry.registerCommandAndKeybindingRule({
+		id: DIFF_OPEN_SIDE,
+		weight: KeybindingWeight.WorkbenchContrib,
+		when: EditorContextKeys.inDiffEditor,
+		primary: KeyChord(KeyMod.CtrlCmd | KeyCode.KeyK, KeyMod.Shift | KeyCode.KeyO),
+		handler: async accessor => {
+			const editorService = accessor.get(IEditorService);
+
+			const activeEditor = editorService.activeEditor;
+			const activeTextEditorControl = editorService.activeTextEditorControl;
+			if (!isDiffEditor(activeTextEditorControl) || !(activeEditor instanceof DiffEditorInput)) {
+				return;
+			}
+
+			let editor: EditorInput | undefined;
+			const originalEditor = activeTextEditorControl.getOriginalEditor();
+			if (originalEditor.hasTextFocus()) {
+				editor = activeEditor.original;
+			} else {
+				editor = activeEditor.modified;
+			}
+
+			return editorService.openEditor(editor);
+		}
+	});
+
+	MenuRegistry.appendMenuItem(MenuId.CommandPalette, {
+		command: {
+			id: DIFF_OPEN_SIDE,
+			title: localize2('compare.openSide', 'Open Active Diff Side'),
+		}
+	});
+
 	KeybindingsRegistry.registerCommandAndKeybindingRule({
 		id: GOTO_NEXT_CHANGE,
 		weight: KeybindingWeight.WorkbenchContrib,
@@ -58,21 +93,9 @@ export function registerDiffEditorCommands(): void {
 		}
 	});
 
-	function getActiveTextDiffEditor(accessor: ServicesAccessor, args: any[]): TextDiffEditor | undefined {
-		const editorService = accessor.get(IEditorService);
-		const resource = args.length > 0 && args[0] instanceof URI ? args[0] : undefined;
 
-		for (const editor of [editorService.activeEditorPane, ...editorService.visibleEditorPanes]) {
-			if (editor instanceof TextDiffEditor && (!resource || editor.input instanceof DiffEditorInput && isEqual(editor.input.primary.resource, resource))) {
-				return editor;
-			}
-		}
-
-		return undefined;
-	}
-
-	function navigateInDiffEditor(accessor: ServicesAccessor, args: any[], next: boolean): void {
-		const activeTextDiffEditor = getActiveTextDiffEditor(accessor, args);
+	function navigateInDiffEditor(accessor: ServicesAccessor, args: unknown[], next: boolean): void {
+		const activeTextDiffEditor = getActiveTextDiffEditor(accessor.get(IEditorService), args);
 
 		if (activeTextDiffEditor) {
 			activeTextDiffEditor.getControl()?.goToDiff(next ? 'next' : 'previous');
@@ -85,8 +108,8 @@ export function registerDiffEditorCommands(): void {
 		Toggle
 	}
 
-	function focusInDiffEditor(accessor: ServicesAccessor, args: any[], mode: FocusTextDiffEditorMode): void {
-		const activeTextDiffEditor = getActiveTextDiffEditor(accessor, args);
+	function focusInDiffEditor(accessor: ServicesAccessor, args: unknown[], mode: FocusTextDiffEditorMode): void {
+		const activeTextDiffEditor = getActiveTextDiffEditor(accessor.get(IEditorService), args);
 
 		if (activeTextDiffEditor) {
 			switch (mode) {
@@ -106,21 +129,9 @@ export function registerDiffEditorCommands(): void {
 		}
 	}
 
-	function toggleDiffSideBySide(accessor: ServicesAccessor, args: any[]): void {
+	function toggleDiffIgnoreTrimWhitespace(accessor: ServicesAccessor, args: unknown[]): void {
 		const configService = accessor.get(ITextResourceConfigurationService);
-		const activeTextDiffEditor = getActiveTextDiffEditor(accessor, args);
-
-		const m = activeTextDiffEditor?.getControl()?.getModifiedEditor()?.getModel();
-		if (!m) { return; }
-
-		const key = 'diffEditor.renderSideBySide';
-		const val = configService.getValue(m.uri, key);
-		configService.updateValue(m.uri, key, !val);
-	}
-
-	function toggleDiffIgnoreTrimWhitespace(accessor: ServicesAccessor, args: any[]): void {
-		const configService = accessor.get(ITextResourceConfigurationService);
-		const activeTextDiffEditor = getActiveTextDiffEditor(accessor, args);
+		const activeTextDiffEditor = getActiveTextDiffEditor(accessor.get(IEditorService), args);
 
 		const m = activeTextDiffEditor?.getControl()?.getModifiedEditor()?.getModel();
 		if (!m) { return; }
@@ -130,10 +141,10 @@ export function registerDiffEditorCommands(): void {
 		configService.updateValue(m.uri, key, !val);
 	}
 
-	async function swapDiffSides(accessor: ServicesAccessor, args: any[]): Promise<void> {
+	async function swapDiffSides(accessor: ServicesAccessor, args: unknown[]): Promise<void> {
 		const editorService = accessor.get(IEditorService);
 
-		const diffEditor = getActiveTextDiffEditor(accessor, args);
+		const diffEditor = getActiveTextDiffEditor(editorService, args);
 		const activeGroup = diffEditor?.group;
 		const diffInput = diffEditor?.input;
 		if (!diffEditor || typeof activeGroup === 'undefined' || !(diffInput instanceof DiffEditorInput) || !diffInput.modified.resource) {
@@ -150,14 +161,14 @@ export function registerDiffEditorCommands(): void {
 		// yet opened. This ensures that the swapping is not
 		// bringing up a confirmation dialog to save.
 		if (diffInput.modified.isModified() && editorService.findEditors({ resource: diffInput.modified.resource, typeId: diffInput.modified.typeId, editorId: diffInput.modified.editorId }).length === 0) {
-			await editorService.openEditor({
-				...untypedDiffInput.modified,
-				options: {
-					...untypedDiffInput.modified.options,
-					pinned: true,
-					inactive: true
-				}
-			}, activeGroup);
+			const editorToOpen: IUntypedEditorInput = { ...untypedDiffInput.modified };
+			if (!editorToOpen.options) {
+				editorToOpen.options = {};
+			}
+			editorToOpen.options.pinned = true;
+			editorToOpen.options.inactive = true;
+
+			await editorService.openEditor(editorToOpen, activeGroup);
 		}
 
 		// Replace the input with the swapped variant
@@ -182,7 +193,7 @@ export function registerDiffEditorCommands(): void {
 		weight: KeybindingWeight.WorkbenchContrib,
 		when: undefined,
 		primary: undefined,
-		handler: (accessor, ...args) => toggleDiffSideBySide(accessor, args)
+		handler: (accessor, ...args) => accessor.get(IDiffEditorCommandsService).toggleRenderSideBySide(args)
 	});
 
 	KeybindingsRegistry.registerCommandAndKeybindingRule({
@@ -231,7 +242,7 @@ export function registerDiffEditorCommands(): void {
 			title: localize2('toggleInlineView', "Toggle Inline View"),
 			category: localize('compare', "Compare")
 		},
-		when: TextCompareEditorActiveContext
+		when: ContextKeyExpr.or(TextCompareEditorActiveContext, ActiveCustomEditorDiffCanToggleLayoutContext)
 	});
 
 	MenuRegistry.appendMenuItem(MenuId.CommandPalette, {

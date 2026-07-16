@@ -3,13 +3,12 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import TelemetryReporter from '@vscode/extension-telemetry';
-import * as fs from 'fs';
-import { TextDecoder } from 'util';
-import { Disposable, ExtensionContext, l10n } from 'vscode';
-import { LanguageClient, LanguageClientOptions, ServerOptions, TransportKind } from 'vscode-languageclient/node';
-import { AsyncDisposable, LanguageClientConstructor, startClient } from '../htmlClient';
 import { getNodeFileFS } from './nodeFs';
+import { Disposable, ExtensionContext, l10n } from 'vscode';
+import { startClient, LanguageClientConstructor, AsyncDisposable } from '../htmlClient';
+import { ServerOptions, TransportKind, LanguageClientOptions, LanguageClient } from 'vscode-languageclient/node';
+import * as fs from 'fs';
+import TelemetryReporter from '@vscode/extension-telemetry';
 
 
 let telemetry: TelemetryReporter | undefined;
@@ -49,7 +48,7 @@ export async function activate(context: ExtensionContext) {
 	// pass the location of the localization bundle to the server
 	process.env['VSCODE_L10N_BUNDLE_LOCATION'] = l10n.uri?.toString() ?? '';
 
-	client = await startClient(context, newLanguageClient, { fileFs: getNodeFileFS(), TextDecoder: TextDecoder as any, telemetry, timer });
+	client = await startClient(context, newLanguageClient, { fileFs: getNodeFileFS(), TextDecoder, telemetry, timer });
 }
 
 export async function deactivate(): Promise<void> {

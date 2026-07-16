@@ -3,32 +3,31 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { createReadStream, promises } from 'fs';
+import type * as http from 'http';
+import * as url from 'url';
 import * as cookie from 'cookie';
 import * as crypto from 'crypto';
-import { createReadStream, promises } from 'fs';
-import * as http from 'http';
-import * as path from 'path';
-import * as url from 'url';
-import { streamToBuffer } from '../../base/common/buffer.js';
-import { CancellationToken } from '../../base/common/cancellation.js';
-import { CharCode } from '../../base/common/charCode.js';
 import { isEqualOrParent } from '../../base/common/extpath.js';
 import { getMediaMime } from '../../base/common/mime.js';
-import { builtinExtensionsPath, connectionTokenCookieName, connectionTokenQueryName, FileAccess, Schemas } from '../../base/common/network.js';
-import { dirname, extname, join, normalize, posix } from '../../base/common/path.js';
 import { isLinux } from '../../base/common/platform.js';
-import { IProductConfiguration } from '../../base/common/product.js';
-import { isString } from '../../base/common/types.js';
-import { URI } from '../../base/common/uri.js';
-import { generateUuid } from '../../base/common/uuid.js';
-import { IHeaders } from '../../base/parts/request/common/request.js';
-import { ICSSDevelopmentService } from '../../platform/cssDev/node/cssDevService.js';
-import { IExtensionManifest } from '../../platform/extensions/common/extensions.js';
 import { ILogService, LogLevel } from '../../platform/log/common/log.js';
-import { IProductService } from '../../platform/product/common/productService.js';
-import { asTextOrError, IRequestService } from '../../platform/request/common/request.js';
-import { ServerConnectionToken, ServerConnectionTokenType } from './serverConnectionToken.js';
 import { IServerEnvironmentService } from './serverEnvironmentService.js';
+import { extname, dirname, join, normalize, posix, resolve } from '../../base/common/path.js';
+import { FileAccess, connectionTokenCookieName, connectionTokenQueryName, Schemas, builtinExtensionsPath } from '../../base/common/network.js';
+import { generateUuid } from '../../base/common/uuid.js';
+import { IProductService } from '../../platform/product/common/productService.js';
+import { ServerConnectionToken, ServerConnectionTokenType } from './serverConnectionToken.js';
+import { asTextOrError, IRequestService } from '../../platform/request/common/request.js';
+import { IHeaders } from '../../base/parts/request/common/request.js';
+import { CancellationToken } from '../../base/common/cancellation.js';
+import { URI } from '../../base/common/uri.js';
+import { streamToBuffer } from '../../base/common/buffer.js';
+import { IProductConfiguration } from '../../base/common/product.js';
+import { isString, Mutable } from '../../base/common/types.js';
+import { CharCode } from '../../base/common/charCode.js';
+import { IExtensionManifest } from '../../platform/extensions/common/extensions.js';
+import { ICSSDevelopmentService } from '../../platform/cssDev/node/cssDevService.js';
 
 const textMimeType: { [ext: string]: string | undefined } = {
 	'.html': 'text/html',
@@ -74,10 +73,29 @@ export async function serveFile(filePath: string, cacheControl: CacheControl, lo
 
 		responseHeaders['Content-Type'] = textMimeType[extname(filePath)] || getMediaMime(filePath) || 'text/plain';
 
-		res.writeHead(200, responseHeaders);
-
-		// Data
-		createReadStream(filePath).pipe(res);
+		// Create the stream first and wait for it to open before sending
+		// headers so that errors (e.g. ENOENT race) can still produce a
+		// proper 404 response instead of aborting a half-sent 200.
+		const fileStream = createReadStream(filePath);
+		await new Promise<void>((resolve, reject) => {
+			fileStream.on('error', reject);
+			fileStream.on('open', () => {
+				// File opened successfully - send headers and pipe
+				res.writeHead(200, responseHeaders);
+				fileStream.pipe(res);
+				// Destroy the read stream if the response is closed prematurely
+				// (e.g. client disconnect) to avoid leaking the file descriptor.
+				res.once('close', () => fileStream.destroy());
+				fileStream.on('end', resolve);
+				// Replace the initial error handler now that headers are sent
+				fileStream.removeAllListeners('error');
+				fileStream.on('error', error => {
+					logService.error(error);
+					console.error(error.toString());
+					res.destroy();
+				});
+			});
+		});
 	} catch (error) {
 		if (error.code !== 'ENOENT') {
 			logService.error(error);
@@ -207,7 +225,8 @@ export class WebClientServer {
 		const context = await this._requestService.request({
 			type: 'GET',
 			url: uri.toString(true),
-			headers
+			headers,
+			callSite: 'webClientServer.fetchAndWriteFile'
 		}, CancellationToken.None);
 
 		const status = context.res.statusCode || 500;
@@ -323,7 +342,7 @@ export class WebClientServer {
 		const callbackRoute = posix.join(basePath, this._productPath, CALLBACK_PATH);
 		const webExtensionRoute = posix.join(basePath, this._productPath, WEB_EXTENSION_PATH);
 
-		const resolveWorkspaceURI = (defaultLocation?: string) => defaultLocation && URI.file(path.resolve(defaultLocation)).with({ scheme: Schemas.vscodeRemote, authority: remoteAuthority });
+		const resolveWorkspaceURI = (defaultLocation?: string) => defaultLocation && URI.file(resolve(defaultLocation)).with({ scheme: Schemas.vscodeRemote, authority: remoteAuthority });
 
 		const filePath = FileAccess.asFileUri(`vs/code/browser/workbench/workbench${this._environmentService.isBuilt ? '' : '-dev'}.html`).fsPath;
 		const authSessionInfo = !this._environmentService.isBuilt && this._environmentService.args['github-auth'] ? {
@@ -333,7 +352,7 @@ export class WebClientServer {
 			scopes: [['user:email'], ['repo']]
 		} : undefined;
 
-		const productConfiguration = {
+		const productConfiguration: Partial<Mutable<IProductConfiguration>> = {
 			embedderIdentifier: 'server-distro',
 			extensionsGallery: this._webExtensionResourceUrlTemplate && this._productService.extensionsGallery ? {
 				...this._productService.extensionsGallery,
@@ -343,7 +362,7 @@ export class WebClientServer {
 					path: `${webExtensionRoute}/${this._webExtensionResourceUrlTemplate.authority}${this._webExtensionResourceUrlTemplate.path}`
 				}).toString(true)
 			} : undefined
-		} satisfies Partial<IProductConfiguration>;
+		};
 
 		if (!this._environmentService.isBuilt) {
 			try {
@@ -412,12 +431,12 @@ export class WebClientServer {
 			return void res.end('Not found');
 		}
 
-		const webWorkerExtensionHostIframeScriptSHA = 'sha256-2Q+j4hfT09+1+imS46J2YlkCtHWQt0/BE79PXjJ0ZJ8=';
+		const webWorkerExtensionHostIframeScriptSHA = 'sha256-daEgfo2VIXpx2Np71KqCCbkeQwv+68vPrx54XRcbdcs=';
 
 		const cspDirectives = [
 			'default-src \'self\';',
 			'img-src \'self\' https: data: blob:;',
-			'media-src \'self\' blob:;',
+			'media-src \'self\';',
 			`script-src 'self' 'unsafe-eval' ${WORKBENCH_NLS_BASE_URL ?? ''} blob: 'nonce-1nline-m4p' ${this._getScriptCspHashes(data).join(' ')} '${webWorkerExtensionHostIframeScriptSHA}' 'sha256-/r7rqQ+yrxt57sxLuQ6AMYcy/lUpvAIzHjIJt/OeLWU=' ${useTestResolver ? '' : `http://${remoteAuthority}`};`,  // the sha is the same as in src/vs/workbench/services/extensions/worker/webWorkerExtensionHostIframe.html
 			'child-src \'self\';',
 			`frame-src 'self' https://*.vscode-cdn.net data:;`,
@@ -460,9 +479,8 @@ export class WebClientServer {
 			const hasher = crypto.createHash('sha256');
 			// This only works on Windows if we strip `\r` from `\r\n`.
 			const script = match[1].replace(/\r\n/g, '\n');
-			const scriptBuffer = Buffer.from(script) as Uint8Array<ArrayBuffer>;
 			const hash = hasher
-				.update(scriptBuffer)
+				.update(Buffer.from(script))
 				.digest().toString('base64');
 
 			result.push(`'sha256-${hash}'`);

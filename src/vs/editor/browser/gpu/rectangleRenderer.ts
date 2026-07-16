@@ -251,7 +251,7 @@ export class RectangleRenderer extends ViewEventHandler {
 			const dpr = getActiveWindow().devicePixelRatio;
 			this._scrollOffsetValueBuffer[0] = this._context.viewLayout.getCurrentScrollLeft() * dpr;
 			this._scrollOffsetValueBuffer[1] = this._context.viewLayout.getCurrentScrollTop() * dpr;
-			this._device.queue.writeBuffer(this._scrollOffsetBindBuffer, 0, new Float32Array(this._scrollOffsetValueBuffer.slice()).buffer);
+			this._device.queue.writeBuffer(this._scrollOffsetBindBuffer, 0, this._scrollOffsetValueBuffer as Float32Array<ArrayBuffer>);
 		}
 		return true;
 	}
@@ -264,8 +264,7 @@ export class RectangleRenderer extends ViewEventHandler {
 		}
 		const shapes = this._shapeCollection;
 		if (shapes.dirtyTracker.isDirty) {
-			const buffer = shapes.buffer as ArrayBuffer;
-			this._device.queue.writeBuffer(this._shapeBindBuffer.value!.object, 0, buffer, shapes.dirtyTracker.dataOffset, shapes.dirtyTracker.dirtySize! * shapes.view.BYTES_PER_ELEMENT);
+			this._device.queue.writeBuffer(this._shapeBindBuffer.value!.object, 0, shapes.buffer, shapes.dirtyTracker.dataOffset, shapes.dirtyTracker.dirtySize! * shapes.view.BYTES_PER_ELEMENT);
 			shapes.dirtyTracker.clear();
 		}
 	}

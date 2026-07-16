@@ -280,7 +280,7 @@ export class BrowserFileUpload {
 			operation.filesTotal += childEntries.length;
 
 			// Split up files from folders to upload
-			const folderTarget = target && target.getChild(entry.name) || undefined;
+			const folderTarget = target?.getChild(entry.name) || undefined;
 			const fileChildEntries: IWebkitDataTransferItemEntry[] = [];
 			const folderChildEntries: IWebkitDataTransferItemEntry[] = [];
 			for (const childEntry of childEntries) {
@@ -718,10 +718,7 @@ export class FileDownload {
 
 			listenStream(sourceStream, {
 				onData: data => {
-					// VSBuffer.buffer is Uint8Array, but TypeScript infers it as Uint8Array<ArrayBufferLike>
-					// Create a new Uint8Array copy to ensure it has ArrayBuffer backing, not ArrayBufferLike
-					const buffer = new Uint8Array(data.buffer.slice());
-					target.write(buffer);
+					target.write(data.buffer as Uint8Array<ArrayBuffer>);
 					this.reportProgress(contents.name, contents.size, data.byteLength, operation);
 				},
 				onError: error => {
@@ -739,10 +736,7 @@ export class FileDownload {
 	private async downloadFileUnbufferedBrowser(resource: URI, target: FileSystemWritableFileStream, operation: IDownloadOperation, token: CancellationToken): Promise<void> {
 		const contents = await this.fileService.readFile(resource, undefined, token);
 		if (!token.isCancellationRequested) {
-			// contents.value.buffer is Uint8Array, but TypeScript infers it as Uint8Array<ArrayBufferLike>
-			// Create a new Uint8Array copy to ensure it has ArrayBuffer backing, not ArrayBufferLike
-			const buffer = new Uint8Array(contents.value.buffer.slice());
-			target.write(buffer);
+			target.write(contents.value.buffer as Uint8Array<ArrayBuffer>);
 			this.reportProgress(contents.name, contents.size, contents.value.byteLength, operation);
 		}
 

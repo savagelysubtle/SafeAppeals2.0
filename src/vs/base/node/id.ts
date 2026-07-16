@@ -7,6 +7,8 @@ import { networkInterfaces } from 'os';
 import { TernarySearchTree } from '../common/ternarySearchTree.js';
 import * as uuid from '../common/uuid.js';
 import { getMac } from './macAddress.js';
+import { isWindows } from '../common/platform.js';
+import { stripUTF8BOM } from '../common/strings.js';
 
 // http://www.techrepublic.com/blog/data-center/mac-address-scorecard-for-common-virtual-machine-platforms/
 // VMware ESX 3, Server, Workstation, Player	00-50-56, 00-0C-29, 00-05-69
@@ -77,7 +79,7 @@ export const virtualMachineHint: { value(): number } = new class {
 };
 
 let machineId: Promise<string>;
-export async function getMachineId(errorLogger: (error: any) => void): Promise<string> {
+export async function getMachineId(errorLogger: (error: Error) => void): Promise<string> {
 	if (!machineId) {
 		machineId = (async () => {
 			const id = await getMacMachineId(errorLogger);
@@ -89,7 +91,7 @@ export async function getMachineId(errorLogger: (error: any) => void): Promise<s
 	return machineId;
 }
 
-async function getMacMachineId(errorLogger: (error: any) => void): Promise<string | undefined> {
+async function getMacMachineId(errorLogger: (error: Error) => void): Promise<string | undefined> {
 	try {
 		const crypto = await import('crypto');
 		const macAddress = getMac();
@@ -100,17 +102,25 @@ async function getMacMachineId(errorLogger: (error: any) => void): Promise<strin
 	}
 }
 
-export async function getSqmMachineId(errorLogger: (error: any) => void): Promise<string> {
-	// Skip windows registry for doc-focused editor to avoid native module issues
-	console.log('getSqmMachineId: Skipping windows registry for doc-focused editor');
+const SQM_KEY: string = 'Software\\Microsoft\\SQMClient';
+export async function getSqmMachineId(errorLogger: (error: Error) => void): Promise<string> {
+	if (isWindows) {
+		const Registry = await import('@vscode/windows-registry');
+		try {
+			return Registry.GetStringRegKey('HKEY_LOCAL_MACHINE', SQM_KEY, 'MachineId') || '';
+		} catch (err) {
+			errorLogger(err);
+			return '';
+		}
+	}
 	return '';
 }
 
-export async function getdevDeviceId(errorLogger: (error: any) => void): Promise<string> {
+export async function getDevDeviceId(errorLogger: (error: Error) => void): Promise<string> {
 	try {
 		const deviceIdPackage = await import('@vscode/deviceid');
 		const id = await deviceIdPackage.getDeviceId();
-		return id;
+		return stripUTF8BOM(id);
 	} catch (err) {
 		errorLogger(err);
 		return uuid.generateUuid();

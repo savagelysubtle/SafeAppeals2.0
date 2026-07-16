@@ -1,4 +1,4 @@
-[Messages]
+﻿[Messages]
 FinishedLabel=Setup has finished installing [name] on your computer. The application may be launched by selecting the installed shortcuts.
 ConfirmUninstall=Are you sure you want to completely remove %1 and all of its components?
 
@@ -15,5 +15,3 @@ Other=Other:
 SourceFile=%1 Source File
 OpenWithCodeContextMenu=Open w&ith %1
 UpdatingVisualStudioCode=Updating Visual Studio Code...
-InstallOCRDeps=Install OCR dependencies (Tesseract, Ghostscript for PDF text extraction)
-OCRFeatures=OCR Features:

@@ -23,7 +23,7 @@ export class StreamSplitter extends Transform {
 		if (!this.buffer) {
 			this.buffer = chunk;
 		} else {
-			this.buffer = Buffer.concat([this.buffer, chunk] as Uint8Array[]);
+			this.buffer = Buffer.concat([this.buffer, chunk]);
 		}
 
 		let offset = 0;

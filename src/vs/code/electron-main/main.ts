@@ -5,95 +5,32 @@
 
 import '../../platform/update/common/update.config.contribution.js';
 
-// ============================================
-// EARLY .ENV LOADING (must happen before other modules import process.env)
-// This enables bundled environment variables for production builds
-// ============================================
 import { app, dialog } from 'electron';
-import { existsSync, promises, readFileSync, unlinkSync } from 'fs';
-import { dirname, join } from 'path';
-import { fileURLToPath } from 'url';
-
-// Load .env file synchronously before any other modules read process.env
-(function loadEnvFile() {
-	try {
-		// Determine app root directory
-		const __filename = fileURLToPath(import.meta.url);
-		const __dirname = dirname(__filename);
-		// In dev: __dirname is out/vs/code/electron-main, go up to root
-		// In prod: __dirname is resources/app/out/vs/code/electron-main
-		const possiblePaths = [
-			join(__dirname, '../../../../.env'),           // Dev: out/vs/code/electron-main -> root
-			join(__dirname, '../../../../../.env'),        // Prod: resources/app/out/... -> root
-			join(app.getAppPath(), '.env'),                // App path
-			join(process.resourcesPath || '', '.env'),     // Resources path (prod)
-		];
-
-		for (const envPath of possiblePaths) {
-			if (existsSync(envPath)) {
-				console.log('[main.ts] Loading .env from:', envPath);
-				const content = readFileSync(envPath, 'utf-8');
-
-				// Parse .env file (simple parser for KEY=VALUE format)
-				for (const line of content.split(/\r?\n/)) {
-					const trimmed = line.trim();
-					if (!trimmed || trimmed.startsWith('#')) continue;
-
-					const eqIndex = trimmed.indexOf('=');
-					if (eqIndex === -1) continue;
-
-					const key = trimmed.substring(0, eqIndex).trim();
-					let value = trimmed.substring(eqIndex + 1).trim();
-
-					// Remove surrounding quotes
-					if ((value.startsWith('"') && value.endsWith('"')) ||
-						(value.startsWith("'") && value.endsWith("'"))) {
-						value = value.slice(1, -1);
-					}
-
-					// Handle escaped newlines in double quotes
-					value = value.replace(/\\n/g, '\n').replace(/\\r/g, '\r');
-
-					// Only set if not already defined (don't override explicit env vars)
-					if (!process.env[key]) {
-						process.env[key] = value;
-					}
-				}
-				console.log('[main.ts] Loaded env vars from .env');
-				break;
-			}
-		}
-	} catch (error) {
-		console.warn('[main.ts] Failed to load .env file:', error);
-	}
-})();
-// ============================================
+import { unlinkSync, promises } from 'fs';
+import { URI } from '../../base/common/uri.js';
 import { coalesce, distinct } from '../../base/common/arrays.js';
-import { Promises } from '../../base/common/async.js';
+import { Promises, retry } from '../../base/common/async.js';
 import { toErrorMessage } from '../../base/common/errorMessage.js';
 import { ExpectedError, setUnexpectedErrorHandler } from '../../base/common/errors.js';
-import { Event } from '../../base/common/event.js';
 import { IPathWithLineAndColumn, isValidBasename, parseLineAndColumnAware, sanitizeFilePath } from '../../base/common/extpath.js';
+import { Event } from '../../base/common/event.js';
 import { getPathLabel } from '../../base/common/labels.js';
-import { DisposableStore } from '../../base/common/lifecycle.js';
 import { Schemas } from '../../base/common/network.js';
-import { basename, resolve } from '../../base/common/path.js';
+import { basename, join, resolve } from '../../base/common/path.js';
 import { mark } from '../../base/common/performance.js';
-import { IProcessEnvironment, isMacintosh, isWindows, OS } from '../../base/common/platform.js';
+import { IProcessEnvironment, isLinux, isMacintosh, isWindows, OS } from '../../base/common/platform.js';
 import { cwd } from '../../base/common/process.js';
 import { rtrim, trim } from '../../base/common/strings.js';
-import { URI } from '../../base/common/uri.js';
 import { Promises as FSPromises } from '../../base/node/pfs.js';
-import { addUNCHostToAllowlist, getUNCHost } from '../../base/node/unc.js';
 import { ProxyChannel } from '../../base/parts/ipc/common/ipc.js';
 import { Client as NodeIPCClient } from '../../base/parts/ipc/common/ipc.net.js';
 import { connect as nodeIPCConnect, serve as nodeIPCServe, Server as NodeIPCServer, XDG_RUNTIME_DIR } from '../../base/parts/ipc/node/ipc.net.js';
+import { CodeApplication } from './app.js';
 import { localize } from '../../nls.js';
 import { IConfigurationService } from '../../platform/configuration/common/configuration.js';
 import { ConfigurationService } from '../../platform/configuration/common/configurationService.js';
 import { IDiagnosticsMainService } from '../../platform/diagnostics/electron-main/diagnosticsMainService.js';
 import { DiagnosticsService } from '../../platform/diagnostics/node/diagnosticsService.js';
-import { massageMessageBoxOptions } from '../../platform/dialogs/common/dialogs.js';
 import { NativeParsedArgs } from '../../platform/environment/common/argv.js';
 import { EnvironmentMainService, IEnvironmentMainService } from '../../platform/environment/electron-main/environmentMainService.js';
 import { addArg, parseMainProcessArgv } from '../../platform/environment/node/argvHelper.js';
@@ -108,31 +45,39 @@ import { ServiceCollection } from '../../platform/instantiation/common/serviceCo
 import { ILaunchMainService } from '../../platform/launch/electron-main/launchMainService.js';
 import { ILifecycleMainService, LifecycleMainService } from '../../platform/lifecycle/electron-main/lifecycleMainService.js';
 import { BufferLogger } from '../../platform/log/common/bufferLog.js';
-import { ConsoleMainLogger, getLogLevel, ILoggerService, ILogService } from '../../platform/log/common/log.js';
-import { LogService } from '../../platform/log/common/logService.js';
-import { ILoggerMainService, LoggerMainService } from '../../platform/log/electron-main/loggerService.js';
-import { FilePolicyService } from '../../platform/policy/common/filePolicyService.js';
-import { IPolicyService, NullPolicyService } from '../../platform/policy/common/policy.js';
-import { NativePolicyService } from '../../platform/policy/node/nativePolicyService.js';
+import { ConsoleMainLogger, getLogLevel, ILoggerService, ILogService, isDevConsoleLogForwardingEnabled, registerDevConsoleLogForwarder } from '../../platform/log/common/log.js';
 import product from '../../platform/product/common/product.js';
 import { IProductService } from '../../platform/product/common/productService.js';
 import { IProtocolMainService } from '../../platform/protocol/electron-main/protocol.js';
 import { ProtocolMainService } from '../../platform/protocol/electron-main/protocolMainService.js';
+import { ITunnelService } from '../../platform/tunnel/common/tunnel.js';
+import { TunnelService } from '../../platform/tunnel/node/tunnelService.js';
 import { IRequestService } from '../../platform/request/common/request.js';
 import { RequestService } from '../../platform/request/electron-utility/requestService.js';
 import { ISignService } from '../../platform/sign/common/sign.js';
 import { SignService } from '../../platform/sign/node/signService.js';
 import { IStateReadService, IStateService } from '../../platform/state/node/state.js';
-import { SaveStrategy, StateService } from '../../platform/state/node/stateService.js';
 import { NullTelemetryService } from '../../platform/telemetry/common/telemetryUtils.js';
-import { IThemeMainService, ThemeMainService } from '../../platform/theme/electron-main/themeMainService.js';
-import { ITunnelService } from '../../platform/tunnel/common/tunnel.js';
-import { TunnelService } from '../../platform/tunnel/node/tunnelService.js';
+import { IThemeMainService } from '../../platform/theme/electron-main/themeMainService.js';
+import { IUserDataProfilesMainService, UserDataProfilesMainService } from '../../platform/userDataProfile/electron-main/userDataProfile.js';
+import { IPolicyService, NullPolicyService } from '../../platform/policy/common/policy.js';
+import { NativePolicyService } from '../../platform/policy/node/nativePolicyService.js';
+import { FilePolicyService } from '../../platform/policy/common/filePolicyService.js';
+import { MultiplexPolicyService } from '../../platform/policy/common/multiplexPolicyService.js';
+import { GITHUB_COPILOT_MACOS_BUNDLE_ID, GITHUB_COPILOT_WIN32_POLICY_NAME, GITHUB_COPILOT_WIN32_REGISTRY_PATH, INativeManagedSettingsService, IFileManagedSettingsService, MANAGED_SETTINGS_FILE_NAME, MANAGED_SETTINGS_LINUX_FILE_PATH, MANAGED_SETTINGS_MACOS_FILE_PATH, MANAGED_SETTINGS_WINDOWS_DIR, NullNativeManagedSettingsService, NullFileManagedSettingsService } from '../../platform/policy/common/copilotManagedSettings.js';
+import { FileManagedSettingsService } from '../../platform/policy/common/fileManagedSettingsService.js';
+import { NativeManagedSettingsService } from '../../platform/policy/node/nativeManagedSettingsService.js';
+import { DisposableStore } from '../../base/common/lifecycle.js';
 import { IUriIdentityService } from '../../platform/uriIdentity/common/uriIdentity.js';
 import { UriIdentityService } from '../../platform/uriIdentity/common/uriIdentityService.js';
+import { ILoggerMainService, LoggerMainService } from '../../platform/log/electron-main/loggerService.js';
+import { LogService } from '../../platform/log/common/logService.js';
+import { massageMessageBoxOptions } from '../../platform/dialogs/common/dialogs.js';
+import { SaveStrategy, StateService } from '../../platform/state/node/stateService.js';
 import { FileUserDataProvider } from '../../platform/userData/common/fileUserDataProvider.js';
-import { IUserDataProfilesMainService, UserDataProfilesMainService } from '../../platform/userDataProfile/electron-main/userDataProfile.js';
-import { CodeApplication } from './app.js';
+import { addUNCHostToAllowlist, getUNCHost } from '../../base/node/unc.js';
+import { ThemeMainService } from '../../platform/theme/electron-main/themeMainServiceImpl.js';
+import { LINUX_SYSTEM_POLICY_FILE_PATH } from '../../base/common/policy.js';
 
 /**
  * The main VS Code entry point.
@@ -203,6 +148,14 @@ class CodeMain {
 					evt.join('instanceLockfile', promises.unlink(environmentMainService.mainLockfile).catch(() => { /* ignored */ }));
 				});
 
+				// Check if Inno Setup is running. Briefly wait for the updating mutex to be released before refusing to launch.
+				const innoSetupActive = await this.checkInnoSetupMutex(productService, logService);
+				if (innoSetupActive) {
+					const message = `${productService.nameShort} is currently being updated. Please wait for the update to complete before launching.`;
+					instantiationService.invokeFunction(this.quit, new Error(message));
+					return;
+				}
+
 				return instantiationService.createInstance(CodeApplication, mainProcessNodeIpcServer, instanceEnvironment).startup();
 			});
 		} catch (error) {
@@ -233,6 +186,9 @@ class CodeMain {
 		// log file access on Windows (https://github.com/microsoft/vscode/issues/41218)
 		const bufferLogger = new BufferLogger(loggerService.getLogLevel());
 		const logService = disposables.add(new LogService(bufferLogger, [new ConsoleMainLogger(loggerService.getLogLevel())]));
+		if (!environmentMainService.isBuilt && isDevConsoleLogForwardingEnabled) {
+			disposables.add(registerDevConsoleLogForwarder(logService));
+		}
 		services.set(ILogService, logService);
 
 		// Files
@@ -251,7 +207,7 @@ class CodeMain {
 		services.set(IStateService, stateService);
 
 		// User Data Profiles
-		const userDataProfilesMainService = new UserDataProfilesMainService(stateService, uriIdentityService, environmentMainService, fileService, logService);
+		const userDataProfilesMainService = new UserDataProfilesMainService(stateService, uriIdentityService, environmentMainService, fileService, logService, productService);
 		services.set(IUserDataProfilesMainService, userDataProfilesMainService);
 
 		// Use FileUserDataProvider for user data to
@@ -260,12 +216,55 @@ class CodeMain {
 
 		// Policy
 		let policyService: IPolicyService | undefined;
-		if (isWindows && productService.win32RegValueName) {
-			policyService = disposables.add(new NativePolicyService(logService));
-		} else if (isMacintosh && productService.darwinBundleIdentifier) {
-			policyService = disposables.add(new NativePolicyService(logService));
+		const policyProductName = isWindows
+			? (productService.parentPolicyConfig?.win32RegValueName ?? productService.win32RegValueName)
+			: (productService.parentPolicyConfig?.darwinBundleIdentifier ?? productService.darwinBundleIdentifier);
+		const policyServices: IPolicyService[] = [];
+		if (isWindows && policyProductName) {
+			policyServices.push(disposables.add(new NativePolicyService(logService, policyProductName)));
+		} else if (isMacintosh && policyProductName) {
+			policyServices.push(disposables.add(new NativePolicyService(logService, policyProductName)));
+		} else if (isLinux) {
+			policyServices.push(disposables.add(new FilePolicyService(URI.file(LINUX_SYSTEM_POLICY_FILE_PATH), fileService, logService)));
 		} else if (environmentMainService.policyFile) {
-			policyService = disposables.add(new FilePolicyService(environmentMainService.policyFile, fileService, logService));
+			policyServices.push(disposables.add(new FilePolicyService(environmentMainService.policyFile, fileService, logService)));
+		}
+
+		let nativeManagedSettingsService: NativeManagedSettingsService | undefined;
+		if (isWindows) {
+			nativeManagedSettingsService = disposables.add(new NativeManagedSettingsService(logService, GITHUB_COPILOT_WIN32_POLICY_NAME, { registryPath: GITHUB_COPILOT_WIN32_REGISTRY_PATH }));
+		} else if (isMacintosh) {
+			nativeManagedSettingsService = disposables.add(new NativeManagedSettingsService(logService, GITHUB_COPILOT_MACOS_BUNDLE_ID));
+		}
+		if (nativeManagedSettingsService) {
+			services.set(INativeManagedSettingsService, nativeManagedSettingsService);
+		} else {
+			services.set(INativeManagedSettingsService, new NullNativeManagedSettingsService());
+		}
+
+		// File-based managed settings
+		let fileManagedSettingsPath: string | undefined;
+		if (isWindows) {
+			const programFiles = process.env['ProgramFiles'];
+			if (programFiles) {
+				fileManagedSettingsPath = join(programFiles, MANAGED_SETTINGS_WINDOWS_DIR, MANAGED_SETTINGS_FILE_NAME);
+			}
+		} else if (isMacintosh) {
+			fileManagedSettingsPath = MANAGED_SETTINGS_MACOS_FILE_PATH;
+		} else if (isLinux) {
+			fileManagedSettingsPath = MANAGED_SETTINGS_LINUX_FILE_PATH;
+		}
+		if (fileManagedSettingsPath) {
+			const fileManagedSettingsService = disposables.add(new FileManagedSettingsService(URI.file(fileManagedSettingsPath), fileService, logService));
+			services.set(IFileManagedSettingsService, fileManagedSettingsService);
+		} else {
+			services.set(IFileManagedSettingsService, new NullFileManagedSettingsService());
+		}
+
+		if (policyServices.length > 1) {
+			policyService = disposables.add(new MultiplexPolicyService(policyServices, logService));
+		} else if (policyServices.length === 1) {
+			policyService = policyServices[0];
 		} else {
 			policyService = new NullPolicyService();
 		}
@@ -418,7 +417,7 @@ class CodeMain {
 			// Show a warning dialog after some timeout if it takes long to talk to the other instance
 			// Skip this if we are running with --wait where it is expected that we wait for a while.
 			// Also skip when gathering diagnostics (--status) which can take a longer time.
-			let startupWarningDialogHandle: NodeJS.Timeout | undefined = undefined;
+			let startupWarningDialogHandle: Timeout | undefined = undefined;
 			if (!environmentMainService.args.wait && !environmentMainService.args.status) {
 				startupWarningDialogHandle = setTimeout(() => {
 					this.showStartupWarningDialog(
@@ -544,6 +543,41 @@ class CodeMain {
 		lifecycleMainService.kill(exitCode);
 	}
 
+	private async checkInnoSetupMutex(productService: IProductService, logService: ILogService): Promise<boolean> {
+		if (!(isWindows && productService.win32MutexName && productService.win32VersionedUpdate)) {
+			return false;
+		}
+
+		try {
+			const updatingMutexName = `${productService.win32MutexName}-updating`;
+			const mutex = await import('@vscode/windows-mutex');
+
+			if (!mutex.isActive(updatingMutexName)) {
+				return false;
+			}
+
+			// Wait briefly for setup teardown to release the mutex; Inno's `nowait postinstall` runcode can race the setup process exit.
+			const pollIntervalMs = 250, retries = 120; // 30s total
+			logService.info(`checkInnoSetupMutex: ${updatingMutexName} is held, waiting up to ${(pollIntervalMs * retries) / 1000}s for setup to finish...`);
+			const start = Date.now();
+			try {
+				await retry(async () => {
+					if (mutex.isActive(updatingMutexName)) {
+						throw new Error('mutex still held');
+					}
+				}, pollIntervalMs, retries);
+				logService.info(`checkInnoSetupMutex: ${updatingMutexName} released after ${Date.now() - start}ms`);
+				return false;
+			} catch {
+				logService.warn(`checkInnoSetupMutex: ${updatingMutexName} still held after ${Date.now() - start}ms, giving up`);
+				return true;
+			}
+		} catch (error) {
+			logService.error('Failed to check Inno Setup mutex:', error);
+			return false;
+		}
+	}
+
 	//#region Command line arguments utilities
 
 	private resolveArgs(): NativeParsedArgs {
@@ -551,19 +585,36 @@ class CodeMain {
 		// Parse arguments
 		const args = this.validatePaths(parseMainProcessArgv(process.argv));
 
-		// If we are started with --wait create a random temporary file
-		// and pass it over to the starting instance. We can use this file
-		// to wait for it to be deleted to monitor that the edited file
-		// is closed and then exit the waiting process.
-		//
-		// Note: we are not doing this if the wait marker has been already
-		// added as argument. This can happen if VS Code was started from CLI.
-
 		if (args.wait && !args.waitMarkerFilePath) {
+			// If we are started with --wait create a random temporary file
+			// and pass it over to the starting instance. We can use this file
+			// to wait for it to be deleted to monitor that the edited file
+			// is closed and then exit the waiting process.
+			//
+			// Note: we are not doing this if the wait marker has been already
+			// added as argument. This can happen if VS Code was started from CLI.
 			const waitMarkerFilePath = createWaitMarkerFileSync(args.verbose);
 			if (waitMarkerFilePath) {
 				addArg(process.argv, '--waitMarkerFilePath', waitMarkerFilePath);
 				args.waitMarkerFilePath = waitMarkerFilePath;
+			}
+		}
+
+		if (args.chat) {
+			if (args.chat['new-window']) {
+				// Apply `--new-window` flag to the main arguments
+				args['new-window'] = true;
+			} else if (args.chat['reuse-window']) {
+				// Apply `--reuse-window` flag to the main arguments
+				args['reuse-window'] = true;
+			} else if (args.chat['profile']) {
+				// Apply `--profile` flag to the main arguments
+				args['profile'] = args.chat['profile'];
+			} else {
+				// Unless we are started with specific instructions about
+				// new windows or reusing existing ones, always take the
+				// current working directory as workspace to open.
+				args._ = [cwd()];
 			}
 		}
 

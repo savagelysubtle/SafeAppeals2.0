@@ -12,7 +12,7 @@ import { resolveTerminalEncoding } from '../../../base/node/terminalEncoding.js'
 export function hasStdinWithoutTty() {
 	try {
 		return !process.stdin.isTTY; // Via https://twitter.com/MylesBorins/status/782009479382626304
-	} catch (error) {
+	} catch {
 		// Windows workaround for https://github.com/nodejs/node/issues/11656
 	}
 	return false;
@@ -67,8 +67,7 @@ export async function readFromStdin(targetPath: string, verbose: boolean, onEnd?
 	const decoder = iconv.default.getDecoder(encoding);
 
 	process.stdin.on('data', chunk => {
-		const chunkData = chunk as Uint8Array<ArrayBuffer>;
-		const chunkStr = decoder.write(chunkData);
+		const chunkStr = decoder.write(chunk);
 		appendFileQueue.queue(() => fs.promises.appendFile(targetPath, chunkStr));
 	});
 

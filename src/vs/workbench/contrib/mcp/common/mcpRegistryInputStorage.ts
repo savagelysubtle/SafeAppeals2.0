@@ -139,7 +139,7 @@ export class McpRegistryInputStorage extends Disposable {
 			const encrypted = await crypto.subtle.encrypt(
 				{ name: MCP_ENCRYPTION_KEY_ALGORITHM, iv: iv.buffer },
 				key,
-				new TextEncoder().encode(toSeal).buffer,
+				new TextEncoder().encode(toSeal).buffer as ArrayBuffer,
 			);
 
 			const enc = encodeBase64(VSBuffer.wrap(new Uint8Array(encrypted)));
@@ -162,18 +162,10 @@ export class McpRegistryInputStorage extends Disposable {
 			const iv = decodeBase64(this._record.value.secrets.iv);
 			const encrypted = decodeBase64(this._record.value.secrets.value);
 
-			const ivArray = new Uint8Array(iv.buffer.length);
-			for (let i = 0; i < iv.buffer.length; i++) {
-				ivArray[i] = iv.buffer[i]!;
-			}
-			const encryptedArray = new Uint8Array(encrypted.buffer.length);
-			for (let i = 0; i < encrypted.buffer.length; i++) {
-				encryptedArray[i] = encrypted.buffer[i]!;
-			}
 			const decrypted = await crypto.subtle.decrypt(
-				{ name: MCP_ENCRYPTION_KEY_ALGORITHM, iv: ivArray.buffer as ArrayBuffer },
+				{ name: MCP_ENCRYPTION_KEY_ALGORITHM, iv: iv.buffer as Uint8Array<ArrayBuffer> },
 				key,
-				encryptedArray.buffer as ArrayBuffer,
+				encrypted.buffer as Uint8Array<ArrayBuffer>,
 			);
 
 			const unsealedSecrets = JSON.parse(new TextDecoder().decode(decrypted));

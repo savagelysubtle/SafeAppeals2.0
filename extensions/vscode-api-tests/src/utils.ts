@@ -4,8 +4,8 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as assert from 'assert';
-import * as crypto from 'crypto';
 import { EOL } from 'os';
+import * as crypto from 'crypto';
 import * as vscode from 'vscode';
 import { TestFS } from './memfs';
 
@@ -24,7 +24,7 @@ export async function createRandomFile(contents: string | Uint8Array = '', dir: 
 	} else {
 		fakeFile = vscode.Uri.parse(`${testFs.scheme}:/${rndName() + ext}`);
 	}
-	testFs.writeFile(fakeFile, new Uint8Array(Buffer.from(contents)), { create: true, overwrite: true });
+	testFs.writeFile(fakeFile, typeof contents === 'string' ? Buffer.from(contents) : Buffer.from(contents), { create: true, overwrite: true });
 	return fakeFile;
 }
 
@@ -250,3 +250,7 @@ export class DeferredPromise<T> {
 		});
 	}
 }
+
+export type Mutable<T> = {
+	-readonly [P in keyof T]: T[P];
+};

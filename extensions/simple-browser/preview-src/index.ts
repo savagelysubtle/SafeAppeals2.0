@@ -5,15 +5,61 @@
 
 import { onceDocumentLoaded } from './events';
 
-declare function acquireVsCodeApi(): { postMessage(msg: unknown): void; getState(): unknown; setState(state: unknown): void };
+interface SimpleBrowserSettings {
+	readonly url: string;
+	readonly focusLockEnabled: boolean;
+}
+
+interface SimpleBrowserState {
+	readonly url: string;
+}
+
+interface OpenExternalMessage {
+	readonly type: 'openExternal';
+	readonly url: string;
+}
+
+type ExtensionToWebviewMessage =
+	| { readonly type: 'focus' }
+	| { readonly type: 'didChangeFocusLockIndicatorEnabled'; readonly focusLockEnabled: boolean };
+
+interface VsCodeApi<State, Message> {
+	setState(state: State): void;
+	postMessage(message: Message): void;
+}
+
+declare function acquireVsCodeApi(): VsCodeApi<SimpleBrowserState, OpenExternalMessage>;
+
 const vscode = acquireVsCodeApi();
 
-function getSettings() {
+function isSimpleBrowserSettings(value: unknown): value is SimpleBrowserSettings {
+	return typeof value === 'object'
+		&& value !== null
+		&& 'url' in value
+		&& typeof value.url === 'string'
+		&& 'focusLockEnabled' in value
+		&& typeof value.focusLockEnabled === 'boolean';
+}
+
+function isExtensionToWebviewMessage(value: unknown): value is ExtensionToWebviewMessage {
+	return typeof value === 'object'
+		&& value !== null
+		&& 'type' in value
+		&& (value.type === 'focus'
+			|| (value.type === 'didChangeFocusLockIndicatorEnabled'
+				&& 'focusLockEnabled' in value
+				&& typeof value.focusLockEnabled === 'boolean'));
+}
+
+function getSettings(): SimpleBrowserSettings {
 	const element = document.getElementById('simple-browser-settings');
 	if (element) {
 		const data = element.getAttribute('data-settings');
 		if (data) {
-			return JSON.parse(data);
+			const settings: unknown = JSON.parse(data);
+			if (isSimpleBrowserSettings(settings)) {
+				return settings;
+			}
 		}
 	}
 
@@ -28,38 +74,15 @@ const input = header.querySelector<HTMLInputElement>('.url-input')!;
 const forwardButton = header.querySelector<HTMLButtonElement>('.forward-button')!;
 const backButton = header.querySelector<HTMLButtonElement>('.back-button')!;
 const reloadButton = header.querySelector<HTMLButtonElement>('.reload-button')!;
-const homeButton = header.querySelector<HTMLButtonElement>('.home-button')!;
 const openExternalButton = header.querySelector<HTMLButtonElement>('.open-external-button')!;
-const loadingIndicator = document.querySelector<HTMLElement>('.loading-indicator')!;
-
-const navigationHistory: string[] = [];
-let historyIndex = -1;
-
-function updateNavButtons() {
-	backButton.disabled = historyIndex <= 0;
-	forwardButton.disabled = historyIndex >= navigationHistory.length - 1;
-}
-
-function showLoading(show: boolean) {
-	loadingIndicator.classList.toggle('visible', show);
-}
-
-function normalizeUrl(rawUrl: string): string {
-	const trimmed = rawUrl.trim();
-	if (!trimmed) {
-		return trimmed;
-	}
-	if (/^[a-zA-Z][a-zA-Z\d+\-.]*:/.test(trimmed)) {
-		return trimmed;
-	}
-	if (trimmed.includes('.') && !trimmed.includes(' ')) {
-		return 'https://' + trimmed;
-	}
-	return trimmed;
-}
 
 window.addEventListener('message', e => {
-	switch (e.data.type) {
+	const message: unknown = e.data;
+	if (!isExtensionToWebviewMessage(message)) {
+		return;
+	}
+
+	switch (message.type) {
 		case 'focus':
 			{
 				iframe.focus();
@@ -67,7 +90,7 @@ window.addEventListener('message', e => {
 			}
 		case 'didChangeFocusLockIndicatorEnabled':
 			{
-				toggleFocusLockIndicatorEnabled(e.data.enabled);
+				toggleFocusLockIndicatorEnabled(message.focusLockEnabled);
 				break;
 			}
 	}
@@ -80,59 +103,20 @@ onceDocumentLoaded(() => {
 	}, 50);
 
 	iframe.addEventListener('load', () => {
-		showLoading(false);
+		// Noop
 	});
 
 	input.addEventListener('change', e => {
-		const rawUrl = (e.target as HTMLInputElement).value;
-		const url = normalizeUrl(rawUrl);
-		input.value = url;
-		navigateTo(url, true);
-	});
-
-	input.addEventListener('keydown', e => {
-		if (e.key === 'Enter') {
-			input.blur();
-			const url = normalizeUrl(input.value);
-			input.value = url;
-			navigateTo(url, true);
-		} else if (e.key === 'Escape') {
-			input.blur();
-		}
-	});
-
-	document.addEventListener('keydown', e => {
-		if ((e.ctrlKey || e.metaKey) && e.key === 'l') {
-			e.preventDefault();
-			input.focus();
-			input.select();
-		}
+		const url = (e.target as HTMLInputElement).value;
+		navigateTo(url);
 	});
 
 	forwardButton.addEventListener('click', () => {
-		if (historyIndex < navigationHistory.length - 1) {
-			historyIndex++;
-			const url = navigationHistory[historyIndex];
-			input.value = url;
-			navigateTo(url, false);
-			updateNavButtons();
-		}
+		history.forward();
 	});
 
 	backButton.addEventListener('click', () => {
-		if (historyIndex > 0) {
-			historyIndex--;
-			const url = navigationHistory[historyIndex];
-			input.value = url;
-			navigateTo(url, false);
-			updateNavButtons();
-		}
-	});
-
-	homeButton.addEventListener('click', () => {
-		const homeUrl = settings.homeUrl || 'https://www.google.com';
-		input.value = homeUrl;
-		navigateTo(homeUrl, true);
+		history.back();
 	});
 
 	openExternalButton.addEventListener('click', () => {
@@ -143,33 +127,33 @@ onceDocumentLoaded(() => {
 	});
 
 	reloadButton.addEventListener('click', () => {
-		navigateTo(input.value, false);
+		// This does not seem to trigger what we want
+		// history.go(0);
+
+		// This incorrectly adds entries to the history but does reload
+		// It also always incorrectly always loads the value in the input bar,
+		// which may not match the current page if the user has navigated
+		navigateTo(input.value);
 	});
 
-	navigateTo(settings.url, true);
+	navigateTo(settings.url);
 	input.value = settings.url;
 
-	toggleFocusLockIndicatorEnabled(settings.focusLockIndicatorEnabled);
-	updateNavButtons();
+	toggleFocusLockIndicatorEnabled(settings.focusLockEnabled);
 
-	function navigateTo(rawUrl: string, addToHistory: boolean): void {
-		showLoading(true);
-
+	function navigateTo(rawUrl: string): void {
 		try {
 			const url = new URL(rawUrl);
+
+			// Try to bust the cache for the iframe
+			// There does not appear to be any way to reliably do this except modifying the url
+			const existing = new URLSearchParams(location.search);
+			url.searchParams.append('id', existing.get('id')!);
 			url.searchParams.append('vscodeBrowserReqId', Date.now().toString());
+
 			iframe.src = url.toString();
 		} catch {
 			iframe.src = rawUrl;
-		}
-
-		if (addToHistory) {
-			if (historyIndex < navigationHistory.length - 1) {
-				navigationHistory.splice(historyIndex + 1);
-			}
-			navigationHistory.push(rawUrl);
-			historyIndex = navigationHistory.length - 1;
-			updateNavButtons();
 		}
 
 		vscode.setState({ url: rawUrl });
@@ -179,3 +163,4 @@ onceDocumentLoaded(() => {
 function toggleFocusLockIndicatorEnabled(enabled: boolean) {
 	document.body.classList.toggle('enable-focus-lock-indicator', enabled);
 }
+

@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { VSBuffer } from './buffer.js';
+import { encodeHex, VSBuffer } from './buffer.js';
 import * as strings from './strings.js';
 
 type NotSyncHashable = ArrayBufferLike | ArrayBufferView;
@@ -18,7 +18,7 @@ export function hash<T>(obj: T extends NotSyncHashable ? never : T): number {
 	return doHash(obj, 0);
 }
 
-export function doHash(obj: any, hashVal: number): number {
+export function doHash(obj: unknown, hashVal: number): number {
 	switch (typeof obj) {
 		case 'object':
 			if (obj === null) {
@@ -56,16 +56,16 @@ export function stringHash(s: string, hashVal: number) {
 	return hashVal;
 }
 
-function arrayHash(arr: any[], initialHashVal: number): number {
+function arrayHash(arr: unknown[], initialHashVal: number): number {
 	initialHashVal = numberHash(104579, initialHashVal);
-	return arr.reduce((hashVal, item) => doHash(item, hashVal), initialHashVal);
+	return arr.reduce<number>((hashVal, item) => doHash(item, hashVal), initialHashVal);
 }
 
-function objectHash(obj: any, initialHashVal: number): number {
+function objectHash(obj: object, initialHashVal: number): number {
 	initialHashVal = numberHash(181387, initialHashVal);
 	return Object.keys(obj).sort().reduce((hashVal, key) => {
 		hashVal = stringHash(key, hashVal);
-		return doHash(obj[key], hashVal);
+		return doHash((obj as Record<string, unknown>)[key], hashVal);
 	}, initialHashVal);
 }
 
@@ -84,40 +84,16 @@ export const hashAsync = (input: string | ArrayBufferView | VSBuffer) => {
 		return Promise.resolve(sha.digest());
 	}
 
-	let buff: BufferSource;
+	let buff: ArrayBufferView;
 	if (typeof input === 'string') {
 		buff = new TextEncoder().encode(input);
 	} else if (input instanceof VSBuffer) {
-		// Convert VSBuffer.buffer (Uint8Array<ArrayBufferLike>) to BufferSource
-		const arr = new Uint8Array(input.buffer.length);
-		for (let i = 0; i < input.buffer.length; i++) {
-			arr[i] = input.buffer[i]!;
-		}
-		buff = arr.buffer as ArrayBuffer;
+		buff = input.buffer;
 	} else {
-		// Convert ArrayBufferView<ArrayBufferLike> to BufferSource
-		// Handle different ArrayBufferView types by checking for specific typed arrays first
-		if (input instanceof Uint8Array || input instanceof Uint16Array || input instanceof Uint32Array ||
-			input instanceof Int8Array || input instanceof Int16Array || input instanceof Int32Array ||
-			input instanceof Float32Array || input instanceof Float64Array) {
-			const arr = new Uint8Array(input.length);
-			for (let i = 0; i < input.length; i++) {
-				arr[i] = input[i]!;
-			}
-			buff = arr.buffer as ArrayBuffer;
-		} else {
-			// For other ArrayBufferView types, access via byteLength and create Uint8Array view
-			const view = input as { byteLength: number; buffer: ArrayBufferLike; byteOffset: number };
-			const uint8View = new Uint8Array(view.buffer as ArrayBuffer, view.byteOffset, view.byteLength);
-			const arr = new Uint8Array(uint8View.length);
-			for (let i = 0; i < uint8View.length; i++) {
-				arr[i] = uint8View[i]!;
-			}
-			buff = arr.buffer as ArrayBuffer;
-		}
+		buff = input;
 	}
 
-	return crypto.subtle.digest('sha-1', buff).then(toHexString);
+	return crypto.subtle.digest('sha-1', buff as ArrayBufferView<ArrayBuffer>).then(toHexString); // CodeQL [SM04514] we use sha1 here for validating old stored client state, not for security
 };
 
 const enum SHA1Constant {
@@ -140,7 +116,7 @@ function toHexString(buffer: ArrayBuffer): string;
 function toHexString(value: number, bitsize?: number): string;
 function toHexString(bufferOrValue: ArrayBuffer | number, bitsize: number = 32): string {
 	if (bufferOrValue instanceof ArrayBuffer) {
-		return Array.from(new Uint8Array(bufferOrValue)).map(b => b.toString(16).padStart(2, '0')).join('');
+		return encodeHex(VSBuffer.wrap(new Uint8Array(bufferOrValue)));
 	}
 
 	return (bufferOrValue >>> 0).toString(16).padStart(bitsize / 4, '0');
