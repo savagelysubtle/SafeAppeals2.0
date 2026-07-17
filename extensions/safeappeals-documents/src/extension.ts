@@ -4,15 +4,17 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as vscode from 'vscode';
+import { DocxEditorProvider } from './docx/docxEditorProvider';
 import { PdfAnnotationStore } from './pdf/annotationStore';
 import { PdfEditorProvider } from './pdf/pdfEditorProvider';
 
 export function activate(context: vscode.ExtensionContext): void {
 	const annotationStore = new PdfAnnotationStore(context);
 
-	// Rung 5a: PDF. Rungs 5b/5c will register docx/xlsx providers alongside this.
+	// Rung 5a: PDF. Rung 5b: DOCX. Rung 5c: XLSX.
 	context.subscriptions.push(
 		PdfEditorProvider.register(context, annotationStore),
+		DocxEditorProvider.register(context),
 	);
 
 	context.subscriptions.push(
@@ -30,3 +32,4 @@ export function activate(context: vscode.ExtensionContext): void {
 export function deactivate(): void {
 	// no-op
 }
+

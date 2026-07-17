@@ -1,5 +1,5 @@
 /**
- * Bundle PDF webview TypeScript → media/pdf/pdfRustViewer.js (IIFE).
+ * Bundle webview TypeScript to media PDF/DOCX IIFE bundles.
  *
  * Usage:
  *   node esbuild.mjs
@@ -12,28 +12,45 @@ import { fileURLToPath } from 'url';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const isWatch = process.argv.includes('--watch');
 
-const buildOptions = {
-	entryPoints: [resolve(__dirname, 'webview-src/pdf/main.ts')],
+const shared = {
 	bundle: true,
-	outfile: resolve(__dirname, 'media/pdf/pdfRustViewer.js'),
 	format: 'iife',
 	platform: 'browser',
 	target: ['es2020'],
 	sourcemap: false,
 	minify: false,
-	// WASM binary is loaded at runtime via fetch(data-wasm-url); pdfium.js is a separate script tag.
+	logLevel: 'info',
 	define: {
 		'process.env.NODE_ENV': '"production"',
 		'import.meta.url': '""',
 	},
-	logLevel: 'info',
 };
 
+const builds = [
+	{
+		...shared,
+		entryPoints: [resolve(__dirname, 'webview-src/pdf/main.ts')],
+		outfile: resolve(__dirname, 'media/pdf/pdfRustViewer.js'),
+	},
+	{
+		...shared,
+		entryPoints: [resolve(__dirname, 'webview-src/docx/main.ts')],
+		outfile: resolve(__dirname, 'media/docx/docxEditor.js'),
+		loader: {
+			'.js': 'js',
+		},
+		mainFields: ['browser', 'module', 'main'],
+		conditions: ['browser'],
+	},
+];
+
 if (isWatch) {
-	const ctx = await context(buildOptions);
-	await ctx.watch();
-	console.log('[safeappeals-documents] Watching webview-src/pdf...');
+	const contexts = await Promise.all(builds.map(opts => context(opts)));
+	await Promise.all(contexts.map(ctx => ctx.watch()));
+	console.log('[safeappeals-documents] Watching webview-src/pdf + webview-src/docx...');
 } else {
-	await build(buildOptions);
-	console.log('[safeappeals-documents] Built media/pdf/pdfRustViewer.js');
+	for (const opts of builds) {
+		await build(opts);
+		console.log(`[safeappeals-documents] Built ${opts.outfile}`);
+	}
 }

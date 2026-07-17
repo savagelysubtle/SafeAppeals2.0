@@ -1,7 +1,7 @@
 {
   "name": "safeappeals-documents",
   "displayName": "Safe Appeals Documents",
-  "description": "PDF (and future DOCX/XLSX) custom editors for Safe Appeals",
+  "description": "PDF and DOCX (future XLSX) custom editors for Safe Appeals",
   "version": "1.0.0",
   "publisher": "safeappeals",
   "license": "MIT",
@@ -16,7 +16,8 @@
     "workspace"
   ],
   "activationEvents": [
-    "onCustomEditor:safeappeals.pdfViewer"
+    "onCustomEditor:safeappeals.pdfViewer",
+    "onCustomEditor:safeappeals.docxViewer"
   ],
   "capabilities": {
     "virtualWorkspaces": true,
@@ -32,6 +33,16 @@
         "selector": [
           {
             "filenamePattern": "*.pdf"
+          }
+        ],
+        "priority": "default"
+      },
+      {
+        "viewType": "safeappeals.docxViewer",
+        "displayName": "Safe Appeals DOCX Editor",
+        "selector": [
+          {
+            "filenamePattern": "*.docx"
           }
         ],
         "priority": "default"
@@ -52,6 +63,36 @@
     "watch-webview": "node ./esbuild.mjs --watch"
   },
   "devDependencies": {
-    "@types/node": "24.x"
+    "@adalat-ai/page-extension": "^1.0.9",
+    "@tiptap/core": "^2.27.2",
+    "@tiptap/extension-collaboration": "^2.27.2",
+    "@tiptap/extension-color": "^2.27.2",
+    "@tiptap/extension-font-family": "^2.27.2",
+    "@tiptap/extension-link": "^2.27.2",
+    "@tiptap/extension-table": "^2.27.2",
+    "@tiptap/extension-table-cell": "^2.27.2",
+    "@tiptap/extension-table-header": "^2.27.2",
+    "@tiptap/extension-table-row": "^2.27.2",
+    "@tiptap/extension-text-align": "^2.27.2",
+    "@tiptap/extension-text-style": "^2.27.2",
+    "@tiptap/extension-underline": "^2.27.2",
+    "@tiptap/pm": "^2.27.2",
+    "@tiptap/react": "^2.27.2",
+    "@tiptap/starter-kit": "^2.27.2",
+    "@types/node": "24.x",
+    "@types/pica": "^9.0.5",
+    "@types/react": "^18.3.31",
+    "@types/react-dom": "^18.3.7",
+    "docx": "^9.7.1",
+    "docx-preview": "^0.3.7",
+    "esbuild": "^0.25.0",
+    "jszip": "^3.10.1",
+    "pica": "^9.0.1",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "y-prosemirror": "^1.3.7"
+  },
+  "allowScripts": {
+    "esbuild@0.25.0": true
   }
 }
