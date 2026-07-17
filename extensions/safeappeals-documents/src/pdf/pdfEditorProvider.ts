@@ -86,7 +86,10 @@ export class PdfEditorProvider implements vscode.CustomReadonlyEditorProvider {
 					type: 'loadPDF',
 					data: base64,
 					encoding: 'base64',
-					preloadStrategy: 'all',
+					// 'adjacent' = render current page + neighbors, evict far pages.
+					// 'all' eagerly rasterizes every page at full scale and stalls
+					// large documents, so the host never sends it.
+					preloadStrategy: 'adjacent',
 					startPage,
 					pdfUri: document.uri.toString(),
 				});

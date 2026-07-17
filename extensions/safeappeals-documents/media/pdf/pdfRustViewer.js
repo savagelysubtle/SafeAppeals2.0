@@ -4,7 +4,7 @@
   var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
   var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "symbol" ? key + "" : key, value);
 
-  // extensions/safeappeals-documents/webview-src/pdf/wasm/pdf_viewer.js
+  // webview-src/pdf/wasm/pdf_viewer.js
   var PdfRenderer = class {
     __destroy_into_raw() {
       const ptr = this.__wbg_ptr;
@@ -655,7 +655,7 @@ ${val.stack}`;
     return __wbg_finalize_init(instance, module);
   }
 
-  // extensions/safeappeals-documents/webview-src/pdf/renderer.ts
+  // webview-src/pdf/renderer.ts
   var PdfCanvasRenderer = class {
     constructor(canvas, textLayer, renderContainer) {
       __publicField(this, "canvas");
@@ -772,35 +772,67 @@ ${val.stack}`;
     }
   };
 
-  // extensions/safeappeals-documents/webview-src/pdf/sidebar.ts
+  // webview-src/pdf/sidebar.ts
+  var THUMBNAIL_WIDTH = 150;
+  var DEFAULT_PAGE_ASPECT = 297 / 210;
   var Sidebar = class {
     constructor(thumbnailsContainer, outlineContainer, bookmarksContainer, onNavigate) {
       __publicField(this, "thumbnailsContainer");
       __publicField(this, "outlineContainer");
       __publicField(this, "bookmarksContainer");
       __publicField(this, "onNavigate");
+      // Lazy thumbnail state
+      __publicField(this, "thumbObserver", null);
+      __publicField(this, "thumbQueue", []);
+      __publicField(this, "thumbWorkScheduled", false);
+      __publicField(this, "renderedThumbs", /* @__PURE__ */ new Set());
+      __publicField(this, "thumbCanvases", /* @__PURE__ */ new Map());
+      __publicField(this, "renderThumbnail", null);
+      // Bumped on every reset so in-flight rAF callbacks/observer entries from a
+      // previous document are ignored instead of painting stale content.
+      __publicField(this, "thumbGeneration", 0);
       this.thumbnailsContainer = thumbnailsContainer;
       this.outlineContainer = outlineContainer;
       this.bookmarksContainer = bookmarksContainer;
       this.onNavigate = onNavigate;
     }
     /**
-     * Set thumbnail images from WASM-rendered ImageData objects.
+     * Create placeholder tiles for every page immediately (page number + aspect-ratio
+     * box). Actual pixels are rendered on demand as tiles scroll into view.
+     *
+     * @param renderThumbnail Callback that rasterizes one page via WASM and returns a
+     * detached ImageData copy (safe from pdfium buffer reuse), or null on failure.
      */
-    setThumbnails(thumbnails, activePage) {
-      this.thumbnailsContainer.innerHTML = "";
-      for (const { pageNum, imageData } of thumbnails) {
+    setThumbnailPlaceholders(pageCount2, pageDimensions2, activePage, renderThumbnail) {
+      this.clearThumbnails();
+      this.renderThumbnail = renderThumbnail;
+      const generation = this.thumbGeneration;
+      this.thumbObserver = new IntersectionObserver((entries) => {
+        if (generation !== this.thumbGeneration) {
+          return;
+        }
+        for (const entry of entries) {
+          if (!entry.isIntersecting) {
+            continue;
+          }
+          const page = parseInt(entry.target.dataset.page || "0");
+          if (page > 0 && !this.renderedThumbs.has(page) && !this.thumbQueue.includes(page)) {
+            this.thumbQueue.push(page);
+          }
+        }
+        this.scheduleThumbnailWork();
+      }, { rootMargin: "300px 0px", threshold: 0 });
+      const fragment = document.createDocumentFragment();
+      for (let pageNum = 1; pageNum <= pageCount2; pageNum++) {
+        const dims = pageDimensions2[pageNum - 1];
+        const aspect = dims && dims.width > 0 ? dims.height / dims.width : DEFAULT_PAGE_ASPECT;
         const thumbItem = document.createElement("div");
         thumbItem.className = "thumbnail-item";
         thumbItem.dataset.page = pageNum.toString();
         const thumbCanvas = document.createElement("canvas");
         thumbCanvas.className = "thumbnail-canvas";
-        thumbCanvas.width = imageData.width;
-        thumbCanvas.height = imageData.height;
-        const thumbCtx = thumbCanvas.getContext("2d");
-        if (thumbCtx) {
-          thumbCtx.putImageData(imageData, 0, 0);
-        }
+        thumbCanvas.width = THUMBNAIL_WIDTH;
+        thumbCanvas.height = Math.max(1, Math.round(THUMBNAIL_WIDTH * aspect));
         const label = document.createElement("div");
         label.className = "thumbnail-label";
         label.textContent = `Page ${pageNum}`;
@@ -812,8 +844,86 @@ ${val.stack}`;
         if (pageNum === activePage) {
           thumbItem.classList.add("active");
         }
-        this.thumbnailsContainer.appendChild(thumbItem);
+        fragment.appendChild(thumbItem);
+        this.thumbCanvases.set(pageNum, thumbCanvas);
       }
+      this.thumbnailsContainer.appendChild(fragment);
+      for (const canvas of this.thumbCanvases.values()) {
+        this.thumbObserver.observe(canvas.parentElement);
+      }
+      this.prioritizeThumbnail(activePage);
+    }
+    /**
+     * Move a page to the front of the render queue (visible range / active page first).
+     */
+    prioritizeThumbnail(pageNum) {
+      if (pageNum <= 0 || this.renderedThumbs.has(pageNum) || !this.thumbCanvases.has(pageNum)) {
+        return;
+      }
+      const idx = this.thumbQueue.indexOf(pageNum);
+      if (idx >= 0) {
+        this.thumbQueue.splice(idx, 1);
+      }
+      this.thumbQueue.unshift(pageNum);
+      this.scheduleThumbnailWork();
+    }
+    /**
+     * Drain the queue one page per animation frame so WASM rasterization never
+     * blocks the main viewer for more than a single tile at a time.
+     */
+    scheduleThumbnailWork() {
+      if (this.thumbWorkScheduled || this.thumbQueue.length === 0) {
+        return;
+      }
+      this.thumbWorkScheduled = true;
+      const generation = this.thumbGeneration;
+      requestAnimationFrame(() => {
+        this.thumbWorkScheduled = false;
+        if (generation !== this.thumbGeneration) {
+          return;
+        }
+        const page = this.thumbQueue.shift();
+        if (page !== void 0 && !this.renderedThumbs.has(page)) {
+          this.paintThumbnail(page);
+        }
+        this.scheduleThumbnailWork();
+      });
+    }
+    paintThumbnail(pageNum) {
+      const canvas = this.thumbCanvases.get(pageNum);
+      if (!canvas || !this.renderThumbnail) {
+        return;
+      }
+      try {
+        const imageData = this.renderThumbnail(pageNum);
+        if (!imageData) {
+          return;
+        }
+        canvas.width = imageData.width;
+        canvas.height = imageData.height;
+        canvas.getContext("2d")?.putImageData(imageData, 0, 0);
+        this.renderedThumbs.add(pageNum);
+        const item = canvas.parentElement;
+        if (item) {
+          this.thumbObserver?.unobserve(item);
+        }
+      } catch (e) {
+        console.error(`[PDF Viewer] Failed to render thumbnail for page ${pageNum}:`, e);
+      }
+    }
+    /**
+     * Tear down observer, queue, and tiles. Safe to call between document loads.
+     */
+    clearThumbnails() {
+      this.thumbGeneration++;
+      this.thumbObserver?.disconnect();
+      this.thumbObserver = null;
+      this.thumbQueue.length = 0;
+      this.thumbWorkScheduled = false;
+      this.renderedThumbs.clear();
+      this.thumbCanvases.clear();
+      this.renderThumbnail = null;
+      this.thumbnailsContainer.innerHTML = "";
     }
     /**
      * Update which thumbnail is highlighted as active.
@@ -829,6 +939,7 @@ ${val.stack}`;
           el.classList.remove("active");
         }
       });
+      this.prioritizeThumbnail(pageNum);
     }
     /**
      * Set the document outline from WASM-extracted data.
@@ -899,7 +1010,7 @@ ${val.stack}`;
     }
   };
 
-  // extensions/safeappeals-documents/webview-src/pdf/annotations.ts
+  // webview-src/pdf/annotations.ts
   var COLOR_MAP = {
     yellow: "rgba(255, 235, 59, 0.4)",
     green: "rgba(76, 175, 80, 0.4)",
@@ -1266,7 +1377,7 @@ ${val.stack}`;
     }
   };
 
-  // extensions/safeappeals-documents/webview-src/pdf/signatures.ts
+  // webview-src/pdf/signatures.ts
   var SignatureManager = class {
     constructor(getCurrentPage, getScale, getPdfUri, postMessage, annotationManager2) {
       // Canvas state
@@ -1825,7 +1936,7 @@ ${val.stack}`;
     }
   };
 
-  // extensions/safeappeals-documents/webview-src/pdf/continuousScroll.ts
+  // webview-src/pdf/continuousScroll.ts
   var ContinuousScrollManager = class {
     constructor(scrollContainer, pageCount2, pageDimensions2, scale2, renderPageImageData, getTextBlocks, onPageChange) {
       __publicField(this, "scrollContainer", scrollContainer);
@@ -1982,7 +2093,7 @@ ${val.stack}`;
     }
   };
 
-  // extensions/safeappeals-documents/webview-src/pdf/forms.ts
+  // webview-src/pdf/forms.ts
   var FormOverlayManager = class {
     constructor(renderContainer) {
       __publicField(this, "renderContainer", renderContainer);
@@ -2077,7 +2188,7 @@ ${val.stack}`;
     }
   };
 
-  // extensions/safeappeals-documents/webview-src/pdf/main.ts
+  // webview-src/pdf/main.ts
   var vscode = acquireVsCodeApi();
   var previousState = vscode.getState() || {};
   var pdfRenderer = null;
@@ -2094,7 +2205,7 @@ ${val.stack}`;
   var wasmReady = false;
   var pendingLoadMessage = null;
   var pageCount = 0;
-  var preloadStrategy = "all";
+  var preloadStrategy = "adjacent";
   var currentFitMode = "none";
   var pageRotation = 0;
   var darkModeReading = false;
@@ -2216,8 +2327,7 @@ ${val.stack}`;
         pageDimensions = [];
         imageDataCache.clear();
         canvasRenderer?.clear();
-        const tc = document.getElementById("thumbnails-container");
-        if (tc) tc.innerHTML = "";
+        sidebar?.clearThumbnails();
         break;
       }
       case "getSelectionRect": {
@@ -2271,10 +2381,9 @@ ${val.stack}`;
       console.error("[PDF Viewer] Renderer not initialized");
       return;
     }
-    const thumbnailsContainer = document.getElementById("thumbnails-container");
-    if (thumbnailsContainer) thumbnailsContainer.innerHTML = "";
+    sidebar?.clearThumbnails();
     try {
-      preloadStrategy = message.preloadStrategy || "all";
+      preloadStrategy = message.preloadStrategy || "adjacent";
       const startPage = message.startPage || 1;
       const skipPreload = message.skipPreload || false;
       loadedPdfUri = message.pdfUri;
@@ -2301,9 +2410,9 @@ ${val.stack}`;
       currentPage = Math.max(1, Math.min(startPage, pageCount));
       scale = 0.8;
       try {
-        await generateThumbnails();
+        setupThumbnails();
       } catch (thumbErr) {
-        console.error("[PDF Viewer] Thumbnail generation failed:", thumbErr);
+        console.error("[PDF Viewer] Thumbnail setup failed:", thumbErr);
       }
       try {
         await extractOutline();
@@ -2407,8 +2516,10 @@ ${val.stack}`;
   async function preloadAllPages() {
     if (!pdfRenderer) return;
     const maxPages = Math.min(pageCount, 500);
+    const loadingUri = loadedPdfUri;
     console.log(`[PDF Viewer] Preloading ${maxPages} pages...`);
     for (let i = 1; i <= maxPages; i++) {
+      if (loadedPdfUri !== loadingUri || !pdfRenderer) return;
       if (imageDataCache.has(i)) continue;
       try {
         const dims = pageDimensions[i - 1];
@@ -2420,6 +2531,7 @@ ${val.stack}`;
       } catch (e) {
         console.error(`[PDF Viewer] Failed to preload page ${i}:`, e);
       }
+      await new Promise((resolve) => setTimeout(resolve, 0));
     }
     console.log(`[PDF Viewer] Preload complete`);
   }
@@ -2449,28 +2561,18 @@ ${val.stack}`;
       }
     }
   }
-  async function generateThumbnails() {
+  function setupThumbnails() {
     if (!pdfRenderer || !sidebar) return;
-    console.log(`[PDF Viewer] Generating thumbnails for ${pageCount} pages, uri: ${loadedPdfUri}`);
-    const thumbnails = [];
-    const batchSize = 5;
-    for (let i = 1; i <= pageCount; i += batchSize) {
-      for (let j = i; j < Math.min(i + batchSize, pageCount + 1); j++) {
-        try {
-          const img = pdfRenderer.render_thumbnail(j - 1, 150);
-          const copy = new ImageData(
-            new Uint8ClampedArray(img.data),
-            img.width,
-            img.height
-          );
-          thumbnails.push({ pageNum: j, imageData: copy });
-        } catch (e) {
-          console.error(`[PDF Viewer] Failed to generate thumbnail for page ${j}:`, e);
-        }
-      }
-      await new Promise((resolve) => setTimeout(resolve, 0));
-    }
-    sidebar.setThumbnails(thumbnails, currentPage);
+    console.log(`[PDF Viewer] Creating ${pageCount} thumbnail placeholders, uri: ${loadedPdfUri}`);
+    sidebar.setThumbnailPlaceholders(pageCount, pageDimensions, currentPage, (pageNum) => {
+      if (!pdfRenderer) return null;
+      const img = pdfRenderer.render_thumbnail(pageNum - 1, 150);
+      return new ImageData(
+        new Uint8ClampedArray(img.data),
+        img.width,
+        img.height
+      );
+    });
   }
   async function extractOutline() {
     if (!pdfRenderer || !sidebar) return;

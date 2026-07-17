@@ -43,7 +43,7 @@ let rendering = false;
 let wasmReady = false;
 let pendingLoadMessage: MessageEvent['data'] | null = null;
 let pageCount = 0;
-let preloadStrategy = 'all';
+let preloadStrategy = 'adjacent';
 
 // Feature state
 let currentFitMode: 'none' | 'width' | 'page' | 'actual' = 'none';
@@ -209,8 +209,7 @@ window.addEventListener('message', async (event) => {
 			pageDimensions = [];
 			imageDataCache.clear();
 			canvasRenderer?.clear();
-			const tc = document.getElementById('thumbnails-container');
-			if (tc) tc.innerHTML = '';
+			sidebar?.clearThumbnails();
 			break;
 		}
 
@@ -274,12 +273,12 @@ async function handleLoadPDF(message: Record<string, unknown>) {
 		return;
 	}
 
-	// Clear stale thumbnails immediately so old content never persists
-	const thumbnailsContainer = document.getElementById('thumbnails-container');
-	if (thumbnailsContainer) thumbnailsContainer.innerHTML = '';
+	// Clear stale thumbnails immediately so old content never persists.
+	// Also tears down the previous document's observer + render queue.
+	sidebar?.clearThumbnails();
 
 	try {
-		preloadStrategy = (message.preloadStrategy as string) || 'all';
+		preloadStrategy = (message.preloadStrategy as string) || 'adjacent';
 		const startPage = (message.startPage as number) || 1;
 		const skipPreload = (message.skipPreload as boolean) || false;
 
@@ -320,11 +319,11 @@ async function handleLoadPDF(message: Record<string, unknown>) {
 		currentPage = Math.max(1, Math.min(startPage, pageCount));
 		scale = 0.8;
 
-		// Generate thumbnails + outline via WASM
+		// Thumbnails (lazy placeholders) + outline via WASM
 		try {
-			await generateThumbnails();
+			setupThumbnails();
 		} catch (thumbErr) {
-			console.error('[PDF Viewer] Thumbnail generation failed:', thumbErr);
+			console.error('[PDF Viewer] Thumbnail setup failed:', thumbErr);
 		}
 		try {
 			await extractOutline();
@@ -472,12 +471,18 @@ async function renderPage(pageNum: number) {
 
 // ==================== PRELOADING ====================
 
+// NOTE: 'all' is no longer sent by the extension host (it preloads every page at
+// full scale — unusable for large documents). Kept for compatibility, with a yield
+// per page so it can never hard-block the main thread if re-enabled.
 async function preloadAllPages() {
 	if (!pdfRenderer) return;
 	const maxPages = Math.min(pageCount, 500);
+	const loadingUri = loadedPdfUri;
 	console.log(`[PDF Viewer] Preloading ${maxPages} pages...`);
 
 	for (let i = 1; i <= maxPages; i++) {
+		// Abandon if another document was loaded meanwhile
+		if (loadedPdfUri !== loadingUri || !pdfRenderer) return;
 		if (imageDataCache.has(i)) continue;
 		try {
 			const dims = pageDimensions[i - 1];
@@ -489,6 +494,8 @@ async function preloadAllPages() {
 		} catch (e) {
 			console.error(`[PDF Viewer] Failed to preload page ${i}:`, e);
 		}
+		// Yield to the browser between pages
+		await new Promise(resolve => setTimeout(resolve, 0));
 	}
 	console.log(`[PDF Viewer] Preload complete`);
 }
@@ -525,37 +532,25 @@ function preloadAdjacentPages(centerPage: number) {
 
 // ==================== THUMBNAILS & OUTLINE ====================
 
-async function generateThumbnails() {
+function setupThumbnails() {
 	if (!pdfRenderer || !sidebar) return;
 
-	console.log(`[PDF Viewer] Generating thumbnails for ${pageCount} pages, uri: ${loadedPdfUri}`);
+	console.log(`[PDF Viewer] Creating ${pageCount} thumbnail placeholders, uri: ${loadedPdfUri}`);
 
-	const thumbnails: Array<{ pageNum: number; imageData: ImageData }> = [];
-	const batchSize = 5;
-
-	for (let i = 1; i <= pageCount; i += batchSize) {
-		for (let j = i; j < Math.min(i + batchSize, pageCount + 1); j++) {
-			try {
-				const img = pdfRenderer.render_thumbnail(j - 1, 150);
-				// Copy pixel data immediately — pdfium's WASM buffer is reused
-				// across renders, so without a copy all ImageData objects would
-				// reference the same (last-rendered) page.
-				const copy = new ImageData(
-					new Uint8ClampedArray(img.data),
-					img.width,
-					img.height
-				);
-				thumbnails.push({ pageNum: j, imageData: copy });
-			} catch (e) {
-				console.error(`[PDF Viewer] Failed to generate thumbnail for page ${j}:`, e);
-			}
-		}
-
-		// Yield to browser
-		await new Promise(resolve => setTimeout(resolve, 0));
-	}
-
-	sidebar.setThumbnails(thumbnails, currentPage);
+	// Placeholders appear instantly; the sidebar rasterizes tiles lazily via
+	// IntersectionObserver + one-per-frame queue (all rasterization stays in WASM).
+	sidebar.setThumbnailPlaceholders(pageCount, pageDimensions, currentPage, (pageNum: number) => {
+		if (!pdfRenderer) return null;
+		const img = pdfRenderer.render_thumbnail(pageNum - 1, 150);
+		// Copy pixel data immediately — pdfium's WASM buffer is reused across
+		// renders, so without a copy all ImageData objects would reference the
+		// same (last-rendered) page.
+		return new ImageData(
+			new Uint8ClampedArray(img.data),
+			img.width,
+			img.height
+		);
+	});
 }
 
 async function extractOutline() {
