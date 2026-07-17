@@ -1,0 +1,13 @@
+.vscode/**
+src/**
+webview-src/**
+package-lock.json
+tsconfig.json
+tsconfig.tsbuildinfo
+esbuild.mjs
+**/*.md
+!README.md
+out/**
+**/*.map
+**/*.ts
+!media/**/*.d.ts

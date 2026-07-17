@@ -1,0 +1,57 @@
+{
+  "name": "safeappeals-documents",
+  "displayName": "Safe Appeals Documents",
+  "description": "PDF (and future DOCX/XLSX) custom editors for Safe Appeals",
+  "version": "1.0.0",
+  "publisher": "safeappeals",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.70.0"
+  },
+  "main": "./out/extension.js",
+  "categories": [
+    "Other"
+  ],
+  "extensionKind": [
+    "workspace"
+  ],
+  "activationEvents": [
+    "onCustomEditor:safeappeals.pdfViewer"
+  ],
+  "capabilities": {
+    "virtualWorkspaces": true,
+    "untrustedWorkspaces": {
+      "supported": true
+    }
+  },
+  "contributes": {
+    "customEditors": [
+      {
+        "viewType": "safeappeals.pdfViewer",
+        "displayName": "Safe Appeals PDF Viewer",
+        "selector": [
+          {
+            "filenamePattern": "*.pdf"
+          }
+        ],
+        "priority": "default"
+      }
+    ],
+    "commands": [
+      {
+        "command": "safeappeals-documents.pdf.exportAnnotations",
+        "title": "Export PDF Annotations",
+        "category": "Safe Appeals Documents"
+      }
+    ]
+  },
+  "scripts": {
+    "compile": "npm run build-webview && gulp compile-extension:safeappeals-documents",
+    "watch": "npm run watch-webview",
+    "build-webview": "node ./esbuild.mjs",
+    "watch-webview": "node ./esbuild.mjs --watch"
+  },
+  "devDependencies": {
+    "@types/node": "24.x"
+  }
+}
