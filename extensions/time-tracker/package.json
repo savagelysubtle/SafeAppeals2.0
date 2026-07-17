@@ -142,8 +142,14 @@
     "watch": "gulp watch-extension:time-tracker",
     "lint": "eslint src --ext ts"
   },
+  "dependencies": {
+    "better-sqlite3": "12.11.1"
+  },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.8",
     "@types/node": "24.x"
+  },
+  "allowScripts": {
+    "better-sqlite3@12.11.1": true
   }
 }
