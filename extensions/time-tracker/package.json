@@ -138,11 +138,12 @@
     }
   },
   "scripts": {
-    "compile": "tsc -p ./",
-    "watch": "tsc -watch -p ./",
+    "compile": "gulp compile-extension:time-tracker",
+    "watch": "gulp watch-extension:time-tracker",
     "lint": "eslint src --ext ts"
   },
   "devDependencies": {
-    "@types/better-sqlite3": "^7.6.8"
+    "@types/better-sqlite3": "^7.6.8",
+    "@types/node": "24.x"
   }
 }
