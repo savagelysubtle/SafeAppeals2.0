@@ -6,6 +6,7 @@
 import { localize } from '../../../../nls.js';
 import { isMacintosh } from '../../../../base/common/platform.js';
 import { IProductOnboardingTheme } from '../../../../base/common/product.js';
+import product from '../../../../platform/product/common/product.js';
 
 /**
  * Step identifiers for the onboarding walkthrough.
@@ -39,7 +40,8 @@ export function getOnboardingStepTitle(stepId: OnboardingStepId): string {
 export function getOnboardingStepSubtitle(stepId: OnboardingStepId): string {
 	switch (stepId) {
 		case OnboardingStepId.SignIn:
-			return localize('onboarding.step.signIn.subtitle', "Sync settings, unlock AI features, and connect to GitHub");
+			// SafeAppeals
+			return localize('onboarding.step.signIn.subtitle', "Sync settings and unlock AI features in {0}", product.nameLong);
 		case OnboardingStepId.Personalize:
 			return localize('onboarding.step.personalize.subtitle', "Choose your theme and keyboard mapping");
 		case OnboardingStepId.AiPreference:
@@ -52,11 +54,16 @@ export function getOnboardingStepSubtitle(stepId: OnboardingStepId): string {
 /**
  * Ordered step IDs for the onboarding flow.
  */
-export const ONBOARDING_STEPS: readonly OnboardingStepId[] = [
+const ALL_ONBOARDING_STEPS: readonly OnboardingStepId[] = [
 	OnboardingStepId.SignIn,
 	OnboardingStepId.Personalize,
 	OnboardingStepId.AgentSessions,
 ];
+
+/** SafeAppeals: honor product.json onboardingSkipSignInStep to omit the Copilot sign-in step. */
+export const ONBOARDING_STEPS: readonly OnboardingStepId[] = product.onboardingSkipSignInStep
+	? ALL_ONBOARDING_STEPS.filter(step => step !== OnboardingStepId.SignIn)
+	: ALL_ONBOARDING_STEPS;
 
 /**
  * Theme option for the onboarding personalization step.

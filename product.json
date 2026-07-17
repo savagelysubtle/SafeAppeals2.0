@@ -172,10 +172,11 @@
 			"GitHub.copilot-chat"
 		]
 	},
+	"onboardingSkipSignInStep": true,
 	"onboardingKeymaps": [
 		{
 			"id": "vscode",
-			"label": "VS Code",
+			"label": "Safe Appeals",
 			"description": "Default keyboard mapping"
 		},
 		{

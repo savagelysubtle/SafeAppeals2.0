@@ -268,6 +268,8 @@ export interface IProductConfiguration {
 
 	readonly onboardingKeymaps?: readonly IProductOnboardingKeymap[];
 	readonly onboardingThemes?: readonly IProductOnboardingTheme[];
+	/** When true, first-run onboarding skips the sign-in step (chat/auth infra remains available). */
+	readonly onboardingSkipSignInStep?: boolean;
 
 	/**
 	 * When running as an embedded app, the parent VS Code's policy
