@@ -6,7 +6,7 @@ overview:
   infrastructure (chat, chat editing, inline chat, inline completions, tools,
   MCP, browserView) and register SafeAppeals providers into it; rewrite the
   legal-domain product into contrib/safeappeals or as new built-in extensions
-  (documents/docusign/calendar/email — see D.2), each feature written once in
+  (documents/calendar/email — see D.2; DocuSign dropped), each written once in
   its final home using void-reference/ as the logic source. This file is
   the full disposition inventory: every fork asset classified as
   replace / bolt-on / rewrite-in-contrib / extension / retire / defer."
@@ -34,8 +34,8 @@ todos:
     content: "Phase 3: rewrite domain features into contrib/safeappeals (D) "
     status: pending
   - id: phase3b-new-extensions
-    content: "Phase 3 (parallel): write safeappeals-documents / -docusign /
-      -calendar / -email as new built-in extensions (D.2)"
+    content: "Phase 3 (parallel): write safeappeals-documents / -calendar /
+      -email as new built-in extensions (D.2; DocuSign dropped)"
     status: pending
   - id: phase4-appts-channels
     content: "Phase 4: port reduced app.ts channel set (~15 of 20)"
@@ -278,14 +278,15 @@ Browser/common/electron-main triads, with their channels (see G):
   common) + `timelineExportChannel` — name-collision note: upstream
   `contrib/timeline` = file history; keep Void IDs distinct
 - Calendar: `calendar/` + calendar channel (Google sync)
-- DocuSign: `docuSign/`, `common/docuSign`, `docuSignChannel`,
-  `docusign-esign.d.ts`, `devAuthServer`
+- ~~DocuSign~~ — DROPPED (see D.2); `devAuthServer` is cloud dev-auth, moves
+  with Cloud below
 - Files: `fileOrganizer/` + `fileOrgContextService`, `fileConverter/` +
   `fileConverterChannel`, `browser/fileService`
 - Audio: `audioRecorder/` (browser/common/electron-main) — evaluate vs
   upstream `speech`/`agentsVoice` AFTER migration; port first
-- Cloud: `voidCloudService/AuthProvider/UrlHandler/Actions`,
-  `common/voidCloudTypes`, `rateLimiter`, metrics
+- Cloud: `voidCloudService/AuthProvider/UrlHandler/Actions` (URL handler
+  rewritten WITHOUT DocuSign OAuth branches), `common/voidCloudTypes`,
+  `devAuthServer`, `rateLimiter`, metrics
   (`metricsService/PollService/MainService`), update
   (`voidUpdateService/MainService`, `voidUpdateActions`)
 - Settings: `voidSettingsService` + `voidSettingsPane` + `react/void-settings-tsx`
@@ -316,10 +317,17 @@ auth providers/URI handlers.
 - `safeappeals-documents` — PDF/DOCX/XLSX custom editors + `edit_document`
   + extract LM tools in the same extension (agent reads/edits docs through
   it); creator/export commands
-- `safeappeals-docusign` — OAuth via `onUri`, REST from ext host
 - `safeappeals-calendar` — background sync + settings
 - `safeappeals-email` — IMAP/SMTP in ext host, webview dashboard,
   classifier via `vscode.lm`; case links via commands
+
+**DROPPED from migration (Jul 17): DocuSign** — no partnership agreement,
+can't ship their integration until their requirements are met. Do NOT
+migrate `docuSign/` (browser/common), `docuSignChannel`,
+`docusign-esign.d.ts`, or the DocuSign OAuth handling inside the cloud URL
+handler (strip it during the cloud rewrite). Code remains in
+`void-reference/` if partnership lands later; would return as a
+`safeappeals-docusign` extension.
 
 **Stay in contrib (reasons):** integration layer (in-process registries),
 cloud auth/credits/update/metrics (LM provider consumes session
@@ -361,14 +369,22 @@ timeline/RAG-as-MCP/audio placement after the dust settles."
 
 ## G. app.ts channels — reduced set (was 20)
 
-KEEP (~15): `llmMessage`, `rag`, `pdf-extractor`, `docx-extractor`,
-`xlsx-extractor`, `docx-creator`, `file-converter`, `brave-search`,
-`timeline-export`, `calendar`, `docusign`, `document-export`, `email`,
-`audio-recorder`, `metrics`, `update`, `scm` (audit: metrics/update/scm may
-slim later).
+KEEP: `llmMessage`, `rag`, `file-converter`, `brave-search`,
+`timeline-export`, `audio-recorder`, `metrics`, `update`, `scm` (audit:
+metrics/update/scm may slim later).
 
 DROP: `mcp` (upstream), `browser-panel` (upstream), `chat-threads` (upstream
-persistence; keep read-only access for Phase 6 import).
+persistence; keep read-only access for Phase 6 import), `docusign` (feature
+dropped, D.2).
+
+MOVED TO EXT HOST via D.2 extensions (no app.ts channel needed): `calendar`,
+`email`, `document-export`, `docx-creator`, and in principle the extractors
+(`pdf-extractor`, `docx-extractor`, `xlsx-extractor`) — OPEN DESIGN POINT
+(Phase 3): RAG's main-process indexer also consumes extraction. Either keep
+extractor channels alive for RAG (extension does its own extraction in ext
+host; some duplication) or move extraction fully to the documents extension
+and let RAG request it via command/tool bridge. Decide when RAG is
+rewritten.
 
 DEFER: `cloud-proxy`, `growth-writer` (exist only on
 `feat-blog-writer-extension`; decide after that branch lands).
