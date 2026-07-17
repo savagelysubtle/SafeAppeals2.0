@@ -21,39 +21,50 @@ todos:
     content: "Phase 0: overlay from main; move old code to void-reference/;
       scaffold contrib/safeappeals hub"
     status: completed
-  - id: phase1-branding-build
-    content: "Phase 1: product.json branding + Copilot strip; themes + utility
-      extensions; buildreact wiring into gulpfile.mjs build"
+  - id: rung1-time-tracker
+    content: "Rung 1: time-tracker extension builds + loads on 1.129"
     status: pending
-  - id: phase2-ai-boltons
-    content:
-      "Phase 2: contrib/safeappeals/browser/integration — LM providers, default
-      chat agent (panel + EditorInline), InlineCompletionsProvider, LM tools"
+  - id: rung2-themes
+    content: "Rung 2: theme-safeappeals packs + product.json entries + default theme"
     status: pending
-  - id: phase3-domain-port
-    content: "Phase 3: rewrite domain features into contrib/safeappeals (D) "
+  - id: rung3-branding
+    content: "Rung 3: branding pass — product.json identity, appealsIcons, blank defaultChatAgent"
     status: pending
-  - id: phase3b-new-extensions
-    content: "Phase 3 (parallel): write safeappeals-documents / -calendar /
-      -email as new built-in extensions (D.2; DocuSign dropped)"
+  - id: rung4-calendar-ext
+    content: "Rung 4: NEW safeappeals-calendar extension (from-scratch template)"
     status: pending
-  - id: phase4-appts-channels
-    content: "Phase 4: port reduced app.ts channel set (~15 of 20)"
+  - id: rung5-documents-ext
+    content: "Rung 5: NEW safeappeals-documents extension (PDF/DOCX/XLSX custom editors)"
     status: pending
-  - id: phase5-compile-native
-    content:
-      "Phase 5: bun install vs new Electron/Node pins; native module rebuilds;
-      full compile + smoke test"
+  - id: rung6-email-ext
+    content: "Rung 6: NEW safeappeals-email extension (classifier deferred to rung 12)"
     status: pending
-  - id: phase6-data-migrations
-    content:
-      "Phase 6: chat-thread → ChatSessionStore import; MCP config → .mcp.json;
-      settings key carry-over"
+  - id: rung7-contrib-foundation
+    content: "Rung 7: contrib foundation — settings service, storage keys, hub activation"
     status: pending
-  - id: phase7-placement-review
-    content:
-      "Phase 7 (post-migration): placement review (timeline → extension?,
-      RAG → local MCP server?, audio); delete void-reference/"
+  - id: rung8-fileorganizer
+    content: "Rung 8: file organizer + converter (explorer hook, first app.ts channel)"
+    status: pending
+  - id: rung9-timeline-caseinfo
+    content: "Rung 9: timeline + case info (wire buildreact here)"
+    status: pending
+  - id: rung10-rag
+    content: "Rung 10: RAG (native deps, extractor decision, rag channel)"
+    status: pending
+  - id: rung11-audio
+    content: "Rung 11: audio recorder (ffmpeg/whisper)"
+    status: pending
+  - id: rung12-ai-integration
+    content: "Rung 12: AI integration layer BYOK — providers, agent loop, completions, tools"
+    status: pending
+  - id: rung13-cloud
+    content: "Rung 13: cloud — auth/credits + server SSE/tool_calls/models + cloud vendor"
+    status: pending
+  - id: rung14-migrations-packaging
+    content: "Rung 14: data migrations + packaging/CI + remaining core edits"
+    status: pending
+  - id: rung15-placement-review
+    content: "Rung 15: placement review; delete void-reference/"
     status: pending
 isProject: false
 ---
@@ -430,31 +441,80 @@ OBSOLETE (do NOT re-apply):
 | Browser sessions   | `persist:void-browser-v2`                       | `persist:vscode-browser` (accept cookie loss)                                                                                                      |
 | Keybindings        | Cmd+K quick edit                                | map to `inlineChat.start` in defaults                                                                                                              |
 
-## J. Phase order & gates
+## J. Execution ladder — one feature at a time (settled Jul 17)
 
-- **Phase 0** prep: wipe residual `contrib/void` from disk; commit checkpoint.
-- **Phase 1** branding/build: product.json (branding + blank
-  `defaultChatAgent` + theme entries), icons, themes/utility extensions,
-  `buildreact` into ESM build, package.json deps. GATE: upstream-clean build
-  still compiles + runs branded.
-- **Phase 2** AI bolt-on: integration layer (C) + `llmMessage` channel only.
-  Includes cloud-as-18th-impl + the void-cloud server upgrade (SSE streaming,
-  native tool_calls, `/models`) — server work can start in parallel with
-  Phase 1 since it's a separate deployable. GATE: native chat panel answers
-  via BOTH vendors (cloud streaming + BYOK); inline chat works; ghost text
-  appears; agent mode executes a native tool call end-to-end.
-- **Phase 3** domain overlay (D): sub-feature at a time, compile-fix loop.
-  GATE: each feature's views/editors open.
-- **Phase 4** remaining channels (G) + H re-applies.
-- **Phase 5** native/Electron: rebuild sqlite/whisper/sharp/WASM against new
-  ABI; packaging; CI (`build-release.yml` vs upstream expectations). GATE:
-  packaged build runs on Windows.
-- **Phase 6** data migrations (I).
-- **Phase 3 note**: extension-targeted features (D.2) are written directly
-  as extensions; contrib-targeted features directly in contrib/safeappeals.
-- **Phase 7** (repurposed): post-migration placement review — timeline →
-  extension?, RAG → local MCP server?, audio recorder → extension/speech?;
-  delete `void-reference/`.
+Working rule: **a feature is not "done" until it runs properly in the dev
+build; only then start the next one.** Each rung carries its own wiring
+(its channel, its build step, its contribution/extension registration, its
+core-hook edits) — there is no big-bang integration phase. Order is
+easiest-first to rebuild familiarity (extensions before contrib, contrib
+before cloud/agents). Native-dependency features are deliberately late.
+
+Ladder (start at 1):
+
+1. **`time-tracker` extension** — already extension-shaped; make it build +
+   load on 1.129. Smallest possible win; teaches the 1.129 extension build.
+   DONE: appears in extensions view, tracks time in dev build.
+2. **Themes** — `theme-safeappeals*` + product.json theme entries
+   (`color-themes-product-json-entries.txt`) + default-theme core edit
+   (`workbenchThemeService.ts`). DONE: SafeAppeals theme is the default,
+   all packs selectable.
+3. **Branding pass (mini Phase 1)** — product.json identity, `appealsIcons/`
+   swaps (6 CSS files + build icons), blank `defaultChatAgent` (hides
+   Copilot chrome; native chat stays empty-but-present for now).
+   DONE: dev build launches as Safe Appeals with no Copilot nags.
+4. **`safeappeals-calendar` extension (NEW)** — first from-scratch
+   extension; Google OAuth + background sync + settings. Small surface,
+   establishes the new-extension template (esbuild, package.json contribs).
+   DONE: connects, syncs, settings work.
+5. **`safeappeals-documents` extension (NEW)** — the big product piece:
+   PDF/DOCX/XLSX custom editors (webviews, React inside the webview — no
+   scope-tailwind needed), creator/export commands. LM tools included but
+   inert until rung 12. DONE: all three formats open/render/save; Open With
+   works.
+6. **`safeappeals-email` extension (NEW)** — IMAP/SMTP, dashboard webview,
+   threads/drafts. Classifier SKIPPED until rung 12 (needs LM). DONE: send/
+   receive/dashboard against a real account.
+7. **Contrib foundation + settings** — `safeappealsSettings` service
+   (slimmed voidSettings; keys keep `void*` values), storage keys, action
+   IDs, helper services; first workbench.common.main.ts hub activation.
+   DONE: settings pane opens, values persist across restart.
+8. **File organizer + converter (contrib)** — includes `explorerViewer.ts`
+   core hook (first core-file edit) + `file-converter` channel (first
+   app.ts channel, establishes the channel-wiring pattern). DONE: organizer
+   view + conversions work.
+9. **Timeline + case info (contrib)** — first contrib React UIs: wire
+   `buildreact` (tsup/scope-tailwind) into the ESM build here, not earlier.
+   + `timeline-export` channel. DONE: case dashboard + timeline render,
+   export produces PDF.
+10. **RAG (contrib)** — native sqlite/embeddings + python backend +
+    extractor decision (G open point) + `rag` channel. First native-ABI
+    exposure on Electron ~42. DONE: index a case folder, search returns
+    results.
+11. **Audio recorder (contrib)** — ffmpeg/whisper natives, `audio-recorder`
+    channel. DONE: record → transcript.
+12. **AI integration layer (contrib) — BYOK first** — `llmMessage` channel +
+    SDK impls; `safeappealsLMProviders` (BYOK vendor), `safeappealsChatAgent`
+    (loop, C.2), `safeappealsCompletions`, `safeappealsTools` (RAG/timeline/
+    doc/web tools now go live; email classifier unblocked). DONE: Phase-2
+    gate minus cloud — chat answers via BYOK, inline chat, ghost text,
+    native tool call end-to-end.
+13. **Cloud (contrib + server)** — auth provider/URL handler (no DocuSign),
+    credits, metrics/update; server work (SSE, native tool_calls, `/models`)
+    can run in parallel any time after rung 4; cloud vendor + 18th impl land
+    here. DONE: sign in, cloud models in picker, streamed cloud chat with
+    credits decrementing.
+14. **Data migrations (I)** + packaging/CI (`build-release.yml`), remaining
+    H re-applies (watermark, keybinding weight, telemetry, encryption),
+    `open-remote-*` verdict. DONE: packaged Windows build, old user data
+    migrates.
+15. **Placement review (old Phase 7)** — timeline → extension?, RAG → local
+    MCP server?, audio → speech?; delete `void-reference/`.
+
+Parallelism notes: the void-cloud server upgrade (rung 13's prerequisite)
+is a separate deployable — start it whenever convenient. Rungs 4–6 are
+independent of each other if a break from one is needed, but finish each
+before starting the next per the working rule.
 
 ## K. Risks
 
