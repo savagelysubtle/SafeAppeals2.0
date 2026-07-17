@@ -1,0 +1,119 @@
+{
+  "name": "safeappeals-calendar",
+  "displayName": "Safe Appeals Calendar",
+  "description": "Google Calendar and Outlook sync for Safe Appeals (extension-host OAuth + background sync)",
+  "version": "1.0.0",
+  "publisher": "safeappeals",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.70.0"
+  },
+  "main": "./out/extension.js",
+  "categories": [
+    "Other"
+  ],
+  "extensionKind": [
+    "workspace"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "capabilities": {
+    "virtualWorkspaces": false,
+    "untrustedWorkspaces": {
+      "supported": false
+    }
+  },
+  "contributes": {
+    "commands": [
+      {
+        "command": "safeappeals-calendar.connect",
+        "title": "Connect Calendar Provider",
+        "category": "Safe Appeals Calendar"
+      },
+      {
+        "command": "safeappeals-calendar.disconnect",
+        "title": "Disconnect Calendar Provider",
+        "category": "Safe Appeals Calendar"
+      },
+      {
+        "command": "safeappeals-calendar.syncNow",
+        "title": "Sync Now",
+        "category": "Safe Appeals Calendar"
+      },
+      {
+        "command": "safeappeals-calendar.getEvents",
+        "title": "Get Events (range query)",
+        "category": "Safe Appeals Calendar"
+      },
+      {
+        "command": "safeappeals-calendar.status",
+        "title": "Show Sync Status",
+        "category": "Safe Appeals Calendar"
+      }
+    ],
+    "configuration": {
+      "title": "Safe Appeals Calendar",
+      "properties": {
+        "safeappealsCalendar.enabledProviders": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "google",
+              "outlook"
+            ]
+          },
+          "default": [
+            "google",
+            "outlook"
+          ],
+          "description": "Calendar providers available for connect/sync"
+        },
+        "safeappealsCalendar.syncIntervalMinutes": {
+          "type": "number",
+          "default": 15,
+          "minimum": 1,
+          "description": "Background sync interval in minutes"
+        },
+        "safeappealsCalendar.google.clientId": {
+          "type": "string",
+          "default": "",
+          "description": "Google OAuth client ID (falls back to GOOGLE_CALENDAR_CLIENT_ID env)"
+        },
+        "safeappealsCalendar.google.clientSecret": {
+          "type": "string",
+          "default": "",
+          "description": "Google OAuth client secret (falls back to GOOGLE_CALENDAR_CLIENT_SECRET env)"
+        },
+        "safeappealsCalendar.google.calendarId": {
+          "type": "string",
+          "default": "primary",
+          "description": "Google Calendar ID to sync"
+        },
+        "safeappealsCalendar.outlook.clientId": {
+          "type": "string",
+          "default": "",
+          "description": "Microsoft/Outlook OAuth client ID (falls back to OUTLOOK_CLIENT_ID env)"
+        },
+        "safeappealsCalendar.outlook.tenantId": {
+          "type": "string",
+          "default": "common",
+          "description": "Azure AD tenant ID (falls back to OUTLOOK_TENANT_ID env; default common)"
+        },
+        "safeappealsCalendar.outlook.calendarId": {
+          "type": "string",
+          "default": "primary",
+          "description": "Outlook calendar ID to sync (primary = default calendar)"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "gulp compile-extension:safeappeals-calendar",
+    "watch": "gulp watch-extension:safeappeals-calendar"
+  },
+  "devDependencies": {
+    "@types/node": "24.x"
+  }
+}

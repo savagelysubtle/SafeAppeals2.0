@@ -1,0 +1,7 @@
+.vscode
+src/
+package-lock.json
+tsconfig.json
+*.md
+!README.md
+tsconfig.tsbuildinfo
