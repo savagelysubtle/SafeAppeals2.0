@@ -1,9 +1,13 @@
 /**
- * Bundle webview TypeScript to media PDF/DOCX IIFE bundles.
+ * Bundle webview TypeScript to media PDF/DOCX/XLSX IIFE bundles.
  *
  * Usage:
  *   node esbuild.mjs
  *   node esbuild.mjs --watch
+ *
+ * XLSX: main-thread WASM (worker.ts unused). WASM binary is NOT bundled —
+ * loaded at runtime from media/xlsx/wasm/xlsx_rust_viewer_bg.wasm.
+ * Rust source (reference only): void-reference/.../xlsxRustViewer/wasm/src
  */
 import { build, context } from 'esbuild';
 import { dirname, resolve } from 'path';
@@ -42,12 +46,22 @@ const builds = [
 		mainFields: ['browser', 'module', 'main'],
 		conditions: ['browser'],
 	},
+	{
+		...shared,
+		entryPoints: [resolve(__dirname, 'webview-src/xlsx/main.ts')],
+		outfile: resolve(__dirname, 'media/xlsx/xlsxViewer.js'),
+		loader: {
+			'.js': 'js',
+		},
+		mainFields: ['browser', 'module', 'main'],
+		conditions: ['browser'],
+	},
 ];
 
 if (isWatch) {
 	const contexts = await Promise.all(builds.map(opts => context(opts)));
 	await Promise.all(contexts.map(ctx => ctx.watch()));
-	console.log('[safeappeals-documents] Watching webview-src/pdf + webview-src/docx...');
+	console.log('[safeappeals-documents] Watching webview-src/pdf + docx + xlsx...');
 } else {
 	for (const opts of builds) {
 		await build(opts);

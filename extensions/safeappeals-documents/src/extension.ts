@@ -7,6 +7,7 @@ import * as vscode from 'vscode';
 import { DocxEditorProvider } from './docx/docxEditorProvider';
 import { PdfAnnotationStore } from './pdf/annotationStore';
 import { PdfEditorProvider } from './pdf/pdfEditorProvider';
+import { XlsxEditorProvider } from './xlsx/xlsxEditorProvider';
 
 export function activate(context: vscode.ExtensionContext): void {
 	const annotationStore = new PdfAnnotationStore(context);
@@ -15,6 +16,7 @@ export function activate(context: vscode.ExtensionContext): void {
 	context.subscriptions.push(
 		PdfEditorProvider.register(context, annotationStore),
 		DocxEditorProvider.register(context),
+		XlsxEditorProvider.register(context),
 	);
 
 	context.subscriptions.push(

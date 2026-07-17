@@ -1,7 +1,7 @@
 {
   "name": "safeappeals-documents",
   "displayName": "Safe Appeals Documents",
-  "description": "PDF and DOCX (future XLSX) custom editors for Safe Appeals",
+  "description": "PDF, DOCX, and XLSX custom editors for Safe Appeals",
   "version": "1.0.0",
   "publisher": "safeappeals",
   "license": "MIT",
@@ -17,7 +17,8 @@
   ],
   "activationEvents": [
     "onCustomEditor:safeappeals.pdfViewer",
-    "onCustomEditor:safeappeals.docxViewer"
+    "onCustomEditor:safeappeals.docxViewer",
+    "onCustomEditor:safeappeals.xlsxViewer"
   ],
   "capabilities": {
     "virtualWorkspaces": true,
@@ -43,6 +44,19 @@
         "selector": [
           {
             "filenamePattern": "*.docx"
+          }
+        ],
+        "priority": "default"
+      },
+      {
+        "viewType": "safeappeals.xlsxViewer",
+        "displayName": "Safe Appeals XLSX Editor",
+        "selector": [
+          {
+            "filenamePattern": "*.xlsx"
+          },
+          {
+            "filenamePattern": "*.xls"
           }
         ],
         "priority": "default"
@@ -83,6 +97,7 @@
     "@types/pica": "^9.0.5",
     "@types/react": "^18.3.31",
     "@types/react-dom": "^18.3.7",
+    "chart.js": "^4.5.1",
     "docx": "^9.7.1",
     "docx-preview": "^0.3.7",
     "esbuild": "^0.25.0",
