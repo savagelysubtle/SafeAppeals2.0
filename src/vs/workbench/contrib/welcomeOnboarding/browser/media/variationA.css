@@ -288,7 +288,7 @@
 	border: none;
 	background: transparent;
 	box-shadow: none;
-	background-image: url('../../../../browser/media/logo_cube_noshadow.png');
+	background-image: url('../../../../browser/media/logo_cube_noshadow.png'); /* SafeAppeals */
 	background-repeat: no-repeat;
 	background-position: center center;
 	background-size: 148px;
