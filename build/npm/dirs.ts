@@ -51,6 +51,8 @@ export const dirs = [
 	'extensions/time-tracker',
 	'extensions/safeappeals-calendar',
 	'extensions/safeappeals-documents',
+	'extensions/safeappeals-email',
+
 	'extensions/typescript-language-features',
 	'extensions/vscode-api-tests',
 	'extensions/vscode-colorize-tests',

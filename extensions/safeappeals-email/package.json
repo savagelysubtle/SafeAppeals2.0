@@ -1,0 +1,281 @@
+{
+  "name": "safeappeals-email",
+  "displayName": "Safe Appeals Email",
+  "description": "IMAP/SMTP email, threads, drafts, and dashboard for Safe Appeals (extension host)",
+  "version": "1.0.0",
+  "publisher": "safeappeals",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.70.0"
+  },
+  "main": "./out/extension.js",
+  "categories": [
+    "Other"
+  ],
+  "extensionKind": [
+    "workspace"
+  ],
+  "activationEvents": [
+    "onStartupFinished",
+    "onCustomEditor:safeappeals.emlViewer"
+  ],
+  "capabilities": {
+    "virtualWorkspaces": false,
+    "untrustedWorkspaces": {
+      "supported": false
+    }
+  },
+  "contributes": {
+    "commands": [
+      {
+        "command": "safeappeals-email.openDashboard",
+        "title": "Open Email Dashboard",
+        "category": "Safe Appeals Email",
+        "icon": "$(mail)"
+      },
+      {
+        "command": "safeappeals-email.addAccount",
+        "title": "Add Email Account",
+        "category": "Safe Appeals Email"
+      },
+      {
+        "command": "safeappeals-email.removeAccount",
+        "title": "Remove Email Account",
+        "category": "Safe Appeals Email"
+      },
+      {
+        "command": "safeappeals-email.listAccounts",
+        "title": "List Email Accounts",
+        "category": "Safe Appeals Email"
+      },
+      {
+        "command": "safeappeals-email.syncNow",
+        "title": "Sync Now",
+        "category": "Safe Appeals Email"
+      },
+      {
+        "command": "safeappeals-email.syncStatus",
+        "title": "Show Sync Status",
+        "category": "Safe Appeals Email"
+      },
+      {
+        "command": "safeappeals-email.listFolders",
+        "title": "List Folders",
+        "category": "Safe Appeals Email"
+      },
+      {
+        "command": "safeappeals-email.listThreads",
+        "title": "List Threads",
+        "category": "Safe Appeals Email"
+      },
+      {
+        "command": "safeappeals-email.getThread",
+        "title": "Get Thread",
+        "category": "Safe Appeals Email"
+      },
+      {
+        "command": "safeappeals-email.getMessage",
+        "title": "Get Message Body",
+        "category": "Safe Appeals Email"
+      },
+      {
+        "command": "safeappeals-email.send",
+        "title": "Send Email",
+        "category": "Safe Appeals Email"
+      },
+      {
+        "command": "safeappeals-email.saveDraft",
+        "title": "Save Draft",
+        "category": "Safe Appeals Email"
+      },
+      {
+        "command": "safeappeals-email.listDrafts",
+        "title": "List Drafts",
+        "category": "Safe Appeals Email"
+      },
+      {
+        "command": "safeappeals-email.getDraft",
+        "title": "Get Draft",
+        "category": "Safe Appeals Email"
+      },
+      {
+        "command": "safeappeals-email.updateDraftStatus",
+        "title": "Update Draft Status",
+        "category": "Safe Appeals Email"
+      },
+      {
+        "command": "safeappeals-email.parseEml",
+        "title": "Parse EML File",
+        "category": "Safe Appeals Email"
+      },
+      {
+        "command": "safeappeals-email.searchEmails",
+        "title": "Search Emails",
+        "category": "Safe Appeals Email"
+      },
+      {
+        "command": "safeappeals-email.toggleStar",
+        "title": "Toggle Star",
+        "category": "Safe Appeals Email"
+      },
+      {
+        "command": "safeappeals-email.updateClassification",
+        "title": "Update Classification",
+        "category": "Safe Appeals Email"
+      },
+      {
+        "command": "safeappeals-email.getUnclassifiedEmails",
+        "title": "Get Unclassified Emails",
+        "category": "Safe Appeals Email"
+      },
+      {
+        "command": "safeappeals-email.getStats",
+        "title": "Get Email Stats",
+        "category": "Safe Appeals Email"
+      }
+    ],
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "safeappeals-email.openDashboard"
+        },
+        {
+          "command": "safeappeals-email.addAccount"
+        },
+        {
+          "command": "safeappeals-email.removeAccount"
+        },
+        {
+          "command": "safeappeals-email.syncNow"
+        },
+        {
+          "command": "safeappeals-email.syncStatus"
+        }
+      ]
+    },
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "safeappeals-email",
+          "title": "Email",
+          "icon": "$(mail)"
+        }
+      ]
+    },
+    "views": {
+      "safeappeals-email": [
+        {
+          "id": "safeappeals-email.sidebar",
+          "name": "Email",
+          "type": "webview"
+        }
+      ]
+    },
+    "customEditors": [
+      {
+        "viewType": "safeappeals.emlViewer",
+        "displayName": "Safe Appeals Email Viewer",
+        "selector": [
+          {
+            "filenamePattern": "*.eml"
+          }
+        ],
+        "priority": "default"
+      }
+    ],
+    "configuration": {
+      "title": "Safe Appeals Email",
+      "properties": {
+        "safeappealsEmail.syncIntervalMinutes": {
+          "type": "number",
+          "default": 15,
+          "minimum": 1,
+          "description": "Background IMAP sync interval in minutes"
+        },
+        "safeappealsEmail.defaultFolder": {
+          "type": "string",
+          "default": "INBOX",
+          "description": "Default IMAP folder to sync"
+        },
+        "safeappealsEmail.maxMessagesPerSync": {
+          "type": "number",
+          "default": 100,
+          "minimum": 10,
+          "maximum": 500,
+          "description": "Max messages to fetch headers for per folder sync"
+        },
+        "safeappealsEmail.accounts": {
+          "type": "array",
+          "default": [],
+          "description": "Non-secret account metadata (host/port/user). Passwords live in SecretStorage.",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "label": {
+                "type": "string"
+              },
+              "email": {
+                "type": "string"
+              },
+              "imapHost": {
+                "type": "string"
+              },
+              "imapPort": {
+                "type": "number"
+              },
+              "imapSecure": {
+                "type": "boolean"
+              },
+              "smtpHost": {
+                "type": "string"
+              },
+              "smtpPort": {
+                "type": "number"
+              },
+              "smtpSecure": {
+                "type": "boolean"
+              },
+              "username": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    },
+    "keybindings": [
+      {
+        "command": "safeappeals-email.openDashboard",
+        "key": "ctrl+shift+e",
+        "mac": "cmd+shift+e"
+      }
+    ]
+  },
+  "scripts": {
+    "compile": "npm run build-webview && gulp compile-extension:safeappeals-email",
+    "watch": "npm run watch-webview",
+    "build-webview": "node ./esbuild.mjs",
+    "watch-webview": "node ./esbuild.mjs --watch"
+  },
+  "dependencies": {
+    "imapflow": "^1.0.181",
+    "mailparser": "^3.7.2",
+    "nodemailer": "^6.10.1"
+  },
+  "devDependencies": {
+    "@types/mailparser": "^3.4.5",
+    "@types/node": "24.x",
+    "@types/nodemailer": "^6.4.17",
+    "@types/react": "^18.3.31",
+    "@types/react-dom": "^18.3.7",
+    "esbuild": "^0.25.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "allowScripts": {
+    "esbuild@0.25.12": true
+  }
+}
