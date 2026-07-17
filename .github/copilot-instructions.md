@@ -5,6 +5,7 @@
 Visual Studio Code is built with a layered architecture using TypeScript, web APIs and Electron, combining web technologies with native app capabilities. The codebase is organized into key architectural layers:
 
 ### Root Folders
+
 - `src/`: Main TypeScript source code with unit tests in `src/vs/*/test/` folders
 - `build/`: Build scripts and CI/CD tools
 - `extensions/`: Built-in extensions that ship with VS Code
@@ -14,6 +15,7 @@ Visual Studio Code is built with a layered architecture using TypeScript, web AP
 - `out/`: Compiled JavaScript output (generated during build)
 
 ### Core Architecture (`src/` folder)
+
 - `src/vs/base/` - Foundation utilities and cross-platform abstractions
 - `src/vs/platform/` - Platform services and dependency injection infrastructure
 - `src/vs/editor/` - Text editor implementation with language services, syntax highlighting, and editing features
@@ -27,14 +29,17 @@ Visual Studio Code is built with a layered architecture using TypeScript, web AP
 - `src/vs/sessions/` - Agent sessions window, a dedicated workbench layer for agentic workflows (sits alongside `vs/workbench`, may import from it but not vice versa)
 
 The core architecture follows these principles:
+
 - **Layered architecture** - from `base`, `platform`, `editor`, to `workbench`
 - **Dependency injection** - Services are injected through constructor parameters
-    - If non-service parameters are needed, they need to come before the service parameters
+  - If non-service parameters are needed, they need to come before the service parameters
 - **Contribution model** - Features contribute to registries and extension points
 - **Cross-platform compatibility** - Abstractions separate platform-specific code
 
 ### Built-in Extensions (`extensions/` folder)
+
 The `extensions/` directory contains first-party extensions that ship with VS Code:
+
 - **Language support** - `typescript-language-features/`, `html-language-features/`, `css-language-features/`, etc.
 - **Core features** - `git/`, `debug-auto-launch/`, `emmet/`, `markdown-language-features/`
 - **Themes** - `theme-*` folders for default color themes
@@ -43,6 +48,7 @@ The `extensions/` directory contains first-party extensions that ship with VS Co
 Each extension follows the standard VS Code extension structure with `package.json`, TypeScript sources, and contribution points to extend the workbench through the Extension API.
 
 ### Finding Related Code
+
 1. **Semantic search first**: Use file search for general concepts
 2. **Grep for exact strings**: Use grep for error messages or specific function names
 3. **Follow imports**: Check what files import the problematic module
@@ -56,12 +62,14 @@ MANDATORY: Always check for compilation errors before running any tests or valid
 - NEVER use `npm run compile` to compile TypeScript files
 
 ### TypeScript compilation steps
+
 - If the `#runTasks/getTaskOutput` tool is available, check the `VS Code - Build` watch task output for compilation errors. This task runs `Core - Build` and `Ext - Build` to incrementally compile VS Code TypeScript sources and built-in extensions. Start the task if it's not already running in the background.
 - If the tool is not available (e.g. in CLI environments) and you only changed code under `src/`, run `npm run typecheck-client` after making changes to type-check the main VS Code sources (it validates `./src/tsconfig.json`).
 - If you changed built-in extensions under `extensions/` and the tool is not available, run the corresponding gulp task `npm run gulp compile-extensions` instead so that TypeScript errors in extensions are also reported.
 - For TypeScript changes in the `build` folder, you can simply run `npm run typecheck` in the `build` folder.
 
 ### TypeScript validation steps
+
 - Use the run test tool if you need to run tests. If that tool is not available, then you can use `scripts/test.sh` (or `scripts\test.bat` on Windows) for unit tests (add `--grep <pattern>` to filter tests) or `scripts/test-integration.sh` (or `scripts\test-integration.bat` on Windows) for integration tests (integration tests end with .integrationTest.ts or are in /extensions/).
 - Use `npm run valid-layers-check` to check for layering issues
 
@@ -73,6 +81,8 @@ We use tabs, not spaces.
 
 ### Naming Conventions
 
+- Use **camelCase** throughout this app (functions, methods, properties, local variables)
+- Use **snake_case** in Python code
 - Use PascalCase for `type` names
 - Use PascalCase for `enum` values
 - Use camelCase for `function` and `method` names
@@ -96,10 +106,12 @@ We use tabs, not spaces.
 - Externalized strings must not use string concatenation. Use placeholders instead (`{0}`).
 
 ### UI labels
+
 - Use title-style capitalization for command labels, buttons and menu items (each word is capitalized).
 - Don't capitalize prepositions of four or fewer letters unless it's the first or last word (e.g. "in", "with", "for").
 
 ### Designing UI
+
 - When creating, editing, or reviewing any visual surface, reason in **design terms, not pixels**: name the **feeling** (Calm, Focused, Consistent, Delightful), find the **principle** it breaks, then reach for the **move** (token/tier/ramp) that restores it. Describe a bug by its role/tier/ramp (e.g. "this overlay is rounded at the control tier"), not its number.
 - See the [`design-philosophy` skill](skills/design-philosophy/SKILL.md) for the full Values→Principles→Moves vocabulary, worked examples, and feedback guidance, and [design-tokens.instructions.md](instructions/design-tokens.instructions.md) for the token reference.
 
@@ -120,11 +132,11 @@ x => x + x
 
 ```typescript
 for (let i = 0, n = str.length; i < 10; i++) {
-    if (x < 10) {
-        foo();
-    }
+	if (x < 10) {
+		foo();
+	}
 }
-function f(x: number, y: string): void { }
+function f(x: number, y: string): void {}
 ```
 
 - Whenever possible, in top-level scopes, use `export function x(…) {…}` instead of `export const x = (…) => {…}`. One advantage of using the `function` keyword is that the stack trace shows a good name when debugging.
@@ -153,5 +165,6 @@ function f(x: number, y: string): void { }
 - Service dependencies MUST be declared in constructors and MUST NOT be accessed through the `IInstantiationService` at any other point in time.
 
 ## Learnings
+
 - Minimize the amount of assertions in tests. Prefer one snapshot-style `assert.deepStrictEqual` over multiple precise assertions, as they are much more difficult to understand and to update.
 - Do not stub a global object (e.g. `(mainWindow as any).ResizeObserver = ...`) or use `any` casts to install fakes in tests. Instead, make the dependency injectable: add an optional constructor parameter on the production class that defaults to the real implementation (e.g. `targetWindow.ResizeObserver`), and have the test pass a fake that implements the real interface.

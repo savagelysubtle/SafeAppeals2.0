@@ -1,14 +1,15 @@
 ---
 name: Upstream VS Code Merge — Bolt-On Migration
 overview:
-  'Migration to upstream VS Code 1.129 on branch update-vscode (import commit
+  "Migration to upstream VS Code 1.129 on branch update-vscode (import commit
   65015a05, byte-identical to tag). Strategy: adopt upstream agent
   infrastructure (chat, chat editing, inline chat, inline completions, tools,
-  MCP, browserView) and register SafeAppeals providers into it; port only the
-  legal-domain product into contrib/void; keep themes and utility extensions
-  as extensions; extension-ize document viewers post-migration. This file is
+  MCP, browserView) and register SafeAppeals providers into it; rewrite the
+  legal-domain product into contrib/safeappeals or as new built-in extensions
+  (documents/docusign/calendar/email — see D.2), each feature written once in
+  its final home using void-reference/ as the logic source. This file is
   the full disposition inventory: every fork asset classified as
-  replace / bolt-on / port / extension / retire / defer.'
+  replace / bolt-on / rewrite-in-contrib / extension / retire / defer."
 todos:
   - id: import-upstream
     content: Import 1.129.0 tree on update-vscode (65015a05, diff vs tag = 0)
@@ -17,38 +18,42 @@ todos:
     content: Survey 1.129 agent stack vs Void systems; write decision matrix
     status: completed
   - id: phase0-prep
-    content: 'Phase 0: wipe residual contrib/void on disk; confirm overlay sources'
-    status: pending
+    content: "Phase 0: overlay from main; move old code to void-reference/;
+      scaffold contrib/safeappeals hub"
+    status: completed
   - id: phase1-branding-build
-    content:
-      'Phase 1: product.json branding + Copilot strip; themes + utility
-      extensions; buildreact wiring into gulpfile.mjs build'
+    content: "Phase 1: product.json branding + Copilot strip; themes + utility
+      extensions; buildreact wiring into gulpfile.mjs build"
     status: pending
   - id: phase2-ai-boltons
     content:
-      'Phase 2: contrib/void/browser/integration — LM provider, default chat
-      agent (panel + EditorInline), InlineCompletionsProvider, LM tools'
+      "Phase 2: contrib/safeappeals/browser/integration — LM providers, default
+      chat agent (panel + EditorInline), InlineCompletionsProvider, LM tools"
     status: pending
   - id: phase3-domain-port
-    content: 'Phase 3: overlay domain features into contrib/void; fix API drift'
+    content: "Phase 3: rewrite domain features into contrib/safeappeals (D) "
+    status: pending
+  - id: phase3b-new-extensions
+    content: "Phase 3 (parallel): write safeappeals-documents / -docusign /
+      -calendar / -email as new built-in extensions (D.2)"
     status: pending
   - id: phase4-appts-channels
-    content: 'Phase 4: port reduced app.ts channel set (~15 of 20)'
+    content: "Phase 4: port reduced app.ts channel set (~15 of 20)"
     status: pending
   - id: phase5-compile-native
     content:
-      'Phase 5: bun install vs new Electron/Node pins; native module rebuilds;
-      full compile + smoke test'
+      "Phase 5: bun install vs new Electron/Node pins; native module rebuilds;
+      full compile + smoke test"
     status: pending
   - id: phase6-data-migrations
     content:
-      'Phase 6: chat-thread → ChatSessionStore import; MCP config → .mcp.json;
-      settings key carry-over'
+      "Phase 6: chat-thread → ChatSessionStore import; MCP config → .mcp.json;
+      settings key carry-over"
     status: pending
-  - id: phase7-extensionize-viewers
+  - id: phase7-placement-review
     content:
-      'Phase 7 (post-migration): convert PDF → DOCX → XLSX viewers to built-in
-      custom-editor extensions'
+      "Phase 7 (post-migration): placement review (timeline → extension?,
+      RAG → local MCP server?, audio); delete void-reference/"
     status: pending
 isProject: false
 ---
@@ -62,7 +67,7 @@ isProject: false
 - Phase 0 DONE (Jul 17): old contrib overlaid from `main` (commit
   `2c4faea8`) then moved out of src/ to **`void-reference/`** at repo root —
   the readable source of truth for the rewrite. Extensions/themes/docs/
-  python remain overlaid in place. `contrib/safeappeals/` scaffolded with
+  python remain overlaid in place. `contrib/safeAppeals/` scaffolded with
   the contribution hub. src/ compiles as vanilla 1.129 + one stub.
 - `feat-blog-writer-extension` only for Growth Writer (deferred).
 - Residual untracked files on disk (`python/` extras,
@@ -79,7 +84,7 @@ keep upstream files untouched except a tiny marked hookpoint set.**
 
 Architecture rules (settled):
 
-- **Naming settled (Jul 17): the contrib is `src/vs/workbench/contrib/safeappeals/`**
+- **Naming settled (Jul 17): the contrib is `src/vs/workbench/contrib/safeAppeals/`**
   — "void" is removed from all NEW code (folder, service names, channel
   names, action IDs where practical). EXCEPTION: persisted storage keys and
   settings keys keep their old `void*` values so user data survives; alias
@@ -88,9 +93,9 @@ Architecture rules (settled):
   vanilla compiles stay clean; committed for readability during migration —
   read it directly, not via `git show`). Deleted at the end of Phase 6.
 - **Migration = rewrite, not copy**: each feature is written fresh under
-  `contrib/safeappeals/` against 1.129 APIs using `void-reference/` as the
+  `contrib/safeAppeals/` against 1.129 APIs using `void-reference/` as the
   source of logic; import paths, naming, and API usage are corrected on the
-  way in. Entry hub: `safeappeals/browser/safeappeals.contribution.ts`
+  way in. Entry hub: `safeAppeals/browser/safeAppeals.contribution.ts`
   (already scaffolded with commented imports per phase).
 - No new logic in upstream files.
 - New thin `contrib/void/browser/integration/` layer is the ONLY place
@@ -104,37 +109,37 @@ Architecture rules (settled):
 
 ## A. Upstream 1.129 capabilities we adopt (hook points)
 
-| Capability | Hook |
-| --- | --- |
-| LLM providers | `ILanguageModelsService.registerLanguageModelProvider('safeappeals', provider)` — in-process, no extension (`contrib/chat/common/languageModels.ts`) |
+| Capability                  | Hook                                                                                                                                                                   |
+| --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| LLM providers               | `ILanguageModelsService.registerLanguageModelProvider('safeAppeals', provider)` — in-process, no extension (`contrib/chat/common/languageModels.ts`)                   |
 | Chat agent (panel + inline) | `IChatAgentService.registerDynamicAgent`, `isDefault: true`, locations `[Panel, EditorInline]` — EditorInline default agent un-gates inline chat (`InlineChatEnabler`) |
-| Agentic edits / diff review | `IChatEditingSession` (agent emits `textEditGroup` progress; accept/reject per hunk) — replaces DiffZones |
-| Autocomplete + NES | `ILanguageFeaturesService.inlineCompletionsProvider.register('*', p)`; `isInlineEdit: true` |
-| Tool calling | `ILanguageModelToolsService.registerTool` (+ confirmation service) |
-| MCP | `contrib/mcp` full client (stdio+HTTP/SSE, OAuth, trust, `.mcp.json`/Claude discovery); servers run in extension host |
-| Integrated browser | `contrib/browserView` (`WebContentsView`, `persist:vscode-browser`, Playwright/CDP agent tools) |
-| Chat persistence | `ChatSessionStore` (workspace/global) |
-| Copilot residue | `product.json` `defaultChatAgent` blanked; `IChatEntitlementService` chrome hidden via product config; skip Copilot MCP setup commands |
+| Agentic edits / diff review | `IChatEditingSession` (agent emits `textEditGroup` progress; accept/reject per hunk) — replaces DiffZones                                                              |
+| Autocomplete + NES          | `ILanguageFeaturesService.inlineCompletionsProvider.register('*', p)`; `isInlineEdit: true`                                                                            |
+| Tool calling                | `ILanguageModelToolsService.registerTool` (+ confirmation service)                                                                                                     |
+| MCP                         | `contrib/mcp` full client (stdio+HTTP/SSE, OAuth, trust, `.mcp.json`/Claude discovery); servers run in extension host                                                  |
+| Integrated browser          | `contrib/browserView` (`WebContentsView`, `persist:vscode-browser`, Playwright/CDP agent tools)                                                                        |
+| Chat persistence            | `ChatSessionStore` (workspace/global)                                                                                                                                  |
+| Copilot residue             | `product.json` `defaultChatAgent` blanked; `IChatEntitlementService` chrome hidden via product config; skip Copilot MCP setup commands                                 |
 
 ---
 
 ## B. Disposition: REPLACE with upstream (delete from port set)
 
-| Void system | Replaced by | Data/UX migration |
-| --- | --- | --- |
-| React chat sidebar (`sidebarPane`, `sidebarActions`, `react/sidebar-tsx`) | native `ChatViewPane` | UX change: native widget, not Tailwind |
-| `chatThreadService` + `void-channel-chat-threads` storage | `ChatSessionStore` | Phase 6 thread import shim |
-| `editCodeService` (+ types, `react/diff`, `void-editor-widgets-tsx`) | `IChatEditingSession` | none |
-| `cloudLLMRouterService` | model picker + `isDefaultForLocation` (see C.1) | routing becomes explicit model choice |
-| `quickEditActions` (Cmd+K) + `react/quick-edit-tsx` | `contrib/inlineChat` (Cmd+I) | optional keybinding remap Cmd+K→`inlineChat.start` |
-| `autocompleteService` | inlineCompletions provider (Phase 2 registers ours) | none |
-| `browser/tools` + `electron-main/tools` + `common/tools` | `ILanguageModelToolsService` (re-register in Phase 2) | tool confirmations now upstream UI |
-| `common/mcpService` + `mcpChannel` + `void-channel-mcp` | `contrib/mcp` | Phase 6 config migration; servers move electron-main → ext host |
-| `browserPanel` + `browserPanelChannel` + `void-channel-browser-panel` | `contrib/browserView` | drop `persist:void-browser-v2` app.ts exemptions; cookies/sessions reset |
-| `webSearchActions` | chat tool entry | Brave backend kept (see C) |
-| `voidCommandBarService`, `voidSelectionHelperWidget`, `tooltipService`, `react/void-tooltip` | retired Void-chat UX glue | delete |
-| `voidOnboardingService` + `react/void-onboarding` | upstream `welcomeOnboarding` / `welcomeAgentSessions` | re-add SafeAppeals onboarding content later if needed |
-| `contextGatheringService` (as standalone) | folded into agent impl + upstream `IPromptsService` instructions | — |
+| Void system                                                                                  | Replaced by                                                      | Data/UX migration                                                        |
+| -------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| React chat sidebar (`sidebarPane`, `sidebarActions`, `react/sidebar-tsx`)                    | native `ChatViewPane`                                            | UX change: native widget, not Tailwind                                   |
+| `chatThreadService` + `void-channel-chat-threads` storage                                    | `ChatSessionStore`                                               | Phase 6 thread import shim                                               |
+| `editCodeService` (+ types, `react/diff`, `void-editor-widgets-tsx`)                         | `IChatEditingSession`                                            | none                                                                     |
+| `cloudLLMRouterService`                                                                      | model picker + `isDefaultForLocation` (see C.1)                  | routing becomes explicit model choice                                    |
+| `quickEditActions` (Cmd+K) + `react/quick-edit-tsx`                                          | `contrib/inlineChat` (Cmd+I)                                     | optional keybinding remap Cmd+K→`inlineChat.start`                       |
+| `autocompleteService`                                                                        | inlineCompletions provider (Phase 2 registers ours)              | none                                                                     |
+| `browser/tools` + `electron-main/tools` + `common/tools`                                     | `ILanguageModelToolsService` (re-register in Phase 2)            | tool confirmations now upstream UI                                       |
+| `common/mcpService` + `mcpChannel` + `void-channel-mcp`                                      | `contrib/mcp`                                                    | Phase 6 config migration; servers move electron-main → ext host          |
+| `browserPanel` + `browserPanelChannel` + `void-channel-browser-panel`                        | `contrib/browserView`                                            | drop `persist:void-browser-v2` app.ts exemptions; cookies/sessions reset |
+| `webSearchActions`                                                                           | chat tool entry                                                  | Brave backend kept (see C)                                               |
+| `voidCommandBarService`, `voidSelectionHelperWidget`, `tooltipService`, `react/void-tooltip` | retired Void-chat UX glue                                        | delete                                                                   |
+| `voidOnboardingService` + `react/void-onboarding`                                            | upstream `welcomeOnboarding` / `welcomeAgentSessions`            | re-add safeAppeals onboarding content later if needed                    |
+| `contextGatheringService` (as standalone)                                                    | folded into agent impl + upstream `IPromptsService` instructions | —                                                                        |
 
 ## C. Disposition: BOLT-ON layer (new code, small; wraps kept pipeline)
 
@@ -155,14 +160,14 @@ coupled (Copilot chrome is separate); providers get `metadata.auth`,
 
 Decision:
 
-- **Vendor `safeappeals-cloud`** ("SafeAppeals Cloud"): managed models,
+- **Vendor `safeAppeals-cloud`** ("safeAppeals Cloud"): managed models,
   credits. Model list fetched from cloud API (new `/models` endpoint — makes
   server the single source of truth; deletes the 3-way drift between
   `defaults.ts`, `cloudModelMapping`, `litellm/config.yaml`). Metadata:
   pricing multiplier display, `statusIcon`+`warningText` on low credits,
-  `metadata.auth` → existing `safeappeals-cloud` IAuthenticationService
+  `metadata.auth` → existing `safeAppeals-cloud` IAuthenticationService
   provider (ports as-is), `isDefaultForLocation` set when signed in.
-- **Vendor `safeappeals-byok`** ("Your API Keys"): wraps the 17 provider SDK
+- **Vendor `safeAppeals-byok`** ("Your API Keys"): wraps the 17 provider SDK
   impls in `electron-main/llmMessage`. Local providers (ollama/vLLM/
   lmStudio) keep auto-detect listing.
 - **`cloudLLMRouterService` is DELETED** — the model picker IS the router.
@@ -220,7 +225,7 @@ Decisions:
 3. **Generic tools are deleted, not ported**: read_file/ls_dir/dir_tree/
    search×3/lint, rewrite/edit/create/delete file, run_command + persistent
    terminal ×3 → upstream built-ins + terminal agent tools cover all of it.
-4. **SafeAppeals-specific tools re-register as `IToolData`/`IToolImpl`**
+4. **safeAppeals-specific tools re-register as `IToolData`/`IToolImpl`**
    (~1,500 LOC of impls kept): RAG ×5, timeline ×6, `edit_document`
    (docx/xlsx structured ops), `web_search`/`multi_link_search` (Brave via
    channel).
@@ -229,7 +234,7 @@ Decisions:
    `confirmationMessages` in `prepareToolInvocation`.
 6. **Mode-based tool filtering** (research vs case_manager) → custom chat
    modes + tool picker `userSelectedTools`, not hardcoded lists.
-7. **The agent loop is rewritten small** inside `safeappealsChatAgent.ts`:
+7. **The agent loop is rewritten small** inside `safeAppealsChatAgent.ts`:
    with parsing/approval/schema-injection gone it shrinks from ~1,000 LOC to
    a few hundred (send with tools → invokeTool on `tool_use` → append →
    repeat; emit `textEditGroup` progress for edits so chat editing renders).
@@ -241,13 +246,13 @@ domain tool impls + a small loop.
 
 New `contrib/void/browser/integration/`:
 
-| New file (indicative) | Registers | Backed by (kept, ported as-is) |
-| --- | --- | --- |
-| `safeappealsLMProviders.ts` | vendors `safeappeals-cloud` + `safeappeals-byok` (C.1) | `sendLLMMessageService` + `llmMessage/` channel + 17 SDK impls + new cloud impl; `modelCapabilities`, `refreshModelService`, `convertToLLMMessageService` |
-| `safeappealsChatAgent.ts` | default dynamic agent, Panel + EditorInline; OWNS the agentic loop (C.2 #7) | `common/prompt` system prompts (minus XML tool sections); context assembly (ex-`contextGatheringService`) |
-| `safeappealsCompletions.ts` | `InlineCompletionsProvider` (ghost text; NES later) | same LM pipeline (FIM prompts from old `autocompleteService`) |
-| `safeappealsTools.ts` | LM tools: RAG search, case-profile lookup, doc extract, Brave web search, email query, timeline query | RAG/email/etc. services in contrib; `braveSearchChannel` |
-| `safeappealsChatModes.ts` (optional) | custom chat modes (legal research / drafting) | `IChatModeService` |
+| New file (indicative)                | Registers                                                                                             | Backed by (kept, ported as-is)                                                                                                                            |
+| ------------------------------------ | ----------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `safeAppealsLMProviders.ts`          | vendors `safeAppeals-cloud` + `safeAppeals-byok` (C.1)                                                | `sendLLMMessageService` + `llmMessage/` channel + 17 SDK impls + new cloud impl; `modelCapabilities`, `refreshModelService`, `convertToLLMMessageService` |
+| `safeAppealsChatAgent.ts`            | default dynamic agent, Panel + EditorInline; OWNS the agentic loop (C.2 #7)                           | `common/prompt` system prompts (minus XML tool sections); context assembly (ex-`contextGatheringService`)                                                 |
+| `safeAppealsCompletions.ts`          | `InlineCompletionsProvider` (ghost text; NES later)                                                   | same LM pipeline (FIM prompts from old `autocompleteService`)                                                                                             |
+| `safeAppealsTools.ts`                | LM tools: RAG search, case-profile lookup, doc extract, Brave web search, email query, timeline query | RAG/email/etc. services in contrib; `braveSearchChannel`                                                                                                  |
+| `safeAppealsChatModes.ts` (optional) | custom chat modes (legal research / drafting)                                                         | `IChatModeService`                                                                                                                                        |
 
 Gotchas from the 1.129 contract: provider owns `identifier` strings
 (`vendor:modelId`); fire `onDidChange` after model refresh; set
@@ -298,9 +303,38 @@ React entries kept (rebuild via tsup, unchanged pipeline):
 `void-settings-tsx` (slimmed). Deleted entries: `sidebar-tsx`, `diff`,
 `quick-edit-tsx`, `void-tooltip`, `void-onboarding`, `void-editor-widgets-tsx`.
 
+## D.2 Extension split (settled Jul 17): write in final home, no two-step
+
+Because migration = rewrite-from-scratch, features are written ONCE in their
+final location (the old "contrib first, extension-ize in Phase 7" two-step
+is dropped). Extensions are first-class with the agent: `lm.registerTool`
+feeds the same tool registry, `vscode.lm` consumes our registered models,
+custom editors get the 1.129 custom-editor diff API, extensions register
+auth providers/URI handlers.
+
+**Written as NEW extensions (Phase 3):**
+- `safeappeals-documents` — PDF/DOCX/XLSX custom editors + `edit_document`
+  + extract LM tools in the same extension (agent reads/edits docs through
+  it); creator/export commands
+- `safeappeals-docusign` — OAuth via `onUri`, REST from ext host
+- `safeappeals-calendar` — background sync + settings
+- `safeappeals-email` — IMAP/SMTP in ext host, webview dashboard,
+  classifier via `vscode.lm`; case links via commands
+
+**Stay in contrib (reasons):** integration layer (in-process registries),
+cloud auth/credits/update/metrics (LM provider consumes session
+synchronously), case profiles (shared-state hub), file organizer (explorer
+tree core hook) + file converter, timeline (case coupling — revisit),
+RAG (watchers + native deps + agent tools; OPTION: later re-shape as local
+MCP server wrapping the python backend), settings pane, audio recorder
+(mic/whisper/ffmpeg — defer).
+
+Phase 7 is repurposed: no viewer conversion needed; becomes "revisit
+timeline/RAG-as-MCP/audio placement after the dust settles."
+
 ## E. Disposition: EXTENSIONS (copy into extensions/, already extension-shaped)
 
-- ~50 `theme-safeappeals*` theme extensions + `theme-scripts` +
+- ~50 `theme-safeAppeals*` theme extensions + `theme-scripts` +
   `color-themes-product-json-entries.txt` (merge entries into new
   product.json)
 - `time-tracker`
@@ -313,17 +347,17 @@ React entries kept (rebuild via tsup, unchanged pipeline):
 
 ## F. Root-level / non-src assets
 
-| Asset (main) | Disposition |
-| --- | --- |
-| `void-cloud/` (Next.js dashboard) | untouched separate app; keep out of vscode build; stays untracked or its own repo eventually |
-| `python/`, `pyproject.toml`, `uv.lock` | RAG/audio backend tooling — port with RAG (verify usage first) |
-| `resources/ffmpeg`, `resources/models` (whisper) | ship-with assets for audio — port with audioRecorder; wire into build packaging |
-| `void_icons/`, icon CSS swaps | rebrand assets — Phase 1 (re-do the 6 CSS `// Void` icon edits) |
-| `docs/`, `*.md` guides (VOID_CLOUD_*, PROJECT_MODIFICATIONS, etc.) | copy docs/ wholesale; root md files prune to relevant |
-| `gulpfile.js` (main) vs `gulpfile.mjs` (1.129) | build system moved to ESM — REDO buildreact + packaging integration in new build files, don't copy old |
-| `bun.lock`, package.json scripts | re-add `buildreact`/`watchreact` + fork deps to 1.129 package.json; regenerate lock |
-| `.voidrules`, `.cursor/`, `.claude/`, `CLAUDE.md`, `tasks.md` | dev-tooling; copy as needed, untracked ok |
-| `build/win32/tools/`, `.configurations`, `convert-key.cjs`, `test-sharp-electron.js` | audit individually during Phase 5 (packaging/native-module helpers) |
+| Asset (main)                                                                         | Disposition                                                                                            |
+| ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------ |
+| `void-cloud/` (Next.js dashboard)                                                    | untouched separate app; keep out of vscode build; stays untracked or its own repo eventually           |
+| `python/`, `pyproject.toml`, `uv.lock`                                               | RAG/audio backend tooling — port with RAG (verify usage first)                                         |
+| `resources/ffmpeg`, `resources/models` (whisper)                                     | ship-with assets for audio — port with audioRecorder; wire into build packaging                        |
+| `void_icons/`, icon CSS swaps                                                        | rebrand assets — Phase 1 (re-do the 6 CSS `// Void` icon edits)                                        |
+| `docs/`, `*.md` guides (VOID*CLOUD*\*, PROJECT_MODIFICATIONS, etc.)                  | copy docs/ wholesale; root md files prune to relevant                                                  |
+| `gulpfile.js` (main) vs `gulpfile.mjs` (1.129)                                       | build system moved to ESM — REDO buildreact + packaging integration in new build files, don't copy old |
+| `bun.lock`, package.json scripts                                                     | re-add `buildreact`/`watchreact` + fork deps to 1.129 package.json; regenerate lock                    |
+| `.voidrules`, `.cursor/`, `.claude/`, `CLAUDE.md`, `tasks.md`                        | dev-tooling; copy as needed, untracked ok                                                              |
+| `build/win32/tools/`, `.configurations`, `convert-key.cjs`, `test-sharp-electron.js` | audit individually during Phase 5 (packaging/native-module helpers)                                    |
 
 ## G. app.ts channels — reduced set (was 20)
 
@@ -342,12 +376,13 @@ DEFER: `cloud-proxy`, `growth-writer` (exist only on
 ## H. Core-file edits outside contrib (old ~25 marked files — new verdicts)
 
 RE-APPLY (still wanted):
+
 - `workbench.common.main.ts` — the one import line
 - `app.ts` — reduced channel block (G)
 - `keybindingsRegistry.ts` — `VoidExtension = 605` weight
 - `telemetryService.ts` — telemetry removal
 - `encryptionMainService.ts` — Linux default provider
-- `workbenchThemeService.ts` — default theme = SafeAppeals theme
+- `workbenchThemeService.ts` — default theme = safeAppeals theme
 - `auxiliaryBarPart.ts` + `layout.ts` — aux bar min width / default size
   (verify still sensible with native chat in panel)
 - CSS icon swaps (6 files) + `product.ts` `release` field
@@ -358,6 +393,7 @@ RE-APPLY (still wanted):
   explorer changes)
 
 OBSOLETE (do NOT re-apply):
+
 - All chat-disable patches (`chatActions.ts`, `chatParticipant.contribution.ts`
   comment-outs, `workbench.common.main.ts` chat region edits) — we now USE
   upstream chat; suppression happens via product.json `defaultChatAgent`
@@ -368,15 +404,15 @@ OBSOLETE (do NOT re-apply):
 
 ## I. Data / config migrations (Phase 6)
 
-| Data | From | To |
-| --- | --- | --- |
-| Chat threads | `void-channel-chat-threads` store | `ChatSessionStore` import shim (one-time) |
-| MCP servers | voidSettings JSON | `.mcp.json` (workspace) / user MCP config |
-| Provider API keys | `voidSettingsService` encrypted blob | `ISecretStorageService` (`chat.lm.secret.*`) + `chatLanguageModels.json` groups via one-time importer; then delete key mgmt from settings React UI |
-| Cloud model list | `defaults.ts` + `cloudModelMapping` (hardcoded) | cloud API `/models` endpoint (server = source of truth) |
-| Cloud session/auth | `void.cloud.session` in IStorageService | unchanged (auth provider ports as-is); consider moving token to secret storage while at it |
-| Browser sessions | `persist:void-browser-v2` | `persist:vscode-browser` (accept cookie loss) |
-| Keybindings | Cmd+K quick edit | map to `inlineChat.start` in defaults |
+| Data               | From                                            | To                                                                                                                                                 |
+| ------------------ | ----------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Chat threads       | `void-channel-chat-threads` store               | `ChatSessionStore` import shim (one-time)                                                                                                          |
+| MCP servers        | voidSettings JSON                               | `.mcp.json` (workspace) / user MCP config                                                                                                          |
+| Provider API keys  | `voidSettingsService` encrypted blob            | `ISecretStorageService` (`chat.lm.secret.*`) + `chatLanguageModels.json` groups via one-time importer; then delete key mgmt from settings React UI |
+| Cloud model list   | `defaults.ts` + `cloudModelMapping` (hardcoded) | cloud API `/models` endpoint (server = source of truth)                                                                                            |
+| Cloud session/auth | `void.cloud.session` in IStorageService         | unchanged (auth provider ports as-is); consider moving token to secret storage while at it                                                         |
+| Browser sessions   | `persist:void-browser-v2`                       | `persist:vscode-browser` (accept cookie loss)                                                                                                      |
+| Keybindings        | Cmd+K quick edit                                | map to `inlineChat.start` in defaults                                                                                                              |
 
 ## J. Phase order & gates
 
@@ -398,20 +434,22 @@ OBSOLETE (do NOT re-apply):
   ABI; packaging; CI (`build-release.yml` vs upstream expectations). GATE:
   packaged build runs on Windows.
 - **Phase 6** data migrations (I).
-- **Phase 7** extension-ize viewers: PDF first (most standalone), then DOCX,
-  XLSX; move extraction to ext host + `lm.registerTool` OR keep channels and
-  bridge via commands (decide with PDF pilot).
+- **Phase 3 note**: extension-targeted features (D.2) are written directly
+  as extensions; contrib-targeted features directly in contrib/safeappeals.
+- **Phase 7** (repurposed): post-migration placement review — timeline →
+  extension?, RAG → local MCP server?, audio recorder → extension/speech?;
+  delete `void-reference/`.
 
 ## K. Risks
 
-| Risk | Mitigation |
-| --- | --- |
-| Electron 34→~42 native ABI (sqlite, whisper, sharp, WASM loaders) | Phase 5 isolated; known-highest risk; budget accordingly |
-| Upstream chat API churn (not yet `vscode.d.ts`-stable in-process) | all coupling confined to `integration/`; small surface |
-| ESM build (`gulpfile.mjs`) vs old gulpfile.js glue | rewrite glue, don't port |
-| Thread/MCP/config migration bugs | one-time importers with dry-run logging; keep old stores read-only |
-| `open-remote-*` vs 1.129 remote stack | verify early in Phase 1; drop if upstream superseded |
-| Cloud server upgrade (SSE + native tool_calls) breaks old 1.95 clients | keep non-streaming XML endpoint alive during transition; version via `X-Client-Version` |
-| No upstream quota UI for credits | pricing display fields + `statusIcon`/`warningText` low-credit signal + dashboard for purchase; custom credit UI in contrib only if needed later |
+| Risk                                                                                                                                 | Mitigation                                                                                                                                                     |
+| ------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Electron 34→~42 native ABI (sqlite, whisper, sharp, WASM loaders)                                                                    | Phase 5 isolated; known-highest risk; budget accordingly                                                                                                       |
+| Upstream chat API churn (not yet `vscode.d.ts`-stable in-process)                                                                    | all coupling confined to `integration/`; small surface                                                                                                         |
+| ESM build (`gulpfile.mjs`) vs old gulpfile.js glue                                                                                   | rewrite glue, don't port                                                                                                                                       |
+| Thread/MCP/config migration bugs                                                                                                     | one-time importers with dry-run logging; keep old stores read-only                                                                                             |
+| `open-remote-*` vs 1.129 remote stack                                                                                                | verify early in Phase 1; drop if upstream superseded                                                                                                           |
+| Cloud server upgrade (SSE + native tool_calls) breaks old 1.95 clients                                                               | keep non-streaming XML endpoint alive during transition; version via `X-Client-Version`                                                                        |
+| No upstream quota UI for credits                                                                                                     | pricing display fields + `statusIcon`/`warningText` low-credit signal + dashboard for purchase; custom credit UI in contrib only if needed later               |
 | Dropping XML tool fallback removes agent mode for non-native-tool models (fork marked ollama/vLLM/lmStudio/deepseek/xAI as XML-only) | acceptable: chat still works (`toolCalling: false`); re-audit capability flags first — deepseek/xAI/ollama gained native tools since 1.95-era code was written |
-| UX regressions (native chat vs Tailwind sidebar; Cmd+I vs Cmd+K) | accept + keybinding remap; revisit theming via chat CSS vars |
+| UX regressions (native chat vs Tailwind sidebar; Cmd+I vs Cmd+K)                                                                     | accept + keybinding remap; revisit theming via chat CSS vars                                                                                                   |
