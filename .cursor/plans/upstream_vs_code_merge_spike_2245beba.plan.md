@@ -59,9 +59,13 @@ isProject: false
 
 - Branch `update-vscode`: fork `main` tip (`741fd1ab`) + import commit
   `65015a05` == tag `1.129.0` exactly (`git diff --stat` = 0).
-- Overlay sources: `git show main:<path>` for everything below;
-  `feat-blog-writer-extension` only for Growth Writer (deferred).
-- Residual untracked files on disk (`contrib/void` leftovers, `python/`,
+- Phase 0 DONE (Jul 17): old contrib overlaid from `main` (commit
+  `2c4faea8`) then moved out of src/ to **`void-reference/`** at repo root —
+  the readable source of truth for the rewrite. Extensions/themes/docs/
+  python remain overlaid in place. `contrib/safeappeals/` scaffolded with
+  the contribution hub. src/ compiles as vanilla 1.129 + one stub.
+- `feat-blog-writer-extension` only for Growth Writer (deferred).
+- Residual untracked files on disk (`python/` extras,
   `void-cloud/`, `resources/ffmpeg|models`, `.env`, workspace file) — wipe
   `contrib/void` residue before overlay; the rest are non-build assets.
 
@@ -75,9 +79,20 @@ keep upstream files untouched except a tiny marked hookpoint set.**
 
 Architecture rules (settled):
 
-- All fork code stays under `src/vs/workbench/contrib/void/` (rename to
-  `safeappeals` optional/cosmetic later; storage & settings keys must not
-  change). No new logic in upstream files.
+- **Naming settled (Jul 17): the contrib is `src/vs/workbench/contrib/safeappeals/`**
+  — "void" is removed from all NEW code (folder, service names, channel
+  names, action IDs where practical). EXCEPTION: persisted storage keys and
+  settings keys keep their old `void*` values so user data survives; alias
+  table lives with `storageKeys.ts` when migrated.
+- **Old code lives at root in `void-reference/`** (moved out of src/ so
+  vanilla compiles stay clean; committed for readability during migration —
+  read it directly, not via `git show`). Deleted at the end of Phase 6.
+- **Migration = rewrite, not copy**: each feature is written fresh under
+  `contrib/safeappeals/` against 1.129 APIs using `void-reference/` as the
+  source of logic; import paths, naming, and API usage are corrected on the
+  way in. Entry hub: `safeappeals/browser/safeappeals.contribution.ts`
+  (already scaffolded with commented imports per phase).
+- No new logic in upstream files.
 - New thin `contrib/void/browser/integration/` layer is the ONLY place
   coupled to upstream chat APIs (provider, agent, completions, tools).
 - Rule of thumb: renders a document → extension candidate; orchestrates
