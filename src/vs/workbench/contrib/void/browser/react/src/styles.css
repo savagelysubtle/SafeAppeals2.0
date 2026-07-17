@@ -1,0 +1,41 @@
+/*--------------------------------------------------------------------------------------
+ *  Copyright 2025 Glass Devtools, Inc. All rights reserved.
+ *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
+ *--------------------------------------------------------------------------------------*/
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Void Onboarding Logo - now loaded via <img> tag in VoidOnboarding.tsx using FileAccess.asFileUri */
+/* The CSS background-image approach doesn't work with bundled CSS (tsup injectStyle) */
+
+.void-scope {
+	--void-bg-1: var(--vscode-input-background, #1e1e1e);
+	--void-bg-1-alt: var(--vscode-badge-background, #252526);
+	--void-bg-2: var(--vscode-sideBar-background, #252526);
+	--void-bg-2-alt: var(--vscode-editor-background, #1e1e1e);
+	--void-bg-2-hover: var(--vscode-sideBar-background, #252526);
+	--void-bg-3: var(--vscode-editor-background, #1e1e1e);
+
+	--void-fg-0: var(--vscode-tab-activeForeground, #ffffff);
+	--void-fg-1: var(--vscode-editor-foreground, #cccccc);
+	--void-fg-2: var(--vscode-input-foreground, #cccccc);
+	--void-fg-3: var(--vscode-input-placeholderForeground, #8c8c8c);
+	--void-fg-4: var(--vscode-list-deemphasizedForeground, #8c8c8c);
+
+	--void-warning: var(--vscode-charts-yellow, #f0d754);
+
+	--void-border-1: var(--vscode-focusBorder, #007acc);
+	--void-border-2: var(--vscode-commandCenter-border, #3e3e42);
+	--void-border-3: var(--vscode-commandCenter-inactiveBorder, #3e3e42);
+	--void-border-4: var(--vscode-editorGroup-border, #3e3e42);
+
+	--void-ring-color: var(--vscode-focusBorder, #007acc);
+	--void-link-color: var(--vscode-textLink-foreground, #3794ff);
+
+	/* Button colors */
+	--void-button-primary-bg: var(--vscode-button-background, #0e639c);
+	--void-button-primary-hover: var(--vscode-button-hoverBackground, #1177bb);
+	--void-button-primary-text: var(--vscode-button-foreground, #ffffff);
+}

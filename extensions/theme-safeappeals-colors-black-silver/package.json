@@ -1,0 +1,21 @@
+{
+	"name": "theme-safeappeals-colors-black-silver",
+	"displayName": "Black & Silver",
+	"description": "Jet black with silver accents - Sleek and modern",
+	"version": "1.0.0",
+	"publisher": "safeappeals",
+	"license": "MIT",
+	"engines": {
+		"vscode": "*"
+	},
+	"categories": ["Themes"],
+	"contributes": {
+		"themes": [
+			{
+				"label": "Black & Silver",
+				"uiTheme": "vs-dark",
+				"path": "./themes/black-silver-color-theme.json"
+			}
+		]
+	}
+}

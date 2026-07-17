@@ -1,0 +1,21 @@
+{
+	"name": "theme-safeappeals-colors-dark",
+	"displayName": "Safe Appeals Dark Optimized",
+	"description": "Dark mode optimized - Easy on the eyes",
+	"version": "1.0.0",
+	"publisher": "safeappeals",
+	"license": "MIT",
+	"engines": {
+		"vscode": "*"
+	},
+	"categories": ["Themes"],
+	"contributes": {
+		"themes": [
+			{
+				"label": "Safe Appeals Dark Optimized",
+				"uiTheme": "vs-dark",
+				"path": "./themes/dark-color-theme.json"
+			}
+		]
+	}
+}

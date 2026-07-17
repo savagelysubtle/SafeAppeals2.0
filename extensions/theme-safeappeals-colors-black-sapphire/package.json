@@ -1,0 +1,21 @@
+{
+	"name": "theme-safeappeals-colors-black-sapphire",
+	"displayName": "Black & Sapphire",
+	"description": "Pure black with sapphire blue accents - Deep and mysterious",
+	"version": "1.0.0",
+	"publisher": "safeappeals",
+	"license": "MIT",
+	"engines": {
+		"vscode": "*"
+	},
+	"categories": ["Themes"],
+	"contributes": {
+		"themes": [
+			{
+				"label": "Black & Sapphire",
+				"uiTheme": "vs-dark",
+				"path": "./themes/black-sapphire-color-theme.json"
+			}
+		]
+	}
+}

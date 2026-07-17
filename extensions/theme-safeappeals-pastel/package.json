@@ -1,0 +1,16 @@
+{
+    "name": "theme-safeappeals-pastel",
+    "displayName": "Safe Appeals Icons (Pastel)",
+    "description": "Pastel folder variant - Soft Minimal",
+    "version": "1.0.0",
+    "publisher": "safeappeals",
+    "license": "MIT",
+    "engines": { "vscode": "*" },
+    "contributes": {
+        "iconThemes": [{
+            "id": "safeappeals-icons-pastel",
+            "label": "Safe Appeals Icons (Pastel)",
+            "path": "./safeappeals-icon-theme-pastel.json"
+        }]
+    }
+}

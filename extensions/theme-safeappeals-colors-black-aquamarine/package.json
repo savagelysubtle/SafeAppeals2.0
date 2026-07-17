@@ -1,0 +1,21 @@
+{
+	"name": "theme-safeappeals-colors-black-aquamarine",
+	"displayName": "Black & Aquamarine",
+	"description": "Obsidian black with aquamarine accents - Ocean depths",
+	"version": "1.0.0",
+	"publisher": "safeappeals",
+	"license": "MIT",
+	"engines": {
+		"vscode": "*"
+	},
+	"categories": ["Themes"],
+	"contributes": {
+		"themes": [
+			{
+				"label": "Black & Aquamarine",
+				"uiTheme": "vs-dark",
+				"path": "./themes/black-aquamarine-color-theme.json"
+			}
+		]
+	}
+}

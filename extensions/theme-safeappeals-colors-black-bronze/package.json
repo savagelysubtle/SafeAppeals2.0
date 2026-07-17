@@ -1,0 +1,21 @@
+{
+	"name": "theme-safeappeals-colors-black-bronze",
+	"displayName": "Black & Bronze",
+	"description": "Midnight black with bronze accents - Timeless classic",
+	"version": "1.0.0",
+	"publisher": "safeappeals",
+	"license": "MIT",
+	"engines": {
+		"vscode": "*"
+	},
+	"categories": ["Themes"],
+	"contributes": {
+		"themes": [
+			{
+				"label": "Black & Bronze",
+				"uiTheme": "vs-dark",
+				"path": "./themes/black-bronze-color-theme.json"
+			}
+		]
+	}
+}

@@ -1,0 +1,16 @@
+[project]
+name = "safe-appeals"
+version = "1.99.3"
+description = "Python dependencies for Safe Appeals Navigator"
+requires-python = ">=3.13"
+dependencies = [
+    "docling>=2.61.1",
+    "docling-serve>=1.4.0",
+    "easyocr>=1.7.2",
+    "hf-xet>=1.2.0",
+    "python-dotenv>=1.0.0",
+]
+
+[tool.uv]
+dev-dependencies = []
+

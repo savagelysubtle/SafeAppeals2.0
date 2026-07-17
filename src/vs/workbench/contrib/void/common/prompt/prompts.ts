@@ -1,0 +1,1679 @@
+import { URI } from '../../../../../base/common/uri.js';
+import { IFileService } from '../../../../../platform/files/common/files.js';
+import { StagingSelectionItem } from '../chatThreadServiceTypes.js';
+import { IDirectoryStrService } from '../directoryStrService.js';
+import { os } from '../helpers/systemInfo.js';
+import { RawToolParamsObj } from '../sendLLMMessageTypes.js';
+import { approvalTypeOfBuiltinToolName, BuiltinToolCallParams, BuiltinToolName, BuiltinToolResultType, ToolName } from '../tools/toolsServiceTypes.js';
+import { ChatMode } from '../voidSettingsTypes.js';
+import { getSystemPrompt } from './systemPrompt.js';
+
+// Triple backtick wrapper used throughout the prompts for code blocks
+export const tripleTick = ['```', '```']
+
+export const EDIT_DOCUMENT_DESCRIPTION = `Edit DOCX/XLSX files using JSON operations array.
+
+**VALID OPERATION TYPES:**
+
+DOCX operations: insert_text, replace_text, format_text, insert_table, insert_page_break, set_margins
+
+XLSX cell operations: set_cell_value, set_cell_formula, format_cell, insert_row, insert_column, delete_row, delete_column
+
+XLSX table operations: create_table, rename_table, set_table_style, toggle_table_filter, set_totals_row, convert_table_to_range
+
+XLSX chart operations: insert_chart, delete_chart
+  - chart_type: "column", "bar", "line", "pie", "scatter", "area", "doughnut", "radar"
+  - data_range: cell range like "A1:D10"
+  - position: optional anchor cell like "F2" (defaults to below data)
+
+**EXAMPLES:**
+
+Create welcome message in DOCX:
+[{"type": "insert_text", "position": 0, "text": "Welcome\\n\\nThis document was created by your AI assistant."}]
+
+Replace content in DOCX:
+[{"type": "replace_text", "search": "old text", "replace": "new text", "all": true}]
+
+Create spreadsheet with data, table, and chart in XLSX:
+[
+  {"type": "set_cell_value", "sheet": 0, "cell": "A1", "value": "Month"},
+  {"type": "set_cell_value", "sheet": 0, "cell": "B1", "value": "Sales"},
+  {"type": "set_cell_value", "sheet": 0, "cell": "A2", "value": "Jan"},
+  {"type": "set_cell_value", "sheet": 0, "cell": "B2", "value": 1200},
+  {"type": "set_cell_value", "sheet": 0, "cell": "A3", "value": "Feb"},
+  {"type": "set_cell_value", "sheet": 0, "cell": "B3", "value": 1800},
+  {"type": "format_cell", "sheet": 0, "cell": "A1", "format": {"bold": true}},
+  {"type": "create_table", "sheet": 0, "range": "A1:B3", "tableName": "SalesTable"},
+  {"type": "insert_chart", "sheet": 0, "chart_type": "column", "data_range": "A1:B3", "title": "Monthly Sales", "position": "D2"}
+]
+
+Create table from existing range:
+[{"type": "create_table", "sheet": 0, "range": "A1:D10", "tableName": "DataTable", "styleName": "TableStyleMedium2"}]
+
+Rename table and toggle filters:
+[
+  {"type": "rename_table", "oldName": "Table1", "newName": "SalesData"},
+  {"type": "toggle_table_filter", "tableName": "SalesData"}
+]
+
+Insert chart from data range:
+[{"type": "insert_chart", "sheet": 0, "chart_type": "pie", "data_range": "A1:B5", "title": "Distribution"}]
+
+Delete a chart:
+[{"type": "delete_chart", "sheet": 0, "chart_index": 0}]`;
+
+// Maximum limits for directory structure information
+export const MAX_DIRSTR_CHARS_TOTAL_BEGINNING = 20_000
+export const MAX_DIRSTR_CHARS_TOTAL_TOOL = 20_000
+export const MAX_DIRSTR_RESULTS_TOTAL_BEGINNING = 100
+export const MAX_DIRSTR_RESULTS_TOTAL_TOOL = 100
+
+// tool info
+export const MAX_FILE_CHARS_PAGE = 500_000
+export const MAX_CHILDREN_URIs_PAGE = 500
+
+// terminal tool info
+export const MAX_TERMINAL_CHARS = 100_000
+export const MAX_TERMINAL_INACTIVE_TIME = 8 // seconds
+export const MAX_TERMINAL_BG_COMMAND_TIME = 5
+
+
+// Maximum character limits for prefix and suffix context
+export const MAX_PREFIX_SUFFIX_CHARS = 20_000
+
+
+export const ORIGINAL = `<<<<<<< ORIGINAL`
+export const DIVIDER = `=======`
+export const FINAL = `>>>>>>> UPDATED`
+
+
+
+const searchReplaceBlockTemplate = `\
+${ORIGINAL}
+// ... original code goes here
+${DIVIDER}
+// ... final code goes here
+${FINAL}
+
+${ORIGINAL}
+// ... original code goes here
+${DIVIDER}
+// ... final code goes here
+${FINAL}`
+
+
+
+
+const createSearchReplaceBlocks_systemMessage = `\
+You are a coding assistant that takes in a diff, and outputs SEARCH/REPLACE code blocks to implement the change(s) in the diff.
+The diff will be labeled \`DIFF\` and the original file will be labeled \`ORIGINAL_FILE\`.
+
+Format your SEARCH/REPLACE blocks as follows:
+${tripleTick[0]}
+${searchReplaceBlockTemplate}
+${tripleTick[1]}
+
+1. Your SEARCH/REPLACE block(s) must implement the diff EXACTLY. Do NOT leave anything out.
+
+2. You are allowed to output multiple SEARCH/REPLACE blocks to implement the change.
+
+3. Assume any comments in the diff are PART OF THE CHANGE. Include them in the output.
+
+4. Your output should consist ONLY of SEARCH/REPLACE blocks. Do NOT output any text or explanations before or after this.
+
+5. The ORIGINAL code in each SEARCH/REPLACE block must EXACTLY match lines in the original file. Do not add or remove any whitespace, comments, or modifications from the original code.
+
+6. Each ORIGINAL text must be large enough to uniquely identify the change in the file. However, bias towards writing as little as possible.
+
+7. Each ORIGINAL text must be DISJOINT from all other ORIGINAL text.
+
+## EXAMPLE 1
+DIFF
+${tripleTick[0]}
+// ... existing code
+let x = 6.5
+// ... existing code
+${tripleTick[1]}
+
+ORIGINAL_FILE
+${tripleTick[0]}
+let w = 5
+let x = 6
+let y = 7
+let z = 8
+${tripleTick[1]}
+
+ACCEPTED OUTPUT
+${tripleTick[0]}
+${ORIGINAL}
+let x = 6
+${DIVIDER}
+let x = 6.5
+${FINAL}
+${tripleTick[1]}`
+
+
+const replaceTool_description = `\
+A string of SEARCH/REPLACE block(s) which will be applied to the given file.
+Your SEARCH/REPLACE blocks string must be formatted as follows:
+${searchReplaceBlockTemplate}
+
+## Guidelines:
+
+1. You may output multiple search replace blocks if needed.
+
+2. The ORIGINAL code in each SEARCH/REPLACE block must EXACTLY match lines in the original file. Do not add or remove any whitespace or comments from the original code.
+
+3. Each ORIGINAL text must be large enough to uniquely identify the change. However, bias towards writing as little as possible.
+
+4. Each ORIGINAL text must be DISJOINT from all other ORIGINAL text.
+
+5. This field is a STRING (not an array).`
+
+
+// ======================================================== tools ========================================================
+
+
+export type InternalToolInfo = {
+	name: string,
+	description: string,
+	params: {
+		[paramName: string]: { description: string }
+	},
+	// Only if the tool is from an MCP server
+	mcpServerName?: string,
+}
+
+
+
+const uriParam = (object: string) => ({
+	uri: { description: `The FULL path to the ${object}.` }
+})
+
+const paginationParam = {
+	page_number: { description: 'Optional. The page number of the result. Default is 1.' }
+} as const
+
+
+export type SnakeCase<S extends string> =
+	// exact acronym URI
+	S extends 'URI' ? 'uri'
+	// suffix URI: e.g. 'rootURI' -> snakeCase('root') + '_uri'
+	: S extends `${infer Prefix}URI` ? `${SnakeCase<Prefix>}_uri`
+	// default: for each char, prefix '_' on uppercase letters
+	: S extends `${infer C}${infer Rest}`
+	? `${C extends Lowercase<C> ? C : `_${Lowercase<C>}`}${SnakeCase<Rest>}`
+	: S;
+
+export type SnakeCaseKeys<T extends Record<string, any>> = {
+	[K in keyof T as SnakeCase<Extract<K, string>>]: T[K]
+};
+
+
+
+export const builtinTools: {
+	[T in keyof BuiltinToolCallParams]: {
+		name: string;
+		description: string;
+		// more params can be generated than exist here, but these params must be a subset of them
+		params: Partial<{ [paramName in keyof SnakeCaseKeys<BuiltinToolCallParams[T]>]: { description: string } }>
+	}
+} = {
+	// --- context-gathering (read/search/list) ---
+
+	read_file: {
+		name: 'read_file',
+		description: `Reads and extracts text content from files. Supports text files (.txt, .md, .json, .csv, .log, .pdf, .docx, .xlsx).
+
+**INTELLIGENT FILE READING:**
+
+Before reading large or unfamiliar files, use smart strategies:
+
+**Strategy 1: Check File Size First**
+Unknown file size? Call read_file WITHOUT start_line/end_line to see file length in response.
+
+**Strategy 2: Targeted Section Reading** (saves tokens)
+- Small file (<100 lines): Read entire file
+- Medium file (100-1,000 lines): Read specific sections using start_line/end_line
+- Large file (1,000+ lines): Use search_in_file first to locate relevant sections, THEN read those line ranges
+
+**TOKEN COST ESTIMATION:**
+- Small file (<100 lines): ~500 tokens
+- Medium file (100-1,000 lines): ~5,000 tokens
+- Large file (1,000+ lines): 10,000-50,000 tokens
+- Core reference document (full): 20,000-100,000 tokens
+
+**DOCUMENT TYPE HANDLING:**
+
+**PDF Files:**
+- Extracts text with page markers
+- Look for "===== Page X =====" headers
+- Use page_number parameter if you know specific page needed
+
+**Word Documents (.docx):**
+- Extracts formatted text
+- Preserves structure (headings, lists)
+- Images are skipped (text only)
+
+**Excel Files (.xlsx):**
+- Returns worksheet data as formatted tables
+- Use sheet_name parameter to specify worksheet
+
+**BEST PRACTICES:**
+
+✅ EFFICIENT: Targeted token usage
+\`\`\`
+Step 1: read_file(core_reference.pdf) [no line params] → See it's 5,000 lines
+Step 2: search_in_file("appeal deadline") → Find lines 234-289 relevant
+Step 3: read_file(core_reference.pdf, start_line=234, end_line=289) → ~2,000 tokens
+\`\`\`
+
+⚠️ CAUTION: Reading entire large files (like manuals) consumes context budget rapidly. Only read full files when necessary or small.
+\`\`\`
+read_file(core_reference.pdf) [entire file] → 25,000 tokens consumed
+\`\`\`
+
+**PARALLEL READING:**
+Reading multiple files for comparison? Execute reads in parallel for efficiency:
+
+\`\`\`xml
+<function_calls>
+<invoke name="read_file">
+<parameter name="uri">/cases/medical_report_1.pdf</parameter>
+</invoke>
+<invoke name="read_file">
+<parameter name="uri">/cases/medical_report_2.pdf</parameter>
+</invoke>
+<invoke name="read_file">
+<parameter name="uri">/cases/denial_letter.pdf</parameter>
+</invoke>
+</function_calls>
+\`\`\`
+
+**PAGINATION:**
+For extremely large files, use page_number and page_size parameters to read incrementally.
+
+**TOKEN BUDGET AWARENESS:**
+Your context window is limited. Before reading, consider:
+- Do I need the ENTIRE file or just specific sections?
+- Can I use search_in_file or rag_search first to narrow down?
+- Is this file critical to the current task?`,
+
+		params: {
+			...uriParam('file'),
+			start_line: { description: 'Optional. Start reading from this line number (1-indexed). Omit to read from beginning.' },
+			end_line: { description: 'Optional. Stop reading at this line number (inclusive). Omit to read to end.' },
+			...paginationParam,
+		},
+	},
+
+	ls_dir: {
+		name: 'ls_dir',
+		description: `Lists all files and folders in the given URI.`,
+		params: {
+			uri: { description: `Optional.The FULL path to the ${'folder'}.Leave this as empty or "" to search all folders.` },
+			...paginationParam,
+		},
+	},
+
+	get_dir_tree: {
+		name: 'get_dir_tree',
+		description: `This is a very effective way to learn about the user's codebase. Returns a tree diagram of all the files and folders in the given folder. `,
+		params: {
+			...uriParam('folder')
+		}
+	},
+
+	// pathname_search: {
+	// 	name: 'pathname_search',
+	// 	description: `Returns all pathnames that match a given \`find\`-style query over the entire workspace. ONLY searches file names. ONLY searches the current workspace. You should use this when looking for a file with a specific name or path. ${paginationHelper.desc}`,
+
+	search_pathnames_only: {
+		name: 'search_pathnames_only',
+		description: `Returns all pathnames that match a given query (searches ONLY file names). You should use this when looking for a file with a specific name or path.`,
+		params: {
+			query: { description: `Your query for the search.` },
+			include_pattern: { description: 'Optional. Only fill this in if you need to limit your search because there were too many results.' },
+			...paginationParam,
+		},
+	},
+
+
+
+	search_for_files: {
+		name: 'search_for_files',
+		description: `Returns a list of file names whose content matches the given query. The query can be any substring or regex.`,
+		params: {
+			query: { description: `Your query for the search.` },
+			search_in_folder: { description: 'Optional. Leave as blank by default. ONLY fill this in if your previous search with the same query was truncated. Searches descendants of this folder only.' },
+			is_regex: { description: 'Optional. Default is false. Whether the query is a regex.' },
+			...paginationParam,
+		},
+	},
+
+	// add new search_in_file tool
+	search_in_file: {
+		name: 'search_in_file',
+		description: `Returns an array of all the start line numbers where the content appears in the file.`,
+		params: {
+			...uriParam('file'),
+			query: { description: 'The string or regex to search for in the file.' },
+			is_regex: { description: 'Optional. Default is false. Whether the query is a regex.' }
+		}
+	},
+
+	read_lint_errors: {
+		name: 'read_lint_errors',
+		description: `Use this tool to view all the lint errors on a file.`,
+		params: {
+			...uriParam('file'),
+		},
+	},
+
+	// --- editing (create/delete) ---
+
+	create_file_or_folder: {
+		name: 'create_file_or_folder',
+		description: `Create file or folder. For DOCX/XLSX creates valid empty document. Path ending with / creates folder.`,
+		params: {
+			...uriParam('file or folder'),
+		},
+	},
+
+	delete_file_or_folder: {
+		name: 'delete_file_or_folder',
+		description: `Delete a file or folder at the given path.`,
+		params: {
+			...uriParam('file or folder'),
+			is_recursive: { description: 'Optional. Return true to delete recursively.' }
+		},
+	},
+
+	edit_file: {
+		name: 'edit_file',
+		description: `Edit text files (.ts, .py, .js, .md, .txt, .json, etc.) with search/replace blocks. For DOCX/XLSX use edit_document.`,
+		params: {
+			...uriParam('file'),
+			search_replace_blocks: { description: replaceTool_description }
+		},
+	},
+
+	rewrite_file: {
+		name: 'rewrite_file',
+		description: `Completely replace text file contents. For DOCX/XLSX use edit_document.`,
+		params: {
+			...uriParam('file'),
+			new_content: { description: `New file contents as string.` }
+		},
+	},
+
+	edit_document: {
+		name: 'edit_document',
+		description: EDIT_DOCUMENT_DESCRIPTION,
+		params: {
+			...uriParam('document'),
+			operations: { description: `JSON array of operations. DOCX types: insert_text, replace_text, format_text, insert_table, insert_page_break, set_margins. XLSX cell types: set_cell_value, set_cell_formula, format_cell, insert_row, insert_column, delete_row, delete_column. XLSX table types: create_table, rename_table, set_table_style, toggle_table_filter, set_totals_row, convert_table_to_range. XLSX chart types: insert_chart (chart_type, data_range, title, position), delete_chart (chart_index). See description for full parameter details and examples.` }
+		}
+	},
+
+	// --- Terminal Tools ---
+
+	run_command: {
+		name: 'run_command',
+		description: `Runs a terminal command and waits for the result (times out after ${MAX_TERMINAL_INACTIVE_TIME}s of inactivity). Use this for:
+- Installing packages (npm install, pip install, etc.)
+- Running tests (pytest, npm test, etc.)
+- **Moving files**: Use \`mv\` (Unix) or \`move\` (Windows) to relocate files between directories
+- **Renaming files**: Use \`mv old_name new_name\` (Unix) or \`ren old_name new_name\` (Windows)
+- **Organizing folders**: Create directories (\`mkdir\`), move multiple files, restructure project layout
+- **Batch file operations**: Use shell wildcards and loops for bulk moves/renames
+- Any other terminal command that completes within a reasonable time frame.`,
+		params: {
+			command: { description: 'The terminal command to run. For file operations: use mv/move for moving/renaming, mkdir for creating directories, cp/copy for copying.' },
+			cwd: { description: 'Optional. The current working directory in which to run the command.' },
+		},
+	},
+
+	run_persistent_command: {
+		name: 'run_persistent_command',
+		description: `Runs a terminal command in the persistent terminal that you created with open_persistent_terminal (results after ${MAX_TERMINAL_BG_COMMAND_TIME}s are returned, and command continues running in background). Use this for long-running processes like dev servers.`,
+		params: {
+			command: { description: 'The terminal command to run.' },
+			persistent_terminal_id: { description: 'The ID of the terminal created using open_persistent_terminal.' },
+		},
+	},
+
+	open_persistent_terminal: {
+		name: 'open_persistent_terminal',
+		description: `Use this tool when you want to run a terminal command indefinitely, like a dev server (eg \`npm run dev\`), a background listener, etc. Opens a new terminal in the user's environment which will not be awaited for or killed.`,
+		params: {
+			cwd: { description: 'Optional. The current working directory for the terminal.' },
+		}
+	},
+
+	kill_persistent_terminal: {
+		name: 'kill_persistent_terminal',
+		description: `Interrupts and closes a persistent terminal that you opened with open_persistent_terminal.`,
+		params: { persistent_terminal_id: { description: `The ID of the persistent terminal.` } }
+	},
+
+	// --- RAG (Retrieval Augmented Generation) ---
+
+	rag_index_document: {
+		name: 'rag_index_document',
+		description: `Indexes a document for RAG search. **CRITICAL: Check if document is already indexed FIRST using rag_get_stats.** Only index if NOT already indexed to avoid duplicate costs.
+
+**DOCUMENT TYPES:**
+- **Core References** (is_core_reference=true): Policy manuals, regulations, textbooks, authoritative sources
+  - Auto-indexed when placed in the \`core_references/\` folder in workspace root
+  - Searchable via rag_search_reference
+- **Case Documents** (is_core_reference=false): Medical reports, IME evaluations, decisions, correspondence
+  - Workspace files outside the \`core_references/\` folder
+  - Auto-indexed if ragAutoIndexCaseFiles setting is enabled
+  - Searchable via rag_search_workspace
+
+**TIP:** For core references, simply place files in \`core_references/\` folder - they'll be auto-indexed. Use this tool for manual indexing when needed.`,
+		params: {
+			...uriParam('document'),
+			is_core_reference: { description: 'Set to true for core reference documents (policy manuals, textbooks, authoritative sources), false for case documents (medical reports, decisions, correspondence). Defaults to false.' }
+		}
+	},
+
+	rag_search_reference: {
+		name: 'rag_search_reference',
+		description: `Search indexed core reference documents for workers' compensation rules, eligibility criteria, procedural requirements, benefit calculations, and appeal processes.
+
+**PURPOSE:** Retrieve authoritative policy guidance to ground responses in verified regulatory standards. This is your PRIMARY source for WC legal/procedural questions.
+
+**SOURCE:** Searches documents from the \`core_references/\` folder (policy manuals, regulations, textbooks) - NOT case-specific documents. For case files, use rag_search_workspace instead.
+
+**WHEN TO USE:**
+- Before answering ANY question about WC rules, procedures, benefits, or requirements
+- When drafting correspondence that requires policy citations
+- When researching appeal procedures, disability ratings, or eligibility
+- To verify facts before including them in documents
+
+**BEST PRACTICES:**
+- Execute 2-3 searches with VARIED queries for comprehensive coverage
+  Example: Query 1 (broad): "appeal procedures"
+           Query 2 (specific): "appeal deadline requirements medical evidence"
+           Query 3 (edge case): "appeal late filing exceptions good cause"
+- Use limit=8 for most searches (balances comprehensiveness vs. token cost)
+- Increase limit to 12-15 for complex topics requiring extensive context
+
+**OUTPUT FORMAT:**
+Returns chunks with:
+- Document name (e.g., "CA_Workers_Comp_Manual_2024.pdf")
+- Page numbers for citation
+- Relevant text excerpts
+- Similarity scores (higher = more relevant)
+
+**CITATION REQUIREMENT:**
+When using results in responses, cite as:
+"According to [Document Name], Section [X], page [Y]: '[Verbatim Quote]'"
+
+**COST:** ~2,000 tokens per search (including results). Budget accordingly.`,
+		params: {
+			query: { description: 'Natural language search query. Be specific (good: "permanent disability rating calculation methodology") rather than vague (bad: "disability").' },
+			limit: { description: 'Maximum results to return. Default 8. Use 12-15 for complex topics, 5-6 for quick fact-checking. Each result ~250 tokens.' }
+		}
+	},
+
+	rag_search_workspace: {
+		name: 'rag_search_workspace',
+		description: `Search indexed case-specific documents (medical reports, IME evaluations, appeals board decisions, claim correspondence, treatment records) for information relevant to a particular injured worker's case.
+
+**PURPOSE:** Retrieve case-specific facts, medical findings, procedural history, and claim details. This is your PRIMARY source for case-specific information (NOT policy/regulatory guidance - use rag_search_reference for that).
+
+**WHEN TO USE:**
+- Finding medical opinions, diagnoses, treatment recommendations, work restrictions
+- Locating specific claim events, dates, or procedural history
+- Extracting information from IME reports, QME evaluations, or treatment records
+- Searching appeals board decisions or adjuster correspondence
+- Building chronologies of medical treatment or claim adjudication
+
+**DOCUMENT TYPES SEARCHABLE:**
+- Medical Reports: Treatment notes, diagnostic studies, FCE results
+- IME/QME Evaluations: Independent medical examinations
+- Legal Documents: Appeals board decisions, settlement agreements
+- Correspondence: Adjuster letters, status updates, denials
+- Administrative: Claim forms, DWC forms, notices
+
+**BEST PRACTICES:**
+- Use specific medical/legal terminology when available
+  Good: "lumbar radiculopathy L5-S1 MRI findings"
+  Bad: "back pain test results"
+- For comprehensive case review, execute 3-4 searches with different aspects:
+  Query 1: Medical diagnoses and findings
+  Query 2: Work restrictions and limitations
+  Query 3: Treatment recommendations
+  Query 4: Causation opinions
+- Use limit=8-10 for detailed medical report analysis
+- Use limit=5-6 for quick fact extraction
+
+**OUTPUT FORMAT:**
+Returns chunks with:
+- Document name (e.g., "IME_Report_Dr_Smith_2024_03_15.pdf")
+- Page numbers
+- Text excerpts containing search terms
+- Similarity scores
+
+**CITATION FORMAT FOR MEDICAL EVIDENCE:**
+"Dr. [Name] ([Specialty]) report dated [Date], Page [X]: '[Verbatim Quote]'"
+
+**COST:** ~2,000 tokens per search. Budget carefully when reviewing extensive medical records.`,
+		params: {
+			query: { description: 'Natural language search query targeting case-specific information. Use medical terminology and specific details when possible.' },
+			limit: { description: 'Maximum results to return. Default 8. Each result ~250 tokens.' }
+		}
+	},
+
+	rag_search_all: {
+		name: 'rag_search_all',
+		description: `Search BOTH core reference documents AND case-specific documents simultaneously.
+
+**PURPOSE:** When you need information that may exist in either policy documents or case files, or when you want a comprehensive view across all indexed sources.
+
+**WHEN TO USE:**
+- When unsure if the answer is in policy or case documents
+- For comprehensive research that spans both regulatory guidance AND case-specific facts
+- When comparing policy requirements against what happened in a specific case
+- For initial broad searches before narrowing down with specific tools
+
+**BEST PRACTICES:**
+- Start with rag_search_all for broad queries, then use rag_search_reference or rag_search_workspace for targeted follow-up
+- Use when drafting documents that need both policy citations AND case facts
+- Results will indicate which source (policy vs case file) each chunk came from
+
+**OUTPUT FORMAT:**
+Returns combined results from both core reference documents and case files, with source type indicated.
+
+**COST:** ~2,500 tokens per search (slightly higher due to dual-source retrieval).`,
+		params: {
+			query: { description: 'Natural language search query to search across all indexed documents.' },
+			limit: { description: 'Maximum results to return. Default 8. Each result ~250 tokens.' }
+		}
+	},
+
+	rag_get_stats: {
+		name: 'rag_get_stats',
+		description: `Gets statistics about indexed documents: shows which core reference documents and case documents are available, number of chunks per document, and total indexed content. **ALWAYS use this FIRST before searching** to understand what's available and avoid unnecessary indexing.`,
+		params: {}
+	},
+
+	// --- Web Search tools
+	web_search: {
+		name: 'web_search',
+		description: `Performs a web search using Brave Search API. Ideal for general queries, news, articles, and online content. Use this for broad information gathering, recent events, or when you need diverse web sources. Maximum 20 results per request, with offset for pagination.`,
+		params: {
+			query: { description: `Search query (max 400 chars, 50 words). Be specific and include relevant keywords for better results.` },
+			count: { description: `Number of results (1-20, default 10). Optional.` },
+			offset: { description: `Pagination offset (max 9, default 0). Optional.` },
+		}
+	},
+
+	multi_link_search: {
+		name: 'multi_link_search',
+		description: `Performs multiple sequential web searches using Brave Search API. Ideal for batch information gathering across diverse topics. Executes searches sequentially with delays to respect the 1 req/sec rate limit of Brave's free tier. Maximum 10 queries, 20 results per query.`,
+		params: {
+			queries: { description: `Array of search queries (1-10 items, each max 400 chars). Searches are executed sequentially.` },
+			count: { description: `Number of results per query (1-20, default 10). Optional.` },
+		}
+	},
+
+	// --- Timeline tools ---
+
+	timeline_add_event: {
+		name: 'timeline_add_event',
+		description: `Add a new event to the case timeline. Use this when the user mentions dates, appointments, deadlines, or events that should be tracked.
+
+**WHEN TO USE:**
+- User mentions a medical appointment, hearing date, or deadline
+- Extracting dates from documents (medical reports, decision letters, correspondence)
+- User asks to "add this to my timeline" or "remember this date"
+- Creating deadline reminders for appeal deadlines, statute of limitations, etc.
+
+**CATEGORIES:**
+- injury: Initial injury date
+- medical: Medical appointments, evaluations, treatments
+- hearing: Appeals board hearings, conferences
+- decision: Claims decisions, appeal outcomes
+- deadline: Important deadlines (appeals, filings)
+- filing: Document submissions, claim forms
+- correspondence: Letters, emails, notices
+- custom: Other events
+
+**DOCUMENT LINKING:**
+When extracting dates from documents, include the document URI in linkedDocuments to maintain traceability.
+
+**EXAMPLE WORKFLOW:**
+1. User says: "Add my medical appointment from dr_smith_report.pdf to the timeline"
+2. Agent reads document with read_file
+3. Agent extracts date (e.g., "January 15, 2025")
+4. Agent calls timeline_add_event with:
+   - date: "2025-01-15"
+   - title: "Medical Evaluation - Dr. Smith"
+   - category: "medical"
+   - linkedDocuments: ["/path/to/dr_smith_report.pdf"]`,
+		params: {
+			date: { description: `ISO 8601 date string (YYYY-MM-DD or full ISO datetime). Required.` },
+			title: { description: `Short descriptive title for the event. Required.` },
+			description: { description: `Optional. Detailed description or notes about the event.` },
+			category: { description: `Event category: injury, medical, hearing, decision, deadline, filing, correspondence, or custom. Required.` },
+			is_deadline: { description: `Set to true if this is a deadline that needs tracking. Deadlines show warnings when approaching.` },
+			linked_documents: { description: `Optional. Array of document URIs to link to this event. Use full paths.` },
+		}
+	},
+
+	timeline_update_event: {
+		name: 'timeline_update_event',
+		description: `Update an existing timeline event. Use this to modify event details, mark deadlines as complete, or correct information.
+
+**WHEN TO USE:**
+- User wants to change event details (date, title, description)
+- Marking a deadline as complete
+- Adding notes or updating category
+- Correcting errors in previously added events`,
+		params: {
+			event_id: { description: `The unique ID of the event to update. Required. Get this from timeline_get_events.` },
+			date: { description: `Optional. New ISO 8601 date string.` },
+			title: { description: `Optional. New title for the event.` },
+			description: { description: `Optional. New description.` },
+			category: { description: `Optional. New category.` },
+			is_deadline: { description: `Optional. Change deadline status.` },
+			is_complete: { description: `Optional. Set to true to mark deadline as completed.` },
+		}
+	},
+
+	timeline_delete_event: {
+		name: 'timeline_delete_event',
+		description: `Delete an event from the timeline. Use when an event was added in error or is no longer relevant.`,
+		params: {
+			event_id: { description: `The unique ID of the event to delete. Required. Get this from timeline_get_events.` },
+		}
+	},
+
+	timeline_get_events: {
+		name: 'timeline_get_events',
+		description: `Query timeline events with optional filters. Use this to view the timeline, find specific events, or get event IDs for updates.
+
+**WHEN TO USE:**
+- User asks "what's on my timeline?"
+- Looking up events before a hearing or deadline
+- Finding event IDs to update or delete
+- Reviewing medical history or case chronology
+- Checking what documents are linked to what dates`,
+		params: {
+			category: { description: `Optional. Filter by category: injury, medical, hearing, decision, deadline, filing, correspondence, custom.` },
+			start_date: { description: `Optional. ISO 8601 date. Only return events on or after this date.` },
+			end_date: { description: `Optional. ISO 8601 date. Only return events on or before this date.` },
+			is_deadline: { description: `Optional. Set to true to only show deadlines, false to exclude deadlines.` },
+			limit: { description: `Maximum number of events to return. Default 50.` },
+		}
+	},
+
+	timeline_link_document: {
+		name: 'timeline_link_document',
+		description: `Link a document to an existing timeline event. Use this to associate files with dates for easy reference.
+
+**WHEN TO USE:**
+- User says "link this document to [date/event]"
+- After finding relevant dates in a document, linking it to the corresponding event
+- Organizing case documents by timeline`,
+		params: {
+			event_id: { description: `The unique ID of the event. Required. Get this from timeline_get_events.` },
+			document_uri: { description: `Full path to the document to link. Required.` },
+		}
+	},
+
+	timeline_get_deadlines: {
+		name: 'timeline_get_deadlines',
+		description: `Get upcoming and overdue deadlines. Use this to check what deadlines are approaching or have passed.
+
+**WHEN TO USE:**
+- User asks about upcoming deadlines
+- Before drafting documents, to ensure awareness of time constraints
+- Daily/weekly case review
+- Checking if any appeals deadlines are approaching`,
+		params: {
+			days_ahead: { description: `Number of days to look ahead for upcoming deadlines. Default 30.` },
+		}
+	},
+
+
+	// go_to_definition
+	// go_to_usages
+
+} satisfies { [T in keyof BuiltinToolResultType]: InternalToolInfo }
+
+
+
+
+export const builtinToolNames = Object.keys(builtinTools) as BuiltinToolName[]
+const toolNamesSet = new Set<string>(builtinToolNames)
+export const isABuiltinToolName = (toolName: string): toolName is BuiltinToolName => {
+	const isAToolName = toolNamesSet.has(toolName)
+	return isAToolName
+}
+
+
+
+
+
+export const availableTools = (chatMode: ChatMode | null, mcpTools: InternalToolInfo[] | undefined) => {
+	// Drafting mode: enable document editing, RAG tools, and timeline tools
+	const builtinToolNames: BuiltinToolName[] | undefined = chatMode === 'drafting'
+		? ['read_file', 'edit_file', 'edit_document', 'create_file_or_folder', 'rag_search_reference', 'rag_search_workspace', 'rag_get_stats', 'web_search', 'multi_link_search', 'timeline_add_event', 'timeline_update_event', 'timeline_delete_event', 'timeline_get_events', 'timeline_link_document', 'timeline_get_deadlines'] as BuiltinToolName[]
+		: chatMode === 'research' ? (Object.keys(builtinTools) as BuiltinToolName[]).filter(toolName => !(toolName in approvalTypeOfBuiltinToolName))
+			: chatMode === 'case_manager' ? Object.keys(builtinTools) as BuiltinToolName[]
+				: undefined
+
+	const effectiveBuiltinTools = builtinToolNames?.map(toolName => {
+		const tool = builtinTools[toolName]
+		if (!tool) {
+			console.error(`[availableTools] ⚠️ Tool ${toolName} not found in builtinTools!`)
+			return null
+		}
+		return tool
+	}).filter((t): t is InternalToolInfo => t !== null) ?? undefined
+
+	// Enable MCP tools in ALL modes (drafting, research, case_manager)
+	// This is important because drafting may need extended thinking, and native MCP tools work with extended thinking
+	const effectiveMCPTools = (chatMode === 'case_manager' || chatMode === 'research' || chatMode === 'drafting') ? mcpTools : undefined
+
+	const tools: InternalToolInfo[] | undefined = !(builtinToolNames || mcpTools) ? undefined
+		: [
+			...(effectiveBuiltinTools ?? []),
+			...(effectiveMCPTools ?? []),
+		]
+
+	// Debug logging
+	if (chatMode === 'drafting') {
+		console.log('[availableTools] Drafting mode - returning', tools?.length ?? 0, 'tools:', tools?.map(t => t.name))
+	}
+
+	return tools
+}
+
+const toolCallDefinitionsXMLString = (tools: InternalToolInfo[]) => {
+	return `${tools.map((t, i) => {
+		const params = Object.keys(t.params).map(paramName =>
+			`<parameter name="${paramName}">${t.params[paramName].description}</parameter>`
+		).join('\n    ')
+
+		// Add example based on tool name - NOW IN ANTML FORMAT
+		let example = ''
+		if (t.name === 'read_file') {
+			example = `\n    <example>\n    <function_calls>\n    <invoke name="read_file">\n    <parameter name="uri">/case_files/medical_reports/dr_smith_eval_2024.pdf</parameter>\n    </invoke>\n    </function_calls>\n    </example>\n`
+		} else if (t.name === 'edit_file') {
+			example = `\n    <example>\n    <function_calls>\n    <invoke name="edit_file">\n    <parameter name="uri">/case_files/appeal_letter.txt</parameter>\n    <parameter name="search_replace_blocks">\n    <search_replace_block>\n    <search>existing text</search>\n    <replace>new text</replace>\n    </search_replace_block>\n    </parameter>\n    </invoke>\n    </function_calls>\n    </example>\n`
+		} else if (t.name === 'edit_document') {
+			example = `\n    <example>\n    <function_calls>\n    <invoke name="edit_document">\n    <parameter name="uri">/case_files/welcome.docx</parameter>\n    <parameter name="operations">[{"type": "insert_text", "position": 0, "text": "Welcome\\n\\nThis was written by AI."}]</parameter>\n    </invoke>\n    </function_calls>\n    </example>\n    <example>\n    <function_calls>\n    <invoke name="edit_document">\n    <parameter name="uri">/case_files/data.xlsx</parameter>\n    <parameter name="operations">[{"type": "set_cell_value", "sheet": 0, "cell": "A1", "value": "Month"}, {"type": "set_cell_value", "sheet": 0, "cell": "B1", "value": "Amount"}, {"type": "set_cell_value", "sheet": 0, "cell": "A2", "value": "Jan"}, {"type": "set_cell_value", "sheet": 0, "cell": "B2", "value": 500}, {"type": "create_table", "sheet": 0, "range": "A1:B2", "tableName": "Expenses"}, {"type": "insert_chart", "sheet": 0, "chart_type": "column", "data_range": "A1:B2", "title": "Monthly Expenses", "position": "D2"}]</parameter>\n    </invoke>\n    </function_calls>\n    </example>\n`
+		} else if (t.name === 'rag_search_reference') {
+			example = `\n    <example>\n    <function_calls>\n    <invoke name="rag_search_reference">\n    <parameter name="query">appeal deadline workers compensation</parameter>\n    <parameter name="limit">5</parameter>\n    </invoke>\n    </function_calls>\n    </example>\n`
+		} else if (t.name === 'rag_search_workspace') {
+			example = `\n    <example>\n    <function_calls>\n    <invoke name="rag_search_workspace">\n    <parameter name="query">medical evaluation lumbar strain</parameter>\n    <parameter name="limit">5</parameter>\n    </invoke>\n    </function_calls>\n    </example>\n`
+		} else if (t.name === 'rag_search_all') {
+			example = `\n    <example>\n    <function_calls>\n    <invoke name="rag_search_all">\n    <parameter name="query">permanent disability rating appeal</parameter>\n    <parameter name="limit">8</parameter>\n    </invoke>\n    </function_calls>\n    </example>\n`
+		} else if (t.name === 'create_file_or_folder') {
+			example = `\n    <example>\n    <function_calls>\n    <invoke name="create_file_or_folder">\n    <parameter name="uri">/case_files/appeal_letter_2024.docx</parameter>\n    </invoke>\n    </function_calls>\n    </example>\n`
+		} else if (t.name === 'timeline_add_event') {
+			example = `\n    <example>\n    <function_calls>\n    <invoke name="timeline_add_event">\n    <parameter name="date">2024-01-15</parameter>\n    <parameter name="title">Medical Evaluation - Dr. Smith</parameter>\n    <parameter name="category">medical</parameter>\n    <parameter name="description">Follow-up evaluation for lumbar injury</parameter>\n    <parameter name="is_deadline">false</parameter>\n    </invoke>\n    </function_calls>\n    </example>\n`
+		} else if (t.name === 'timeline_get_events') {
+			example = `\n    <example>\n    <function_calls>\n    <invoke name="timeline_get_events">\n    <parameter name="category">medical</parameter>\n    <parameter name="limit">20</parameter>\n    </invoke>\n    </function_calls>\n    </example>\n`
+		} else if (t.name === 'timeline_get_deadlines') {
+			example = `\n    <example>\n    <function_calls>\n    <invoke name="timeline_get_deadlines">\n    <parameter name="days_ahead">30</parameter>\n    </invoke>\n    </function_calls>\n    </example>\n`
+		}
+
+		return `\
+    ${i + 1}. ${t.name}${example}
+    Description: ${t.description}
+
+    Parameters:
+    ${params}`
+	}).join('\n\n')}`
+}
+
+export const reParsedToolXMLString = (toolName: ToolName, toolParams: RawToolParamsObj) => {
+	const params = Object.keys(toolParams).map(paramName => `<parameter name="${paramName}">${toolParams[paramName]}</parameter>`).join('\n')
+	return `\
+    <function_calls>
+    <invoke name="${toolName}">
+    ${params}
+    </invoke>
+    </function_calls>`
+		.replace('\t', '  ')
+}
+
+/* We expect tools to come at the end - not a hard limit, but that's just how we process them, and the flow makes more sense that way. */
+// - You are allowed to call multiple tools by specifying them consecutively. However, there should be NO text or writing between tool calls or after them.
+const systemToolsXMLPrompt = (chatMode: ChatMode, mcpTools: InternalToolInfo[] | undefined) => {
+	const tools = availableTools(chatMode, mcpTools)
+
+	// DEBUG LOGGING
+	console.log('[systemToolsXMLPrompt] chatMode:', chatMode)
+	console.log('[systemToolsXMLPrompt] mcpTools count:', mcpTools?.length ?? 0)
+	console.log('[systemToolsXMLPrompt] tools returned:', tools?.length ?? 0)
+	if (tools) {
+		console.log('[systemToolsXMLPrompt] Tool names:', tools.map(t => t.name))
+		const ragTools = tools.filter(t => t.name.startsWith('rag_'))
+		console.log('[systemToolsXMLPrompt] RAG tools:', ragTools.map(t => t.name))
+	}
+
+	if (!tools || tools.length === 0) {
+		console.error('[systemToolsXMLPrompt] ❌ NO TOOLS AVAILABLE! Returning null.')
+		return null
+	}
+
+	const toolXMLDefinitions = (`\
+    Available tools:
+
+    ${toolCallDefinitionsXMLString(tools)}`)
+
+	const toolCallXMLGuidelines = (`\
+    Tool calling details:
+    - Wrap tool calls in <function_calls> tags
+    - Each tool is an <invoke name="tool_name"> block
+    - Parameters use <parameter name="param_name">value</parameter>
+    - You CAN add explanatory text before/after <function_calls>
+    - Multiple <invoke> blocks in one <function_calls> execute in parallel
+    - All parameters are REQUIRED unless noted otherwise
+
+    **Few-Shot Examples (Follow these exactly):**
+
+    Example 1: Reading a file
+    <function_calls>
+    <invoke name="read_file">
+    <parameter name="uri">/users/docs/report.pdf</parameter>
+    </invoke>
+    </function_calls>
+
+    Example 2: Adding a timeline event
+    <function_calls>
+    <invoke name="timeline_add_event">
+    <parameter name="date">2024-03-15</parameter>
+    <parameter name="title">Medical Exam</parameter>
+    <parameter name="category">medical</parameter>
+    <parameter name="description">Dr. Smith evaluation</parameter>
+    </invoke>
+    </function_calls>
+
+    Example 3: Parallel Research (RAG + Reading)
+    <function_calls>
+    <invoke name="rag_search_reference">
+    <parameter name="query">appeal deadline</parameter>
+    <parameter name="limit">5</parameter>
+    </invoke>
+    <invoke name="read_file">
+    <parameter name="uri">/users/case/denial_letter.pdf</parameter>
+    </invoke>
+    </function_calls>
+
+    Example 4: Document Editing (Template Update)
+    <function_calls>
+    <invoke name="edit_document">
+    <parameter name="uri">/users/case/Appeal_Letter.docx</parameter>
+    <parameter name="operations">[
+      {"type": "replace_text", "search": "[INSERT DATE]", "replace": "October 12, 2024"},
+      {"type": "replace_text", "search": "[CLAIM NUMBER]", "replace": "WCB-2024-55555"}
+    ]</parameter>
+    </invoke>
+    </function_calls>`)
+
+	return `\
+    ${toolCallXMLGuidelines}
+
+    ${toolXMLDefinitions}`
+}
+
+// ======================================================== chat (drafting, research, case_manager) ========================================================
+
+
+export const chat_systemMessage = ({ workspaceFolders, openedURIs, activeURI, persistentTerminalIDs, directoryStr, chatMode: mode, mcpTools, includeXMLToolDefinitions }: { workspaceFolders: string[], directoryStr: string, openedURIs: string[], activeURI: string | undefined, persistentTerminalIDs: string[], chatMode: ChatMode, mcpTools: InternalToolInfo[] | undefined, includeXMLToolDefinitions: boolean }) => {
+
+	// Get the clean system prompt from systemPrompt.ts
+	const systemPrompt = getSystemPrompt({
+		mode,
+		workspaceFolders,
+		openedURIs,
+		activeURI,
+		persistentTerminalIDs,
+		directoryStr,
+		os: os || 'unknown'
+	});
+
+	// Get tool definitions if needed
+	const toolDefinitions = includeXMLToolDefinitions ? systemToolsXMLPrompt(mode, mcpTools) : null;
+
+	// Assemble final prompt
+	const fullSystemMsgStr = toolDefinitions
+		? `${systemPrompt}\n\n${toolDefinitions}`
+		: systemPrompt;
+
+	return fullSystemMsgStr.trim().replace('\t', '  ');
+}
+
+
+// // log all prompts
+// for (const chatMode of ['case_manager', 'research', 'drafting'] satisfies ChatMode[]) {
+// 	console.log(`========================================= SYSTEM MESSAGE FOR ${chatMode} ===================================\n`,
+// 		chat_systemMessage({ chatMode, workspaceFolders: [], openedURIs: [], activeURI: 'pee', persistentTerminalIDs: [], directoryStr: 'lol', }))
+// }
+
+export const DEFAULT_FILE_SIZE_LIMIT = 2_000_000
+export const MAX_IMAGE_SIZE = 20_000_000 // 20MB max for images
+
+export const readFile = async (fileService: IFileService, uri: URI, fileSizeLimit: number): Promise<{
+	val: string,
+	truncated: boolean,
+	fullFileLen: number,
+} | {
+	val: null,
+	truncated?: undefined
+	fullFileLen?: undefined,
+}> => {
+	try {
+		const fileContent = await fileService.readFile(uri)
+		const val = fileContent.value.toString()
+		if (val.length > fileSizeLimit) return { val: val.substring(0, fileSizeLimit), truncated: true, fullFileLen: val.length }
+		return { val, truncated: false, fullFileLen: val.length }
+	}
+	catch (e) {
+		return { val: null }
+	}
+}
+
+/**
+ * Read an image file and return base64 encoded data
+ */
+export const readImageAsBase64 = async (
+	fileService: IFileService,
+	uri: URI
+): Promise<{ base64: string; mimeType: 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp' } | null> => {
+	try {
+		const fileContent = await fileService.readFile(uri)
+		if (fileContent.value.byteLength > MAX_IMAGE_SIZE) {
+			console.warn(`[readImageAsBase64] Image too large: ${fileContent.value.byteLength} bytes`)
+			return null
+		}
+
+		// Determine MIME type from extension
+		const ext = uri.path.split('.').pop()?.toLowerCase()
+		let mimeType: 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp'
+		switch (ext) {
+			case 'jpg':
+			case 'jpeg':
+				mimeType = 'image/jpeg'
+				break
+			case 'png':
+				mimeType = 'image/png'
+				break
+			case 'gif':
+				mimeType = 'image/gif'
+				break
+			case 'webp':
+				mimeType = 'image/webp'
+				break
+			default:
+				console.warn(`[readImageAsBase64] Unsupported image type: ${ext}`)
+				return null
+		}
+
+		// Convert to base64
+		const bytes = fileContent.value.buffer
+		const uint8Array = new Uint8Array(bytes)
+		let binaryString = ''
+		for (let i = 0; i < uint8Array.length; i++) {
+			binaryString += String.fromCharCode(uint8Array[i])
+		}
+		const base64 = btoa(binaryString)
+
+		return { base64, mimeType }
+	} catch (e) {
+		console.error('[readImageAsBase64] Failed to read image:', e)
+		return null
+	}
+}
+
+/**
+ * Check if a URI points to an image file by extension
+ */
+const isImageFileByExtension = (uri: URI | undefined): boolean => {
+	if (!uri || !uri.fsPath) {
+		return false
+	}
+	const ext = uri.fsPath.split('.').pop()?.toLowerCase()
+	return ext === 'jpg' || ext === 'jpeg' || ext === 'png' || ext === 'gif' || ext === 'webp'
+}
+
+/**
+ * Extract image selections from a list of staging selections
+ * Handles both explicit 'Image' type and 'File' type with image extensions
+ */
+export const getImageSelectionsWithData = async (
+	selections: StagingSelectionItem[] | null,
+	fileService: IFileService
+): Promise<Array<{ uri: URI; base64: string; mimeType: 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp' }>> => {
+	if (!selections) return []
+
+	const results: Array<{ uri: URI; base64: string; mimeType: 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp' }> = []
+
+	for (const s of selections) {
+		// Handle explicit Image type
+		if (s.type === 'Image') {
+			// Use cached data if available
+			if (s.state?.base64Data) {
+				results.push({ uri: s.uri, base64: s.state.base64Data, mimeType: s.mimeType })
+				continue
+			}
+
+			// Read and convert the image
+			const imageData = await readImageAsBase64(fileService, s.uri)
+			if (imageData) {
+				results.push({ uri: s.uri, ...imageData })
+			}
+			continue
+		}
+
+		// Handle File type that might be an image (detected by extension)
+		if (s.type === 'File' && isImageFileByExtension(s.uri)) {
+			console.log(`[getImageSelectionsWithData] Detected image file by extension: ${s.uri.fsPath}`)
+			const imageData = await readImageAsBase64(fileService, s.uri)
+			if (imageData) {
+				results.push({ uri: s.uri, ...imageData })
+			}
+		}
+	}
+
+	return results
+}
+
+/**
+ * Check if any selections contain images (explicit Image type or File with image extension)
+ */
+export const hasImageSelections = (selections: StagingSelectionItem[] | null): boolean => {
+	return (selections ?? []).some(s =>
+		s.type === 'Image' ||
+		(s.type === 'File' && isImageFileByExtension(s.uri))
+	)
+}
+
+
+
+
+
+export const messageOfSelection = async (
+	s: StagingSelectionItem,
+	opts: {
+		directoryStrService: IDirectoryStrService,
+		fileService: IFileService,
+		folderOpts: {
+			maxChildren: number,
+			maxCharsPerFile: number,
+		}
+	}
+) => {
+	const lineNumAddition = (range: [number, number]) => ` (lines ${range[0]}:${range[1]})`
+
+	if (s.type === 'CodeSelection') {
+		const { val } = await readFile(opts.fileService, s.uri, DEFAULT_FILE_SIZE_LIMIT)
+		const lines = val?.split('\n')
+
+		const innerVal = lines?.slice(s.range[0] - 1, s.range[1]).join('\n')
+		const content = !lines ? ''
+			: `${tripleTick[0]}${s.language}\n${innerVal}\n${tripleTick[1]}`
+		const str = `${s.uri.fsPath}${lineNumAddition(s.range)}:\n${content}`
+		return str
+	}
+	else if (s.type === 'File') {
+		// Debug: Log file selection processing
+		console.log(`[messageOfSelection] Processing File: ${s.uri.fsPath}`)
+		console.log(`[messageOfSelection] - language: ${s.language}`)
+		console.log(`[messageOfSelection] - hasRagContext: ${!!s.state.ragContext}`)
+		console.log(`[messageOfSelection] - ragContextLength: ${s.state.ragContext?.length ?? 0}`)
+
+		// Check if this is a virtual file (like folder trees)
+		if (s.state.isVirtualFile && s.state.virtualContent) {
+			return `${s.uri.fsPath}:\n${tripleTick[0]}plaintext\n${s.state.virtualContent}\n${tripleTick[1]}`
+		}
+
+		// Check if this is an image file - skip text extraction, images are sent separately as base64
+		if (isImageFileByExtension(s.uri)) {
+			return `${s.uri.fsPath}: [Image attached - sent separately for visual analysis]`
+		}
+
+		// Check if RAG context is available (for PDFs and other documents)
+		if (s.state.ragContext) {
+			console.log(`[messageOfSelection] ✅ Using ragContext for ${s.uri.fsPath} (${s.state.ragContext.length} chars)`)
+			// Use pre-generated content - this is the FULL extracted text, not excerpts
+			// Make it very clear to the LLM that this is complete and it should NOT use read_file
+			const str = `${s.uri.fsPath} [FULL DOCUMENT CONTENT - DO NOT USE read_file]:\n${tripleTick[0]}\n${s.state.ragContext}\n${tripleTick[1]}`
+			return str
+		}
+
+		// Check if this is a binary document (PDF, DOCX, XLSX) without RAG context
+		// These can't be read as text directly - need to indicate the file is attached
+		const ext = s.uri?.path?.split('.').pop()?.toLowerCase() || ''
+		const binaryDocTypes = ['pdf', 'docx', 'doc', 'xlsx', 'xls', 'pptx', 'ppt']
+		if (binaryDocTypes.includes(ext)) {
+			// Binary document without extracted content - tell the agent clearly
+			const fileName = s.uri.path.split('/').pop() || 'document'
+			return `${s.uri.fsPath}: [${ext.toUpperCase()} document attached: "${fileName}"]\n⚠️ This document was drag-dropped but text extraction is pending. The agent should use the read_file tool to read this specific file: ${s.uri.fsPath}`
+		}
+
+		// Standard file extraction for text files
+		const { val } = await readFile(opts.fileService, s.uri, DEFAULT_FILE_SIZE_LIMIT)
+
+		const innerVal = val
+		const content = val === null ? ''
+			: `${tripleTick[0]}${s.language}\n${innerVal}\n${tripleTick[1]}`
+
+		const str = `${s.uri.fsPath}:\n${content}`
+		return str
+	}
+	else if (s.type === 'Folder') {
+		const dirStr: string = await opts.directoryStrService.getDirectoryStrTool(s.uri)
+		const folderStructure = `${s.uri.fsPath} folder structure:${tripleTick[0]}\n${dirStr}\n${tripleTick[1]}`
+
+		const uris = await opts.directoryStrService.getAllURIsInDirectory(s.uri, { maxResults: opts.folderOpts.maxChildren })
+		const strOfFiles = await Promise.all(uris.map(async uri => {
+			const { val, truncated } = await readFile(opts.fileService, uri, opts.folderOpts.maxCharsPerFile)
+			const truncationStr = truncated ? `\n... file truncated ...` : ''
+			const content = val === null ? 'null' : `${tripleTick[0]}\n${val}${truncationStr}\n${tripleTick[1]}`
+			const str = `${uri.fsPath}:\n${content}`
+			return str
+		}))
+		const contentStr = [folderStructure, ...strOfFiles].join('\n\n')
+		return contentStr
+	}
+	else if (s.type === 'Image') {
+		// Images are handled specially via multi-modal message format
+		// Return a placeholder text that describes the image
+		const fileName = s.uri.path.split('/').pop() || 'image'
+		return `[Image attached: ${fileName}]`
+	}
+	else
+		return ''
+
+}
+
+
+export const chat_userMessageContent = async (
+	instructions: string,
+	currSelns: StagingSelectionItem[] | null,
+	opts: {
+		directoryStrService: IDirectoryStrService,
+		fileService: IFileService
+	},
+) => {
+
+	const selnsStrs = await Promise.all(
+		(currSelns ?? []).map(async (s) =>
+			messageOfSelection(s, {
+				...opts,
+				folderOpts: { maxChildren: 100, maxCharsPerFile: 100_000, }
+			})
+		)
+	)
+
+
+	let str = ''
+	str += `${instructions}`
+
+	const selnsStr = selnsStrs.join('\n\n') ?? ''
+	if (selnsStr) {
+		// Check if any selections are PDFs with RAG context
+		const hasPDFExcerpts = (currSelns ?? []).some(s =>
+			s.type === 'File' && s.language === 'pdf' && s.state.ragContext
+		);
+
+		// Count selection types for clear instructions
+		const fileCount = (currSelns ?? []).filter(s => s.type === 'File').length
+		const codeCount = (currSelns ?? []).filter(s => s.type === 'CodeSelection').length
+		const folderCount = (currSelns ?? []).filter(s => s.type === 'Folder').length
+		const imageCount = (currSelns ?? []).filter(s => s.type === 'Image').length
+
+		// Build a clear header that tells the agent NOT to re-read these files
+		let header: string
+		if (hasPDFExcerpts) {
+			header = `📄 ATTACHED DOCUMENTS (FULL CONTENT INCLUDED BELOW)
+The following documents have been FULLY EXTRACTED and their COMPLETE TEXT is included below.
+🚫 DO NOT use read_file on these documents - you already have the full content.
+✅ Simply read and analyze the text below. Use file tools ONLY for files NOT listed here.`
+		} else {
+			const parts: string[] = []
+			if (fileCount > 0) parts.push(`${fileCount} file(s)`)
+			if (codeCount > 0) parts.push(`${codeCount} code selection(s)`)
+			if (folderCount > 0) parts.push(`${folderCount} folder(s)`)
+			if (imageCount > 0) parts.push(`${imageCount} image(s)`)
+			const summary = parts.length > 0 ? parts.join(', ') : 'selections'
+
+			header = `📎 ATTACHED FILES & SELECTIONS (FULL CONTENT BELOW)
+The user has attached ${summary}. Their COMPLETE CONTENTS are included below.
+🚫 DO NOT use read_file on these files - you already have the full content.
+✅ Simply read and analyze the content below. Use file tools ONLY for files NOT listed here.`
+		}
+
+		str += `\n---\n${header}\n${selnsStr}`;
+	}
+	return str;
+}
+
+
+export const rewriteCode_systemMessage = `\
+You are a coding assistant that re-writes an entire file to make a change. You are given the original file \`ORIGINAL_FILE\` and a change \`CHANGE\`.
+
+Directions:
+1. Please rewrite the original file \`ORIGINAL_FILE\`, making the change \`CHANGE\`. You must completely re-write the whole file.
+2. Keep all of the original comments, spaces, newlines, and other details whenever possible.
+3. ONLY output the full new file. Do not add any other explanations or text.
+`
+
+
+
+// ======================================================== apply (writeover) ========================================================
+
+export const rewriteCode_userMessage = ({ originalCode, applyStr, language }: { originalCode: string, applyStr: string, language: string }) => {
+
+	return `\
+ORIGINAL_FILE
+${tripleTick[0]}${language}
+${originalCode}
+${tripleTick[1]}
+
+CHANGE
+${tripleTick[0]}
+${applyStr}
+${tripleTick[1]}
+
+INSTRUCTIONS
+Please finish writing the new file by applying the change to the original file. Return ONLY the completion of the file, without any explanation.
+`
+}
+
+
+
+// ======================================================== apply (fast apply - search/replace) ========================================================
+
+export const searchReplaceGivenDescription_systemMessage = createSearchReplaceBlocks_systemMessage
+
+
+export const searchReplaceGivenDescription_userMessage = ({ originalCode, applyStr }: { originalCode: string, applyStr: string }) => `\
+DIFF
+${applyStr}
+
+ORIGINAL_FILE
+${tripleTick[0]}
+${originalCode}
+${tripleTick[1]}`
+
+
+
+
+export const voidPrefixAndSuffix = ({ fullFileStr, startLine, endLine }: { fullFileStr: string, startLine: number, endLine: number }) => {
+
+	const fullFileLines = fullFileStr.split('\n')
+
+	/*
+
+	a
+	a
+	a     <-- final i (prefix = a\na\n)
+	a
+	|b    <-- startLine-1 (middle = b\nc\nd\n)   <-- initial i (moves up)
+	c
+	d|    <-- endLine-1                          <-- initial j (moves down)
+	e
+	e     <-- final j (suffix = e\ne\n)
+	e
+	e
+	*/
+
+	let prefix = ''
+	let i = startLine - 1  // 0-indexed exclusive
+	// we'll include fullFileLines[i...(startLine-1)-1].join('\n') in the prefix.
+	while (i !== 0) {
+		const newLine = fullFileLines[i - 1]
+		if (newLine.length + 1 + prefix.length <= MAX_PREFIX_SUFFIX_CHARS) { // +1 to include the \n
+			prefix = `${newLine}\n${prefix}`
+			i -= 1
+		}
+		else break
+	}
+
+	let suffix = ''
+	let j = endLine - 1
+	while (j !== fullFileLines.length - 1) {
+		const newLine = fullFileLines[j + 1]
+		if (newLine.length + 1 + suffix.length <= MAX_PREFIX_SUFFIX_CHARS) { // +1 to include the \n
+			suffix = `${suffix}\n${newLine}`
+			j += 1
+		}
+		else break
+	}
+
+	return { prefix, suffix }
+
+}
+
+
+// ======================================================== quick edit (ctrl+K) ========================================================
+
+export type QuickEditFimTagsType = {
+	preTag: string,
+	sufTag: string,
+	midTag: string
+}
+export const defaultQuickEditFimTags: QuickEditFimTagsType = {
+	preTag: 'ABOVE',
+	sufTag: 'BELOW',
+	midTag: 'SELECTION',
+}
+
+// this should probably be longer
+export const ctrlKStream_systemMessage = ({ quickEditFIMTags: { preTag, midTag, sufTag } }: { quickEditFIMTags: QuickEditFimTagsType }) => {
+	return `\
+You are a smart editing assistant using FIM (Fill-In-The-Middle).
+Your goal is to update the SELECTION marked by <${midTag}> tags based on the user's INSTRUCTIONS.
+
+**Context:**
+- <${preTag}>: Preceding context
+- <${sufTag}>: Following context
+- ORIGINAL SELECTION: Content to be replaced
+
+**Instructions:**
+1. **Transform**: Apply the user's instructions to the original selection.
+2. **Output**: Return strictly the new content within <${midTag}> tags.
+3. **Integrity**: Ensure the result flows seamlessly with the surrounding text or code.
+   - Maintain correct indentation and formatting.
+   - For text: Ensure grammatical continuity.
+   - For code: Ensure syntax validity.
+`
+}
+
+export const ctrlKStream_userMessage = ({
+	selection,
+	prefix,
+	suffix,
+	instructions,
+	// isOllamaFIM: false, // Remove unused variable
+	fimTags,
+	language }: {
+		selection: string, prefix: string, suffix: string, instructions: string, fimTags: QuickEditFimTagsType, language: string,
+	}) => {
+	const { preTag, sufTag, midTag } = fimTags
+
+	// prompt the model artifically on how to do FIM
+	// const preTag = 'BEFORE'
+	// const sufTag = 'AFTER'
+	// const midTag = 'SELECTION'
+	return `\
+
+CURRENT SELECTION
+${tripleTick[0]}${language}
+<${midTag}>${selection}</${midTag}>
+${tripleTick[1]}
+
+INSTRUCTIONS
+${instructions}
+
+<${preTag}>${prefix}</${preTag}>
+<${sufTag}>${suffix}</${sufTag}>
+
+Return only the completion block of code (of the form ${tripleTick[0]}${language}
+<${midTag}>...new code</${midTag}>
+${tripleTick[1]}).`
+};
+
+
+
+// ======================================================== scm ========================================================================
+
+export const gitCommitMessage_systemMessage = `
+You are an intelligent version control assistant responsible for writing clear and concise Git commit messages that summarize the **purpose** and **intent** of the change.
+
+**Guidelines:**
+1. **Concise**: Aim for a single sentence. Use two only if necessary.
+2. **Intent-Focused**: Explain *why* the change was made, not just *what* changed.
+3. **Format**:
+   <output>Correct formatting in appeal letter template</output>
+   <reasoning>This commit fixes indentation issues in the appeal letter to ensure professional presentation.</reasoning>
+
+**Output Requirement:**
+Provide ONLY the <output> and <reasoning> tags. No other text.`.trim()
+
+
+/**
+ * Create a user message for the LLM to generate a commit message. The message contains instructions git diffs, and git metadata to provide context.
+ *
+ * @param stat - Summary of Changes (git diff --stat)
+ * @param sampledDiffs - Sampled File Diffs (Top changed files)
+ * @param branch - Current Git Branch
+ * @param log - Last 5 commits (excluding merges)
+ * @returns A prompt for the LLM to generate a commit message.
+ *
+ * @example
+ * // Sample output (truncated for brevity)
+ * const prompt = gitCommitMessage_userMessage("fileA.ts | 10 ++--", "diff --git a/fileA.ts...", "main", "abc123|Fix bug|2025-01-01\n...")
+ *
+ * // Result:
+ * Based on the following Git changes, write a clear, concise commit message that accurately summarizes the intent of the code changes.
+ *
+ * Section 1 - Summary of Changes (git diff --stat):
+ * fileA.ts | 10 ++--
+ *
+ * Section 2 - Sampled File Diffs (Top changed files):
+ * diff --git a/fileA.ts b/fileA.ts
+ * ...
+ *
+ * Section 3 - Current Git Branch:
+ * main
+ *
+ * Section 4 - Last 5 Commits (excluding merges):
+ * abc123|Fix bug|2025-01-01
+ * def456|Improve logging|2025-01-01
+ * ...
+ */
+export const gitCommitMessage_userMessage = (stat: string, sampledDiffs: string, branch: string, log: string) => {
+	const section1 = `Section 1 - Summary of Changes (git diff --stat):`
+	const section2 = `Section 2 - Sampled File Diffs (Top changed files):`
+	const section3 = `Section 3 - Current Git Branch:`
+	const section4 = `Section 4 - Last 5 Commits (excluding merges):`
+	return `
+Based on the following Git changes, write a clear, concise commit message that accurately summarizes the intent of the code changes.
+
+${section1}
+
+${stat}
+
+${section2}
+
+${sampledDiffs}
+
+${section3}
+
+${branch}
+
+${section4}
+
+${log}`.trim()
+}
+
+
+// ======================================================== case organizer ========================================================
+
+export const caseOrganizerInit_systemMessage = `\
+You are the Case Organizer agent for SafeAppeals - a specialized assistant for organizing workers compensation documents using terminal tools with maximum safety.
+
+**Your Mission:** Help organize case files into a structured folder hierarchy while maintaining complete safety through dry-runs, backups, and clear user confirmations.
+
+**Available Modes:**
+1. **full_auto**: Analyze files, propose plan, preview (dry_run), create backups, then execute moves automatically
+2. **interactive**: Ask user to confirm categories for low-confidence files; always show dry_run preview first
+3. **manual**: Only scaffold folders; do not move any files
+
+**Safety Guardrails (CRITICAL):**
+- ALWAYS run a dry_run plan first: generate and show a JSON preview of operations before executing
+- In full_auto mode: ALWAYS create backups first in \`tosort/_originals/\` before any moves
+- On filename conflicts: auto-rename with numeric suffix (_01, _02, etc.)
+- Log ALL operations to \`organization_log.json\` in project root
+- Produce \`undo_plan.json\` with reverse operations for safety
+- NEVER delete original files unless user explicitly requests it
+
+**OS-Specific Commands (Windows PowerShell - adapt for macOS/Linux):**
+- Create directory: \`New-Item -ItemType Directory -Path "<path>" -Force\`
+- Copy for backup: \`Copy-Item -Path "<src>" -Destination "<dst>" -Force\`
+- Move file: \`Move-Item -Path "<src>" -Destination "<dst>" -Force\`
+- List directory: \`Get-ChildItem -Path "<path>" | Format-Table Name, Length\`
+
+**Folder Structure to Create:**
+\`\`\`
+Case_Files/
+├── Medical_Reports/
+├── Correspondence/
+├── Decisions_and_Orders/
+├── Evidence/
+├── Personal_Notes/
+└── Uncategorized/
+\`\`\`
+
+**Categorization Heuristics (filename patterns):**
+- Medical_Reports: medical, doctor, physician, exam, assessment, treatment, diagnosis, mri, xray, report
+- Correspondence: letter, email, correspondence, notice, communication
+- Decisions_and_Orders: decision, order, ruling, judgment, determination, award
+- Evidence: evidence, witness, statement, photo, image, document
+- Personal_Notes: note, journal, diary, personal, draft
+- Uncategorized: anything that doesn't clearly fit above
+
+**Standard Workflow:**
+
+**Step 1: Mode Selection**
+Ask user: "Choose organization mode:
+1. Full Auto - I'll analyze, plan, backup, and organize everything
+2. Interactive - I'll confirm categories with you before organizing
+3. Manual - I'll only create the folder structure"
+
+**Step 2: Analysis (for full_auto and interactive)**
+1. Check if \`./tosort\` exists (create if missing using \`New-Item\`)
+2. Read directory tree under \`./tosort\` (use \`get_dir_tree\` tool)
+3. For each file, categorize by filename patterns
+4. For uncertain files, optionally sample first 1KB of content (text files only)
+5. Build categorization plan
+
+**Step 3: Dry-Run Plan**
+Create and display a JSON plan:
+\`\`\`json
+{
+  "mode": "full_auto",
+  "operations": [
+    {
+      "source": "./tosort/2024-01-15_medical_exam.pdf",
+      "destination": "./Case_Files/Medical_Reports/2024-01-15_Medical_Exam.pdf",
+      "category": "Medical_Reports",
+      "confidence": "high",
+      "reason": "Filename contains 'medical' and 'exam'"
+    }
+  ],
+  "stats": {
+    "total_files": 25,
+    "high_confidence": 20,
+    "medium_confidence": 3,
+    "low_confidence": 2,
+    "conflicts_detected": 1
+  },
+  "conflicts": [
+    {
+      "file": "report.pdf",
+      "issue": "Already exists in destination",
+      "resolution": "Will rename to report_01.pdf"
+    }
+  ]
+}
+\`\`\`
+
+Ask user: "Review the plan above. Type 'proceed' to continue, 'edit' to modify, or 'cancel' to stop."
+
+**Step 4: Execution (if approved)**
+1. Create all destination folders (\`New-Item -ItemType Directory -Force\`)
+2. If full_auto mode:
+   - Create \`./tosort/_originals/\` directory
+   - Copy all files to \`_originals/\` first (use \`Copy-Item\`)
+3. For each operation:
+   - Check if destination parent exists (create if needed)
+   - Check for filename conflicts (rename with suffix if needed)
+   - Execute move (\`Move-Item\`)
+   - Record success/failure in log
+4. Write \`organization_log.json\` with all operations
+5. Write \`undo_plan.json\` with reverse operations
+
+**Step 5: Summary Report**
+\`\`\`json
+{
+  "summary": {
+    "mode": "full_auto",
+    "files_moved": 23,
+    "files_skipped": 2,
+    "conflicts_resolved": 1,
+    "backups_created": 25,
+    "errors": []
+  },
+  "logs": "organization_log.json",
+  "undo_plan": "undo_plan.json"
+}
+\`\`\`
+
+**Interactive Mode Specifics:**
+- For files with confidence < "high", ask user: "Where should I place '<filename>'? Suggested: <category>"
+- Allow user to specify custom destination or category
+- Show updated plan after user input
+
+**Manual Mode:**
+- Only create folder scaffold under \`./Case_Files/\`
+- Print: "Folder structure created. You can manually organize files into these folders."
+- Exit after scaffold creation
+
+**Error Handling:**
+- If a command fails, record in errors array
+- Skip failed operation and continue with next
+- Never abort entire process due to single failure
+- Report all errors in final summary
+
+**Important Notes:**
+- Always use PowerShell commands on Windows (detected OS: ${os})
+- Print each command before executing for transparency
+- Prefer absolute paths over relative when possible
+- Ask user before overwriting any existing \`organization_log.json\`
+- If \`tosort/\` doesn't exist and mode is full_auto/interactive, ask if user wants to specify a different folder
+
+**Example User Interaction:**
+User: "I want to organize my case files"
+You: "I'll help organize your workers compensation case files. Which mode would you like?
+1. Full Auto - I'll handle everything with backups
+2. Interactive - You'll confirm uncertain categorizations
+3. Manual - Just create the folder structure
+
+Type 1, 2, or 3 to choose."
+`.trim()
+
+export const caseOrganizerInit_defaultPrompt = `I need to organize my workers compensation case files using the Case Organizer system.
+
+**Context:** I have documents that need to be categorized into:
+- Medical_Reports
+- Correspondence
+- Decisions_and_Orders
+- Evidence
+- Personal_Notes
+- Uncategorized
+
+Please follow the Case Organizer workflow:
+1. Ask me which mode (Full Auto, Interactive, or Manual)
+2. Analyze files in ./tosort or ask me to specify folder
+3. Create a dry-run JSON plan with categorization
+4. Wait for my approval before executing
+5. If approved, create backups and execute moves
+6. Generate organization_log.json and undo_plan.json
+
+**System:** ${os}
+**Commands:** Use ${os === 'windows' ? 'PowerShell (New-Item, Copy-Item, Move-Item)' : 'bash (mkdir, cp, mv)'}
+
+**Safety:** Always backup before moving files. Ask before overwriting logs.`
