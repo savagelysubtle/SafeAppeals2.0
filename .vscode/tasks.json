@@ -15,7 +15,7 @@
 		},
 		{
 			"label": "Run VS Code",
-			"detail": "Run VS Code with a user data directory inside the worktree.",
+			"detail": "DESKTOP: launch the Electron app with an isolated profile (.profile-oss inside the worktree). Same as Run Dev but keeps settings/extensions separate from your normal profile - good for clean-slate testing.",
 			"type": "shell",
 			"command": "./scripts/code.sh",
 			"windows": {
@@ -26,6 +26,30 @@
 				"--extensions-dir=${workspaceFolder}/.profile-oss/extensions"
 			],
 			"inAgents": true,
+			"problemMatcher": []
+		},
+		{
+			"label": "Watch & Run Electron App",
+			"detail": "DESKTOP: run the watchers (npm run watch), then launch the native Electron app. Use this for performance testing - real desktop runtime, native modules, GPU rendering. See https://github.com/microsoft/vscode/wiki/How-to-Contribute#desktop",
+			"dependsOn": [
+				"Watch",
+				"Run VS Code"
+			],
+			"dependsOrder": "sequence",
+			"inAgents": true,
+			"problemMatcher": []
+		},
+		{
+			"label": "Run VS Code CLI",
+			"detail": "Run CLI commands against the dev build (eg. --version). Pass extra args via the terminal after the task starts.",
+			"type": "shell",
+			"command": "./scripts/code-cli.sh",
+			"windows": {
+				"command": ".\\scripts\\code-cli.bat"
+			},
+			"args": [
+				"--version"
+			],
 			"problemMatcher": []
 		},
 		{
@@ -41,6 +65,7 @@
 		},
 		{
 			"label": "Install Dependencies",
+			"detail": "Uses npm (not bun) - Bun sandboxes postinstall/node-gyp lifecycle scripts by default, which would break native module builds against the Electron ABI (see .npmrc).",
 			"type": "shell",
 			"command": "npm install",
 			"windows": {
@@ -316,7 +341,7 @@
 			"label": "Kill VS Code - Build, Npm, VS Code - Build",
 			"dependsOn": [
 				"Kill VS Code - Build",
-				"npm: install",
+				"Install Dependencies",
 				"VS Code - Build"
 			],
 			"group": "build",
@@ -423,34 +448,6 @@
 		},
 		{
 			"type": "shell",
-			"command": "./scripts/code-server.sh",
-			"windows": {
-				"command": ".\\scripts\\code-server.bat"
-			},
-			"args": [
-				"--no-launch",
-				"--connection-token",
-				"dev-token",
-				"--port",
-				"8080"
-			],
-			"label": "Run code server",
-			"isBackground": true,
-			"problemMatcher": {
-				"pattern": {
-					"regexp": ""
-				},
-				"background": {
-					"beginsPattern": ".*node .*",
-					"endsPattern": "Web UI available at .*"
-				}
-			},
-			"presentation": {
-				"reveal": "never"
-			}
-		},
-		{
-			"type": "shell",
 			"command": "./scripts/code-web.sh",
 			"windows": {
 				"command": ".\\scripts\\code-web.bat"
@@ -462,6 +459,7 @@
 				"none"
 			],
 			"label": "Run code web",
+			"detail": "BROWSER (serverless): serve the pure web build at http://localhost:8080 - no NodeJS backend, web extensions only. Use to test the browser-only build; for everyday UI work prefer Run Dev (WEB).",
 			"isBackground": true,
 			"problemMatcher": {
 				"pattern": {
@@ -477,8 +475,8 @@
 			}
 		},
 		{
-			"label": "Run VS Code (Web)",
-			"detail": "Run the Agents window as a web client.",
+			"label": "Run Dev (WEB)",
+			"detail": "BROWSER: serve the app at http://localhost:8080/?tkn=dev-token (open manually). Use this for UI work - iterate on the workbench UI in the browser with DevTools, just reload the tab after the watcher recompiles.",
 			"type": "shell",
 			"command": "./scripts/code-server.sh",
 			"windows": {
@@ -504,6 +502,46 @@
 			"presentation": {
 				"reveal": "always"
 			}
+		},
+		{
+			"label": "Run Code Server (Launch Browser)",
+			"detail": "BROWSER: same as Run Dev (WEB) but opens your browser automatically. UI runs in the browser, extensions run in a NodeJS code server on the desktop.",
+			"type": "shell",
+			"command": "./scripts/code-server.sh",
+			"windows": {
+				"command": ".\\scripts\\code-server.bat"
+			},
+			"args": [
+				"--launch",
+				"--connection-token",
+				"dev-token",
+				"--port",
+				"8080"
+			],
+			"isBackground": true,
+			"problemMatcher": {
+				"pattern": {
+					"regexp": ""
+				},
+				"background": {
+					"beginsPattern": ".*node .*",
+					"endsPattern": "Web UI available at .*"
+				}
+			},
+			"presentation": {
+				"reveal": "always"
+			}
+		},
+		{
+			"label": "Watch & Run Code Server (Web UI, Desktop Extensions)",
+			"detail": "BROWSER: run the watchers (npm run watch), then serve the UI in the browser (auto-opens). One-shot task for a UI-upgrade session: edit code, wait for recompile, reload the tab. See https://github.com/microsoft/vscode/wiki/How-to-Contribute#code-server-web",
+			"dependsOn": [
+				"Watch",
+				"Run Code Server (Launch Browser)"
+			],
+			"dependsOrder": "sequence",
+			"inAgents": true,
+			"problemMatcher": []
 		},
 		{
 			"type": "npm",
@@ -539,7 +577,7 @@
 		{
 			"label": "Launch Monaco Editor Vite",
 			"type": "shell",
-			"command": "npm run dev",
+			"command": "bun run dev",
 			"options": {
 				"cwd": "./build/vite/"
 			},
@@ -565,7 +603,7 @@
 		{
 			"label": "Launch MCP Server",
 			"type": "shell",
-			"command": "cd test/mcp && npm run compile && npm run start-http",
+			"command": "cd test/mcp && bun run compile && bun run start-http",
 			"isBackground": true,
 			"problemMatcher": [
 				"$tsc"
@@ -573,6 +611,7 @@
 		},
 		{
 			"label": "Run Dev",
+			"detail": "DESKTOP: launch the full app in Electron with your normal profile. Use this to test real app performance (native modules, GPU rendering, startup time). Requires a Watch task already running.",
 			"type": "shell",
 			"command": "./scripts/code.sh",
 			"windows": {
@@ -614,7 +653,7 @@
 		{
 			"label": "Component Explorer Server",
 			"type": "shell",
-			"command": "npx component-explorer serve -p ./test/componentFixtures/component-explorer.json -vv --kill-if-running",
+			"command": "bunx component-explorer serve -p ./test/componentFixtures/component-explorer.json -vv --kill-if-running",
 			"isBackground": true,
 			"inAgents": true,
 			"problemMatcher": {
@@ -635,10 +674,11 @@
 		},
 		{
 			"label": "Install & Watch",
+			"detail": "npm install is kept for native module builds against the Electron ABI (see .npmrc); the watch script runs via bun.",
 			"type": "shell",
-			"command": "npm install && npm run watch-transpile",
+			"command": "npm install && bun run watch-transpile",
 			"windows": {
-				"command": "cmd /c \"npm install && npm run watch-transpile\""
+				"command": "cmd /c \"npm install && bun run watch-transpile\""
 			},
 			"presentation": {
 				"focus": false,
@@ -668,16 +708,5 @@
 				}
 			}
 		},
-		{
-			"label": "Echo E2E Status",
-			"type": "shell",
-			"command": "pwsh",
-			"args": [
-				"-NoProfile",
-				"-Command",
-				"Write-Output \"134 passed, 0 failed, 1 skipped, 135 total\"; Start-Sleep -Seconds 2; Write-Output \"[PASS] E2E Tests\"; Write-Output \"Watching for changes...\""
-			],
-			"isBackground": false
-		}
 	]
 }

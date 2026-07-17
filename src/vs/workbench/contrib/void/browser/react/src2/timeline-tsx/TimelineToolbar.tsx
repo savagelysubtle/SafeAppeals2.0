@@ -1,0 +1,536 @@
+/*--------------------------------------------------------------------------------------
+ *  Copyright 2025 Glass Devtools, Inc. All rights reserved.
+ *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
+ *--------------------------------------------------------------------------------------*/
+
+import React from "react";
+import {
+  EVENT_CATEGORY_LABELS,
+  EventCategory,
+  JurisdictionConfig,
+  TimelineEvent } from
+"../../../../common/timeline/timelineTypes.js";
+import { NotificationCenter } from "./NotificationCenter.js";
+import type { DisplayMode, TimelineViewMode } from "./TimelineDashboard.js";
+
+// Reusable style objects with VSCode CSS variables
+const toolbarStyle: React.CSSProperties = {
+  backgroundColor: "var(--vscode-sideBar-background)",
+  borderBottom: "1px solid var(--vscode-panel-border)"
+};
+
+const buttonPrimaryStyle: React.CSSProperties = {
+  backgroundColor: "var(--vscode-button-background)",
+  color: "var(--vscode-button-foreground)",
+  border: "none",
+  borderRadius: "8px",
+  cursor: "pointer"
+};
+
+const buttonSecondaryStyle: React.CSSProperties = {
+  backgroundColor: "var(--vscode-button-secondaryBackground)",
+  color: "var(--vscode-button-secondaryForeground)",
+  border: "1px solid var(--vscode-panel-border)",
+  borderRadius: "8px"
+};
+
+const selectStyle: React.CSSProperties = {
+  backgroundColor: "var(--vscode-input-background)",
+  color: "var(--vscode-input-foreground)",
+  border: "1px solid var(--vscode-input-border)",
+  borderRadius: "8px"
+};
+
+const textMutedStyle: React.CSSProperties = {
+  color: "var(--vscode-descriptionForeground)"
+};
+
+// View mode labels
+const VIEW_MODE_LABELS: Record<
+  TimelineViewMode,
+  {label: string;icon: string;}> =
+{
+  all: { label: "All Time", icon: "codicon-list-flat" },
+  year: { label: "This Year", icon: "codicon-calendar" },
+  month: { label: "This Month", icon: "codicon-calendar" },
+  week: { label: "This Week", icon: "codicon-watch" }
+};
+
+interface TimelineToolbarProps {
+  onAddEvent: () => void;
+  onExport: () => void;
+  onExportIcs?: () => void;
+  calendarEventCount?: number;
+  // Google Calendar integration
+  googleCalendarConnected?: boolean;
+  onConnectGoogleCalendar?: () => void;
+  onDisconnectGoogleCalendar?: () => void;
+  onSyncToGoogleCalendar?: () => void;
+  isSyncing?: boolean;
+  // Outlook Calendar integration (buttons hidden until Azure app registration is available)
+  outlookCalendarConnected?: boolean;
+  onConnectOutlookCalendar?: () => void;
+  onDisconnectOutlookCalendar?: () => void;
+  onSyncToOutlookCalendar?: () => void;
+  isOutlookSyncing?: boolean;
+  onSyncFromCase: () => void;
+  filterCategory: EventCategory | "all";
+  onFilterChange: (category: EventCategory | "all") => void;
+  showDeadlinesOnly: boolean;
+  onShowDeadlinesChange: (show: boolean) => void;
+  jurisdiction?: JurisdictionConfig;
+  onJurisdictionClick: () => void;
+  eventCount: number;
+  viewMode: TimelineViewMode;
+  onViewModeChange: (mode: TimelineViewMode) => void;
+  displayMode: DisplayMode;
+  onDisplayModeChange: (mode: DisplayMode) => void;
+  onEditEvent?: (event: TimelineEvent) => void;
+  onOpenNotificationSettings?: () => void;
+}
+
+export const TimelineToolbar: React.FC<TimelineToolbarProps> = ({
+  onAddEvent,
+  onExport,
+  onExportIcs,
+  calendarEventCount = 0,
+  googleCalendarConnected = false,
+  onConnectGoogleCalendar,
+  onDisconnectGoogleCalendar,
+  onSyncToGoogleCalendar,
+  isSyncing = false,
+  // Outlook props - kept for future use, buttons hidden until Azure app registration
+  outlookCalendarConnected: _outlookCalendarConnected = false,
+  onConnectOutlookCalendar: _onConnectOutlookCalendar,
+  onDisconnectOutlookCalendar: _onDisconnectOutlookCalendar,
+  onSyncToOutlookCalendar: _onSyncToOutlookCalendar,
+  isOutlookSyncing: _isOutlookSyncing = false,
+  onSyncFromCase,
+  filterCategory,
+  onFilterChange,
+  showDeadlinesOnly,
+  onShowDeadlinesChange,
+  jurisdiction,
+  onJurisdictionClick,
+  eventCount,
+  viewMode,
+  onViewModeChange,
+  displayMode,
+  onDisplayModeChange,
+  onEditEvent,
+  onOpenNotificationSettings
+}) => {
+  const categories: (EventCategory | "all")[] = [
+  "all",
+  "injury",
+  "medical",
+  "hearing",
+  "decision",
+  "deadline",
+  "filing",
+  "correspondence",
+  "custom"];
+
+
+  return (
+    <div className="void-p-3 void-flex void-flex-wrap void-items-center void-gap-3" style={toolbarStyle}>
+			{/* Add Event Button - Primary */}
+			<button
+        onClick={onAddEvent}
+        className="void-px-4 void-py-2 void-rounded-lg void-font-semibold void-flex void-items-center void-gap-2 void-transition-all"
+        style={buttonPrimaryStyle}>
+        
+				<i className="void-codicon void-codicon-add" />
+				<span>Add Event</span>
+			</button>
+
+			{/* Divider */}
+			<div
+        className="void-w-px void-h-6"
+        style={{ backgroundColor: "var(--vscode-panel-border)" }} />
+      
+
+			{/* Display Mode Toggle (Timeline/Calendar) */}
+			<div
+        className="void-flex void-items-center void-gap-1 void-p-1 void-rounded-lg"
+        style={buttonSecondaryStyle}>
+        
+				<button
+          onClick={() => onDisplayModeChange("timeline")}
+          className="void-px-2.5 void-py-1 void-rounded-md void-text-xs void-font-medium void-transition-all void-flex void-items-center void-gap-1.5"
+          style={{
+            backgroundColor:
+            displayMode === "timeline" ?
+            "var(--vscode-button-background)" :
+            "transparent",
+            color:
+            displayMode === "timeline" ?
+            "var(--vscode-button-foreground)" :
+            "var(--vscode-descriptionForeground)"
+          }}
+          title="Timeline View">
+          
+					<i
+            className="void-codicon void-codicon-list-tree"
+            style={{ fontSize: "12px" }} />
+          
+					<span>Timeline</span>
+				</button>
+				<button
+          onClick={() => onDisplayModeChange("calendar")}
+          className="void-px-2.5 void-py-1 void-rounded-md void-text-xs void-font-medium void-transition-all void-flex void-items-center void-gap-1.5"
+          style={{
+            backgroundColor:
+            displayMode === "calendar" ?
+            "var(--vscode-button-background)" :
+            "transparent",
+            color:
+            displayMode === "calendar" ?
+            "var(--vscode-button-foreground)" :
+            "var(--vscode-descriptionForeground)"
+          }}
+          title="Calendar View">
+          
+					<i
+            className="void-codicon void-codicon-calendar"
+            style={{ fontSize: "12px" }} />
+          
+					<span>Calendar</span>
+				</button>
+			</div>
+
+			{/* Divider */}
+			<div
+        className="void-w-px void-h-6"
+        style={{ backgroundColor: "var(--vscode-panel-border)" }} />
+      
+
+			{/* View Mode Selector (Zoom Controls) - Only show in timeline mode */}
+			{displayMode === "timeline" &&
+      <>
+					<div
+          className="void-flex void-items-center void-gap-1 void-p-1 void-rounded-lg"
+          style={buttonSecondaryStyle}>
+          
+						{(Object.keys(VIEW_MODE_LABELS) as TimelineViewMode[]).map(
+            (mode) =>
+            <button
+              key={mode}
+              onClick={() => onViewModeChange(mode)}
+              className="void-px-2.5 void-py-1 void-rounded-md void-text-xs void-font-medium void-transition-all"
+              style={{
+                backgroundColor:
+                viewMode === mode ?
+                "var(--vscode-button-background)" :
+                "transparent",
+                color:
+                viewMode === mode ?
+                "var(--vscode-button-foreground)" :
+                "var(--vscode-descriptionForeground)"
+              }}
+              title={VIEW_MODE_LABELS[mode].label}>
+              
+									{VIEW_MODE_LABELS[mode].label}
+								</button>
+
+          )}
+					</div>
+					<div
+          className="void-w-px void-h-6"
+          style={{ backgroundColor: "var(--vscode-panel-border)" }} />
+        
+				</>
+      }
+
+			{/* Category Filter & Deadlines Toggle - Only show in timeline mode */}
+			{displayMode === "timeline" &&
+      <>
+					{/* Category Filter */}
+					<div className="void-flex void-items-center void-gap-2">
+						<label className="void-text-sm" style={textMutedStyle}>
+							Filter:
+						</label>
+						<select
+            value={filterCategory}
+            onChange={(e) =>
+            onFilterChange(e.target.value as EventCategory | "all")
+            }
+            className="void-px-3 void-py-1.5 void-rounded-lg void-text-sm void-outline-none void-cursor-pointer"
+            style={selectStyle}>
+            
+							{categories.map((cat) =>
+            <option key={cat} value={cat}>
+									{cat === "all" ?
+              "All Categories" :
+              EVENT_CATEGORY_LABELS[cat]}
+								</option>
+            )}
+						</select>
+					</div>
+
+					{/* Deadlines Only Toggle */}
+					<label className="void-flex void-items-center void-gap-2 void-cursor-pointer void-select-none">
+						<div
+            className="void-relative void-w-8 void-h-5 void-rounded-full void-transition-colors void-cursor-pointer"
+            style={{
+              backgroundColor: showDeadlinesOnly ?
+              "var(--vscode-button-background)" :
+              "var(--vscode-panel-border)"
+            }}
+            onClick={() => onShowDeadlinesChange(!showDeadlinesOnly)}>
+            
+							<div
+              className="void-absolute void-top-0.5 void-w-4 void-h-4 void-rounded-full void-transition-transform"
+              style={{
+                backgroundColor: "var(--vscode-editor-foreground)",
+                transform: showDeadlinesOnly ?
+                "translateX(14px)" :
+                "translateX(2px)"
+              }} />
+            
+						</div>
+						<span className="void-text-sm" style={textMutedStyle}>
+							Deadlines only
+						</span>
+					</label>
+				</>
+      }
+
+			{/* Spacer */}
+			<div className="void-flex-1" />
+
+			{/* Export PDF Button */}
+			<button
+        onClick={onExport}
+        className="void-text-xs void-px-3 void-py-1.5 void-rounded-lg void-flex void-items-center void-gap-2 void-transition-all void-cursor-pointer"
+        style={buttonSecondaryStyle}
+        title="Export timeline to PDF">
+        
+				<i className="void-codicon void-codicon-file-pdf" style={{ fontSize: "12px" }} />
+				<span>Export PDF</span>
+			</button>
+
+			{/* Export ICS Button */}
+			{onExportIcs &&
+      <button
+        onClick={onExportIcs}
+        disabled={calendarEventCount === 0}
+        className="void-text-xs void-px-3 void-py-1.5 void-rounded-lg void-flex void-items-center void-gap-2 void-transition-all void-cursor-pointer"
+        style={{
+          ...buttonSecondaryStyle,
+          opacity: calendarEventCount === 0 ? 0.5 : 1,
+          cursor: calendarEventCount === 0 ? "not-allowed" : "pointer"
+        }}
+        title={
+        calendarEventCount === 0 ?
+        "No events marked for calendar sync" :
+        `Export ${calendarEventCount} event${calendarEventCount !== 1 ? "s" : ""} to calendar (.ics)`
+        }>
+        
+					<i
+          className="void-codicon void-codicon-calendar"
+          style={{ fontSize: "12px" }} />
+        
+					<span>
+						Export .ics
+						{calendarEventCount > 0 ? ` (${calendarEventCount})` : ""}
+					</span>
+				</button>
+      }
+
+			{/* Google Calendar Integration */}
+			{!googleCalendarConnected && onConnectGoogleCalendar &&
+      <button
+        onClick={onConnectGoogleCalendar}
+        className="void-text-xs void-px-3 void-py-1.5 void-rounded-lg void-flex void-items-center void-gap-2 void-transition-all void-cursor-pointer"
+        style={{
+          ...buttonSecondaryStyle,
+          borderColor: "var(--vscode-charts-blue)"
+        }}
+        title="Connect to Google Calendar for live sync">
+        
+					<i
+          className="void-codicon void-codicon-plug"
+          style={{ fontSize: "12px", color: "var(--vscode-charts-blue)" }} />
+        
+					<span>Connect Google</span>
+				</button>
+      }
+
+			{googleCalendarConnected &&
+      <div className="void-flex void-items-center void-gap-1">
+					{/* Sync Now Button */}
+					{onSyncToGoogleCalendar &&
+        <button
+          onClick={onSyncToGoogleCalendar}
+          disabled={isSyncing || calendarEventCount === 0}
+          className="void-text-xs void-px-3 void-py-1.5 void-rounded-lg void-flex void-items-center void-gap-2 void-transition-all void-cursor-pointer"
+          style={{
+            ...buttonSecondaryStyle,
+            borderColor: "var(--vscode-charts-green)",
+            opacity: isSyncing || calendarEventCount === 0 ? 0.5 : 1,
+            cursor:
+            isSyncing || calendarEventCount === 0 ?
+            "not-allowed" :
+            "pointer"
+          }}
+          title={
+          isSyncing ?
+          "Syncing..." :
+          calendarEventCount === 0 ?
+          "No events to sync" :
+          `Sync ${calendarEventCount} event${calendarEventCount !== 1 ? "s" : ""} to Google Calendar`
+          }>
+          
+							<i
+            className={`void-codicon ${isSyncing ? "void-codicon-sync void-codicon-modifier-spin" : "void-codicon-cloud-upload"}`}
+            style={{
+              fontSize: "12px",
+              color: "var(--vscode-charts-green)"
+            }} />
+          
+							<span>{isSyncing ? "Syncing..." : "Google"}</span>
+						</button>
+        }
+					{/* Disconnect Button */}
+					{onDisconnectGoogleCalendar &&
+        <button
+          onClick={onDisconnectGoogleCalendar}
+          className="void-text-xs void-px-2 void-py-1.5 void-rounded-lg void-flex void-items-center void-transition-all void-cursor-pointer"
+          style={{
+            ...buttonSecondaryStyle,
+            color: "var(--vscode-errorForeground)"
+          }}
+          title="Disconnect Google Calendar">
+          
+							<span>Disconnect</span>
+						</button>
+        }
+				</div>
+      }
+
+			{/* Outlook Calendar Integration - HIDDEN until Azure app registration is available
+        * TODO: Uncomment when Microsoft paid account is available for Azure app connection
+        * Users can use Export .ics for Outlook in the meantime
+        {!_outlookCalendarConnected && _onConnectOutlookCalendar && (
+        <button
+        	onClick={_onConnectOutlookCalendar}
+        	className="text-xs px-3 py-1.5 rounded-lg flex items-center gap-2 transition-all cursor-pointer"
+        	style={{
+        		...buttonSecondaryStyle,
+        		borderColor: "var(--vscode-charts-orange)",
+        	}}
+        	title="Connect to Outlook Calendar for live sync"
+        >
+        	<i
+        		className="codicon codicon-plug"
+        		style={{ fontSize: "12px", color: "var(--vscode-charts-orange)" }}
+        	/>
+        	<span>Connect Outlook</span>
+        </button>
+        )}
+        	{_outlookCalendarConnected && (
+        <div className="flex items-center gap-1">
+        	{_onSyncToOutlookCalendar && (
+        		<button
+        			onClick={_onSyncToOutlookCalendar}
+        			disabled={_isOutlookSyncing || calendarEventCount === 0}
+        			className="text-xs px-3 py-1.5 rounded-lg flex items-center gap-2 transition-all cursor-pointer"
+        			style={{
+        				...buttonSecondaryStyle,
+        				borderColor: "var(--vscode-charts-orange)",
+        				opacity: _isOutlookSyncing || calendarEventCount === 0 ? 0.5 : 1,
+        				cursor:
+        					_isOutlookSyncing || calendarEventCount === 0
+        						? "not-allowed"
+        						: "pointer",
+        			}}
+        			title={
+        				_isOutlookSyncing
+        					? "Syncing..."
+        					: calendarEventCount === 0
+        						? "No events to sync"
+        						: `Sync ${calendarEventCount} event${calendarEventCount !== 1 ? "s" : ""} to Outlook Calendar`
+        			}
+        		>
+        			<i
+        				className={`codicon ${_isOutlookSyncing ? "codicon-sync codicon-modifier-spin" : "codicon-cloud-upload"}`}
+        				style={{
+        					fontSize: "12px",
+        					color: "var(--vscode-charts-orange)",
+        				}}
+        			/>
+        			<span>{_isOutlookSyncing ? "Syncing..." : "Outlook"}</span>
+        		</button>
+        	)}
+        	{_onDisconnectOutlookCalendar && (
+        		<button
+        			onClick={_onDisconnectOutlookCalendar}
+        			className="text-xs px-2 py-1.5 rounded-lg flex items-center transition-all cursor-pointer"
+        			style={{
+        				...buttonSecondaryStyle,
+        				color: "var(--vscode-errorForeground)",
+        			}}
+        			title="Disconnect Outlook Calendar"
+        		>
+        			<span>Disconnect</span>
+        		</button>
+        	)}
+        </div>
+        )}
+        */
+      }
+
+			{/* Sync from Case Button */}
+			<button
+        onClick={onSyncFromCase}
+        className="void-text-xs void-px-3 void-py-1.5 void-rounded-lg void-flex void-items-center void-gap-2 void-transition-all void-cursor-pointer"
+        style={buttonSecondaryStyle}
+        title="Sync timeline with case configuration">
+        
+				<i className="void-codicon void-codicon-sync" style={{ fontSize: "12px" }} />
+				<span>Sync Case</span>
+			</button>
+
+			{/* Jurisdiction Selector Button */}
+			<button
+        onClick={onJurisdictionClick}
+        className="void-text-xs void-px-3 void-py-1.5 void-rounded-lg void-flex void-items-center void-gap-2 void-transition-all void-cursor-pointer"
+        style={{
+          ...buttonPrimaryStyle,
+          padding: "6px 12px"
+        }}>
+        
+				<i className="void-codicon void-codicon-law" style={{ fontSize: "12px" }} />
+				<span>{jurisdiction?.name || "Select Jurisdiction"}</span>
+				<i
+          className="void-codicon void-codicon-chevron-down"
+          style={{ fontSize: "12px" }} />
+        
+			</button>
+
+			{/* Notification Center */}
+			<NotificationCenter onEditEvent={onEditEvent} />
+
+			{/* Notification Settings Button */}
+			{onOpenNotificationSettings &&
+      <button
+        onClick={onOpenNotificationSettings}
+        className="void-text-xs void-px-3 void-py-1.5 void-rounded-lg void-transition-colors void-flex void-items-center void-gap-2 void-cursor-pointer"
+        style={buttonSecondaryStyle}
+        title="Notification Settings">
+        
+					<span>Alert Settings</span>
+				</button>
+      }
+
+			{/* Event Count */}
+			<span
+        className="void-text-sm void-px-3 void-py-1 void-rounded-lg"
+        style={buttonSecondaryStyle}>
+        
+				{eventCount} event{eventCount !== 1 ? "s" : ""}
+			</span>
+		</div>);
+
+};

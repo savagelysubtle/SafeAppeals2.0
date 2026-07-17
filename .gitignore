@@ -48,3 +48,14 @@ dist
 .github/prompts/*.local.prompt.md
 .agents/skills/.local/
 .github/skills/.local/
+
+# SafeAppeals additions
+.env
+resources/ffmpeg/
+resources/models/
+void-cloud/
+build/win32/tools/
+python/logs/
+__pycache__/
+*.pyc
+src/vs/workbench/contrib/void/browser/documentViewers/**/wasm/target/

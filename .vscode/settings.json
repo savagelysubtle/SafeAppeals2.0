@@ -186,6 +186,10 @@
 		}
 	],
 	// --- Tools ---
+	// Makes all "type": "npm" tasks (Compile, Watch, Watch Client Transpile, etc.) run via `bun run <script>`.
+	// "Install Dependencies" is intentionally left on npm - Bun sandboxes postinstall/node-gyp lifecycle
+	// scripts by default, which would break native module builds against the Electron ABI (see .npmrc).
+	"npm.packageManager": "bun",
 	"npm.exclude": "**/extensions/**",
 	"eslint.useFlatConfig": true,
 	"emmet.excludeLanguages": [],
