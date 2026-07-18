@@ -9,15 +9,30 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 import type { BillingRate, ExportOptions, Matter, TimeEntry, TimeEntryWithDetails } from './types';
 
-// Import better-sqlite3 dynamically to handle potential loading issues
-let Database: typeof import('better-sqlite3');
+/**
+ * Dual-ABI better-sqlite3 native bindings:
+ * - Desktop (Electron 42.x): NODE_MODULE_VERSION 146 → prebuilds/electron-146/
+ * - Web / code-web / serve-web (plain Node 24): NODE_MODULE_VERSION 137 → prebuilds/node-137/
+ * Extension-local .npmrc builds the Electron binary into node_modules for desktop dev.
+ * When Electron or Node major (ABI) changes, regenerate both .npmrc target and prebuilds/.
+ */
+let Database: typeof import('better-sqlite3') | undefined;
 try {
+	// JS package only — native .node is loaded via { nativeBinding } in initialize().
 	Database = require('better-sqlite3');
 } catch {
 	// Will be handled in initialize()
 }
 
 type DatabaseType = import('better-sqlite3').Database;
+
+function resolveNativeBindingPath(): string | undefined {
+	const abi = process.versions.modules;
+	const runtime = process.versions.electron ? 'electron' : 'node';
+	// Compiled output lives in out/; prebuilds/ sits at the extension root.
+	const candidate = path.join(__dirname, '..', 'prebuilds', `${runtime}-${abi}`, 'better_sqlite3.node');
+	return fs.existsSync(candidate) ? candidate : undefined;
+}
 
 export class StorageService {
 	private db: DatabaseType | null = null;
@@ -66,7 +81,10 @@ export class StorageService {
 		}
 
 		try {
-			this.db = new Database(this.dbPath);
+			const nativeBinding = resolveNativeBindingPath();
+			this.db = nativeBinding
+				? new Database(this.dbPath, { nativeBinding })
+				: new Database(this.dbPath);
 			this.createTables();
 		} catch (error) {
 			throw new Error(`Failed to initialize database: ${error}`);
