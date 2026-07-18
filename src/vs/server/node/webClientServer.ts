@@ -352,8 +352,26 @@ export class WebClientServer {
 			scopes: [['user:email'], ['repo']]
 		} : undefined;
 
+		const requestProtocol = getFirstHeader('x-forwarded-proto') || 'http';
+
 		const productConfiguration: Partial<Mutable<IProductConfiguration>> = {
 			embedderIdentifier: 'server-distro',
+			// Ensure the browser-side product configuration uses the same
+			// quality/commit as the server. The server root path (e.g.
+			// '/stable-dev/vscode-remote-resource') is derived from these
+			// values on both sides; when running from sources the browser
+			// falls back to OSS defaults ('oss-dev') and every remote
+			// resource request 404s (file icon themes, extension resources).
+			quality: this._productService.quality,
+			commit: this._productService.commit,
+			// Serve the webview host (pre/index.html + service worker) from
+			// this server instead of the Microsoft CDN. The CDN copy is a
+			// different build with an incompatible webview service-worker
+			// protocol version, which breaks all webview CSS/JS resource
+			// loading on web. A per-webview `{{uuid}}.` subdomain is used to
+			// keep webviews origin-isolated from the workbench (same approach
+			// as @vscode/test-web; `*.localhost` resolves in modern browsers).
+			webviewContentExternalBaseUrlTemplate: `${requestProtocol}://{{uuid}}.${remoteAuthority}${staticRoute}/out/vs/workbench/contrib/webview/browser/pre/`,
 			extensionsGallery: this._webExtensionResourceUrlTemplate && this._productService.extensionsGallery ? {
 				...this._productService.extensionsGallery,
 				resourceUrlTemplate: this._webExtensionResourceUrlTemplate.with({
@@ -439,7 +457,9 @@ export class WebClientServer {
 			'media-src \'self\';',
 			`script-src 'self' 'unsafe-eval' ${WORKBENCH_NLS_BASE_URL ?? ''} blob: 'nonce-1nline-m4p' ${this._getScriptCspHashes(data).join(' ')} '${webWorkerExtensionHostIframeScriptSHA}' 'sha256-/r7rqQ+yrxt57sxLuQ6AMYcy/lUpvAIzHjIJt/OeLWU=' ${useTestResolver ? '' : `http://${remoteAuthority}`};`,  // the sha is the same as in src/vs/workbench/services/extensions/worker/webWorkerExtensionHostIframe.html
 			'child-src \'self\';',
-			`frame-src 'self' https://*.vscode-cdn.net data:;`,
+			// *.${remoteAuthority} allows the webview host iframes which are served
+			// from a per-webview subdomain of this server (see webviewContentExternalBaseUrlTemplate)
+			`frame-src 'self' ${requestProtocol}://*.${remoteAuthority} https://*.vscode-cdn.net data:;`,
 			'worker-src \'self\' data: blob:;',
 			'style-src \'self\' \'unsafe-inline\';',
 			'connect-src \'self\' ws: wss: https:;',

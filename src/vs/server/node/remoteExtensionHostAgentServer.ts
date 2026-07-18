@@ -141,7 +141,14 @@ class RemoteExtensionHostAgentServer extends Disposable implements IServerAPI {
 			return void res.end('OK');
 		}
 
-		if (!httpRequestHasValidConnectionToken(this._connectionToken, req, parsedUrl)) {
+		// The webview host files (pre/index.html, fake.html, service-worker.js) are
+		// loaded in iframes on a per-webview `{{uuid}}.` subdomain origin (see
+		// webviewContentExternalBaseUrlTemplate in webClientServer.ts). The connection
+		// token cookie is scoped to the main host and is not sent along with these
+		// requests, so serve this small, non-sensitive subtree without a token.
+		const isWebviewContentRequest = pathname.startsWith('/static/out/vs/workbench/contrib/webview/browser/pre/');
+
+		if (!isWebviewContentRequest && !httpRequestHasValidConnectionToken(this._connectionToken, req, parsedUrl)) {
 			// invalid connection token
 			return serveError(req, res, 403, `Forbidden.`);
 		}
