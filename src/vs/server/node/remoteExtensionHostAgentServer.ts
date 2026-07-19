@@ -15,7 +15,7 @@ import { isSigPipeError, onUnexpectedError, setUnexpectedErrorHandler } from '..
 import { isEqualOrParent } from '../../base/common/extpath.js';
 import { Disposable, DisposableMap, DisposableStore } from '../../base/common/lifecycle.js';
 import { connectionTokenQueryName, FileAccess, getServerProductSegment, Schemas } from '../../base/common/network.js';
-import { dirname, join } from '../../base/common/path.js';
+import { dirname, join, posix } from '../../base/common/path.js';
 import * as perf from '../../base/common/performance.js';
 import * as platform from '../../base/common/platform.js';
 import { createRegExp, escapeRegExpCharacters } from '../../base/common/strings.js';
@@ -41,6 +41,47 @@ import { IServerLifetimeService } from './serverLifetimeService.js';
 import { setupServerServices, SocketServer } from './serverServices.js';
 import { CacheControl, serveError, serveFile, WebClientServer } from './webClientServer.js';
 const require = createRequire(import.meta.url);
+
+const WEBVIEW_PRE_CONTENT_PREFIX = '/static/out/vs/workbench/contrib/webview/browser/pre/';
+
+/**
+ * Whether `pathname` (the raw, still percent-encoded request path, already
+ * stripped of the server base/product path) resolves to a file inside the
+ * webview `pre/` host directory that we intentionally serve without a
+ * connection token.
+ *
+ * This must be evaluated against the FULLY DECODED AND NORMALIZED path,
+ * because the static file handler later decodes and `join`s the path before
+ * serving. A raw `startsWith` check would allow encoded traversal sequences
+ * (e.g. `pre/%2e%2e/%2e%2e/product.json`, or backslash variants on Windows)
+ * to bypass the token while still resolving to files outside `pre/`.
+ */
+function isWebviewPreContentPath(pathname: string): boolean {
+	let decoded: string;
+	try {
+		decoded = decodeURIComponent(pathname);
+	} catch {
+		// Malformed percent-encoding: never exempt.
+		return false;
+	}
+
+	// Reject backslashes outright: on Windows the downstream `join` treats `\`
+	// as a path separator, so they must not be able to escape the prefix.
+	if (decoded.indexOf('\\') !== -1) {
+		return false;
+	}
+
+	// Collapse `.`/`..` segments using posix rules (all separators are `/` now).
+	const normalized = posix.normalize(decoded);
+
+	// After normalization there must be no remaining `..` segments and the path
+	// must still live under the webview `pre/` directory.
+	if (normalized.indexOf('..') !== -1) {
+		return false;
+	}
+
+	return normalized.startsWith(WEBVIEW_PRE_CONTENT_PREFIX);
+}
 
 declare namespace vsda {
 	// the signer is a native module that for historical reasons uses a lower case class name
@@ -146,7 +187,7 @@ class RemoteExtensionHostAgentServer extends Disposable implements IServerAPI {
 		// webviewContentExternalBaseUrlTemplate in webClientServer.ts). The connection
 		// token cookie is scoped to the main host and is not sent along with these
 		// requests, so serve this small, non-sensitive subtree without a token.
-		const isWebviewContentRequest = pathname.startsWith('/static/out/vs/workbench/contrib/webview/browser/pre/');
+		const isWebviewContentRequest = isWebviewPreContentPath(pathname);
 
 		if (!isWebviewContentRequest && !httpRequestHasValidConnectionToken(this._connectionToken, req, parsedUrl)) {
 			// invalid connection token
