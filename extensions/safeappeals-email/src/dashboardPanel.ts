@@ -15,6 +15,7 @@ export class DashboardPanel {
 
 	private readonly panel: vscode.WebviewPanel;
 	private disposables: vscode.Disposable[] = [];
+	private onAccountsChanged?: () => void;
 
 	private constructor(
 		panel: vscode.WebviewPanel,
@@ -23,8 +24,10 @@ export class DashboardPanel {
 		private readonly accounts: AccountStore,
 		private readonly index: EmailIndex,
 		private readonly log: (msg: string) => void,
+		onAccountsChanged?: () => void,
 	) {
 		this.panel = panel;
+		this.onAccountsChanged = onAccountsChanged;
 		this.panel.webview.html = this.getHtml(this.panel.webview);
 		this.panel.onDidDispose(() => this.dispose(), null, this.disposables);
 		this.panel.webview.onDidReceiveMessage(
@@ -40,9 +43,11 @@ export class DashboardPanel {
 		accounts: AccountStore,
 		index: EmailIndex,
 		log: (msg: string) => void,
+		onAccountsChanged?: () => void,
 	): DashboardPanel {
 		const column = vscode.window.activeTextEditor?.viewColumn ?? vscode.ViewColumn.One;
 		if (DashboardPanel.current) {
+			DashboardPanel.current.onAccountsChanged = onAccountsChanged;
 			DashboardPanel.current.panel.reveal(column);
 			void DashboardPanel.current.postBootstrap();
 			return DashboardPanel.current;
@@ -60,9 +65,23 @@ export class DashboardPanel {
 				],
 			},
 		);
-		DashboardPanel.current = new DashboardPanel(panel, extensionUri, engine, accounts, index, log);
+		DashboardPanel.current = new DashboardPanel(
+			panel,
+			extensionUri,
+			engine,
+			accounts,
+			index,
+			log,
+			onAccountsChanged,
+		);
 		void DashboardPanel.current.postBootstrap();
 		return DashboardPanel.current;
+	}
+
+	static async refreshIfOpen(): Promise<void> {
+		if (DashboardPanel.current) {
+			await DashboardPanel.current.postBootstrap();
+		}
 	}
 
 	dispose(): void {
@@ -148,6 +167,35 @@ export class DashboardPanel {
 				}
 				case 'addAccount':
 					await vscode.commands.executeCommand('safeappeals-email.addAccount');
+					await this.postBootstrap();
+					break;
+				case 'removeAccount': {
+					const accountId = msg.accountId as string | undefined;
+					if (!accountId) {
+						break;
+					}
+					const account = this.accounts.getAccount(accountId);
+					const label = account?.label || accountId;
+					const confirm = await vscode.window.showWarningMessage(
+						`Remove email account “${label}”? Cached messages for this account will be deleted.`,
+						{ modal: true },
+						'Remove',
+					);
+					if (confirm !== 'Remove') {
+						break;
+					}
+					await this.index.clearAccount(accountId);
+					await this.accounts.removeAccount(accountId);
+					this.log(`Account removed (dashboard): ${accountId}`);
+					this.onAccountsChanged?.();
+					await this.postBootstrap();
+					break;
+				}
+				case 'updatePassword':
+					await vscode.commands.executeCommand(
+						'safeappeals-email.updatePassword',
+						msg.accountId as string | undefined,
+					);
 					await this.postBootstrap();
 					break;
 				case 'openEml': {

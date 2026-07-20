@@ -32,7 +32,13 @@ export const App: React.FC = () => {
 			switch (msg.type) {
 				case 'bootstrap':
 					setAccounts(msg.accounts || []);
-					setAccountId((prev) => prev || msg.accounts?.[0]?.id || '');
+					setAccountId((prev) => {
+						const list = msg.accounts || [];
+						if (prev && list.some((a: Account) => a.id === prev)) {
+							return prev;
+						}
+						return list[0]?.id || '';
+					});
 					setFolder(msg.folder || 'INBOX');
 					setThreads(msg.threads || []);
 					setTotal(msg.total || 0);
@@ -216,6 +222,28 @@ export const App: React.FC = () => {
 								{a.label}
 							</option>
 						))}
+					</select>
+					<select
+						className="account-menu"
+						value=""
+						disabled={!accountId}
+						title="Account actions"
+						onChange={(e) => {
+							const action = e.target.value;
+							e.target.value = '';
+							if (!accountId || !action) {
+								return;
+							}
+							if (action === 'remove') {
+								vscode.postMessage({ type: 'removeAccount', accountId });
+							} else if (action === 'updatePassword') {
+								vscode.postMessage({ type: 'updatePassword', accountId });
+							}
+						}}
+					>
+						<option value="">Account…</option>
+						<option value="updatePassword">Update password</option>
+						<option value="remove">Remove account</option>
 					</select>
 					<input
 						className="folder-input"

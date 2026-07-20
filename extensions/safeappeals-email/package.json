@@ -44,6 +44,11 @@
         "category": "Safe Appeals Email"
       },
       {
+        "command": "safeappeals-email.updatePassword",
+        "title": "Update Account Password",
+        "category": "Safe Appeals Email"
+      },
+      {
         "command": "safeappeals-email.listAccounts",
         "title": "List Email Accounts",
         "category": "Safe Appeals Email"
@@ -149,6 +154,9 @@
         },
         {
           "command": "safeappeals-email.removeAccount"
+        },
+        {
+          "command": "safeappeals-email.updatePassword"
         },
         {
           "command": "safeappeals-email.syncNow"

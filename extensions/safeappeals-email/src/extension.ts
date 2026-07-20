@@ -4,15 +4,17 @@
 
 import * as vscode from 'vscode';
 import { AccountStore } from './accountStore';
-import { getSyncIntervalMinutes } from './config';
+import { getDefaultFolder, getSyncIntervalMinutes } from './config';
 import { DashboardPanel, EmailSidebarProvider } from './dashboardPanel';
 import { EmailIndex } from './emailIndex';
 import { EmlEditorProvider } from './emlEditorProvider';
 import { parseEmlFile } from './emlParser';
+import { diagnoseConnection } from './imapClient';
 import { SyncEngine } from './syncEngine';
 import type {
 	DraftStatus,
 	EmailAccountConfig,
+	EmailAccountCredentials,
 	EmailClassification,
 	ListThreadsQuery,
 	SendMailRequest,
@@ -64,8 +66,13 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 		void refreshStatusBar();
 	});
 
+	const refreshUi = () => {
+		void refreshStatusBar();
+		void DashboardPanel.refreshIfOpen();
+	};
+
 	const openDashboard = () => {
-		DashboardPanel.show(context.extensionUri, engine, accounts, index, log);
+		DashboardPanel.show(context.extensionUri, engine, accounts, index, log, refreshUi);
 	};
 
 	context.subscriptions.push(
@@ -86,7 +93,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 		}),
 	);
 
-	registerCommands(context, log, openDashboard);
+	registerCommands(context, log, openDashboard, refreshUi);
 	await refreshStatusBar();
 	engine.startBackgroundSync();
 	log('Activated');
@@ -100,6 +107,7 @@ function registerCommands(
 	context: vscode.ExtensionContext,
 	log: (msg: string) => void,
 	openDashboard: () => void,
+	refreshUi: () => void,
 ): void {
 	const regs: vscode.Disposable[] = [
 		vscode.commands.registerCommand('safeappeals-email.openDashboard', () => {
@@ -107,12 +115,12 @@ function registerCommands(
 		}),
 
 		vscode.commands.registerCommand('safeappeals-email.addAccount', async () => {
-			const account = await promptAddAccount();
+			const account = await promptAddAccount(log);
 			if (!account) {
 				return undefined;
 			}
 			log(`Account added: ${account.label}`);
-			void vscode.window.showInformationMessage(`Email account added: ${account.label}`);
+			refreshUi();
 			await engine.syncAll(account.id);
 			return account;
 		}),
@@ -122,11 +130,43 @@ function registerCommands(
 			if (!accountId) {
 				return { success: false };
 			}
+			const account = accounts.getAccount(accountId);
+			const label = account?.label || accountId;
+			const confirm = await vscode.window.showWarningMessage(
+				`Remove email account “${label}”? Cached messages for this account will be deleted.`,
+				{ modal: true },
+				'Remove',
+			);
+			if (confirm !== 'Remove') {
+				return { success: false };
+			}
 			await index.clearAccount(accountId);
 			const ok = await accounts.removeAccount(accountId);
 			log(`Account removed: ${accountId}`);
+			refreshUi();
 			return { success: ok };
 		}),
+
+		vscode.commands.registerCommand(
+			'safeappeals-email.updatePassword',
+			async (accountIdArg?: string) => {
+				const accountId = accountIdArg || (await pickAccountId('Update password for which account?'));
+				if (!accountId) {
+					return { success: false };
+				}
+				const account = accounts.getAccount(accountId);
+				if (!account) {
+					void vscode.window.showErrorMessage('Account not found.');
+					return { success: false };
+				}
+				const ok = await promptUpdatePassword(account, log);
+				if (ok) {
+					refreshUi();
+					await engine.syncAll(account.id);
+				}
+				return { success: ok };
+			},
+		),
 
 		vscode.commands.registerCommand('safeappeals-email.listAccounts', () => {
 			return accounts.listAccounts();
@@ -345,7 +385,9 @@ async function pickAccountId(placeHolder: string): Promise<string | undefined> {
 	return pick?.id;
 }
 
-async function promptAddAccount(): Promise<EmailAccountConfig | undefined> {
+async function promptAddAccount(
+	log: (msg: string) => void,
+): Promise<EmailAccountConfig | undefined> {
 	const email = await vscode.window.showInputBox({
 		prompt: 'Email address',
 		placeHolder: 'you@example.com',
@@ -402,7 +444,7 @@ async function promptAddAccount(): Promise<EmailAccountConfig | undefined> {
 		return undefined;
 	}
 
-	const password = await vscode.window.showInputBox({
+	let password = await vscode.window.showInputBox({
 		prompt: 'Password / app password (stored in SecretStorage, not settings)',
 		password: true,
 		ignoreFocusOut: true,
@@ -413,21 +455,118 @@ async function promptAddAccount(): Promise<EmailAccountConfig | undefined> {
 
 	const imapPort = Number(imapPortStr) || 993;
 	const smtpPort = Number(smtpPortStr) || 465;
+	const config = {
+		label: email,
+		email,
+		imapHost,
+		imapPort,
+		imapSecure: imapPort === 993,
+		smtpHost,
+		smtpPort,
+		smtpSecure: smtpPort === 465,
+		username,
+	};
+	const candidate: EmailAccountConfig = { id: 'pending', ...config };
+	const folder = getDefaultFolder();
 
-	return accounts.addAccount(
-		{
-			label: email,
-			email,
-			imapHost,
-			imapPort,
-			imapSecure: imapPort === 993,
-			smtpHost,
-			smtpPort,
-			smtpSecure: smtpPort === 465,
-			username,
-		},
-		{ password },
-	);
+	for (;;) {
+		const creds: EmailAccountCredentials = { password };
+		const result = await vscode.window.withProgress(
+			{
+				location: vscode.ProgressLocation.Notification,
+				title: 'Verifying IMAP connection…',
+				cancellable: false,
+			},
+			async () => diagnoseConnection(candidate, creds, folder, log),
+		);
+
+		if (result.ok) {
+			const account = await accounts.addAccount(config, creds);
+			void vscode.window.showInformationMessage(
+				`Connected — ${result.exists} messages in ${result.folder || folder}`,
+			);
+			return account;
+		}
+
+		const choice = await vscode.window.showErrorMessage(
+			`IMAP connection failed: ${result.error || 'unknown error'}`,
+			'Retry password',
+			'Save anyway',
+		);
+		if (choice === 'Retry password') {
+			const retry = await vscode.window.showInputBox({
+				prompt: 'Password / app password',
+				password: true,
+				ignoreFocusOut: true,
+			});
+			if (retry === undefined) {
+				return undefined;
+			}
+			password = retry;
+			continue;
+		}
+		if (choice === 'Save anyway') {
+			const account = await accounts.addAccount(config, creds);
+			void vscode.window.showWarningMessage(
+				`Account saved without a successful IMAP check: ${account.label}`,
+			);
+			return account;
+		}
+		return undefined;
+	}
+}
+
+async function promptUpdatePassword(
+	account: EmailAccountConfig,
+	log: (msg: string) => void,
+): Promise<boolean> {
+	const folder = getDefaultFolder();
+	let password = await vscode.window.showInputBox({
+		prompt: `New password for ${account.label}`,
+		password: true,
+		ignoreFocusOut: true,
+	});
+	if (password === undefined) {
+		return false;
+	}
+
+	for (;;) {
+		const creds: EmailAccountCredentials = { password };
+		const result = await vscode.window.withProgress(
+			{
+				location: vscode.ProgressLocation.Notification,
+				title: 'Verifying IMAP connection…',
+				cancellable: false,
+			},
+			async () => diagnoseConnection(account, creds, folder, log),
+		);
+
+		if (result.ok) {
+			await accounts.updateCredentials(account.id, creds);
+			void vscode.window.showInformationMessage(
+				`Password updated — ${result.exists} messages in ${result.folder || folder}`,
+			);
+			log(`Password updated for ${account.label}`);
+			return true;
+		}
+
+		const choice = await vscode.window.showErrorMessage(
+			`IMAP connection failed: ${result.error || 'unknown error'}`,
+			'Retry password',
+		);
+		if (choice !== 'Retry password') {
+			return false;
+		}
+		const retry = await vscode.window.showInputBox({
+			prompt: `New password for ${account.label}`,
+			password: true,
+			ignoreFocusOut: true,
+		});
+		if (retry === undefined) {
+			return false;
+		}
+		password = retry;
+	}
 }
 
 async function promptSend(): Promise<SendMailRequest | undefined> {

@@ -98,6 +98,15 @@ button.linkish {
 	width: 100px;
 }
 
+.account-menu {
+	max-width: 140px;
+}
+
+.account-menu:disabled {
+	opacity: 0.5;
+	cursor: default;
+}
+
 .layout {
 	display: grid;
 	grid-template-columns: minmax(220px, 340px) 1fr;

@@ -7351,7 +7351,13 @@
         switch (msg.type) {
           case "bootstrap":
             setAccounts(msg.accounts || []);
-            setAccountId((prev) => prev || msg.accounts?.[0]?.id || "");
+            setAccountId((prev) => {
+              const list = msg.accounts || [];
+              if (prev && list.some((a) => a.id === prev)) {
+                return prev;
+              }
+              return list[0]?.id || "";
+            });
             setFolder(msg.folder || "INBOX");
             setThreads(msg.threads || []);
             setTotal(msg.total || 0);
@@ -7523,6 +7529,32 @@
               children: [
                 accounts.length === 0 && /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("option", { value: "", children: "No accounts" }),
                 accounts.map((a) => /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("option", { value: a.id, children: a.label }, a.id))
+              ]
+            }
+          ),
+          /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)(
+            "select",
+            {
+              className: "account-menu",
+              value: "",
+              disabled: !accountId,
+              title: "Account actions",
+              onChange: (e) => {
+                const action = e.target.value;
+                e.target.value = "";
+                if (!accountId || !action) {
+                  return;
+                }
+                if (action === "remove") {
+                  vscode.postMessage({ type: "removeAccount", accountId });
+                } else if (action === "updatePassword") {
+                  vscode.postMessage({ type: "updatePassword", accountId });
+                }
+              },
+              children: [
+                /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("option", { value: "", children: "Account\u2026" }),
+                /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("option", { value: "updatePassword", children: "Update password" }),
+                /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("option", { value: "remove", children: "Remove account" })
               ]
             }
           ),
