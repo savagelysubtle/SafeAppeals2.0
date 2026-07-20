@@ -8,10 +8,12 @@ import { runClassifierOnNewMessages, type ClassifierHook, noopClassifierHook } f
 import { getDefaultFolder, getMaxMessagesPerSync, getSyncIntervalMinutes } from './config';
 import { EmailIndex, toSummary } from './emailIndex';
 import {
+	describeImapError,
 	diagnoseConnection,
 	fetchHeaders,
 	fetchMessageBody,
 	listFolders,
+	logImapErrorDetails,
 	type DiagnoseConnectionResult,
 } from './imapClient';
 import { sendMail } from './smtpClient';
@@ -117,8 +119,10 @@ export class SyncEngine implements vscode.Disposable {
 	private async syncAccount(account: EmailAccountConfig, folder: string, max: number): Promise<void> {
 		const creds = await this.accounts.getCredentials(account.id);
 		if (!creds) {
+			const missingMsg =
+				'Credentials missing — use Account… → Update password to re-enter it.';
 			this.log(`Skip ${account.label}: no credentials in SecretStorage`);
-			await this.index.markAccountSynced(account.id, 'missing_credentials');
+			await this.index.markAccountSynced(account.id, missingMsg);
 			return;
 		}
 		try {
@@ -136,9 +140,10 @@ export class SyncEngine implements vscode.Disposable {
 			// TODO(rung12): classifier will process unclassified here
 			await runClassifierOnNewMessages(headers.map(toSummary), this.classifier);
 		} catch (err) {
-			const message = err instanceof Error ? err.message : String(err);
+			const message = describeImapError(err, account.imapHost);
 			const stack = err instanceof Error ? err.stack : undefined;
 			this.log(`Sync failed for ${account.label}: ${message}`);
+			logImapErrorDetails(err, this.log);
 			if (stack) {
 				this.log(stack);
 			}

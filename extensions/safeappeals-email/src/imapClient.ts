@@ -26,6 +26,108 @@ export interface DiagnoseConnectionResult {
 	stack?: string;
 }
 
+/** Gmail rejects normal passwords for IMAP; surface a clear next step. */
+const GMAIL_APP_PASSWORD_HINT =
+	'Gmail requires an App Password (myaccount.google.com/apppasswords) — regular passwords are rejected.';
+
+interface ImapErrorLike {
+	message?: string;
+	responseText?: string;
+	response?: unknown;
+	serverResponseCode?: string;
+	authenticationFailed?: boolean;
+	code?: string;
+	responseStatus?: string;
+}
+
+function isGmailHost(host: string): boolean {
+	const h = host.toLowerCase();
+	return h.includes('gmail') || h.includes('googlemail');
+}
+
+function isAuthFailure(err: ImapErrorLike, text: string): boolean {
+	if (err.authenticationFailed === true) {
+		return true;
+	}
+	const hay = `${err.serverResponseCode || ''} ${text}`.toLowerCase();
+	return (
+		hay.includes('authenticationfailed') ||
+		hay.includes('invalid credentials') ||
+		hay.includes('application-specific')
+	);
+}
+
+/**
+ * Prefer imapflow's rich server fields over the generic Error.message ("Command failed").
+ *
+ * Confirmed fields (imapflow source + docs):
+ * - responseText: human text from NO/BAD (set when command fails)
+ * - response: parsed object, then often rewritten to a string via enhanceCommandError/login
+ * - serverResponseCode: e.g. AUTHENTICATIONFAILED
+ * - authenticationFailed: true on login/auth failures
+ * - code: e.g. ETHROTTLE
+ */
+export function describeImapError(err: unknown, imapHost?: string): string {
+	const e = (err && typeof err === 'object' ? err : {}) as ImapErrorLike;
+	const responseText = typeof e.responseText === 'string' ? e.responseText.trim() : '';
+	const responseStr = typeof e.response === 'string' ? e.response.trim() : '';
+	const serverCode = typeof e.serverResponseCode === 'string' ? e.serverResponseCode.trim() : '';
+	const generic = err instanceof Error ? err.message : String(err);
+	const isGenericCommandFailed = !generic || generic === 'Command failed';
+
+	let detail: string;
+	if (responseText) {
+		detail = responseText;
+	} else if (responseStr) {
+		detail = responseStr;
+	} else if (serverCode && isGenericCommandFailed) {
+		detail = serverCode;
+	} else {
+		detail = generic || 'unknown error';
+	}
+
+	if (serverCode && !detail.toUpperCase().includes(serverCode.toUpperCase())) {
+		detail = `[${serverCode}] ${detail}`;
+	} else if (typeof e.code === 'string' && e.code && !detail.includes(e.code)) {
+		detail = `[${e.code}] ${detail}`;
+	}
+
+	if (imapHost && isGmailHost(imapHost) && isAuthFailure(e, detail)) {
+		detail = `${detail} — ${GMAIL_APP_PASSWORD_HINT}`;
+	}
+
+	return detail;
+}
+
+/** Log enumerable + own error keys for debugging (truncated). */
+export function logImapErrorDetails(err: unknown, log: ImapLog, maxLen = 2000): void {
+	try {
+		const data: Record<string, unknown> = {};
+		if (err && typeof err === 'object') {
+			for (const key of Object.getOwnPropertyNames(err)) {
+				data[key] = (err as Record<string, unknown>)[key];
+			}
+		} else {
+			log(`imap error (non-object): ${String(err)}`);
+			return;
+		}
+		let json = JSON.stringify(data, (_key, value) => {
+			if (typeof value === 'string' && value.length > 400) {
+				return `${value.slice(0, 400)}…`;
+			}
+			return value;
+		});
+		if (json.length > maxLen) {
+			json = `${json.slice(0, maxLen)}…`;
+		}
+		log(`imap error details: ${json}`);
+	} catch (serializeErr) {
+		log(
+			`imap error details: (serialize failed) ${err instanceof Error ? err.message : String(err)}; ${serializeErr instanceof Error ? serializeErr.message : String(serializeErr)}`,
+		);
+	}
+}
+
 function createClient(account: EmailAccountConfig, creds: EmailAccountCredentials): ImapFlow {
 	return new ImapFlow({
 		host: account.imapHost,
@@ -238,9 +340,12 @@ export async function diagnoseConnection(
 			lock.release();
 		}
 	} catch (err) {
-		const message = err instanceof Error ? err.message : String(err);
+		const message = describeImapError(err, account.imapHost);
 		const stack = err instanceof Error ? err.stack : undefined;
 		log?.(`diagnoseConnection: FAILED — ${message}`);
+		if (log) {
+			logImapErrorDetails(err, log);
+		}
 		if (stack) {
 			log?.(stack);
 		}

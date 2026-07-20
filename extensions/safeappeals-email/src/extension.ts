@@ -37,7 +37,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
 	log('Activating…');
 
-	accounts = new AccountStore(context.secrets);
+	accounts = new AccountStore(context.secrets, log);
 	index = new EmailIndex(context.globalStorageUri);
 	await index.initialize();
 
