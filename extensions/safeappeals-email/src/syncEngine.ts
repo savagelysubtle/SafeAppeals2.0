@@ -7,7 +7,13 @@ import { AccountStore } from './accountStore';
 import { runClassifierOnNewMessages, type ClassifierHook, noopClassifierHook } from './classifierSeam';
 import { getDefaultFolder, getMaxMessagesPerSync, getSyncIntervalMinutes } from './config';
 import { EmailIndex, toSummary } from './emailIndex';
-import { fetchHeaders, fetchMessageBody, listFolders } from './imapClient';
+import {
+	diagnoseConnection,
+	fetchHeaders,
+	fetchMessageBody,
+	listFolders,
+	type DiagnoseConnectionResult,
+} from './imapClient';
 import { sendMail } from './smtpClient';
 import type {
 	EmailAccountConfig,
@@ -116,19 +122,46 @@ export class SyncEngine implements vscode.Disposable {
 			return;
 		}
 		try {
-			this.log(`Syncing ${account.label} / ${folder} (max ${max})…`);
-			const headers = await fetchHeaders(account, creds, folder, max);
+			this.log(
+				`Syncing ${account.label} (${account.email}) folder=${folder} max=${max} host=${account.imapHost}:${account.imapPort}`,
+			);
+			const headers = await fetchHeaders(account, creds, folder, max, this.log);
 			await this.index.upsertSummaries(headers);
 			await this.index.markAccountSynced(account.id);
-			this.log(`Synced ${headers.length} headers for ${account.label}`);
+			const totalForAccount = this.index.countForAccount(account.id);
+			this.log(
+				`Synced ${account.label}: fetched=${headers.length} headers, upserted into index, accountTotal=${totalForAccount}`,
+			);
 
 			// TODO(rung12): classifier will process unclassified here
 			await runClassifierOnNewMessages(headers.map(toSummary), this.classifier);
 		} catch (err) {
 			const message = err instanceof Error ? err.message : String(err);
+			const stack = err instanceof Error ? err.stack : undefined;
 			this.log(`Sync failed for ${account.label}: ${message}`);
+			if (stack) {
+				this.log(stack);
+			}
 			await this.index.markAccountSynced(account.id, message);
 		}
+	}
+
+	async diagnoseAccount(accountId?: string, folder?: string): Promise<DiagnoseConnectionResult> {
+		const account = accountId
+			? this.accounts.getAccount(accountId)
+			: this.accounts.listAccounts()[0];
+		if (!account) {
+			throw new Error('No email account configured');
+		}
+		const creds = await this.accounts.getCredentials(account.id);
+		if (!creds) {
+			throw new Error(`Missing credentials for ${account.label}`);
+		}
+		const targetFolder = folder || getDefaultFolder();
+		this.log(`--- diagnoseConnection start: ${account.label} / ${targetFolder} ---`);
+		const result = await diagnoseConnection(account, creds, targetFolder, this.log);
+		this.log(`--- diagnoseConnection end: ok=${result.ok} exists=${result.exists} fetched=${result.fetched} ---`);
+		return result;
 	}
 
 	async listFolders(accountId: string) {

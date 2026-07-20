@@ -57,6 +57,22 @@ export interface Stats {
 	threadCount: number;
 }
 
+export interface AccountSyncStatus {
+	accountId: string;
+	label: string;
+	email: string;
+	lastSync: string | null;
+	messageCount: number;
+	error?: string;
+}
+
+export interface SyncStatus {
+	accounts: AccountSyncStatus[];
+	lastBackgroundSync: string | null;
+	syncIntervalMinutes: number;
+	syncing: boolean;
+}
+
 declare global {
 	function acquireVsCodeApi(): {
 		postMessage(msg: unknown): void;

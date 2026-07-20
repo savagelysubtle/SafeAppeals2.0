@@ -7336,6 +7336,7 @@
     const [selectedMessageId, setSelectedMessageId] = (0, import_react2.useState)(null);
     const [message, setMessage] = (0, import_react2.useState)(null);
     const [stats, setStats] = (0, import_react2.useState)(null);
+    const [syncStatus, setSyncStatus] = (0, import_react2.useState)(null);
     const [drafts, setDrafts] = (0, import_react2.useState)([]);
     const [pane, setPane] = (0, import_react2.useState)("list");
     const [error, setError] = (0, import_react2.useState)(null);
@@ -7355,8 +7356,12 @@
             setThreads(msg.threads || []);
             setTotal(msg.total || 0);
             setStats(msg.stats || null);
+            setSyncStatus(msg.status || null);
             setDrafts(msg.drafts || []);
             setError(null);
+            break;
+          case "syncStatus":
+            setSyncStatus(msg.status || null);
             break;
           case "threads":
             setThreads(msg.threads || []);
@@ -7390,6 +7395,25 @@
       vscode.postMessage({ type: "ready" });
       return () => window.removeEventListener("message", handler);
     }, []);
+    const selectedAccountStatus = (0, import_react2.useMemo)(() => {
+      if (!syncStatus) {
+        return null;
+      }
+      if (accountId) {
+        return syncStatus.accounts.find((a) => a.accountId === accountId) || null;
+      }
+      return syncStatus.accounts.find((a) => a.error) || syncStatus.accounts[0] || null;
+    }, [syncStatus, accountId]);
+    const syncErrorBanner = (0, import_react2.useMemo)(() => {
+      if (!syncStatus) {
+        return null;
+      }
+      const withError = accountId ? syncStatus.accounts.filter((a) => a.accountId === accountId && a.error) : syncStatus.accounts.filter((a) => a.error);
+      if (withError.length === 0) {
+        return null;
+      }
+      return withError.map((a) => `Sync failed: ${a.error}`).join(" \xB7 ");
+    }, [syncStatus, accountId]);
     const selectedThread = (0, import_react2.useMemo)(
       () => threads.find((t) => t.threadId === selectedThreadId) || null,
       [threads, selectedThreadId]
@@ -7469,6 +7493,16 @@
             " threads \xB7 ",
             stats.draftCount,
             " drafts"
+          ] }),
+          selectedAccountStatus && /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("span", { className: "muted sync-meta", children: [
+            "Last synced:",
+            " ",
+            selectedAccountStatus.lastSync ? formatDate(selectedAccountStatus.lastSync) : "never",
+            " ",
+            "\xB7 ",
+            selectedAccountStatus.messageCount,
+            " messages",
+            syncStatus?.syncing ? " \xB7 syncing\u2026" : ""
           ] })
         ] }),
         /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { className: "toolbar-right", children: [
@@ -7511,6 +7545,7 @@
           }, children: "Drafts" })
         ] })
       ] }),
+      syncErrorBanner && /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("div", { className: "error sync-error", children: syncErrorBanner }),
       error && /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("div", { className: "error", children: error }),
       pane === "compose" && /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("section", { className: "compose", children: [
         /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("h2", { children: "Compose" }),

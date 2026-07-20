@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import type { Account, Draft, FullMessage, Stats, Thread } from './types';
+import type { Account, Draft, FullMessage, Stats, SyncStatus, Thread } from './types';
 import { VirtualList } from './VirtualList';
 
 const vscode = acquireVsCodeApi();
@@ -16,6 +16,7 @@ export const App: React.FC = () => {
 	const [selectedMessageId, setSelectedMessageId] = useState<string | null>(null);
 	const [message, setMessage] = useState<FullMessage | null>(null);
 	const [stats, setStats] = useState<Stats | null>(null);
+	const [syncStatus, setSyncStatus] = useState<SyncStatus | null>(null);
 	const [drafts, setDrafts] = useState<Draft[]>([]);
 	const [pane, setPane] = useState<Pane>('list');
 	const [error, setError] = useState<string | null>(null);
@@ -36,8 +37,12 @@ export const App: React.FC = () => {
 					setThreads(msg.threads || []);
 					setTotal(msg.total || 0);
 					setStats(msg.stats || null);
+					setSyncStatus(msg.status || null);
 					setDrafts(msg.drafts || []);
 					setError(null);
+					break;
+				case 'syncStatus':
+					setSyncStatus(msg.status || null);
 					break;
 				case 'threads':
 					setThreads(msg.threads || []);
@@ -71,6 +76,29 @@ export const App: React.FC = () => {
 		vscode.postMessage({ type: 'ready' });
 		return () => window.removeEventListener('message', handler);
 	}, []);
+
+	const selectedAccountStatus = useMemo(() => {
+		if (!syncStatus) {
+			return null;
+		}
+		if (accountId) {
+			return syncStatus.accounts.find((a) => a.accountId === accountId) || null;
+		}
+		return syncStatus.accounts.find((a) => a.error) || syncStatus.accounts[0] || null;
+	}, [syncStatus, accountId]);
+
+	const syncErrorBanner = useMemo(() => {
+		if (!syncStatus) {
+			return null;
+		}
+		const withError = accountId
+			? syncStatus.accounts.filter((a) => a.accountId === accountId && a.error)
+			: syncStatus.accounts.filter((a) => a.error);
+		if (withError.length === 0) {
+			return null;
+		}
+		return withError.map((a) => `Sync failed: ${a.error}`).join(' · ');
+	}, [syncStatus, accountId]);
 
 	const selectedThread = useMemo(
 		() => threads.find((t) => t.threadId === selectedThreadId) || null,
@@ -157,6 +185,16 @@ export const App: React.FC = () => {
 							{stats.totalEmails} msgs · {stats.threadCount} threads · {stats.draftCount} drafts
 						</span>
 					)}
+					{selectedAccountStatus && (
+						<span className="muted sync-meta">
+							Last synced:{' '}
+							{selectedAccountStatus.lastSync
+								? formatDate(selectedAccountStatus.lastSync)
+								: 'never'}{' '}
+							· {selectedAccountStatus.messageCount} messages
+							{syncStatus?.syncing ? ' · syncing…' : ''}
+						</span>
+					)}
 				</div>
 				<div className="toolbar-right">
 					<select
@@ -201,6 +239,7 @@ export const App: React.FC = () => {
 				</div>
 			</header>
 
+			{syncErrorBanner && <div className="error sync-error">{syncErrorBanner}</div>}
 			{error && <div className="error">{error}</div>}
 
 			{pane === 'compose' && (

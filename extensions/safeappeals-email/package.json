@@ -59,6 +59,11 @@
         "category": "Safe Appeals Email"
       },
       {
+        "command": "safeappeals-email.diagnoseConnection",
+        "title": "Diagnose IMAP Connection",
+        "category": "Safe Appeals Email"
+      },
+      {
         "command": "safeappeals-email.listFolders",
         "title": "List Folders",
         "category": "Safe Appeals Email"
@@ -150,6 +155,9 @@
         },
         {
           "command": "safeappeals-email.syncStatus"
+        },
+        {
+          "command": "safeappeals-email.diagnoseConnection"
         }
       ]
     },

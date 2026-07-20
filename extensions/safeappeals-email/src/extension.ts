@@ -162,6 +162,45 @@ function registerCommands(
 			return status;
 		}),
 
+		vscode.commands.registerCommand(
+			'safeappeals-email.diagnoseConnection',
+			async (accountIdArg?: string) => {
+				const accountId = accountIdArg || (await pickAccountId('Diagnose which account?'));
+				if (!accountId) {
+					return undefined;
+				}
+				output.show(true);
+				try {
+					const result = await engine.diagnoseAccount(accountId);
+					if (result.ok) {
+						const detail =
+							result.exists === 0
+								? 'Mailbox empty (exists=0).'
+								: `exists=${result.exists}, fetched newest header uid=${result.sampleUid}, subject=${result.sampleSubject}`;
+						void vscode.window.showInformationMessage(
+							`Email diagnose OK: ${detail} (see Output: Safe Appeals Email)`,
+						);
+					} else {
+						void vscode.window.showErrorMessage(
+							`Email diagnose FAILED: ${result.error || 'unknown error'} (see Output: Safe Appeals Email)`,
+						);
+					}
+					return result;
+				} catch (err) {
+					const message = err instanceof Error ? err.message : String(err);
+					const stack = err instanceof Error ? err.stack : undefined;
+					log(`diagnoseConnection command error: ${message}`);
+					if (stack) {
+						log(stack);
+					}
+					void vscode.window.showErrorMessage(
+						`Email diagnose FAILED: ${message} (see Output: Safe Appeals Email)`,
+					);
+					return { ok: false, error: message, stack };
+				}
+			},
+		),
+
 		vscode.commands.registerCommand('safeappeals-email.listFolders', async (accountId?: string) => {
 			const id = accountId || (await pickAccountId('List folders for which account?'));
 			if (!id) {

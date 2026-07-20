@@ -54,6 +54,15 @@ body,
 	border-radius: 4px;
 }
 
+.error.sync-error {
+	border: 1px solid var(--vscode-inputValidation-errorBorder, #be1100);
+	font-weight: 600;
+}
+
+.sync-meta {
+	margin-left: 4px;
+}
+
 button,
 select,
 input,
