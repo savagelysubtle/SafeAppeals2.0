@@ -1,5 +1,5 @@
 /**
- * Bundle webview TypeScript/React to media/dashboard and media/eml IIFE bundles.
+ * Bundle webview TypeScript/React to media/dashboard, media/sidebar, and media/eml IIFE bundles.
  *
  * Usage:
  *   node esbuild.mjs
@@ -25,18 +25,28 @@ const shared = {
 	},
 };
 
+const reactBuild = {
+	jsx: 'automatic',
+	loader: {
+		'.tsx': 'tsx',
+		'.ts': 'ts',
+	},
+	mainFields: ['browser', 'module', 'main'],
+	conditions: ['browser'],
+};
+
 const builds = [
 	{
 		...shared,
+		...reactBuild,
 		entryPoints: [resolve(__dirname, 'webview-src/dashboard/main.tsx')],
 		outfile: resolve(__dirname, 'media/dashboard/dashboard.js'),
-		jsx: 'automatic',
-		loader: {
-			'.tsx': 'tsx',
-			'.ts': 'ts',
-		},
-		mainFields: ['browser', 'module', 'main'],
-		conditions: ['browser'],
+	},
+	{
+		...shared,
+		...reactBuild,
+		entryPoints: [resolve(__dirname, 'webview-src/sidebar/main.tsx')],
+		outfile: resolve(__dirname, 'media/sidebar/sidebar.js'),
 	},
 	{
 		...shared,

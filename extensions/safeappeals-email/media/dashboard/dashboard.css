@@ -108,19 +108,58 @@ button.linkish {
 }
 
 .layout {
-	display: grid;
-	grid-template-columns: minmax(220px, 340px) 1fr;
+	display: flex;
 	flex: 1;
 	min-height: 0;
+	min-width: 0;
 }
 
 .thread-list {
-	border-right: 1px solid var(--vscode-panel-border, #444);
+	flex: 0 0 auto;
 	padding: 8px;
 	overflow: hidden;
 	display: flex;
 	flex-direction: column;
 	gap: 8px;
+	min-width: 220px;
+	min-height: 0;
+}
+
+.sash {
+	flex: 0 0 5px;
+	width: 5px;
+	cursor: col-resize;
+	background: transparent;
+	position: relative;
+	z-index: 2;
+	touch-action: none;
+	user-select: none;
+}
+
+.sash::before {
+	content: '';
+	position: absolute;
+	top: 0;
+	bottom: 0;
+	left: 2px;
+	width: 1px;
+	background: var(--vscode-panel-border, #444);
+}
+
+.sash:hover,
+.sash.active {
+	background: var(--vscode-sash-hoverBorder, var(--vscode-focusBorder, #007fd4));
+}
+
+.sash:hover::before,
+.sash.active::before {
+	display: none;
+}
+
+.vlist-fill {
+	flex: 1;
+	min-height: 0;
+	height: 100%;
 }
 
 .list-meta {
@@ -181,6 +220,9 @@ button.linkish {
 }
 
 .reader {
+	flex: 1 1 auto;
+	min-width: 320px;
+	min-height: 0;
 	padding: 12px 16px;
 	overflow: auto;
 }

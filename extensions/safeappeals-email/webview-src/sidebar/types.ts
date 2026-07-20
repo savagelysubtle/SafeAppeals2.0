@@ -1,0 +1,46 @@
+export interface Account {
+	id: string;
+	label: string;
+	email: string;
+}
+
+export interface MessageSummary {
+	id: string;
+	from: string;
+	subject: string;
+	date: string;
+}
+
+export interface Thread {
+	threadId: string;
+	accountId: string;
+	folder: string;
+	subject: string;
+	latestDate: string;
+	emailCount: number;
+	messages: MessageSummary[];
+}
+
+export interface AccountSyncStatus {
+	accountId: string;
+	label: string;
+	email: string;
+	lastSync: string | null;
+	messageCount: number;
+	error?: string;
+}
+
+export interface SyncStatus {
+	accounts: AccountSyncStatus[];
+	lastBackgroundSync: string | null;
+	syncIntervalMinutes: number;
+	syncing: boolean;
+}
+
+declare global {
+	function acquireVsCodeApi(): {
+		postMessage(msg: unknown): void;
+		getState(): unknown;
+		setState(state: unknown): void;
+	};
+}

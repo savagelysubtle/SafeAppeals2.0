@@ -46,6 +46,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 	statusBar.tooltip = 'Safe Appeals Email';
 	statusBar.show();
 
+	let sidebarProvider: EmailSidebarProvider;
+
 	const refreshStatusBar = async () => {
 		try {
 			const status = await engine.getStatus();
@@ -62,18 +64,41 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 		}
 	};
 
-	engine = new SyncEngine(accounts, index, log, () => {
-		void refreshStatusBar();
-	});
-
 	const refreshUi = () => {
 		void refreshStatusBar();
 		void DashboardPanel.refreshIfOpen();
+		EmailSidebarProvider.refreshIfResolved();
 	};
+
+	engine = new SyncEngine(accounts, index, log, () => {
+		refreshUi();
+	});
 
 	const openDashboard = () => {
 		DashboardPanel.show(context.extensionUri, engine, accounts, index, log, refreshUi);
 	};
+
+	const openThread = (threadId: string) => {
+		DashboardPanel.showAndSelectThread(
+			context.extensionUri,
+			engine,
+			accounts,
+			index,
+			log,
+			threadId,
+			refreshUi,
+		);
+	};
+
+	sidebarProvider = new EmailSidebarProvider(
+		context.extensionUri,
+		engine,
+		accounts,
+		index,
+		log,
+		openDashboard,
+		openThread,
+	);
 
 	context.subscriptions.push(
 		output,
@@ -82,7 +107,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 		EmlEditorProvider.register(context, index, log),
 		vscode.window.registerWebviewViewProvider(
 			EmailSidebarProvider.viewType,
-			new EmailSidebarProvider(openDashboard),
+			sidebarProvider,
 		),
 
 		vscode.workspace.onDidChangeConfiguration((e) => {

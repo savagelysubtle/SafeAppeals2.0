@@ -1,10 +1,28 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Account, Draft, FullMessage, Stats, SyncStatus, Thread } from './types';
 import { VirtualList } from './VirtualList';
 
 const vscode = acquireVsCodeApi();
 
 type Pane = 'list' | 'compose' | 'drafts';
+
+const DEFAULT_LIST_WIDTH = 340;
+const MIN_LIST_WIDTH = 220;
+const MIN_READER_WIDTH = 320;
+const SASH_WIDTH = 5;
+
+interface PersistedState {
+	listWidth?: number;
+}
+
+function readPersistedListWidth(): number {
+	const state = vscode.getState() as PersistedState | undefined;
+	const w = state?.listWidth;
+	if (typeof w === 'number' && Number.isFinite(w) && w >= MIN_LIST_WIDTH) {
+		return w;
+	}
+	return DEFAULT_LIST_WIDTH;
+}
 
 export const App: React.FC = () => {
 	const [accounts, setAccounts] = useState<Account[]>([]);
@@ -22,6 +40,36 @@ export const App: React.FC = () => {
 	const [error, setError] = useState<string | null>(null);
 	const [loadingBody, setLoadingBody] = useState(false);
 	const [compose, setCompose] = useState({ to: '', subject: '', content: '' });
+	const [listWidth, setListWidth] = useState(readPersistedListWidth);
+	const [sashActive, setSashActive] = useState(false);
+	const [listRemeasureKey, setListRemeasureKey] = useState(0);
+
+	const layoutRef = useRef<HTMLDivElement>(null);
+	const dragRef = useRef<{ startX: number; startWidth: number } | null>(null);
+	const pendingSelectRef = useRef<string | null>(null);
+
+	const selectMessage = useCallback((messageId: string) => {
+		setSelectedMessageId(messageId);
+		setLoadingBody(true);
+		setMessage(null);
+		vscode.postMessage({ type: 'getMessage', messageId });
+	}, []);
+
+	const focusThread = useCallback(
+		(threadId: string, thread?: Thread) => {
+			setSelectedThreadId(threadId);
+			setPane('list');
+			pendingSelectRef.current = threadId;
+			vscode.postMessage({ type: 'getThread', threadId });
+			const t = thread || threads.find((x) => x.threadId === threadId);
+			const latest = t?.messages[t.messages.length - 1];
+			if (latest) {
+				pendingSelectRef.current = null;
+				selectMessage(latest.id);
+			}
+		},
+		[threads, selectMessage],
+	);
 
 	useEffect(() => {
 		const handler = (event: MessageEvent) => {
@@ -60,6 +108,24 @@ export const App: React.FC = () => {
 							const others = prev.filter((t) => t.threadId !== msg.thread.threadId);
 							return [msg.thread, ...others];
 						});
+						if (pendingSelectRef.current === msg.thread.threadId) {
+							pendingSelectRef.current = null;
+							const latest = msg.thread.messages[msg.thread.messages.length - 1];
+							if (latest) {
+								setSelectedMessageId(latest.id);
+								setLoadingBody(true);
+								setMessage(null);
+								vscode.postMessage({ type: 'getMessage', messageId: latest.id });
+							}
+						}
+					}
+					break;
+				case 'selectThread':
+					if (typeof msg.threadId === 'string' && msg.threadId) {
+						setSelectedThreadId(msg.threadId);
+						setPane('list');
+						pendingSelectRef.current = msg.threadId;
+						vscode.postMessage({ type: 'getThread', threadId: msg.threadId });
 					}
 					break;
 				case 'message':
@@ -82,6 +148,11 @@ export const App: React.FC = () => {
 		vscode.postMessage({ type: 'ready' });
 		return () => window.removeEventListener('message', handler);
 	}, []);
+
+	useEffect(() => {
+		const prev = (vscode.getState() as PersistedState | null) || {};
+		vscode.setState({ ...prev, listWidth });
+	}, [listWidth]);
 
 	const selectedAccountStatus = useMemo(() => {
 		if (!syncStatus) {
@@ -125,20 +196,7 @@ export const App: React.FC = () => {
 	);
 
 	const selectThread = (thread: Thread) => {
-		setSelectedThreadId(thread.threadId);
-		setPane('list');
-		vscode.postMessage({ type: 'getThread', threadId: thread.threadId });
-		const latest = thread.messages[thread.messages.length - 1];
-		if (latest) {
-			selectMessage(latest.id);
-		}
-	};
-
-	const selectMessage = (messageId: string) => {
-		setSelectedMessageId(messageId);
-		setLoadingBody(true);
-		setMessage(null);
-		vscode.postMessage({ type: 'getMessage', messageId });
+		focusThread(thread.threadId, thread);
 	};
 
 	const onSync = () => {
@@ -179,6 +237,46 @@ export const App: React.FC = () => {
 				content: compose.content,
 			},
 		});
+	};
+
+	const clampListWidth = useCallback((raw: number) => {
+		const layoutW = layoutRef.current?.clientWidth ?? window.innerWidth;
+		const maxList = Math.max(MIN_LIST_WIDTH, layoutW - MIN_READER_WIDTH - SASH_WIDTH);
+		return Math.min(maxList, Math.max(MIN_LIST_WIDTH, Math.round(raw)));
+	}, []);
+
+	const onSashPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+		e.preventDefault();
+		const sash = e.currentTarget;
+		sash.setPointerCapture(e.pointerId);
+		dragRef.current = { startX: e.clientX, startWidth: listWidth };
+		setSashActive(true);
+
+		const onMove = (ev: PointerEvent) => {
+			const drag = dragRef.current;
+			if (!drag) {
+				return;
+			}
+			setListWidth(clampListWidth(drag.startWidth + (ev.clientX - drag.startX)));
+		};
+
+		const onUp = (ev: PointerEvent) => {
+			dragRef.current = null;
+			setSashActive(false);
+			try {
+				sash.releasePointerCapture(ev.pointerId);
+			} catch {
+				/* already released */
+			}
+			sash.removeEventListener('pointermove', onMove);
+			sash.removeEventListener('pointerup', onUp);
+			sash.removeEventListener('pointercancel', onUp);
+			setListRemeasureKey((k) => k + 1);
+		};
+
+		sash.addEventListener('pointermove', onMove);
+		sash.addEventListener('pointerup', onUp);
+		sash.addEventListener('pointercancel', onUp);
 	};
 
 	return (
@@ -330,15 +428,15 @@ export const App: React.FC = () => {
 			)}
 
 			{pane === 'list' && (
-				<div className="layout">
-					<aside className="thread-list">
+				<div className="layout" ref={layoutRef}>
+					<aside className="thread-list" style={{ width: listWidth, flexBasis: listWidth }}>
 						<div className="list-meta muted">
 							{total} threads (showing {threads.length})
 						</div>
 						<VirtualList
 							items={threads}
 							itemHeight={64}
-							height={Math.max(240, window.innerHeight - 120)}
+							remeasureKey={listRemeasureKey}
 							renderItem={(thread) => (
 								<button
 									type="button"
@@ -358,6 +456,16 @@ export const App: React.FC = () => {
 							</button>
 						)}
 					</aside>
+
+					<div
+						className={`sash${sashActive ? ' active' : ''}`}
+						role="separator"
+						aria-orientation="vertical"
+						aria-valuenow={listWidth}
+						aria-valuemin={MIN_LIST_WIDTH}
+						tabIndex={0}
+						onPointerDown={onSashPointerDown}
+					/>
 
 					<main className="reader">
 						{!selectedThread && <p className="muted">Select a thread</p>}

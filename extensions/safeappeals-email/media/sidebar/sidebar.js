@@ -7280,150 +7280,37 @@
     }
   });
 
-  // webview-src/dashboard/main.tsx
-  var import_react3 = __toESM(require_react());
+  // webview-src/sidebar/main.tsx
+  var import_react2 = __toESM(require_react());
   var import_client = __toESM(require_client());
 
-  // webview-src/dashboard/App.tsx
-  var import_react2 = __toESM(require_react());
-
-  // webview-src/dashboard/VirtualList.tsx
+  // webview-src/sidebar/App.tsx
   var import_react = __toESM(require_react());
   var import_jsx_runtime = __toESM(require_jsx_runtime());
-  function VirtualList({
-    items,
-    itemHeight,
-    height: heightProp,
-    remeasureKey = 0,
-    renderItem,
-    overscan = 6
-  }) {
-    const ref = (0, import_react.useRef)(null);
-    const [scrollTop, setScrollTop] = (0, import_react.useState)(0);
-    const [measuredHeight, setMeasuredHeight] = (0, import_react.useState)(heightProp ?? 240);
-    const onScroll = (0, import_react.useCallback)(() => {
-      if (ref.current) {
-        setScrollTop(ref.current.scrollTop);
-      }
-    }, []);
-    (0, import_react.useEffect)(() => {
-      const el = ref.current;
-      if (!el) {
-        return;
-      }
-      el.addEventListener("scroll", onScroll, { passive: true });
-      return () => el.removeEventListener("scroll", onScroll);
-    }, [onScroll]);
-    (0, import_react.useEffect)(() => {
-      if (heightProp !== void 0) {
-        setMeasuredHeight(heightProp);
-        return;
-      }
-      const el = ref.current;
-      if (!el) {
-        return;
-      }
-      const measure = () => {
-        const h = el.clientHeight;
-        if (h > 0) {
-          setMeasuredHeight(h);
-        }
-      };
-      measure();
-      const ro = new ResizeObserver(measure);
-      ro.observe(el);
-      return () => ro.disconnect();
-    }, [heightProp, remeasureKey]);
-    const height = heightProp ?? measuredHeight;
-    const { start, end, offsetY } = (0, import_react.useMemo)(() => {
-      const startIdx = Math.max(0, Math.floor(scrollTop / itemHeight) - overscan);
-      const visible = Math.ceil(height / itemHeight) + overscan * 2;
-      const endIdx = Math.min(items.length, startIdx + visible);
-      return { start: startIdx, end: endIdx, offsetY: startIdx * itemHeight };
-    }, [scrollTop, itemHeight, height, items.length, overscan]);
-    const slice = items.slice(start, end);
-    const totalHeight = items.length * itemHeight;
-    const fillParent = heightProp === void 0;
-    return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-      "div",
-      {
-        ref,
-        className: `vlist${fillParent ? " vlist-fill" : ""}`,
-        style: fillParent ? void 0 : { height },
-        children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "vlist-spacer", style: { height: totalHeight }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "vlist-window", style: { transform: `translateY(${offsetY}px)` }, children: slice.map((item, i) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "vlist-row", style: { height: itemHeight }, children: renderItem(item, start + i) }, start + i)) }) })
-      }
-    );
-  }
-
-  // webview-src/dashboard/App.tsx
-  var import_jsx_runtime2 = __toESM(require_jsx_runtime());
   var vscode = acquireVsCodeApi();
-  var DEFAULT_LIST_WIDTH = 340;
-  var MIN_LIST_WIDTH = 220;
-  var MIN_READER_WIDTH = 320;
-  var SASH_WIDTH = 5;
-  function readPersistedListWidth() {
+  function readPersisted() {
     const state = vscode.getState();
-    const w = state?.listWidth;
-    if (typeof w === "number" && Number.isFinite(w) && w >= MIN_LIST_WIDTH) {
-      return w;
-    }
-    return DEFAULT_LIST_WIDTH;
+    return state && typeof state === "object" ? state : {};
   }
   var App = () => {
-    const [accounts, setAccounts] = (0, import_react2.useState)([]);
-    const [accountId, setAccountId] = (0, import_react2.useState)("");
-    const [folder, setFolder] = (0, import_react2.useState)("INBOX");
-    const [threads, setThreads] = (0, import_react2.useState)([]);
-    const [total, setTotal] = (0, import_react2.useState)(0);
-    const [selectedThreadId, setSelectedThreadId] = (0, import_react2.useState)(null);
-    const [selectedMessageId, setSelectedMessageId] = (0, import_react2.useState)(null);
-    const [message, setMessage] = (0, import_react2.useState)(null);
-    const [stats, setStats] = (0, import_react2.useState)(null);
-    const [syncStatus, setSyncStatus] = (0, import_react2.useState)(null);
-    const [drafts, setDrafts] = (0, import_react2.useState)([]);
-    const [pane, setPane] = (0, import_react2.useState)("list");
-    const [error, setError] = (0, import_react2.useState)(null);
-    const [loadingBody, setLoadingBody] = (0, import_react2.useState)(false);
-    const [compose, setCompose] = (0, import_react2.useState)({ to: "", subject: "", content: "" });
-    const [listWidth, setListWidth] = (0, import_react2.useState)(readPersistedListWidth);
-    const [sashActive, setSashActive] = (0, import_react2.useState)(false);
-    const [listRemeasureKey, setListRemeasureKey] = (0, import_react2.useState)(0);
-    const layoutRef = (0, import_react2.useRef)(null);
-    const dragRef = (0, import_react2.useRef)(null);
-    const pendingSelectRef = (0, import_react2.useRef)(null);
-    const selectMessage = (0, import_react2.useCallback)((messageId) => {
-      setSelectedMessageId(messageId);
-      setLoadingBody(true);
-      setMessage(null);
-      vscode.postMessage({ type: "getMessage", messageId });
-    }, []);
-    const focusThread = (0, import_react2.useCallback)(
-      (threadId, thread) => {
-        setSelectedThreadId(threadId);
-        setPane("list");
-        pendingSelectRef.current = threadId;
-        vscode.postMessage({ type: "getThread", threadId });
-        const t = thread || threads.find((x) => x.threadId === threadId);
-        const latest = t?.messages[t.messages.length - 1];
-        if (latest) {
-          pendingSelectRef.current = null;
-          selectMessage(latest.id);
-        }
-      },
-      [threads, selectMessage]
-    );
-    (0, import_react2.useEffect)(() => {
+    const persisted = readPersisted();
+    const [accounts, setAccounts] = (0, import_react.useState)([]);
+    const [accountId, setAccountId] = (0, import_react.useState)(persisted.accountId || "");
+    const [folder, setFolder] = (0, import_react.useState)(persisted.folder || "INBOX");
+    const [threads, setThreads] = (0, import_react.useState)([]);
+    const [syncStatus, setSyncStatus] = (0, import_react.useState)(null);
+    const [error, setError] = (0, import_react.useState)(null);
+    (0, import_react.useEffect)(() => {
       const handler = (event) => {
         const msg = event.data;
         if (!msg || typeof msg !== "object") {
           return;
         }
         switch (msg.type) {
-          case "bootstrap":
-            setAccounts(msg.accounts || []);
+          case "bootstrap": {
+            const list = msg.accounts || [];
+            setAccounts(list);
             setAccountId((prev) => {
-              const list = msg.accounts || [];
               if (prev && list.some((a) => a.id === prev)) {
                 return prev;
               }
@@ -7431,56 +7318,18 @@
             });
             setFolder(msg.folder || "INBOX");
             setThreads(msg.threads || []);
-            setTotal(msg.total || 0);
-            setStats(msg.stats || null);
             setSyncStatus(msg.status || null);
-            setDrafts(msg.drafts || []);
             setError(null);
+            break;
+          }
+          case "threads":
+            setThreads(msg.threads || []);
             break;
           case "syncStatus":
             setSyncStatus(msg.status || null);
             break;
-          case "threads":
-            setThreads(msg.threads || []);
-            setTotal(msg.total || 0);
-            break;
-          case "thread":
-            if (msg.thread) {
-              setThreads((prev) => {
-                const others = prev.filter((t) => t.threadId !== msg.thread.threadId);
-                return [msg.thread, ...others];
-              });
-              if (pendingSelectRef.current === msg.thread.threadId) {
-                pendingSelectRef.current = null;
-                const latest = msg.thread.messages[msg.thread.messages.length - 1];
-                if (latest) {
-                  setSelectedMessageId(latest.id);
-                  setLoadingBody(true);
-                  setMessage(null);
-                  vscode.postMessage({ type: "getMessage", messageId: latest.id });
-                }
-              }
-            }
-            break;
-          case "selectThread":
-            if (typeof msg.threadId === "string" && msg.threadId) {
-              setSelectedThreadId(msg.threadId);
-              setPane("list");
-              pendingSelectRef.current = msg.threadId;
-              vscode.postMessage({ type: "getThread", threadId: msg.threadId });
-            }
-            break;
-          case "message":
-            setMessage(msg.message);
-            setLoadingBody(false);
-            break;
-          case "draftSaved":
-          case "drafts":
-            setDrafts(msg.drafts || (msg.draft ? [msg.draft] : []));
-            break;
           case "error":
             setError(msg.message || "Unknown error");
-            setLoadingBody(false);
             break;
           default:
             break;
@@ -7490,392 +7339,156 @@
       vscode.postMessage({ type: "ready" });
       return () => window.removeEventListener("message", handler);
     }, []);
-    (0, import_react2.useEffect)(() => {
-      const prev = vscode.getState() || {};
-      vscode.setState({ ...prev, listWidth });
-    }, [listWidth]);
-    const selectedAccountStatus = (0, import_react2.useMemo)(() => {
+    (0, import_react.useEffect)(() => {
+      vscode.setState({ accountId, folder });
+    }, [accountId, folder]);
+    const accountStatus = (0, import_react.useMemo)(() => {
       if (!syncStatus) {
         return null;
       }
       if (accountId) {
         return syncStatus.accounts.find((a) => a.accountId === accountId) || null;
       }
-      return syncStatus.accounts.find((a) => a.error) || syncStatus.accounts[0] || null;
+      return syncStatus.accounts[0] || null;
     }, [syncStatus, accountId]);
-    const syncErrorBanner = (0, import_react2.useMemo)(() => {
-      if (!syncStatus) {
-        return null;
+    const statusDotClass = (0, import_react.useMemo)(() => {
+      if (syncStatus?.syncing) {
+        return "dot syncing";
       }
-      const withError = accountId ? syncStatus.accounts.filter((a) => a.accountId === accountId && a.error) : syncStatus.accounts.filter((a) => a.error);
-      if (withError.length === 0) {
-        return null;
+      if (accountStatus?.error) {
+        return "dot error";
       }
-      return withError.map((a) => `Sync failed: ${a.error}`).join(" \xB7 ");
-    }, [syncStatus, accountId]);
-    const selectedThread = (0, import_react2.useMemo)(
-      () => threads.find((t) => t.threadId === selectedThreadId) || null,
-      [threads, selectedThreadId]
-    );
-    const loadMore = (0, import_react2.useCallback)(
-      (offset) => {
-        vscode.postMessage({
-          type: "listThreads",
-          accountId: accountId || void 0,
-          folder,
-          offset,
-          limit: 50
-        });
-      },
-      [accountId, folder]
-    );
-    const selectThread = (thread) => {
-      focusThread(thread.threadId, thread);
+      if (accountStatus?.lastSync) {
+        return "dot ok";
+      }
+      return "dot idle";
+    }, [syncStatus, accountStatus]);
+    const onAccountChange = (id) => {
+      setAccountId(id);
+      vscode.postMessage({
+        type: "listThreads",
+        accountId: id || void 0,
+        folder,
+        limit: 25
+      });
     };
     const onSync = () => {
       vscode.postMessage({ type: "syncNow", accountId: accountId || void 0 });
     };
-    const onSend = () => {
-      if (!accountId) {
-        setError("Add an account first");
-        return;
-      }
-      vscode.postMessage({
-        type: "send",
-        request: {
-          accountId,
-          to: compose.to,
-          subject: compose.subject,
-          text: compose.content,
-          html: `<pre>${escapeHtml(compose.content)}</pre>`
-        }
-      });
-      setCompose({ to: "", subject: "", content: "" });
-      setPane("list");
-    };
-    const onSaveDraft = () => {
-      if (!accountId) {
-        setError("Add an account first");
-        return;
-      }
-      vscode.postMessage({
-        type: "saveDraft",
-        draft: {
-          accountId,
-          emailId: selectedMessageId || "",
-          to: compose.to,
-          subject: compose.subject,
-          content: compose.content
-        }
-      });
-    };
-    const clampListWidth = (0, import_react2.useCallback)((raw) => {
-      const layoutW = layoutRef.current?.clientWidth ?? window.innerWidth;
-      const maxList = Math.max(MIN_LIST_WIDTH, layoutW - MIN_READER_WIDTH - SASH_WIDTH);
-      return Math.min(maxList, Math.max(MIN_LIST_WIDTH, Math.round(raw)));
-    }, []);
-    const onSashPointerDown = (e) => {
-      e.preventDefault();
-      const sash = e.currentTarget;
-      sash.setPointerCapture(e.pointerId);
-      dragRef.current = { startX: e.clientX, startWidth: listWidth };
-      setSashActive(true);
-      const onMove = (ev) => {
-        const drag = dragRef.current;
-        if (!drag) {
-          return;
-        }
-        setListWidth(clampListWidth(drag.startWidth + (ev.clientX - drag.startX)));
-      };
-      const onUp = (ev) => {
-        dragRef.current = null;
-        setSashActive(false);
-        try {
-          sash.releasePointerCapture(ev.pointerId);
-        } catch {
-        }
-        sash.removeEventListener("pointermove", onMove);
-        sash.removeEventListener("pointerup", onUp);
-        sash.removeEventListener("pointercancel", onUp);
-        setListRemeasureKey((k) => k + 1);
-      };
-      sash.addEventListener("pointermove", onMove);
-      sash.addEventListener("pointerup", onUp);
-      sash.addEventListener("pointercancel", onUp);
-    };
-    return /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { className: "app", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("header", { className: "toolbar", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { className: "toolbar-left", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("strong", { children: "Email" }),
-          stats && /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("span", { className: "muted", children: [
-            stats.totalEmails,
-            " msgs \xB7 ",
-            stats.threadCount,
-            " threads \xB7 ",
-            stats.draftCount,
-            " drafts"
-          ] }),
-          selectedAccountStatus && /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("span", { className: "muted sync-meta", children: [
-            "Last synced:",
-            " ",
-            selectedAccountStatus.lastSync ? formatDate(selectedAccountStatus.lastSync) : "never",
-            " ",
-            "\xB7 ",
-            selectedAccountStatus.messageCount,
-            " messages",
-            syncStatus?.syncing ? " \xB7 syncing\u2026" : ""
-          ] })
-        ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { className: "toolbar-right", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)(
+    return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "sidebar", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("header", { className: "header", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "header-row", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
             "select",
             {
+              className: "account-select",
               value: accountId,
-              onChange: (e) => {
-                setAccountId(e.target.value);
-                vscode.postMessage({
-                  type: "listThreads",
-                  accountId: e.target.value || void 0,
-                  folder,
-                  offset: 0,
-                  limit: 50
-                });
-              },
+              onChange: (e) => onAccountChange(e.target.value),
+              title: "Account",
               children: [
-                accounts.length === 0 && /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("option", { value: "", children: "No accounts" }),
-                accounts.map((a) => /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("option", { value: a.id, children: a.label }, a.id))
+                accounts.length === 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "", children: "No accounts" }),
+                accounts.map((a) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: a.id, children: a.label }, a.id))
               ]
             }
           ),
-          /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)(
-            "select",
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+            "button",
             {
-              className: "account-menu",
-              value: "",
-              disabled: !accountId,
-              title: "Account actions",
-              onChange: (e) => {
-                const action = e.target.value;
-                e.target.value = "";
-                if (!accountId || !action) {
-                  return;
-                }
-                if (action === "remove") {
-                  vscode.postMessage({ type: "removeAccount", accountId });
-                } else if (action === "updatePassword") {
-                  vscode.postMessage({ type: "updatePassword", accountId });
-                }
-              },
-              children: [
-                /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("option", { value: "", children: "Account\u2026" }),
-                /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("option", { value: "updatePassword", children: "Update password" }),
-                /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("option", { value: "remove", children: "Remove account" })
-              ]
+              type: "button",
+              className: "icon-btn",
+              title: "Open Email Dashboard",
+              "aria-label": "Open Email Dashboard",
+              onClick: () => vscode.postMessage({ type: "openDashboard" }),
+              children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "codicon", "aria-hidden": "true", children: "\u29C9" })
             }
-          ),
-          /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
-            "input",
-            {
-              className: "folder-input",
-              value: folder,
-              onChange: (e) => setFolder(e.target.value),
-              onBlur: () => loadMore(0),
-              title: "IMAP folder"
-            }
-          ),
-          /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("button", { type: "button", onClick: onSync, children: "Sync" }),
-          /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("button", { type: "button", onClick: () => vscode.postMessage({ type: "addAccount" }), children: "Add account" }),
-          /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("button", { type: "button", onClick: () => setPane("compose"), children: "Compose" }),
-          /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("button", { type: "button", onClick: () => {
-            setPane("drafts");
-            vscode.postMessage({ type: "listDrafts", accountId });
-          }, children: "Drafts" })
+          )
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "header-row meta-row", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "folder-name", title: folder, children: folder }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: statusDotClass, title: statusTitle(accountStatus, syncStatus) }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "sync-time muted", children: syncStatus?.syncing ? "Syncing\u2026" : accountStatus?.lastSync ? relativeTime(accountStatus.lastSync) : "Never" }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { type: "button", className: "sync-btn", onClick: onSync, disabled: !!syncStatus?.syncing, children: "Sync" })
         ] })
       ] }),
-      syncErrorBanner && /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("div", { className: "error sync-error", children: syncErrorBanner }),
-      error && /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("div", { className: "error", children: error }),
-      pane === "compose" && /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("section", { className: "compose", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("h2", { children: "Compose" }),
-        /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
-          "input",
-          {
-            placeholder: "To",
-            value: compose.to,
-            onChange: (e) => setCompose({ ...compose, to: e.target.value })
-          }
-        ),
-        /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
-          "input",
-          {
-            placeholder: "Subject",
-            value: compose.subject,
-            onChange: (e) => setCompose({ ...compose, subject: e.target.value })
-          }
-        ),
-        /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
-          "textarea",
-          {
-            placeholder: "Message",
-            rows: 12,
-            value: compose.content,
-            onChange: (e) => setCompose({ ...compose, content: e.target.value })
-          }
-        ),
-        /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { className: "compose-actions", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("button", { type: "button", onClick: onSend, children: "Send" }),
-          /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("button", { type: "button", onClick: onSaveDraft, children: "Save draft" }),
-          /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("button", { type: "button", className: "secondary", onClick: () => setPane("list"), children: "Cancel" })
-        ] })
-      ] }),
-      pane === "drafts" && /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("section", { className: "drafts", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("h2", { children: "Drafts" }),
-        drafts.length === 0 && /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("p", { className: "muted", children: "No drafts" }),
-        /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("ul", { children: drafts.map((d) => /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("li", { children: /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)(
+      error && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "error", children: error }),
+      accounts.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { className: "empty muted", children: "Add an account from the dashboard." }) : threads.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { className: "empty muted", children: "No threads yet. Sync to fetch mail." }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", { className: "thread-list", children: threads.map((thread) => {
+        const sender = thread.messages[thread.messages.length - 1]?.from || "(unknown)";
+        return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("li", { children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
           "button",
           {
             type: "button",
-            className: "linkish",
-            onClick: () => {
-              setCompose({ to: d.to, subject: d.subject, content: d.content });
-              setPane("compose");
-            },
+            className: "thread-row",
+            onClick: () => vscode.postMessage({ type: "openThread", threadId: thread.threadId }),
             children: [
-              d.subject || "(no subject)",
-              " \u2192 ",
-              d.to,
-              " \xB7 ",
-              d.status
+              /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "row-top", children: [
+                /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "subject", children: thread.subject || "(no subject)" }),
+                /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "badge", children: thread.emailCount })
+              ] }),
+              /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "row-bottom muted", children: [
+                /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "sender", children: shortSender(sender) }),
+                /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "time", children: relativeTime(thread.latestDate) })
+              ] })
             ]
           }
-        ) }, d.id)) }),
-        /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("button", { type: "button", className: "secondary", onClick: () => setPane("list"), children: "Back" })
-      ] }),
-      pane === "list" && /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { className: "layout", ref: layoutRef, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("aside", { className: "thread-list", style: { width: listWidth, flexBasis: listWidth }, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { className: "list-meta muted", children: [
-            total,
-            " threads (showing ",
-            threads.length,
-            ")"
-          ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
-            VirtualList,
-            {
-              items: threads,
-              itemHeight: 64,
-              remeasureKey: listRemeasureKey,
-              renderItem: (thread) => /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)(
-                "button",
-                {
-                  type: "button",
-                  className: `thread-row ${thread.threadId === selectedThreadId ? "active" : ""}`,
-                  onClick: () => selectThread(thread),
-                  children: [
-                    /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("div", { className: "thread-subject", children: thread.subject }),
-                    /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { className: "thread-meta muted", children: [
-                      thread.emailCount,
-                      " \xB7 ",
-                      formatDate(thread.latestDate),
-                      " \xB7 ",
-                      thread.status
-                    ] })
-                  ]
-                }
-              )
-            }
-          ),
-          threads.length < total && /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("button", { type: "button", className: "secondary", onClick: () => loadMore(threads.length), children: "Load more" })
-        ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
-          "div",
-          {
-            className: `sash${sashActive ? " active" : ""}`,
-            role: "separator",
-            "aria-orientation": "vertical",
-            "aria-valuenow": listWidth,
-            "aria-valuemin": MIN_LIST_WIDTH,
-            tabIndex: 0,
-            onPointerDown: onSashPointerDown
-          }
-        ),
-        /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("main", { className: "reader", children: [
-          !selectedThread && /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("p", { className: "muted", children: "Select a thread" }),
-          selectedThread && /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)(import_jsx_runtime2.Fragment, { children: [
-            /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("div", { className: "thread-messages", children: selectedThread.messages.map((m) => /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)(
-              "button",
-              {
-                type: "button",
-                className: `msg-chip ${m.id === selectedMessageId ? "active" : ""}`,
-                onClick: () => selectMessage(m.id),
-                children: [
-                  m.from || "(unknown)",
-                  " \xB7 ",
-                  formatDate(m.date)
-                ]
-              },
-              m.id
-            )) }),
-            loadingBody && /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("p", { className: "muted", children: "Loading body\u2026" }),
-            message && !loadingBody && /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("article", { className: "message", children: [
-              /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("h2", { children: message.subject }),
-              /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { className: "msg-headers muted", children: [
-                /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { children: [
-                  "From: ",
-                  message.from
-                ] }),
-                /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { children: [
-                  "To: ",
-                  message.to
-                ] }),
-                /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("div", { children: formatDate(message.date) })
-              ] }),
-              message.bodyHtml ? /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
-                "iframe",
-                {
-                  className: "body-html",
-                  sandbox: "",
-                  title: "email-body",
-                  srcDoc: message.bodyHtml
-                }
-              ) : /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("pre", { className: "body-text", children: message.bodyText || "(empty)" }),
-              /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
-                "button",
-                {
-                  type: "button",
-                  onClick: () => {
-                    setCompose({
-                      to: message.from,
-                      subject: message.subject.startsWith("Re:") ? message.subject : `Re: ${message.subject}`,
-                      content: ""
-                    });
-                    setPane("compose");
-                  },
-                  children: "Reply"
-                }
-              )
-            ] })
-          ] })
-        ] })
-      ] })
+        ) }, thread.threadId);
+      }) })
     ] });
   };
-  function formatDate(iso) {
+  function statusTitle(accountStatus, syncStatus) {
+    if (syncStatus?.syncing) {
+      return "Syncing";
+    }
+    if (accountStatus?.error) {
+      return `Error: ${accountStatus.error}`;
+    }
+    if (accountStatus?.lastSync) {
+      return `Last synced ${new Date(accountStatus.lastSync).toLocaleString()}`;
+    }
+    return "Not synced";
+  }
+  function shortSender(from) {
+    const angle = from.match(/<([^>]+)>/);
+    if (angle) {
+      const name = from.slice(0, from.indexOf("<")).trim().replace(/^"|"$/g, "");
+      return name || angle[1];
+    }
+    return from;
+  }
+  function relativeTime(iso) {
     try {
-      return new Date(iso).toLocaleString();
+      const t = Date.parse(iso);
+      if (!Number.isFinite(t)) {
+        return iso;
+      }
+      const diff = Date.now() - t;
+      const sec = Math.round(diff / 1e3);
+      if (sec < 60) {
+        return "just now";
+      }
+      const min = Math.round(sec / 60);
+      if (min < 60) {
+        return `${min}m`;
+      }
+      const hr = Math.round(min / 60);
+      if (hr < 24) {
+        return `${hr}h`;
+      }
+      const days = Math.round(hr / 24);
+      if (days < 7) {
+        return `${days}d`;
+      }
+      return new Date(t).toLocaleDateString();
     } catch {
       return iso;
     }
   }
-  function escapeHtml(s) {
-    return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-  }
 
-  // webview-src/dashboard/main.tsx
-  var import_jsx_runtime3 = __toESM(require_jsx_runtime());
+  // webview-src/sidebar/main.tsx
+  var import_jsx_runtime2 = __toESM(require_jsx_runtime());
   var rootEl = document.getElementById("root");
   if (rootEl) {
     (0, import_client.createRoot)(rootEl).render(
-      /* @__PURE__ */ (0, import_jsx_runtime3.jsx)(import_react3.default.StrictMode, { children: /* @__PURE__ */ (0, import_jsx_runtime3.jsx)(App, {}) })
+      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(import_react2.default.StrictMode, { children: /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(App, {}) })
     );
   }
 })();

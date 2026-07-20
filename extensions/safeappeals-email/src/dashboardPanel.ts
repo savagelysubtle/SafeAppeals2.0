@@ -1,5 +1,5 @@
 /*--------------------------------------------------------------------------------------
- *  Email dashboard webview panel (React bundle in media/dashboard)
+ *  Email dashboard webview panel + sidebar mini-inbox (React bundles in media/)
  *--------------------------------------------------------------------------------------*/
 
 import { randomUUID } from 'crypto';
@@ -16,6 +16,7 @@ export class DashboardPanel {
 	private readonly panel: vscode.WebviewPanel;
 	private disposables: vscode.Disposable[] = [];
 	private onAccountsChanged?: () => void;
+	private pendingSelectThreadId: string | undefined;
 
 	private constructor(
 		panel: vscode.WebviewPanel,
@@ -78,10 +79,32 @@ export class DashboardPanel {
 		return DashboardPanel.current;
 	}
 
+	/** Reveal the dashboard and focus a thread in the reading pane. */
+	static showAndSelectThread(
+		extensionUri: vscode.Uri,
+		engine: SyncEngine,
+		accounts: AccountStore,
+		index: EmailIndex,
+		log: (msg: string) => void,
+		threadId: string,
+		onAccountsChanged?: () => void,
+	): DashboardPanel {
+		const panel = DashboardPanel.show(extensionUri, engine, accounts, index, log, onAccountsChanged);
+		panel.selectThread(threadId);
+		return panel;
+	}
+
 	static async refreshIfOpen(): Promise<void> {
 		if (DashboardPanel.current) {
 			await DashboardPanel.current.postBootstrap();
 		}
+	}
+
+	selectThread(threadId: string): void {
+		this.pendingSelectThreadId = threadId;
+		this.panel.reveal(this.panel.viewColumn ?? vscode.ViewColumn.One);
+		// Immediate delivery when the webview is already live; also kept as pending for `ready`.
+		this.panel.webview.postMessage({ type: 'selectThread', threadId });
 	}
 
 	dispose(): void {
@@ -120,6 +143,11 @@ export class DashboardPanel {
 			switch (msg.type) {
 				case 'ready':
 					await this.postBootstrap();
+					if (this.pendingSelectThreadId) {
+						const threadId = this.pendingSelectThreadId;
+						this.pendingSelectThreadId = undefined;
+						this.panel.webview.postMessage({ type: 'selectThread', threadId });
+					}
 					break;
 				case 'listThreads': {
 					const result = this.engine.listThreads({
@@ -247,31 +275,166 @@ export class DashboardPanel {
 	}
 }
 
-/** Sidebar webview view that opens the full dashboard panel. */
+/** Sidebar webview view — mini inbox with recent threads. */
 export class EmailSidebarProvider implements vscode.WebviewViewProvider {
 	public static readonly viewType = 'safeappeals-email.sidebar';
+	private static current: EmailSidebarProvider | undefined;
 
-	constructor(private readonly openDashboard: () => void) {}
+	private view: vscode.WebviewView | undefined;
+	private accountId: string | undefined;
+	private folder: string = getDefaultFolder();
+	private messageDisposable: vscode.Disposable | undefined;
 
+	constructor(
+		private readonly extensionUri: vscode.Uri,
+		private readonly engine: SyncEngine,
+		private readonly accounts: AccountStore,
+		private readonly index: EmailIndex,
+		private readonly log: (msg: string) => void,
+		private readonly openDashboard: () => void,
+		private readonly openThread: (threadId: string) => void,
+	) {
+		EmailSidebarProvider.current = this;
+	}
+
+	static refreshIfResolved(): void {
+		void EmailSidebarProvider.current?.refresh();
+	}
+
+	async refresh(): Promise<void> {
+		if (this.view) {
+			await this.postBootstrap();
+		}
+	}
 
 	resolveWebviewView(webviewView: vscode.WebviewView): void {
-		const nonce = randomUUID();
-		webviewView.webview.options = { enableScripts: true };
-		webviewView.webview.html = `<!DOCTYPE html>
-<html><body style="padding:12px;font-family:var(--vscode-font-family);color:var(--vscode-foreground);background:var(--vscode-sideBar-background);">
-	<p style="margin:0 0 12px;">Safe Appeals Email</p>
-	<button id="open" style="background:var(--vscode-button-background);color:var(--vscode-button-foreground);border:none;padding:8px 12px;border-radius:2px;cursor:pointer;width:100%;">
-		Open Email Dashboard
-	</button>
-	<script nonce="${nonce}">
-		const vscode = acquireVsCodeApi();
-		document.getElementById('open').addEventListener('click', () => vscode.postMessage({ type: 'open' }));
-	</script>
-</body></html>`;
-		webviewView.webview.onDidReceiveMessage((msg) => {
-			if (msg?.type === 'open') {
-				this.openDashboard();
-			}
+		this.view = webviewView;
+		webviewView.webview.options = {
+			enableScripts: true,
+			localResourceRoots: [
+				vscode.Uri.joinPath(this.extensionUri, 'media', 'sidebar'),
+				this.extensionUri,
+			],
+		};
+		webviewView.webview.html = this.getHtml(webviewView.webview);
+
+		this.messageDisposable?.dispose();
+		this.messageDisposable = webviewView.webview.onDidReceiveMessage((msg) => {
+			void this.onMessage(msg);
 		});
+
+		webviewView.onDidDispose(() => {
+			if (this.view === webviewView) {
+				this.view = undefined;
+			}
+			this.messageDisposable?.dispose();
+			this.messageDisposable = undefined;
+		});
+
+		void this.postBootstrap();
+	}
+
+	private async postBootstrap(): Promise<void> {
+		if (!this.view) {
+			return;
+		}
+		const accounts = this.accounts.listAccounts();
+		const accountId = this.accountId && accounts.some((a) => a.id === this.accountId)
+			? this.accountId
+			: accounts[0]?.id;
+		this.accountId = accountId;
+		const folder = this.folder || getDefaultFolder();
+		const status = await this.engine.getStatus();
+		const { threads, total } = this.engine.listThreads({
+			accountId,
+			folder,
+			offset: 0,
+			limit: 25,
+		});
+		this.view.webview.postMessage({
+			type: 'bootstrap',
+			accounts,
+			status,
+			folder,
+			threads,
+			total,
+			stats: this.index.getStats(),
+		});
+	}
+
+	private async onMessage(msg: { type: string; [key: string]: unknown }): Promise<void> {
+		if (!this.view) {
+			return;
+		}
+		try {
+			switch (msg.type) {
+				case 'ready':
+					await this.postBootstrap();
+					break;
+				case 'listThreads': {
+					const accountId = msg.accountId as string | undefined;
+					const folder = (msg.folder as string) || getDefaultFolder();
+					this.accountId = accountId;
+					this.folder = folder;
+					const result = this.engine.listThreads({
+						accountId,
+						folder,
+						offset: (msg.offset as number) || 0,
+						limit: (msg.limit as number) || 25,
+					});
+					this.view.webview.postMessage({ type: 'threads', ...result, folder });
+					break;
+				}
+				case 'syncNow': {
+					const status = await this.engine.syncAll(msg.accountId as string | undefined);
+					await this.postBootstrap();
+					this.view.webview.postMessage({ type: 'syncStatus', status });
+					break;
+				}
+				case 'openDashboard':
+					this.openDashboard();
+					break;
+				case 'openThread': {
+					const threadId = msg.threadId as string | undefined;
+					if (threadId) {
+						this.openThread(threadId);
+					}
+					break;
+				}
+				default:
+					this.log(`Unknown sidebar message: ${msg.type}`);
+			}
+		} catch (err) {
+			const message = err instanceof Error ? err.message : String(err);
+			this.log(`Sidebar error: ${message}`);
+			this.view.webview.postMessage({ type: 'error', message });
+		}
+	}
+
+	private getHtml(webview: vscode.Webview): string {
+		const nonce = randomUUID();
+		const mediaRoot = vscode.Uri.joinPath(this.extensionUri, 'media', 'sidebar');
+		const scriptUri = webview.asWebviewUri(vscode.Uri.joinPath(mediaRoot, 'sidebar.js'));
+		const styleUri = webview.asWebviewUri(vscode.Uri.joinPath(mediaRoot, 'sidebar.css'));
+		const csp = webview.cspSource;
+
+		return `<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8" />
+	<meta http-equiv="Content-Security-Policy"
+		content="default-src 'none';
+			img-src ${csp} https: data:;
+			style-src ${csp} 'unsafe-inline';
+			script-src 'nonce-${nonce}' ${csp};" />
+	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+	<link rel="stylesheet" href="${styleUri}" />
+	<title>Email</title>
+</head>
+<body>
+	<div id="root"></div>
+	<script nonce="${nonce}" src="${scriptUri}"></script>
+</body>
+</html>`;
 	}
 }
