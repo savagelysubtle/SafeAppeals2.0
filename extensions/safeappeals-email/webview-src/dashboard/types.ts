@@ -10,6 +10,7 @@ export interface MessageSummary {
 	folder: string;
 	from: string;
 	to: string;
+	cc?: string;
 	subject: string;
 	date: string;
 	snippet?: string;
@@ -29,6 +30,9 @@ export interface Thread {
 	emailCount: number;
 	participantCount: number;
 	status: string;
+	caseFolderPath?: string;
+	tags?: string[];
+	hidden?: boolean;
 	messages: MessageSummary[];
 }
 
@@ -44,10 +48,30 @@ export interface Draft {
 	emailId: string;
 	to: string;
 	cc?: string;
+	bcc?: string;
 	subject: string;
 	content: string;
 	status: string;
 	updatedAt: string;
+}
+
+export interface ComposeSettings {
+	header: string;
+	signature: string;
+	autoCc: string;
+	autoBcc: string;
+	hasCase: boolean;
+}
+
+export interface SyncSettings {
+	syncIntervalMinutes: number;
+	defaultFolder: string;
+	maxMessagesPerSync: number;
+}
+
+export interface EmailSettings {
+	compose: ComposeSettings;
+	sync: SyncSettings;
 }
 
 export interface Stats {

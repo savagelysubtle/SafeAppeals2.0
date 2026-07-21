@@ -20,6 +20,8 @@ import type {
 const INDEX_FILE = 'email-index.json';
 const DRAFTS_FILE = 'email-drafts.json';
 const META_FILE = 'email-sync-meta.json';
+const CASE_LINKS_FILE = 'email-case-links.json';
+const TAGS_FILE = 'email-tags.json';
 
 interface IndexFile {
 	version: '1.0';
@@ -36,6 +38,20 @@ interface SyncMetaFile {
 	version: '1.0';
 	lastBackgroundSync: string | null;
 	perAccount: Record<string, { lastSync: string | null; error?: string }>;
+}
+
+interface CaseLinksFile {
+	version: '1.0';
+	/** threadId → absolute fsPath of the linked case folder */
+	links: Record<string, string>;
+}
+
+interface TagsFile {
+	version: '1.0';
+	/** Every tag ever created, even if currently unused */
+	knownTags: string[];
+	threadTags: Record<string, string[]>;
+	hiddenThreads: string[];
 }
 
 function toSummary(m: EmailMessage): EmailMessageSummary {
@@ -78,6 +94,10 @@ export class EmailIndex {
 	private messages: EmailMessage[] = [];
 	private threadStatus: Record<string, ThreadStatus> = {};
 	private drafts: EmailDraft[] = [];
+	private caseLinks: Record<string, string> = {};
+	private knownTags: string[] = [];
+	private threadTags: Record<string, string[]> = {};
+	private hiddenThreads = new Set<string>();
 	private meta: SyncMetaFile = { version: '1.0', lastBackgroundSync: null, perAccount: {} };
 
 	constructor(private readonly storageUri: vscode.Uri) {}
@@ -154,6 +174,8 @@ export class EmailIndex {
 		offset?: number;
 		limit?: number;
 		sort?: ThreadSort;
+		caseFolderPath?: string;
+		tag?: string;
 	}): { threads: EmailThread[]; total: number } {
 		const folder = opts.folder || 'INBOX';
 		const filtered = this.messages.filter((m) => {
@@ -170,7 +192,7 @@ export class EmailIndex {
 			byThread.set(m.threadId, list);
 		}
 
-		const threads: EmailThread[] = [];
+		let threads: EmailThread[] = [];
 		for (const [threadId, msgs] of byThread) {
 			msgs.sort((a, b) => Date.parse(a.date) - Date.parse(b.date));
 			const latest = msgs[msgs.length - 1];
@@ -184,8 +206,19 @@ export class EmailIndex {
 				emailCount: msgs.length,
 				participantCount: participants.size,
 				status: this.threadStatus[threadId] || 'active',
+				caseFolderPath: this.caseLinks[threadId],
+				tags: this.threadTags[threadId],
+				hidden: this.hiddenThreads.has(threadId),
 				messages: msgs.map(toSummary),
 			});
+		}
+
+		if (opts.caseFolderPath) {
+			threads = threads.filter((t) => t.caseFolderPath === opts.caseFolderPath);
+		}
+		if (opts.tag) {
+			const tagLc = opts.tag.toLowerCase();
+			threads = threads.filter((t) => (t.tags || []).some((x) => x.toLowerCase() === tagLc));
 		}
 
 		const sort = opts.sort || 'newest';
@@ -208,6 +241,8 @@ export class EmailIndex {
 				threads.sort((a, b) => Date.parse(b.latestDate) - Date.parse(a.latestDate));
 				break;
 		}
+		// Hidden threads sink to the bottom, keeping the active sort among themselves
+		threads = [...threads.filter((t) => !t.hidden), ...threads.filter((t) => t.hidden)];
 		const offset = opts.offset ?? 0;
 		const limit = opts.limit ?? 50;
 		return {
@@ -232,6 +267,9 @@ export class EmailIndex {
 			emailCount: msgs.length,
 			participantCount: new Set(msgs.map((m) => m.from)).size,
 			status: this.threadStatus[threadId] || 'active',
+			caseFolderPath: this.caseLinks[threadId],
+			tags: this.threadTags[threadId],
+			hidden: this.hiddenThreads.has(threadId),
 			messages: msgs.map(toSummary),
 		};
 	}
@@ -239,6 +277,118 @@ export class EmailIndex {
 	async updateThreadStatus(threadId: string, status: ThreadStatus): Promise<void> {
 		this.threadStatus[threadId] = status;
 		await this.saveIndex();
+	}
+
+	async linkThreadToCase(threadId: string, caseFolderPath: string): Promise<void> {
+		this.caseLinks[threadId] = caseFolderPath;
+		await this.saveCaseLinks();
+	}
+
+	async unlinkThread(threadId: string): Promise<void> {
+		delete this.caseLinks[threadId];
+		await this.saveCaseLinks();
+	}
+
+	getThreadCase(threadId: string): string | undefined {
+		return this.caseLinks[threadId];
+	}
+
+	/** Returns the first-use casing when the tag is already known. */
+	private canonicalTag(tag: string): string {
+		const lc = tag.toLowerCase();
+		return this.knownTags.find((t) => t.toLowerCase() === lc) || tag;
+	}
+
+	async tagThread(threadId: string, tag: string): Promise<void> {
+		const trimmed = tag.trim();
+		if (!trimmed) {
+			throw new Error('Tag must not be empty');
+		}
+		const canonical = this.canonicalTag(trimmed);
+		const lc = canonical.toLowerCase();
+		const existing = this.threadTags[threadId] || [];
+		if (!existing.some((t) => t.toLowerCase() === lc)) {
+			this.threadTags[threadId] = [...existing, canonical];
+		}
+		if (!this.knownTags.some((t) => t.toLowerCase() === lc)) {
+			this.knownTags.push(canonical);
+		}
+		await this.saveTags();
+	}
+
+	async untagThread(threadId: string, tag: string): Promise<void> {
+		const lc = tag.trim().toLowerCase();
+		const existing = this.threadTags[threadId];
+		if (!existing) {
+			return;
+		}
+		const next = existing.filter((t) => t.toLowerCase() !== lc);
+		if (next.length > 0) {
+			this.threadTags[threadId] = next;
+		} else {
+			delete this.threadTags[threadId];
+		}
+		await this.saveTags();
+	}
+
+	/**
+	 * Removes a tag from the vocabulary and strips it from every thread.
+	 * Never deletes messages — only the tag association.
+	 */
+	async deleteTag(tag: string): Promise<void> {
+		const lc = tag.trim().toLowerCase();
+		if (!lc) {
+			return;
+		}
+		this.knownTags = this.knownTags.filter((t) => t.toLowerCase() !== lc);
+		for (const threadId of Object.keys(this.threadTags)) {
+			const next = this.threadTags[threadId].filter((t) => t.toLowerCase() !== lc);
+			if (next.length > 0) {
+				this.threadTags[threadId] = next;
+			} else {
+				delete this.threadTags[threadId];
+			}
+		}
+		await this.saveTags();
+	}
+
+	getThreadTags(threadId: string): string[] {
+		return [...(this.threadTags[threadId] || [])];
+	}
+
+	listTags(): { name: string; count: number }[] {
+		const byKey = new Map<string, { name: string; count: number }>();
+		for (const tag of this.knownTags) {
+			byKey.set(tag.toLowerCase(), { name: tag, count: 0 });
+		}
+		for (const tags of Object.values(this.threadTags)) {
+			for (const tag of tags) {
+				const entry = byKey.get(tag.toLowerCase());
+				if (entry) {
+					entry.count += 1;
+				} else {
+					byKey.set(tag.toLowerCase(), { name: tag, count: 1 });
+				}
+			}
+		}
+		return [...byKey.values()].sort(
+			(a, b) =>
+				b.count - a.count || a.name.toLowerCase().localeCompare(b.name.toLowerCase()),
+		);
+	}
+
+	async hideThread(threadId: string): Promise<void> {
+		this.hiddenThreads.add(threadId);
+		await this.saveTags();
+	}
+
+	async unhideThread(threadId: string): Promise<void> {
+		this.hiddenThreads.delete(threadId);
+		await this.saveTags();
+	}
+
+	isThreadHidden(threadId: string): boolean {
+		return this.hiddenThreads.has(threadId);
 	}
 
 	async upsertMessage(msg: EmailMessage): Promise<EmailMessage> {
@@ -419,6 +569,14 @@ export class EmailIndex {
 		return path.join(this.storageUri.fsPath, META_FILE);
 	}
 
+	private caseLinksPath(): string {
+		return path.join(this.storageUri.fsPath, CASE_LINKS_FILE);
+	}
+
+	private tagsPath(): string {
+		return path.join(this.storageUri.fsPath, TAGS_FILE);
+	}
+
 	private async load(): Promise<void> {
 		try {
 			const raw = await fs.readFile(this.indexPath(), 'utf8');
@@ -445,6 +603,24 @@ export class EmailIndex {
 		} catch {
 			this.meta = { version: '1.0', lastBackgroundSync: null, perAccount: {} };
 		}
+		try {
+			const raw = await fs.readFile(this.caseLinksPath(), 'utf8');
+			const parsed = JSON.parse(raw) as CaseLinksFile;
+			this.caseLinks = parsed.links || {};
+		} catch {
+			this.caseLinks = {};
+		}
+		try {
+			const raw = await fs.readFile(this.tagsPath(), 'utf8');
+			const parsed = JSON.parse(raw) as TagsFile;
+			this.knownTags = parsed.knownTags || [];
+			this.threadTags = parsed.threadTags || {};
+			this.hiddenThreads = new Set(parsed.hiddenThreads || []);
+		} catch {
+			this.knownTags = [];
+			this.threadTags = {};
+			this.hiddenThreads = new Set();
+		}
 	}
 
 	private async saveIndex(): Promise<void> {
@@ -463,6 +639,21 @@ export class EmailIndex {
 
 	private async saveMeta(): Promise<void> {
 		await fs.writeFile(this.metaPath(), JSON.stringify(this.meta, null, 2), 'utf8');
+	}
+
+	private async saveCaseLinks(): Promise<void> {
+		const payload: CaseLinksFile = { version: '1.0', links: this.caseLinks };
+		await fs.writeFile(this.caseLinksPath(), JSON.stringify(payload, null, 2), 'utf8');
+	}
+
+	private async saveTags(): Promise<void> {
+		const payload: TagsFile = {
+			version: '1.0',
+			knownTags: this.knownTags,
+			threadTags: this.threadTags,
+			hiddenThreads: [...this.hiddenThreads],
+		};
+		await fs.writeFile(this.tagsPath(), JSON.stringify(payload, null, 2), 'utf8');
 	}
 }
 

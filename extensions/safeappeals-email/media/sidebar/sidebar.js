@@ -7298,12 +7298,28 @@
   function isThreadSort(value) {
     return value === "newest" || value === "oldest" || value === "sender" || value === "subject";
   }
+  function isMailScope(value) {
+    return value === "all" || value === "case";
+  }
   var App = () => {
     const persisted = readPersisted();
     const [accounts, setAccounts] = (0, import_react.useState)([]);
     const [accountId, setAccountId] = (0, import_react.useState)(persisted.accountId || "");
     const [folder, setFolder] = (0, import_react.useState)(persisted.folder || "INBOX");
     const [sort, setSort] = (0, import_react.useState)(isThreadSort(persisted.sort) ? persisted.sort : "newest");
+    const [scope, setScope] = (0, import_react.useState)(isMailScope(persisted.scope) ? persisted.scope : "all");
+    const [caseName, setCaseName] = (0, import_react.useState)(null);
+    const [casePath, setCasePath] = (0, import_react.useState)(null);
+    const [allTags, setAllTags] = (0, import_react.useState)([]);
+    const [tagFilter, setTagFilter] = (0, import_react.useState)(
+      typeof persisted.tagFilter === "string" ? persisted.tagFilter : null
+    );
+    const [tagMenuOpen, setTagMenuOpen] = (0, import_react.useState)(false);
+    const [menuThreadId, setMenuThreadId] = (0, import_react.useState)(null);
+    const [menuPos, setMenuPos] = (0, import_react.useState)(null);
+    const [newTagDraft, setNewTagDraft] = (0, import_react.useState)(null);
+    const menuRef = (0, import_react.useRef)(null);
+    const tagMenuRef = (0, import_react.useRef)(null);
     const [threads, setThreads] = (0, import_react.useState)([]);
     const [total, setTotal] = (0, import_react.useState)(0);
     const [syncStatus, setSyncStatus] = (0, import_react.useState)(null);
@@ -7355,6 +7371,13 @@
             if (isThreadSort(msg.sort)) {
               setSort(msg.sort);
             }
+            if (isMailScope(msg.scope)) {
+              setScope(msg.scope);
+            }
+            setCaseName(typeof msg.caseName === "string" ? msg.caseName : null);
+            setCasePath(typeof msg.caseFolderPath === "string" ? msg.caseFolderPath : null);
+            setAllTags(Array.isArray(msg.allTags) ? msg.allTags : []);
+            setTagFilter(typeof msg.tag === "string" && msg.tag ? msg.tag : null);
             setThreads(msg.threads || []);
             setTotal(typeof msg.total === "number" ? msg.total : 0);
             setSyncStatus(msg.status || null);
@@ -7371,6 +7394,13 @@
             if (isThreadSort(msg.sort)) {
               setSort(msg.sort);
             }
+            if (isMailScope(msg.scope)) {
+              setScope(msg.scope);
+            }
+            if (Array.isArray(msg.allTags)) {
+              setAllTags(msg.allTags);
+            }
+            setTagFilter(typeof msg.tag === "string" && msg.tag ? msg.tag : null);
             if (offset > 0) {
               setThreads((prev) => [...prev, ...next]);
             } else {
@@ -7397,8 +7427,8 @@
       return () => window.removeEventListener("message", handler);
     }, []);
     (0, import_react.useEffect)(() => {
-      vscode.setState({ accountId, folder, sort });
-    }, [accountId, folder, sort]);
+      vscode.setState({ accountId, folder, sort, scope, tagFilter });
+    }, [accountId, folder, sort, scope, tagFilter]);
     (0, import_react.useEffect)(() => {
       return () => {
         if (searchTimerRef.current) {
@@ -7406,6 +7436,54 @@
         }
       };
     }, []);
+    (0, import_react.useEffect)(() => {
+      if (!menuThreadId) {
+        return;
+      }
+      const onDocMouseDown = (e) => {
+        if (menuRef.current && !menuRef.current.contains(e.target)) {
+          closeMenu();
+        }
+      };
+      const onDocKeyDown = (e) => {
+        if (e.key === "Escape") {
+          closeMenu();
+        }
+      };
+      document.addEventListener("mousedown", onDocMouseDown);
+      document.addEventListener("keydown", onDocKeyDown);
+      return () => {
+        document.removeEventListener("mousedown", onDocMouseDown);
+        document.removeEventListener("keydown", onDocKeyDown);
+      };
+    }, [menuThreadId]);
+    (0, import_react.useEffect)(() => {
+      if (!tagMenuOpen) {
+        return;
+      }
+      const onDocMouseDown = (e) => {
+        if (tagMenuRef.current && !tagMenuRef.current.contains(e.target)) {
+          setTagMenuOpen(false);
+        }
+      };
+      const onDocKeyDown = (e) => {
+        if (e.key === "Escape") {
+          setTagMenuOpen(false);
+        }
+      };
+      document.addEventListener("mousedown", onDocMouseDown);
+      document.addEventListener("keydown", onDocKeyDown);
+      return () => {
+        document.removeEventListener("mousedown", onDocMouseDown);
+        document.removeEventListener("keydown", onDocKeyDown);
+      };
+    }, [tagMenuOpen]);
+    (0, import_react.useEffect)(() => {
+      if (tagFilter && allTags.length > 0 && !allTags.some((t) => t.name.toLowerCase() === tagFilter.toLowerCase())) {
+        setTagFilter(null);
+        listThreads({ tag: null, offset: 0 });
+      }
+    }, [allTags, tagFilter]);
     const accountStatus = (0, import_react.useMemo)(() => {
       if (!syncStatus) {
         return null;
@@ -7428,6 +7506,10 @@
       return "dot idle";
     }, [syncStatus, accountStatus]);
     const searching = searchResults !== null;
+    const menuThread = (0, import_react.useMemo)(
+      () => menuThreadId ? threads.find((t) => t.threadId === menuThreadId) || null : null,
+      [threads, menuThreadId]
+    );
     const listThreads = (opts) => {
       vscode.postMessage({
         type: "listThreads",
@@ -7435,7 +7517,9 @@
         folder: opts.folder ?? folder,
         offset: opts.offset ?? 0,
         limit: PAGE_SIZE,
-        sort: opts.sort ?? sort
+        sort: opts.sort ?? sort,
+        scope: opts.scope ?? scope,
+        tag: opts.tag === void 0 ? tagFilter : opts.tag
       });
     };
     const onAccountChange = (id) => {
@@ -7452,6 +7536,76 @@
     const onSortChange = (next) => {
       setSort(next);
       listThreads({ sort: next, offset: 0 });
+    };
+    const onScopeChange = (next) => {
+      if (next === scope) {
+        return;
+      }
+      setScope(next);
+      listThreads({ scope: next, offset: 0 });
+    };
+    const onTagFilterPick = (nextTag) => {
+      setTagFilter(nextTag);
+      setTagMenuOpen(false);
+      listThreads({ tag: nextTag, offset: 0 });
+    };
+    const onDeleteTag = (tag, e) => {
+      e.stopPropagation();
+      vscode.postMessage({ type: "deleteTag", tag });
+      setTagMenuOpen(false);
+    };
+    const closeMenu = () => {
+      setMenuThreadId(null);
+      setMenuPos(null);
+      setNewTagDraft(null);
+    };
+    const onMenuButtonClick = (thread, e) => {
+      e.stopPropagation();
+      setTagMenuOpen(false);
+      if (menuThreadId === thread.threadId) {
+        closeMenu();
+        return;
+      }
+      const rect = e.currentTarget.getBoundingClientRect();
+      const entryCount = (caseName ? 1 : 0) + 1 + allTags.length + 1;
+      const estHeight = Math.min(260, entryCount * 24 + 20);
+      const top = Math.max(8, Math.min(rect.bottom + 4, window.innerHeight - estHeight - 8));
+      const left = Math.max(8, Math.min(rect.right - 180, window.innerWidth - 188));
+      setNewTagDraft(null);
+      setMenuThreadId(thread.threadId);
+      setMenuPos({ top, left });
+    };
+    const onMenuToggleCase = (thread) => {
+      const linked = !!casePath && thread.caseFolderPath === casePath;
+      vscode.postMessage({
+        type: linked ? "unlinkThreadFromCase" : "linkThreadToCase",
+        threadId: thread.threadId
+      });
+      closeMenu();
+    };
+    const onMenuToggleHidden = (thread) => {
+      vscode.postMessage({
+        type: thread.hidden ? "unhideThread" : "hideThread",
+        threadId: thread.threadId
+      });
+      closeMenu();
+    };
+    const onMenuToggleTag = (thread, tag) => {
+      const has = (thread.tags || []).some((t) => t.toLowerCase() === tag.toLowerCase());
+      vscode.postMessage({
+        type: has ? "untagThread" : "tagThread",
+        threadId: thread.threadId,
+        tag
+      });
+      closeMenu();
+    };
+    const onNewTagSubmit = (thread) => {
+      const tag = (newTagDraft || "").trim();
+      if (!tag) {
+        return;
+      }
+      vscode.postMessage({ type: "tagThread", threadId: thread.threadId, tag });
+      closeMenu();
     };
     const commitFolder = () => {
       const next = folder.trim() || "INBOX";
@@ -7578,6 +7732,17 @@
               children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "codicon", "aria-hidden": "true", children: "\u29C9" })
             }
           ),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+            "button",
+            {
+              type: "button",
+              className: "icon-btn",
+              title: "Email Settings",
+              "aria-label": "Email Settings",
+              onClick: () => vscode.postMessage({ type: "openSettings" }),
+              children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "codicon", "aria-hidden": "true", children: "\u2699" })
+            }
+          ),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: statusDotClass, title: statusTitle(accountStatus, syncStatus) }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "sync-time muted", children: syncStatus?.syncing ? "Syncing\u2026" : accountStatus?.lastSync ? relativeTime(accountStatus.lastSync) : "Never" })
         ] }),
@@ -7651,8 +7816,90 @@
                 /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "subject", children: "Subject" })
               ]
             }
-          )
+          ),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "tag-filter", ref: tagMenuRef, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
+              "button",
+              {
+                type: "button",
+                className: `tag-select-btn ${tagMenuOpen ? "open" : ""}`,
+                title: "Filter by tag",
+                "aria-label": "Filter by tag",
+                "aria-haspopup": "menu",
+                "aria-expanded": tagMenuOpen,
+                onClick: () => {
+                  closeMenu();
+                  setTagMenuOpen((open) => !open);
+                },
+                children: [
+                  /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "tag-select-label", children: tagFilter || "All tags" }),
+                  /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "tag-select-caret", "aria-hidden": true, children: "\u25BE" })
+                ]
+              }
+            ),
+            tagMenuOpen && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "tag-filter-menu", role: "menu", children: [
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+                "button",
+                {
+                  type: "button",
+                  className: `tag-filter-item ${!tagFilter ? "active" : ""}`,
+                  role: "menuitem",
+                  onClick: () => onTagFilterPick(null),
+                  children: "All tags"
+                }
+              ),
+              allTags.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "tag-filter-empty muted", children: "No tags yet" }) : allTags.map((t) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "tag-filter-row", children: [
+                /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
+                  "button",
+                  {
+                    type: "button",
+                    className: `tag-filter-item ${tagFilter?.toLowerCase() === t.name.toLowerCase() ? "active" : ""}`,
+                    role: "menuitem",
+                    onClick: () => onTagFilterPick(t.name),
+                    children: [
+                      t.name,
+                      " (",
+                      t.count,
+                      ")"
+                    ]
+                  }
+                ),
+                /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+                  "button",
+                  {
+                    type: "button",
+                    className: "tag-remove-btn",
+                    title: `Remove tag \u201C${t.name}\u201D (emails stay)`,
+                    "aria-label": `Remove tag ${t.name}`,
+                    onClick: (e) => onDeleteTag(t.name, e),
+                    children: "\u2715"
+                  }
+                )
+              ] }, t.name))
+            ] })
+          ] })
         ] })
+      ] }),
+      caseName && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "scope-toggle", role: "group", "aria-label": "Mail scope", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+          "button",
+          {
+            type: "button",
+            className: `scope-btn ${scope === "all" ? "active" : ""}`,
+            onClick: () => onScopeChange("all"),
+            children: "All mail"
+          }
+        ),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+          "button",
+          {
+            type: "button",
+            className: `scope-btn ${scope === "case" ? "active" : ""}`,
+            title: `Only threads linked to ${caseName}`,
+            onClick: () => onScopeChange("case"),
+            children: "This case"
+          }
+        )
       ] }),
       error && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "error", children: error }),
       accounts.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { className: "empty muted", children: "Add an account via Account\u2026" }) : searching ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
@@ -7681,7 +7928,7 @@
             ]
           }
         ) }, result.id)) })
-      ] }) : threads.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { className: "empty muted", children: "No threads yet. Sync to fetch mail." }) : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+      ] }) : threads.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { className: "empty muted", children: tagFilter ? `No threads tagged '${tagFilter}'.` : "No threads yet. Sync to fetch mail." }) : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "list-meta muted", children: [
           total,
           " thread",
@@ -7690,24 +7937,45 @@
         ] }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", { className: "thread-list", children: threads.map((thread) => {
           const sender = thread.messages[thread.messages.length - 1]?.from || "(unknown)";
-          return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("li", { children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
-            "button",
-            {
-              type: "button",
-              className: "thread-row",
-              onClick: () => vscode.postMessage({ type: "openThread", threadId: thread.threadId }),
-              children: [
-                /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "row-top", children: [
-                  /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "subject", children: thread.subject || "(no subject)" }),
-                  /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "badge", children: thread.emailCount })
-                ] }),
-                /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "row-bottom muted", children: [
-                  /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "sender", children: shortSender(sender) }),
-                  /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "time", children: relativeTime(thread.latestDate) })
-                ] })
-              ]
-            }
-          ) }, thread.threadId);
+          const tags = thread.tags || [];
+          return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("li", { className: "thread-item", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
+              "button",
+              {
+                type: "button",
+                className: `thread-row ${thread.hidden ? "hidden-thread" : ""}`,
+                onClick: () => vscode.postMessage({ type: "openThread", threadId: thread.threadId }),
+                children: [
+                  /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "row-top", children: [
+                    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "subject", children: thread.subject || "(no subject)" }),
+                    casePath && thread.caseFolderPath === casePath && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "case-chip", title: `Linked to case: ${caseName}`, children: "case" }),
+                    tags.slice(0, 2).map((tag) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "tag-chip", title: `Tagged: ${tag}`, children: tag }, tag)),
+                    tags.length > 2 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { className: "tag-chip", title: tags.slice(2).join(", "), children: [
+                      "+",
+                      tags.length - 2
+                    ] }),
+                    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "badge", children: thread.emailCount })
+                  ] }),
+                  /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "row-bottom muted", children: [
+                    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "sender", children: shortSender(sender) }),
+                    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "time", children: relativeTime(thread.latestDate) })
+                  ] })
+                ]
+              }
+            ),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+              "button",
+              {
+                type: "button",
+                className: `row-menu-btn ${menuThreadId === thread.threadId ? "open" : ""}`,
+                title: "Thread actions",
+                "aria-label": "Thread actions",
+                onMouseDown: (e) => e.stopPropagation(),
+                onClick: (e) => onMenuButtonClick(thread, e),
+                children: "\u25BE"
+              }
+            )
+          ] }, thread.threadId);
         }) }),
         threads.length < total && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "list-footer", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
           "button",
@@ -7718,7 +7986,100 @@
             children: "Load more"
           }
         ) })
-      ] })
+      ] }),
+      menuThread && menuPos && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
+        "div",
+        {
+          className: "row-menu",
+          ref: menuRef,
+          role: "menu",
+          style: { top: menuPos.top, left: menuPos.left },
+          children: [
+            caseName && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
+              "button",
+              {
+                type: "button",
+                className: "menu-item",
+                role: "menuitemcheckbox",
+                "aria-checked": !!casePath && menuThread.caseFolderPath === casePath,
+                onClick: () => onMenuToggleCase(menuThread),
+                children: [
+                  /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "menu-check", "aria-hidden": "true", children: casePath && menuThread.caseFolderPath === casePath ? "\u2713" : "" }),
+                  "This case"
+                ]
+              }
+            ),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
+              "button",
+              {
+                type: "button",
+                className: "menu-item",
+                role: "menuitemcheckbox",
+                "aria-checked": !!menuThread.hidden,
+                onClick: () => onMenuToggleHidden(menuThread),
+                children: [
+                  /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "menu-check", "aria-hidden": "true", children: menuThread.hidden ? "\u2713" : "" }),
+                  "Hide"
+                ]
+              }
+            ),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "menu-sep" }),
+            allTags.map((t) => {
+              const has = (menuThread.tags || []).some(
+                (x) => x.toLowerCase() === t.name.toLowerCase()
+              );
+              return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
+                "button",
+                {
+                  type: "button",
+                  className: "menu-item",
+                  role: "menuitemcheckbox",
+                  "aria-checked": has,
+                  onClick: () => onMenuToggleTag(menuThread, t.name),
+                  children: [
+                    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "menu-check", "aria-hidden": "true", children: has ? "\u2713" : "" }),
+                    t.name
+                  ]
+                },
+                t.name
+              );
+            }),
+            newTagDraft === null ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
+              "button",
+              {
+                type: "button",
+                className: "menu-item",
+                role: "menuitem",
+                onClick: () => setNewTagDraft(""),
+                children: [
+                  /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "menu-check", "aria-hidden": "true" }),
+                  "New tag\u2026"
+                ]
+              }
+            ) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+              "input",
+              {
+                className: "menu-input",
+                autoFocus: true,
+                value: newTagDraft,
+                placeholder: "Tag name",
+                "aria-label": "New tag name",
+                onChange: (e) => setNewTagDraft(e.target.value),
+                onKeyDown: (e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    onNewTagSubmit(menuThread);
+                  } else if (e.key === "Escape") {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setNewTagDraft(null);
+                  }
+                }
+              }
+            )
+          ]
+        }
+      )
     ] });
   };
   function statusTitle(accountStatus, syncStatus) {

@@ -6,6 +6,13 @@ export interface Account {
 
 export type ThreadSort = 'newest' | 'oldest' | 'sender' | 'subject';
 
+export type MailScope = 'all' | 'case';
+
+export interface TagInfo {
+	name: string;
+	count: number;
+}
+
 export interface MessageSummary {
 	id: string;
 	threadId: string;
@@ -22,6 +29,9 @@ export interface Thread {
 	subject: string;
 	latestDate: string;
 	emailCount: number;
+	caseFolderPath?: string;
+	tags?: string[];
+	hidden?: boolean;
 	messages: MessageSummary[];
 }
 

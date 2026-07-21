@@ -4,7 +4,7 @@
 
 import * as vscode from 'vscode';
 import { AccountStore } from './accountStore';
-import { getDefaultFolder, getSyncIntervalMinutes } from './config';
+import { getCurrentCase, getDefaultFolder, getSyncIntervalMinutes } from './config';
 import { DashboardPanel, EmailSidebarProvider } from './dashboardPanel';
 import { EmailIndex } from './emailIndex';
 import { EmlEditorProvider } from './emlEditorProvider';
@@ -98,6 +98,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 		DashboardPanel.showDrafts(context.extensionUri, engine, accounts, index, log, refreshUi);
 	};
 
+	const openSettings = () => {
+		DashboardPanel.showSettings(context.extensionUri, engine, accounts, index, log, refreshUi);
+	};
+
 	sidebarProvider = new EmailSidebarProvider(
 		context.extensionUri,
 		engine,
@@ -108,6 +112,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 		openThread,
 		openCompose,
 		openDrafts,
+		openSettings,
 		refreshUi,
 	);
 
@@ -400,6 +405,108 @@ function registerCommands(
 			'safeappeals-email.updateThreadStatus',
 			async (threadId: string, status: ThreadStatus) => {
 				await index.updateThreadStatus(threadId, status);
+				return { success: true };
+			},
+		),
+
+		vscode.commands.registerCommand(
+			'safeappeals-email.linkThreadToCase',
+			async (threadId: string, caseFolderPath?: string) => {
+				if (!threadId) {
+					throw new Error('threadId required');
+				}
+				const target = caseFolderPath || getCurrentCase()?.caseFolderPath;
+				if (!target) {
+					void vscode.window.showWarningMessage(
+						'Open a case folder to link email threads to a case.',
+					);
+					return { success: false };
+				}
+				await index.linkThreadToCase(threadId, target);
+				log(`Thread ${threadId} linked to case ${target}`);
+				refreshUi();
+				return { success: true };
+			},
+		),
+
+		vscode.commands.registerCommand(
+			'safeappeals-email.unlinkThreadFromCase',
+			async (threadId: string) => {
+				if (!threadId) {
+					throw new Error('threadId required');
+				}
+				await index.unlinkThread(threadId);
+				log(`Thread ${threadId} unlinked from case`);
+				refreshUi();
+				return { success: true };
+			},
+		),
+
+		vscode.commands.registerCommand(
+			'safeappeals-email.tagThread',
+			async (threadId: string, tag: string) => {
+				if (!threadId) {
+					throw new Error('threadId required');
+				}
+				if (!tag || !tag.trim()) {
+					throw new Error('tag required');
+				}
+				await index.tagThread(threadId, tag);
+				refreshUi();
+				return { success: true };
+			},
+		),
+
+		vscode.commands.registerCommand(
+			'safeappeals-email.untagThread',
+			async (threadId: string, tag: string) => {
+				if (!threadId) {
+					throw new Error('threadId required');
+				}
+				if (!tag || !tag.trim()) {
+					throw new Error('tag required');
+				}
+				await index.untagThread(threadId, tag);
+				refreshUi();
+				return { success: true };
+			},
+		),
+
+		vscode.commands.registerCommand('safeappeals-email.listTags', () => index.listTags()),
+
+		vscode.commands.registerCommand(
+			'safeappeals-email.deleteTag',
+			async (tag: string) => {
+				if (!tag || !tag.trim()) {
+					throw new Error('tag required');
+				}
+				await index.deleteTag(tag);
+				log(`Tag deleted: ${tag.trim()} (emails unchanged)`);
+				refreshUi();
+				return { success: true };
+			},
+		),
+
+		vscode.commands.registerCommand(
+			'safeappeals-email.hideThread',
+			async (threadId: string) => {
+				if (!threadId) {
+					throw new Error('threadId required');
+				}
+				await index.hideThread(threadId);
+				refreshUi();
+				return { success: true };
+			},
+		),
+
+		vscode.commands.registerCommand(
+			'safeappeals-email.unhideThread',
+			async (threadId: string) => {
+				if (!threadId) {
+					throw new Error('threadId required');
+				}
+				await index.unhideThread(threadId);
+				refreshUi();
 				return { success: true };
 			},
 		),

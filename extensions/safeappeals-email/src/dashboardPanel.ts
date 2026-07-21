@@ -7,7 +7,7 @@ import * as vscode from 'vscode';
 import type { AccountStore } from './accountStore';
 import type { EmailIndex } from './emailIndex';
 import type { SyncEngine } from './syncEngine';
-import { getDefaultFolder } from './config';
+import { getCurrentCase, getDefaultFolder, getEmailSettings, updateEmailSettings } from './config';
 import type { ThreadSort } from './types';
 
 export class DashboardPanel {
@@ -20,6 +20,7 @@ export class DashboardPanel {
 	private pendingSelectThreadId: string | undefined;
 	private pendingOpenCompose = false;
 	private pendingOpenDrafts = false;
+	private pendingOpenSettings = false;
 
 	private constructor(
 		panel: vscode.WebviewPanel,
@@ -125,6 +126,20 @@ export class DashboardPanel {
 		return panel;
 	}
 
+	/** Reveal the dashboard and show the settings pane. */
+	static showSettings(
+		extensionUri: vscode.Uri,
+		engine: SyncEngine,
+		accounts: AccountStore,
+		index: EmailIndex,
+		log: (msg: string) => void,
+		onAccountsChanged?: () => void,
+	): DashboardPanel {
+		const panel = DashboardPanel.show(extensionUri, engine, accounts, index, log, onAccountsChanged);
+		panel.openSettings();
+		return panel;
+	}
+
 	static async refreshIfOpen(): Promise<void> {
 		if (DashboardPanel.current) {
 			await DashboardPanel.current.postBootstrap();
@@ -148,6 +163,12 @@ export class DashboardPanel {
 		this.pendingOpenDrafts = true;
 		this.panel.reveal(this.panel.viewColumn ?? vscode.ViewColumn.One);
 		this.panel.webview.postMessage({ type: 'openDrafts' });
+	}
+
+	openSettings(): void {
+		this.pendingOpenSettings = true;
+		this.panel.reveal(this.panel.viewColumn ?? vscode.ViewColumn.One);
+		this.panel.webview.postMessage({ type: 'openSettings' });
 	}
 
 	dispose(): void {
@@ -177,7 +198,9 @@ export class DashboardPanel {
 			threads,
 			total,
 			stats,
+			caseName: getCurrentCase()?.caseName ?? null,
 			drafts: this.index.listDrafts(),
+			settings: getEmailSettings(),
 		});
 	}
 
@@ -198,6 +221,10 @@ export class DashboardPanel {
 					if (this.pendingOpenDrafts) {
 						this.pendingOpenDrafts = false;
 						this.panel.webview.postMessage({ type: 'openDrafts' });
+					}
+					if (this.pendingOpenSettings) {
+						this.pendingOpenSettings = false;
+						this.panel.webview.postMessage({ type: 'openSettings' });
 					}
 					break;
 				case 'listThreads': {
@@ -235,6 +262,26 @@ export class DashboardPanel {
 				case 'saveDraft': {
 					const draft = await this.index.saveDraft(msg.draft as Parameters<EmailIndex['saveDraft']>[0]);
 					this.panel.webview.postMessage({ type: 'draftSaved', draft, drafts: this.index.listDrafts() });
+					break;
+				}
+				case 'updateSettings': {
+					const raw = (msg.settings || {}) as Record<string, unknown>;
+					await updateEmailSettings({
+						header: typeof raw.header === 'string' ? raw.header : undefined,
+						signature: typeof raw.signature === 'string' ? raw.signature : undefined,
+						autoCc: typeof raw.autoCc === 'string' ? raw.autoCc : undefined,
+						autoBcc: typeof raw.autoBcc === 'string' ? raw.autoBcc : undefined,
+						syncIntervalMinutes:
+							typeof raw.syncIntervalMinutes === 'number' ? raw.syncIntervalMinutes : undefined,
+						defaultFolder: typeof raw.defaultFolder === 'string' ? raw.defaultFolder : undefined,
+						maxMessagesPerSync:
+							typeof raw.maxMessagesPerSync === 'number' ? raw.maxMessagesPerSync : undefined,
+					});
+					this.log('Email settings updated');
+					this.panel.webview.postMessage({
+						type: 'settingsSaved',
+						settings: getEmailSettings(),
+					});
 					break;
 				}
 				case 'listDrafts': {
@@ -277,6 +324,26 @@ export class DashboardPanel {
 					);
 					await this.postBootstrap();
 					break;
+				case 'linkThreadToCase': {
+					const threadId = msg.threadId as string | undefined;
+					if (!threadId) {
+						break;
+					}
+					await vscode.commands.executeCommand('safeappeals-email.linkThreadToCase', threadId);
+					await this.postBootstrap();
+					this.panel.webview.postMessage({ type: 'thread', thread: this.engine.getThread(threadId) });
+					break;
+				}
+				case 'unlinkThreadFromCase': {
+					const threadId = msg.threadId as string | undefined;
+					if (!threadId) {
+						break;
+					}
+					await vscode.commands.executeCommand('safeappeals-email.unlinkThreadFromCase', threadId);
+					await this.postBootstrap();
+					this.panel.webview.postMessage({ type: 'thread', thread: this.engine.getThread(threadId) });
+					break;
+				}
 				case 'openEml': {
 					const message = this.index.getMessage(msg.messageId as string);
 					if (message?.filePath) {
@@ -338,6 +405,8 @@ export class EmailSidebarProvider implements vscode.WebviewViewProvider {
 	private accountId: string | undefined;
 	private folder: string = getDefaultFolder();
 	private sort: ThreadSort = 'newest';
+	private scope: 'all' | 'case' = 'all';
+	private tagFilter: string | null = null;
 	private messageDisposable: vscode.Disposable | undefined;
 
 	constructor(
@@ -350,6 +419,7 @@ export class EmailSidebarProvider implements vscode.WebviewViewProvider {
 		private readonly openThread: (threadId: string) => void,
 		private readonly openCompose: () => void,
 		private readonly openDrafts: () => void,
+		private readonly openSettings: () => void,
 		private readonly onAccountsChanged?: () => void,
 	) {
 		EmailSidebarProvider.current = this;
@@ -403,12 +473,15 @@ export class EmailSidebarProvider implements vscode.WebviewViewProvider {
 		this.accountId = accountId;
 		const folder = this.folder || getDefaultFolder();
 		const status = await this.engine.getStatus();
+		const currentCase = getCurrentCase();
 		const { threads, total } = this.engine.listThreads({
 			accountId,
 			folder,
 			offset: 0,
 			limit: 50,
 			sort: this.sort,
+			caseFolderPath: this.scope === 'case' ? currentCase?.caseFolderPath : undefined,
+			tag: this.tagFilter ?? undefined,
 		});
 		this.view.webview.postMessage({
 			type: 'bootstrap',
@@ -416,6 +489,11 @@ export class EmailSidebarProvider implements vscode.WebviewViewProvider {
 			status,
 			folder,
 			sort: this.sort,
+			scope: this.scope,
+			tag: this.tagFilter,
+			allTags: this.index.listTags(),
+			caseName: currentCase?.caseName ?? null,
+			caseFolderPath: currentCase?.caseFolderPath ?? null,
 			threads,
 			total,
 			stats: this.index.getStats(),
@@ -436,17 +514,32 @@ export class EmailSidebarProvider implements vscode.WebviewViewProvider {
 					const folder = (msg.folder as string) || getDefaultFolder();
 					const offset = (msg.offset as number) || 0;
 					const sort = (msg.sort as ThreadSort | undefined) || this.sort || 'newest';
+					const scope = msg.scope === 'case' || msg.scope === 'all' ? msg.scope : this.scope;
+					const tag = typeof msg.tag === 'string' && msg.tag ? msg.tag : null;
 					this.accountId = accountId;
 					this.folder = folder;
 					this.sort = sort;
+					this.scope = scope;
+					this.tagFilter = tag;
 					const result = this.engine.listThreads({
 						accountId,
 						folder,
 						offset,
 						limit: (msg.limit as number) || 50,
 						sort,
+						caseFolderPath: scope === 'case' ? getCurrentCase()?.caseFolderPath : undefined,
+						tag: tag ?? undefined,
 					});
-					this.view.webview.postMessage({ type: 'threads', ...result, folder, offset, sort });
+					this.view.webview.postMessage({
+						type: 'threads',
+						...result,
+						folder,
+						offset,
+						sort,
+						scope,
+						tag,
+						allTags: this.index.listTags(),
+					});
 					break;
 				}
 				case 'search': {
@@ -478,6 +571,9 @@ export class EmailSidebarProvider implements vscode.WebviewViewProvider {
 				case 'openDrafts':
 					this.openDrafts();
 					break;
+				case 'openSettings':
+					this.openSettings();
+					break;
 				case 'addAccount':
 					await vscode.commands.executeCommand('safeappeals-email.addAccount');
 					await this.postBootstrap();
@@ -508,6 +604,62 @@ export class EmailSidebarProvider implements vscode.WebviewViewProvider {
 					await this.accounts.removeAccount(accountId);
 					this.log(`Account removed (sidebar): ${accountId}`);
 					this.onAccountsChanged?.();
+					await this.postBootstrap();
+					break;
+				}
+				case 'tagThread':
+				case 'untagThread': {
+					const threadId = msg.threadId as string | undefined;
+					const tag = msg.tag as string | undefined;
+					if (!threadId || !tag) {
+						break;
+					}
+					await vscode.commands.executeCommand(`safeappeals-email.${msg.type}`, threadId, tag);
+					await this.postBootstrap();
+					break;
+				}
+				case 'deleteTag': {
+					const tag = typeof msg.tag === 'string' ? msg.tag.trim() : '';
+					if (!tag) {
+						break;
+					}
+					const count =
+						this.index.listTags().find((t) => t.name.toLowerCase() === tag.toLowerCase())
+							?.count ?? 0;
+					const confirm = await vscode.window.showWarningMessage(
+						count > 0
+							? `Remove tag “${tag}” from ${count} thread${count === 1 ? '' : 's'}? Emails are not deleted.`
+							: `Remove unused tag “${tag}”?`,
+						{ modal: true },
+						'Remove Tag',
+					);
+					if (confirm !== 'Remove Tag') {
+						break;
+					}
+					if (this.tagFilter && this.tagFilter.toLowerCase() === tag.toLowerCase()) {
+						this.tagFilter = null;
+					}
+					await vscode.commands.executeCommand('safeappeals-email.deleteTag', tag);
+					await this.postBootstrap();
+					break;
+				}
+				case 'hideThread':
+				case 'unhideThread': {
+					const threadId = msg.threadId as string | undefined;
+					if (!threadId) {
+						break;
+					}
+					await vscode.commands.executeCommand(`safeappeals-email.${msg.type}`, threadId);
+					await this.postBootstrap();
+					break;
+				}
+				case 'linkThreadToCase':
+				case 'unlinkThreadFromCase': {
+					const threadId = msg.threadId as string | undefined;
+					if (!threadId) {
+						break;
+					}
+					await vscode.commands.executeCommand(`safeappeals-email.${msg.type}`, threadId);
 					await this.postBootstrap();
 					break;
 				}

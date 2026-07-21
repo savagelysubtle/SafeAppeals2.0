@@ -7288,6 +7288,35 @@
   var import_react = __toESM(require_react());
   var import_jsx_runtime = __toESM(require_jsx_runtime());
   var vscode = acquireVsCodeApi();
+  var emptyCompose = () => ({
+    to: "",
+    cc: "",
+    bcc: "",
+    subject: "",
+    content: ""
+  });
+  function applyDefaults(body, settings) {
+    const compose = settings?.compose;
+    const parts = [];
+    const header = compose?.header?.trim() || "";
+    const signature = compose?.signature?.trim() || "";
+    if (header) {
+      parts.push(header);
+    }
+    if (body.trim()) {
+      parts.push(body.trim());
+    } else if (header || signature) {
+      parts.push("");
+    }
+    if (signature) {
+      parts.push(signature);
+    }
+    return {
+      content: parts.join("\n\n"),
+      cc: compose?.autoCc || "",
+      bcc: compose?.autoBcc || ""
+    };
+  }
   var App = () => {
     const [accountId, setAccountId] = (0, import_react.useState)("");
     const [threads, setThreads] = (0, import_react.useState)([]);
@@ -7298,16 +7327,41 @@
     const [syncStatus, setSyncStatus] = (0, import_react.useState)(null);
     const [drafts, setDrafts] = (0, import_react.useState)([]);
     const [pane, setPane] = (0, import_react.useState)("read");
+    const [caseName, setCaseName] = (0, import_react.useState)(null);
     const [error, setError] = (0, import_react.useState)(null);
     const [loadingBody, setLoadingBody] = (0, import_react.useState)(false);
-    const [compose, setCompose] = (0, import_react.useState)({ to: "", subject: "", content: "" });
+    const [compose, setCompose] = (0, import_react.useState)(emptyCompose());
+    const [showCc, setShowCc] = (0, import_react.useState)(false);
+    const [showBcc, setShowBcc] = (0, import_react.useState)(false);
+    const [settings, setSettings] = (0, import_react.useState)(null);
+    const [settingsDraft, setSettingsDraft] = (0, import_react.useState)(null);
+    const [settingsSaved, setSettingsSaved] = (0, import_react.useState)(false);
     const pendingSelectRef = (0, import_react.useRef)(null);
+    const settingsRef = (0, import_react.useRef)(null);
+    settingsRef.current = settings;
     const selectMessage = (0, import_react.useCallback)((messageId) => {
       setSelectedMessageId(messageId);
       setLoadingBody(true);
       setMessage(null);
       vscode.postMessage({ type: "getMessage", messageId });
     }, []);
+    const startCompose = (0, import_react.useCallback)(
+      (partial) => {
+        const defaults = applyDefaults(partial.body ?? "", settingsRef.current);
+        const next = {
+          to: partial.to ?? "",
+          cc: partial.cc ?? defaults.cc,
+          bcc: partial.bcc ?? defaults.bcc,
+          subject: partial.subject ?? "",
+          content: partial.content ?? defaults.content
+        };
+        setCompose(next);
+        setShowCc(!!next.cc);
+        setShowBcc(!!next.bcc);
+        setPane("compose");
+      },
+      []
+    );
     (0, import_react.useEffect)(() => {
       const handler = (event) => {
         const msg = event.data;
@@ -7327,6 +7381,11 @@
             setStats(msg.stats || null);
             setSyncStatus(msg.status || null);
             setDrafts(msg.drafts || []);
+            setCaseName(typeof msg.caseName === "string" ? msg.caseName : null);
+            if (msg.settings) {
+              setSettings(msg.settings);
+              setSettingsDraft((prev) => prev ?? msg.settings);
+            }
             setError(null);
             break;
           case "syncStatus":
@@ -7362,10 +7421,21 @@
             }
             break;
           case "openCompose":
-            setPane("compose");
+            startCompose({});
             break;
           case "openDrafts":
             setPane("drafts");
+            break;
+          case "openSettings":
+            setPane("settings");
+            setSettingsSaved(false);
+            break;
+          case "settingsSaved":
+            if (msg.settings) {
+              setSettings(msg.settings);
+              setSettingsDraft(msg.settings);
+            }
+            setSettingsSaved(true);
             break;
           case "message":
             setMessage(msg.message);
@@ -7420,12 +7490,16 @@
         request: {
           accountId,
           to: compose.to,
+          cc: compose.cc || void 0,
+          bcc: compose.bcc || void 0,
           subject: compose.subject,
           text: compose.content,
           html: `<pre>${escapeHtml(compose.content)}</pre>`
         }
       });
-      setCompose({ to: "", subject: "", content: "" });
+      setCompose(emptyCompose());
+      setShowCc(false);
+      setShowBcc(false);
       setPane("read");
     };
     const onSaveDraft = () => {
@@ -7439,6 +7513,8 @@
           accountId,
           emailId: selectedMessageId || "",
           to: compose.to,
+          cc: compose.cc || void 0,
+          bcc: compose.bcc || void 0,
           subject: compose.subject,
           content: compose.content
         }
@@ -7448,12 +7524,24 @@
       if (!message) {
         return;
       }
-      setCompose({
+      startCompose({
         to: message.from,
+        cc: message.cc || void 0,
         subject: message.subject.startsWith("Re:") ? message.subject : `Re: ${message.subject}`,
-        content: ""
+        body: ""
       });
-      setPane("compose");
+    };
+    const onLinkCase = () => {
+      if (!selectedThreadId) {
+        return;
+      }
+      vscode.postMessage({ type: "linkThreadToCase", threadId: selectedThreadId });
+    };
+    const onUnlinkCase = () => {
+      if (!selectedThreadId) {
+        return;
+      }
+      vscode.postMessage({ type: "unlinkThreadFromCase", threadId: selectedThreadId });
     };
     const onForward = () => {
       if (!message) {
@@ -7461,18 +7549,35 @@
       }
       const subject = message.subject.startsWith("Fwd:") ? message.subject : `Fwd: ${message.subject}`;
       const body = message.bodyText || message.snippet || "";
-      const content = `
-
----------- Forwarded message ----------
+      const forwarded = `---------- Forwarded message ----------
 From: ${message.from}
 Date: ${formatDate(message.date)}
 Subject: ${message.subject}
 To: ${message.to}
 
 ${body}`;
-      setCompose({ to: "", subject, content });
-      setPane("compose");
+      startCompose({ to: "", subject, body: forwarded });
     };
+    const onSaveSettings = () => {
+      if (!settingsDraft) {
+        return;
+      }
+      setSettingsSaved(false);
+      vscode.postMessage({
+        type: "updateSettings",
+        settings: {
+          header: settingsDraft.compose.header,
+          signature: settingsDraft.compose.signature,
+          autoCc: settingsDraft.compose.autoCc,
+          autoBcc: settingsDraft.compose.autoBcc,
+          syncIntervalMinutes: settingsDraft.sync.syncIntervalMinutes,
+          defaultFolder: settingsDraft.sync.defaultFolder,
+          maxMessagesPerSync: settingsDraft.sync.maxMessagesPerSync
+        }
+      });
+    };
+    const draftCompose = settingsDraft?.compose;
+    const draftSync = settingsDraft?.sync;
     return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "app", children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("header", { className: "toolbar", children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "toolbar-left", children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("strong", { children: "Email" }),
@@ -7499,12 +7604,35 @@ ${body}`;
       error && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "error", children: error }),
       pane === "compose" && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", { className: "compose", children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("h2", { children: "Compose" }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "compose-to-row", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+            "input",
+            {
+              className: "compose-to",
+              placeholder: "To",
+              value: compose.to,
+              onChange: (e) => setCompose({ ...compose, to: e.target.value })
+            }
+          ),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "cc-bcc-toggles", children: [
+            !showCc && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { type: "button", className: "linkish", onClick: () => setShowCc(true), children: "Cc" }),
+            !showBcc && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { type: "button", className: "linkish", onClick: () => setShowBcc(true), children: "Bcc" })
+          ] })
+        ] }),
+        showCc && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
           "input",
           {
-            placeholder: "To",
-            value: compose.to,
-            onChange: (e) => setCompose({ ...compose, to: e.target.value })
+            placeholder: "Cc",
+            value: compose.cc,
+            onChange: (e) => setCompose({ ...compose, cc: e.target.value })
+          }
+        ),
+        showBcc && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+          "input",
+          {
+            placeholder: "Bcc",
+            value: compose.bcc,
+            onChange: (e) => setCompose({ ...compose, bcc: e.target.value })
           }
         ),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
@@ -7539,7 +7667,15 @@ ${body}`;
             type: "button",
             className: "linkish",
             onClick: () => {
-              setCompose({ to: d.to, subject: d.subject, content: d.content });
+              setCompose({
+                to: d.to,
+                cc: d.cc || "",
+                bcc: d.bcc || "",
+                subject: d.subject,
+                content: d.content
+              });
+              setShowCc(!!d.cc);
+              setShowBcc(!!d.bcc);
               setPane("compose");
             },
             children: [
@@ -7552,6 +7688,132 @@ ${body}`;
           }
         ) }, d.id)) }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { type: "button", className: "secondary", onClick: () => setPane("read"), children: "Back" })
+      ] }),
+      pane === "settings" && draftCompose && draftSync && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", { className: "settings", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("h2", { children: "Email Settings" }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("h3", { children: "Compose" }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", { className: "settings-field", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "Header (global)" }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+            "textarea",
+            {
+              rows: 3,
+              value: draftCompose.header,
+              placeholder: "e.g. PRIVILEGED AND CONFIDENTIAL",
+              onChange: (e) => setSettingsDraft({
+                ...settingsDraft,
+                compose: { ...draftCompose, header: e.target.value }
+              })
+            }
+          )
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", { className: "settings-field", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "Signature (global)" }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+            "textarea",
+            {
+              rows: 4,
+              value: draftCompose.signature,
+              placeholder: "Your name, title, contact\u2026",
+              onChange: (e) => setSettingsDraft({
+                ...settingsDraft,
+                compose: { ...draftCompose, signature: e.target.value }
+              })
+            }
+          )
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", { className: "settings-field", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { children: [
+            "Auto-CC (this case)",
+            !draftCompose.hasCase && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "muted", children: " \u2014 open a case folder to set" })
+          ] }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+            "input",
+            {
+              value: draftCompose.autoCc,
+              disabled: !draftCompose.hasCase,
+              placeholder: "address@example.com",
+              onChange: (e) => setSettingsDraft({
+                ...settingsDraft,
+                compose: { ...draftCompose, autoCc: e.target.value }
+              })
+            }
+          )
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", { className: "settings-field", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { children: [
+            "Auto-BCC (this case)",
+            !draftCompose.hasCase && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "muted", children: " \u2014 open a case folder to set" })
+          ] }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+            "input",
+            {
+              value: draftCompose.autoBcc,
+              disabled: !draftCompose.hasCase,
+              placeholder: "address@example.com",
+              onChange: (e) => setSettingsDraft({
+                ...settingsDraft,
+                compose: { ...draftCompose, autoBcc: e.target.value }
+              })
+            }
+          )
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("h3", { children: "Sync" }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", { className: "settings-field", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "Sync interval (minutes)" }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+            "input",
+            {
+              type: "number",
+              min: 1,
+              value: draftSync.syncIntervalMinutes,
+              onChange: (e) => setSettingsDraft({
+                ...settingsDraft,
+                sync: {
+                  ...draftSync,
+                  syncIntervalMinutes: Number(e.target.value) || 15
+                }
+              })
+            }
+          )
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", { className: "settings-field", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "Default folder" }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+            "input",
+            {
+              value: draftSync.defaultFolder,
+              onChange: (e) => setSettingsDraft({
+                ...settingsDraft,
+                sync: { ...draftSync, defaultFolder: e.target.value }
+              })
+            }
+          )
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", { className: "settings-field", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "Max messages per sync" }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+            "input",
+            {
+              type: "number",
+              min: 10,
+              max: 500,
+              value: draftSync.maxMessagesPerSync,
+              onChange: (e) => setSettingsDraft({
+                ...settingsDraft,
+                sync: {
+                  ...draftSync,
+                  maxMessagesPerSync: Number(e.target.value) || 100
+                }
+              })
+            }
+          )
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "compose-actions", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { type: "button", onClick: onSaveSettings, children: "Save" }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { type: "button", className: "secondary", onClick: () => setPane("read"), children: "Back" }),
+          settingsSaved && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "muted", children: "Saved" })
+        ] })
       ] }),
       pane === "read" && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("main", { className: "reader", children: [
         !selectedThread && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "empty-state", children: [
@@ -7566,7 +7828,7 @@ ${body}`;
                 children: "Open Email sidebar"
               }
             ),
-            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { type: "button", onClick: () => setPane("compose"), children: "Compose" })
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { type: "button", onClick: () => startCompose({}), children: "Compose" })
           ] })
         ] }),
         selectedThread && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
@@ -7588,9 +7850,21 @@ ${body}`;
           message && !loadingBody && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("article", { className: "message", children: [
             /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "msg-title-row", children: [
               /* @__PURE__ */ (0, import_jsx_runtime.jsx)("h2", { children: message.subject }),
+              selectedThread.caseFolderPath && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "case-chip", title: selectedThread.caseFolderPath, children: basename(selectedThread.caseFolderPath) }),
+              (selectedThread.tags || []).map((tag) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "tag-chip", title: `Tagged: ${tag}`, children: tag }, tag)),
               /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "msg-actions", children: [
                 /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { type: "button", onClick: onReply, children: "Reply" }),
-                /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { type: "button", onClick: onForward, children: "Forward" })
+                /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { type: "button", onClick: onForward, children: "Forward" }),
+                selectedThread.caseFolderPath ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { type: "button", className: "secondary", onClick: onUnlinkCase, children: "Unlink from case" }) : caseName ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+                  "button",
+                  {
+                    type: "button",
+                    className: "secondary",
+                    title: `Link this thread to ${caseName}`,
+                    onClick: onLinkCase,
+                    children: "Link to case"
+                  }
+                ) : null
               ] })
             ] }),
             /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "msg-headers muted", children: [
@@ -7601,6 +7875,10 @@ ${body}`;
               /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
                 "To: ",
                 message.to
+              ] }),
+              message.cc && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
+                "Cc: ",
+                message.cc
               ] }),
               /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { children: formatDate(message.date) })
             ] }),
@@ -7618,6 +7896,10 @@ ${body}`;
       ] })
     ] });
   };
+  function basename(fsPath) {
+    const parts = fsPath.split(/[\\/]/).filter(Boolean);
+    return parts[parts.length - 1] || fsPath;
+  }
   function formatDate(iso) {
     try {
       return new Date(iso).toLocaleString();

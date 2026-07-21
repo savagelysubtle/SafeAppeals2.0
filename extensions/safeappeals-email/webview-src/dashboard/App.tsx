@@ -1,9 +1,59 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { Account, Draft, FullMessage, Stats, SyncStatus, Thread } from './types';
+import type {
+	Account,
+	Draft,
+	EmailSettings,
+	FullMessage,
+	Stats,
+	SyncStatus,
+	Thread,
+} from './types';
 
 const vscode = acquireVsCodeApi();
 
-type Pane = 'read' | 'compose' | 'drafts';
+type Pane = 'read' | 'compose' | 'drafts' | 'settings';
+
+interface ComposeState {
+	to: string;
+	cc: string;
+	bcc: string;
+	subject: string;
+	content: string;
+}
+
+const emptyCompose = (): ComposeState => ({
+	to: '',
+	cc: '',
+	bcc: '',
+	subject: '',
+	content: '',
+});
+
+function applyDefaults(
+	body: string,
+	settings: EmailSettings | null,
+): Pick<ComposeState, 'content' | 'cc' | 'bcc'> {
+	const compose = settings?.compose;
+	const parts: string[] = [];
+	const header = compose?.header?.trim() || '';
+	const signature = compose?.signature?.trim() || '';
+	if (header) {
+		parts.push(header);
+	}
+	if (body.trim()) {
+		parts.push(body.trim());
+	} else if (header || signature) {
+		parts.push('');
+	}
+	if (signature) {
+		parts.push(signature);
+	}
+	return {
+		content: parts.join('\n\n'),
+		cc: compose?.autoCc || '',
+		bcc: compose?.autoBcc || '',
+	};
+}
 
 export const App: React.FC = () => {
 	const [accountId, setAccountId] = useState<string>('');
@@ -15,11 +65,20 @@ export const App: React.FC = () => {
 	const [syncStatus, setSyncStatus] = useState<SyncStatus | null>(null);
 	const [drafts, setDrafts] = useState<Draft[]>([]);
 	const [pane, setPane] = useState<Pane>('read');
+	const [caseName, setCaseName] = useState<string | null>(null);
 	const [error, setError] = useState<string | null>(null);
 	const [loadingBody, setLoadingBody] = useState(false);
-	const [compose, setCompose] = useState({ to: '', subject: '', content: '' });
+	const [compose, setCompose] = useState<ComposeState>(emptyCompose());
+	const [showCc, setShowCc] = useState(false);
+	const [showBcc, setShowBcc] = useState(false);
+	const [settings, setSettings] = useState<EmailSettings | null>(null);
+	const [settingsDraft, setSettingsDraft] = useState<EmailSettings | null>(null);
+	const [settingsSaved, setSettingsSaved] = useState(false);
 
 	const pendingSelectRef = useRef<string | null>(null);
+	// Ref mirror so the once-mounted message listener always sees current settings
+	const settingsRef = useRef<EmailSettings | null>(null);
+	settingsRef.current = settings;
 
 	const selectMessage = useCallback((messageId: string) => {
 		setSelectedMessageId(messageId);
@@ -27,6 +86,24 @@ export const App: React.FC = () => {
 		setMessage(null);
 		vscode.postMessage({ type: 'getMessage', messageId });
 	}, []);
+
+	const startCompose = useCallback(
+		(partial: Partial<ComposeState> & { body?: string }) => {
+			const defaults = applyDefaults(partial.body ?? '', settingsRef.current);
+			const next: ComposeState = {
+				to: partial.to ?? '',
+				cc: partial.cc ?? defaults.cc,
+				bcc: partial.bcc ?? defaults.bcc,
+				subject: partial.subject ?? '',
+				content: partial.content ?? defaults.content,
+			};
+			setCompose(next);
+			setShowCc(!!next.cc);
+			setShowBcc(!!next.bcc);
+			setPane('compose');
+		},
+		[],
+	);
 
 	useEffect(() => {
 		const handler = (event: MessageEvent) => {
@@ -47,6 +124,12 @@ export const App: React.FC = () => {
 					setStats(msg.stats || null);
 					setSyncStatus(msg.status || null);
 					setDrafts(msg.drafts || []);
+					setCaseName(typeof msg.caseName === 'string' ? msg.caseName : null);
+					if (msg.settings) {
+						setSettings(msg.settings);
+						// Never clobber in-progress edits: seed the draft only when empty
+						setSettingsDraft((prev) => prev ?? msg.settings);
+					}
 					setError(null);
 					break;
 				case 'syncStatus':
@@ -82,10 +165,21 @@ export const App: React.FC = () => {
 					}
 					break;
 				case 'openCompose':
-					setPane('compose');
+					startCompose({});
 					break;
 				case 'openDrafts':
 					setPane('drafts');
+					break;
+				case 'openSettings':
+					setPane('settings');
+					setSettingsSaved(false);
+					break;
+				case 'settingsSaved':
+					if (msg.settings) {
+						setSettings(msg.settings);
+						setSettingsDraft(msg.settings);
+					}
+					setSettingsSaved(true);
 					break;
 				case 'message':
 					setMessage(msg.message);
@@ -106,6 +200,9 @@ export const App: React.FC = () => {
 		window.addEventListener('message', handler);
 		vscode.postMessage({ type: 'ready' });
 		return () => window.removeEventListener('message', handler);
+		// Mount once: `ready` must only be posted a single time, and the handler
+		// reads live values through refs/stable callbacks.
+		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, []);
 
 	const selectedAccountStatus = useMemo(() => {
@@ -146,12 +243,16 @@ export const App: React.FC = () => {
 			request: {
 				accountId,
 				to: compose.to,
+				cc: compose.cc || undefined,
+				bcc: compose.bcc || undefined,
 				subject: compose.subject,
 				text: compose.content,
 				html: `<pre>${escapeHtml(compose.content)}</pre>`,
 			},
 		});
-		setCompose({ to: '', subject: '', content: '' });
+		setCompose(emptyCompose());
+		setShowCc(false);
+		setShowBcc(false);
 		setPane('read');
 	};
 
@@ -166,6 +267,8 @@ export const App: React.FC = () => {
 				accountId,
 				emailId: selectedMessageId || '',
 				to: compose.to,
+				cc: compose.cc || undefined,
+				bcc: compose.bcc || undefined,
 				subject: compose.subject,
 				content: compose.content,
 			},
@@ -176,14 +279,28 @@ export const App: React.FC = () => {
 		if (!message) {
 			return;
 		}
-		setCompose({
+		startCompose({
 			to: message.from,
+			cc: message.cc || undefined,
 			subject: message.subject.startsWith('Re:')
 				? message.subject
 				: `Re: ${message.subject}`,
-			content: '',
+			body: '',
 		});
-		setPane('compose');
+	};
+
+	const onLinkCase = () => {
+		if (!selectedThreadId) {
+			return;
+		}
+		vscode.postMessage({ type: 'linkThreadToCase', threadId: selectedThreadId });
+	};
+
+	const onUnlinkCase = () => {
+		if (!selectedThreadId) {
+			return;
+		}
+		vscode.postMessage({ type: 'unlinkThreadFromCase', threadId: selectedThreadId });
 	};
 
 	const onForward = () => {
@@ -193,20 +310,38 @@ export const App: React.FC = () => {
 		const subject = message.subject.startsWith('Fwd:')
 			? message.subject
 			: `Fwd: ${message.subject}`;
-		const body =
-			message.bodyText ||
-			message.snippet ||
-			'';
-		const content =
-			`\n\n---------- Forwarded message ----------\n` +
+		const body = message.bodyText || message.snippet || '';
+		const forwarded =
+			`---------- Forwarded message ----------\n` +
 			`From: ${message.from}\n` +
 			`Date: ${formatDate(message.date)}\n` +
 			`Subject: ${message.subject}\n` +
 			`To: ${message.to}\n` +
 			`\n${body}`;
-		setCompose({ to: '', subject, content });
-		setPane('compose');
+		startCompose({ to: '', subject, body: forwarded });
 	};
+
+	const onSaveSettings = () => {
+		if (!settingsDraft) {
+			return;
+		}
+		setSettingsSaved(false);
+		vscode.postMessage({
+			type: 'updateSettings',
+			settings: {
+				header: settingsDraft.compose.header,
+				signature: settingsDraft.compose.signature,
+				autoCc: settingsDraft.compose.autoCc,
+				autoBcc: settingsDraft.compose.autoBcc,
+				syncIntervalMinutes: settingsDraft.sync.syncIntervalMinutes,
+				defaultFolder: settingsDraft.sync.defaultFolder,
+				maxMessagesPerSync: settingsDraft.sync.maxMessagesPerSync,
+			},
+		});
+	};
+
+	const draftCompose = settingsDraft?.compose;
+	const draftSync = settingsDraft?.sync;
 
 	return (
 		<div className="app">
@@ -237,11 +372,40 @@ export const App: React.FC = () => {
 			{pane === 'compose' && (
 				<section className="compose">
 					<h2>Compose</h2>
-					<input
-						placeholder="To"
-						value={compose.to}
-						onChange={(e) => setCompose({ ...compose, to: e.target.value })}
-					/>
+					<div className="compose-to-row">
+						<input
+							className="compose-to"
+							placeholder="To"
+							value={compose.to}
+							onChange={(e) => setCompose({ ...compose, to: e.target.value })}
+						/>
+						<div className="cc-bcc-toggles">
+							{!showCc && (
+								<button type="button" className="linkish" onClick={() => setShowCc(true)}>
+									Cc
+								</button>
+							)}
+							{!showBcc && (
+								<button type="button" className="linkish" onClick={() => setShowBcc(true)}>
+									Bcc
+								</button>
+							)}
+						</div>
+					</div>
+					{showCc && (
+						<input
+							placeholder="Cc"
+							value={compose.cc}
+							onChange={(e) => setCompose({ ...compose, cc: e.target.value })}
+						/>
+					)}
+					{showBcc && (
+						<input
+							placeholder="Bcc"
+							value={compose.bcc}
+							onChange={(e) => setCompose({ ...compose, bcc: e.target.value })}
+						/>
+					)}
 					<input
 						placeholder="Subject"
 						value={compose.subject}
@@ -278,7 +442,15 @@ export const App: React.FC = () => {
 									type="button"
 									className="linkish"
 									onClick={() => {
-										setCompose({ to: d.to, subject: d.subject, content: d.content });
+										setCompose({
+											to: d.to,
+											cc: d.cc || '',
+											bcc: d.bcc || '',
+											subject: d.subject,
+											content: d.content,
+										});
+										setShowCc(!!d.cc);
+										setShowBcc(!!d.bcc);
 										setPane('compose');
 									}}
 								>
@@ -290,6 +462,139 @@ export const App: React.FC = () => {
 					<button type="button" className="secondary" onClick={() => setPane('read')}>
 						Back
 					</button>
+				</section>
+			)}
+
+			{pane === 'settings' && draftCompose && draftSync && (
+				<section className="settings">
+					<h2>Email Settings</h2>
+
+					<h3>Compose</h3>
+					<label className="settings-field">
+						<span>Header (global)</span>
+						<textarea
+							rows={3}
+							value={draftCompose.header}
+							placeholder="e.g. PRIVILEGED AND CONFIDENTIAL"
+							onChange={(e) =>
+								setSettingsDraft({
+									...settingsDraft!,
+									compose: { ...draftCompose, header: e.target.value },
+								})
+							}
+						/>
+					</label>
+					<label className="settings-field">
+						<span>Signature (global)</span>
+						<textarea
+							rows={4}
+							value={draftCompose.signature}
+							placeholder="Your name, title, contact…"
+							onChange={(e) =>
+								setSettingsDraft({
+									...settingsDraft!,
+									compose: { ...draftCompose, signature: e.target.value },
+								})
+							}
+						/>
+					</label>
+					<label className="settings-field">
+						<span>
+							Auto-CC (this case)
+							{!draftCompose.hasCase && (
+								<span className="muted"> — open a case folder to set</span>
+							)}
+						</span>
+						<input
+							value={draftCompose.autoCc}
+							disabled={!draftCompose.hasCase}
+							placeholder="address@example.com"
+							onChange={(e) =>
+								setSettingsDraft({
+									...settingsDraft!,
+									compose: { ...draftCompose, autoCc: e.target.value },
+								})
+							}
+						/>
+					</label>
+					<label className="settings-field">
+						<span>
+							Auto-BCC (this case)
+							{!draftCompose.hasCase && (
+								<span className="muted"> — open a case folder to set</span>
+							)}
+						</span>
+						<input
+							value={draftCompose.autoBcc}
+							disabled={!draftCompose.hasCase}
+							placeholder="address@example.com"
+							onChange={(e) =>
+								setSettingsDraft({
+									...settingsDraft!,
+									compose: { ...draftCompose, autoBcc: e.target.value },
+								})
+							}
+						/>
+					</label>
+
+					<h3>Sync</h3>
+					<label className="settings-field">
+						<span>Sync interval (minutes)</span>
+						<input
+							type="number"
+							min={1}
+							value={draftSync.syncIntervalMinutes}
+							onChange={(e) =>
+								setSettingsDraft({
+									...settingsDraft!,
+									sync: {
+										...draftSync,
+										syncIntervalMinutes: Number(e.target.value) || 15,
+									},
+								})
+							}
+						/>
+					</label>
+					<label className="settings-field">
+						<span>Default folder</span>
+						<input
+							value={draftSync.defaultFolder}
+							onChange={(e) =>
+								setSettingsDraft({
+									...settingsDraft!,
+									sync: { ...draftSync, defaultFolder: e.target.value },
+								})
+							}
+						/>
+					</label>
+					<label className="settings-field">
+						<span>Max messages per sync</span>
+						<input
+							type="number"
+							min={10}
+							max={500}
+							value={draftSync.maxMessagesPerSync}
+							onChange={(e) =>
+								setSettingsDraft({
+									...settingsDraft!,
+									sync: {
+										...draftSync,
+										maxMessagesPerSync: Number(e.target.value) || 100,
+									},
+								})
+							}
+						/>
+					</label>
+
+					<div className="compose-actions">
+						<button type="button" onClick={onSaveSettings}>
+							Save
+						</button>
+						<button type="button" className="secondary" onClick={() => setPane('read')}>
+							Back
+						</button>
+						{settingsSaved && <span className="muted">Saved</span>}
+					</div>
 				</section>
 			)}
 
@@ -308,7 +613,7 @@ export const App: React.FC = () => {
 								>
 									Open Email sidebar
 								</button>
-								<button type="button" onClick={() => setPane('compose')}>
+								<button type="button" onClick={() => startCompose({})}>
 									Compose
 								</button>
 							</div>
@@ -333,6 +638,16 @@ export const App: React.FC = () => {
 								<article className="message">
 									<div className="msg-title-row">
 										<h2>{message.subject}</h2>
+										{selectedThread.caseFolderPath && (
+											<span className="case-chip" title={selectedThread.caseFolderPath}>
+												{basename(selectedThread.caseFolderPath)}
+											</span>
+										)}
+										{(selectedThread.tags || []).map((tag) => (
+											<span key={tag} className="tag-chip" title={`Tagged: ${tag}`}>
+												{tag}
+											</span>
+										))}
 										<div className="msg-actions">
 											<button type="button" onClick={onReply}>
 												Reply
@@ -340,11 +655,26 @@ export const App: React.FC = () => {
 											<button type="button" onClick={onForward}>
 												Forward
 											</button>
+											{selectedThread.caseFolderPath ? (
+												<button type="button" className="secondary" onClick={onUnlinkCase}>
+													Unlink from case
+												</button>
+											) : caseName ? (
+												<button
+													type="button"
+													className="secondary"
+													title={`Link this thread to ${caseName}`}
+													onClick={onLinkCase}
+												>
+													Link to case
+												</button>
+											) : null}
 										</div>
 									</div>
 									<div className="msg-headers muted">
 										<div>From: {message.from}</div>
 										<div>To: {message.to}</div>
+										{message.cc && <div>Cc: {message.cc}</div>}
 										<div>{formatDate(message.date)}</div>
 									</div>
 									{message.bodyHtml ? (
@@ -366,6 +696,11 @@ export const App: React.FC = () => {
 		</div>
 	);
 };
+
+function basename(fsPath: string): string {
+	const parts = fsPath.split(/[\\/]/).filter(Boolean);
+	return parts[parts.length - 1] || fsPath;
+}
 
 function formatDate(iso: string): string {
 	try {

@@ -77,6 +77,12 @@ export interface EmailThread {
 	emailCount: number;
 	participantCount: number;
 	status: ThreadStatus;
+	/** Absolute fsPath of the linked case folder, when linked */
+	caseFolderPath?: string;
+	/** User-applied tags */
+	tags?: string[];
+	/** Hidden threads sort to the bottom of listings and render greyed out */
+	hidden?: boolean;
 	/** Summaries only — bodies loaded on demand */
 	messages: EmailMessageSummary[];
 }
@@ -135,6 +141,10 @@ export interface ListThreadsQuery {
 	offset?: number;
 	limit?: number;
 	sort?: ThreadSort;
+	/** Only threads linked to this case folder (absolute fsPath) */
+	caseFolderPath?: string;
+	/** Only threads carrying this tag (case-insensitive) */
+	tag?: string;
 }
 
 export interface SyncStatus {

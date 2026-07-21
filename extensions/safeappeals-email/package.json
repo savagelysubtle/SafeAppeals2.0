@@ -142,6 +142,46 @@
         "command": "safeappeals-email.getStats",
         "title": "Get Email Stats",
         "category": "Safe Appeals Email"
+      },
+      {
+        "command": "safeappeals-email.linkThreadToCase",
+        "title": "Link Thread to Case",
+        "category": "Safe Appeals Email"
+      },
+      {
+        "command": "safeappeals-email.unlinkThreadFromCase",
+        "title": "Unlink Thread from Case",
+        "category": "Safe Appeals Email"
+      },
+      {
+        "command": "safeappeals-email.tagThread",
+        "title": "Tag Thread",
+        "category": "Safe Appeals Email"
+      },
+      {
+        "command": "safeappeals-email.untagThread",
+        "title": "Untag Thread",
+        "category": "Safe Appeals Email"
+      },
+      {
+        "command": "safeappeals-email.listTags",
+        "title": "List Tags",
+        "category": "Safe Appeals Email"
+      },
+      {
+        "command": "safeappeals-email.deleteTag",
+        "title": "Delete Tag",
+        "category": "Safe Appeals Email"
+      },
+      {
+        "command": "safeappeals-email.hideThread",
+        "title": "Hide Thread",
+        "category": "Safe Appeals Email"
+      },
+      {
+        "command": "safeappeals-email.unhideThread",
+        "title": "Unhide Thread",
+        "category": "Safe Appeals Email"
       }
     ],
     "menus": {
@@ -219,6 +259,28 @@
           "minimum": 10,
           "maximum": 500,
           "description": "Max messages to fetch headers for per folder sync"
+        },
+        "safeappealsEmail.compose.header": {
+          "type": "string",
+          "default": "",
+          "description": "Text inserted at the top of new compositions (global)"
+        },
+        "safeappealsEmail.compose.signature": {
+          "type": "string",
+          "default": "",
+          "description": "Signature appended to new compositions (global)"
+        },
+        "safeappealsEmail.compose.autoCc": {
+          "type": "string",
+          "default": "",
+          "scope": "resource",
+          "description": "Addresses prefilled in CC for new compositions in this case (workspace-scoped)"
+        },
+        "safeappealsEmail.compose.autoBcc": {
+          "type": "string",
+          "default": "",
+          "scope": "resource",
+          "description": "Addresses prefilled in BCC for new compositions in this case (workspace-scoped)"
         },
         "safeappealsEmail.accounts": {
           "type": "array",
