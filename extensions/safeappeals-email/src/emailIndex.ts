@@ -13,6 +13,7 @@ import type {
 	EmailMessageSummary,
 	EmailStats,
 	EmailThread,
+	ThreadSort,
 	ThreadStatus,
 } from './types';
 
@@ -152,6 +153,7 @@ export class EmailIndex {
 		folder?: string;
 		offset?: number;
 		limit?: number;
+		sort?: ThreadSort;
 	}): { threads: EmailThread[]; total: number } {
 		const folder = opts.folder || 'INBOX';
 		const filtered = this.messages.filter((m) => {
@@ -186,7 +188,26 @@ export class EmailIndex {
 			});
 		}
 
-		threads.sort((a, b) => Date.parse(b.latestDate) - Date.parse(a.latestDate));
+		const sort = opts.sort || 'newest';
+		switch (sort) {
+			case 'oldest':
+				threads.sort((a, b) => Date.parse(a.latestDate) - Date.parse(b.latestDate));
+				break;
+			case 'sender':
+				threads.sort((a, b) => {
+					const af = (a.messages[a.messages.length - 1]?.from || '').toLowerCase();
+					const bf = (b.messages[b.messages.length - 1]?.from || '').toLowerCase();
+					return af.localeCompare(bf);
+				});
+				break;
+			case 'subject':
+				threads.sort((a, b) => a.subject.toLowerCase().localeCompare(b.subject.toLowerCase()));
+				break;
+			case 'newest':
+			default:
+				threads.sort((a, b) => Date.parse(b.latestDate) - Date.parse(a.latestDate));
+				break;
+		}
 		const offset = opts.offset ?? 0;
 		const limit = opts.limit ?? 50;
 		return {

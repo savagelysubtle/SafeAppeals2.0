@@ -4,11 +4,15 @@ export interface Account {
 	email: string;
 }
 
+export type ThreadSort = 'newest' | 'oldest' | 'sender' | 'subject';
+
 export interface MessageSummary {
 	id: string;
+	threadId: string;
 	from: string;
 	subject: string;
 	date: string;
+	snippet?: string;
 }
 
 export interface Thread {

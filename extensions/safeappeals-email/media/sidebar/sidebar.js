@@ -7289,19 +7289,52 @@
   var import_jsx_runtime = __toESM(require_jsx_runtime());
   var vscode = acquireVsCodeApi();
   var PAGE_SIZE = 50;
+  var SEARCH_DEBOUNCE_MS = 300;
+  var SEARCH_MIN_CHARS = 2;
   function readPersisted() {
     const state = vscode.getState();
     return state && typeof state === "object" ? state : {};
+  }
+  function isThreadSort(value) {
+    return value === "newest" || value === "oldest" || value === "sender" || value === "subject";
   }
   var App = () => {
     const persisted = readPersisted();
     const [accounts, setAccounts] = (0, import_react.useState)([]);
     const [accountId, setAccountId] = (0, import_react.useState)(persisted.accountId || "");
     const [folder, setFolder] = (0, import_react.useState)(persisted.folder || "INBOX");
+    const [sort, setSort] = (0, import_react.useState)(isThreadSort(persisted.sort) ? persisted.sort : "newest");
     const [threads, setThreads] = (0, import_react.useState)([]);
     const [total, setTotal] = (0, import_react.useState)(0);
     const [syncStatus, setSyncStatus] = (0, import_react.useState)(null);
     const [error, setError] = (0, import_react.useState)(null);
+    const [searchInput, setSearchInput] = (0, import_react.useState)("");
+    const [activeQuery, setActiveQuery] = (0, import_react.useState)("");
+    const [searchResults, setSearchResults] = (0, import_react.useState)(null);
+    const searchTimerRef = (0, import_react.useRef)(null);
+    const clearSearch = () => {
+      if (searchTimerRef.current) {
+        clearTimeout(searchTimerRef.current);
+        searchTimerRef.current = null;
+      }
+      setSearchInput("");
+      setActiveQuery("");
+      setSearchResults(null);
+    };
+    const runSearch = (query) => {
+      const q = query.trim();
+      if (q.length < SEARCH_MIN_CHARS) {
+        setActiveQuery("");
+        setSearchResults(null);
+        return;
+      }
+      setActiveQuery(q);
+      vscode.postMessage({
+        type: "search",
+        query: q,
+        accountId: accountId || void 0
+      });
+    };
     (0, import_react.useEffect)(() => {
       const handler = (event) => {
         const msg = event.data;
@@ -7319,6 +7352,9 @@
               return list[0]?.id || "";
             });
             setFolder(msg.folder || "INBOX");
+            if (isThreadSort(msg.sort)) {
+              setSort(msg.sort);
+            }
             setThreads(msg.threads || []);
             setTotal(typeof msg.total === "number" ? msg.total : 0);
             setSyncStatus(msg.status || null);
@@ -7332,6 +7368,9 @@
             if (typeof msg.folder === "string" && msg.folder) {
               setFolder(msg.folder);
             }
+            if (isThreadSort(msg.sort)) {
+              setSort(msg.sort);
+            }
             if (offset > 0) {
               setThreads((prev) => [...prev, ...next]);
             } else {
@@ -7339,6 +7378,10 @@
             }
             break;
           }
+          case "searchResults":
+            setActiveQuery(typeof msg.query === "string" ? msg.query : "");
+            setSearchResults(Array.isArray(msg.results) ? msg.results : []);
+            break;
           case "syncStatus":
             setSyncStatus(msg.status || null);
             break;
@@ -7354,8 +7397,15 @@
       return () => window.removeEventListener("message", handler);
     }, []);
     (0, import_react.useEffect)(() => {
-      vscode.setState({ accountId, folder });
-    }, [accountId, folder]);
+      vscode.setState({ accountId, folder, sort });
+    }, [accountId, folder, sort]);
+    (0, import_react.useEffect)(() => {
+      return () => {
+        if (searchTimerRef.current) {
+          clearTimeout(searchTimerRef.current);
+        }
+      };
+    }, []);
     const accountStatus = (0, import_react.useMemo)(() => {
       if (!syncStatus) {
         return null;
@@ -7377,18 +7427,31 @@
       }
       return "dot idle";
     }, [syncStatus, accountStatus]);
+    const searching = searchResults !== null;
     const listThreads = (opts) => {
       vscode.postMessage({
         type: "listThreads",
         accountId: opts.accountId ?? (accountId || void 0),
         folder: opts.folder ?? folder,
         offset: opts.offset ?? 0,
-        limit: PAGE_SIZE
+        limit: PAGE_SIZE,
+        sort: opts.sort ?? sort
       });
     };
     const onAccountChange = (id) => {
       setAccountId(id);
       listThreads({ accountId: id || void 0, offset: 0 });
+      if (activeQuery.length >= SEARCH_MIN_CHARS) {
+        vscode.postMessage({
+          type: "search",
+          query: activeQuery,
+          accountId: id || void 0
+        });
+      }
+    };
+    const onSortChange = (next) => {
+      setSort(next);
+      listThreads({ sort: next, offset: 0 });
     };
     const commitFolder = () => {
       const next = folder.trim() || "INBOX";
@@ -7397,8 +7460,41 @@
       }
       listThreads({ folder: next, offset: 0 });
     };
+    const onSearchInputChange = (value) => {
+      setSearchInput(value);
+      if (searchTimerRef.current) {
+        clearTimeout(searchTimerRef.current);
+        searchTimerRef.current = null;
+      }
+      const trimmed = value.trim();
+      if (trimmed.length < SEARCH_MIN_CHARS) {
+        setActiveQuery("");
+        setSearchResults(null);
+        return;
+      }
+      searchTimerRef.current = setTimeout(() => {
+        runSearch(value);
+      }, SEARCH_DEBOUNCE_MS);
+    };
     const onSync = () => {
       vscode.postMessage({ type: "syncNow", accountId: accountId || void 0 });
+    };
+    const onAccountMenu = (action) => {
+      if (!action) {
+        return;
+      }
+      if (action === "add") {
+        vscode.postMessage({ type: "addAccount" });
+        return;
+      }
+      if (!accountId) {
+        return;
+      }
+      if (action === "updatePassword") {
+        vscode.postMessage({ type: "updatePassword", accountId });
+      } else if (action === "remove") {
+        vscode.postMessage({ type: "removeAccount", accountId });
+      }
     };
     return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "sidebar", children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("header", { className: "header", children: [
@@ -7416,6 +7512,27 @@
               ]
             }
           ),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
+            "select",
+            {
+              className: "account-menu",
+              value: "",
+              title: "Account actions",
+              onChange: (e) => {
+                const action = e.target.value;
+                e.target.value = "";
+                onAccountMenu(action);
+              },
+              children: [
+                /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "", children: "Account\u2026" }),
+                /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "add", children: "Add account\u2026" }),
+                /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "updatePassword", disabled: !accountId, children: "Update password" }),
+                /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "remove", disabled: !accountId, children: "Remove account" })
+              ]
+            }
+          )
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "header-row toolbar-row", children: [
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
             "button",
             {
@@ -7432,10 +7549,72 @@
             {
               type: "button",
               className: "icon-btn",
+              title: "Drafts",
+              "aria-label": "Drafts",
+              onClick: () => vscode.postMessage({ type: "openDrafts" }),
+              children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "codicon", "aria-hidden": "true", children: "\u2630" })
+            }
+          ),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+            "button",
+            {
+              type: "button",
+              className: "icon-btn",
+              title: "Sync",
+              "aria-label": "Sync",
+              disabled: !!syncStatus?.syncing,
+              onClick: onSync,
+              children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "codicon", "aria-hidden": "true", children: "\u21BB" })
+            }
+          ),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+            "button",
+            {
+              type: "button",
+              className: "icon-btn",
               title: "Open Email Dashboard",
               "aria-label": "Open Email Dashboard",
               onClick: () => vscode.postMessage({ type: "openDashboard" }),
               children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "codicon", "aria-hidden": "true", children: "\u29C9" })
+            }
+          ),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: statusDotClass, title: statusTitle(accountStatus, syncStatus) }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "sync-time muted", children: syncStatus?.syncing ? "Syncing\u2026" : accountStatus?.lastSync ? relativeTime(accountStatus.lastSync) : "Never" })
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "search-row", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+            "input",
+            {
+              className: "search-input",
+              type: "search",
+              placeholder: "Search emails\u2026",
+              value: searchInput,
+              "aria-label": "Search emails",
+              onChange: (e) => onSearchInputChange(e.target.value),
+              onKeyDown: (e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  if (searchTimerRef.current) {
+                    clearTimeout(searchTimerRef.current);
+                    searchTimerRef.current = null;
+                  }
+                  runSearch(searchInput);
+                } else if (e.key === "Escape") {
+                  e.preventDefault();
+                  clearSearch();
+                }
+              }
+            }
+          ),
+          searchInput && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+            "button",
+            {
+              type: "button",
+              className: "icon-btn search-clear",
+              title: "Clear search",
+              "aria-label": "Clear search",
+              onClick: clearSearch,
+              children: "\u2715"
             }
           )
         ] }),
@@ -7457,13 +7636,52 @@
               "aria-label": "IMAP folder"
             }
           ),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: statusDotClass, title: statusTitle(accountStatus, syncStatus) }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "sync-time muted", children: syncStatus?.syncing ? "Syncing\u2026" : accountStatus?.lastSync ? relativeTime(accountStatus.lastSync) : "Never" }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { type: "button", className: "sync-btn", onClick: onSync, disabled: !!syncStatus?.syncing, children: "Sync" })
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
+            "select",
+            {
+              className: "sort-select",
+              value: sort,
+              title: "Sort threads",
+              "aria-label": "Sort threads",
+              onChange: (e) => onSortChange(e.target.value),
+              children: [
+                /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "newest", children: "Newest" }),
+                /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "oldest", children: "Oldest" }),
+                /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "sender", children: "Sender" }),
+                /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "subject", children: "Subject" })
+              ]
+            }
+          )
         ] })
       ] }),
       error && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "error", children: error }),
-      accounts.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { className: "empty muted", children: "Add an account from the dashboard." }) : threads.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { className: "empty muted", children: "No threads yet. Sync to fetch mail." }) : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+      accounts.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { className: "empty muted", children: "Add an account via Account\u2026" }) : searching ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "list-meta muted", children: [
+          searchResults.length,
+          " result",
+          searchResults.length === 1 ? "" : "s",
+          " for \u2018",
+          activeQuery,
+          "\u2019",
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "meta-note", children: " \xB7 synced mail only" })
+        ] }),
+        searchResults.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { className: "empty muted", children: "No matches." }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", { className: "thread-list", children: searchResults.map((result) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("li", { children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
+          "button",
+          {
+            type: "button",
+            className: "thread-row search-row",
+            onClick: () => vscode.postMessage({ type: "openThread", threadId: result.threadId }),
+            children: [
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "row-top", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "subject", children: result.subject || "(no subject)" }) }),
+              /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "row-bottom muted", children: [
+                /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "sender", children: shortSender(result.from) }),
+                /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "time", children: relativeTime(result.date) })
+              ] }),
+              result.snippet && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "snippet muted", children: result.snippet })
+            ]
+          }
+        ) }, result.id)) })
+      ] }) : threads.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { className: "empty muted", children: "No threads yet. Sync to fetch mail." }) : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "list-meta muted", children: [
           total,
           " thread",

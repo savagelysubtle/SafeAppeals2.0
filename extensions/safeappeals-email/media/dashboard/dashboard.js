@@ -7289,7 +7289,6 @@
   var import_jsx_runtime = __toESM(require_jsx_runtime());
   var vscode = acquireVsCodeApi();
   var App = () => {
-    const [accounts, setAccounts] = (0, import_react.useState)([]);
     const [accountId, setAccountId] = (0, import_react.useState)("");
     const [threads, setThreads] = (0, import_react.useState)([]);
     const [selectedThreadId, setSelectedThreadId] = (0, import_react.useState)(null);
@@ -7317,7 +7316,6 @@
         }
         switch (msg.type) {
           case "bootstrap":
-            setAccounts(msg.accounts || []);
             setAccountId((prev) => {
               const list = msg.accounts || [];
               if (prev && list.some((a) => a.id === prev)) {
@@ -7366,6 +7364,9 @@
           case "openCompose":
             setPane("compose");
             break;
+          case "openDrafts":
+            setPane("drafts");
+            break;
           case "message":
             setMessage(msg.message);
             setLoadingBody(false);
@@ -7409,9 +7410,6 @@
       () => threads.find((t) => t.threadId === selectedThreadId) || null,
       [threads, selectedThreadId]
     );
-    const onSync = () => {
-      vscode.postMessage({ type: "syncNow", accountId: accountId || void 0 });
-    };
     const onSend = () => {
       if (!accountId) {
         setError("Add an account first");
@@ -7446,76 +7444,57 @@
         }
       });
     };
+    const onReply = () => {
+      if (!message) {
+        return;
+      }
+      setCompose({
+        to: message.from,
+        subject: message.subject.startsWith("Re:") ? message.subject : `Re: ${message.subject}`,
+        content: ""
+      });
+      setPane("compose");
+    };
+    const onForward = () => {
+      if (!message) {
+        return;
+      }
+      const subject = message.subject.startsWith("Fwd:") ? message.subject : `Fwd: ${message.subject}`;
+      const body = message.bodyText || message.snippet || "";
+      const content = `
+
+---------- Forwarded message ----------
+From: ${message.from}
+Date: ${formatDate(message.date)}
+Subject: ${message.subject}
+To: ${message.to}
+
+${body}`;
+      setCompose({ to: "", subject, content });
+      setPane("compose");
+    };
     return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "app", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("header", { className: "toolbar", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "toolbar-left", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("strong", { children: "Email" }),
-          stats && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { className: "muted", children: [
-            stats.totalEmails,
-            " msgs \xB7 ",
-            stats.threadCount,
-            " threads \xB7 ",
-            stats.draftCount,
-            " drafts"
-          ] }),
-          selectedAccountStatus && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { className: "muted sync-meta", children: [
-            "Last synced:",
-            " ",
-            selectedAccountStatus.lastSync ? formatDate(selectedAccountStatus.lastSync) : "never",
-            " ",
-            "\xB7 ",
-            selectedAccountStatus.messageCount,
-            " messages",
-            syncStatus?.syncing ? " \xB7 syncing\u2026" : ""
-          ] })
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("header", { className: "toolbar", children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "toolbar-left", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("strong", { children: "Email" }),
+        stats && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { className: "muted", children: [
+          stats.totalEmails,
+          " msgs \xB7 ",
+          stats.threadCount,
+          " threads \xB7 ",
+          stats.draftCount,
+          " drafts"
         ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "toolbar-right", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
-            "select",
-            {
-              value: accountId,
-              onChange: (e) => setAccountId(e.target.value),
-              children: [
-                accounts.length === 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "", children: "No accounts" }),
-                accounts.map((a) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: a.id, children: a.label }, a.id))
-              ]
-            }
-          ),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
-            "select",
-            {
-              className: "account-menu",
-              value: "",
-              disabled: !accountId,
-              title: "Account actions",
-              onChange: (e) => {
-                const action = e.target.value;
-                e.target.value = "";
-                if (!accountId || !action) {
-                  return;
-                }
-                if (action === "remove") {
-                  vscode.postMessage({ type: "removeAccount", accountId });
-                } else if (action === "updatePassword") {
-                  vscode.postMessage({ type: "updatePassword", accountId });
-                }
-              },
-              children: [
-                /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "", children: "Account\u2026" }),
-                /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "updatePassword", children: "Update password" }),
-                /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "remove", children: "Remove account" })
-              ]
-            }
-          ),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { type: "button", onClick: onSync, children: "Sync" }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { type: "button", onClick: () => vscode.postMessage({ type: "addAccount" }), children: "Add account" }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { type: "button", onClick: () => setPane("compose"), children: "Compose" }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { type: "button", onClick: () => {
-            setPane("drafts");
-            vscode.postMessage({ type: "listDrafts", accountId });
-          }, children: "Drafts" })
+        selectedAccountStatus && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { className: "muted sync-meta", children: [
+          "Last synced:",
+          " ",
+          selectedAccountStatus.lastSync ? formatDate(selectedAccountStatus.lastSync) : "never",
+          " ",
+          "\xB7 ",
+          selectedAccountStatus.messageCount,
+          " messages",
+          syncStatus?.syncing ? " \xB7 syncing\u2026" : ""
         ] })
-      ] }),
+      ] }) }),
       syncErrorBanner && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "error sync-error", children: syncErrorBanner }),
       error && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "error", children: error }),
       pane === "compose" && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", { className: "compose", children: [
@@ -7607,7 +7586,13 @@
           )) }),
           loadingBody && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { className: "muted", children: "Loading body\u2026" }),
           message && !loadingBody && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("article", { className: "message", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("h2", { children: message.subject }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "msg-title-row", children: [
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("h2", { children: message.subject }),
+              /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "msg-actions", children: [
+                /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { type: "button", onClick: onReply, children: "Reply" }),
+                /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { type: "button", onClick: onForward, children: "Forward" })
+              ] })
+            ] }),
             /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "msg-headers muted", children: [
               /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
                 "From: ",
@@ -7627,22 +7612,7 @@
                 title: "email-body",
                 srcDoc: message.bodyHtml
               }
-            ) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("pre", { className: "body-text", children: message.bodyText || "(empty)" }),
-            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-              "button",
-              {
-                type: "button",
-                onClick: () => {
-                  setCompose({
-                    to: message.from,
-                    subject: message.subject.startsWith("Re:") ? message.subject : `Re: ${message.subject}`,
-                    content: ""
-                  });
-                  setPane("compose");
-                },
-                children: "Reply"
-              }
-            )
+            ) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("pre", { className: "body-text", children: message.bodyText || "(empty)" })
           ] })
         ] })
       ] })

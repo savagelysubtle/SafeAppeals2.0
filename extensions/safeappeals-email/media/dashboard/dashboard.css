@@ -33,8 +33,7 @@ body,
 	border-bottom: 1px solid var(--vscode-panel-border, #444);
 }
 
-.toolbar-left,
-.toolbar-right {
+.toolbar-left {
 	display: flex;
 	flex-wrap: wrap;
 	gap: 8px;
@@ -92,15 +91,6 @@ button.linkish {
 	color: var(--vscode-textLink-foreground);
 	text-align: left;
 	padding: 4px 0;
-}
-
-.account-menu {
-	max-width: 140px;
-}
-
-.account-menu:disabled {
-	opacity: 0.5;
-	cursor: default;
 }
 
 .reader {
@@ -164,8 +154,25 @@ button.linkish {
 	outline: 1px solid var(--vscode-focusBorder);
 }
 
-.message h2 {
-	margin: 0 0 8px;
+.msg-title-row {
+	display: flex;
+	align-items: flex-start;
+	justify-content: space-between;
+	gap: 12px;
+	margin-bottom: 8px;
+}
+
+.msg-title-row h2 {
+	margin: 0;
+	flex: 1;
+	min-width: 0;
+}
+
+.msg-actions {
+	display: flex;
+	flex-shrink: 0;
+	gap: 6px;
+	align-items: center;
 }
 
 .msg-headers {

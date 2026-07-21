@@ -6,7 +6,6 @@ const vscode = acquireVsCodeApi();
 type Pane = 'read' | 'compose' | 'drafts';
 
 export const App: React.FC = () => {
-	const [accounts, setAccounts] = useState<Account[]>([]);
 	const [accountId, setAccountId] = useState<string>('');
 	const [threads, setThreads] = useState<Thread[]>([]);
 	const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
@@ -37,10 +36,9 @@ export const App: React.FC = () => {
 			}
 			switch (msg.type) {
 				case 'bootstrap':
-					setAccounts(msg.accounts || []);
 					setAccountId((prev) => {
-						const list = msg.accounts || [];
-						if (prev && list.some((a: Account) => a.id === prev)) {
+						const list: Account[] = msg.accounts || [];
+						if (prev && list.some((a) => a.id === prev)) {
 							return prev;
 						}
 						return list[0]?.id || '';
@@ -85,6 +83,9 @@ export const App: React.FC = () => {
 					break;
 				case 'openCompose':
 					setPane('compose');
+					break;
+				case 'openDrafts':
+					setPane('drafts');
 					break;
 				case 'message':
 					setMessage(msg.message);
@@ -135,10 +136,6 @@ export const App: React.FC = () => {
 		[threads, selectedThreadId],
 	);
 
-	const onSync = () => {
-		vscode.postMessage({ type: 'syncNow', accountId: accountId || undefined });
-	};
-
 	const onSend = () => {
 		if (!accountId) {
 			setError('Add an account first');
@@ -175,6 +172,42 @@ export const App: React.FC = () => {
 		});
 	};
 
+	const onReply = () => {
+		if (!message) {
+			return;
+		}
+		setCompose({
+			to: message.from,
+			subject: message.subject.startsWith('Re:')
+				? message.subject
+				: `Re: ${message.subject}`,
+			content: '',
+		});
+		setPane('compose');
+	};
+
+	const onForward = () => {
+		if (!message) {
+			return;
+		}
+		const subject = message.subject.startsWith('Fwd:')
+			? message.subject
+			: `Fwd: ${message.subject}`;
+		const body =
+			message.bodyText ||
+			message.snippet ||
+			'';
+		const content =
+			`\n\n---------- Forwarded message ----------\n` +
+			`From: ${message.from}\n` +
+			`Date: ${formatDate(message.date)}\n` +
+			`Subject: ${message.subject}\n` +
+			`To: ${message.to}\n` +
+			`\n${body}`;
+		setCompose({ to: '', subject, content });
+		setPane('compose');
+	};
+
 	return (
 		<div className="app">
 			<header className="toolbar">
@@ -195,53 +228,6 @@ export const App: React.FC = () => {
 							{syncStatus?.syncing ? ' · syncing…' : ''}
 						</span>
 					)}
-				</div>
-				<div className="toolbar-right">
-					<select
-						value={accountId}
-						onChange={(e) => setAccountId(e.target.value)}
-					>
-						{accounts.length === 0 && <option value="">No accounts</option>}
-						{accounts.map((a) => (
-							<option key={a.id} value={a.id}>
-								{a.label}
-							</option>
-						))}
-					</select>
-					<select
-						className="account-menu"
-						value=""
-						disabled={!accountId}
-						title="Account actions"
-						onChange={(e) => {
-							const action = e.target.value;
-							e.target.value = '';
-							if (!accountId || !action) {
-								return;
-							}
-							if (action === 'remove') {
-								vscode.postMessage({ type: 'removeAccount', accountId });
-							} else if (action === 'updatePassword') {
-								vscode.postMessage({ type: 'updatePassword', accountId });
-							}
-						}}
-					>
-						<option value="">Account…</option>
-						<option value="updatePassword">Update password</option>
-						<option value="remove">Remove account</option>
-					</select>
-					<button type="button" onClick={onSync}>
-						Sync
-					</button>
-					<button type="button" onClick={() => vscode.postMessage({ type: 'addAccount' })}>
-						Add account
-					</button>
-					<button type="button" onClick={() => setPane('compose')}>
-						Compose
-					</button>
-					<button type="button" onClick={() => { setPane('drafts'); vscode.postMessage({ type: 'listDrafts', accountId }); }}>
-						Drafts
-					</button>
 				</div>
 			</header>
 
@@ -345,7 +331,17 @@ export const App: React.FC = () => {
 							{loadingBody && <p className="muted">Loading body…</p>}
 							{message && !loadingBody && (
 								<article className="message">
-									<h2>{message.subject}</h2>
+									<div className="msg-title-row">
+										<h2>{message.subject}</h2>
+										<div className="msg-actions">
+											<button type="button" onClick={onReply}>
+												Reply
+											</button>
+											<button type="button" onClick={onForward}>
+												Forward
+											</button>
+										</div>
+									</div>
 									<div className="msg-headers muted">
 										<div>From: {message.from}</div>
 										<div>To: {message.to}</div>
@@ -361,21 +357,6 @@ export const App: React.FC = () => {
 									) : (
 										<pre className="body-text">{message.bodyText || '(empty)'}</pre>
 									)}
-									<button
-										type="button"
-										onClick={() => {
-											setCompose({
-												to: message.from,
-												subject: message.subject.startsWith('Re:')
-													? message.subject
-													: `Re: ${message.subject}`,
-												content: '',
-											});
-											setPane('compose');
-										}}
-									>
-										Reply
-									</button>
 								</article>
 							)}
 						</>

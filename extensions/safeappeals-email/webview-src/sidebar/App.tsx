@@ -1,13 +1,16 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import type { Account, SyncStatus, Thread } from './types';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import type { Account, MessageSummary, SyncStatus, Thread, ThreadSort } from './types';
 
 const vscode = acquireVsCodeApi();
 
 const PAGE_SIZE = 50;
+const SEARCH_DEBOUNCE_MS = 300;
+const SEARCH_MIN_CHARS = 2;
 
 interface PersistedState {
 	accountId?: string;
 	folder?: string;
+	sort?: ThreadSort;
 }
 
 function readPersisted(): PersistedState {
@@ -15,15 +18,49 @@ function readPersisted(): PersistedState {
 	return state && typeof state === 'object' ? state : {};
 }
 
+function isThreadSort(value: unknown): value is ThreadSort {
+	return value === 'newest' || value === 'oldest' || value === 'sender' || value === 'subject';
+}
+
 export const App: React.FC = () => {
 	const persisted = readPersisted();
 	const [accounts, setAccounts] = useState<Account[]>([]);
 	const [accountId, setAccountId] = useState(persisted.accountId || '');
 	const [folder, setFolder] = useState(persisted.folder || 'INBOX');
+	const [sort, setSort] = useState<ThreadSort>(isThreadSort(persisted.sort) ? persisted.sort : 'newest');
 	const [threads, setThreads] = useState<Thread[]>([]);
 	const [total, setTotal] = useState(0);
 	const [syncStatus, setSyncStatus] = useState<SyncStatus | null>(null);
 	const [error, setError] = useState<string | null>(null);
+	const [searchInput, setSearchInput] = useState('');
+	const [activeQuery, setActiveQuery] = useState('');
+	const [searchResults, setSearchResults] = useState<MessageSummary[] | null>(null);
+	const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+	const clearSearch = () => {
+		if (searchTimerRef.current) {
+			clearTimeout(searchTimerRef.current);
+			searchTimerRef.current = null;
+		}
+		setSearchInput('');
+		setActiveQuery('');
+		setSearchResults(null);
+	};
+
+	const runSearch = (query: string) => {
+		const q = query.trim();
+		if (q.length < SEARCH_MIN_CHARS) {
+			setActiveQuery('');
+			setSearchResults(null);
+			return;
+		}
+		setActiveQuery(q);
+		vscode.postMessage({
+			type: 'search',
+			query: q,
+			accountId: accountId || undefined,
+		});
+	};
 
 	useEffect(() => {
 		const handler = (event: MessageEvent) => {
@@ -42,6 +79,9 @@ export const App: React.FC = () => {
 						return list[0]?.id || '';
 					});
 					setFolder(msg.folder || 'INBOX');
+					if (isThreadSort(msg.sort)) {
+						setSort(msg.sort);
+					}
 					setThreads(msg.threads || []);
 					setTotal(typeof msg.total === 'number' ? msg.total : 0);
 					setSyncStatus(msg.status || null);
@@ -55,6 +95,9 @@ export const App: React.FC = () => {
 					if (typeof msg.folder === 'string' && msg.folder) {
 						setFolder(msg.folder);
 					}
+					if (isThreadSort(msg.sort)) {
+						setSort(msg.sort);
+					}
 					if (offset > 0) {
 						setThreads((prev) => [...prev, ...next]);
 					} else {
@@ -62,6 +105,10 @@ export const App: React.FC = () => {
 					}
 					break;
 				}
+				case 'searchResults':
+					setActiveQuery(typeof msg.query === 'string' ? msg.query : '');
+					setSearchResults(Array.isArray(msg.results) ? msg.results : []);
+					break;
 				case 'syncStatus':
 					setSyncStatus(msg.status || null);
 					break;
@@ -78,8 +125,16 @@ export const App: React.FC = () => {
 	}, []);
 
 	useEffect(() => {
-		vscode.setState({ accountId, folder });
-	}, [accountId, folder]);
+		vscode.setState({ accountId, folder, sort });
+	}, [accountId, folder, sort]);
+
+	useEffect(() => {
+		return () => {
+			if (searchTimerRef.current) {
+				clearTimeout(searchTimerRef.current);
+			}
+		};
+	}, []);
 
 	const accountStatus = useMemo(() => {
 		if (!syncStatus) {
@@ -104,19 +159,39 @@ export const App: React.FC = () => {
 		return 'dot idle';
 	}, [syncStatus, accountStatus]);
 
-	const listThreads = (opts: { accountId?: string; folder?: string; offset?: number }) => {
+	const searching = searchResults !== null;
+
+	const listThreads = (opts: {
+		accountId?: string;
+		folder?: string;
+		offset?: number;
+		sort?: ThreadSort;
+	}) => {
 		vscode.postMessage({
 			type: 'listThreads',
 			accountId: opts.accountId ?? (accountId || undefined),
 			folder: opts.folder ?? folder,
 			offset: opts.offset ?? 0,
 			limit: PAGE_SIZE,
+			sort: opts.sort ?? sort,
 		});
 	};
 
 	const onAccountChange = (id: string) => {
 		setAccountId(id);
 		listThreads({ accountId: id || undefined, offset: 0 });
+		if (activeQuery.length >= SEARCH_MIN_CHARS) {
+			vscode.postMessage({
+				type: 'search',
+				query: activeQuery,
+				accountId: id || undefined,
+			});
+		}
+	};
+
+	const onSortChange = (next: ThreadSort) => {
+		setSort(next);
+		listThreads({ sort: next, offset: 0 });
 	};
 
 	const commitFolder = () => {
@@ -127,8 +202,43 @@ export const App: React.FC = () => {
 		listThreads({ folder: next, offset: 0 });
 	};
 
+	const onSearchInputChange = (value: string) => {
+		setSearchInput(value);
+		if (searchTimerRef.current) {
+			clearTimeout(searchTimerRef.current);
+			searchTimerRef.current = null;
+		}
+		const trimmed = value.trim();
+		if (trimmed.length < SEARCH_MIN_CHARS) {
+			setActiveQuery('');
+			setSearchResults(null);
+			return;
+		}
+		searchTimerRef.current = setTimeout(() => {
+			runSearch(value);
+		}, SEARCH_DEBOUNCE_MS);
+	};
+
 	const onSync = () => {
 		vscode.postMessage({ type: 'syncNow', accountId: accountId || undefined });
+	};
+
+	const onAccountMenu = (action: string) => {
+		if (!action) {
+			return;
+		}
+		if (action === 'add') {
+			vscode.postMessage({ type: 'addAccount' });
+			return;
+		}
+		if (!accountId) {
+			return;
+		}
+		if (action === 'updatePassword') {
+			vscode.postMessage({ type: 'updatePassword', accountId });
+		} else if (action === 'remove') {
+			vscode.postMessage({ type: 'removeAccount', accountId });
+		}
 	};
 
 	return (
@@ -148,6 +258,27 @@ export const App: React.FC = () => {
 							</option>
 						))}
 					</select>
+					<select
+						className="account-menu"
+						value=""
+						title="Account actions"
+						onChange={(e) => {
+							const action = e.target.value;
+							e.target.value = '';
+							onAccountMenu(action);
+						}}
+					>
+						<option value="">Account…</option>
+						<option value="add">Add account…</option>
+						<option value="updatePassword" disabled={!accountId}>
+							Update password
+						</option>
+						<option value="remove" disabled={!accountId}>
+							Remove account
+						</option>
+					</select>
+				</div>
+				<div className="header-row toolbar-row">
 					<button
 						type="button"
 						className="icon-btn"
@@ -162,6 +293,29 @@ export const App: React.FC = () => {
 					<button
 						type="button"
 						className="icon-btn"
+						title="Drafts"
+						aria-label="Drafts"
+						onClick={() => vscode.postMessage({ type: 'openDrafts' })}
+					>
+						<span className="codicon" aria-hidden="true">
+							☰
+						</span>
+					</button>
+					<button
+						type="button"
+						className="icon-btn"
+						title="Sync"
+						aria-label="Sync"
+						disabled={!!syncStatus?.syncing}
+						onClick={onSync}
+					>
+						<span className="codicon" aria-hidden="true">
+							↻
+						</span>
+					</button>
+					<button
+						type="button"
+						className="icon-btn"
 						title="Open Email Dashboard"
 						aria-label="Open Email Dashboard"
 						onClick={() => vscode.postMessage({ type: 'openDashboard' })}
@@ -170,6 +324,48 @@ export const App: React.FC = () => {
 							⧉
 						</span>
 					</button>
+					<span className={statusDotClass} title={statusTitle(accountStatus, syncStatus)} />
+					<span className="sync-time muted">
+						{syncStatus?.syncing
+							? 'Syncing…'
+							: accountStatus?.lastSync
+								? relativeTime(accountStatus.lastSync)
+								: 'Never'}
+					</span>
+				</div>
+				<div className="search-row">
+					<input
+						className="search-input"
+						type="search"
+						placeholder="Search emails…"
+						value={searchInput}
+						aria-label="Search emails"
+						onChange={(e) => onSearchInputChange(e.target.value)}
+						onKeyDown={(e) => {
+							if (e.key === 'Enter') {
+								e.preventDefault();
+								if (searchTimerRef.current) {
+									clearTimeout(searchTimerRef.current);
+									searchTimerRef.current = null;
+								}
+								runSearch(searchInput);
+							} else if (e.key === 'Escape') {
+								e.preventDefault();
+								clearSearch();
+							}
+						}}
+					/>
+					{searchInput && (
+						<button
+							type="button"
+							className="icon-btn search-clear"
+							title="Clear search"
+							aria-label="Clear search"
+							onClick={clearSearch}
+						>
+							✕
+						</button>
+					)}
 				</div>
 				<div className="header-row meta-row">
 					<input
@@ -186,24 +382,61 @@ export const App: React.FC = () => {
 						title="IMAP folder"
 						aria-label="IMAP folder"
 					/>
-					<span className={statusDotClass} title={statusTitle(accountStatus, syncStatus)} />
-					<span className="sync-time muted">
-						{syncStatus?.syncing
-							? 'Syncing…'
-							: accountStatus?.lastSync
-								? relativeTime(accountStatus.lastSync)
-								: 'Never'}
-					</span>
-					<button type="button" className="sync-btn" onClick={onSync} disabled={!!syncStatus?.syncing}>
-						Sync
-					</button>
+					<select
+						className="sort-select"
+						value={sort}
+						title="Sort threads"
+						aria-label="Sort threads"
+						onChange={(e) => onSortChange(e.target.value as ThreadSort)}
+					>
+						<option value="newest">Newest</option>
+						<option value="oldest">Oldest</option>
+						<option value="sender">Sender</option>
+						<option value="subject">Subject</option>
+					</select>
 				</div>
 			</header>
 
 			{error && <div className="error">{error}</div>}
 
 			{accounts.length === 0 ? (
-				<p className="empty muted">Add an account from the dashboard.</p>
+				<p className="empty muted">Add an account via Account…</p>
+			) : searching ? (
+				<>
+					<div className="list-meta muted">
+						{searchResults!.length} result{searchResults!.length === 1 ? '' : 's'} for &lsquo;
+						{activeQuery}&rsquo;
+						<span className="meta-note"> · synced mail only</span>
+					</div>
+					{searchResults!.length === 0 ? (
+						<p className="empty muted">No matches.</p>
+					) : (
+						<ul className="thread-list">
+							{searchResults!.map((result) => (
+								<li key={result.id}>
+									<button
+										type="button"
+										className="thread-row search-row"
+										onClick={() =>
+											vscode.postMessage({ type: 'openThread', threadId: result.threadId })
+										}
+									>
+										<div className="row-top">
+											<span className="subject">{result.subject || '(no subject)'}</span>
+										</div>
+										<div className="row-bottom muted">
+											<span className="sender">{shortSender(result.from)}</span>
+											<span className="time">{relativeTime(result.date)}</span>
+										</div>
+										{result.snippet && (
+											<div className="snippet muted">{result.snippet}</div>
+										)}
+									</button>
+								</li>
+							))}
+						</ul>
+					)}
+				</>
 			) : threads.length === 0 ? (
 				<p className="empty muted">No threads yet. Sync to fetch mail.</p>
 			) : (

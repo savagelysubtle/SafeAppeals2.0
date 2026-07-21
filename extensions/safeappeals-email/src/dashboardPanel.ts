@@ -8,6 +8,7 @@ import type { AccountStore } from './accountStore';
 import type { EmailIndex } from './emailIndex';
 import type { SyncEngine } from './syncEngine';
 import { getDefaultFolder } from './config';
+import type { ThreadSort } from './types';
 
 export class DashboardPanel {
 	public static current: DashboardPanel | undefined;
@@ -18,6 +19,7 @@ export class DashboardPanel {
 	private onAccountsChanged?: () => void;
 	private pendingSelectThreadId: string | undefined;
 	private pendingOpenCompose = false;
+	private pendingOpenDrafts = false;
 
 	private constructor(
 		panel: vscode.WebviewPanel,
@@ -109,6 +111,20 @@ export class DashboardPanel {
 		return panel;
 	}
 
+	/** Reveal the dashboard and show the drafts pane. */
+	static showDrafts(
+		extensionUri: vscode.Uri,
+		engine: SyncEngine,
+		accounts: AccountStore,
+		index: EmailIndex,
+		log: (msg: string) => void,
+		onAccountsChanged?: () => void,
+	): DashboardPanel {
+		const panel = DashboardPanel.show(extensionUri, engine, accounts, index, log, onAccountsChanged);
+		panel.openDrafts();
+		return panel;
+	}
+
 	static async refreshIfOpen(): Promise<void> {
 		if (DashboardPanel.current) {
 			await DashboardPanel.current.postBootstrap();
@@ -126,6 +142,12 @@ export class DashboardPanel {
 		this.pendingOpenCompose = true;
 		this.panel.reveal(this.panel.viewColumn ?? vscode.ViewColumn.One);
 		this.panel.webview.postMessage({ type: 'openCompose' });
+	}
+
+	openDrafts(): void {
+		this.pendingOpenDrafts = true;
+		this.panel.reveal(this.panel.viewColumn ?? vscode.ViewColumn.One);
+		this.panel.webview.postMessage({ type: 'openDrafts' });
 	}
 
 	dispose(): void {
@@ -172,6 +194,10 @@ export class DashboardPanel {
 					if (this.pendingOpenCompose) {
 						this.pendingOpenCompose = false;
 						this.panel.webview.postMessage({ type: 'openCompose' });
+					}
+					if (this.pendingOpenDrafts) {
+						this.pendingOpenDrafts = false;
+						this.panel.webview.postMessage({ type: 'openDrafts' });
 					}
 					break;
 				case 'listThreads': {
@@ -311,6 +337,7 @@ export class EmailSidebarProvider implements vscode.WebviewViewProvider {
 	private view: vscode.WebviewView | undefined;
 	private accountId: string | undefined;
 	private folder: string = getDefaultFolder();
+	private sort: ThreadSort = 'newest';
 	private messageDisposable: vscode.Disposable | undefined;
 
 	constructor(
@@ -322,6 +349,8 @@ export class EmailSidebarProvider implements vscode.WebviewViewProvider {
 		private readonly openDashboard: () => void,
 		private readonly openThread: (threadId: string) => void,
 		private readonly openCompose: () => void,
+		private readonly openDrafts: () => void,
+		private readonly onAccountsChanged?: () => void,
 	) {
 		EmailSidebarProvider.current = this;
 	}
@@ -379,12 +408,14 @@ export class EmailSidebarProvider implements vscode.WebviewViewProvider {
 			folder,
 			offset: 0,
 			limit: 50,
+			sort: this.sort,
 		});
 		this.view.webview.postMessage({
 			type: 'bootstrap',
 			accounts,
 			status,
 			folder,
+			sort: this.sort,
 			threads,
 			total,
 			stats: this.index.getStats(),
@@ -404,15 +435,25 @@ export class EmailSidebarProvider implements vscode.WebviewViewProvider {
 					const accountId = msg.accountId as string | undefined;
 					const folder = (msg.folder as string) || getDefaultFolder();
 					const offset = (msg.offset as number) || 0;
+					const sort = (msg.sort as ThreadSort | undefined) || this.sort || 'newest';
 					this.accountId = accountId;
 					this.folder = folder;
+					this.sort = sort;
 					const result = this.engine.listThreads({
 						accountId,
 						folder,
 						offset,
 						limit: (msg.limit as number) || 50,
+						sort,
 					});
-					this.view.webview.postMessage({ type: 'threads', ...result, folder, offset });
+					this.view.webview.postMessage({ type: 'threads', ...result, folder, offset, sort });
+					break;
+				}
+				case 'search': {
+					const query = typeof msg.query === 'string' ? msg.query : '';
+					const accountId = msg.accountId as string | undefined;
+					const results = this.index.search(query, accountId).slice(0, 100);
+					this.view.webview.postMessage({ type: 'searchResults', query, results });
 					break;
 				}
 				case 'syncNow': {
@@ -434,6 +475,42 @@ export class EmailSidebarProvider implements vscode.WebviewViewProvider {
 				case 'compose':
 					this.openCompose();
 					break;
+				case 'openDrafts':
+					this.openDrafts();
+					break;
+				case 'addAccount':
+					await vscode.commands.executeCommand('safeappeals-email.addAccount');
+					await this.postBootstrap();
+					break;
+				case 'updatePassword':
+					await vscode.commands.executeCommand(
+						'safeappeals-email.updatePassword',
+						msg.accountId as string | undefined,
+					);
+					await this.postBootstrap();
+					break;
+				case 'removeAccount': {
+					const accountId = msg.accountId as string | undefined;
+					if (!accountId) {
+						break;
+					}
+					const account = this.accounts.getAccount(accountId);
+					const label = account?.label || accountId;
+					const confirm = await vscode.window.showWarningMessage(
+						`Remove email account “${label}”? Cached messages for this account will be deleted.`,
+						{ modal: true },
+						'Remove',
+					);
+					if (confirm !== 'Remove') {
+						break;
+					}
+					await this.index.clearAccount(accountId);
+					await this.accounts.removeAccount(accountId);
+					this.log(`Account removed (sidebar): ${accountId}`);
+					this.onAccountsChanged?.();
+					await this.postBootstrap();
+					break;
+				}
 				default:
 					this.log(`Unknown sidebar message: ${msg.type}`);
 			}

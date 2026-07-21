@@ -127,11 +127,14 @@ export interface SendMailRequest {
 	references?: string[];
 }
 
+export type ThreadSort = 'newest' | 'oldest' | 'sender' | 'subject';
+
 export interface ListThreadsQuery {
 	accountId?: string;
 	folder?: string;
 	offset?: number;
 	limit?: number;
+	sort?: ThreadSort;
 }
 
 export interface SyncStatus {

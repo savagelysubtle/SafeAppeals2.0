@@ -187,6 +187,7 @@ export class SyncEngine implements vscode.Disposable {
 			folder: query.folder || getDefaultFolder(),
 			offset: query.offset,
 			limit: query.limit,
+			sort: query.sort,
 		});
 	}
 
