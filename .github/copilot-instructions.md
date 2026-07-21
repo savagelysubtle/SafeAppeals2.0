@@ -1,5 +1,23 @@
 # VS Code Copilot Instructions
 
+## Local tooling (this machine)
+
+On this PC, `npm` is **not** a general-purpose command. Use:
+
+- **fnm** for Node.js version management
+- **bun** for package scripts and day-to-day package management
+
+The only intended use of `npm` here is **`npm install`** at startup to install dependencies (this repo's install path). Prefer `bun run …` over `npm run …` when invoking scripts; do not assume bare `npm` works for other commands.
+
+## UI inspection: Cursor browser first, Playwright fallback
+
+When inspecting, verifying, or driving UI (webviews, dashboards, Simple Browser previews, or any in-browser surface):
+
+1. **Prefer Cursor's browser** (`cursor-ide-browser` MCP: navigate, snapshot, click, type, screenshot, CDP). The developer codes against that same Cursor browser, so you share one viewport and see what they see.
+2. **Fall back to `@playwright/cli`** (including the `launch` skill's CDP attach flow) only when Cursor's browser cannot reach the target — e.g. full Electron/Code OSS workbench chrome, Agents window, Monaco chat-input automation, or multi-instance isolated launches.
+
+Do not open a separate Playwright session by default when the UI is already (or can be) open in Cursor's browser.
+
 ## Project Overview
 
 Visual Studio Code is built with a layered architecture using TypeScript, web APIs and Electron, combining web technologies with native app capabilities. The codebase is organized into key architectural layers:

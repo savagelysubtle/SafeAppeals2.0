@@ -23,25 +23,59 @@ todos:
     status: completed
   - id: rung1-time-tracker
     content: "Rung 1: time-tracker extension builds + loads on 1.129"
-    status: pending
+    status: completed
   - id: rung2-themes
     content: "Rung 2: theme-safeappeals packs + product.json entries + default theme"
-    status: pending
+    status: completed
   - id: rung3-branding
-    content: "Rung 3: branding pass — product.json identity, appealsIcons, blank defaultChatAgent"
-    status: pending
+    content: "Rung 3: branding pass — product.json identity + appealsIcons only
+      (defaultChatAgent kept: we tap Copilot's agent infra ourselves, decided Jul 17)"
+    status: completed
   - id: rung4-calendar-ext
     content: "Rung 4: NEW safeappeals-calendar extension (from-scratch template)"
-    status: pending
+    status: completed
   - id: rung5-documents-ext
-    content: "Rung 5: NEW safeappeals-documents extension (PDF/DOCX/XLSX custom editors)"
-    status: pending
+    content: "Rung 5: NEW safeappeals-documents extension — split (Jul 17):
+      5a scaffold+PDF viewer, 5b DOCX editor, 5c XLSX viewer; each user-tested
+      before the next. Image viewer: SKIPPED (upstream media preview suffices)."
+    status: completed
   - id: rung6-email-ext
     content: "Rung 6: NEW safeappeals-email extension (classifier deferred to rung 12)"
+    status: completed
+  - id: rung6-polish-dashboard
+    content: "Rung 6 polish: email dashboard — sidebar became THE inbox
+      (account menu, search, sort, compose/drafts/sync); dashboard is
+      reader/compose/drafts with Reply+Forward (a9fe6b6c, 9e1652fe)"
+    status: completed
+  - id: rung66-email-case-links
+    content: "Rung 6.6 (before oauth): email↔case linking — global IMAP index
+      + thread→caseFolder links, sidebar 'All mail / This case' scope,
+      reader Link/Unlink actions, classifier seam for rung 12"
+    status: completed
+  - id: rung67-email-tags
+    content: "Rung 6.7 (before oauth): manual email tagging — thread tag store
+      (email-tags.json) + tagThread/untagThread/listTags/hideThread/
+      unhideThread commands (AI seam), per-row always-visible dropdown menu
+      (This case / Hide / tags / New tag), hide = grey + sink to bottom,
+      auto-populating tag filter dropdown"
+    status: completed
+  - id: rung68-email-settings
+    content: "Rung 6.8: email settings pane (header/signature global,
+      auto-CC/BCC per-case) + compose CC/BCC + product-wide .vscode →
+      .safeAppeals workspace config folder rename (core constant + ~13
+      literals + copilot + configuration-editing)"
+    status: completed
+  - id: rung65-unified-auth
+    content: "DEFERRED (user decision Jul 21): unified sign-in — built in ONE
+      shot right before rung 13, after every auth consumer exists (email,
+      calendar, cloud, agent backend). safeappeals-authentication extension
+      (cloud/google/microsoft providers, brokered via cloud API), convert
+      calendar+email to getSession(). Detailed plan:
+      unified_safeappeals_sign-in_225af75a.plan.md"
     status: pending
   - id: rung7-contrib-foundation
     content: "Rung 7: contrib foundation — settings service, storage keys, hub activation"
-    status: pending
+    status: in_progress
   - id: rung8-fileorganizer
     content: "Rung 8: file organizer + converter (explorer hook, first app.ts channel)"
     status: pending
@@ -71,7 +105,129 @@ isProject: false
 
 # Upstream VS Code Merge — Bolt-On Migration (full disposition plan)
 
-## Status (Jul 17, 2026)
+## Status (Jul 20, 2026)
+
+**MILESTONE (Jul 20, user-verified): rungs 1–6 complete. All four custom
+extensions (time-tracker, safeappeals-calendar, safeappeals-documents [PDF/
+DOCX/XLSX], safeappeals-email) build, load, and function in BOTH the Electron
+dev build AND the web/code-server dev build.** All work as delegated
+manager→worker: each rung briefed to a cheaper subagent, reviewed here, then
+user-tested before advancing. Rung 6 (email) committed `75ae64f0` and verified
+in this milestone. Rung 6 follow-ups: `60ddcb05` (sync errors were swallowed —
+user's wrong Gmail password looked like an empty inbox; added red sync-failure
+banner, verbose sync logging, `diagnoseConnection` command, and fixed body
+`download()` to pass `{ uid: true }`) and `9fbd862e` (Account… menu in the
+dashboard with Remove account / Update password, add-account now verifies IMAP
+credentials before saving with Retry / Save anyway, new
+`safeappeals-email.updatePassword` command) and `a08afbfe` (surface real
+imapflow server errors [responseText/serverResponseCode] with Gmail
+app-password hint; ROOT CAUSE of "missing_credentials": addAccount wrote
+settings before SecretStorage so background sync raced the secret write —
+now secret-first with cleanup on failure). Jul 20 user-verified: Gmail sync
+works with an app password (1895 msgs in INBOX, 100 synced per cap, threads
+render). Rung 6 polish in flight: resizable dashboard split + sidebar mini
+inbox (user-picked scope).
+
+**Jul 20 (late): web webview "regression" after `441bea36` — CLOSED, no code
+fault.** Repro attempt in a real Chromium (fresh profile, no DevTools, via
+playwright) against code-server 8080 at HEAD `441bea36`: sidebar webview AND
+Email Dashboard both load and render (105 threads listed). The earlier
+"load loop" evidence came from Cursor's embedded browser, which cannot fetch
+`*.localhost` subdomains at all; the "works with DevTools open" symptom
+matches a stale cached webview service worker in the user's browser
+(hard refresh Ctrl+Shift+R clears it). `441bea36` stands, no revert. Note:
+"Sync failed: Credentials missing" on web is EXPECTED — SecretStorage is
+per-client, so passwords entered on Electron don't exist in the browser
+profile; one-time Account… → Update password on web (rung 6.5 OAuth removes
+this friction). Follow-on (user-requested): email UI redesign — sidebar
+becomes THE inbox (folder input, 50/page + load more, compose button);
+dashboard editor becomes reader/compose/drafts only (thread list + sash
+removed); `ctrl+shift+e` keybinding dropped (shadowed Show Explorer).
+Commits: `a9fe6b6c` (sidebar=inbox split) + `9e1652fe` (sidebar owns
+account menu/add/sync/compose/drafts + search box over the local index +
+host-side thread sort newest/oldest/sender/subject; reader gets top-aligned
+Reply + new Forward with quoted prefill). Cursor embedded-browser webview
+issue root-caused: its CDP request interception can't fetch
+`*.localhost:8080` webview subdomain origins unless DevTools is open
+(0ms "Failed to fetch" probe); affects ALL webviews incl. built-in markdown
+preview since `67adb730` moved webview hosting off the CDN. Not a code
+fault — test web in a real browser; workaround option (wildcard DNS like
+lvh.me) documented in chat, deliberately not applied.
+
+**NEW Rung 6.5 (Jul 20, planned + user-approved): unified sign-in.** One free
+SafeAppeals Cloud account brokers Google/Microsoft OAuth server-side and powers
+email (Gmail XOAUTH2), calendar, and later AI credits — copies VS Code's own
+AuthenticationProvider pattern (github-authentication model, Accounts menu for
+free). New built-in `extensions/safeappeals-authentication` with 3 providers;
+calendar drops oauthLoopback/client-secret settings; email gets OAuth account
+type (app-password fallback stays); **rung 13 slims to credits/LLM only**.
+Marketing note: free account unlocks calendar/email/docs, pay only for AI.
+Full plan: `unified_safeappeals_sign-in_225af75a.plan.md`.
+
+**RESEQUENCED (user decision Jul 21): OAuth deferred to pre-rung-13.** Same
+rationale as the tools pass — build unified sign-in ONCE, after every consumer
+of it exists (email, calendar, cloud link, agent backend), so the provider
+surface is designed against real usage across the whole app instead of being
+retrofitted per extension. Until then app-passwords stay for email. Sequence
+is now: 6.6/6.7/6.8 (done) → 7 (contrib foundation) → 8..12 → **6.5 unified
+sign-in → 13 (cloud/credits) → tools pass → 14**. Next up: rung 7 — first
+`src/vs/workbench` contrib code + hub activation, where the migration moves
+from extensions into the workbench itself.
+
+**Rung 6.8 (Jul 21, DONE): email settings + CC/BCC + `.safeAppeals` rename.**
+Settings gear in sidebar → dashboard Settings pane: compose header/signature
+(global), auto-CC/BCC (per-case, workspace-scoped), sync interval/folder/max
+surfaced. Compose gained Gmail-style Cc/Bcc toggles wired through send +
+drafts + reply prefill. Product-wide workspace config folder renamed `.vscode`
+→ `.safeAppeals` (`FOLDER_CONFIG_FOLDER_NAME` + ~13 core literals + copilot
+protected-files glob/launch.json + configuration-editing schema associations +
+config-related tests) so case folders never expose `.vscode` and per-case
+email settings land in `.safeAppeals/settings.json`. Plan:
+`email_settings_+_cc_bcc_aec3a5ea.plan.md`.
+
+Commit trail (rungs): `2260b0b8`+`a0611c9b` (1, +`f53bbb4d` dual-ABI web fix),
+themes (2, pre-milestone), `c6a853d8`+`57f42b9c` (3), `6996c961` (4),
+`5021ec1f`+`40424e4e` (5a), `ed5a4a14` (5b), `41cf7077` (5c), `75ae64f0` (6),
+`67adb730`+`b5521c84` (web viewer/icon fixes + traversal hardening),
+`60ddcb05`+`9fbd862e`+`a08afbfe` (6 follow-ups: error surfacing, account
+management UX, credential-storage race fix).
+
+### Gap audit vs docs/ADDED_FEATURES_TRACKER.md (Jul 20)
+
+Cross-checked every tracker feature against the disposition inventory. Gaps
+found (everything else is covered by rungs 5–13 or documented drops):
+
+1. **Agent tools plan → DEFERRED TO END (user decision Jul 20):** the tools
+   pass (`safeappeals_agent_tools_da04f06e.plan.md`) runs AFTER all
+   extensions/features land — one extension at a time, agent-tested live,
+   which requires SafeAppeals cloud + agent backend linked (rung 13). The
+   plan will grow to absorb RAG ×5 and timeline ×6 tools (C.2 #4) plus
+   PDF-email import if re-added. Sequence: ...12 → 13 → tools pass → 14.
+   Meanwhile **rung 6.6 (email↔case linking, gap 4) runs BEFORE rung 6.5**.
+2. **Case Organizer agent workflow UNCLASSIFIED** (`void.organizer.init`,
+   auto-created `tosort/`, structured case folders, dry-run/undo plans,
+   `.voidrules` categories). Disposition: custom chat mode + prompt +
+   upstream file tools at rung 12; `tosort/` auto-creation folds into file
+   organizer (rung 8). Source: void-reference + tracker "Case Organizer".
+3. **PDF-printed-email import dropped silently** — old email dashboard
+   imported .pdf email exports via pdfjs; new ext only parses .eml. Decide
+   at rung 12 (classifier work): re-add or drop formally.
+4. **Email case-linking / workspace scoping lost** — old email was
+   per-workspace SQLite w/ case-folder filter; new index is global
+   (`globalStorageUri`), `caseFolderPath` field dormant. **→ Being rebuilt
+   NOW as rung 6.6** (design: keep global IMAP index — per-workspace re-sync
+   of the same mailbox makes no sense — and add thread→caseFolder links +
+   sidebar scope filter + reader Link/Unlink actions).
+5. **Rung 10 scope must name Advanced RAG** — hybrid BM25+RRF retriever,
+   query processor, cross-encoder reranker, sqlite-vec backend
+   (`void-reference/common/ragHybridRetriever.ts` etc.), not just basic
+   vector search. Also: policy-manuals auto-create/watch/poll behaviors.
+6. Confirmed drops/notes: image viewer stays dropped (upstream preview: no
+   rotate — accepted); old-fork keybindings are conflict-prone
+   (Ctrl+Shift+O = Go to Symbol, Ctrl+Shift+R = refactor, Ctrl+Shift+E
+   removed Jul 20) — rungs 8–11 must not blind-copy them.
+
+### Earlier status (Jul 17, 2026)
 
 - Branch `update-vscode`: fork `main` tip (`741fd1ab`) + import commit
   `65015a05` == tag `1.129.0` exactly (`git diff --stat` = 0).
@@ -80,6 +236,78 @@ isProject: false
   the readable source of truth for the rewrite. Extensions/themes/docs/
   python remain overlaid in place. `contrib/safeAppeals/` scaffolded with
   the contribution hub. src/ compiles as vanilla 1.129 + one stub.
+- Rung 1 DONE (Jul 17, user-verified): time-tracker compiles via
+  `compile-extension:time-tracker` (listed in `build/gulpfile.extensions.ts` +
+  `build/npm/dirs.ts`); self-contained `better-sqlite3@12.11.1` runtime dep
+  with extension-local `.npmrc` targeting Electron 42.6.0 ABI (bump both
+  `.npmrc`s together on Electron upgrades). Timer + DB verified in dev build.
+  - Jul 18 fix (web ext host = plain Node ABI 137, not Electron 146):
+    DUAL-ABI PATTERN — commit both binaries under `prebuilds/<runtime>-<abi>/`
+    and pass `nativeBinding` at Database construction based on
+    `process.versions.electron`/`.modules`; Node binary via official
+    `prebuild-install`, Electron binary stays default in node_modules.
+    Commit `f53bbb4d`. REUSE THIS for RAG sqlite (rung 10). win32-x64 only;
+    per-platform prebuilds = packaging, rung 14.
+- Rung 2 DONE (Jul 17, user-verified): theme packs load in dev build;
+  `workbenchThemeService.ts` defaults = "Safe Appeals Dark Optimized" +
+  `safeappeals-icons`. appealsIcons/ + marketing logos regenerated by user.
+- Rung 3 DONE (Jul 17, user-verified): product.json identity (data-compat keys
+  byte-identical to main), CSS icon swaps marked `/* SafeAppeals */`, dev
+  Electron regenerated as `Safe Appeals.exe`. First-run onboarding: new typed
+  product field `onboardingSkipSignInStep` filters the Copilot sign-in step;
+  welcome/gettingStarted strings rebranded via `product.nameLong`. Chat/
+  Copilot infra deliberately UNTOUCHED — decision (Jul 17): we tap upstream
+  Copilot/chat agent infrastructure for our own agents; never port the old
+  chat-disable patches. Commits `c6a853d8` + `57f42b9c`.
+- Rung 4 DONE (Jul 17, user-verified): `safeappeals-calendar` extension —
+  Google/Outlook OAuth (loopback 127.0.0.1:47294, PKCE for Outlook) + sync
+  engine fully in ext host; tokens in SecretStorage (old workspace
+  `.calendar-sync.json` token embedding dropped); zero runtime deps (raw
+  REST, no googleapis/MSAL). API for rung 9: commands
+  `safeappeals-calendar.{connect,disconnect,syncNow,getEvents,status}`.
+  Deferred to later rungs: timeline→calendar push (9), cloud token inject
+  (13). No sidebar UI by design. Commit `6996c961`.
+- Rung 5a DONE (Jul 17, user-verified "2026 app speed"): `safeappeals-documents`
+  scaffold + PDF custom editor (`safeappeals.pdfViewer`, readonly provider) —
+  PDFium+Rust WASM rendering (NOT pdf.js; legacy lib kept unused), annotations
+  sidecar in workspaceState under old `void.*` keys (no auto-migration from
+  workbench storage — rung 14). Perf fix beyond old fork: lazy WASM thumbnails
+  (IntersectionObserver + rAF queue + generation teardown) and
+  `preloadStrategy: 'adjacent'` instead of eager all-pages rasterization.
+  Webview bundled via extension-local esbuild.mjs; bundle committed.
+  Commits `5021ec1f` + `40424e4e`.
+- Rung 5b DONE (Jul 17, user-verified): DOCX editable custom editor
+  (`safeappeals.docxViewer`) — TipTap webview (docx-preview in / `docx` Packer
+  out, all in webview, zero ext-host runtime deps); full CustomEditorProvider
+  with fresh-serialize-on-save handshake (no stale-byte race), real hot-exit
+  backups (old fork's backup was a stub); TipTap-owned undo/redo. Deferred:
+  AI bridge (12), PDF export, doc creator. Watch: TipTap v2/v3 pagination
+  peer warning. Commit `ed5a4a14`.
+- Rung 5c DONE (Jul 17, user-verified) → RUNG 5 COMPLETE: XLSX editable
+  custom editor (`safeappeals.xlsxViewer`, *.xlsx + *.xls) — Rust WASM engine
+  kept (binaries copied unrebuilt; Rust source stays in void-reference until
+  a home is picked pre-deletion), full ribbon/dialog/chart/pivot surface,
+  DOCX-pattern save handshake; old 500ms auto-write dropped in favor of
+  standard dirty/save. Known limits (pre-existing): weak .xls path, chart/
+  pivot writer round-trip, full model in JS memory. Image viewer NOT ported
+  (upstream media preview). Commit `41cf7077`.
+- Web/code-server fixes (Jul 18, user-verified live): two server↔browser
+  product-config mismatches, NOT extension bugs. (1) Webviews loaded their
+  host frame from upstream's pinned CDN (`webviewContentExternalBaseUrlTemplate`
+  in product.json) whose service worker protocol (v4) mismatched this fork
+  (v5) → all webview CSS/JS silently failed (viewers opened unstyled). Fix:
+  server hosts the `pre/` webview frame itself on per-webview `{{uuid}}.`
+  subdomains; removed the CDN pin. (2) Browser fell back to `oss-dev` while
+  server served `/stable-dev/` → icon-theme/remote-resource 404s. Fix:
+  `webClientServer.ts` sends `quality`+`commit` to the browser. Token
+  exemption for `pre/` hardened against encoded path traversal
+  (decode+normalize+reject `..`/`\`). Commits `67adb730` + `b5521c84`.
+  Touched core server files (`webClientServer.ts`,
+  `remoteExtensionHostAgentServer.ts`) — RE-VERIFY at packaging (rung 14):
+  built server sets real quality/commit so the CDN-vs-self-host path differs
+  from dev. Desktop Electron unaffected (own `vscode-webview://` scheme).
+  Note: `safeappeals-documents` is `extensionKind: ["workspace"]` (main-only),
+  so pure `code-web`/test-web can't run it; needs code-server mode.
 - `feat-blog-writer-extension` only for Growth Writer (deferred).
 - Residual untracked files on disk (`python/` extras,
   `void-cloud/`, `resources/ffmpeg|models`, `.env`, workspace file) — wipe
