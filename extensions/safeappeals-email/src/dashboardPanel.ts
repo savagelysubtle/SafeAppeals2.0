@@ -1,5 +1,5 @@
 /*--------------------------------------------------------------------------------------
- *  Email dashboard webview panel + sidebar mini-inbox (React bundles in media/)
+ *  Email dashboard webview panel + sidebar inbox (React bundles in media/)
  *--------------------------------------------------------------------------------------*/
 
 import { randomUUID } from 'crypto';
@@ -17,6 +17,7 @@ export class DashboardPanel {
 	private disposables: vscode.Disposable[] = [];
 	private onAccountsChanged?: () => void;
 	private pendingSelectThreadId: string | undefined;
+	private pendingOpenCompose = false;
 
 	private constructor(
 		panel: vscode.WebviewPanel,
@@ -94,6 +95,20 @@ export class DashboardPanel {
 		return panel;
 	}
 
+	/** Reveal the dashboard and show the compose pane. */
+	static showCompose(
+		extensionUri: vscode.Uri,
+		engine: SyncEngine,
+		accounts: AccountStore,
+		index: EmailIndex,
+		log: (msg: string) => void,
+		onAccountsChanged?: () => void,
+	): DashboardPanel {
+		const panel = DashboardPanel.show(extensionUri, engine, accounts, index, log, onAccountsChanged);
+		panel.openCompose();
+		return panel;
+	}
+
 	static async refreshIfOpen(): Promise<void> {
 		if (DashboardPanel.current) {
 			await DashboardPanel.current.postBootstrap();
@@ -105,6 +120,12 @@ export class DashboardPanel {
 		this.panel.reveal(this.panel.viewColumn ?? vscode.ViewColumn.One);
 		// Immediate delivery when the webview is already live; also kept as pending for `ready`.
 		this.panel.webview.postMessage({ type: 'selectThread', threadId });
+	}
+
+	openCompose(): void {
+		this.pendingOpenCompose = true;
+		this.panel.reveal(this.panel.viewColumn ?? vscode.ViewColumn.One);
+		this.panel.webview.postMessage({ type: 'openCompose' });
 	}
 
 	dispose(): void {
@@ -147,6 +168,10 @@ export class DashboardPanel {
 						const threadId = this.pendingSelectThreadId;
 						this.pendingSelectThreadId = undefined;
 						this.panel.webview.postMessage({ type: 'selectThread', threadId });
+					}
+					if (this.pendingOpenCompose) {
+						this.pendingOpenCompose = false;
+						this.panel.webview.postMessage({ type: 'openCompose' });
 					}
 					break;
 				case 'listThreads': {
@@ -237,6 +262,9 @@ export class DashboardPanel {
 					}
 					break;
 				}
+				case 'focusSidebar':
+					await vscode.commands.executeCommand('workbench.view.extension.safeappeals-email');
+					break;
 				default:
 					this.log(`Unknown dashboard message: ${msg.type}`);
 			}
@@ -275,7 +303,7 @@ export class DashboardPanel {
 	}
 }
 
-/** Sidebar webview view — mini inbox with recent threads. */
+/** Sidebar webview view — primary email inbox. */
 export class EmailSidebarProvider implements vscode.WebviewViewProvider {
 	public static readonly viewType = 'safeappeals-email.sidebar';
 	private static current: EmailSidebarProvider | undefined;
@@ -293,6 +321,7 @@ export class EmailSidebarProvider implements vscode.WebviewViewProvider {
 		private readonly log: (msg: string) => void,
 		private readonly openDashboard: () => void,
 		private readonly openThread: (threadId: string) => void,
+		private readonly openCompose: () => void,
 	) {
 		EmailSidebarProvider.current = this;
 	}
@@ -349,7 +378,7 @@ export class EmailSidebarProvider implements vscode.WebviewViewProvider {
 			accountId,
 			folder,
 			offset: 0,
-			limit: 25,
+			limit: 50,
 		});
 		this.view.webview.postMessage({
 			type: 'bootstrap',
@@ -374,15 +403,16 @@ export class EmailSidebarProvider implements vscode.WebviewViewProvider {
 				case 'listThreads': {
 					const accountId = msg.accountId as string | undefined;
 					const folder = (msg.folder as string) || getDefaultFolder();
+					const offset = (msg.offset as number) || 0;
 					this.accountId = accountId;
 					this.folder = folder;
 					const result = this.engine.listThreads({
 						accountId,
 						folder,
-						offset: (msg.offset as number) || 0,
-						limit: (msg.limit as number) || 25,
+						offset,
+						limit: (msg.limit as number) || 50,
 					});
-					this.view.webview.postMessage({ type: 'threads', ...result, folder });
+					this.view.webview.postMessage({ type: 'threads', ...result, folder, offset });
 					break;
 				}
 				case 'syncNow': {
@@ -401,6 +431,9 @@ export class EmailSidebarProvider implements vscode.WebviewViewProvider {
 					}
 					break;
 				}
+				case 'compose':
+					this.openCompose();
+					break;
 				default:
 					this.log(`Unknown sidebar message: ${msg.type}`);
 			}

@@ -7288,6 +7288,7 @@
   var import_react = __toESM(require_react());
   var import_jsx_runtime = __toESM(require_jsx_runtime());
   var vscode = acquireVsCodeApi();
+  var PAGE_SIZE = 50;
   function readPersisted() {
     const state = vscode.getState();
     return state && typeof state === "object" ? state : {};
@@ -7298,6 +7299,7 @@
     const [accountId, setAccountId] = (0, import_react.useState)(persisted.accountId || "");
     const [folder, setFolder] = (0, import_react.useState)(persisted.folder || "INBOX");
     const [threads, setThreads] = (0, import_react.useState)([]);
+    const [total, setTotal] = (0, import_react.useState)(0);
     const [syncStatus, setSyncStatus] = (0, import_react.useState)(null);
     const [error, setError] = (0, import_react.useState)(null);
     (0, import_react.useEffect)(() => {
@@ -7318,13 +7320,25 @@
             });
             setFolder(msg.folder || "INBOX");
             setThreads(msg.threads || []);
+            setTotal(typeof msg.total === "number" ? msg.total : 0);
             setSyncStatus(msg.status || null);
             setError(null);
             break;
           }
-          case "threads":
-            setThreads(msg.threads || []);
+          case "threads": {
+            const next = msg.threads || [];
+            const offset = typeof msg.offset === "number" ? msg.offset : 0;
+            setTotal(typeof msg.total === "number" ? msg.total : 0);
+            if (typeof msg.folder === "string" && msg.folder) {
+              setFolder(msg.folder);
+            }
+            if (offset > 0) {
+              setThreads((prev) => [...prev, ...next]);
+            } else {
+              setThreads(next);
+            }
             break;
+          }
           case "syncStatus":
             setSyncStatus(msg.status || null);
             break;
@@ -7363,14 +7377,25 @@
       }
       return "dot idle";
     }, [syncStatus, accountStatus]);
-    const onAccountChange = (id) => {
-      setAccountId(id);
+    const listThreads = (opts) => {
       vscode.postMessage({
         type: "listThreads",
-        accountId: id || void 0,
-        folder,
-        limit: 25
+        accountId: opts.accountId ?? (accountId || void 0),
+        folder: opts.folder ?? folder,
+        offset: opts.offset ?? 0,
+        limit: PAGE_SIZE
       });
+    };
+    const onAccountChange = (id) => {
+      setAccountId(id);
+      listThreads({ accountId: id || void 0, offset: 0 });
+    };
+    const commitFolder = () => {
+      const next = folder.trim() || "INBOX";
+      if (next !== folder) {
+        setFolder(next);
+      }
+      listThreads({ folder: next, offset: 0 });
     };
     const onSync = () => {
       vscode.postMessage({ type: "syncNow", accountId: accountId || void 0 });
@@ -7396,6 +7421,17 @@
             {
               type: "button",
               className: "icon-btn",
+              title: "Compose",
+              "aria-label": "Compose",
+              onClick: () => vscode.postMessage({ type: "compose" }),
+              children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "codicon", "aria-hidden": "true", children: "\u270E" })
+            }
+          ),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+            "button",
+            {
+              type: "button",
+              className: "icon-btn",
               title: "Open Email Dashboard",
               "aria-label": "Open Email Dashboard",
               onClick: () => vscode.postMessage({ type: "openDashboard" }),
@@ -7404,34 +7440,67 @@
           )
         ] }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "header-row meta-row", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "folder-name", title: folder, children: folder }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+            "input",
+            {
+              className: "folder-input",
+              value: folder,
+              onChange: (e) => setFolder(e.target.value),
+              onBlur: commitFolder,
+              onKeyDown: (e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  e.target.blur();
+                }
+              },
+              title: "IMAP folder",
+              "aria-label": "IMAP folder"
+            }
+          ),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: statusDotClass, title: statusTitle(accountStatus, syncStatus) }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "sync-time muted", children: syncStatus?.syncing ? "Syncing\u2026" : accountStatus?.lastSync ? relativeTime(accountStatus.lastSync) : "Never" }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { type: "button", className: "sync-btn", onClick: onSync, disabled: !!syncStatus?.syncing, children: "Sync" })
         ] })
       ] }),
       error && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "error", children: error }),
-      accounts.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { className: "empty muted", children: "Add an account from the dashboard." }) : threads.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { className: "empty muted", children: "No threads yet. Sync to fetch mail." }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", { className: "thread-list", children: threads.map((thread) => {
-        const sender = thread.messages[thread.messages.length - 1]?.from || "(unknown)";
-        return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("li", { children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
+      accounts.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { className: "empty muted", children: "Add an account from the dashboard." }) : threads.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { className: "empty muted", children: "No threads yet. Sync to fetch mail." }) : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "list-meta muted", children: [
+          total,
+          " thread",
+          total === 1 ? "" : "s",
+          threads.length < total ? ` \xB7 showing ${threads.length}` : ""
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", { className: "thread-list", children: threads.map((thread) => {
+          const sender = thread.messages[thread.messages.length - 1]?.from || "(unknown)";
+          return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("li", { children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
+            "button",
+            {
+              type: "button",
+              className: "thread-row",
+              onClick: () => vscode.postMessage({ type: "openThread", threadId: thread.threadId }),
+              children: [
+                /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "row-top", children: [
+                  /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "subject", children: thread.subject || "(no subject)" }),
+                  /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "badge", children: thread.emailCount })
+                ] }),
+                /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "row-bottom muted", children: [
+                  /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "sender", children: shortSender(sender) }),
+                  /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "time", children: relativeTime(thread.latestDate) })
+                ] })
+              ]
+            }
+          ) }, thread.threadId);
+        }) }),
+        threads.length < total && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "list-footer", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
           "button",
           {
             type: "button",
-            className: "thread-row",
-            onClick: () => vscode.postMessage({ type: "openThread", threadId: thread.threadId }),
-            children: [
-              /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "row-top", children: [
-                /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "subject", children: thread.subject || "(no subject)" }),
-                /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "badge", children: thread.emailCount })
-              ] }),
-              /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "row-bottom muted", children: [
-                /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "sender", children: shortSender(sender) }),
-                /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "time", children: relativeTime(thread.latestDate) })
-              ] })
-            ]
+            className: "load-more",
+            onClick: () => listThreads({ offset: threads.length }),
+            children: "Load more"
           }
-        ) }, thread.threadId);
-      }) })
+        ) })
+      ] })
     ] });
   };
   function statusTitle(accountStatus, syncStatus) {

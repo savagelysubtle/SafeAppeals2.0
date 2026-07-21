@@ -3,6 +3,8 @@ import type { Account, SyncStatus, Thread } from './types';
 
 const vscode = acquireVsCodeApi();
 
+const PAGE_SIZE = 50;
+
 interface PersistedState {
 	accountId?: string;
 	folder?: string;
@@ -19,6 +21,7 @@ export const App: React.FC = () => {
 	const [accountId, setAccountId] = useState(persisted.accountId || '');
 	const [folder, setFolder] = useState(persisted.folder || 'INBOX');
 	const [threads, setThreads] = useState<Thread[]>([]);
+	const [total, setTotal] = useState(0);
 	const [syncStatus, setSyncStatus] = useState<SyncStatus | null>(null);
 	const [error, setError] = useState<string | null>(null);
 
@@ -40,13 +43,25 @@ export const App: React.FC = () => {
 					});
 					setFolder(msg.folder || 'INBOX');
 					setThreads(msg.threads || []);
+					setTotal(typeof msg.total === 'number' ? msg.total : 0);
 					setSyncStatus(msg.status || null);
 					setError(null);
 					break;
 				}
-				case 'threads':
-					setThreads(msg.threads || []);
+				case 'threads': {
+					const next: Thread[] = msg.threads || [];
+					const offset = typeof msg.offset === 'number' ? msg.offset : 0;
+					setTotal(typeof msg.total === 'number' ? msg.total : 0);
+					if (typeof msg.folder === 'string' && msg.folder) {
+						setFolder(msg.folder);
+					}
+					if (offset > 0) {
+						setThreads((prev) => [...prev, ...next]);
+					} else {
+						setThreads(next);
+					}
 					break;
+				}
 				case 'syncStatus':
 					setSyncStatus(msg.status || null);
 					break;
@@ -89,14 +104,27 @@ export const App: React.FC = () => {
 		return 'dot idle';
 	}, [syncStatus, accountStatus]);
 
-	const onAccountChange = (id: string) => {
-		setAccountId(id);
+	const listThreads = (opts: { accountId?: string; folder?: string; offset?: number }) => {
 		vscode.postMessage({
 			type: 'listThreads',
-			accountId: id || undefined,
-			folder,
-			limit: 25,
+			accountId: opts.accountId ?? (accountId || undefined),
+			folder: opts.folder ?? folder,
+			offset: opts.offset ?? 0,
+			limit: PAGE_SIZE,
 		});
+	};
+
+	const onAccountChange = (id: string) => {
+		setAccountId(id);
+		listThreads({ accountId: id || undefined, offset: 0 });
+	};
+
+	const commitFolder = () => {
+		const next = folder.trim() || 'INBOX';
+		if (next !== folder) {
+			setFolder(next);
+		}
+		listThreads({ folder: next, offset: 0 });
 	};
 
 	const onSync = () => {
@@ -123,6 +151,17 @@ export const App: React.FC = () => {
 					<button
 						type="button"
 						className="icon-btn"
+						title="Compose"
+						aria-label="Compose"
+						onClick={() => vscode.postMessage({ type: 'compose' })}
+					>
+						<span className="codicon" aria-hidden="true">
+							✎
+						</span>
+					</button>
+					<button
+						type="button"
+						className="icon-btn"
 						title="Open Email Dashboard"
 						aria-label="Open Email Dashboard"
 						onClick={() => vscode.postMessage({ type: 'openDashboard' })}
@@ -133,9 +172,20 @@ export const App: React.FC = () => {
 					</button>
 				</div>
 				<div className="header-row meta-row">
-					<span className="folder-name" title={folder}>
-						{folder}
-					</span>
+					<input
+						className="folder-input"
+						value={folder}
+						onChange={(e) => setFolder(e.target.value)}
+						onBlur={commitFolder}
+						onKeyDown={(e) => {
+							if (e.key === 'Enter') {
+								e.preventDefault();
+								(e.target as HTMLInputElement).blur();
+							}
+						}}
+						title="IMAP folder"
+						aria-label="IMAP folder"
+					/>
 					<span className={statusDotClass} title={statusTitle(accountStatus, syncStatus)} />
 					<span className="sync-time muted">
 						{syncStatus?.syncing
@@ -157,31 +207,48 @@ export const App: React.FC = () => {
 			) : threads.length === 0 ? (
 				<p className="empty muted">No threads yet. Sync to fetch mail.</p>
 			) : (
-				<ul className="thread-list">
-					{threads.map((thread) => {
-						const sender = thread.messages[thread.messages.length - 1]?.from || '(unknown)';
-						return (
-							<li key={thread.threadId}>
-								<button
-									type="button"
-									className="thread-row"
-									onClick={() =>
-										vscode.postMessage({ type: 'openThread', threadId: thread.threadId })
-									}
-								>
-									<div className="row-top">
-										<span className="subject">{thread.subject || '(no subject)'}</span>
-										<span className="badge">{thread.emailCount}</span>
-									</div>
-									<div className="row-bottom muted">
-										<span className="sender">{shortSender(sender)}</span>
-										<span className="time">{relativeTime(thread.latestDate)}</span>
-									</div>
-								</button>
-							</li>
-						);
-					})}
-				</ul>
+				<>
+					<div className="list-meta muted">
+						{total} thread{total === 1 ? '' : 's'}
+						{threads.length < total ? ` · showing ${threads.length}` : ''}
+					</div>
+					<ul className="thread-list">
+						{threads.map((thread) => {
+							const sender = thread.messages[thread.messages.length - 1]?.from || '(unknown)';
+							return (
+								<li key={thread.threadId}>
+									<button
+										type="button"
+										className="thread-row"
+										onClick={() =>
+											vscode.postMessage({ type: 'openThread', threadId: thread.threadId })
+										}
+									>
+										<div className="row-top">
+											<span className="subject">{thread.subject || '(no subject)'}</span>
+											<span className="badge">{thread.emailCount}</span>
+										</div>
+										<div className="row-bottom muted">
+											<span className="sender">{shortSender(sender)}</span>
+											<span className="time">{relativeTime(thread.latestDate)}</span>
+										</div>
+									</button>
+								</li>
+							);
+						})}
+					</ul>
+					{threads.length < total && (
+						<div className="list-footer">
+							<button
+								type="button"
+								className="load-more"
+								onClick={() => listThreads({ offset: threads.length })}
+							>
+								Load more
+							</button>
+						</div>
+					)}
+				</>
 			)}
 		</div>
 	);

@@ -261,14 +261,7 @@
           }
         }
       }
-    },
-    "keybindings": [
-      {
-        "command": "safeappeals-email.openDashboard",
-        "key": "ctrl+shift+e",
-        "mac": "cmd+shift+e"
-      }
-    ]
+    }
   },
   "scripts": {
     "compile": "npm run build-webview && gulp compile-extension:safeappeals-email",

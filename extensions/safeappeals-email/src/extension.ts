@@ -90,6 +90,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 		);
 	};
 
+	const openCompose = () => {
+		DashboardPanel.showCompose(context.extensionUri, engine, accounts, index, log, refreshUi);
+	};
+
 	sidebarProvider = new EmailSidebarProvider(
 		context.extensionUri,
 		engine,
@@ -98,6 +102,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 		log,
 		openDashboard,
 		openThread,
+		openCompose,
 	);
 
 	context.subscriptions.push(

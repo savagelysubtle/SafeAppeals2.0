@@ -56,7 +56,8 @@ body,
 }
 
 .icon-btn,
-.sync-btn {
+.sync-btn,
+.load-more {
 	font: inherit;
 	border: none;
 	border-radius: 2px;
@@ -94,15 +95,32 @@ body,
 	cursor: default;
 }
 
-.folder-name {
-	font-weight: 600;
+.folder-input {
+	flex: 0 1 auto;
+	min-width: 0;
+	max-width: 40%;
+	font: inherit;
 	font-size: 11px;
+	font-weight: 600;
 	text-transform: uppercase;
 	letter-spacing: 0.02em;
-	overflow: hidden;
-	text-overflow: ellipsis;
-	white-space: nowrap;
-	max-width: 40%;
+	color: var(--vscode-input-foreground, var(--vscode-foreground));
+	background: var(--vscode-input-background, transparent);
+	border: 1px solid transparent;
+	border-radius: 2px;
+	padding: 1px 4px;
+}
+
+.folder-input:hover {
+	border-color: var(--vscode-input-border, #555);
+}
+
+.folder-input:focus {
+	outline: 1px solid var(--vscode-focusBorder);
+	outline-offset: -1px;
+	border-color: var(--vscode-focusBorder);
+	text-transform: none;
+	font-weight: 400;
 }
 
 .muted {
@@ -155,6 +173,12 @@ body,
 	padding: 12px 8px;
 	font-size: 12px;
 	margin: 0;
+}
+
+.list-meta {
+	padding: 6px 8px 2px;
+	font-size: 11px;
+	flex-shrink: 0;
 }
 
 .thread-list {
@@ -237,4 +261,22 @@ body,
 
 .time {
 	flex: 0 0 auto;
+}
+
+.list-footer {
+	padding: 8px;
+	flex-shrink: 0;
+	border-top: 1px solid var(--vscode-sideBarSectionHeader-border, var(--vscode-panel-border, #444));
+}
+
+.load-more {
+	width: 100%;
+	font-size: 11px;
+	padding: 4px 8px;
+	background: var(--vscode-button-secondaryBackground, rgba(127, 127, 127, 0.2));
+	color: var(--vscode-button-secondaryForeground, var(--vscode-foreground));
+}
+
+.load-more:hover {
+	background: var(--vscode-list-hoverBackground);
 }
