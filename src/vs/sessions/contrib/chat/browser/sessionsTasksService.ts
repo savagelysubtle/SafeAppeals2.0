@@ -12,6 +12,7 @@ import { URI } from '../../../../base/common/uri.js';
 import { createDecorator } from '../../../../platform/instantiation/common/instantiation.js';
 import { IFileService } from '../../../../platform/files/common/files.js';
 import { ISession } from '../../../services/sessions/common/session.js';
+import { FOLDER_CONFIG_FOLDER_NAME } from '../../../../workbench/services/configuration/common/configuration.js';
 import { IJSONEditingService } from '../../../../workbench/services/configuration/common/jsonEditing.js';
 import { IStorageService, StorageScope, StorageTarget } from '../../../../platform/storage/common/storage.js';
 import { IPreferencesService } from '../../../../workbench/services/preferences/common/preferences.js';
@@ -504,7 +505,7 @@ export class SessionsTasksService extends Disposable implements ISessionsTasksSe
 	}
 
 	private _getWorkspaceTasksJsonUri(folder: URI | undefined): URI | undefined {
-		return folder?.path ? joinPath(folder, '.vscode', 'tasks.json') : undefined;
+		return folder?.path ? joinPath(folder, FOLDER_CONFIG_FOLDER_NAME, 'tasks.json') : undefined;
 	}
 
 	private _getUserTasksJsonUri(): URI | undefined {

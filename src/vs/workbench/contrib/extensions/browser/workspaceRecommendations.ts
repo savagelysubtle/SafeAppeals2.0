@@ -17,8 +17,9 @@ import { FileChangeType, IFileService } from '../../../../platform/files/common/
 import { URI } from '../../../../base/common/uri.js';
 import { RunOnceScheduler } from '../../../../base/common/async.js';
 import { IWorkbenchExtensionManagementService } from '../../../services/extensionManagement/common/extensionManagement.js';
+import { FOLDER_CONFIG_FOLDER_NAME } from '../../../services/configuration/common/configuration.js';
 
-const WORKSPACE_EXTENSIONS_FOLDER = '.vscode/extensions';
+const WORKSPACE_EXTENSIONS_FOLDER = `${FOLDER_CONFIG_FOLDER_NAME}/extensions`;
 
 export class WorkspaceRecommendations extends ExtensionRecommendations {
 

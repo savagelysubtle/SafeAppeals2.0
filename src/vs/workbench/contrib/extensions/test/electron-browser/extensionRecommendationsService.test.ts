@@ -334,7 +334,7 @@ suite('ExtensionRecommendationsService Test', () => {
 	async function setUpFolder(folderName: string, recommendedExtensions: string[], ignoredRecommendations: string[] = []): Promise<void> {
 		const fileService = instantiationService.get(IFileService);
 		const folderDir = joinPath(ROOT, folderName);
-		const workspaceSettingsDir = joinPath(folderDir, '.vscode');
+		const workspaceSettingsDir = joinPath(folderDir, '.safeAppeals');
 		await fileService.createFolder(workspaceSettingsDir);
 		const configPath = joinPath(workspaceSettingsDir, 'extensions.json');
 		await fileService.writeFile(configPath, VSBuffer.fromString(JSON.stringify({

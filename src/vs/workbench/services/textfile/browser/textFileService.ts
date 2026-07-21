@@ -24,6 +24,7 @@ import { IDialogService, IFileDialogService } from '../../../../platform/dialogs
 import { VSBuffer, VSBufferReadable, bufferToStream, VSBufferReadableStream } from '../../../../base/common/buffer.js';
 import { ITextSnapshot, ITextModel } from '../../../../editor/common/model.js';
 import { ITextResourceConfigurationService } from '../../../../editor/common/services/textResourceConfiguration.js';
+import { FOLDER_CONFIG_FOLDER_NAME } from '../../configuration/common/configuration.js';
 import { PLAINTEXT_LANGUAGE_ID } from '../../../../editor/common/languages/modesRegistry.js';
 import { IFilesConfigurationService } from '../../filesConfiguration/common/filesConfigurationService.js';
 import { IResolvedTextEditorModel } from '../../../../editor/common/services/resolverService.js';
@@ -810,7 +811,7 @@ export class EncodingOracle extends Disposable implements IResourceEncodings {
 
 		// Folder Settings
 		this.contextService.getWorkspace().folders.forEach(folder => {
-			defaultEncodingOverrides.push({ parent: joinPath(folder.uri, '.vscode'), encoding: UTF8 });
+			defaultEncodingOverrides.push({ parent: joinPath(folder.uri, FOLDER_CONFIG_FOLDER_NAME), encoding: UTF8 });
 		});
 
 		return defaultEncodingOverrides;

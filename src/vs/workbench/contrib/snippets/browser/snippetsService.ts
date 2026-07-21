@@ -17,6 +17,7 @@ import { FileChangeType, IFileService } from '../../../../platform/files/common/
 import { ILifecycleService, LifecyclePhase } from '../../../services/lifecycle/common/lifecycle.js';
 import { ILogService } from '../../../../platform/log/common/log.js';
 import { IWorkspace, IWorkspaceContextService } from '../../../../platform/workspace/common/workspace.js';
+import { FOLDER_CONFIG_FOLDER_NAME } from '../../../services/configuration/common/configuration.js';
 import { ISnippetGetOptions, ISnippetsService } from './snippets.js';
 import { Snippet, SnippetFile, SnippetSource } from './snippetsFile.js';
 import { ExtensionsRegistry, IExtensionPointUser } from '../../../services/extensions/common/extensionsRegistry.js';
@@ -432,7 +433,7 @@ export class SnippetsService implements ISnippetsService {
 
 	private async _initWorkspaceFolderSnippets(workspace: IWorkspace, bucket: DisposableStore): Promise<any> {
 		const promises = workspace.folders.map(async folder => {
-			const snippetFolder = folder.toResource('.vscode');
+			const snippetFolder = folder.toResource(FOLDER_CONFIG_FOLDER_NAME);
 			const value = await this._fileService.exists(snippetFolder);
 			if (value) {
 				this._initFolderSnippets(SnippetSource.Workspace, snippetFolder, bucket);

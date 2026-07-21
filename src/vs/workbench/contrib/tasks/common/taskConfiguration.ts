@@ -25,6 +25,7 @@ import { ConfiguredInput } from '../../../services/configurationResolver/common/
 import { URI } from '../../../../base/common/uri.js';
 import { ShellExecutionSupportedContext, ProcessExecutionSupportedContext } from './taskService.js';
 import { IContextKeyService, RawContextKey } from '../../../../platform/contextkey/common/contextkey.js';
+import { TASKS_CONFIGURATION_KEY, WORKSPACE_STANDALONE_CONFIGURATIONS } from '../../../services/configuration/common/configuration.js';
 
 export const enum ShellQuoting {
 	/**
@@ -1508,7 +1509,7 @@ namespace ConfiguringTask {
 		}
 		const configElement: Tasks.ITaskSourceConfigElement = {
 			workspaceFolder: context.workspaceFolder,
-			file: '.vscode/tasks.json',
+			file: WORKSPACE_STANDALONE_CONFIGURATIONS[TASKS_CONFIGURATION_KEY],
 			index,
 			element: external
 		};
@@ -1588,15 +1589,15 @@ namespace CustomTask {
 		let taskSource: Tasks.FileBasedTaskSource;
 		switch (source) {
 			case TaskConfigSource.User: {
-				taskSource = { kind: Tasks.TaskSourceKind.User, config: { index, element: external, file: '.vscode/tasks.json', workspaceFolder: context.workspaceFolder }, label };
+				taskSource = { kind: Tasks.TaskSourceKind.User, config: { index, element: external, file: WORKSPACE_STANDALONE_CONFIGURATIONS[TASKS_CONFIGURATION_KEY], workspaceFolder: context.workspaceFolder }, label };
 				break;
 			}
 			case TaskConfigSource.WorkspaceFile: {
-				taskSource = { kind: Tasks.TaskSourceKind.WorkspaceFile, config: { index, element: external, file: '.vscode/tasks.json', workspaceFolder: context.workspaceFolder, workspace: context.workspace }, label };
+				taskSource = { kind: Tasks.TaskSourceKind.WorkspaceFile, config: { index, element: external, file: WORKSPACE_STANDALONE_CONFIGURATIONS[TASKS_CONFIGURATION_KEY], workspaceFolder: context.workspaceFolder, workspace: context.workspace }, label };
 				break;
 			}
 			default: {
-				taskSource = { kind: Tasks.TaskSourceKind.Workspace, config: { index, element: external, file: '.vscode/tasks.json', workspaceFolder: context.workspaceFolder }, label };
+				taskSource = { kind: Tasks.TaskSourceKind.Workspace, config: { index, element: external, file: WORKSPACE_STANDALONE_CONFIGURATIONS[TASKS_CONFIGURATION_KEY], workspaceFolder: context.workspaceFolder }, label };
 				break;
 			}
 		}

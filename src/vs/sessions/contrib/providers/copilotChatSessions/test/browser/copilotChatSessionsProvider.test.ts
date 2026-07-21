@@ -1153,8 +1153,8 @@ suite('CopilotChatSessionsProvider', () => {
 		assert.strictEqual(workspace.requiresWorkspaceTrust, true);
 
 		// The core symptom of #310777: any of these calls must not throw.
-		assert.doesNotThrow(() => URI.joinPath(workspace.folders[0].root, '.vscode', 'settings.json'));
-		assert.doesNotThrow(() => URI.joinPath(workspace.folders[0].root, '.vscode/extensions.json'));
+		assert.doesNotThrow(() => URI.joinPath(workspace.folders[0].root, '.safeAppeals', 'settings.json'));
+		assert.doesNotThrow(() => URI.joinPath(workspace.folders[0].root, '.safeAppeals/extensions.json'));
 	});
 
 	// ---- Claude session creation -------

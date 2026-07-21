@@ -17,6 +17,7 @@ import { URI } from '../../../../../../../base/common/uri.js';
 import { IFileService } from '../../../../../../../platform/files/common/files.js';
 import { VSBuffer } from '../../../../../../../base/common/buffer.js';
 import { IConfigurationService } from '../../../../../../../platform/configuration/common/configuration.js';
+import { TASKS_CONFIGURATION_KEY, WORKSPACE_STANDALONE_CONFIGURATIONS } from '../../../../../../services/configuration/common/configuration.js';
 import { toolResultDetailsFromResponse, toolResultMessageFromResponse } from './taskHelpers.js';
 import { IInstantiationService } from '../../../../../../../platform/instantiation/common/instantiation.js';
 import { DisposableStore } from '../../../../../../../base/common/lifecycle.js';
@@ -54,7 +55,7 @@ export class CreateAndRunTaskTool implements IToolImpl {
 			return { content: [{ kind: 'text', value: `No invocation context` }], toolResultMessage: `No invocation context` };
 		}
 
-		const tasksJsonUri = URI.file(args.workspaceFolder).with({ path: `${args.workspaceFolder}/.vscode/tasks.json` });
+		const tasksJsonUri = URI.file(args.workspaceFolder).with({ path: `${args.workspaceFolder}/${WORKSPACE_STANDALONE_CONFIGURATIONS[TASKS_CONFIGURATION_KEY]}` });
 		const exists = await this._fileService.exists(tasksJsonUri);
 
 		const newTask: IConfiguredTask = {

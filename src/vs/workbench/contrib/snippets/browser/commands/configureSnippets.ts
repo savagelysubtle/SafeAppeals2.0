@@ -17,6 +17,7 @@ import { ILabelService } from '../../../../../platform/label/common/label.js';
 import { IOpenerService } from '../../../../../platform/opener/common/opener.js';
 import { IQuickInputService, IQuickPickItem, QuickPickInput } from '../../../../../platform/quickinput/common/quickInput.js';
 import { IWorkspaceContextService } from '../../../../../platform/workspace/common/workspace.js';
+import { FOLDER_CONFIG_FOLDER_NAME } from '../../../../services/configuration/common/configuration.js';
 import { SnippetsAction } from './abstractSnippetsActions.js';
 import { ISnippetsService } from '../snippets.js';
 import { SnippetSource } from '../snippetsFile.js';
@@ -286,7 +287,7 @@ export class ConfigureSnippetsAction extends SnippetsAction {
 			workspaceSnippetPicks.push({
 				scope: nls.localize('new.workspace_scope', "{0} workspace", folder.name),
 				label: nls.localize('new.folder', "New Snippets file for '{0}'...", folder.name),
-				uri: folder.toResource('.vscode')
+				uri: folder.toResource(FOLDER_CONFIG_FOLDER_NAME)
 			});
 		}
 

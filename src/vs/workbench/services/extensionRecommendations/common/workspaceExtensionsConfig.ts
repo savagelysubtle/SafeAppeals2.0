@@ -17,10 +17,11 @@ import { IModelService } from '../../../../editor/common/services/model.js';
 import { ILanguageService } from '../../../../editor/common/languages/language.js';
 import { localize } from '../../../../nls.js';
 import { URI } from '../../../../base/common/uri.js';
+import { FOLDER_CONFIG_FOLDER_NAME } from '../../configuration/common/configuration.js';
 import { IJSONEditingService, IJSONValue } from '../../configuration/common/jsonEditing.js';
 import { ResourceMap } from '../../../../base/common/map.js';
 
-export const EXTENSIONS_CONFIG = '.vscode/extensions.json';
+export const EXTENSIONS_CONFIG = `${FOLDER_CONFIG_FOLDER_NAME}/extensions.json`;
 
 export interface IExtensionsConfigContent {
 	recommendations?: string[];

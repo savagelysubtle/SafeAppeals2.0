@@ -172,7 +172,7 @@ suite('Sessions ConfigurationService', () => {
 		await fileService.createFolder(folder);
 		await fileService.writeFile(userDataProfileService.currentProfile.settingsResource, VSBuffer.fromString('{ "sessionsConfigurationService.testSetting": "userValue" }'));
 		await testObject.reloadConfiguration();
-		await fileService.writeFile(joinPath(folder, '.vscode', 'settings.json'), VSBuffer.fromString('{ "sessionsConfigurationService.testSetting": "folderValue" }'));
+		await fileService.writeFile(joinPath(folder, '.safeAppeals', 'settings.json'), VSBuffer.fromString('{ "sessionsConfigurationService.testSetting": "folderValue" }'));
 		await workspaceService.addFolders([{ uri: folder }]);
 		assert.strictEqual(testObject.getValue('sessionsConfigurationService.testSetting', { resource: folder }), 'folderValue');
 	}));
@@ -180,7 +180,7 @@ suite('Sessions ConfigurationService', () => {
 	test('folder settings are read when folders are added', () => runWithFakedTimers<void>({ useFakeTimers: true }, async () => {
 		const folder = joinPath(ROOT, 'addedFolder');
 		await fileService.createFolder(folder);
-		await fileService.writeFile(joinPath(folder, '.vscode', 'settings.json'), VSBuffer.fromString('{ "sessionsConfigurationService.testSetting": "folderValue" }'));
+		await fileService.writeFile(joinPath(folder, '.safeAppeals', 'settings.json'), VSBuffer.fromString('{ "sessionsConfigurationService.testSetting": "folderValue" }'));
 		await workspaceService.addFolders([{ uri: folder }]);
 		assert.strictEqual(testObject.getValue('sessionsConfigurationService.testSetting', { resource: folder }), 'folderValue');
 	}));
@@ -188,7 +188,7 @@ suite('Sessions ConfigurationService', () => {
 	test('folder settings are removed when folders are removed', () => runWithFakedTimers<void>({ useFakeTimers: true }, async () => {
 		const folder = joinPath(ROOT, 'removedFolder');
 		await fileService.createFolder(folder);
-		await fileService.writeFile(joinPath(folder, '.vscode', 'settings.json'), VSBuffer.fromString('{ "sessionsConfigurationService.testSetting": "folderValue" }'));
+		await fileService.writeFile(joinPath(folder, '.safeAppeals', 'settings.json'), VSBuffer.fromString('{ "sessionsConfigurationService.testSetting": "folderValue" }'));
 		await workspaceService.addFolders([{ uri: folder }]);
 		assert.strictEqual(testObject.getValue('sessionsConfigurationService.testSetting', { resource: folder }), 'folderValue');
 		await workspaceService.removeFolders([folder]);
@@ -198,7 +198,7 @@ suite('Sessions ConfigurationService', () => {
 	test('configuration change event is fired when folders with settings are removed', () => runWithFakedTimers<void>({ useFakeTimers: true }, async () => {
 		const folder = joinPath(ROOT, 'removedFolder2');
 		await fileService.createFolder(folder);
-		await fileService.writeFile(joinPath(folder, '.vscode', 'settings.json'), VSBuffer.fromString('{ "sessionsConfigurationService.testSetting": "folderValue" }'));
+		await fileService.writeFile(joinPath(folder, '.safeAppeals', 'settings.json'), VSBuffer.fromString('{ "sessionsConfigurationService.testSetting": "folderValue" }'));
 		await workspaceService.addFolders([{ uri: folder }]);
 		assert.strictEqual(testObject.getValue('sessionsConfigurationService.testSetting', { resource: folder }), 'folderValue');
 
@@ -222,7 +222,7 @@ suite('Sessions ConfigurationService', () => {
 		await fileService.createFolder(folder);
 		await fileService.writeFile(userDataProfileService.currentProfile.settingsResource, VSBuffer.fromString('{ "sessionsConfigurationService.testSetting": "userValue" }'));
 		await testObject.reloadConfiguration();
-		await fileService.writeFile(joinPath(folder, '.vscode', 'settings.json'), VSBuffer.fromString('{ "sessionsConfigurationService.testSetting": "folderValue" }'));
+		await fileService.writeFile(joinPath(folder, '.safeAppeals', 'settings.json'), VSBuffer.fromString('{ "sessionsConfigurationService.testSetting": "folderValue" }'));
 		await workspaceService.addFolders([{ uri: folder }]);
 
 		const inspection = testObject.inspect('sessionsConfigurationService.testSetting', { resource: folder });
@@ -234,7 +234,7 @@ suite('Sessions ConfigurationService', () => {
 	test('application settings are not read from workspace folder', () => runWithFakedTimers<void>({ useFakeTimers: true }, async () => {
 		const folder = joinPath(ROOT, 'appFolder');
 		await fileService.createFolder(folder);
-		await fileService.writeFile(joinPath(folder, '.vscode', 'settings.json'), VSBuffer.fromString('{ "sessionsConfigurationService.applicationSetting": "folderValue" }'));
+		await fileService.writeFile(joinPath(folder, '.safeAppeals', 'settings.json'), VSBuffer.fromString('{ "sessionsConfigurationService.applicationSetting": "folderValue" }'));
 		await workspaceService.addFolders([{ uri: folder }]);
 		assert.strictEqual(testObject.getValue('sessionsConfigurationService.applicationSetting', { resource: folder }), 'defaultValue');
 	}));
@@ -242,7 +242,7 @@ suite('Sessions ConfigurationService', () => {
 	test('machine settings are not read from workspace folder', () => runWithFakedTimers<void>({ useFakeTimers: true }, async () => {
 		const folder = joinPath(ROOT, 'machineFolder');
 		await fileService.createFolder(folder);
-		await fileService.writeFile(joinPath(folder, '.vscode', 'settings.json'), VSBuffer.fromString('{ "sessionsConfigurationService.machineSetting": "folderValue" }'));
+		await fileService.writeFile(joinPath(folder, '.safeAppeals', 'settings.json'), VSBuffer.fromString('{ "sessionsConfigurationService.machineSetting": "folderValue" }'));
 		await workspaceService.addFolders([{ uri: folder }]);
 		assert.strictEqual(testObject.getValue('sessionsConfigurationService.machineSetting', { resource: folder }), 'defaultValue');
 	}));
@@ -250,12 +250,12 @@ suite('Sessions ConfigurationService', () => {
 	test('folder settings change fires configuration change event', () => runWithFakedTimers<void>({ useFakeTimers: true }, async () => {
 		const folder = joinPath(ROOT, 'changeFolder');
 		await fileService.createFolder(folder);
-		await fileService.writeFile(joinPath(folder, '.vscode', 'settings.json'), VSBuffer.fromString('{ "sessionsConfigurationService.testSetting": "initialValue" }'));
+		await fileService.writeFile(joinPath(folder, '.safeAppeals', 'settings.json'), VSBuffer.fromString('{ "sessionsConfigurationService.testSetting": "initialValue" }'));
 		await workspaceService.addFolders([{ uri: folder }]);
 		assert.strictEqual(testObject.getValue('sessionsConfigurationService.testSetting', { resource: folder }), 'initialValue');
 
 		const promise = Event.toPromise(testObject.onDidChangeConfiguration);
-		await fileService.writeFile(joinPath(folder, '.vscode', 'settings.json'), VSBuffer.fromString('{ "sessionsConfigurationService.testSetting": "updatedValue" }'));
+		await fileService.writeFile(joinPath(folder, '.safeAppeals', 'settings.json'), VSBuffer.fromString('{ "sessionsConfigurationService.testSetting": "updatedValue" }'));
 		const event = await promise;
 		assert.ok(event.affectsConfiguration('sessionsConfigurationService.testSetting'));
 		assert.strictEqual(testObject.getValue('sessionsConfigurationService.testSetting', { resource: folder }), 'updatedValue');
@@ -365,7 +365,7 @@ suite('Sessions ConfigurationService', () => {
 	test('read setting from workspace folder', () => runWithFakedTimers<void>({ useFakeTimers: true }, async () => {
 		const folder = joinPath(ROOT, 'readFolder');
 		await fileService.createFolder(folder);
-		await fileService.writeFile(joinPath(folder, '.vscode', 'settings.json'), VSBuffer.fromString('{ "sessionsConfigurationService.testSetting": "folderValue" }'));
+		await fileService.writeFile(joinPath(folder, '.safeAppeals', 'settings.json'), VSBuffer.fromString('{ "sessionsConfigurationService.testSetting": "folderValue" }'));
 
 		await workspaceService.addFolders([{ uri: folder }]);
 
@@ -392,7 +392,7 @@ suite('Sessions ConfigurationService', () => {
 
 		await testObject.updateValue('sessionsConfigurationService.testSetting', 'persistedFolderValue', { resource: folder }, ConfigurationTarget.WORKSPACE_FOLDER);
 
-		const content = (await fileService.readFile(joinPath(folder, '.vscode', 'settings.json'))).value.toString();
+		const content = (await fileService.readFile(joinPath(folder, '.safeAppeals', 'settings.json'))).value.toString();
 		assert.ok(content.includes('"sessionsConfigurationService.testSetting"'));
 		assert.ok(content.includes('persistedFolderValue'));
 	}));

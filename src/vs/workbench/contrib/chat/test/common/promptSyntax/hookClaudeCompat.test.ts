@@ -505,7 +505,7 @@ suite('HookSourceFormat', () => {
 		});
 
 		test('returns Copilot format for settings.json not inside .claude', () => {
-			assert.strictEqual(getHookSourceFormat(URI.file('/workspace/.vscode/settings.json')), HookSourceFormat.Copilot);
+			assert.strictEqual(getHookSourceFormat(URI.file('/workspace/.safeAppeals/settings.json')), HookSourceFormat.Copilot);
 		});
 	});
 

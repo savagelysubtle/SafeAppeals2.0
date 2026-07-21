@@ -710,7 +710,7 @@ export async function applyEdit(
 }
 
 const ALWAYS_CHECKED_EDIT_PATTERNS: Readonly<Record<string, boolean>> = {
-	'**/.vscode/*.json': false,
+	'**/.safeAppeals/*.json': false,
 };
 
 const allPlatformPatterns: (glob.ParsedPattern | string)[] = [

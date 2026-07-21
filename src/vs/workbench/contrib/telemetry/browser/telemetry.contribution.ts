@@ -18,6 +18,7 @@ import { Disposable } from '../../../../base/common/lifecycle.js';
 import ErrorTelemetry from '../../../../platform/telemetry/browser/errorTelemetry.js';
 import { supportsTelemetry, TelemetryLogGroup, telemetryLogId, TelemetryTrustedValue } from '../../../../platform/telemetry/common/telemetryUtils.js';
 import { ConfigurationTarget, ConfigurationTargetToString, IConfigurationService } from '../../../../platform/configuration/common/configuration.js';
+import { FOLDER_CONFIG_FOLDER_NAME } from '../../../services/configuration/common/configuration.js';
 import { ITextFileService, ITextFileSaveEvent, ITextFileResolveEvent } from '../../../services/textfile/common/textfiles.js';
 import { extname, basename, isEqual, isEqualOrParent } from '../../../../base/common/resources.js';
 import { URI } from '../../../../base/common/uri.js';
@@ -200,7 +201,7 @@ export class TelemetryContribution extends Disposable implements IWorkbenchContr
 		// Check for workspace settings file
 		const folders = this.contextService.getWorkspace().folders;
 		for (const folder of folders) {
-			if (isEqualOrParent(resource, folder.toResource('.vscode'))) {
+			if (isEqualOrParent(resource, folder.toResource(FOLDER_CONFIG_FOLDER_NAME))) {
 				const filename = basename(resource);
 				if (TelemetryContribution.ALLOWLIST_WORKSPACE_JSON.indexOf(filename) > -1) {
 					return `.vscode/${filename}`;

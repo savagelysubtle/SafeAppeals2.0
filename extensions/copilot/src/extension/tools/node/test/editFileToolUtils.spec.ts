@@ -749,12 +749,12 @@ describe('makeUriConfirmationChecker', async () => {
 		expect(result).toBe(ConfirmationCheckResult.Sensitive); // Sensitive
 	});
 
-	test('always checks .vscode/*.json files', async () => {
+	test('always checks .safeAppeals/*.json files', async () => {
 		const workspaceFolder = URI.file('/workspace');
 		workspaceService = new TestWorkspaceService([workspaceFolder], []);
 
 		const checker = makeUriConfirmationChecker(configService, workspaceService.getWorkspaceFolder.bind(workspaceService), customInstructionsService);
-		const settingsFile = URI.file('/workspace/.vscode/settings.json');
+		const settingsFile = URI.file('/workspace/.safeAppeals/settings.json');
 		const result = await checker(settingsFile);
 		expect(result).toBe(ConfirmationCheckResult.Sensitive); // Sensitive - always requires confirmation
 	});

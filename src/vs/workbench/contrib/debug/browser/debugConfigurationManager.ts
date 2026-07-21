@@ -15,6 +15,7 @@ import { ThemeIcon } from '../../../../base/common/themables.js';
 import { URI as uri } from '../../../../base/common/uri.js';
 import * as nls from '../../../../nls.js';
 import { ConfigurationTarget, IConfigurationService } from '../../../../platform/configuration/common/configuration.js';
+import { LAUNCH_CONFIGURATION_KEY, WORKSPACE_STANDALONE_CONFIGURATIONS } from '../../../services/configuration/common/configuration.js';
 import { IContextKey, IContextKeyService } from '../../../../platform/contextkey/common/contextkey.js';
 import { IFileService } from '../../../../platform/files/common/files.js';
 import { IInstantiationService } from '../../../../platform/instantiation/common/instantiation.js';
@@ -643,7 +644,7 @@ class Launch extends AbstractLaunch implements ILaunch {
 	}
 
 	get uri(): uri {
-		return resources.joinPath(this.workspace.uri, '/.vscode/launch.json');
+		return resources.joinPath(this.workspace.uri, WORKSPACE_STANDALONE_CONFIGURATIONS[LAUNCH_CONFIGURATION_KEY]);
 	}
 
 	get name(): string {
@@ -673,7 +674,7 @@ class Launch extends AbstractLaunch implements ILaunch {
 			try {
 				await this.textFileService.write(resource, content);
 			} catch (error) {
-				throw new Error(nls.localize('DebugConfig.failed', "Unable to create 'launch.json' file inside the '.vscode' folder ({0}).", error.message));
+				throw new Error(nls.localize('DebugConfig.failed', "Unable to create 'launch.json' file inside the '.safeAppeals' folder ({0}).", error.message));
 			}
 		}
 

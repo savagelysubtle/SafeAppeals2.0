@@ -95,7 +95,7 @@ suite('SessionPermissionManager', () => {
 	});
 
 	test('requires confirmation for protected files inside the working directory', async () => {
-		const files = ['.env', 'package.json', join('.git', 'config'), 'deps.lock', join('.vscode', 'settings.json')];
+		const files = ['.env', 'package.json', join('.git', 'config'), 'deps.lock', join('.safeAppeals', 'settings.json')];
 		const results: (ToolCallConfirmationReason | undefined)[] = [];
 		for (const file of files) {
 			results.push(await permissions.getAutoApproval(writeEvent(join(workDir, file)), sessionUri));

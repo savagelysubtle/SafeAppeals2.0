@@ -48,7 +48,7 @@ export class DebugCommandsContribution extends Disposable {
 		};
 
 		this._register(vscode.commands.registerCommand('github.copilot.createLaunchJsonFileWithContents', async (launchConfig: IStartDebuggingParsedResponse) => {
-			// Define the path for the .vscode/launch.json file
+			// Define the path for the .safeAppeals/launch.json file
 			const workspaceFolders = vscode.workspace.workspaceFolders;
 			if (!workspaceFolders?.length) {
 				vscode.window.showErrorMessage('No workspace folder is open.');
