@@ -50,6 +50,7 @@ export const dirs = [
 	'extensions/terminal-suggest',
 	'extensions/time-tracker',
 	'extensions/safeappeals-calendar',
+	'extensions/safeappeals-case',
 	'extensions/safeappeals-documents',
 	'extensions/safeappeals-email',
 

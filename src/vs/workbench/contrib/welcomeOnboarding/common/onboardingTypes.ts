@@ -13,6 +13,8 @@ import product from '../../../../platform/product/common/product.js';
  */
 export const enum OnboardingStepId {
 	SignIn = 'onboarding.signIn',
+	/** SafeAppeals: who the user is / where they work / what law they practice. */
+	Profile = 'onboarding.profile',
 	Personalize = 'onboarding.personalize',
 	AiPreference = 'onboarding.aiPreference',
 	AgentSessions = 'onboarding.agentSessions',
@@ -25,6 +27,9 @@ export function getOnboardingStepTitle(stepId: OnboardingStepId): string {
 	switch (stepId) {
 		case OnboardingStepId.SignIn:
 			return localize('onboarding.step.signIn', "Sign In");
+		case OnboardingStepId.Profile:
+			// SafeAppeals
+			return localize('onboarding.step.profile', "Who You Are");
 		case OnboardingStepId.Personalize:
 			return localize('onboarding.step.personalize', "Make It Yours");
 		case OnboardingStepId.AiPreference:
@@ -42,6 +47,9 @@ export function getOnboardingStepSubtitle(stepId: OnboardingStepId): string {
 		case OnboardingStepId.SignIn:
 			// SafeAppeals
 			return localize('onboarding.step.signIn.subtitle', "Sync settings and unlock AI features in {0}", product.nameLong);
+		case OnboardingStepId.Profile:
+			// SafeAppeals
+			return localize('onboarding.step.profile.subtitle', "The AI agent tailors its help to your practice — saved only on this computer");
 		case OnboardingStepId.Personalize:
 			return localize('onboarding.step.personalize.subtitle', "Choose your theme and keyboard mapping");
 		case OnboardingStepId.AiPreference:
@@ -56,6 +64,7 @@ export function getOnboardingStepSubtitle(stepId: OnboardingStepId): string {
  */
 const ALL_ONBOARDING_STEPS: readonly OnboardingStepId[] = [
 	OnboardingStepId.SignIn,
+	OnboardingStepId.Profile, // SafeAppeals
 	OnboardingStepId.Personalize,
 	OnboardingStepId.AgentSessions,
 ];

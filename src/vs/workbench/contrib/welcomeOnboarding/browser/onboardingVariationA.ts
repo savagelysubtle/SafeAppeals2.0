@@ -5,6 +5,8 @@
 
 import { Disposable, DisposableStore } from '../../../../base/common/lifecycle.js';
 import { Emitter, Event } from '../../../../base/common/event.js';
+import { VSBuffer } from '../../../../base/common/buffer.js';
+import { joinPath } from '../../../../base/common/resources.js';
 import { $, append, addDisposableListener, EventType, clearNode, getActiveWindow } from '../../../../base/browser/dom.js';
 import { isCancellationError } from '../../../../base/common/errors.js';
 import { StopWatch } from '../../../../base/common/stopwatch.js';
@@ -133,6 +135,15 @@ export class OnboardingVariationA extends Disposable implements IOnboardingServi
 	private enterpriseSignInUiState: EnterpriseSignInUiState = 'options';
 	private enterpriseInstanceValue = '';
 	private enterpriseSignInWatch: StopWatch | undefined;
+	/** SafeAppeals: profile step state; persisted to safeappeals.profile.* on step leave. */
+	private profilePrefilled = false;
+	private readonly profileValues: Record<'name' | 'organization' | 'role' | 'practiceArea' | 'jurisdiction', string> = {
+		name: '',
+		organization: '',
+		role: '',
+		practiceArea: '',
+		jurisdiction: '',
+	};
 
 	constructor(
 		@ILayoutService private readonly layoutService: ILayoutService,
@@ -289,6 +300,11 @@ export class OnboardingVariationA extends Disposable implements IOnboardingServi
 			return;
 		}
 
+		// SafeAppeals: don't lose profile input when dismissing from the profile step
+		if (this.steps[this.currentStepIndex] === OnboardingStepId.Profile) {
+			this._saveProfile();
+		}
+
 		this._logAction('dismiss', undefined, reason);
 
 		this.overlay.classList.remove('visible');
@@ -321,6 +337,9 @@ export class OnboardingVariationA extends Disposable implements IOnboardingServi
 			}
 			if (leavingStep === OnboardingStepId.Personalize) {
 				this._applyKeymap(this.selectedKeymapId);
+			}
+			if (leavingStep === OnboardingStepId.Profile) {
+				this._saveProfile(); // SafeAppeals
 			}
 			this.currentStepIndex++;
 			this._renderStep();
@@ -397,6 +416,9 @@ export class OnboardingVariationA extends Disposable implements IOnboardingServi
 		switch (stepId) {
 			case OnboardingStepId.SignIn:
 				this._renderSignInStep(this.contentEl);
+				break;
+			case OnboardingStepId.Profile:
+				this._renderProfileStep(this.contentEl);
 				break;
 			case OnboardingStepId.Personalize:
 				this._renderPersonalizeStep(this.contentEl);
@@ -799,6 +821,110 @@ export class OnboardingVariationA extends Disposable implements IOnboardingServi
 			severity: Severity.Error,
 			message: localize('onboarding.signIn.enterprise.error', "GitHub Enterprise sign-in failed. Check your instance URL and try again."),
 		});
+	}
+
+	// =====================================================================
+	// Step: Profile (SafeAppeals)
+	// =====================================================================
+
+	private static readonly PROFILE_FIELDS: ReadonlyArray<{ key: 'name' | 'organization' | 'role' | 'practiceArea' | 'jurisdiction'; label: string; placeholder: string }> = [
+		{ key: 'name', label: localize('onboarding.profile.name', "Your Name"), placeholder: localize('onboarding.profile.name.placeholder', "As it should appear in drafted documents") },
+		{ key: 'organization', label: localize('onboarding.profile.organization', "Firm / Organization"), placeholder: localize('onboarding.profile.organization.placeholder', "Leave empty if self-represented") },
+		{ key: 'role', label: localize('onboarding.profile.role', "Your Role"), placeholder: localize('onboarding.profile.role.placeholder', "e.g. lawyer, paralegal, claimant advocate, worker") },
+		{ key: 'practiceArea', label: localize('onboarding.profile.practiceArea', "Area of Law"), placeholder: localize('onboarding.profile.practiceArea.placeholder', "e.g. Workers' Compensation") },
+		{ key: 'jurisdiction', label: localize('onboarding.profile.jurisdiction', "Jurisdiction"), placeholder: localize('onboarding.profile.jurisdiction.placeholder', "e.g. BC WCB, Ontario WSIB, California DWC") },
+	];
+
+	private _renderProfileStep(container: HTMLElement): void {
+		if (!this.profilePrefilled) {
+			this.profilePrefilled = true;
+			for (const field of OnboardingVariationA.PROFILE_FIELDS) {
+				const value = this.configurationService.getValue<string>(`safeappeals.profile.${field.key}`);
+				if (typeof value === 'string' && value) {
+					this.profileValues[field.key] = value;
+				}
+			}
+		}
+
+		const wrapper = append(container, $('.onboarding-a-profile'));
+
+		for (const field of OnboardingVariationA.PROFILE_FIELDS) {
+			const fieldEl = append(wrapper, $('.onboarding-a-profile-field'));
+			const label = append(fieldEl, $('div.onboarding-a-section-label'));
+			label.textContent = field.label;
+
+			const inputBox = this.stepDisposables.add(new InputBox(fieldEl, undefined, {
+				placeholder: field.placeholder,
+				ariaLabel: field.label,
+				inputBoxStyles: defaultInputBoxStyles,
+			}));
+			inputBox.value = this.profileValues[field.key];
+			this._registerStepFocusable(inputBox.inputElement);
+			this.stepDisposables.add(inputBox.onDidChange(value => {
+				this.profileValues[field.key] = value;
+			}));
+		}
+
+		const hint = append(wrapper, $('div.onboarding-a-theme-hint'));
+		hint.textContent = localize('onboarding.profile.hint', "All fields are optional and stay on this computer. The AI agent uses them when organizing cases and drafting documents. Change them anytime with the \"Set Up Profile\" command.");
+	}
+
+	/**
+	 * SafeAppeals: persists the profile step to `safeappeals.profile.*` user
+	 * settings and writes a user-level instructions file that the chat system
+	 * attaches to every request (`~/.copilot/instructions` is a built-in
+	 * location, see DEFAULT_INSTRUCTIONS_SOURCE_FOLDERS).
+	 */
+	private _saveProfile(): void {
+		const entries = Object.entries(this.profileValues) as [string, string][];
+		if (!entries.some(([, value]) => value.trim())) {
+			return; // nothing entered, nothing to save
+		}
+		for (const [key, value] of entries) {
+			this.configurationService.updateValue(`safeappeals.profile.${key}`, value.trim(), ConfigurationTarget.USER)
+				.catch(() => { /* non-fatal */ });
+		}
+		this._writeProfileRule().catch(() => { /* non-fatal: settings still saved */ });
+		this._logAction('saveProfile');
+	}
+
+	private async _writeProfileRule(): Promise<void> {
+		const home = await this.pathService.userHome();
+		const target = joinPath(home, '.copilot', 'instructions', 'safeappeals-profile.instructions.md');
+
+		const facts: string[] = [];
+		const push = (label: string, value: string) => {
+			if (value.trim()) {
+				facts.push(`- **${label}:** ${value.trim()}`);
+			}
+		};
+		push('Name', this.profileValues.name);
+		push('Firm / organization', this.profileValues.organization);
+		push('Role', this.profileValues.role);
+		push('Practice area', this.profileValues.practiceArea);
+		push('Default jurisdiction', this.profileValues.jurisdiction);
+
+		const content = [
+			'---',
+			`description: 'Safe Appeals user profile — who the user is and how they practice'`,
+			`applyTo: '**'`,
+			'---',
+			'',
+			'# About the Safe Appeals user',
+			'',
+			'This profile was set up during the Safe Appeals welcome onboarding',
+			'(rerun "Safe Appeals Case: Set Up Profile" to change it).',
+			'',
+			...facts,
+			'',
+			'When drafting documents, correspondence, or appeals, write from this',
+			'person\'s perspective and jurisdiction unless the case brief (AGENTS.md',
+			'in the case folder) says otherwise. Case-specific facts always take',
+			'precedence over this profile.',
+			'',
+		].join('\n');
+
+		await this.fileService.writeFile(target, VSBuffer.fromString(content));
 	}
 
 	// =====================================================================

@@ -73,23 +73,30 @@ todos:
       calendar+email to getSession(). Detailed plan:
       unified_safeappeals_sign-in_225af75a.plan.md"
     status: pending
-  - id: rung7-contrib-foundation
-    content: "Rung 7: contrib foundation — settings service, storage keys, hub activation"
+  - id: rung7-case-ext
+    content: "Rung 7 (RESHAPED Jul 21, extension-first): NEW safeappeals-case
+      extension — profile walkthrough (global identity → settings), case
+      scaffold (AGENTS.md at case root + .safeAppeals/case.json), case-info
+      editing, then timeline+deadlines as slice 2. Replaces old contrib
+      foundation + rung 9 case info; agent-native via AGENTS.md standard."
     status: in_progress
-  - id: rung8-fileorganizer
-    content: "Rung 8: file organizer + converter (explorer hook, first app.ts channel)"
+  - id: rung8-organizer-ext
+    content: "Rung 8: NEW safeappeals-organizer extension — file organizer +
+      converter (explorer context menus + FileDecorationProvider + webview
+      wizard; NO explorerViewer.ts core hook)"
     status: pending
-  - id: rung9-timeline-caseinfo
-    content: "Rung 9: timeline + case info (wire buildreact here)"
+  - id: rung9-audio-ext
+    content: "Rung 9: NEW safeappeals-audio extension — recorder + whisper
+      transcription (was originally an extension in old fork)"
     status: pending
-  - id: rung10-rag
-    content: "Rung 10: RAG (native deps, extractor decision, rag channel)"
+  - id: rung10-rag-ext
+    content: "Rung 10: NEW safeappeals-rag extension — indexing/search, reuse
+      time-tracker dual-ABI better-sqlite3 pattern; hybrid BM25+RRF retriever"
     status: pending
-  - id: rung11-audio
-    content: "Rung 11: audio recorder (ffmpeg/whisper)"
-    status: pending
-  - id: rung12-ai-integration
-    content: "Rung 12: AI integration layer BYOK — providers, agent loop, completions, tools"
+  - id: rung11-agent-update
+    content: "Rung 11: copilot → SafeAppeals agent update — rebrand vendored
+      extensions/copilot, wire BYOK providers; replaces old rung 12 contrib
+      integration layer"
     status: pending
   - id: rung13-cloud
     content: "Rung 13: cloud — auth/credits + server SSE/tool_calls/models + cloud vendor"
@@ -104,6 +111,45 @@ isProject: false
 ---
 
 # Upstream VS Code Merge — Bolt-On Migration (full disposition plan)
+
+## Status (Jul 21, 2026) — EXTENSION-FIRST RE-SEQUENCE (user decision)
+
+**The ladder no longer "cracks into" src/vs.** User call (Jul 21): stay in
+extension-land for everything that can be an extension; core edits stay
+frozen at what's already done (branding, default theme, `.safeAppeals`
+rename, web-server fixes). Rationale: rungs 4–6 proved the webview-React
+extension pattern; every contrib file is a permanent upstream-merge
+conflict; the dual-ABI sqlite pattern (time-tracker) removes the "native
+deps need main process" argument; the vendored `extensions/copilot` is a
+mature agent that replaces the planned hand-written contrib agent loop.
+
+New ladder: **7 safeappeals-case → 8 safeappeals-organizer → 9
+safeappeals-audio → 10 safeappeals-rag → 11 copilot→SafeAppeals agent
+update (BYOK) → 6.5 unified sign-in → 13 cloud/credits → tools pass → 14
+packaging → 15 placement review.** Old rung 7 (contrib
+foundation/settings service) is DELETED — VS Code settings + globalStorage
+cover it. Old rung 12 (contrib AI integration) folds into rung 11.
+Section J's original ladder below is superseded by this ordering; sections
+C/D contrib dispositions for organizer/timeline/case/RAG/audio are
+superseded by extension dispositions (D.2 pattern).
+
+**Case info REDESIGNED (Jul 21, user decision): agent-native, not a port.**
+No case-info dashboard/service. Instead:
+- **Global profile** (who the user is, firm, practice area, jurisdiction):
+  collected by a first-run walkthrough (`contributes.walkthroughs` in
+  safeappeals-case — zero core surgery), stored in global settings
+  (`safeappeals.profile.*`).
+- **Per-case**: `AGENTS.md` at case root (the standard the agent already
+  auto-loads — user picked root over `.safeAppeals/` for visibility +
+  standard plumbing + easy user docs) with the case brief (client,
+  opposing party, claim number, injury date, jurisdiction, status), plus
+  `.safeAppeals/case.json` as the structured twin for timeline/organizer/
+  email to read programmatically. Managed sections in AGENTS.md via marker
+  comments so user prose survives regeneration.
+- Old `caseProfileService`, case-info React pane, `.caseinfo`,
+  `.fileorg.json`, and `.voidrules` categories all collapse into this
+  scheme (case skills later via `.safeAppeals/skills/`).
+Detailed plan: `safeappeals_case_extension` plan file.
 
 ## Status (Jul 20, 2026)
 

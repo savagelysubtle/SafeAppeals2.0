@@ -78,6 +78,7 @@ const compilations = [
 	'extensions/terminal-suggest/tsconfig.json',
 	'extensions/time-tracker/tsconfig.json',
 	'extensions/safeappeals-calendar/tsconfig.json',
+	'extensions/safeappeals-case/tsconfig.json',
 	'extensions/safeappeals-documents/tsconfig.json',
 	'extensions/safeappeals-email/tsconfig.json',
 

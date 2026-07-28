@@ -1,0 +1,128 @@
+{
+  "name": "safeappeals-case",
+  "displayName": "Safe Appeals Case",
+  "description": "Case setup for Safe Appeals: profile walkthrough, agent-native case briefs (AGENTS.md) and structured case info (.safeAppeals/case.json)",
+  "version": "1.0.0",
+  "publisher": "safeappeals",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.70.0"
+  },
+  "main": "./out/extension.js",
+  "categories": [
+    "Other"
+  ],
+  "extensionKind": [
+    "workspace"
+  ],
+  "activationEvents": [],
+  "capabilities": {
+    "virtualWorkspaces": false,
+    "untrustedWorkspaces": {
+      "supported": false
+    }
+  },
+  "contributes": {
+    "chatSkills": [
+      {
+        "path": "./skills/case-setup/SKILL.md"
+      }
+    ],
+    "commands": [
+      {
+        "command": "safeappeals-case.setupProfile",
+        "title": "Set Up Profile",
+        "category": "Safe Appeals Case"
+      },
+      {
+        "command": "safeappeals-case.initCase",
+        "title": "Initialize Case Folder",
+        "category": "Safe Appeals Case"
+      },
+      {
+        "command": "safeappeals-case.editCaseInfo",
+        "title": "Edit Case Info",
+        "category": "Safe Appeals Case"
+      },
+      {
+        "command": "safeappeals-case.openCaseBrief",
+        "title": "Open Case Brief (AGENTS.md)",
+        "category": "Safe Appeals Case"
+      }
+    ],
+    "configuration": {
+      "title": "Safe Appeals Profile",
+      "properties": {
+        "safeappeals.profile.name": {
+          "type": "string",
+          "default": "",
+          "scope": "application",
+          "description": "Your name, as it should appear in case briefs and drafted documents"
+        },
+        "safeappeals.profile.organization": {
+          "type": "string",
+          "default": "",
+          "scope": "application",
+          "description": "Firm, union, or organization you work for (leave empty if self-represented)"
+        },
+        "safeappeals.profile.role": {
+          "type": "string",
+          "default": "",
+          "scope": "application",
+          "description": "Your role, e.g. lawyer, paralegal, claimant advocate, self-represented worker"
+        },
+        "safeappeals.profile.practiceArea": {
+          "type": "string",
+          "default": "Workers' Compensation",
+          "scope": "application",
+          "description": "Primary area of law you practice"
+        },
+        "safeappeals.profile.jurisdiction": {
+          "type": "string",
+          "default": "",
+          "scope": "application",
+          "description": "Default jurisdiction for new cases, e.g. BC WCB, Ontario WSIB"
+        }
+      }
+    },
+    "walkthroughs": [
+      {
+        "id": "safeappealsCaseSetup",
+        "title": "Set Up Safe Appeals",
+        "description": "Tell Safe Appeals who you are and set up your case folder so the AI agent always has the right context.",
+        "steps": [
+          {
+            "id": "setupProfile",
+            "title": "Set Up Your Profile",
+            "description": "Who you are, where you work, and what law you practice. Saved once, globally, and included in every case brief.\n[Set Up Profile](command:safeappeals-case.setupProfile)",
+            "media": {
+              "markdown": "media/walkthrough/profile.md"
+            },
+            "completionEvents": [
+              "onCommand:safeappeals-case.setupProfile"
+            ]
+          },
+          {
+            "id": "initCase",
+            "title": "Initialize This Case Folder",
+            "description": "Creates the case brief (AGENTS.md) and structured case info for the folder you have open, so the agent knows the client, opposing party, and key dates.\n[Initialize Case Folder](command:safeappeals-case.initCase)",
+            "media": {
+              "markdown": "media/walkthrough/case.md"
+            },
+            "completionEvents": [
+              "onCommand:safeappeals-case.initCase"
+            ],
+            "when": "workspaceFolderCount > 0"
+          }
+        ]
+      }
+    ]
+  },
+  "scripts": {
+    "compile": "gulp compile-extension:safeappeals-case",
+    "watch": "gulp watch-extension:safeappeals-case"
+  },
+  "devDependencies": {
+    "@types/node": "24.x"
+  }
+}
