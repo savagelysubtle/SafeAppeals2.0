@@ -1,11 +1,13 @@
 /*--------------------------------------------------------------------------------------
- *  Local email index — JSON under globalStorageUri (replaces old @vscode/sqlite3)
+ *  Local email index — encrypted JSON under globalStorageUri (replaces old @vscode/sqlite3)
  *--------------------------------------------------------------------------------------*/
 
 import { createHash, randomUUID } from 'crypto';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as vscode from 'vscode';
+import { acquireDek, loadJson, writeEncryptedJson } from './shared/encryptedStore';
+import { deleteFileIfExists, ensureDir } from './shared/secureFs';
 import type {
 	DraftStatus,
 	EmailDraft,
@@ -22,6 +24,8 @@ const DRAFTS_FILE = 'email-drafts.json';
 const META_FILE = 'email-sync-meta.json';
 const CASE_LINKS_FILE = 'email-case-links.json';
 const TAGS_FILE = 'email-tags.json';
+const DEK_KEY_ID = 'safeappeals-email.dek.emailIndex';
+const STORE_FILES = [INDEX_FILE, DRAFTS_FILE, META_FILE, CASE_LINKS_FILE, TAGS_FILE] as const;
 
 interface IndexFile {
 	version: '1.0';
@@ -99,12 +103,79 @@ export class EmailIndex {
 	private threadTags: Record<string, string[]> = {};
 	private hiddenThreads = new Set<string>();
 	private meta: SyncMetaFile = { version: '1.0', lastBackgroundSync: null, perAccount: {} };
+	private dek: Buffer | undefined;
+	private mode: 'encrypted' | 'memory' = 'memory';
+	private warnedUnavailable = false;
+	private warnedMemoryDraft = false;
 
-	constructor(private readonly storageUri: vscode.Uri) {}
+	constructor(
+		private readonly storageUri: vscode.Uri,
+		private readonly secrets: vscode.SecretStorage,
+		private readonly log?: (msg: string) => void,
+	) {}
 
+	/**
+	 * Open the store: ensure the storage dir, acquire a DEK, and load encrypted files.
+	 * Never throws — falls back to in-memory mode on any failure.
+	 */
 	async initialize(): Promise<void> {
-		await fs.mkdir(this.storageUri.fsPath, { recursive: true });
-		await this.load();
+		try {
+			await ensureDir(this.storageUri.fsPath);
+			await this.acquireEncryptionKey();
+			if (this.mode === 'encrypted') {
+				await this.load();
+			}
+		} catch (error) {
+			this.dek = undefined;
+			this.mode = 'memory';
+			this.log?.(
+				`EmailIndex.initialize failed: ${error instanceof Error ? error.message : String(error)}`,
+			);
+		}
+	}
+
+	/**
+	 * Delete the on-disk email cache (and quarantine siblings), reset in-memory state,
+	 * drop the DEK, and mint a fresh key when SecretStorage is usable.
+	 */
+	async clearLocalCache(): Promise<void> {
+		const dir = this.storageUri.fsPath;
+		for (const name of STORE_FILES) {
+			await deleteFileIfExists(path.join(dir, name));
+		}
+		try {
+			const entries = await fs.readdir(dir);
+			for (const entry of entries) {
+				if (STORE_FILES.some((name) => entry.startsWith(`${name}.corrupt-`))) {
+					await deleteFileIfExists(path.join(dir, entry));
+				}
+			}
+		} catch (error) {
+			this.log?.(
+				`clearLocalCache readdir failed: ${error instanceof Error ? error.message : String(error)}`,
+			);
+		}
+
+		this.messages = [];
+		this.threadStatus = {};
+		this.drafts = [];
+		this.caseLinks = {};
+		this.knownTags = [];
+		this.threadTags = {};
+		this.hiddenThreads = new Set();
+		this.meta = { version: '1.0', lastBackgroundSync: null, perAccount: {} };
+		this.dek = undefined;
+		this.mode = 'memory';
+		this.warnedMemoryDraft = false;
+
+		try {
+			await this.secrets.delete(DEK_KEY_ID);
+		} catch (error) {
+			this.log?.(
+				`Failed to delete DEK ${DEK_KEY_ID}: ${error instanceof Error ? error.message : String(error)}`,
+			);
+		}
+		await this.acquireEncryptionKey();
 	}
 
 	generateEmailId(seed: string): string {
@@ -511,6 +582,13 @@ export class EmailIndex {
 		content: string;
 		draftId?: string;
 	}): Promise<EmailDraft> {
+		if (this.mode === 'memory' && !this.warnedMemoryDraft) {
+			this.warnedMemoryDraft = true;
+			void vscode.window.showWarningMessage(
+				'Drafts will not survive a restart because secure storage is unavailable.',
+			);
+		}
+
 		const now = new Date().toISOString();
 		if (input.draftId) {
 			const existing = this.getDraft(input.draftId);
@@ -577,50 +655,98 @@ export class EmailIndex {
 		return path.join(this.storageUri.fsPath, TAGS_FILE);
 	}
 
+	private dataPaths(): string[] {
+		return [
+			this.indexPath(),
+			this.draftsPath(),
+			this.metaPath(),
+			this.caseLinksPath(),
+			this.tagsPath(),
+		];
+	}
+
+	/**
+	 * Acquire or mint the DEK. Sets mode to encrypted on success; otherwise memory.
+	 */
+	private async acquireEncryptionKey(): Promise<void> {
+		const result = await acquireDek({
+			secrets: this.secrets,
+			keyId: DEK_KEY_ID,
+			existingDataPaths: this.dataPaths(),
+			log: this.log,
+		});
+		if (result.kind === 'ok') {
+			this.dek = result.dek;
+			this.mode = 'encrypted';
+			return;
+		}
+
+		this.dek = undefined;
+		this.mode = 'memory';
+		this.log?.(`EmailIndex encryption unavailable (${result.reason})`);
+		if (this.warnedUnavailable) {
+			return;
+		}
+		this.warnedUnavailable = true;
+		if (result.reason === 'secret-storage-unusable') {
+			void vscode.window.showWarningMessage(
+				'Emails will not be saved to disk because secure storage is unavailable.',
+			);
+		} else {
+			void vscode.window.showWarningMessage(
+				'The local email cache cannot be decrypted (key missing). Run "Clear Local Email Cache" to reset it.',
+			);
+		}
+	}
+
 	private async load(): Promise<void> {
-		try {
-			const raw = await fs.readFile(this.indexPath(), 'utf8');
-			const parsed = JSON.parse(raw) as IndexFile;
-			this.messages = parsed.messages || [];
-			this.threadStatus = parsed.threadStatus || {};
-		} catch {
+		if (this.mode === 'memory' || !this.dek) {
+			return;
+		}
+		const dek = this.dek;
+
+		const indexResult = await loadJson<IndexFile>(this.indexPath(), dek, this.log);
+		if (indexResult.value) {
+			this.messages = indexResult.value.messages || [];
+			this.threadStatus = indexResult.value.threadStatus || {};
+		} else {
 			this.messages = [];
 			this.threadStatus = {};
 		}
-		try {
-			const raw = await fs.readFile(this.draftsPath(), 'utf8');
-			const parsed = JSON.parse(raw) as DraftsFile;
-			this.drafts = parsed.drafts || [];
-		} catch {
-			this.drafts = [];
-		}
-		try {
-			const raw = await fs.readFile(this.metaPath(), 'utf8');
-			this.meta = JSON.parse(raw) as SyncMetaFile;
+
+		const draftsResult = await loadJson<DraftsFile>(this.draftsPath(), dek, this.log);
+		this.drafts = draftsResult.value?.drafts || [];
+
+		const metaResult = await loadJson<SyncMetaFile>(this.metaPath(), dek, this.log);
+		if (metaResult.value) {
+			this.meta = metaResult.value;
 			if (!this.meta.perAccount) {
 				this.meta.perAccount = {};
 			}
-		} catch {
+		} else {
 			this.meta = { version: '1.0', lastBackgroundSync: null, perAccount: {} };
 		}
-		try {
-			const raw = await fs.readFile(this.caseLinksPath(), 'utf8');
-			const parsed = JSON.parse(raw) as CaseLinksFile;
-			this.caseLinks = parsed.links || {};
-		} catch {
-			this.caseLinks = {};
-		}
-		try {
-			const raw = await fs.readFile(this.tagsPath(), 'utf8');
-			const parsed = JSON.parse(raw) as TagsFile;
-			this.knownTags = parsed.knownTags || [];
-			this.threadTags = parsed.threadTags || {};
-			this.hiddenThreads = new Set(parsed.hiddenThreads || []);
-		} catch {
+
+		const linksResult = await loadJson<CaseLinksFile>(this.caseLinksPath(), dek, this.log);
+		this.caseLinks = linksResult.value?.links || {};
+
+		const tagsResult = await loadJson<TagsFile>(this.tagsPath(), dek, this.log);
+		if (tagsResult.value) {
+			this.knownTags = tagsResult.value.knownTags || [];
+			this.threadTags = tagsResult.value.threadTags || {};
+			this.hiddenThreads = new Set(tagsResult.value.hiddenThreads || []);
+		} else {
 			this.knownTags = [];
 			this.threadTags = {};
 			this.hiddenThreads = new Set();
 		}
+	}
+
+	private async persist(filePath: string, payload: unknown): Promise<void> {
+		if (this.mode === 'memory' || !this.dek) {
+			return;
+		}
+		await writeEncryptedJson(filePath, payload, this.dek);
 	}
 
 	private async saveIndex(): Promise<void> {
@@ -629,21 +755,21 @@ export class EmailIndex {
 			messages: this.messages,
 			threadStatus: this.threadStatus,
 		};
-		await fs.writeFile(this.indexPath(), JSON.stringify(payload, null, 2), 'utf8');
+		await this.persist(this.indexPath(), payload);
 	}
 
 	private async saveDrafts(): Promise<void> {
 		const payload: DraftsFile = { version: '1.0', drafts: this.drafts };
-		await fs.writeFile(this.draftsPath(), JSON.stringify(payload, null, 2), 'utf8');
+		await this.persist(this.draftsPath(), payload);
 	}
 
 	private async saveMeta(): Promise<void> {
-		await fs.writeFile(this.metaPath(), JSON.stringify(this.meta, null, 2), 'utf8');
+		await this.persist(this.metaPath(), this.meta);
 	}
 
 	private async saveCaseLinks(): Promise<void> {
 		const payload: CaseLinksFile = { version: '1.0', links: this.caseLinks };
-		await fs.writeFile(this.caseLinksPath(), JSON.stringify(payload, null, 2), 'utf8');
+		await this.persist(this.caseLinksPath(), payload);
 	}
 
 	private async saveTags(): Promise<void> {
@@ -653,7 +779,7 @@ export class EmailIndex {
 			threadTags: this.threadTags,
 			hiddenThreads: [...this.hiddenThreads],
 		};
-		await fs.writeFile(this.tagsPath(), JSON.stringify(payload, null, 2), 'utf8');
+		await this.persist(this.tagsPath(), payload);
 	}
 }
 

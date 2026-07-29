@@ -85,3 +85,13 @@ export function isOutlookConfigured(): boolean {
 export function isProviderConfigured(provider: CalendarProvider): boolean {
 	return provider === 'google' ? isGoogleConfigured() : isOutlookConfigured();
 }
+
+/**
+ * True when the workbench UI is a browser client (serve-web / vscode.dev).
+ * Browser SecretStorage is in-memory only — credentials cannot be stored securely,
+ * so connect flows must be gated even though this workspace extension still runs
+ * in a Node extension host.
+ */
+export function isWebClient(): boolean {
+	return vscode.env.uiKind === vscode.UIKind.Web;
+}

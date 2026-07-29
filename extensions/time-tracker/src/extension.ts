@@ -23,9 +23,31 @@ let sidebarProvider: SidebarProvider;
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
 	console.log('Time Tracker extension activating...');
 
+	// Construct storage first so the clear-database escape hatch works even when initialize() fails.
+	storageService = new StorageService(context);
+	context.subscriptions.push(
+		vscode.commands.registerCommand('timeTracker.clearLocalDatabase', async () => {
+			const confirm = await vscode.window.showWarningMessage(
+				'Permanently delete all time entries, matters, and billing rates for this workspace? This cannot be undone.',
+				{ modal: true },
+				'Delete Database'
+			);
+			if (confirm !== 'Delete Database') {
+				return;
+			}
+			await storageService.clearLocalDatabase();
+			const reload = await vscode.window.showInformationMessage(
+				'Time Tracker: local database deleted. Reload the window to continue.',
+				'Reload Window'
+			);
+			if (reload === 'Reload Window') {
+				await vscode.commands.executeCommand('workbench.action.reloadWindow');
+			}
+		}),
+		{ dispose: () => storageService.close() }
+	);
+
 	try {
-		// Initialize storage service
-		storageService = new StorageService(context);
 		await storageService.initialize();
 
 		// Initialize services
@@ -65,8 +87,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 		context.subscriptions.push(
 			statusBarController,
 			{ dispose: () => timeTrackerService.dispose() },
-			{ dispose: () => sidebarProvider.dispose() },
-			{ dispose: () => storageService.close() }
+			{ dispose: () => sidebarProvider.dispose() }
 		);
 
 		console.log('Time Tracker extension activated successfully');

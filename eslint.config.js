@@ -143,6 +143,22 @@ export default defineConfig(
 			]
 		},
 	},
+	// SafeAppeals-authored code is not Microsoft's, so it must not carry the
+	// upstream copyright header. These files use either a descriptive banner or a
+	// "Copyright (c) Safe Appeals" block; those differ in length, so the rule is
+	// disabled here rather than pinned to one of them.
+	{
+		files: [
+			'extensions/safeappeals-*/**/*.ts',
+			'extensions/time-tracker/**/*.ts',
+		],
+		plugins: {
+			'header': pluginHeader,
+		},
+		rules: {
+			'header/header': 'off',
+		},
+	},
 	// TS
 	{
 		files: [

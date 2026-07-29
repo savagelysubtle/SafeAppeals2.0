@@ -4,7 +4,7 @@
 
 import * as vscode from 'vscode';
 import { AccountStore } from './accountStore';
-import { getCurrentCase, getDefaultFolder, getSyncIntervalMinutes } from './config';
+import { getCurrentCase, getDefaultFolder, getSyncIntervalMinutes, isWebClient } from './config';
 import { DashboardPanel, EmailSidebarProvider } from './dashboardPanel';
 import { EmailIndex } from './emailIndex';
 import { EmlEditorProvider } from './emlEditorProvider';
@@ -38,7 +38,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 	log('Activating…');
 
 	accounts = new AccountStore(context.secrets, log);
-	index = new EmailIndex(context.globalStorageUri);
+	index = new EmailIndex(context.globalStorageUri, context.secrets, log);
 	await index.initialize();
 
 	statusBar = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 49);
@@ -156,6 +156,12 @@ function registerCommands(
 		}),
 
 		vscode.commands.registerCommand('safeappeals-email.addAccount', async () => {
+			if (isWebClient()) {
+				void vscode.window.showWarningMessage(
+					'Adding accounts is not available in the browser because credentials cannot be stored securely. Use the desktop app.',
+				);
+				return undefined;
+			}
 			const account = await promptAddAccount(log);
 			if (!account) {
 				return undefined;
@@ -510,6 +516,20 @@ function registerCommands(
 				return { success: true };
 			},
 		),
+
+		vscode.commands.registerCommand('safeappeals-email.clearLocalCache', async () => {
+			const confirm = await vscode.window.showWarningMessage(
+				'Delete the local email cache? Synced messages, drafts, tags, and case links stored on this machine will be removed. Accounts and passwords are not affected.',
+				{ modal: true },
+				'Clear Cache',
+			);
+			if (confirm !== 'Clear Cache') {
+				return { success: false };
+			}
+			await index.clearLocalCache();
+			refreshUi();
+			return { success: true };
+		}),
 	];
 
 	context.subscriptions.push(...regs);

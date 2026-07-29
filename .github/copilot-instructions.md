@@ -182,6 +182,18 @@ function f(x: number, y: string): void {}
 - Avoid using events to drive control flow between components. Instead, prefer direct method calls or service interactions to ensure clearer dependencies and easier traceability of logic. Events should be reserved for broadcasting state changes or notifications rather than orchestrating behavior across components.
 - Service dependencies MUST be declared in constructors and MUST NOT be accessed through the `IInstantiationService` at any other point in time.
 
+### Local Data Security (MANDATORY)
+
+SafeAppeals handles confidential legal data (client names, case content, emails, billing). Upstream VS Code's storage habits are NOT sufficient here. Whenever you create or modify a database, cache, index, or any other persisted store:
+
+- **Never write user content to disk in plaintext.** Emails, calendar events, case data, billing records, annotations, and signatures MUST be encrypted at rest. Use the shared `encryptedStore` helper (AES-256-GCM with a data-encryption key held in `SecretStorage`) — see `.cursor/plans/local_storage_security_hardening.plan.md` for the pattern. Metadata-only stores (timestamps, sync state) should still use it; it is cheap.
+- **Secrets go in `SecretStorage` only** — passwords, tokens, API keys, encryption keys, and signature images. Never in settings, `globalState`, `workspaceState`, or files.
+- **Store under managed paths only:** `context.globalStorageUri` or `context.storageUri`. Never write to bare home-directory paths (e.g. `~/.safe-appeals-*`) — data there escapes cleanup, permissions policy, and uninstall.
+- **Fail safe, never fail open:** if encryption is unavailable (no OS keyring, browser build), degrade to in-memory operation with a user-visible warning. Silently falling back to plaintext on disk is a bug.
+- **Set restrictive permissions** (0700 directories, 0600 files on POSIX) and write atomically (tmp file + rename).
+- **Every store needs a purge path:** a clear-cache command and cleanup when the owning account/provider is removed.
+- **Mark sensitive settings machine-scoped** (`"scope": "machine"` in the configuration contribution) so Settings Sync never uploads them.
+
 ## Learnings
 
 - Minimize the amount of assertions in tests. Prefer one snapshot-style `assert.deepStrictEqual` over multiple precise assertions, as they are much more difficult to understand and to update.

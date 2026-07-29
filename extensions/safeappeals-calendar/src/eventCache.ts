@@ -1,10 +1,12 @@
 /*--------------------------------------------------------------------------------------
- *  Cached calendar events — context.globalStorageUri JSON (old fork had no event cache)
+ *  Cached calendar events — encrypted JSON under context.globalStorageUri
  *--------------------------------------------------------------------------------------*/
 
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as vscode from 'vscode';
+import { acquireDek, loadJson, writeEncryptedJson } from './shared/encryptedStore';
+import { deleteFileIfExists, ensureDir } from './shared/secureFs';
 import {
 	CalendarEvent,
 	CalendarSyncState,
@@ -16,6 +18,7 @@ import {
 
 const EVENTS_FILE = 'events-cache.json';
 const META_FILE = 'sync-meta.json';
+const DEK_KEY_ID = 'safeappeals-calendar.dek.eventCache';
 
 interface EventsCacheFile {
 	version: '1.0';
@@ -27,12 +30,48 @@ export class EventCache {
 	private events: CalendarEvent[] = [];
 	private meta: CalendarSyncState = { ...DEFAULT_SYNC_STATE, providers: {} };
 	private lastBackgroundSync: string | null = null;
+	private dek: Buffer | undefined;
+	private mode: 'encrypted' | 'memory' = 'memory';
+	private hasWarnedUnavailable = false;
 
-	constructor(private readonly storageUri: vscode.Uri) {}
+	constructor(
+		private readonly storageUri: vscode.Uri,
+		private readonly secrets: vscode.SecretStorage,
+		private readonly log?: (msg: string) => void,
+	) {}
 
 	async initialize(): Promise<void> {
-		await fs.mkdir(this.storageUri.fsPath, { recursive: true });
-		await this.load();
+		try {
+			await ensureDir(this.storageUri.fsPath);
+			await this.acquireEncryptionKey();
+			if (this.mode === 'encrypted') {
+				await this.load();
+			}
+		} catch (error) {
+			this.mode = 'memory';
+			this.dek = undefined;
+			this.log?.(`EventCache.initialize failed: ${error instanceof Error ? error.message : String(error)}`);
+		}
+	}
+
+	/**
+	 * Delete on-disk cache files, reset in-memory state, and mint a fresh DEK.
+	 * Connected accounts / OAuth tokens are not touched.
+	 */
+	async clearLocalCache(): Promise<void> {
+		await this.deleteCacheFiles();
+		this.events = [];
+		this.meta = { ...DEFAULT_SYNC_STATE, providers: {} };
+		this.lastBackgroundSync = null;
+		this.dek = undefined;
+		this.mode = 'memory';
+		this.hasWarnedUnavailable = false;
+		try {
+			await this.secrets.delete(DEK_KEY_ID);
+		} catch (error) {
+			this.log?.(`Failed to delete DEK ${DEK_KEY_ID}: ${error instanceof Error ? error.message : String(error)}`);
+		}
+		await this.acquireEncryptionKey();
 	}
 
 	getLastBackgroundSync(): string | null {
@@ -157,24 +196,75 @@ export class EventCache {
 		return path.join(this.storageUri.fsPath, META_FILE);
 	}
 
-	private async load(): Promise<void> {
+	private async acquireEncryptionKey(): Promise<void> {
+		const result = await acquireDek({
+			secrets: this.secrets,
+			keyId: DEK_KEY_ID,
+			existingDataPaths: [this.eventsPath(), this.metaPath()],
+			log: this.log,
+		});
+		if (result.kind === 'ok') {
+			this.dek = result.dek;
+			this.mode = 'encrypted';
+			return;
+		}
+
+		this.dek = undefined;
+		this.mode = 'memory';
+		this.log?.(`EventCache encryption unavailable (${result.reason})`);
+		if (!this.hasWarnedUnavailable) {
+			this.hasWarnedUnavailable = true;
+			const message = result.reason === 'key-lost-with-data'
+				? 'Safe Appeals Calendar: the local calendar cache cannot be decrypted — run "Clear Local Calendar Cache" to reset it.'
+				: 'Safe Appeals Calendar: calendar events will not be cached on disk because secure storage is unavailable.';
+			void vscode.window.showWarningMessage(message);
+		}
+	}
+
+	private async deleteCacheFiles(): Promise<void> {
+		await deleteFileIfExists(this.eventsPath());
+		await deleteFileIfExists(this.metaPath());
 		try {
-			const raw = await fs.readFile(this.eventsPath(), 'utf8');
-			const parsed = JSON.parse(raw) as EventsCacheFile;
-			this.events = parsed.events || [];
-			this.lastBackgroundSync = parsed.updatedAt;
-		} catch {
+			const entries = await fs.readdir(this.storageUri.fsPath);
+			for (const name of entries) {
+				if (name.startsWith(`${EVENTS_FILE}.corrupt-`) || name.startsWith(`${META_FILE}.corrupt-`)) {
+					await deleteFileIfExists(path.join(this.storageUri.fsPath, name));
+				}
+			}
+		} catch (error) {
+			this.log?.(`deleteCacheFiles readdir failed: ${error instanceof Error ? error.message : String(error)}`);
+		}
+	}
+
+	private async load(): Promise<void> {
+		if (this.mode !== 'encrypted' || !this.dek) {
+			return;
+		}
+
+		const eventsFile = await loadJson<EventsCacheFile>(this.eventsPath(), this.dek, this.log);
+		if (eventsFile.value) {
+			this.events = eventsFile.value.events || [];
+			this.lastBackgroundSync = eventsFile.value.updatedAt;
+		} else {
 			this.events = [];
 		}
-		try {
-			const raw = await fs.readFile(this.metaPath(), 'utf8');
-			this.meta = JSON.parse(raw) as CalendarSyncState;
+
+		const metaFile = await loadJson<CalendarSyncState>(this.metaPath(), this.dek, this.log);
+		if (metaFile.value) {
+			this.meta = metaFile.value;
 			if (!this.meta.providers) {
 				this.meta.providers = {};
 			}
-		} catch {
+		} else {
 			this.meta = { ...DEFAULT_SYNC_STATE, providers: {} };
 		}
+	}
+
+	private async persist(filePath: string, payload: unknown): Promise<void> {
+		if (this.mode !== 'encrypted' || !this.dek) {
+			return;
+		}
+		await writeEncryptedJson(filePath, payload, this.dek);
 	}
 
 	private async saveEvents(): Promise<void> {
@@ -184,10 +274,10 @@ export class EventCache {
 			updatedAt: new Date().toISOString(),
 		};
 		this.lastBackgroundSync = payload.updatedAt;
-		await fs.writeFile(this.eventsPath(), JSON.stringify(payload, null, 2), 'utf8');
+		await this.persist(this.eventsPath(), payload);
 	}
 
 	private async saveMeta(): Promise<void> {
-		await fs.writeFile(this.metaPath(), JSON.stringify(this.meta, null, 2), 'utf8');
+		await this.persist(this.metaPath(), this.meta);
 	}
 }

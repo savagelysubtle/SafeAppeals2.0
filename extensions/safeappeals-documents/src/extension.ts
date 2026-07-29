@@ -9,8 +9,11 @@ import { PdfAnnotationStore } from './pdf/annotationStore';
 import { PdfEditorProvider } from './pdf/pdfEditorProvider';
 import { XlsxEditorProvider } from './xlsx/xlsxEditorProvider';
 
-export function activate(context: vscode.ExtensionContext): void {
-	const annotationStore = new PdfAnnotationStore(context);
+export async function activate(context: vscode.ExtensionContext): Promise<void> {
+	const log = (msg: string) => {
+		console.log(`[safeappeals-documents] ${msg}`);
+	};
+	const annotationStore = await PdfAnnotationStore.create(context, log);
 
 	// Rung 5a: PDF. Rung 5b: DOCX. Rung 5c: XLSX.
 	context.subscriptions.push(
@@ -34,4 +37,3 @@ export function activate(context: vscode.ExtensionContext): void {
 export function deactivate(): void {
 	// no-op
 }
-

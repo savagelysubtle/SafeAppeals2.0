@@ -63,6 +63,16 @@ export async function setConfiguredAccounts(accounts: EmailAccountConfig[]): Pro
 	await cfg().update('accounts', accounts, vscode.ConfigurationTarget.Global);
 }
 
+/**
+ * True when the workbench UI is a browser client (serve-web / vscode.dev).
+ * Browser SecretStorage is in-memory only — credentials cannot be stored securely,
+ * so account-creation flows must be gated even though this workspace extension
+ * still runs in a Node extension host.
+ */
+export function isWebClient(): boolean {
+	return vscode.env.uiKind === vscode.UIKind.Web;
+}
+
 export function getComposeSettings(): ComposeSettings {
 	const hasCase = !!vscode.workspace.workspaceFolders?.[0];
 	return {

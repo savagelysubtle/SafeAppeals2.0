@@ -8,6 +8,7 @@ import {
 	isGoogleConfigured,
 	isOutlookConfigured,
 	isProviderConfigured,
+	isWebClient,
 } from './config';
 import { EventCache } from './eventCache';
 import { SyncEngine } from './syncEngine';
@@ -30,7 +31,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 	log('Activating…');
 
 	const tokens = new TokenStore(context.secrets);
-	cache = new EventCache(context.globalStorageUri);
+	cache = new EventCache(context.globalStorageUri, context.secrets, log);
 	await cache.initialize();
 
 	statusBar = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 50);
@@ -60,7 +61,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 		void refreshStatusBar();
 	});
 
-	registerCommands(context, log);
+	registerCommands(context, log, () => {
+		void refreshStatusBar();
+	});
 	await refreshStatusBar();
 	engine.startBackgroundSync();
 
@@ -83,9 +86,19 @@ export function deactivate(): void {
 	engine?.dispose();
 }
 
-function registerCommands(context: vscode.ExtensionContext, log: (msg: string) => void): void {
+function registerCommands(
+	context: vscode.ExtensionContext,
+	log: (msg: string) => void,
+	refreshUi: () => void,
+): void {
 	context.subscriptions.push(
 		vscode.commands.registerCommand('safeappeals-calendar.connect', async (providerArg?: CalendarProvider) => {
+			if (isWebClient()) {
+				void vscode.window.showWarningMessage(
+					'Connecting a calendar is not available in the browser because credentials cannot be stored securely. Use the desktop app.',
+				);
+				return { success: false, error: 'web_unsupported' };
+			}
 			const provider = providerArg || await pickProvider('Connect which calendar provider?', true);
 			if (!provider) {
 				return;
@@ -191,6 +204,21 @@ function registerCommands(context: vscode.ExtensionContext, log: (msg: string) =
 			}
 			vscode.window.showInformationMessage(lines.join(' | '));
 			return status;
+		}),
+
+		vscode.commands.registerCommand('safeappeals-calendar.clearLocalCache', async () => {
+			const confirm = await vscode.window.showWarningMessage(
+				'Delete the local calendar cache? Cached events on this machine will be removed and re-synced. Connected accounts are not affected.',
+				{ modal: true },
+				'Delete'
+			);
+			if (confirm !== 'Delete') {
+				return;
+			}
+			await cache.clearLocalCache();
+			log('Local calendar cache cleared');
+			refreshUi();
+			vscode.window.showInformationMessage('Safe Appeals Calendar: local cache cleared');
 		})
 	);
 }

@@ -43,6 +43,22 @@ export function checkCopilotEnginesVersion(repoRoot: string): string | undefined
 }
 
 /**
+ * Checks that per-extension copies under src/shared/ match extensions/safeappeals-shared.
+ * Returns an error message if out of sync, or undefined if OK.
+ */
+export function checkSafeAppealsSharedInSync(repoRoot: string): string | undefined {
+	const result = cp.spawnSync(process.execPath, [path.join(repoRoot, 'build/npm/sync-safeappeals-shared.ts'), '--check'], {
+		cwd: repoRoot,
+		encoding: 'utf8',
+	});
+	if (result.status === 0) {
+		return undefined;
+	}
+	const detail = [result.stdout, result.stderr].filter(Boolean).join('\n').trim();
+	return detail || 'safeappeals-shared copies are out of sync. Run: npm run sync-safeappeals-shared';
+}
+
+/**
  * Checks that every tracked .js/.cjs/.mjs file in the repo is listed in
  * `.eslint-allowed-javascript-files`. This complements the
  * `local/code-no-new-javascript-files` ESLint rule by also covering files
@@ -343,6 +359,15 @@ if (import.meta.main) {
 						const copilotError = checkCopilotEnginesVersion(process.cwd());
 						if (copilotError) {
 							console.error(copilotError);
+							process.exit(1);
+						}
+					}
+
+					// Check safeappeals-shared copies are in sync when shared sources or copies are staged
+					if (some.some(f => f.startsWith('extensions/safeappeals-shared/') || /^extensions\/[^/]+\/src\/shared\//.test(f))) {
+						const sharedError = checkSafeAppealsSharedInSync(process.cwd());
+						if (sharedError) {
+							console.error(sharedError);
 							process.exit(1);
 						}
 					}

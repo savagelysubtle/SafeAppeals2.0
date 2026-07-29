@@ -50,6 +50,11 @@
         "command": "safeappeals-calendar.status",
         "title": "Show Sync Status",
         "category": "Safe Appeals Calendar"
+      },
+      {
+        "command": "safeappeals-calendar.clearLocalCache",
+        "title": "Clear Local Calendar Cache",
+        "category": "Safe Appeals Calendar"
       }
     ],
     "configuration": {
@@ -79,11 +84,13 @@
         "safeappealsCalendar.google.clientId": {
           "type": "string",
           "default": "",
+          "scope": "machine",
           "description": "Google OAuth client ID (falls back to GOOGLE_CALENDAR_CLIENT_ID env)"
         },
         "safeappealsCalendar.google.clientSecret": {
           "type": "string",
           "default": "",
+          "scope": "machine",
           "description": "Google OAuth client secret (falls back to GOOGLE_CALENDAR_CLIENT_SECRET env)"
         },
         "safeappealsCalendar.google.calendarId": {
@@ -94,6 +101,7 @@
         "safeappealsCalendar.outlook.clientId": {
           "type": "string",
           "default": "",
+          "scope": "machine",
           "description": "Microsoft/Outlook OAuth client ID (falls back to OUTLOOK_CLIENT_ID env)"
         },
         "safeappealsCalendar.outlook.tenantId": {

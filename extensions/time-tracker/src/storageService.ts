@@ -1,41 +1,96 @@
 /*--------------------------------------------------------------------------------------
  *  Legal Time Tracker - Storage Service
- *  SQLite database operations for per-workspace time tracking data
+ *  Encrypted SQLite (SQLCipher via better-sqlite3-multiple-ciphers) for billing data
  *--------------------------------------------------------------------------------------*/
 
 import * as crypto from 'crypto';
 import * as fs from 'fs';
+import * as fsPromises from 'fs/promises';
+import * as os from 'os';
 import * as path from 'path';
 import * as vscode from 'vscode';
+import { acquireDek } from './shared/encryptedStore';
+import { deleteFileIfExists, ensureDir, quarantineFile } from './shared/secureFs';
 import type { BillingRate, ExportOptions, Matter, TimeEntry, TimeEntryWithDetails } from './types';
 
 /**
- * Dual-ABI better-sqlite3 native bindings:
- * - Desktop (Electron 42.x): NODE_MODULE_VERSION 146 → prebuilds/electron-146/
- * - Web / code-web / serve-web (plain Node 24): NODE_MODULE_VERSION 137 → prebuilds/node-137/
+ * Per-platform, dual-ABI better-sqlite3-multiple-ciphers native bindings:
+ * - Desktop (Electron 42.x): NODE_MODULE_VERSION 146 → prebuilds/<platform>-<arch>/electron-146/
+ * - Web / code-web / serve-web (plain Node 24): NODE_MODULE_VERSION 137 → prebuilds/<platform>-<arch>/node-137/
+ * The repo is shared across OSes, so binaries are keyed by process.platform-process.arch
+ * (e.g. win32-x64, linux-x64) in addition to runtime-ABI.
  * Extension-local .npmrc builds the Electron binary into node_modules for desktop dev.
  * When Electron or Node major (ABI) changes, regenerate both .npmrc target and prebuilds/.
+ *
+ * Databases live under context.globalStorageUri/workspaces/<workspaceId>/timetracker.db
+ * and are encrypted at rest with a 32-byte DEK from SecretStorage (SQLCipher legacy=4).
+ * See PREBUILDS.md for regenerating native binaries. Never ship a plain better-sqlite3
+ * .node with the ciphers JS — cipher pragmas would be ignored and data would stay plaintext.
  */
 let Database: typeof import('better-sqlite3') | undefined;
 try {
 	// JS package only — native .node is loaded via { nativeBinding } in initialize().
-	Database = require('better-sqlite3');
+	Database = require('better-sqlite3-multiple-ciphers');
 } catch {
 	// Will be handled in initialize()
 }
 
-type DatabaseType = import('better-sqlite3').Database;
+type CipherDatabase = import('better-sqlite3').Database & {
+	key(k: Buffer): void;
+	rekey(k: Buffer): void;
+};
+
+const DEK_KEY_ID = 'time-tracker.dek.database';
+const SQLITE_PLAINTEXT_MAGIC = Buffer.from('SQLite format 3\0', 'utf8');
 
 function resolveNativeBindingPath(): string | undefined {
 	const abi = process.versions.modules;
 	const runtime = process.versions.electron ? 'electron' : 'node';
 	// Compiled output lives in out/; prebuilds/ sits at the extension root.
-	const candidate = path.join(__dirname, '..', 'prebuilds', `${runtime}-${abi}`, 'better_sqlite3.node');
+	const candidate = path.join(__dirname, '..', 'prebuilds', `${process.platform}-${process.arch}`, `${runtime}-${abi}`, 'better_sqlite3.node');
 	return fs.existsSync(candidate) ? candidate : undefined;
 }
 
+function expectedNativeBindingPath(): string {
+	const abi = process.versions.modules;
+	const runtime = process.versions.electron ? 'electron' : 'node';
+	return path.join(__dirname, '..', 'prebuilds', `${process.platform}-${process.arch}`, `${runtime}-${abi}`, 'better_sqlite3.node');
+}
+
+function log(message: string): void {
+	console.log(`[time-tracker] ${message}`);
+}
+
+function applyCipherPragmas(db: CipherDatabase): void {
+	db.pragma('cipher=\'sqlcipher\'');
+	db.pragma('legacy = 4');
+}
+
+function countTableRows(db: CipherDatabase, table: string): number {
+	const row = db.prepare(`SELECT count(*) AS c FROM ${table}`).get() as { c: number };
+	return row.c;
+}
+
+async function pathExists(filePath: string): Promise<boolean> {
+	try {
+		await fsPromises.access(filePath);
+		return true;
+	} catch {
+		return false;
+	}
+}
+
+async function removeEmptyDirBestEffort(dirPath: string): Promise<void> {
+	try {
+		await fsPromises.rmdir(dirPath);
+		log(`Removed empty directory: ${dirPath}`);
+	} catch {
+		// ignore — not empty or already gone
+	}
+}
+
 export class StorageService {
-	private db: DatabaseType | null = null;
+	private db: CipherDatabase | null = null;
 	private workspaceId: string;
 	private dbPath: string;
 
@@ -63,36 +118,253 @@ export class StorageService {
 	}
 
 	private getDbPath(): string {
-		// Follow RAG pattern: ~/.safe-appeals-navigator/databases/workspaces/{workspaceId}/timetracker.db
-		const homeDir = process.env.HOME || process.env.USERPROFILE || '';
-		const baseDir = path.join(homeDir, '.safe-appeals-navigator', 'databases', 'workspaces', this.workspaceId);
+		return path.join(this.context.globalStorageUri.fsPath, 'workspaces', this.workspaceId, 'timetracker.db');
+	}
 
-		// Ensure directory exists
-		if (!fs.existsSync(baseDir)) {
-			fs.mkdirSync(baseDir, { recursive: true });
+	private getLegacyDbPath(): string {
+		const homeDir = process.env.HOME || process.env.USERPROFILE || os.homedir();
+		return path.join(homeDir, '.safe-appeals-navigator', 'databases', 'workspaces', this.workspaceId, 'timetracker.db');
+	}
+
+	private openDatabase(dbPath: string, options?: { readonly?: boolean; nativeBinding?: string }): CipherDatabase {
+		if (!Database) {
+			throw new Error(
+				`better-sqlite3-multiple-ciphers is not available. Prebuilds may need regenerating for this platform/ABI. Expected binding: ${expectedNativeBindingPath()}`
+			);
+		}
+		const openOptions: { readonly?: boolean; nativeBinding?: string } = {};
+		if (options?.readonly) {
+			openOptions.readonly = true;
+		}
+		if (options?.nativeBinding) {
+			openOptions.nativeBinding = options.nativeBinding;
+		}
+		return new Database(dbPath, openOptions) as CipherDatabase;
+	}
+
+	private assertEncryptedOnDisk(dbPath: string): void {
+		const fd = fs.openSync(dbPath, 'r');
+		try {
+			const header = Buffer.alloc(16);
+			const bytesRead = fs.readSync(fd, header, 0, 16, 0);
+			if (bytesRead >= 16 && header.equals(SQLITE_PLAINTEXT_MAGIC)) {
+				throw new Error(
+					'Time tracker database is plaintext on disk; encryption is not active. Refusing to use an unencrypted database.'
+				);
+			}
+		} finally {
+			fs.closeSync(fd);
+		}
+	}
+
+	private async migrateLegacyPlaintextDb(dek: Buffer, nativeBinding: string | undefined): Promise<void> {
+		const legacyPath = this.getLegacyDbPath();
+		const newExists = await pathExists(this.dbPath);
+		const legacyExists = await pathExists(legacyPath);
+
+		if (newExists || !legacyExists) {
+			return;
 		}
 
-		return path.join(baseDir, 'timetracker.db');
+		log(`Migrating legacy plaintext DB from ${legacyPath} to ${this.dbPath}`);
+
+		let legacyCounts: { matters: number; billing_rates: number; time_entries: number };
+		try {
+			const legacyDb = this.openDatabase(legacyPath, { readonly: true, nativeBinding });
+			try {
+				legacyCounts = {
+					matters: countTableRows(legacyDb, 'matters'),
+					billing_rates: countTableRows(legacyDb, 'billing_rates'),
+					time_entries: countTableRows(legacyDb, 'time_entries'),
+				};
+				log(`Legacy row counts: ${JSON.stringify(legacyCounts)}`);
+			} finally {
+				legacyDb.close();
+			}
+		} catch (error) {
+			const reason = error instanceof Error ? error.message : String(error);
+			log(`Legacy DB unreadable (${reason}); quarantining and starting fresh`);
+			const quarantinePath = await quarantineFile(legacyPath);
+			const setAside = quarantinePath ?? `${legacyPath}.corrupt-*`;
+			void vscode.window.showWarningMessage(
+				`Time Tracker: the previous time-tracking database could not be read and has been set aside at ${setAside}. A new empty encrypted database will be created.`
+			);
+			return;
+		}
+
+		await ensureDir(path.dirname(this.dbPath));
+		await fsPromises.copyFile(legacyPath, this.dbPath);
+		log(`Copied legacy DB to ${this.dbPath}`);
+
+		let migratedDb: CipherDatabase | undefined;
+		try {
+			migratedDb = this.openDatabase(this.dbPath, { nativeBinding });
+			applyCipherPragmas(migratedDb);
+			migratedDb.rekey(dek);
+			const migratedCounts = {
+				matters: countTableRows(migratedDb, 'matters'),
+				billing_rates: countTableRows(migratedDb, 'billing_rates'),
+				time_entries: countTableRows(migratedDb, 'time_entries'),
+			};
+			log(`Migrated (encrypted) row counts: ${JSON.stringify(migratedCounts)}`);
+			if (
+				migratedCounts.matters !== legacyCounts.matters
+				|| migratedCounts.billing_rates !== legacyCounts.billing_rates
+				|| migratedCounts.time_entries !== legacyCounts.time_entries
+			) {
+				throw new Error(
+					`Migration row-count mismatch: legacy=${JSON.stringify(legacyCounts)} migrated=${JSON.stringify(migratedCounts)}`
+				);
+			}
+			migratedDb.close();
+			migratedDb = undefined;
+		} catch (error) {
+			if (migratedDb) {
+				try {
+					migratedDb.close();
+				} catch {
+					// ignore
+				}
+			}
+			try {
+				await fsPromises.unlink(this.dbPath);
+			} catch {
+				// ignore
+			}
+			log(`Migration failed; left legacy DB untouched at ${legacyPath}`);
+			throw error;
+		}
+
+		try {
+			await fsPromises.unlink(legacyPath);
+			log(`Deleted legacy DB: ${legacyPath}`);
+		} catch (error) {
+			log(`Failed to delete legacy DB (non-fatal): ${error instanceof Error ? error.message : String(error)}`);
+		}
+
+		const legacyWorkspaceDir = path.dirname(legacyPath);
+		const legacyWorkspacesDir = path.dirname(legacyWorkspaceDir);
+		const legacyDatabasesDir = path.dirname(legacyWorkspacesDir);
+		const legacyRootDir = path.dirname(legacyDatabasesDir);
+		await removeEmptyDirBestEffort(legacyWorkspaceDir);
+		await removeEmptyDirBestEffort(legacyWorkspacesDir);
+		await removeEmptyDirBestEffort(legacyDatabasesDir);
+		await removeEmptyDirBestEffort(legacyRootDir);
+	}
+
+	/**
+	 * Delete this workspace's encrypted DB (+ WAL/SHM) and its DEK.
+	 * Safe to call when initialize() failed — does not require an open connection.
+	 */
+	async clearLocalDatabase(): Promise<void> {
+		this.close();
+		for (const suffix of ['', '-wal', '-shm']) {
+			const filePath = `${this.dbPath}${suffix}`;
+			const deleted = await deleteFileIfExists(filePath);
+			if (deleted) {
+				log(`Deleted ${filePath}`);
+			}
+		}
+		try {
+			await this.context.secrets.delete(DEK_KEY_ID);
+			log(`Deleted SecretStorage key ${DEK_KEY_ID}`);
+		} catch (error) {
+			log(`Failed to delete DEK ${DEK_KEY_ID}: ${error instanceof Error ? error.message : String(error)}`);
+		}
 	}
 
 	async initialize(): Promise<void> {
 		if (!Database) {
-			throw new Error('better-sqlite3 is not available. Please ensure native dependencies are installed.');
+			throw new Error(
+				`better-sqlite3-multiple-ciphers is not available. Prebuilds may need regenerating for this platform/ABI. Expected binding: ${expectedNativeBindingPath()}`
+			);
+		}
+
+		const nativeBinding = resolveNativeBindingPath();
+		if (!nativeBinding) {
+			log(
+				`No committed prebuild at ${expectedNativeBindingPath()}; falling back to package default resolution (node_modules build/Release).`
+			);
 		}
 
 		try {
-			const nativeBinding = resolveNativeBindingPath();
-			this.db = nativeBinding
-				? new Database(this.dbPath, { nativeBinding })
-				: new Database(this.dbPath);
+			await ensureDir(path.dirname(this.dbPath));
+
+			const dekResult = await acquireDek({
+				secrets: this.context.secrets,
+				keyId: DEK_KEY_ID,
+				existingDataPaths: [this.dbPath],
+				log,
+			});
+			if (dekResult.kind === 'unavailable') {
+				if (dekResult.reason === 'secret-storage-unusable') {
+					throw new Error(
+						'Secure storage is unavailable, so time tracking is disabled. Enable OS keychain/SecretStorage and reload.'
+					);
+				}
+				throw new Error(
+					'The encrypted time-tracker database cannot be decrypted because its key is missing from secure storage. Run "Time Tracker: Delete Local Time Tracking Database", then reload.'
+				);
+			}
+			const dek = dekResult.dek;
+
+			await this.migrateLegacyPlaintextDb(dek, nativeBinding);
+
+			const db = this.openDatabase(this.dbPath, { nativeBinding });
+			this.db = db;
+			applyCipherPragmas(db);
+			db.key(dek);
+			try {
+				db.prepare('SELECT count(*) FROM sqlite_master').get();
+			} catch (error) {
+				this.db = null;
+				try {
+					db.close();
+				} catch {
+					// ignore
+				}
+				throw new Error(
+					`Failed to unlock time-tracker database (wrong or missing key): ${error instanceof Error ? error.message : String(error)}`
+				);
+			}
+
 			this.createTables();
+
+			try {
+				this.assertEncryptedOnDisk(this.dbPath);
+			} catch (error) {
+				this.db = null;
+				try {
+					db.close();
+				} catch {
+					// ignore
+				}
+				throw error;
+			}
+
+			log(`Opened encrypted DB at ${this.dbPath}`);
 		} catch (error) {
-			throw new Error(`Failed to initialize database: ${error}`);
+			if (error instanceof Error && (
+				error.message.startsWith('Secure storage is unavailable')
+				|| error.message.startsWith('The encrypted time-tracker database cannot be decrypted')
+				|| error.message.startsWith('Time tracker database is plaintext')
+				|| error.message.startsWith('Failed to unlock')
+				|| error.message.startsWith('Migration row-count')
+				|| error.message.startsWith('better-sqlite3-multiple-ciphers is not available')
+			)) {
+				throw error;
+			}
+			const hint = !nativeBinding
+				? ` Prebuilds may need regenerating for this platform/ABI. Expected binding: ${expectedNativeBindingPath()}`
+				: '';
+			throw new Error(`Failed to initialize database: ${error instanceof Error ? error.message : String(error)}.${hint}`);
 		}
 	}
 
 	private createTables(): void {
-		if (!this.db) return;
+		if (!this.db) {
+			return;
+		}
 
 		// Matters/Cases table
 		this.db.exec(`

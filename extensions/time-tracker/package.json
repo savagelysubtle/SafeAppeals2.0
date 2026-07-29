@@ -74,6 +74,11 @@
         "command": "timeTracker.exportLEDES",
         "title": "Export to LEDES 1998B",
         "category": "Time Tracker"
+      },
+      {
+        "command": "timeTracker.clearLocalDatabase",
+        "title": "Delete Local Time Tracking Database",
+        "category": "Time Tracker"
       }
     ],
     "keybindings": [
@@ -140,16 +145,17 @@
   "scripts": {
     "compile": "gulp compile-extension:time-tracker",
     "watch": "gulp watch-extension:time-tracker",
-    "lint": "eslint src --ext ts"
+    "lint": "eslint src --ext ts",
+    "rebuild-prebuilds": "node ./scripts/rebuild-prebuilds.js"
   },
   "dependencies": {
-    "better-sqlite3": "12.11.1"
+    "better-sqlite3-multiple-ciphers": "12.11.1"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.8",
     "@types/node": "24.x"
   },
   "allowScripts": {
-    "better-sqlite3@12.11.1": true
+    "better-sqlite3-multiple-ciphers@12.11.1": true
   }
 }

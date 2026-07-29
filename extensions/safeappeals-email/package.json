@@ -182,6 +182,11 @@
         "command": "safeappeals-email.unhideThread",
         "title": "Unhide Thread",
         "category": "Safe Appeals Email"
+      },
+      {
+        "command": "safeappeals-email.clearLocalCache",
+        "title": "Clear Local Email Cache",
+        "category": "Safe Appeals Email"
       }
     ],
     "menus": {
@@ -285,6 +290,7 @@
         "safeappealsEmail.accounts": {
           "type": "array",
           "default": [],
+          "scope": "machine",
           "description": "Non-secret account metadata (host/port/user). Passwords live in SecretStorage.",
           "items": {
             "type": "object",
