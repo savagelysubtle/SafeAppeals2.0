@@ -99,7 +99,17 @@
 				"group": "session",
 				"close": false
 			},
-			"problemMatcher": []
+			"problemMatcher": {
+				"owner": "watch-all",
+				"pattern": {
+					"regexp": "^$"
+				},
+				"background": {
+					"activeOnStart": true,
+					"beginsPattern": "Starting all watchers\\.\\.\\.",
+					"endsPattern": "Watchers done and ready for changes"
+				}
+			}
 		},
 		{
 			"label": "Watch Client Transpile",
