@@ -31,7 +31,7 @@ todos:
     status: completed
   - id: onb-t9-a11y
     content: "T9: accessibility pass — workbench.reduceMotion class, scroll-padding for WCAG 2.4.11, focus-restore verification, keyboard audit of new controls. ALSO FOLD IN the five deferred T5 review items: (a) add a localize() translator comment guarding the deliberately-fabricated citation so localizers do not substitute a real one, (b) add themed .onboarding-a-inline-link CSS incl. focus-visible (currently browser-default), (c) approval-card border-radius 12px -> 8px to match the control tier, (d) drop the always-empty div in _createFeatureCard, (e) log updateValue rejections in the approval-mode write."
-    status: pending
+    status: completed
   - id: onb-t10-walkthrough
     content: "T10: safeappeals-case — walkthrough becomes 5–7-item outcome checklist, profile prefill from safeappeals.profile.* settings, package.nls.json restructure"
     status: completed
@@ -582,11 +582,17 @@ the list below is the summary):**
   `.onboarding-a-overlay.reduce-motion`; re-evaluate on the service's change
   event (disposable-registered).
 - **WCAG 2.2 §2.4.11 Focus Not Obscured:** wizard is a single dialog (no
-  nested modal+tour — good). Sticky header (brand mark) and footer
+  nested modal+tour — good). ~~Sticky header (brand mark) and footer
   (buttons/progress dots) must never cover a focused control:
   `scroll-padding-top/bottom` on the step scroll container equal to
-  header/footer heights. The step-4 spotlight tour runs after the dialog
-  closes — no overlay stacking.
+  header/footer heights.~~ **Corrected Jul 30 on implementation — the header
+  and footer are not sticky.** `.onboarding-a-card` is a flex column with
+  `overflow: hidden`, and the header, scroller (`flex: 1`) and footer are
+  ordinary flex siblings, so the scroll area can never pass beneath the
+  chrome and §2.4.11 is satisfied structurally. The shipped
+  `scroll-padding-block` is a small comfort margin only, deliberately not a
+  chrome measurement. Do not "fix" it to match header/footer heights. The
+  step-4 spotlight tour runs after the dialog closes — no overlay stacking.
 - **Focus lifecycle:** trap + `aria-modal` exist; verify focus restores to
   the invoker on dismiss (observable via the restart command) and add if
   missing. New checkbox/pills join `_registerStepFocusable` /
@@ -1227,6 +1233,24 @@ awaits inside this method need the same guard.**
 `variationA.css` pointed at `google.svg` inside the Copilot chat-setup media
 folder, which T14 deletes; the sign-in button's logo would have silently
 vanished. The asset now lives in `welcomeOnboarding/browser/media/`.
+
+**Jul 30 2026 — T9 shipped; two of its premises were wrong and are corrected
+above.** First, §7's "sticky header/footer" framing was false, so the
+scroll-padding it prescribed was solving a problem the layout does not have; the
+shipped padding is an honest comfort margin and the §7 bullet now says so.
+Second, reduced motion had been enumerated selector-by-selector, which had
+already drifted — the approval cards and role pills added during this milestone
+were animating for reduced-motion users because nobody extended the list. Both
+the `prefers-reduced-motion` media query and the `.reduce-motion` class now use
+`.onboarding-a-overlay, .onboarding-a-overlay *` so new controls are covered by
+default, with explicit `transform: none` on the two cards that lift on hover.
+**Keep the two blocks identical**; they exist separately only because the CSS
+media query cannot see the `workbench.reduceMotion` setting.
+
+Also worth knowing: moving the scroll container from `.onboarding-a-credits` up
+to `.onboarding-a-step-content` was not in the T9 brief but was necessary —
+nested scroll containers defeat `scroll-padding`, and the review found the old
+arrangement had been clipping content that keyboard users could not reach.
 
 **"Unbound" never reaches the user.** `KeybindingLabel`'s
 `renderUnboundKeybindings: true` renders the literal word "Unbound" when

@@ -58,11 +58,11 @@ todos:
       flip, walkthrough→checklist, sample case + tour). Plan:
       onboarding_redesign_newcomer.plan.md.
       STATUS Jul 30 end-of-session (committed): DONE = T0, T1, T2, T3, T4,
-      T5, T6, T7, T8, T10, T11, T12, all reviewed. REMAINING = T9 only,
-      which now also carries five deferred T5 review items folded into its
-      task entry (translator comment on the fabricated citation, inline-link
-      CSS, approval-card radius, empty feature-card div, updateValue error
-      logging).       Gates green at commit time: typecheck-client,
+      T5, T6, T7, T8, T9, T10, T11, T12 — the whole of Phase A, all
+      reviewed, including the five deferred T5 review items folded into T9.
+      What remains before Phase A can ship is NOT a task in this list:
+      sign-in has never been exercised end-to-end against a live API.
+      Gates green at commit time: typecheck-client,
       compile-extensions (0 errors), valid-layers-check, and all 9
       onboarding unit tests.
       Two things the next session must know: (a) run the unit tests as

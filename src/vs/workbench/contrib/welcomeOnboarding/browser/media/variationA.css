@@ -192,7 +192,14 @@
 	display: flex;
 	flex-direction: column;
 	min-height: 0;
-	overflow: visible;
+	overflow-y: auto;
+	/*
+	 * Header and footer are flex siblings of this scroller — they never overlap it —
+	 * so WCAG 2.2 §2.4.11 Focus Not Obscured is satisfied by the layout. This padding
+	 * is only a comfort margin so a focused control is not flush against the header
+	 * rule or the footer's border-top.
+	 */
+	scroll-padding-block: 12px;
 }
 
 .onboarding-a-footer {
@@ -620,7 +627,7 @@
 	flex-direction: column;
 	gap: 12px;
 	padding: 20px 18px;
-	border-radius: 12px;
+	border-radius: var(--vscode-cornerRadius-large, 8px);
 	border: 2px solid var(--vscode-widget-border, rgba(255, 255, 255, 0.08));
 	background: var(--vscode-editorWidget-background, var(--vscode-sideBar-background));
 	cursor: pointer;
@@ -1043,13 +1050,48 @@
 	}
 }
 
+/*
+ * Kill every transition under the wizard, plus the hover lifts on theme/approval
+ * cards. Broad `*` coverage so new controls cannot drift out of the list.
+ * Keep the media-query block and the .reduce-motion block identical in effect.
+ */
 @media (prefers-reduced-motion: reduce) {
 	.onboarding-a-overlay,
-	.onboarding-a-card,
-	.onboarding-a-progress-dot,
-	.onboarding-a-theme-card {
+	.onboarding-a-overlay * {
 		transition: none !important;
 	}
+
+	.onboarding-a-overlay .onboarding-a-theme-card:hover,
+	.onboarding-a-overlay .onboarding-a-ai-pref-card:hover {
+		transform: none;
+	}
+}
+
+/* Honors workbench.reduceMotion via IAccessibilityService (class toggled in show()). */
+.onboarding-a-overlay.reduce-motion,
+.onboarding-a-overlay.reduce-motion * {
+	transition: none !important;
+}
+
+.onboarding-a-overlay.reduce-motion .onboarding-a-theme-card:hover,
+.onboarding-a-overlay.reduce-motion .onboarding-a-ai-pref-card:hover {
+	transform: none;
+}
+
+.onboarding-a-inline-link {
+	color: var(--vscode-textLink-foreground, #3794ff);
+	text-decoration: none;
+}
+
+.onboarding-a-inline-link:hover {
+	color: var(--vscode-textLink-activeForeground, var(--vscode-textLink-foreground, #3794ff));
+	text-decoration: underline;
+}
+
+.onboarding-a-inline-link:focus-visible {
+	outline: 2px solid var(--vscode-focusBorder);
+	outline-offset: 2px;
+	border-radius: var(--vscode-cornerRadius-small, 4px);
 }
 
 /* SafeAppeals: profile step */
@@ -1208,7 +1250,6 @@
 	text-align: left;
 	flex: 1;
 	min-height: 0;
-	overflow-y: auto;
 }
 
 .onboarding-a-credits-copy {

@@ -3,12 +3,12 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { Disposable, DisposableStore } from '../../../../base/common/lifecycle.js';
+import { Disposable, DisposableStore, MutableDisposable } from '../../../../base/common/lifecycle.js';
 import { Emitter, Event } from '../../../../base/common/event.js';
 import { VSBuffer } from '../../../../base/common/buffer.js';
 import { dirname, joinPath } from '../../../../base/common/resources.js';
 import { $, append, addDisposableListener, EventType, clearNode, getActiveWindow, isHTMLElement } from '../../../../base/browser/dom.js';
-import { isCancellationError } from '../../../../base/common/errors.js';
+import { isCancellationError, onUnexpectedError } from '../../../../base/common/errors.js';
 import { URI } from '../../../../base/common/uri.js';
 import { ILayoutService } from '../../../../platform/layout/browser/layoutService.js';
 import { KeyCode } from '../../../../base/common/keyCodes.js';
@@ -31,6 +31,7 @@ import { ICommandService } from '../../../../platform/commands/common/commands.j
 import { IOpenerService } from '../../../../platform/opener/common/opener.js';
 import { IStorageService, StorageScope, StorageTarget } from '../../../../platform/storage/common/storage.js';
 import { IAuthenticationService } from '../../../services/authentication/common/authentication.js';
+import { IAccessibilityService } from '../../../../platform/accessibility/common/accessibility.js';
 import { ChatConfiguration, defaultChatToolsEditsAutoApprove } from '../../chat/common/constants.js';
 import { waitForAuthenticationProvider } from '../common/authProviderWait.js';
 import {
@@ -290,6 +291,7 @@ export class OnboardingVariationA extends Disposable implements IOnboardingServi
 	private closeButton: HTMLButtonElement | undefined;
 	private footerLeft: HTMLElement | undefined;
 	private _footerSignInBtn: HTMLButtonElement | undefined;
+	private readonly _footerSignInDisposable = this._register(new MutableDisposable());
 
 	private currentStepIndex = 0;
 	private readonly steps: readonly OnboardingStepId[];
@@ -346,6 +348,7 @@ export class OnboardingVariationA extends Disposable implements IOnboardingServi
 		@IContextViewService private readonly contextViewService: IContextViewService,
 		@IAuthenticationService private readonly authenticationService: IAuthenticationService,
 		@IStorageService private readonly storageService: IStorageService,
+		@IAccessibilityService private readonly accessibilityService: IAccessibilityService,
 	) {
 		super();
 
@@ -373,6 +376,11 @@ export class OnboardingVariationA extends Disposable implements IOnboardingServi
 		this.overlay.setAttribute('role', 'dialog');
 		this.overlay.setAttribute('aria-modal', 'true');
 		this.overlay.setAttribute('aria-label', localize('onboarding.a.aria', "Welcome to {0}", this.productService.nameLong));
+		this._syncReducedMotionClass();
+		// Cleared with `disposables` in `_removeFromDOM` so restart/show does not leak listeners.
+		this.disposables.add(this.accessibilityService.onDidChangeReducedMotion(() => {
+			this._syncReducedMotionClass();
+		}));
 
 		// Card
 		this.card = append(this.overlay, $('.onboarding-a-card'));
@@ -649,16 +657,15 @@ export class OnboardingVariationA extends Disposable implements IOnboardingServi
 					this._footerSignInBtn = append(this.footerLeft, $<HTMLButtonElement>('button.onboarding-a-signin-nudge-btn'));
 					this._footerSignInBtn.type = 'button';
 					this._footerSignInBtn.textContent = localize('onboarding.sessions.signInNudge', "Sign In to Sync Your Profile");
-					this.stepDisposables.add(addDisposableListener(this._footerSignInBtn, EventType.CLICK, () => {
+					// DOM order is footer-left (nudge) then footer-right (Back/Next).
+					this.footerFocusableElements.unshift(this._footerSignInBtn);
+					this._footerSignInDisposable.value = addDisposableListener(this._footerSignInBtn, EventType.CLICK, () => {
 						this._logAction('signInNudge');
 						void this._handleSignIn(OnboardingSignInOrigin.FooterNudge);
-					}));
+					});
 				}
 			} else {
-				if (this._footerSignInBtn) {
-					this._footerSignInBtn.remove();
-					this._footerSignInBtn = undefined;
-				}
+				this._clearFooterSignInBtn();
 			}
 		}
 	}
@@ -742,9 +749,19 @@ export class OnboardingVariationA extends Disposable implements IOnboardingServi
 		}
 
 		parent.append(message.slice(0, termsIndex));
-		this._createInlineLink(parent, termsLabel, 'https://safeappeals.com/terms');
+		const termsLink = this._createInlineLink(parent, termsLabel, 'https://safeappeals.com/terms');
+		this.stepDisposables.add(addDisposableListener(termsLink, EventType.CLICK, e => {
+			e.preventDefault();
+			this._logAction('docLinkClick', undefined, 'termsOfService');
+			void this.openerService.open(URI.parse('https://safeappeals.com/terms'), { openExternal: true });
+		}));
 		parent.append(message.slice(termsIndex + termsLabel.length, privacyIndex));
-		this._createInlineLink(parent, privacyLabel, 'https://safeappeals.com/privacy');
+		const privacyLink = this._createInlineLink(parent, privacyLabel, 'https://safeappeals.com/privacy');
+		this.stepDisposables.add(addDisposableListener(privacyLink, EventType.CLICK, e => {
+			e.preventDefault();
+			this._logAction('docLinkClick', undefined, 'privacyPolicy');
+			void this.openerService.open(URI.parse('https://safeappeals.com/privacy'), { openExternal: true });
+		}));
 		parent.append(message.slice(privacyIndex + privacyLabel.length));
 	}
 
@@ -1570,7 +1587,12 @@ export class OnboardingVariationA extends Disposable implements IOnboardingServi
 
 		const citation = append(block, $('blockquote.onboarding-a-inoculation-citation'));
 		citation.textContent = localize(
-			'onboarding.agentIntro.inoculation.citation',
+			{
+				key: 'onboarding.agentIntro.inoculation.citation',
+				comment: [
+					'SAFETY-CRITICAL: This citation is intentionally fabricated to teach hallucination risk. It must NOT be replaced with a real case. Translators may adapt only to an equally non-existent citation in the target jurisdiction\'s format.',
+				],
+			},
 			"Dowell v. Ridgeline Freight Systems Inc., 212 Work. Comp. App. Rep. 4th 519 (2018)"
 		);
 
@@ -1668,7 +1690,8 @@ export class OnboardingVariationA extends Disposable implements IOnboardingServi
 	private _writeApprovalMode(mode: ApprovalMode, logChoice: boolean): void {
 		const autoApproveRoutine = mode === ApprovalMode.ApplyRoutineEdits;
 		const value: Record<string, boolean> = { ...defaultChatToolsEditsAutoApprove, '**/*': autoApproveRoutine };
-		void this.configurationService.updateValue(ChatConfiguration.AutoApproveEdits, value, ConfigurationTarget.USER);
+		void this.configurationService.updateValue(ChatConfiguration.AutoApproveEdits, value, ConfigurationTarget.USER)
+			.catch(error => onUnexpectedError(error));
 		if (logChoice) {
 			this._logAction('approvalChoice', undefined, mode);
 			this._approvalChoiceLogged = true;
@@ -1891,18 +1914,20 @@ export class OnboardingVariationA extends Disposable implements IOnboardingServi
 		}
 	}
 
-	private _createFeatureCard(parent: HTMLElement, icon: ThemeIcon, title: string, description?: string): HTMLElement {
+	/**
+	 * Renders a non-interactive capability row (icon + title + optional description).
+	 */
+	private _createFeatureCard(parent: HTMLElement, icon: ThemeIcon, title: string, description?: string): void {
 		const card = append(parent, $('div.onboarding-a-feature-card'));
 		const iconCol = append(card, $('div.onboarding-a-feature-icon'));
 		iconCol.appendChild(renderIcon(icon));
 		const textCol = append(card, $('div.onboarding-a-feature-text'));
 		const titleEl = append(textCol, $('div.onboarding-a-feature-title'));
 		titleEl.textContent = title;
-		const descEl = append(textCol, $('div.onboarding-a-feature-desc'));
 		if (description) {
+			const descEl = append(textCol, $('div.onboarding-a-feature-desc'));
 			descEl.textContent = description;
 		}
-		return descEl;
 	}
 
 	private _createDocLink(parent: HTMLElement, label: string, href: string, linkId?: string): void {
@@ -1928,6 +1953,34 @@ export class OnboardingVariationA extends Disposable implements IOnboardingServi
 		link.target = '_blank';
 		link.rel = 'noopener';
 		return link;
+	}
+
+	// =====================================================================
+	// Accessibility helpers
+	// =====================================================================
+
+	/**
+	 * Toggles the overlay `reduce-motion` class from `workbench.reduceMotion`
+	 * / system preference via {@link IAccessibilityService}.
+	 */
+	private _syncReducedMotionClass(): void {
+		this.overlay?.classList.toggle('reduce-motion', this.accessibilityService.isMotionReduced());
+	}
+
+	/**
+	 * Removes the credits-step footer sign-in nudge and drops it from the focus trap.
+	 */
+	private _clearFooterSignInBtn(): void {
+		if (!this._footerSignInBtn) {
+			return;
+		}
+		const idx = this.footerFocusableElements.indexOf(this._footerSignInBtn);
+		if (idx !== -1) {
+			this.footerFocusableElements.splice(idx, 1);
+		}
+		this._footerSignInDisposable.clear();
+		this._footerSignInBtn.remove();
+		this._footerSignInBtn = undefined;
 	}
 
 	// =====================================================================
@@ -2022,7 +2075,7 @@ export class OnboardingVariationA extends Disposable implements IOnboardingServi
 		this.nextButton = undefined;
 		this.closeButton = undefined;
 		this.footerLeft = undefined;
-		this._footerSignInBtn = undefined;
+		this._clearFooterSignInBtn();
 		this.footerFocusableElements.length = 0;
 		this.stepFocusableElements.length = 0;
 		this._signInInProgress = false;
@@ -2031,8 +2084,13 @@ export class OnboardingVariationA extends Disposable implements IOnboardingServi
 		this.disposables.clear();
 		this.stepDisposables.clear();
 
+		// Restore focus to the element that invoked the wizard (e.g. restart command).
 		if (this.previouslyFocusedElement) {
-			this.previouslyFocusedElement.focus();
+			try {
+				this.previouslyFocusedElement.focus();
+			} catch {
+				// Invoker may have been removed from the DOM while the wizard was open.
+			}
 			this.previouslyFocusedElement = undefined;
 		}
 
