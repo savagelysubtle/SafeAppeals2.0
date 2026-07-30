@@ -169,6 +169,11 @@
 		],
 		"github-enterprise": [
 			"GitHub.copilot-chat"
+		],
+		"safeappeals-cloud": [
+			"safeappeals.safeappeals-case",
+			"safeappeals.safeappeals-email",
+			"safeappeals.safeappeals-calendar"
 		]
 	},
 	"onboardingSkipSignInStep": true,

@@ -1,0 +1,12 @@
+{
+	"displayName": "SafeAppeals Cloud Authentication",
+	"description": "Sign in to SafeAppeals Cloud for profile sync and AI credits",
+	"auth.safeappealsCloud.label": "SafeAppeals Cloud",
+	"command.category": "SafeAppeals Cloud",
+	"command.getBalance.title": "Show Credit Balance",
+	"command.openCheckout.title": "Add Credits",
+	"command.pasteAuthCode.title": "Paste Auth Code",
+	"command.signOut.title": "Sign Out",
+	"config.title": "SafeAppeals Cloud",
+	"config.apiUrl.description": "Base URL for the SafeAppeals Cloud API. Machine-scoped so Settings Sync never uploads it."
+}

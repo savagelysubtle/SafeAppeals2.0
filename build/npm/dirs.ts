@@ -49,6 +49,7 @@ export const dirs = [
 	'extensions/tunnel-forwarding',
 	'extensions/terminal-suggest',
 	'extensions/time-tracker',
+	'extensions/safeappeals-authentication',
 	'extensions/safeappeals-calendar',
 	'extensions/safeappeals-case',
 	'extensions/safeappeals-documents',

@@ -77,6 +77,7 @@ const compilations = [
 	'extensions/mermaid-markdown-features/tsconfig.json',
 	'extensions/terminal-suggest/tsconfig.json',
 	'extensions/time-tracker/tsconfig.json',
+	'extensions/safeappeals-authentication/tsconfig.json',
 	'extensions/safeappeals-calendar/tsconfig.json',
 	'extensions/safeappeals-case/tsconfig.json',
 	'extensions/safeappeals-documents/tsconfig.json',

@@ -1,0 +1,78 @@
+{
+	"name": "safeappeals-authentication",
+	"displayName": "%displayName%",
+	"description": "%description%",
+	"version": "1.0.0",
+	"publisher": "safeappeals",
+	"license": "MIT",
+	"engines": {
+		"vscode": "^1.70.0"
+	},
+	"main": "./out/extension.js",
+	"categories": [
+		"Other"
+	],
+	"extensionKind": [
+		"ui",
+		"workspace"
+	],
+	"activationEvents": [
+		"onStartupFinished",
+		"onUri",
+		"onAuthenticationRequest:safeappeals-cloud"
+	],
+	"capabilities": {
+		"virtualWorkspaces": true,
+		"untrustedWorkspaces": {
+			"supported": true
+		}
+	},
+	"contributes": {
+		"authentication": [
+			{
+				"id": "safeappeals-cloud",
+				"label": "%auth.safeappealsCloud.label%"
+			}
+		],
+		"commands": [
+			{
+				"command": "safeappeals.cloud.getBalance",
+				"title": "%command.getBalance.title%",
+				"category": "%command.category%"
+			},
+			{
+				"command": "safeappeals.cloud.openCheckout",
+				"title": "%command.openCheckout.title%",
+				"category": "%command.category%"
+			},
+			{
+				"command": "safeappeals.cloud.pasteAuthCode",
+				"title": "%command.pasteAuthCode.title%",
+				"category": "%command.category%"
+			},
+			{
+				"command": "safeappeals.cloud.signOut",
+				"title": "%command.signOut.title%",
+				"category": "%command.category%"
+			}
+		],
+		"configuration": {
+			"title": "%config.title%",
+			"properties": {
+				"safeappeals.cloud.apiUrl": {
+					"type": "string",
+					"default": "https://api.safeappeals.com",
+					"scope": "machine",
+					"markdownDescription": "%config.apiUrl.description%"
+				}
+			}
+		}
+	},
+	"scripts": {
+		"compile": "gulp compile-extension:safeappeals-authentication",
+		"watch": "gulp watch-extension:safeappeals-authentication"
+	},
+	"devDependencies": {
+		"@types/node": "24.x"
+	}
+}
