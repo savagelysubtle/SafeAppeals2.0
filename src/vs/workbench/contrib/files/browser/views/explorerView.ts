@@ -53,6 +53,8 @@ import { ICommandService } from '../../../../../platform/commands/common/command
 import { IEditorResolverService } from '../../../../services/editor/common/editorResolverService.js';
 import { EditorOpenSource } from '../../../../../platform/editor/common/editor.js';
 import { ResourceMap } from '../../../../../base/common/map.js';
+import { markOnboardingTarget } from '../../../onboarding/browser/spotlight/onboardingTarget.js';
+import { SAMPLE_CASE_TOUR_TARGETS } from '../../../onboarding/browser/sampleCaseTour.js';
 import { AbstractTreePart } from '../../../../../base/browser/ui/tree/abstractTree.js';
 import { IHoverService } from '../../../../../platform/hover/browser/hover.js';
 import { IAccessibilityService } from '../../../../../platform/accessibility/common/accessibility.js';
@@ -304,6 +306,8 @@ export class ExplorerView extends ViewPane implements IExplorerView {
 
 		this.container = container;
 		this.treeContainer = DOM.append(container, DOM.$('.explorer-folders-view'));
+		// SafeAppeals: sample-case tour spotlight target (case-files list).
+		this._register(markOnboardingTarget(this.treeContainer, SAMPLE_CASE_TOUR_TARGETS.caseFiles));
 
 		this.createTree(this.treeContainer);
 

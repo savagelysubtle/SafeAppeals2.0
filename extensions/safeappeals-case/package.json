@@ -1,7 +1,7 @@
 {
   "name": "safeappeals-case",
-  "displayName": "Safe Appeals Case",
-  "description": "Case setup for Safe Appeals: profile walkthrough, agent-native case briefs (AGENTS.md) and structured case info (.safeAppeals/case.json)",
+  "displayName": "%displayName%",
+  "description": "%description%",
   "version": "1.0.0",
   "publisher": "safeappeals",
   "license": "MIT",
@@ -31,81 +31,101 @@
     "commands": [
       {
         "command": "safeappeals-case.setupProfile",
-        "title": "Set Up Profile",
-        "category": "Safe Appeals Case"
+        "title": "%command.setupProfile%",
+        "category": "%command.category%"
       },
       {
         "command": "safeappeals-case.initCase",
-        "title": "Initialize Case Folder",
-        "category": "Safe Appeals Case"
+        "title": "%command.initCase%",
+        "category": "%command.category%"
       },
       {
         "command": "safeappeals-case.editCaseInfo",
-        "title": "Edit Case Info",
-        "category": "Safe Appeals Case"
+        "title": "%command.editCaseInfo%",
+        "category": "%command.category%"
       },
       {
         "command": "safeappeals-case.openCaseBrief",
-        "title": "Open Case Brief (AGENTS.md)",
-        "category": "Safe Appeals Case"
+        "title": "%command.openCaseBrief%",
+        "category": "%command.category%"
+      },
+      {
+        "command": "safeappeals-case.openSampleCase",
+        "title": "%command.openSampleCase%",
+        "category": "%command.category%"
+      },
+      {
+        "command": "safeappeals-case.takeTour",
+        "title": "%command.takeTour%",
+        "category": "%command.category%"
       }
     ],
-    "configuration": {
-      "title": "Safe Appeals Profile",
-      "properties": {
-        "safeappeals.profile.name": {
-          "type": "string",
-          "default": "",
-          "scope": "application",
-          "description": "Your name, as it should appear in case briefs and drafted documents"
-        },
-        "safeappeals.profile.organization": {
-          "type": "string",
-          "default": "",
-          "scope": "application",
-          "description": "Firm, union, or organization you work for (leave empty if self-represented)"
-        },
-        "safeappeals.profile.role": {
-          "type": "string",
-          "default": "",
-          "scope": "application",
-          "description": "Your role, e.g. lawyer, paralegal, claimant advocate, self-represented worker"
-        },
-        "safeappeals.profile.practiceArea": {
-          "type": "string",
-          "default": "Workers' Compensation",
-          "scope": "application",
-          "description": "Primary area of law you practice"
-        },
-        "safeappeals.profile.jurisdiction": {
-          "type": "string",
-          "default": "",
-          "scope": "application",
-          "description": "Default jurisdiction for new cases, e.g. BC WCB, Ontario WSIB"
-        }
-      }
-    },
     "walkthroughs": [
       {
         "id": "safeappealsCaseSetup",
-        "title": "Set Up Safe Appeals",
-        "description": "Tell Safe Appeals who you are and set up your case folder so the AI agent always has the right context.",
+        "title": "%walkthrough.title%",
+        "description": "%walkthrough.description%",
         "steps": [
           {
-            "id": "setupProfile",
-            "title": "Set Up Your Profile",
-            "description": "Who you are, where you work, and what law you practice. Saved once, globally, and included in every case brief.\n[Set Up Profile](command:safeappeals-case.setupProfile)",
+            "id": "reviewProfile",
+            "title": "%walkthrough.reviewProfile.title%",
+            "description": "%walkthrough.reviewProfile.description%",
             "media": {
               "markdown": "media/walkthrough/profile.md"
             },
             "completionEvents": [
+              "onSettingChanged:safeappeals.profile.name",
               "onCommand:safeappeals-case.setupProfile"
             ]
           },
           {
-            "id": "initCase",
-            "title": "Initialize This Case Folder",
-            "description": "Creates the case brief (AGENTS.md) and structured case info for the folder you have open, so the agent knows the client, opposing party, and key dates.\n[Initialize Case Folder](command:safeappeals-case.initCase)",
+            "id": "openSampleCase",
+            "title": "%walkthrough.openSampleCase.title%",
+            "description": "%walkthrough.openSampleCase.description%",
+            "media": {
+              "markdown": "media/walkthrough/sampleCase.md"
+            },
+            "completionEvents": [
+              "onCommand:safeappeals-case.openSampleCase"
+            ]
+          },
+          {
+            "id": "takeTour",
+            "title": "%walkthrough.takeTour.title%",
+            "description": "%walkthrough.takeTour.description%",
+            "media": {
+              "markdown": "media/walkthrough/tour.md"
+            },
+            "completionEvents": [
+              "onCommand:safeappeals-case.takeTour"
+            ]
+          },
+          {
+            "id": "howUsesAI",
+            "title": "%walkthrough.howUsesAI.title%",
+            "description": "%walkthrough.howUsesAI.description%",
+            "media": {
+              "markdown": "media/walkthrough/howUsesAI.md"
+            },
+            "completionEvents": [
+              "onCommand:safeappeals.help.howUsesAI"
+            ]
+          },
+          {
+            "id": "addCredits",
+            "title": "%walkthrough.addCredits.title%",
+            "description": "%walkthrough.addCredits.description%",
+            "media": {
+              "markdown": "media/walkthrough/credits.md"
+            },
+            "completionEvents": [
+              "onCommand:safeappeals.cloud.openCheckout"
+            ]
+          },
+          {
+            "id": "createCase",
+            "title": "%walkthrough.createCase.title%",
+            "description": "%walkthrough.createCase.description%",
             "media": {
               "markdown": "media/walkthrough/case.md"
             },
@@ -113,6 +133,18 @@
               "onCommand:safeappeals-case.initCase"
             ],
             "when": "workspaceFolderCount > 0"
+          },
+          {
+            "id": "connectEmailCalendar",
+            "title": "%walkthrough.connect.title%",
+            "description": "%walkthrough.connect.description%",
+            "media": {
+              "markdown": "media/walkthrough/connect.md"
+            },
+            "completionEvents": [
+              "onCommand:safeappeals-email.addAccount",
+              "onCommand:safeappeals-calendar.connect"
+            ]
           }
         ]
       }

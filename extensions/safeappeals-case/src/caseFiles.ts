@@ -14,7 +14,7 @@ const END_MARKER = '<!-- safeappeals-case:end -->';
  * Standard case folders, each with its own nested AGENTS.md so the agent
  * knows the folder's purpose (surfaced via `chat.useNestedAgentsMdFiles`).
  */
-const STANDARD_FOLDERS: ReadonlyArray<{ name: string; brief: string }> = [
+export const STANDARD_FOLDERS: ReadonlyArray<{ name: string; brief: string }> = [
 	{
 		name: 'Medical_Reports',
 		brief: 'Medical evidence for this case: doctor reports, specialist assessments, independent medical examinations (IMEs), imaging results, and treatment records. When summarizing the case, weigh treating-physician reports and IMEs here. Never modify or delete originals; drafts and summaries belong in Personal_Notes.',
@@ -48,6 +48,20 @@ function renderFolderAgentsMd(folderName: string, brief: string, caseName: strin
 		brief,
 		'',
 	].join('\n');
+}
+
+/**
+ * Creates the standard case folders with nested AGENTS.md briefs when missing.
+ */
+export async function scaffoldStandardFolders(root: vscode.Uri, caseName: string): Promise<void> {
+	for (const spec of STANDARD_FOLDERS) {
+		const dirUri = vscode.Uri.joinPath(root, spec.name);
+		await vscode.workspace.fs.createDirectory(dirUri);
+		const nestedUri = vscode.Uri.joinPath(dirUri, 'AGENTS.md');
+		if (await readTextIfExists(nestedUri) === undefined) {
+			await vscode.workspace.fs.writeFile(nestedUri, Buffer.from(renderFolderAgentsMd(spec.name, spec.brief, caseName), 'utf8'));
+		}
+	}
 }
 
 export function caseJsonUri(folder: vscode.WorkspaceFolder): vscode.Uri {
@@ -329,13 +343,18 @@ export async function initCase(): Promise<void> {
 	);
 
 	await writeCaseFiles(folder, info);
-	for (const pick of folderPicks ?? []) {
-		const spec = STANDARD_FOLDERS.find(f => f.name === pick.label)!;
-		const dirUri = vscode.Uri.joinPath(folder.uri, spec.name);
-		await vscode.workspace.fs.createDirectory(dirUri);
-		const nestedUri = vscode.Uri.joinPath(dirUri, 'AGENTS.md');
-		if (await readTextIfExists(nestedUri) === undefined) {
-			await vscode.workspace.fs.writeFile(nestedUri, Buffer.from(renderFolderAgentsMd(spec.name, spec.brief, info.caseName), 'utf8'));
+	if (folderPicks && folderPicks.length > 0) {
+		const selected = new Set(folderPicks.map(p => p.label));
+		for (const spec of STANDARD_FOLDERS) {
+			if (!selected.has(spec.name)) {
+				continue;
+			}
+			const dirUri = vscode.Uri.joinPath(folder.uri, spec.name);
+			await vscode.workspace.fs.createDirectory(dirUri);
+			const nestedUri = vscode.Uri.joinPath(dirUri, 'AGENTS.md');
+			if (await readTextIfExists(nestedUri) === undefined) {
+				await vscode.workspace.fs.writeFile(nestedUri, Buffer.from(renderFolderAgentsMd(spec.name, spec.brief, info.caseName), 'utf8'));
+			}
 		}
 	}
 
