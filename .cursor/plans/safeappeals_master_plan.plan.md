@@ -62,13 +62,18 @@ todos:
       which now also carries five deferred T5 review items folded into its
       task entry (translator comment on the fabricated citation, inline-link
       CSS, approval-card radius, empty feature-card div, updateValue error
-      logging). Gates green at commit time: typecheck-client,
-      compile-extensions (0 errors), valid-layers-check, and the 6
-      welcomeOnboarding unit tests.
-      Two things the next session must know: (a) the Electron test runner
-      needs a display and segfaults headless on this machine with no
-      xvfb-run installed — run the pure-logic suites directly with
-      `node_modules/.bin/mocha --ui tdd out/vs/.../test/common/*.test.js`;
+      logging).       Gates green at commit time: typecheck-client,
+      compile-extensions (0 errors), valid-layers-check, and all 9
+      onboarding unit tests.
+      Two things the next session must know: (a) run the unit tests as
+      `env -u ELECTRON_RUN_AS_NODE VSCODE_SKIP_PRELAUNCH=1 ./scripts/test.sh
+      --grep onboarding` AND outside the agent sandbox. The runner needs the
+      real Electron binary (an inherited ELECTRON_RUN_AS_NODE makes it start
+      as plain Node and die on `app.setPath`) and needs the X socket, which
+      the sandbox blocks — the resulting "Missing X server or $DISPLAY"
+      segfault looks like a missing display but the machine does have one at
+      :0. Running bare mocha instead silently skips the browser-layer suites
+      and undercounts 9 as 6; if you do need it, `--ui tdd` is required.
       (b) T9 edits browser/onboardingVariationA.ts, so nothing else may edit
       that file concurrently — earlier concurrent edits caused
       noUnusedLocals churn.
