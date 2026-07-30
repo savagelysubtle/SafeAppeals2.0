@@ -119,8 +119,8 @@ const CREDIT_PACKS = {
     },
     pro: {
         priceId: process.env.STRIPE_PRICE_PRO!,
-        credits: 1_400_000,
-        amount: 6000, // $60.00 in cents
+        credits: 2_000_000,
+        amount: 6500, // $65.00 in cents
     },
 };
 ```

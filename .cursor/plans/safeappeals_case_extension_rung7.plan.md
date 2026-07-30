@@ -22,12 +22,19 @@ todos:
     status: completed
   - id: slice1-verify
     content: "Slice 1 verify: compile, load in dev build, walkthrough visible,
-      init + edit round-trip, agent picks up AGENTS.md"
+      init + edit round-trip, agent picks up AGENTS.md. NOTE (Jul 29): two
+      defects found by audit before this ran — core _writeProfileRule() has no
+      mkdir (silent no-op for fresh users), and the two profile-rule writers
+      emit non-identical prose. Both now owned by the onboarding redesign plan
+      (T4 / T10); verify after those land."
     status: pending
   - id: slice2-timeline
     content: "Slice 2: timeline + deadlines (webview view or dashboard editor,
       reads case.json for jurisdiction/injury date; statute deadline calc from
-      old jurisdictionConfig; deadline notifications; PDF export decision)"
+      old jurisdictionConfig; deadline notifications; PDF export decision).
+      DEFERRED (user decision Jul 29) until the onboarding redesign ships —
+      that plan's T10/T12 rewrite this same extension's walkthrough and add a
+      sample case, so timeline waits rather than collide."
     status: pending
   - id: slice3-skills
     content: "Slice 3 (optional/later): case-type skills in .safeAppeals/skills/
@@ -37,6 +44,55 @@ isProject: false
 ---
 
 # safeappeals-case extension (Rung 7, extension-first)
+
+## Status (Jul 29, 2026) — PARTLY SUPERSEDED; remaining work paused
+
+Slices 1 + 1b are committed (`567beff7`). Slice 1 stands as built: four
+commands (`setupProfile`, `initCase`, `editCaseInfo`, plus an unplanned
+`openCaseBrief`), the "Set Up Safe Appeals" walkthrough, the `case-setup`
+chat skill, and build wiring in `gulpfile.extensions.ts` + `npm/dirs.ts`.
+
+**Slice 1b is superseded.** The `onboarding_redesign_newcomer` plan (Jul 29)
+rebuilds the first-run wizard as a 4-step flow and takes ownership of the
+"Who You Are" step this slice created (its T4), of this extension's
+walkthrough (its T10, which becomes a post-wizard checklist), and adds a
+bundled sample case here (its T12). Do not extend slice 1b in this plan —
+that surface now belongs to the onboarding plan.
+
+**Slice 2 (timeline) is deferred, not cancelled** (user decision Jul 29). It
+has no dependency on onboarding, but onboarding's T10/T12 edit this same
+extension, so it waits rather than collide. Source material is inventoried:
+`void-reference/browser/timeline/jurisdictionConfig.ts` (312 lines,
+`DEFAULT_JURISDICTIONS` with real `statuteOfLimitationsDays` +
+`deadlineRules[]`), `common/timeline/timelineTypes.ts` (462),
+`browser/timeline/timelineService.ts` (1018 — `calculateStatuteDeadline`,
+`generateDeadlinesFromDecision`, `getUpcomingDeadlines`, `syncFromCaseConfig`),
+`electron-main/timelineExportChannel.ts` (401, PDF export), plus ~4,900 lines
+of React under `browser/react/src/timeline-tsx/`. **Porting snag to resolve
+first:** old jurisdiction IDs are slugs (`bc-wcb`, `ontario-wsib`) while this
+extension's `src/types.ts` `JURISDICTIONS` uses display names (`BC WCB`,
+`Ontario WSIB`). Old timeline also persisted `.timeline.json` at workspace
+root; the new home is `.safeAppeals/`.
+
+### Defects found by audit (Jul 29), not yet fixed
+
+1. **Profile rule silently not written for fresh users (HIGH).**
+   `_writeProfileRule()` in `onboardingVariationA.ts` writes
+   `~/.copilot/instructions/safeappeals-profile.instructions.md` without
+   creating the parent directory, and swallows the failure. The extension's
+   `src/profile.ts` writer does create it. So the one durable output of slice
+   1b never lands for a user who has not previously run the extension command.
+   Owner: onboarding plan T4.
+2. **The two profile-rule writers disagree.** Same frontmatter and headings,
+   but the provenance line differs ("onboarding" vs "walkthrough"), so running
+   `setupProfile` after the wizard overwrites the wizard's file. The onboarding
+   plan §6 asked for byte-compatibility; it does not hold today. Owner: T10.
+3. Settings registration moved core-side (uncommitted): the
+   `safeappeals.profile.*` block was deleted from this extension's
+   `package.json` and re-registered in `welcomeOnboarding.contribution.ts` at
+   `APPLICATION` scope. This is the correct fix — the wizard wrote those keys
+   before the extension host had registered them — and this plan should no
+   longer describe the extension as owning them.
 
 ## Design decisions (user, Jul 21)
 

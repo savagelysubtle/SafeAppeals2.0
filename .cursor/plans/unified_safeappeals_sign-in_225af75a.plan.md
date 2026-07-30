@@ -20,7 +20,10 @@ todos:
   - id: rung65-auth-ext
     content:
       'Build safeappeals-authentication extension: port cloud auth from
-      void-reference, register 3 providers, SecretStorage, build wiring'
+      void-reference, register 3 providers, SecretStorage, build wiring.
+      SPLIT Jul 29 — the extension shell + safeappeals-cloud provider moved
+      to the onboarding redesign (its T1); only the safeappeals-google and
+      safeappeals-microsoft provider-token providers remain here.'
     status: pending
   - id: rung65-calendar
     content:
@@ -41,6 +44,41 @@ isProject: false
 ---
 
 # Unified SafeAppeals Sign-In (new Rung 6.5)
+
+## Status (Jul 29, 2026) — SPLIT: the front third is being built early
+
+The onboarding redesign (`onboarding_redesign_newcomer.plan.md`) un-defers a
+slice of this plan. Its **T1** builds `extensions/safeappeals-authentication`
+now — the extension shell, the `safeappeals-cloud` provider, the PKCE client,
+the SecretStorage session envelope, build wiring, and
+`trustedExtensionAuthAccess` — because the new first-run wizard's step 1 signs
+in with a SafeAppeals Cloud account and cannot wait for this rung.
+
+**Still owned by this plan:** the `safeappeals-google` / `safeappeals-microsoft`
+provider-token providers (workstream 2's remainder), the entire consumer
+conversion (workstream 3 — email XOAUTH2, calendar `getSession()`), and most
+of workstream 1 (Gmail/Calendar Supabase scopes, the Azure provider, the
+provider-token refresh endpoint, Google restricted-scope verification).
+
+**Why this does not break the Jul 21 deferral rationale.** The deferral existed
+so the provider surface would be shaped by real consumers rather than
+retrofitted per extension. That risk is concentrated in the provider-token
+providers, which stay here and still get designed against email and calendar.
+The `safeappeals-cloud` provider is account identity with a well-understood
+shape, and T1 designs the SecretStorage envelope to already carry
+`googleProviderToken`, so this rung adds providers to an existing extension
+instead of reshaping its storage. Accepted cost: two passes over the extension.
+
+**Correction to workstream 1 — the existing endpoints are NOT sound.** This
+plan assumed `/auth/google`, `/auth/callback`, and `/auth/refresh` stayed
+compatible and only needed new scopes. Verification on Jul 29 found no PKCE
+anywhere in the chain (`void-cloud/api/src/routes/auth.ts:39`, `:61`), an
+implicit flow that returns bearer tokens in the **URI fragment** through the
+OS URI handler (`void-reference/browser/voidCloudUrlHandler.ts:111–137`), and
+no redirect-URI allow-listing in the API itself. The reference client also
+persists the whole session in plain `IStorageService`
+(`voidCloudService.ts:29–30`, `:353`) — do not port that. Fixing all of this
+is the onboarding plan's **T0** and is a prerequisite for anything here.
 
 ## Decisions (Jul 20, user-confirmed)
 

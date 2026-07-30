@@ -66,24 +66,40 @@ todos:
       literals + copilot + configuration-editing)"
     status: completed
   - id: rung65-unified-auth
-    content: "DEFERRED (user decision Jul 21): unified sign-in — built in ONE
-      shot right before rung 13, after every auth consumer exists (email,
-      calendar, cloud, agent backend). safeappeals-authentication extension
-      (cloud/google/microsoft providers, brokered via cloud API), convert
-      calendar+email to getSession(). Detailed plan:
+    content: "DEFERRED (user decision Jul 21), then SPLIT (Jul 29): unified
+      sign-in was to be built in ONE shot right before rung 13. The onboarding
+      redesign now carves out the safeappeals-cloud provider + the
+      safeappeals-authentication extension shell and builds them EARLY (its
+      T1). What remains here: safeappeals-google/-microsoft provider-token
+      providers, calendar+email conversion to getSession(), and the server
+      scopes/Azure/provider-token-refresh workstream. Detailed plan:
       unified_safeappeals_sign-in_225af75a.plan.md"
     status: pending
-  - id: rung7-case-ext
-    content: "Rung 7 (RESHAPED Jul 21, extension-first): NEW safeappeals-case
-      extension — profile walkthrough (global identity → settings), case
-      scaffold (AGENTS.md at case root + .safeAppeals/case.json), case-info
-      editing, then timeline+deadlines as slice 2. Replaces old contrib
-      foundation + rung 9 case info; agent-native via AGENTS.md standard."
+  - id: onboarding-redesign
+    content: "ACTIVE WORKSTREAM (user decision Jul 29): rebuild the first-run
+      wizard for legal users new to agentic AI — 4 steps (SafeAppeals Cloud
+      sign-in → Who You Are → Meet Your AI Assistant → Credits & First Steps),
+      backed by a new extensions/safeappeals-authentication built-in with PKCE
+      + SecretStorage. Cuts across the ladder: pulls the cloud provider out of
+      rung 6.5, the walkthrough/sample-case work out of rung 7, the cloud LLM
+      provider out of rung 13, and the product.json Copilot swap out of rung
+      11. Plan: onboarding_redesign_newcomer.plan.md"
     status: in_progress
+  - id: rung7-case-ext
+    content: "Rung 7 (RESHAPED Jul 21, extension-first; PARTLY SUPERSEDED Jul
+      29): NEW safeappeals-case extension — case scaffold (AGENTS.md at case
+      root + .safeAppeals/case.json), case-info editing, case-setup chat skill.
+      Slices 1 + 1b SHIPPED (567beff7). Slice 1b (onboarding profile step) and
+      the walkthrough now belong to the onboarding redesign (its T4/T10/T12).
+      Slice 2 (timeline + deadlines) DEFERRED until that ships. Replaces old
+      contrib foundation + rung 9 case info; agent-native via AGENTS.md."
+    status: pending
   - id: rung8-organizer-ext
     content: "Rung 8: NEW safeappeals-organizer extension — file organizer +
       converter (explorer context menus + FileDecorationProvider + webview
-      wizard; NO explorerViewer.ts core hook)"
+      wizard; NO explorerViewer.ts core hook). Converter is a Rust sidecar
+      (rust/converter, bin sa-converter) written in Rust from the start,
+      retiring python/ — see the 'Rust strategy' section."
     status: pending
   - id: rung9-audio-ext
     content: "Rung 9: NEW safeappeals-audio extension — recorder + whisper
@@ -91,7 +107,10 @@ todos:
     status: pending
   - id: rung10-rag-ext
     content: "Rung 10: NEW safeappeals-rag extension — indexing/search, reuse
-      time-tracker dual-ABI better-sqlite3 pattern; hybrid BM25+RRF retriever"
+      time-tracker dual-ABI better-sqlite3 pattern; hybrid BM25+RRF retriever.
+      WRITTEN IN RUST FROM THE START (user decision Jul 29): rust/rag-core
+      napi-rs module — fastembed embeddings, usearch HNSW, tantivy BM25. No
+      TS-first-then-port. See the 'Rust strategy' section."
     status: pending
   - id: rung11-agent-update
     content: "Rung 11: copilot → SafeAppeals agent update — rebrand vendored
@@ -112,6 +131,177 @@ isProject: false
 
 # Upstream VS Code Merge — Bolt-On Migration (full disposition plan)
 
+## Status (Jul 29, 2026) — ONBOARDING PIVOT: the ladder is interrupted
+
+**The ladder is paused at rung 7 and an out-of-band workstream takes over.**
+User decision Jul 29, recorded here because it re-cuts four rungs at once.
+
+Why: the audience was reconsidered. SafeAppeals ships to lawyers, paralegals,
+claimant advocates, and self-represented claimants who have **never used an
+agentic AI tool**, and the inherited first-run wizard speaks developer
+("keymaps", "GHE", "pull requests", a `⌘⌃I` chord as a subtitle), promises
+that signing in "unlocks AI features" (false under the zero-credit model), and
+lands users in a product that will edit their files without asking. That is a
+product-credibility problem for a legal audience, and it outranks finishing
+the migration ladder in order. Full plan:
+`onboarding_redesign_newcomer.plan.md` (14 tasks, T0–T14).
+
+**What the onboarding workstream takes from the ladder.** It is not a new
+rung appended to the end; it reaches into four existing ones and lifts the
+piece it needs:
+
+| Ladder rung | What onboarding takes | What stays on the rung |
+| ----------- | --------------------- | ---------------------- |
+| **6.5** unified sign-in | T1: `extensions/safeappeals-authentication` shell + the `safeappeals-cloud` provider only (PKCE client, SecretStorage envelope, build wiring, `trustedExtensionAuthAccess`). T0 adds server-side PKCE work rung 6.5 never scoped. | `safeappeals-google`/`-microsoft` provider-token providers; email XOAUTH2 + calendar `getSession()` conversion; Gmail/Calendar Supabase scopes, Azure provider, provider-token refresh endpoint, Google restricted-scope verification |
+| **7** safeappeals-case | T4 (the "Who You Are" step), T10 (walkthrough → post-wizard checklist), T12 (bundled sample case + spotlight tour) | Slice 2 timeline + deadlines (deferred, see below); slice 3 case skills |
+| **11** copilot → SafeAppeals agent | T14: `product.json` swap — drop `GitHub.copilot-chat`, trim `defaultChatAgent` | Rebranding the vendored agent; BYOK provider wiring |
+| **13** cloud | T13: cloud LLM provider over `POST /llm/chat` + zero-credit UX | Credits/balance/checkout UI, metrics, update, server SSE |
+
+Rungs 8 (organizer), 9 (audio), 10 (RAG) are untouched and still queued in
+order behind this.
+
+**The 6.5 carve-out does not contradict the Jul 21 deferral.** That deferral
+existed so the provider surface would be designed against real consumers
+instead of retrofitted per extension — and that risk lives in the
+google/microsoft **provider-token** providers, which stay deferred. The
+`safeappeals-cloud` provider is account identity with a known shape (Accounts
+menu, `getSession()`), and the onboarding plan already designs the
+SecretStorage envelope to carry `googleProviderToken`, so rung 6.5 adds
+providers to an existing extension rather than reshaping its storage. Cost
+accepted: the auth extension is touched twice instead of once.
+
+**Security defects found on the way in (blocking, T0).** The deployed cloud
+auth that rung 6.5 planned to inherit is not sound: there is no PKCE anywhere
+in the chain (`void-cloud/api/src/routes/auth.ts:39`, `:61`), and the flow
+accepts bearer tokens from the **URI fragment** via the OS URI handler
+(`void-reference/browser/voidCloudUrlHandler.ts:111–137`), interceptable by
+any local app registering the scheme. `/auth/google` also does no
+redirect-URI allow-listing of its own. Separately the reference client
+persists the whole session in plain `IStorageService`
+(`voidCloudService.ts:29–30`, `:353`) — a Local Data Security violation that
+must not be ported. Rung 6.5's server workstream assumed these endpoints were
+fine and only needed scopes bolted on; that assumption is void.
+
+**Rung 7 status.** Slices 1 + 1b shipped in `567beff7`: the extension has four
+commands, the "Set Up Safe Appeals" walkthrough, the `case-setup` chat skill,
+and build wiring. Slice 1b's onboarding step is superseded by T4. Slice 2
+(timeline + deadlines) is **deferred until the onboarding workstream ships**
+(user decision Jul 29) — it has no dependency on onboarding, but T10/T12 edit
+the same extension, so it waits rather than collide. Details, defect list, and
+the void-reference timeline inventory: `safeappeals_case_extension_rung7.plan.md`.
+
+**Uncommitted at the time of this pivot** (working tree on top of `fa3fddf3`):
+the `safeappeals.profile.*` settings registration moved from the extension's
+`package.json` into core `welcomeOnboarding.contribution.ts` at `APPLICATION`
+scope — the correct fix for a real bug, since the wizard was writing keys the
+extension host had not yet registered — plus profile-step UI polish, a
+`workbench.action.restartWelcomeWalkthrough` command, and `webClientServer.ts`
+forwarding SafeAppeals product fields to the browser when running from
+sources. A `product.json` flip of `onboardingSkipSignInStep` to `false` (which
+re-exposed the Copilot sign-in step) was dev scaffolding and has been reverted.
+
+## Rust strategy (consolidated Jul 29 — replaces two standalone plans)
+
+`rust_acceleration_plan_b2c6b37e` and `cleanup_and_rust_consolidation_bea47939`
+were **deleted** on Jul 29 (recoverable at `aa51b7ec`). Both were written
+against the pre-migration `main` branch and pointed at
+`src/vs/workbench/contrib/void/…` paths that no longer exist here; the cleanup
+plan also assumed a `main`-frozen / `dev`-integration branch model that does not
+describe `update-vscode`. Rather than re-base two documents, the surviving
+decisions live here as notes on the rungs that will execute them.
+
+**Governing decision (user, Jul 29): write it in Rust the first time.** Those
+plans existed only because features had already been built in TS/Python and
+then needed replacing. Anything not yet rebuilt skips the round trip — most
+importantly RAG. No TS-first-then-port.
+
+**Crate home:** one top-level `rust/` Cargo workspace, deliberately separate
+from upstream's `cli/` so upstream merges stay clean. Per-platform prebuilds
+are a packaging concern (rung 14) — see `WINDOWS-PREBUILDS-TODO.md`.
+
+### Rung 10 (RAG) — build in Rust from the start
+
+napi-rs module (`rust/rag-core/` → `@safeappeals/rag-core`), N-API surface
+roughly `embedBatch`, `indexChunks`, `search`, `removeDoc`, `stats`:
+
+- Embeddings: `fastembed-rs` (all-MiniLM-L6-v2, 384-dim, ONNX via `ort`) — the
+  same model the old fork used, so any surviving vectors stay compatible
+- Vector search: `usearch` HNSW with mmap persistence per workspace (the old
+  fork brute-forced dot products over an in-memory Map)
+- BM25: `tantivy`; RRF fusion can stay in TS initially
+- Optional later: cross-encoder reranker via `ort` in the same module
+- Keep a SQLite chunk/document store — it is metadata, not the bottleneck
+- Because this is a fresh build, the old plan's `embeddings.db` migration step
+  is moot unless real user indexes need preserving; that is a rung 14 question
+
+Still applies from gap-audit item 5 below: rung 10 means **Advanced RAG**
+(hybrid BM25+RRF, query processor, reranker), not basic vector search.
+
+### Rung 8 (organizer + converter) — Rust sidecar replaces `python/`
+
+`rust/converter/` (bin `sa-converter`), a long-lived child process speaking
+newline-delimited JSON `{command, args}` on stdin — the same protocol as the
+old `electron_bridge.py`, so the TS side stays thin. Preserve the
+`IFileConverterMainService` contract (`configure`, `convert`, `batchConvert`,
+`mergePDFs`, `getAvailableConversions`).
+
+- PDF: `pdfium-render` (render/rasterize) + `lopdf` (merge, metadata)
+- OCR: `ocrs` (pure Rust) first; feature-flag `leptess`/Tesseract if quality demands
+- DOCX `docx-rs`; XLSX/CSV `calamine` + `rust_xlsxwriter`; MD/HTML `comrak` +
+  `ammonia`; EPUB `epub`
+- Port by conversion pair and report unsupported pairs through
+  `getAvailableConversions` so the UI degrades gracefully
+- **Risk:** LibreOffice-dependent pairs (docx→pdf via LO) have no good Rust
+  equivalent — keep them listed unsupported, or shell out to LibreOffice for
+  those pairs only
+- Retires `python/` and ~200 lines of venv-discovery once pair parity is reached
+
+### safeappeals-documents follow-up (rung 5 already shipped)
+
+Goal: Rust as the single implementation per format, then drop the `xlsx`
+(SheetJS) and `pdfjs-dist` dependencies. Order matters — extraction and
+creation are low risk, editing is not:
+
+- **XLSX formula round-trip gap (BLOCKING for the Rust edit path).**
+  `calamine` drops formula ASTs on load and the writer stores formulas as
+  strings, so a load→save through Rust today would **destroy formulas in
+  existing workbooks**. Fix: parse `<f>` elements in `parser.rs`, use
+  `write_formula` in `writer.rs`. Gate the switch on load→save→reload
+  round-trip tests asserting values, formats, AND formulas survive. SheetJS
+  stays until then.
+- Add `extract_text_csv()` and a real `create_empty_xlsx()` (the existing
+  `create_simple_xlsx` is demo code) before swapping extraction/creation.
+- PDF text extraction: replace `pdfjs-dist` `getTextContent` loops with
+  `PdfRenderer.load` + per-page `get_page_text`; decide whether to add
+  `get_document_info()` for Title/Author or accept losing rich metadata.
+- **WASM loading outside the browser:** the existing `--target web` artifacts
+  can be loaded from Node via `fs.readFileSync(wasmPath)` + `init(bytes)` — no
+  second build target — and the pdfium.js Emscripten glue already supports
+  Node. Note the tension with `safeappeals_agent_tools`, which instead calls
+  for `wasm-pack build --target nodejs` for the headless XLSX path; pick one
+  before building the documents agent tools.
+
+### Rust-backed WASM diff — cheap, independent, do any time
+
+1.129 already ships the slot: `diffAlgorithm: 'advanced-wasm'` →
+`src/vs/editor/common/diff/externalLinesDiffComputer.ts` → `@vscode/diff`
+(already in `package.json` at `0.0.2-7`). Phase A is only flipping the default
+and benchmarking on large legal documents (10k+ lines), watching two known
+TODOs in that file: `ignoreTrimWhitespace` is forced true and
+`maxComputationTimeMs` is unsupported — verify both acceptable before rollout.
+Writing our own `rust/diff-wasm/` crate is Phase B, and only if the benchmarks
+demand it.
+
+### Deliberately dropped from those plans
+
+- The `main`-frozen / `dev`-integration branch model — does not describe this branch.
+- Dead pdf.js asset cleanup and stale WASM output dirs — those files live in
+  `void-reference/`, which is deleted wholesale at rung 15.
+- Mega-file splits: `SidebarChat.tsx` (4,549 lines) is gone with the old chat
+  sidebar (replaced by upstream `ChatViewPane`), and the XLSX `renderer.ts`
+  (5,248 lines) already moved into `safeappeals-documents` — re-evaluate there
+  on its own merits, not as migration work.
+
 ## Status (Jul 21, 2026) — EXTENSION-FIRST RE-SEQUENCE (user decision)
 
 **The ladder no longer "cracks into" src/vs.** User call (Jul 21): stay in
@@ -126,7 +316,10 @@ mature agent that replaces the planned hand-written contrib agent loop.
 New ladder: **7 safeappeals-case → 8 safeappeals-organizer → 9
 safeappeals-audio → 10 safeappeals-rag → 11 copilot→SafeAppeals agent
 update (BYOK) → 6.5 unified sign-in → 13 cloud/credits → tools pass → 14
-packaging → 15 placement review.** Old rung 7 (contrib
+packaging → 15 placement review.** (Interrupted Jul 29 — the onboarding
+redesign now runs ahead of rung 7's remainder and carves pieces out of 6.5,
+7, 11, and 13. See the Jul 29 status section above before acting on this
+ordering.) Old rung 7 (contrib
 foundation/settings service) is DELETED — VS Code settings + globalStorage
 cover it. Old rung 12 (contrib AI integration) folds into rung 11.
 Section J's original ladder below is superseded by this ordering; sections
