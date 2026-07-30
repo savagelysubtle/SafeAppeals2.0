@@ -383,6 +383,18 @@ export class WebClientServer {
 		};
 
 		if (!this._environmentService.isBuilt) {
+			// SafeAppeals: when running from sources the browser falls back to
+			// Code - OSS defaults and never sees product.json. Forward branding
+			// and onboarding configuration so the web client matches desktop.
+			Object.assign(productConfiguration, {
+				nameShort: this._productService.nameShort,
+				nameLong: this._productService.nameLong,
+				defaultChatAgent: this._productService.defaultChatAgent,
+				onboardingSkipSignInStep: this._productService.onboardingSkipSignInStep,
+				onboardingKeymaps: this._productService.onboardingKeymaps,
+				onboardingThemes: this._productService.onboardingThemes,
+			});
+
 			try {
 				const productOverrides = JSON.parse((await promises.readFile(join(APP_ROOT, 'product.overrides.json'))).toString());
 				Object.assign(productConfiguration, productOverrides);

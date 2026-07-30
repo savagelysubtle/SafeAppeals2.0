@@ -5,20 +5,19 @@
 
 import { $, append, clearNode, h } from '../../../../base/browser/dom.js';
 import { KeybindingLabel } from '../../../../base/browser/ui/keybindingLabel/keybindingLabel.js';
-import { coalesce, shuffle } from '../../../../base/common/arrays.js';
 import { Disposable, DisposableStore } from '../../../../base/common/lifecycle.js';
-import { isMacintosh, isWeb, OS } from '../../../../base/common/platform.js';
+import { isWeb, OS } from '../../../../base/common/platform.js';
 import { localize } from '../../../../nls.js';
-import { MenuId } from '../../../../platform/actions/common/actions.js';
+import { MenuId, MenuRegistry } from '../../../../platform/actions/common/actions.js';
 import { HiddenItemStrategy, MenuWorkbenchToolBar } from '../../../../platform/actions/browser/toolbar.js';
 import { CommandsRegistry } from '../../../../platform/commands/common/commands.js';
 import { IConfigurationService } from '../../../../platform/configuration/common/configuration.js';
 import { ContextKeyExpr, ContextKeyExpression, IContextKeyService } from '../../../../platform/contextkey/common/contextkey.js';
 import { IInstantiationService } from '../../../../platform/instantiation/common/instantiation.js';
 import { IKeybindingService } from '../../../../platform/keybinding/common/keybinding.js';
-import { IStorageService, StorageScope, StorageTarget, WillSaveStateReason } from '../../../../platform/storage/common/storage.js';
 import { defaultKeybindingLabelStyles } from '../../../../platform/theme/browser/defaultStyles.js';
-import { IWorkspaceContextService, WorkbenchState } from '../../../../platform/workspace/common/workspace.js';
+import { IWorkspaceContextService } from '../../../../platform/workspace/common/workspace.js';
+import { WorkspaceFolderCountContext } from '../../../common/contextkeys.js';
 
 interface WatermarkEntry {
 	readonly id: string;
@@ -30,51 +29,35 @@ interface WatermarkEntry {
 }
 
 const showChatContextKey = ContextKeyExpr.and(ContextKeyExpr.equals('chatSetupHidden', false), ContextKeyExpr.equals('chatSetupDisabledInWorkspace', false));
+// SafeAppeals: initCase needs an open folder (matches T10 checklist `workspaceFolderCount > 0`).
+const hasWorkspaceFolder = ContextKeyExpr.greater(WorkspaceFolderCountContext.key, 0);
 
-const openChat: WatermarkEntry = { text: localize('watermark.openChat', "Open Chat"), id: 'workbench.action.chat.open', when: { native: showChatContextKey, web: showChatContextKey } };
-const showCommands: WatermarkEntry = { text: localize('watermark.showCommands', "Show All Commands"), id: 'workbench.action.showCommands' };
-const gotoFile: WatermarkEntry = { text: localize('watermark.quickAccess', "Go to File"), id: 'workbench.action.quickOpen' };
-const openFile: WatermarkEntry = { text: localize('watermark.openFile', "Open File"), id: 'workbench.action.files.openFile' };
-const openFolder: WatermarkEntry = { text: localize('watermark.openFolder', "Open Folder"), id: 'workbench.action.files.openFolder' };
-const openFileOrFolder: WatermarkEntry = { text: localize('watermark.openFileFolder', "Open File or Folder"), id: 'workbench.action.files.openFileFolder' };
-const openRecent: WatermarkEntry = { text: localize('watermark.openRecent', "Open Recent"), id: 'workbench.action.openRecent' };
-const newUntitledFile: WatermarkEntry = { text: localize('watermark.newUntitledFile', "New Untitled Text File"), id: 'workbench.action.files.newUntitledFile' };
-const findInFiles: WatermarkEntry = { text: localize('watermark.findInFiles', "Find in Files"), id: 'workbench.action.findInFiles' };
-const toggleTerminal: WatermarkEntry = { text: localize({ key: 'watermark.toggleTerminal', comment: ['toggle is a verb here'] }, "Toggle Terminal"), id: 'workbench.action.terminal.toggleTerminal', when: { web: ContextKeyExpr.equals('terminalProcessSupported', true) } };
-const startDebugging: WatermarkEntry = { text: localize('watermark.startDebugging', "Start Debugging"), id: 'workbench.action.debug.start', when: { web: ContextKeyExpr.equals('terminalProcessSupported', true) } };
-const openSettings: WatermarkEntry = { text: localize('watermark.openSettings', "Open Settings"), id: 'workbench.action.openSettings' };
+// SafeAppeals: case-language watermark tips (replaces upstream developer shortcuts).
+const showChat: WatermarkEntry = { text: localize('watermark.showChat', "Show Chat"), id: 'workbench.action.chat.open', when: { native: showChatContextKey, web: showChatContextKey } };
+const newCase: WatermarkEntry = { text: localize('watermark.newCase', "New Case"), id: 'safeappeals-case.initCase', when: { native: hasWorkspaceFolder, web: hasWorkspaceFolder } };
+const openCaseFolder: WatermarkEntry = { text: localize('watermark.openCaseFolder', "Open Case Folder"), id: 'workbench.action.files.openFolder' };
+const takeTour: WatermarkEntry = { text: localize('watermark.takeTour', "Take the Tour"), id: 'safeappeals-case.takeTour' };
 
-const baseEntries: WatermarkEntry[] = [
-	openChat,
-	showCommands,
-];
-
-const emptyWindowEntries: WatermarkEntry[] = coalesce([
-	...baseEntries,
-	openRecent,
-	...(isMacintosh && !isWeb ? [openFileOrFolder] : [openFile, openFolder]),
-	isMacintosh && !isWeb ? newUntitledFile : undefined, // fill in one more on macOS to get to 5 entries
-]);
-
-const workspaceEntries: WatermarkEntry[] = [
-	...baseEntries,
-];
-
-const otherEntries: WatermarkEntry[] = [
-	gotoFile,
-	findInFiles,
-	startDebugging,
-	toggleTerminal,
-	openSettings,
+// SafeAppeals: one tip list for empty window and workspace (New Case is gated by when, not by list).
+const caseEntries: WatermarkEntry[] = [
+	showChat,
+	newCase,
+	openCaseFolder,
+	takeTour,
 ];
 
 export class EditorGroupWatermark extends Disposable {
 
-	private static readonly CACHED_WHEN = 'editorGroupWatermark.whenConditions';
 	private static readonly SETTINGS_KEY = 'workbench.tips.enabled';
-	private static readonly MINIMUM_ENTRIES = 3;
 
-	private readonly cachedWhen: { [when: string]: boolean };
+	/** Context keys referenced by tip `when` clauses — used to avoid re-render storms. */
+	private static readonly WHEN_CONTEXT_KEYS = new Set<string>([
+		'chatSetupHidden',
+		'chatSetupDisabledInWorkspace',
+		WorkspaceFolderCountContext.key,
+	]);
+
+	private static readonly TIP_COMMAND_IDS = new Set(caseEntries.map(entry => entry.id));
 
 	private readonly shortcuts: HTMLElement;
 	private readonly toolbarContainer: HTMLElement;
@@ -82,7 +65,8 @@ export class EditorGroupWatermark extends Disposable {
 	private readonly keybindingLabels = this._register(new DisposableStore());
 
 	private enabled = false;
-	private workbenchState: WorkbenchState;
+	/** Joined command ids currently painted — skip DOM work when the filtered set is unchanged. */
+	private renderedEntryKey: string | undefined;
 
 	constructor(
 		container: HTMLElement,
@@ -90,13 +74,9 @@ export class EditorGroupWatermark extends Disposable {
 		@IWorkspaceContextService private readonly contextService: IWorkspaceContextService,
 		@IContextKeyService private readonly contextKeyService: IContextKeyService,
 		@IConfigurationService private readonly configurationService: IConfigurationService,
-		@IStorageService private readonly storageService: IStorageService,
 		@IInstantiationService private readonly instantiationService: IInstantiationService
 	) {
 		super();
-
-		this.cachedWhen = this.storageService.getObject(EditorGroupWatermark.CACHED_WHEN, StorageScope.PROFILE, Object.create(null));
-		this.workbenchState = this.contextService.getWorkbenchState();
 
 		const elements = h('.editor-group-watermark-wrapper', [
 			h('.editor-group-watermark-toolbar-container@toolbarContainer'),
@@ -120,57 +100,71 @@ export class EditorGroupWatermark extends Disposable {
 
 		this.registerListeners();
 
-		this.render();
+		this.refreshEntriesIfChanged();
 	}
 
 	private registerListeners(): void {
 		this._register(this.configurationService.onDidChangeConfiguration(e => {
-			if (
-				e.affectsConfiguration(EditorGroupWatermark.SETTINGS_KEY) &&
-				this.enabled !== this.configurationService.getValue<boolean>(EditorGroupWatermark.SETTINGS_KEY)
-			) {
-				this.render();
+			if (e.affectsConfiguration(EditorGroupWatermark.SETTINGS_KEY)) {
+				this.refreshEntriesIfChanged();
 			}
 		}));
 
-		this._register(this.contextService.onDidChangeWorkbenchState(workbenchState => {
-			if (this.workbenchState !== workbenchState) {
-				this.workbenchState = workbenchState;
-				this.render();
+		// SafeAppeals: New Case tip is gated on workspaceFolderCount.
+		this._register(this.contextService.onDidChangeWorkspaceFolders(() => this.refreshEntriesIfChanged()));
+		this._register(this.contextService.onDidChangeWorkbenchState(() => this.refreshEntriesIfChanged()));
+
+		// SafeAppeals: contributes.commands reach MenuRegistry after first paint.
+		this._register(MenuRegistry.onDidChangeMenu(e => {
+			if (e.has(MenuId.CommandPalette)) {
+				this.refreshEntriesIfChanged();
+			}
+		}));
+		this._register(CommandsRegistry.onDidRegisterCommand(id => {
+			if (EditorGroupWatermark.TIP_COMMAND_IDS.has(id)) {
+				this.refreshEntriesIfChanged();
 			}
 		}));
 
-		this._register(this.storageService.onWillSaveState(e => {
-			if (e.reason === WillSaveStateReason.SHUTDOWN) {
-				const entries = [...emptyWindowEntries, ...workspaceEntries, ...otherEntries];
-				for (const entry of entries) {
-					const when = isWeb ? entry.when?.web : entry.when?.native;
-					if (when) {
-						this.cachedWhen[entry.id] = this.contextKeyService.contextMatchesRules(when);
-					}
-				}
-
-				this.storageService.store(EditorGroupWatermark.CACHED_WHEN, JSON.stringify(this.cachedWhen), StorageScope.PROFILE, StorageTarget.MACHINE);
+		// SafeAppeals: replace upstream cachedWhen — re-evaluate when tip `when` keys settle.
+		this._register(this.contextKeyService.onDidChangeContext(e => {
+			if (e.affectsSome(EditorGroupWatermark.WHEN_CONTEXT_KEYS)) {
+				this.refreshEntriesIfChanged();
 			}
 		}));
 	}
 
-	private render(): void {
-		this.enabled = this.configurationService.getValue<boolean>(EditorGroupWatermark.SETTINGS_KEY);
-
-		clearNode(this.shortcuts);
-		this.transientDisposables.clear();
-
-		if (!this.enabled) {
+	/**
+	 * Recomputes the visible tip set and rebuilds the DOM only when that set
+	 * (or the tips-enabled flag) actually changed. Cheap to call from noisy
+	 * startup events; avoids render storms without a debounce timer.
+	 */
+	private refreshEntriesIfChanged(): void {
+		const enabled = this.configurationService.getValue<boolean>(EditorGroupWatermark.SETTINGS_KEY);
+		if (!enabled) {
+			if (this.enabled || this.renderedEntryKey !== undefined) {
+				this.enabled = false;
+				this.renderedEntryKey = undefined;
+				clearNode(this.shortcuts);
+				this.transientDisposables.clear();
+			}
 			return;
 		}
 
-		const entries = this.filterEntries(this.workbenchState !== WorkbenchState.EMPTY ? workspaceEntries : emptyWindowEntries);
-		if (entries.length < EditorGroupWatermark.MINIMUM_ENTRIES) {
-			const additionalEntries = this.filterEntries(otherEntries);
-			shuffle(additionalEntries);
-			entries.push(...additionalEntries.slice(0, EditorGroupWatermark.MINIMUM_ENTRIES - entries.length));
+		const entries = this.filterEntries(caseEntries);
+		const entryKey = entries.map(entry => entry.id).join('\0');
+		if (this.enabled && this.renderedEntryKey === entryKey) {
+			return;
 		}
+
+		this.enabled = true;
+		this.renderedEntryKey = entryKey;
+		this.renderEntries(entries);
+	}
+
+	private renderEntries(entries: WatermarkEntry[]): void {
+		clearNode(this.shortcuts);
+		this.transientDisposables.clear();
 
 		const box = append(this.shortcuts, $('.watermark-box'));
 
@@ -180,18 +174,17 @@ export class EditorGroupWatermark extends Disposable {
 
 			for (const entry of entries) {
 				const keys = this.keybindingService.lookupKeybinding(entry.id);
-				if (!keys) {
-					continue;
-				}
 
 				const dl = append(box, $('dl'));
 				const dt = append(dl, $('dt'));
 				dt.textContent = entry.text;
 
-				const dd = append(dl, $('dd'));
-
-				const label = this.keybindingLabels.add(new KeybindingLabel(dd, OS, { renderUnboundKeybindings: true, ...defaultKeybindingLabelStyles }));
-				label.set(keys);
+				// SafeAppeals: never render the "Unbound" key chip — tip label alone when no shortcut.
+				if (keys) {
+					const dd = append(dl, $('dd'));
+					const label = this.keybindingLabels.add(new KeybindingLabel(dd, OS, { ...defaultKeybindingLabelStyles }));
+					label.set(keys);
+				}
 			}
 		};
 
@@ -200,18 +193,19 @@ export class EditorGroupWatermark extends Disposable {
 	}
 
 	private filterEntries(entries: WatermarkEntry[]): WatermarkEntry[] {
-		const filteredEntries = entries
+		return entries
 			.filter(entry => {
-				if (this.cachedWhen[entry.id]) {
-					return true; // cached from previous session
-				}
-
 				const contextKey = isWeb ? entry.when?.web : entry.when?.native;
-				return !contextKey /* works without context */ || this.contextKeyService.contextMatchesRules(contextKey);
+				if (!contextKey) {
+					return true;
+				}
+				// SafeAppeals: live when only (no prior-session cache) so New Case
+				// disappears immediately in an empty window.
+				return this.contextKeyService.contextMatchesRules(contextKey);
 			})
-			.filter(entry => !!CommandsRegistry.getCommand(entry.id))
-			.filter(entry => !!this.keybindingService.lookupKeybinding(entry.id));
-
-		return filteredEntries;
+			// SafeAppeals: extension `contributes.commands` lands in MenuRegistry before
+			// activation; CommandsRegistry only gets a handler when activate() calls
+			// registerCommand. Prefer MenuRegistry so tips appear without forcing activation.
+			.filter(entry => !!MenuRegistry.getCommand(entry.id) || !!CommandsRegistry.getCommand(entry.id));
 	}
 }

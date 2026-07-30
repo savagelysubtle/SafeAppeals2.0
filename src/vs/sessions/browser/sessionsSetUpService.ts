@@ -346,7 +346,8 @@ class SessionsSetUpWidget extends Disposable {
 		this.logService.info('[sessions welcome] Showing welcome dialog');
 
 		const disposables = new DisposableStore();
-		const productName = localize('walkthrough.productName', "{0} - Agents", this.productService.nameLong);
+		// SafeAppeals: legal-workspace product name (not "{0} - Agents").
+		const productName = this.productService.nameLong;
 
 		const dialog = disposables.add(new Dialog(
 			this.layoutService.activeContainer,
@@ -355,7 +356,8 @@ class SessionsSetUpWidget extends Disposable {
 			createWorkbenchDialogOptions({
 				type: 'none',
 				extraClasses: ['chat-setup-dialog', 'sessions-welcome-dialog', 'sessions-main-welcome-dialog'],
-				detail: localize('sessions.welcome.detail', "Your AI-powered coding experience where agents explore, build, and iterate with you."),
+				// SafeAppeals: case-language welcome copy (replaces "AI-powered coding experience").
+				detail: localize('sessions.welcome.detail', "Your legal workspace where an AI assistant helps you explore cases, draft documents, and work through appeals."),
 				icon: Codicon.agent,
 				alignment: DialogContentsAlignment.Vertical,
 				cancelId: 1,

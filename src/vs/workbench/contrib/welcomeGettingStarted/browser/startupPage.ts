@@ -32,8 +32,8 @@ import { AuxiliaryBarMaximizedContext } from '../../../common/contextkeys.js';
 import { mainWindow } from '../../../../base/browser/window.js';
 import { getActiveElement } from '../../../../base/browser/dom.js';
 import { isWeb } from '../../../../base/common/platform.js';
-import { IOnboardingService } from '../../welcomeOnboarding/common/onboardingService.js';
-import { ONBOARDING_STORAGE_KEY } from '../../welcomeOnboarding/common/onboardingTypes.js';
+import { IOnboardingService, OnboardingDismissReason } from '../../welcomeOnboarding/common/onboardingService.js';
+import { ONBOARDING_DISMISS_ATTEMPTS_STORAGE_KEY, ONBOARDING_STORAGE_KEY } from '../../welcomeOnboarding/common/onboardingTypes.js';
 import { IChatEntitlementService } from '../../../services/chat/common/chatEntitlementService.js';
 
 export const restoreWalkthroughsConfigurationKey = 'workbench.welcomePage.restorableWalkthroughs';
@@ -42,6 +42,9 @@ export type RestoreWalkthroughsConfigurationValue = { folder: string; category?:
 const configurationKey = 'workbench.startupEditor';
 const oldConfigurationKey = 'workbench.welcome.enabled';
 const telemetryOptOutStorageKey = 'workbench.telemetryOptOutShown';
+
+/** Max Esc/overlay dismissals before treating onboarding as seen (stops infinite nag). */
+const ONBOARDING_DISMISS_ATTEMPT_CAP = 2;
 
 export class StartupPageEditorResolverContribution extends Disposable implements IWorkbenchContribution {
 
@@ -239,7 +242,8 @@ export class StartupPageRunnerContribution extends Disposable implements IWorkbe
 		}
 
 		if (isWeb) {
-			return; // not supported on web (e.g. codespaces, github.dev)
+			// SafeAppeals: web onboarding intentionally disabled — see plan
+			return;
 		}
 
 		if (!this.configurationService.getValue<boolean>('workbench.welcomePage.experimentalOnboarding')) {
@@ -250,20 +254,35 @@ export class StartupPageRunnerContribution extends Disposable implements IWorkbe
 			return; // AI features are hidden, do not show AI-focused onboarding
 		}
 
-		if (!this.storageService.isNew(StorageScope.APPLICATION)) {
-			return; // only show onboarding for new users who have never used the product before
+		if (this.storageService.getBoolean(ONBOARDING_STORAGE_KEY, StorageScope.APPLICATION)) {
+			return; // onboarding already completed or explicitly skipped
 		}
 
-		if (this.storageService.getBoolean(ONBOARDING_STORAGE_KEY, StorageScope.APPLICATION)) {
-			return; // onboarding already completed
+		const dismissAttempts = this.storageService.getNumber(ONBOARDING_DISMISS_ATTEMPTS_STORAGE_KEY, StorageScope.APPLICATION, 0);
+		if (dismissAttempts >= ONBOARDING_DISMISS_ATTEMPT_CAP) {
+			return; // Esc/overlay dismissed enough times — stop showing
+		}
+
+		// First-run (isNew) or a prior Esc/overlay that left an incomplete attempt.
+		// Existing installs have no dismiss counter, so they stay gated out.
+		const isFirstRun = this.storageService.isNew(StorageScope.APPLICATION);
+		const hasIncompleteAttempt = dismissAttempts > 0;
+		if (!isFirstRun && !hasIncompleteAttempt) {
+			return;
 		}
 
 		// Show the onboarding overlay on top of the welcome page
 		this.onboardingService.show();
 
-		// Mark onboarding as completed when dismissed
-		this._register(this.onboardingService.onDidDismiss(() => {
-			this.storageService.store(ONBOARDING_STORAGE_KEY, true, StorageScope.APPLICATION, StorageTarget.USER);
+		// Seen-flag only on explicit complete/skip; Esc/overlay increments attempt counter
+		this._register(this.onboardingService.onDidDismiss((reason: OnboardingDismissReason) => {
+			if (reason === 'complete' || reason === 'skip') {
+				this.storageService.store(ONBOARDING_STORAGE_KEY, true, StorageScope.APPLICATION, StorageTarget.USER);
+				return;
+			}
+
+			const nextAttempts = this.storageService.getNumber(ONBOARDING_DISMISS_ATTEMPTS_STORAGE_KEY, StorageScope.APPLICATION, 0) + 1;
+			this.storageService.store(ONBOARDING_DISMISS_ATTEMPTS_STORAGE_KEY, nextAttempts, StorageScope.APPLICATION, StorageTarget.USER);
 		}));
 	}
 }

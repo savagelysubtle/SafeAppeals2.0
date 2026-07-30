@@ -116,6 +116,23 @@ export enum ChatConfiguration {
 }
 
 /**
+ * Default value for {@link ChatConfiguration.AutoApproveEdits}.
+ * Order matters: last matching pattern wins.
+ */
+export const defaultChatToolsEditsAutoApprove: Readonly<Record<string, boolean>> = {
+	// SafeAppeals: legal audience — require approval before agent file edits (upstream defaults to true)
+	'**/*': false,
+	'**/.vscode/*.json': false,
+	'**/.git/**': false,
+	'**/{package.json,server.xml,build.rs,web.config,.gitattributes,.env,Cargo.toml}': false,
+	'**/*.{code-workspace,csproj,fsproj,vbproj,vcxproj,proj,targets,props,gradle,gradle.kts}': false,
+	'**/gradle.properties': false,
+	'**/ruby_lsp/*/addon': false, // Auto-included Ruby addons
+	'**/*.lock': false, // yarn.lock, bun.lock, etc.
+	'**/*-lock.{yaml,json}': false, // pnpm-lock.yaml, package-lock.json
+};
+
+/**
  * The "kind" of agents for custom agents.
  */
 export enum ChatModeKind {

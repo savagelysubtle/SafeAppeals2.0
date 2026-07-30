@@ -62,6 +62,35 @@
 	padding: 20px 28px 0;
 }
 
+/* SafeAppeals: persistent brand mark in the modal header */
+.onboarding-a-header-brand {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	min-width: 0;
+	/* keep clear of the absolutely positioned close button */
+	margin-right: 36px;
+}
+
+.onboarding-a-header-brand-icon {
+	width: 22px;
+	height: 22px;
+	flex: none;
+	background-image: url('../../../../browser/media/logo_cube_noshadow.png');
+	background-repeat: no-repeat;
+	background-position: center center;
+	background-size: contain;
+}
+
+.onboarding-a-header-brand-name {
+	font-size: 13px;
+	font-weight: 600;
+	color: var(--vscode-foreground, #333);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
 .onboarding-a-close-btn {
 	position: absolute;
 	top: 16px;
@@ -326,7 +355,7 @@
 	font-size: 14px;
 	line-height: 1.45;
 	color: var(--vscode-descriptionForeground);
-	white-space: nowrap;
+	white-space: normal;
 }
 
 .onboarding-a-signin-actions {
@@ -334,8 +363,15 @@
 	align-items: stretch;
 	gap: 8px;
 	margin-top: 4px;
-	flex-wrap: nowrap;
+	flex-wrap: wrap;
 	min-width: 0;
+}
+
+.onboarding-a-signin-explainer {
+	margin: 4px 0 0;
+	font-size: 12px;
+	line-height: 1.45;
+	color: var(--vscode-descriptionForeground);
 }
 
 .onboarding-a-signin-footer {
@@ -350,29 +386,6 @@
 	gap: 8px;
 }
 
-.onboarding-a-signin-inline-link {
-	padding: 0;
-	border: none;
-	background: none;
-	color: var(--vscode-textLink-foreground, #3794ff);
-	font-size: 12px;
-	font-family: inherit;
-	text-align: left;
-	cursor: pointer;
-	width: fit-content;
-	max-width: 100%;
-}
-
-.onboarding-a-signin-inline-link:hover {
-	text-decoration: underline;
-}
-
-.onboarding-a-signin-inline-link:focus-visible {
-	outline: 2px solid var(--vscode-focusBorder);
-	outline-offset: 2px;
-	border-radius: 4px;
-}
-
 .onboarding-a-signin-disclaimer-col {
 	display: flex;
 	flex-direction: column;
@@ -384,14 +397,6 @@
 	line-height: 1.4;
 	color: var(--vscode-descriptionForeground);
 	white-space: normal;
-}
-
-.onboarding-a-signin-disclaimer strong {
-	color: var(--vscode-editor-foreground);
-}
-
-.onboarding-a-signin-disclaimer p {
-	margin: 0;
 }
 
 .onboarding-a-signin-disclaimer a {
@@ -436,60 +441,14 @@
 	white-space: nowrap;
 }
 
-/* Inline GitHub Enterprise instance input */
-.onboarding-a-signin-ghe-input {
-	display: flex;
-	flex: 1 1 auto;
-	flex-direction: column;
-	gap: 6px;
-	margin-top: 4px;
-	min-width: 0;
-	width: 100%;
-	max-width: 320px;
-}
-
-.onboarding-a-signin-ghe-input .monaco-inputbox {
-	height: 40px;
-	border-radius: 8px;
-	font-size: 13px;
-	line-height: 40px;
-}
-
-.onboarding-a-signin-ghe-input .monaco-inputbox .monaco-action-bar {
-	top: 50%;
-	right: 6px;
-	transform: translateY(-50%);
-}
-
-.onboarding-a-signin-ghe-input .monaco-inputbox.error {
-	box-shadow: inset 0 0 0 1px var(--vscode-inputValidation-errorBorder);
-}
-
-.onboarding-a-signin-ghe-message {
-	font-size: 12px;
-	line-height: 1.4;
-	color: var(--vscode-descriptionForeground);
-	width: 100%;
-	max-width: 100%;
-	box-sizing: border-box;
-	white-space: normal;
-	overflow-wrap: anywhere;
-	word-break: break-word;
-	min-height: 16px;
-}
-
-.onboarding-a-signin-ghe-message.error {
-	color: var(--vscode-inputValidation-errorForeground, var(--vscode-errorForeground));
-}
-
-.onboarding-a-signin-ghe-progress {
+.onboarding-a-signin-progress {
 	display: flex;
 	align-items: center;
 	gap: 8px;
 	padding: 8px 0;
 }
 
-.onboarding-a-signin-ghe-progress-message {
+.onboarding-a-signin-progress-message {
 	font-size: 13px;
 	color: var(--vscode-descriptionForeground);
 }
@@ -514,35 +473,8 @@
 	justify-content: center;
 }
 
-.onboarding-a-provider-mark.github {
-	background-image: none;
-}
-
-.onboarding-a-provider-mark.github .codicon {
-	font-size: 18px;
-	color: currentColor;
-}
-
-.onboarding-a-provider-mark.github-enterprise {
-	background-image: none;
-}
-
-.onboarding-a-provider-mark.github-enterprise .codicon {
-	font-size: 18px;
-	color: currentColor;
-}
-
 .onboarding-a-provider-mark.google {
-	background-image: url('../../../chat/browser/chatSetup/media/google.svg');
-}
-
-.monaco-workbench.hc-light .onboarding-a-provider-mark.apple,
-.monaco-workbench.vs .onboarding-a-provider-mark.apple {
-	background-image: url('../../../chat/browser/chatSetup/media/apple-light.svg');
-}
-
-.onboarding-a-provider-mark.apple {
-	background-image: url('../../../chat/browser/chatSetup/media/apple-dark.svg');
+	background-image: url('./google.svg');
 }
 
 /* Personalize step */
@@ -665,51 +597,12 @@
 	background: var(--vscode-editorWidget-background, var(--vscode-sideBar-background));
 }
 
-.onboarding-a-keymap-list {
-	display: flex;
-	flex-wrap: wrap;
-	gap: 10px;
-}
-
-.onboarding-a-keymap-pill {
-	padding: 7px 14px;
-	border-radius: 20px;
-	border: 1px solid var(--vscode-widget-border, rgba(255, 255, 255, 0.1));
-	background: var(--vscode-editorWidget-background, var(--vscode-sideBar-background));
-	color: var(--vscode-editor-foreground);
-	font-size: 12px;
-	cursor: pointer;
-	font-family: inherit;
-	transition: background 0.12s ease, border-color 0.12s ease;
-	outline: none;
-	display: flex;
-	align-items: center;
-	gap: 6px;
-}
-
-.onboarding-a-keymap-pill:hover {
-	background: var(--vscode-list-hoverBackground);
-	border-color: var(--vscode-focusBorder);
-}
-
-.onboarding-a-keymap-pill:focus-visible {
-	outline: 2px solid var(--vscode-focusBorder);
-	outline-offset: 1px;
-}
-
-.onboarding-a-keymap-pill.selected {
-	background: var(--vscode-button-background);
-	color: var(--vscode-button-foreground);
-	border-color: var(--vscode-button-background);
-}
-
-/* AI Preference step */
+/* Meet Your AI Assistant — approval-mode cards (reused from former AiPreference step) */
 .onboarding-a-ai-pref {
 	display: flex;
 	flex-direction: column;
-	justify-content: center;
-	gap: 16px;
-	flex: 1;
+	justify-content: flex-start;
+	gap: 12px;
 	width: 100%;
 	min-height: 0;
 	margin: 0 auto;
@@ -718,7 +611,7 @@
 
 .onboarding-a-ai-pref-cards {
 	display: grid;
-	grid-template-columns: repeat(3, minmax(0, 1fr));
+	grid-template-columns: repeat(2, minmax(0, 1fr));
 	gap: 14px;
 }
 
@@ -756,14 +649,29 @@
 }
 
 .onboarding-a-ai-pref-card-icon .codicon {
-	font-size: 48px;
+	font-size: 32px;
 	color: var(--vscode-textLink-foreground, #3794ff);
 }
 
 .onboarding-a-ai-pref-card-title {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 8px;
 	font-size: 15px;
 	font-weight: 600;
 	color: var(--vscode-editor-foreground);
+}
+
+.onboarding-a-ai-pref-card-badge {
+	display: inline-block;
+	padding: 1px 7px;
+	font-size: 11px;
+	font-weight: 600;
+	line-height: 1.4;
+	border-radius: 4px;
+	color: var(--vscode-badge-foreground);
+	background: var(--vscode-badge-background);
 }
 
 .onboarding-a-ai-pref-card-desc {
@@ -776,6 +684,113 @@
 	font-size: 12px;
 	color: var(--vscode-descriptionForeground);
 	text-align: center;
+}
+
+/* Meet Your AI Assistant step */
+.onboarding-a-agent-intro {
+	display: flex;
+	flex-direction: column;
+	gap: 18px;
+	flex: 1;
+	width: 100%;
+	min-height: 0;
+	margin: 0 auto;
+	padding: 0;
+	text-align: left;
+}
+
+.onboarding-a-disclosure {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	padding: 14px 16px;
+	border-radius: 8px;
+	border: 1px solid var(--vscode-widget-border, rgba(255, 255, 255, 0.08));
+	background: var(--vscode-editorWidget-background, var(--vscode-sideBar-background));
+}
+
+.onboarding-a-disclosure-heading {
+	margin: 0;
+	font-size: 13px;
+	font-weight: 600;
+	color: var(--vscode-editor-foreground);
+}
+
+.onboarding-a-disclosure-body {
+	margin: 0;
+	font-size: 12px;
+	line-height: 1.55;
+	color: var(--vscode-descriptionForeground);
+}
+
+.onboarding-a-disclosure-consent {
+	margin-top: 2px;
+}
+
+.onboarding-a-agent-intro-features {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+}
+
+.onboarding-a-inoculation {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+	padding: 16px 18px;
+	border-radius: 8px;
+	border: 1px solid var(--vscode-inputValidation-warningBorder, #cca700);
+	background: color-mix(in srgb, var(--vscode-inputValidation-warningBackground, rgba(204, 167, 0, 0.15)) 85%, var(--vscode-editor-background));
+}
+
+.onboarding-a-inoculation-citation {
+	margin: 0;
+	padding: 10px 12px;
+	font-family: var(--monaco-monospace-font);
+	font-size: 13px;
+	font-style: italic;
+	line-height: 1.45;
+	color: var(--vscode-editor-foreground);
+	background: color-mix(in srgb, var(--vscode-editor-background) 70%, transparent);
+	border-left: 3px solid var(--vscode-inputValidation-warningBorder, #cca700);
+}
+
+.onboarding-a-inoculation-caption {
+	margin: 0;
+	font-size: 12px;
+	line-height: 1.55;
+	color: var(--vscode-editor-foreground);
+}
+
+.onboarding-a-inoculation-ack {
+	display: flex;
+	align-items: flex-start;
+	gap: 10px;
+	cursor: pointer;
+	font-size: 13px;
+	line-height: 1.45;
+	color: var(--vscode-editor-foreground);
+}
+
+.onboarding-a-inoculation-checkbox {
+	flex-shrink: 0;
+	width: 16px;
+	height: 16px;
+	margin-top: 2px;
+	accent-color: var(--vscode-focusBorder);
+	cursor: pointer;
+}
+
+.onboarding-a-inoculation-ack-text {
+	min-width: 0;
+}
+
+.onboarding-a-agent-intro-docs {
+	display: flex;
+	align-items: center;
+	gap: 16px;
+	margin-top: auto;
+	padding: 4px 4px 0 4px;
 }
 
 /* Agent Sessions step */
@@ -908,12 +923,6 @@
 }
 
 /* Sign-in nudge */
-.onboarding-a-signin-nudge {
-	display: flex;
-	align-items: center;
-	margin-left: auto;
-}
-
 .onboarding-a-signin-nudge-btn {
 	padding: 4px 12px;
 	border-radius: 6px;
@@ -959,43 +968,6 @@
 	border-radius: 2px;
 }
 
-/* Sign-in icon row */
-.onboarding-a-signin-icon-row {
-	display: flex;
-	gap: 12px;
-	justify-content: center;
-}
-
-.onboarding-a-signin-icon-btn {
-	min-width: 40px;
-	height: 40px;
-	padding: 0 10px;
-	border-radius: 8px;
-	border: 1px solid var(--vscode-widget-border, rgba(255, 255, 255, 0.1));
-	background: var(--vscode-editor-background);
-	color: var(--vscode-editor-foreground);
-	cursor: pointer;
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	transition: background 0.12s ease, border-color 0.12s ease;
-	outline: none;
-	font-size: 13px;
-	font-weight: 600;
-	font-family: inherit;
-	white-space: nowrap;
-}
-
-.onboarding-a-signin-icon-btn:hover {
-	background: var(--vscode-list-hoverBackground);
-	border-color: var(--vscode-focusBorder);
-}
-
-.onboarding-a-signin-icon-btn:focus-visible {
-	outline: 2px solid var(--vscode-focusBorder);
-	outline-offset: 2px;
-}
-
 .onboarding-a-signin-btn.primary {
 	background: var(--vscode-button-background);
 	color: var(--vscode-button-foreground);
@@ -1011,10 +983,6 @@
 	box-shadow:
 		0 0 0 2px var(--vscode-editorWidget-background, #252526),
 		0 0 0 4px var(--vscode-focusBorder);
-}
-
-.onboarding-a-signin-btn.primary .onboarding-a-provider-mark.github .codicon {
-	color: var(--vscode-button-foreground);
 }
 
 .onboarding-a-signin-btn.primary .onboarding-a-signin-btn-label {
@@ -1056,18 +1024,6 @@
 		justify-content: flex-start;
 	}
 
-	.onboarding-a-signin-actions {
-		grid-template-columns: repeat(2, minmax(0, 1fr));
-	}
-
-	.onboarding-a-signin-btn {
-		grid-column: 1 / -1;
-	}
-
-	.onboarding-a-signin-icon-btn {
-		width: 100%;
-	}
-
 	.onboarding-a-theme-grid {
 		grid-template-columns: repeat(2, minmax(0, 1fr));
 	}
@@ -1081,15 +1037,10 @@
 	}
 
 	.onboarding-a-personalize,
-	.onboarding-a-sessions {
+	.onboarding-a-sessions,
+	.onboarding-a-agent-intro {
 		justify-content: flex-start;
 	}
-}
-
-/* Keymap pills with icons */
-.onboarding-a-keymap-pill .codicon {
-	font-size: 13px;
-	opacity: 0.7;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -1102,14 +1053,88 @@
 }
 
 /* SafeAppeals: profile step */
+.onboarding-a-profile-layout {
+	display: flex;
+	align-items: flex-start;
+	gap: 32px;
+	width: 100%;
+	max-width: 800px;
+	margin: 0 auto;
+	text-align: left;
+}
+
+.onboarding-a-profile-info {
+	flex: 1 1 40%;
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+	padding: 16px;
+	border-radius: 6px;
+	background: var(--vscode-textBlockQuote-background, rgba(127, 127, 127, 0.08));
+	border: 1px solid var(--vscode-widget-border, transparent);
+}
+
+.onboarding-a-profile-info-title {
+	margin: 0;
+	font-size: 13px;
+	font-weight: 600;
+	color: var(--vscode-foreground);
+}
+
+.onboarding-a-profile-info-text {
+	margin: 0;
+	font-size: 12px;
+	line-height: 1.5;
+	color: var(--vscode-descriptionForeground);
+}
+
+.onboarding-a-profile-info-list {
+	list-style: none;
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	margin: 2px 0 0;
+	padding: 0;
+}
+
+.onboarding-a-profile-info-item {
+	display: flex;
+	align-items: flex-start;
+	gap: 8px;
+	font-size: 12px;
+	line-height: 1.4;
+	color: var(--vscode-foreground);
+}
+
+.onboarding-a-profile-info-item .codicon {
+	flex: none;
+	margin-top: 2px;
+	color: var(--vscode-focusBorder, #007acc);
+}
+
 .onboarding-a-profile {
 	display: flex;
 	flex-direction: column;
 	gap: 12px;
 	width: 100%;
+	flex: 1 1 60%;
 	max-width: 460px;
 	margin: 0 auto;
 	text-align: left;
+}
+
+@media (max-width: 720px) {
+	.onboarding-a-profile-layout {
+		flex-direction: column;
+		gap: 16px;
+	}
+
+	.onboarding-a-profile-info,
+	.onboarding-a-profile {
+		flex: none;
+		width: 100%;
+		max-width: none;
+	}
 }
 
 .onboarding-a-profile-field {
@@ -1122,6 +1147,136 @@
 	margin: 0;
 }
 
+.onboarding-a-profile-field .monaco-select-box {
+	width: 100%;
+}
+
+.onboarding-a-profile-country-other {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	margin-top: 8px;
+}
+
+.onboarding-a-role-pills {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 10px;
+}
+
+.onboarding-a-role-pill {
+	padding: 7px 14px;
+	border-radius: 20px;
+	border: 1px solid var(--vscode-widget-border, rgba(255, 255, 255, 0.1));
+	background: var(--vscode-editorWidget-background, var(--vscode-sideBar-background));
+	color: var(--vscode-editor-foreground);
+	font-size: 12px;
+	cursor: pointer;
+	font-family: inherit;
+	transition: background 0.12s ease, border-color 0.12s ease;
+	outline: none;
+}
+
+.onboarding-a-role-pill:hover {
+	background: var(--vscode-list-hoverBackground);
+	border-color: var(--vscode-focusBorder);
+}
+
+.onboarding-a-role-pill:focus-visible {
+	outline: 2px solid var(--vscode-focusBorder);
+	outline-offset: 1px;
+}
+
+.onboarding-a-role-pill.selected {
+	background: var(--vscode-button-background);
+	color: var(--vscode-button-foreground);
+	border-color: var(--vscode-button-background);
+}
+
 .onboarding-a-profile .onboarding-a-theme-hint {
 	margin-top: 4px;
+}
+
+/* SafeAppeals: Credits & First Steps */
+.onboarding-a-credits {
+	display: flex;
+	flex-direction: column;
+	gap: 16px;
+	width: 100%;
+	max-width: 640px;
+	margin: 0 auto;
+	text-align: left;
+	flex: 1;
+	min-height: 0;
+	overflow-y: auto;
+}
+
+.onboarding-a-credits-copy {
+	margin: 0;
+	font-size: 13px;
+	line-height: 1.5;
+	color: var(--vscode-foreground);
+}
+
+.onboarding-a-credits-balance {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+	padding: 12px 14px;
+	border-radius: 6px;
+	background: var(--vscode-textBlockQuote-background, rgba(127, 127, 127, 0.08));
+	border: 1px solid var(--vscode-widget-border, transparent);
+}
+
+.onboarding-a-credits-balance-status,
+.onboarding-a-credits-unsigned-copy {
+	margin: 0;
+	font-size: 13px;
+	line-height: 1.5;
+	color: var(--vscode-foreground);
+}
+
+.onboarding-a-credits-unsigned {
+	display: flex;
+	flex-direction: column;
+	align-items: flex-start;
+	gap: 10px;
+}
+
+.onboarding-a-credits-balance-actions,
+.onboarding-a-credits-actions {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 8px;
+}
+
+.onboarding-a-credits-links {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 16px;
+}
+
+.onboarding-a-credits-first-action {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	margin-top: 4px;
+	padding-top: 12px;
+	border-top: 1px solid var(--vscode-widget-border, rgba(127, 127, 127, 0.2));
+}
+
+.onboarding-a-credits-first-heading {
+	margin: 0;
+	font-size: 14px;
+	font-weight: 600;
+	color: var(--vscode-foreground);
+}
+
+.onboarding-a-credits-first-hint {
+	margin: 0;
+	font-size: 12px;
+	line-height: 1.5;
+	color: var(--vscode-descriptionForeground);
 }

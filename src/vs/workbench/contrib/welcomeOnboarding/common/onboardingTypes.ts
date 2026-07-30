@@ -4,9 +4,8 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { localize } from '../../../../nls.js';
-import { isMacintosh } from '../../../../base/common/platform.js';
 import { IProductOnboardingTheme } from '../../../../base/common/product.js';
-import product from '../../../../platform/product/common/product.js';
+import { IProductService } from '../../../../platform/product/common/productService.js';
 
 /**
  * Step identifiers for the onboarding walkthrough.
@@ -15,9 +14,10 @@ export const enum OnboardingStepId {
 	SignIn = 'onboarding.signIn',
 	/** SafeAppeals: who the user is / where they work / what law they practice. */
 	Profile = 'onboarding.profile',
-	Personalize = 'onboarding.personalize',
-	AiPreference = 'onboarding.aiPreference',
-	AgentSessions = 'onboarding.agentSessions',
+	/** SafeAppeals: agent mental model, approval literacy, hallucination inoculation. */
+	AgentIntro = 'onboarding.agentIntro',
+	/** SafeAppeals: honest zero-credit handoff and first zero-cost action. */
+	CreditsHandoff = 'onboarding.creditsHandoff',
 }
 
 /**
@@ -30,32 +30,32 @@ export function getOnboardingStepTitle(stepId: OnboardingStepId): string {
 		case OnboardingStepId.Profile:
 			// SafeAppeals
 			return localize('onboarding.step.profile', "Who You Are");
-		case OnboardingStepId.Personalize:
-			return localize('onboarding.step.personalize', "Make It Yours");
-		case OnboardingStepId.AiPreference:
-			return localize('onboarding.step.aiPreference', "Your AI Style");
-		case OnboardingStepId.AgentSessions:
-			return localize('onboarding.step.agentSessions', "Build with AI Agents");
+		case OnboardingStepId.AgentIntro:
+			// SafeAppeals
+			return localize('onboarding.step.agentIntro', "Meet Your AI Assistant");
+		case OnboardingStepId.CreditsHandoff:
+			// SafeAppeals
+			return localize('onboarding.step.creditsHandoff', "What's Free, and What Isn't");
 	}
 }
 
 /**
  * Returns a localized subtitle for each step.
  */
-export function getOnboardingStepSubtitle(stepId: OnboardingStepId): string {
+export function getOnboardingStepSubtitle(stepId: OnboardingStepId, productService: IProductService): string {
 	switch (stepId) {
 		case OnboardingStepId.SignIn:
 			// SafeAppeals
-			return localize('onboarding.step.signIn.subtitle', "Sync settings and unlock AI features in {0}", product.nameLong);
+			return localize('onboarding.step.signIn.subtitle', "One workspace for your entire appeal — documents, evidence, email, and an AI assistant that drafts while you review.");
 		case OnboardingStepId.Profile:
 			// SafeAppeals
 			return localize('onboarding.step.profile.subtitle', "The AI agent tailors its help to your practice — saved only on this computer");
-		case OnboardingStepId.Personalize:
-			return localize('onboarding.step.personalize.subtitle', "Choose your theme and keyboard mapping");
-		case OnboardingStepId.AiPreference:
-			return localize('onboarding.step.aiPreference.subtitle', "Choose how much AI collaboration fits your workflow");
-		case OnboardingStepId.AgentSessions:
-			return localize('onboarding.step.agentSessions.subtitle', "Open Chat anytime with {0}", isMacintosh ? '\u2318\u2303I' : 'Ctrl+Alt+I');
+		case OnboardingStepId.AgentIntro:
+			// SafeAppeals
+			return localize('onboarding.step.agentIntro.subtitle', "It works like a junior colleague — it drafts, you review, you decide.");
+		case OnboardingStepId.CreditsHandoff:
+			// SafeAppeals
+			return localize('onboarding.step.creditsHandoff.subtitle', "{0} is free to download and use. Organizing cases, editing documents, tracking time, email, and calendar never cost anything.", productService.nameLong);
 	}
 }
 
@@ -64,15 +64,21 @@ export function getOnboardingStepSubtitle(stepId: OnboardingStepId): string {
  */
 const ALL_ONBOARDING_STEPS: readonly OnboardingStepId[] = [
 	OnboardingStepId.SignIn,
-	OnboardingStepId.Profile, // SafeAppeals
-	OnboardingStepId.Personalize,
-	OnboardingStepId.AgentSessions,
+	OnboardingStepId.Profile,
+	OnboardingStepId.AgentIntro,
+	OnboardingStepId.CreditsHandoff,
 ];
 
-/** SafeAppeals: honor product.json onboardingSkipSignInStep to omit the Copilot sign-in step. */
-export const ONBOARDING_STEPS: readonly OnboardingStepId[] = product.onboardingSkipSignInStep
-	? ALL_ONBOARDING_STEPS.filter(step => step !== OnboardingStepId.SignIn)
-	: ALL_ONBOARDING_STEPS;
+/**
+ * SafeAppeals: honor product.json onboardingSkipSignInStep to omit the sign-in step.
+ * Read through IProductService (not the static product module) so web embedder
+ * overrides delivered via the server's productConfiguration are respected.
+ */
+export function getOnboardingSteps(productService: IProductService): readonly OnboardingStepId[] {
+	return productService.onboardingSkipSignInStep
+		? ALL_ONBOARDING_STEPS.filter(step => step !== OnboardingStepId.SignIn)
+		: ALL_ONBOARDING_STEPS;
+}
 
 /**
  * Theme option for the onboarding personalization step.
@@ -81,94 +87,52 @@ export const ONBOARDING_STEPS: readonly OnboardingStepId[] = product.onboardingS
 export type IOnboardingThemeOption = IProductOnboardingTheme;
 
 /**
- * AI collaboration preference for the AI style step.
+ * Approval mode chosen in the Meet Your AI Assistant step.
+ * Writes `chat.tools.edits.autoApprove` with only the catch-all glob key varied.
  */
-export const enum AiCollaborationMode {
-	CodeFirst = 'code-first',
-	Balanced = 'balanced',
-	AgentForward = 'agent-forward',
+export const enum ApprovalMode {
+	ReviewEveryChange = 'review-every-change',
+	ApplyRoutineEdits = 'apply-routine-edits',
 }
 
 /**
- * AI collaboration preference option.
+ * Approval-mode option shown in the Meet Your AI Assistant step.
  */
-export interface IAiPreferenceOption {
-	readonly id: AiCollaborationMode;
+export interface IApprovalModeOption {
+	readonly id: ApprovalMode;
 	readonly label: string;
 	readonly description: string;
 	readonly icon: string;
+	readonly recommended?: boolean;
 }
 
 /**
- * AI collaboration preference options shown in the AI style step.
+ * Approval-mode options for the Meet Your AI Assistant step (consumed by T5).
  */
-export const ONBOARDING_AI_PREFERENCE_OPTIONS: readonly IAiPreferenceOption[] = [
+export const ONBOARDING_APPROVAL_MODE_OPTIONS: readonly IApprovalModeOption[] = [
 	{
-		id: AiCollaborationMode.CodeFirst,
-		label: localize('onboarding.aiPref.codeFirst', "I Write the Code"),
-		description: localize('onboarding.aiPref.codeFirst.desc', "AI assists with suggestions and answers questions when you ask. You stay in control of every edit."),
-		icon: 'edit',
+		id: ApprovalMode.ReviewEveryChange,
+		label: localize('onboarding.approval.reviewEvery', "Review Every Change"),
+		description: localize('onboarding.approval.reviewEvery.desc', "The assistant shows each edit and waits for your approval."),
+		icon: 'check',
+		recommended: true,
 	},
 	{
-		id: AiCollaborationMode.Balanced,
-		label: localize('onboarding.aiPref.balanced', "Side by Side"),
-		description: localize('onboarding.aiPref.balanced.desc', "Inline suggestions plus a chat panel for deeper collaboration. A balance of writing and delegating."),
-		icon: 'layoutSidebarRight',
-	},
-	{
-		id: AiCollaborationMode.AgentForward,
-		label: localize('onboarding.aiPref.agentForward', "AI Takes the Lead"),
-		description: localize('onboarding.aiPref.agentForward.desc', "Let the agent drive — describe what you want and review the result. Great for scaffolding and exploration."),
-		icon: 'copilot',
+		id: ApprovalMode.ApplyRoutineEdits,
+		label: localize('onboarding.approval.applyRoutine', "Apply Routine Edits Automatically"),
+		description: localize('onboarding.approval.applyRoutine.desc', "The assistant applies small edits on its own; you can still undo. You can change this anytime in Settings."),
+		icon: 'runAll',
 	},
 ];
 
 /**
  * Storage key for persisting onboarding completion state.
+ * Set to `true` only on explicit complete or skip (not Esc/overlay dismiss).
  */
 export const ONBOARDING_STORAGE_KEY = 'welcomeOnboarding.state';
 
 /**
- * Regex matching a single-word GHE instance slug (e.g. "octocat").
- * Only allows characters valid in DNS hostnames (letters, digits, hyphens).
+ * Storage key for counting Esc/overlay dismissals of the onboarding overlay.
+ * Cap is enforced by the startup-page consumer; once reached, the wizard stops showing.
  */
-export const GHE_DOMAIN_REGEX = /^[a-zA-Z0-9-]+$/;
-
-/**
- * Regex matching a full GHE instance URI (e.g. "https://octocat.ghe.com").
- */
-export const GHE_FULL_URI_REGEX = /^(https:\/\/)?([a-zA-Z0-9-]+\.)*[a-zA-Z0-9-]+\.ghe\.com\/?$/;
-
-export const enum GheParseResultKind {
-	Empty = 'empty',
-	SingleWord = 'singleWord',
-	FullUri = 'fullUri',
-	Invalid = 'invalid',
-}
-
-export type GheParseResult =
-	| { readonly kind: GheParseResultKind.Empty }
-	| { readonly kind: GheParseResultKind.SingleWord; readonly resolvedUri: string }
-	| { readonly kind: GheParseResultKind.FullUri; readonly resolvedUri: string }
-	| { readonly kind: GheParseResultKind.Invalid };
-
-/**
- * Parses a GHE instance input value and returns the result kind and resolved URI.
- */
-export function parseGheInstanceInput(value: string): GheParseResult {
-	const trimmed = value.trim();
-	if (!trimmed) {
-		return { kind: GheParseResultKind.Empty };
-	}
-
-	if (GHE_DOMAIN_REGEX.test(trimmed)) {
-		return { kind: GheParseResultKind.SingleWord, resolvedUri: `https://${trimmed}.ghe.com` };
-	}
-
-	if (GHE_FULL_URI_REGEX.test(trimmed)) {
-		const resolvedUri = trimmed.toLowerCase().startsWith('https://') ? trimmed : `https://${trimmed}`;
-		return { kind: GheParseResultKind.FullUri, resolvedUri };
-	}
-
-	return { kind: GheParseResultKind.Invalid };
-}
+export const ONBOARDING_DISMISS_ATTEMPTS_STORAGE_KEY = 'welcomeOnboarding.dismissAttempts';

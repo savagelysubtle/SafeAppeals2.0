@@ -6,7 +6,7 @@
 import assert from 'assert';
 import { ensureNoDisposablesAreLeakedInTestSuite } from '../../../../../base/test/common/utils.js';
 import { TestConfigurationService } from '../../../../../platform/configuration/test/common/testConfigurationService.js';
-import { ChatConfiguration, getComputedDefaultSessionType, getDefaultNewChatSessionType, isRememberedSessionTypeUsable, isVisibleEditorChatSessionType, recordUserSelectedSessionType } from '../../common/constants.js';
+import { ChatConfiguration, defaultChatToolsEditsAutoApprove, getComputedDefaultSessionType, getDefaultNewChatSessionType, isRememberedSessionTypeUsable, isVisibleEditorChatSessionType, recordUserSelectedSessionType } from '../../common/constants.js';
 import { localChatSessionType, SessionType, IChatSessionsExtensionPoint } from '../../common/chatSessionsService.js';
 import { MockChatSessionsService } from './mockChatSessionsService.js';
 import { TestStorageService } from '../../../../test/common/workbenchTestServices.js';
@@ -26,6 +26,20 @@ suite('ChatConfiguration defaults', () => {
 		} satisfies IChatSessionsExtensionPoint)));
 		return service;
 	}
+
+	test('SafeAppeals: chat.tools.edits.autoApprove defaults to require approval for all files', () => {
+		assert.deepStrictEqual(defaultChatToolsEditsAutoApprove, {
+			'**/*': false,
+			'**/.vscode/*.json': false,
+			'**/.git/**': false,
+			'**/{package.json,server.xml,build.rs,web.config,.gitattributes,.env,Cargo.toml}': false,
+			'**/*.{code-workspace,csproj,fsproj,vbproj,vcxproj,proj,targets,props,gradle,gradle.kts}': false,
+			'**/gradle.properties': false,
+			'**/ruby_lsp/*/addon': false,
+			'**/*.lock': false,
+			'**/*-lock.{yaml,json}': false,
+		});
+	});
 
 	test('editor default returns local when local is enabled', () => {
 		const configurationService = new TestConfigurationService();

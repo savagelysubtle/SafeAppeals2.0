@@ -38,6 +38,8 @@ import { editorBackground } from '../../../../../../platform/theme/common/colorR
 import { ChatViewTitleControl } from './chatViewTitleControl.js';
 import { IThemeService } from '../../../../../../platform/theme/common/themeService.js';
 import { IViewPaneOptions, ViewPane } from '../../../../../browser/parts/views/viewPane.js';
+import { markOnboardingTarget } from '../../../../onboarding/browser/spotlight/onboardingTarget.js';
+import { SAMPLE_CASE_TOUR_TARGETS } from '../../../../onboarding/browser/sampleCaseTour.js';
 import { Memento } from '../../../../../common/memento.js';
 import { SIDE_BAR_FOREGROUND } from '../../../../../common/theme.js';
 import { IViewDescriptorService, ViewContainerLocation } from '../../../../../common/views.js';
@@ -326,6 +328,8 @@ export class ChatViewPane extends ViewPane implements IViewWelcomeDelegate {
 
 		this.viewPaneContainer = parent;
 		this.viewPaneContainer.classList.add('chat-viewpane');
+		// SafeAppeals: sample-case tour spotlight target (where Chat opens).
+		this._register(markOnboardingTarget(this.viewPaneContainer, SAMPLE_CASE_TOUR_TARGETS.chat));
 		this.updateViewPaneClasses(false);
 
 		// Controls wrapper — sessions + chat live inside here

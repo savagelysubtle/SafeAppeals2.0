@@ -60,7 +60,7 @@ import { ChatTodoListService, IChatTodoListService } from '../common/tools/chatT
 import { ChatTransferService, IChatTransferService } from '../common/model/chatTransferService.js';
 import { IChatVariablesService } from '../common/attachments/chatVariables.js';
 import { ChatWidgetHistoryService, IChatWidgetHistoryService } from '../common/widget/chatWidgetHistoryService.js';
-import { BYOKUtilityModelDefault, ChatAgentLocation, ChatConfiguration, ChatNotificationMode, ChatPermissionLevel } from '../common/constants.js';
+import { BYOKUtilityModelDefault, ChatAgentLocation, ChatConfiguration, ChatNotificationMode, ChatPermissionLevel, defaultChatToolsEditsAutoApprove } from '../common/constants.js';
 import { ILanguageModelIgnoredFilesService, LanguageModelIgnoredFilesService } from '../common/ignoredFiles.js';
 import { ILanguageModelsService, LanguageModelsService } from '../common/languageModels.js';
 import { ILanguageModelStatsService, LanguageModelStatsService } from '../common/languageModelStats.js';
@@ -611,18 +611,10 @@ configurationRegistry.registerConfiguration({
 			tags: ['experimental', 'advanced'],
 		},
 		[ChatConfiguration.AutoApproveEdits]: {
-			default: {
-				'**/*': true,
-				'**/.vscode/*.json': false,
-				'**/.git/**': false,
-				'**/{package.json,server.xml,build.rs,web.config,.gitattributes,.env,Cargo.toml}': false,
-				'**/*.{code-workspace,csproj,fsproj,vbproj,vcxproj,proj,targets,props,gradle,gradle.kts}': false,
-				'**/gradle.properties': false,
-				'**/ruby_lsp/*/addon': false, // Auto-included Ruby addons
-				'**/*.lock': false, // yarn.lock, bun.lock, etc.
-				'**/*-lock.{yaml,json}': false, // pnpm-lock.yaml, package-lock.json
-			},
-			markdownDescription: nls.localize('chat.tools.autoApprove.edits', "Controls whether edits made by the agent are automatically approved. The default is to approve all edits except those made to certain files which have the potential to cause immediate unintended side-effects, such as `**/.vscode/*.json`.\n\nSet to `true` to automatically approve edits to matching files, `false` to always require explicit approval. The last pattern matching a given file will determine whether the edit is automatically approved."),
+			// SafeAppeals: legal audience — require approval before agent file edits (upstream defaults `'**/*'` to true)
+			default: defaultChatToolsEditsAutoApprove,
+			// SafeAppeals: description follows the flipped default above — upstream describes approving all edits by default
+			markdownDescription: nls.localize('chat.tools.autoApprove.edits', "Controls whether edits made by the agent are automatically approved. The default is to require your explicit approval for every edit.\n\nSet to `true` to automatically approve edits to matching files, `false` to always require explicit approval. The last pattern matching a given file will determine whether the edit is automatically approved."),
 			type: 'object',
 			additionalProperties: {
 				type: 'boolean',
