@@ -9,6 +9,7 @@ import { IButton } from '../../../../../base/browser/ui/button/button.js';
 import { Dialog, DialogContentsAlignment } from '../../../../../base/browser/ui/dialog/dialog.js';
 import { coalesce } from '../../../../../base/common/arrays.js';
 import { Codicon } from '../../../../../base/common/codicons.js';
+import { isCancellationError } from '../../../../../base/common/errors.js';
 import { ThemeIcon } from '../../../../../base/common/themables.js';
 import { toErrorMessage } from '../../../../../base/common/errorMessage.js';
 import { MarkdownString } from '../../../../../base/common/htmlContent.js';
@@ -25,8 +26,10 @@ import { ILogService } from '../../../../../platform/log/common/log.js';
 import product from '../../../../../platform/product/common/product.js';
 import { ITelemetryService, TelemetryLevel } from '../../../../../platform/telemetry/common/telemetry.js';
 import { IWorkspaceTrustManagementService, IWorkspaceTrustRequestService } from '../../../../../platform/workspace/common/workspaceTrust.js';
+import { IAuthenticationService } from '../../../../services/authentication/common/authentication.js';
 import { IWorkbenchLayoutService } from '../../../../services/layout/browser/layoutService.js';
 import { ChatEntitlement, ChatEntitlementContext, ChatEntitlementService, IChatEntitlementService, isProUser } from '../../../../services/chat/common/chatEntitlementService.js';
+import { ILanguageModelsService, SAFEAPPEALS_CLOUD_VENDOR_ID } from '../../common/languageModels.js';
 import { IChatWidgetService } from '../chat.js';
 import { ChatSetupController } from './chatSetupController.js';
 import { IChatSetupResult, ChatSetupAnonymous, InstallChatEvent, InstallChatClassification, ChatSetupStrategy, ChatSetupResultValue } from './chatSetup.js';
@@ -76,7 +79,18 @@ export class ChatSetup {
 		@IHostService private readonly hostService: IHostService,
 		@IExtensionService private readonly extensionService: IExtensionService,
 		@IWorkspaceTrustManagementService private readonly workspaceTrustManagementService: IWorkspaceTrustManagementService,
+		@IAuthenticationService private readonly authenticationService: IAuthenticationService,
+		@ILanguageModelsService private readonly languageModelsService: ILanguageModelsService,
 	) { }
+
+	/** SafeAppeals: vendor registered, or hasByokModels + cloud auth provider (align with SetupAgent). */
+	private usesSafeAppealsCloudSetup(): boolean {
+		if (this.languageModelsService.getVendors().some(v => v.vendor === SAFEAPPEALS_CLOUD_VENDOR_ID)) {
+			return true;
+		}
+		return this.chatEntitlementService.hasByokModels
+			&& this.authenticationService.isAuthenticationProviderRegistered(SAFEAPPEALS_CLOUD_VENDOR_ID);
+	}
 
 	skipDialog(): void {
 		this.skipDialogOnce = true;
@@ -162,6 +176,19 @@ export class ChatSetup {
 				case ChatSetupStrategy.SetupWithGoogleProvider:
 					success = await this.controller.value.setupWithProvider({ useEnterpriseProvider: false, useSocialProvider: 'google', additionalScopes: options?.additionalScopes, forceAnonymous: options?.forceAnonymous });
 					break;
+				case ChatSetupStrategy.SetupWithSafeAppealsCloud:
+					// SafeAppeals: Cloud CTA → createSession, never Copilot controller.setup()
+					try {
+						await this.authenticationService.createSession(SAFEAPPEALS_CLOUD_VENDOR_ID, [], { activateImmediate: true });
+						success = true;
+					} catch (error) {
+						if (isCancellationError(error)) {
+							success = undefined;
+						} else {
+							throw error;
+						}
+					}
+					break;
 				case ChatSetupStrategy.DefaultSetup:
 					success = await this.controller.value.setup({ ...options, forceAnonymous: options?.forceAnonymous });
 					break;
@@ -226,6 +253,9 @@ export class ChatSetup {
 		const disposables = new DisposableStore();
 
 		const buttons = this.getButtons(options);
+		// SafeAppeals: avoid Copilot icon when Cloud path still hits this dialog
+		const dialogIcon = options?.dialogIcon
+			?? (this.usesSafeAppealsCloudSetup() ? Codicon.account : Codicon.copilotLarge);
 
 		const dialog = disposables.add(new Dialog(
 			this.layoutService.activeContainer,
@@ -235,7 +265,7 @@ export class ChatSetup {
 				type: 'none',
 				extraClasses: ['chat-setup-dialog'],
 				detail: ' ', // workaround allowing us to render the message in large
-				icon: options?.dialogIcon ?? Codicon.copilotLarge,
+				icon: dialogIcon,
 				alignment: DialogContentsAlignment.Vertical,
 				cancelId: buttons.length,
 				disableCloseButton: options?.disableCloseButton ?? false,
@@ -255,7 +285,10 @@ export class ChatSetup {
 		const styleButton = (...classes: string[]) => ({ styleButton: (button: IButton) => button.element.classList.add(...classes) });
 
 		let buttons: Array<ContinueWithButton>;
-		if (!options?.forceAnonymous && (this.context.state.entitlement === ChatEntitlement.Unknown || options?.forceSignInDialog)) {
+		// SafeAppeals: defense in depth — Cloud CTA maps to createSession strategy (not Copilot DefaultSetup)
+		if (this.usesSafeAppealsCloudSetup() && !options?.forceAnonymous && (this.context.state.entitlement === ChatEntitlement.Unknown || options?.forceSignInDialog)) {
+			buttons = [[localize('signInSafeAppealsCloudButton', "Sign in to SafeAppeals Cloud..."), ChatSetupStrategy.SetupWithSafeAppealsCloud, styleButton('continue-button', 'default')]];
+		} else if (!options?.forceAnonymous && (this.context.state.entitlement === ChatEntitlement.Unknown || options?.forceSignInDialog)) {
 			const defaultProviderButton: ContinueWithButton = [localize('continueWith', "Continue with {0}", defaultChat.provider.default.name), ChatSetupStrategy.SetupWithoutEnterpriseProvider, styleButton('continue-button', 'default')];
 			const defaultProviderLink: ContinueWithButton = [defaultProviderButton[0], defaultProviderButton[1], styleButton('link-button')];
 
@@ -301,6 +334,10 @@ export class ChatSetup {
 		}
 
 		if (this.context.state.entitlement === ChatEntitlement.Unknown || options?.forceSignInDialog) {
+			// SafeAppeals: rebrand dialog title when Cloud path still reaches ChatSetup
+			if (this.usesSafeAppealsCloudSetup()) {
+				return localize('signInSafeAppealsCloud', "Sign in to SafeAppeals Cloud");
+			}
 			return localize('signIn', "Sign in to use GitHub Copilot");
 		}
 
@@ -312,7 +349,10 @@ export class ChatSetup {
 
 
 		let footer: string;
-		if (options?.forceAnonymous || this.telemetryService.telemetryLevel === TelemetryLevel.NONE) {
+		// SafeAppeals: omit GitHub Terms / public-code Copilot blurb on Cloud path
+		if (this.usesSafeAppealsCloudSetup()) {
+			footer = localize('safeAppealsCloudFooter', "Continue to sign in to SafeAppeals Cloud and use Chat.");
+		} else if (options?.forceAnonymous || this.telemetryService.telemetryLevel === TelemetryLevel.NONE) {
 			footer = localize({ key: 'settingsAnonymous', comment: ['{Locked="["}', '{Locked="]({1})"}', '{Locked="]({2})"}'] }, "By continuing, you agree to {0}'s [Terms]({1}) and [Privacy Statement]({2}).", defaultChat.provider.default.name, defaultChat.termsStatementUrl, defaultChat.privacyStatementUrl);
 		} else {
 			footer = localize({ key: 'settings', comment: ['{Locked="["}', '{Locked="]({1})"}', '{Locked="]({2})"}', '{Locked="]({4})"}', '{Locked="]({5})"}'] }, "By continuing, you agree to {0}'s [Terms]({1}) and [Privacy Statement]({2}). {3} Copilot may show [public code]({4}) suggestions and use your data to improve the product. You can change these [settings]({5}) anytime.", defaultChat.provider.default.name, defaultChat.termsStatementUrl, defaultChat.privacyStatementUrl, defaultChat.provider.default.name, defaultChat.publicCodeMatchesUrl, this.defaultAccountService.resolveGitHubUrl(GitHubPaths.copilotSettings));

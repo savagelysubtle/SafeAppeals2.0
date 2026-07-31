@@ -48,6 +48,9 @@ import { ILanguageModelsProviderGroup, ILanguageModelsConfigurationService } fro
  */
 export const COPILOT_VENDOR_ID = 'copilot';
 
+/** SafeAppeals: language-model vendor id contributed by the SafeAppeals Cloud auth extension. */
+export const SAFEAPPEALS_CLOUD_VENDOR_ID = 'safeappeals-cloud';
+
 /**
  * Vendor ids of the BYOK language-model providers that ship in-built with the GitHub Copilot Chat
  * extension. Each provider's vendor id is `providerName.toLowerCase()` (see

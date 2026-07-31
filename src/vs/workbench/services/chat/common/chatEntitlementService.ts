@@ -186,9 +186,12 @@ export interface IChatSetupRequirement {
 export function chatRequiresSetup(context: IChatSetupRequirement): boolean {
 	return (
 		(!context.completed && !context.hasByokModels) ||			// Setup not completed (unless BYOK models are available)
-		context.disabled ||											// Extension disabled: run setup to enable
+		(context.disabled && !context.hasByokModels) ||				// Extension disabled: run setup to enable (unless BYOK)
 		context.untrusted ||										// Workspace untrusted: run setup to ask for trust
-		context.entitlement === ChatEntitlement.Available ||		// Entitlement available: run setup to sign up
+		(
+			context.entitlement === ChatEntitlement.Available &&		// Entitlement available: run setup to sign up
+			!context.hasByokModels									// unless BYOK models are available
+		) ||
 		(
 			context.entitlement === ChatEntitlement.Unknown &&		// Entitlement unknown: run setup to sign in / sign up
 			!context.anonymous &&									// unless anonymous access is enabled

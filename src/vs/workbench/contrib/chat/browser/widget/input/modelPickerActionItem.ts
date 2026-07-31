@@ -158,6 +158,11 @@ export class ModelPickerActionItem extends BaseActionViewItem {
 		return this._pickerWidget.isSetupRequired();
 	}
 
+	/** SafeAppeals: setup-required UI brands as SafeAppeals Cloud (not GitHub Copilot). */
+	public usesSafeAppealsCloudSetup(): boolean {
+		return this._pickerWidget.usesSafeAppealsCloudSetup();
+	}
+
 	private _showPicker(): void {
 		this._pickerWidget.show(this._getAnchorElement());
 	}
@@ -192,7 +197,10 @@ export class ModelPickerActionItem extends BaseActionViewItem {
 			return localize('chat.modelPicker.restrictedHover', "{0} • Unavailable while in Restricted mode. Trust Workspace to enable models.", label);
 		}
 		if (this._pickerWidget.isSetupRequired()) {
-			return localize('chat.modelPicker.setupRequiredHover', "{0} • Sign in to GitHub Copilot to choose a model.", label);
+			// SafeAppeals: brand hover as SafeAppeals Cloud when that vendor is the path
+			return this._pickerWidget.usesSafeAppealsCloudSetup()
+				? localize('chat.modelPicker.setupRequiredHoverSafeAppeals', "{0} • Sign in to SafeAppeals Cloud to choose a model.", label)
+				: localize('chat.modelPicker.setupRequiredHover', "{0} • Sign in to GitHub Copilot to choose a model.", label);
 		}
 		const { statusIcon, tooltip } = this._pickerWidget.selectedModel?.metadata || {};
 		return statusIcon && tooltip ? `${label} • ${tooltip}` : label;

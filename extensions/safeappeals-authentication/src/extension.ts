@@ -9,6 +9,13 @@ import type { CreditPack } from './api';
 import { CloudChatProvider } from './llm/cloudChatProvider';
 import { isAllowedExternalHttpsUrl } from './llm/externalUrl';
 
+/** Known credit pack ids validated against a caller-supplied packId before skipping the quick pick. */
+const KNOWN_CREDIT_PACK_IDS: readonly CreditPack['id'][] = ['starter', 'pro', 'power'];
+
+function isKnownCreditPackId(value: unknown): value is CreditPack['id'] {
+	return typeof value === 'string' && (KNOWN_CREDIT_PACK_IDS as readonly string[]).includes(value);
+}
+
 let output: vscode.OutputChannel;
 let provider: CloudAuthProvider;
 
@@ -21,13 +28,16 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
 	provider = new CloudAuthProvider(context, output);
 	context.subscriptions.push(provider);
-	await provider.initialize();
 
+	// Register chat provider before initialize so restored-session onDidChangeSessions
+	// is observed (models resolve only when that event fires after reload).
 	const chatProvider = new CloudChatProvider(provider, provider.getApiClient(), output);
 	context.subscriptions.push(
 		chatProvider,
 		vscode.lm.registerLanguageModelChatProvider('safeappeals-cloud', chatProvider),
 	);
+
+	await provider.initialize();
 
 	context.subscriptions.push(
 		vscode.commands.registerCommand('safeappeals.cloud.getBalance', async () => {
@@ -43,29 +53,40 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 				throw error;
 			}
 		}),
-		vscode.commands.registerCommand('safeappeals.cloud.openCheckout', async () => {
+		vscode.commands.registerCommand('safeappeals.cloud.getCreditPacks', async () => {
+			return provider.getCreditPacks();
+		}),
+		vscode.commands.registerCommand('safeappeals.cloud.openCheckout', async (packId?: CreditPack['id']) => {
 			try {
 				if (!provider.isSignedIn()) {
 					// Intentional command path — may prompt for SafeAppeals Cloud sign-in.
 					await vscode.authentication.getSession(AUTH_PROVIDER_ID, [], { createIfNone: true });
 				}
 				const packs = await provider.getCreditPacks();
-				const picked = await vscode.window.showQuickPick(
-					packs.map(pack => ({
-						label: pack.name,
-						description: formatPackPrice(pack),
-						detail: pack.description,
-						packId: pack.id,
-					})),
-					{
-						title: vscode.l10n.t('Add Credits'),
-						placeHolder: vscode.l10n.t('Choose a credit pack'),
-					},
-				);
-				if (!picked) {
-					return;
+
+				let resolvedPackId: CreditPack['id'] | undefined;
+				if (isKnownCreditPackId(packId) && packs.some(pack => pack.id === packId)) {
+					resolvedPackId = packId;
+				} else {
+					const picked = await vscode.window.showQuickPick(
+						packs.map(pack => ({
+							label: pack.name,
+							description: formatPackPrice(pack),
+							detail: pack.description,
+							packId: pack.id,
+						})),
+						{
+							title: vscode.l10n.t('Add Credits'),
+							placeHolder: vscode.l10n.t('Choose a credit pack'),
+						},
+					);
+					if (!picked) {
+						return;
+					}
+					resolvedPackId = picked.packId;
 				}
-				const checkoutUrl = await provider.createCheckoutSession(picked.packId);
+
+				const checkoutUrl = await provider.createCheckoutSession(resolvedPackId);
 				if (!isAllowedExternalHttpsUrl(checkoutUrl)) {
 					throw new Error(vscode.l10n.t('Checkout URL from server failed safety validation.'));
 				}

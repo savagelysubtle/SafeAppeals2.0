@@ -7,6 +7,7 @@ import * as dom from '../../../../../base/browser/dom.js';
 import { BaseActionViewItem, IBaseActionViewItemOptions } from '../../../../../base/browser/ui/actionbar/actionViewItems.js';
 import { IAction, WorkbenchActionExecutedClassification, WorkbenchActionExecutedEvent } from '../../../../../base/common/actions.js';
 import { CancellationToken } from '../../../../../base/common/cancellation.js';
+import { isCancellationError } from '../../../../../base/common/errors.js';
 import { Event } from '../../../../../base/common/event.js';
 import { Lazy } from '../../../../../base/common/lazy.js';
 import { Disposable, DisposableStore, markAsSingleton, MutableDisposable } from '../../../../../base/common/lifecycle.js';
@@ -22,7 +23,7 @@ import { IActionViewItemService } from '../../../../../platform/actions/browser/
 import { Action2, MenuId, MenuRegistry, registerAction2 } from '../../../../../platform/actions/common/actions.js';
 import { CommandsRegistry, ICommandService } from '../../../../../platform/commands/common/commands.js';
 import { ConfigurationTarget, IConfigurationService } from '../../../../../platform/configuration/common/configuration.js';
-import { ContextKeyExpr, IContextKeyService } from '../../../../../platform/contextkey/common/contextkey.js';
+import { ContextKeyExpr, IContextKeyService, RawContextKey } from '../../../../../platform/contextkey/common/contextkey.js';
 import { IsWebContext } from '../../../../../platform/contextkey/common/contextkeys.js';
 import { IDialogService } from '../../../../../platform/dialogs/common/dialogs.js';
 import { IEnvironmentService } from '../../../../../platform/environment/common/environment.js';
@@ -43,6 +44,7 @@ import { EnablementState, IWorkbenchExtensionEnablementService } from '../../../
 import { ExtensionUrlHandlerOverrideRegistry, IExtensionUrlHandlerOverride } from '../../../../services/extensions/browser/extensionUrlHandler.js';
 import { IExtensionService } from '../../../../services/extensions/common/extensions.js';
 import { CONTEXT_DEFAULT_ACCOUNT_STATE, DefaultAccountStatus } from '../../../../services/accounts/browser/defaultAccount.js';
+import { IAuthenticationService } from '../../../../services/authentication/common/authentication.js';
 import { IHostService } from '../../../../services/host/browser/host.js';
 import { IWorkbenchLayoutService, Parts } from '../../../../services/layout/browser/layoutService.js';
 import { InEditorZenModeContext } from '../../../../common/contextkeys.js';
@@ -52,6 +54,7 @@ import { IExtension, IExtensionsWorkbenchService } from '../../../extensions/com
 import { ChatContextKeys } from '../../common/actions/chatContextKeys.js';
 import { IChatSessionsService } from '../../common/chatSessionsService.js';
 import { ChatAgentLocation, ChatConfiguration, ChatModeKind } from '../../common/constants.js';
+import { SAFEAPPEALS_CLOUD_VENDOR_ID } from '../../common/languageModels.js';
 import { CHAT_CATEGORY, CHAT_SETUP_ACTION_ID, CHAT_SETUP_SUPPORT_ANONYMOUS_ACTION_ID } from '../actions/chatActions.js';
 import { ChatViewContainerId, IChatWidget, IChatWidgetService } from '../chat.js';
 import { ChatInputNotificationSeverity, IChatInputNotificationService } from '../widget/input/chatInputNotificationService.js';
@@ -67,6 +70,9 @@ const defaultChat = {
 };
 
 const SIGN_IN_TITLE_BAR_ACTION_ID = 'workbench.action.chat.signInIndicator';
+
+// SafeAppeals: Accounts menu when-clause — true while a safeappeals-cloud session exists
+const SAFEAPPEALS_CLOUD_SIGNED_IN = new RawContextKey<boolean>('safeappeals.cloud.signedIn', false, true);
 
 export class ChatSetupContribution extends Disposable implements IWorkbenchContribution {
 
@@ -84,6 +90,7 @@ export class ChatSetupContribution extends Disposable implements IWorkbenchContr
 		@IEnvironmentService private readonly environmentService: IEnvironmentService,
 		@IChatSessionsService private readonly chatSessionsService: IChatSessionsService,
 		@IConfigurationService private readonly configurationService: IConfigurationService,
+		@IAuthenticationService private readonly authenticationService: IAuthenticationService,
 	) {
 		super();
 
@@ -95,12 +102,49 @@ export class ChatSetupContribution extends Disposable implements IWorkbenchContr
 
 		const controller = new Lazy(() => this._register(this.instantiationService.createInstance(ChatSetupController, context, requests)));
 
+		this.registerSafeAppealsCloudSignedInContext();
 		this.registerSetupAgents(context, controller);
 		this.registerGrowthSession(chatEntitlementService);
 		this.registerActions(context, requests, controller);
 		this.registerSignInTitleBarEntry(actionViewItemService);
 		this.registerUrlLinkHandler();
 		this.checkExtensionInstallation(context);
+	}
+
+	/**
+	 * SafeAppeals: keep `safeappeals.cloud.signedIn` in sync so the Accounts menu can
+	 * offer "Sign in to SafeAppeals Cloud..." only while unsigned.
+	 */
+	private registerSafeAppealsCloudSignedInContext(): void {
+		const signedInKey = SAFEAPPEALS_CLOUD_SIGNED_IN.bindTo(this.contextKeyService);
+		const refresh = async (): Promise<void> => {
+			try {
+				if (!this.authenticationService.isAuthenticationProviderRegistered(SAFEAPPEALS_CLOUD_VENDOR_ID)) {
+					signedInKey.set(false);
+					return;
+				}
+				const sessions = await this.authenticationService.getSessions(SAFEAPPEALS_CLOUD_VENDOR_ID);
+				signedInKey.set(sessions.length > 0);
+			} catch {
+				signedInKey.set(false);
+			}
+		};
+		this._register(this.authenticationService.onDidChangeSessions(e => {
+			if (e.providerId === SAFEAPPEALS_CLOUD_VENDOR_ID) {
+				void refresh();
+			}
+		}));
+		this._register(this.authenticationService.onDidRegisterAuthenticationProvider(e => {
+			if (e.id === SAFEAPPEALS_CLOUD_VENDOR_ID) {
+				void refresh();
+			}
+		}));
+		this._register(this.authenticationService.onDidUnregisterAuthenticationProvider(e => {
+			if (e.id === SAFEAPPEALS_CLOUD_VENDOR_ID) {
+				signedInKey.set(false);
+			}
+		}));
+		void refresh();
 	}
 
 	private registerSetupAgents(context: ChatEntitlementContext, controller: Lazy<ChatSetupController>): void {
@@ -373,7 +417,9 @@ export class ChatSetupContribution extends Disposable implements IWorkbenchContr
 							ChatContextKeys.Setup.disabledInWorkspace.negate(),
 							CONTEXT_DEFAULT_ACCOUNT_STATE.notEqualsTo(DefaultAccountStatus.Available), // hide only when signed in (a default GitHub account is present); still shown while signed out or before the account state resolves, incl. untrusted workspaces — no auth prompt
 							ChatContextKeys.Setup.completed.negate(),
-							ChatContextKeys.Entitlement.signedOut
+							ChatContextKeys.Entitlement.signedOut,
+							// SafeAppeals: hide Copilot Accounts sign-in when SafeAppeals Cloud / BYOK models are available
+							ChatEntitlementContextKeys.hasByokModels.negate(),
 						)
 					}
 				});
@@ -386,6 +432,38 @@ export class ChatSetupContribution extends Disposable implements IWorkbenchContr
 				telemetryService.publicLog2<WorkbenchActionExecutedEvent, WorkbenchActionExecutedClassification>('workbenchActionExecuted', { id: CHAT_SETUP_ACTION_ID, from: 'accounts' });
 
 				return commandService.executeCommand(CHAT_SETUP_ACTION_ID);
+			}
+		}
+
+		// SafeAppeals: Accounts entry that signs into SafeAppeals Cloud (not GitHub Copilot setup)
+		class SafeAppealsCloudSignInFromAccountsAction extends Action2 {
+
+			constructor() {
+				super({
+					id: 'workbench.action.chat.signInSafeAppealsCloudFromAccounts',
+					title: localize2('triggerSafeAppealsCloudFromAccounts', "Sign in to SafeAppeals Cloud..."),
+					menu: {
+						id: MenuId.AccountsContext,
+						group: '2_copilot',
+						when: ContextKeyExpr.and(
+							ChatEntitlementContextKeys.hasByokModels,
+							SAFEAPPEALS_CLOUD_SIGNED_IN.negate(),
+						)
+					}
+				});
+			}
+
+			override async run(accessor: ServicesAccessor): Promise<void> {
+				const authenticationService = accessor.get(IAuthenticationService);
+				try {
+					await authenticationService.createSession(SAFEAPPEALS_CLOUD_VENDOR_ID, [], { activateImmediate: true });
+				} catch (error) {
+					// SafeAppeals: cancelled sign-in must not surface an error toast (mirror onboarding)
+					if (isCancellationError(error)) {
+						return;
+					}
+					// Extension already surfaces a specific, actionable error toast.
+				}
 			}
 		}
 
@@ -558,6 +636,7 @@ export class ChatSetupContribution extends Disposable implements IWorkbenchContr
 		registerAction2(ChatSetupTriggerAction);
 		registerAction2(ChatSetupTriggerForceSignInDialogAction);
 		registerAction2(ChatSetupFromAccountsAction);
+		registerAction2(SafeAppealsCloudSignInFromAccountsAction);
 		registerAction2(ChatSetupSignInTitleBarAction);
 		registerAction2(ToggleSignInTitleBarAction);
 		registerAction2(ChatSetupTriggerAnonymousWithoutDialogAction);

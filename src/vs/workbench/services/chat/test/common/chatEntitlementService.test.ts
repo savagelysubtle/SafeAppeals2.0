@@ -39,12 +39,20 @@ suite('chatRequiresSetup', () => {
 		assert.strictEqual(chatRequiresSetup(context({ disabled: true })), true);
 	});
 
+	test('disabled but BYOK models present does not require setup', () => {
+		assert.strictEqual(chatRequiresSetup(context({ disabled: true, hasByokModels: true })), false);
+	});
+
 	test('untrusted requires setup', () => {
 		assert.strictEqual(chatRequiresSetup(context({ untrusted: true })), true);
 	});
 
 	test('entitlement Available requires setup (sign up)', () => {
 		assert.strictEqual(chatRequiresSetup(context({ entitlement: ChatEntitlement.Available })), true);
+	});
+
+	test('entitlement Available but BYOK models present does not require setup', () => {
+		assert.strictEqual(chatRequiresSetup(context({ entitlement: ChatEntitlement.Available, hasByokModels: true })), false);
 	});
 
 	test('signed out (Unknown) requires setup', () => {

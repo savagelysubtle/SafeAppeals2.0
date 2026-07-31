@@ -207,13 +207,17 @@ export class ModePickerActionItem extends ChatInputPickerActionViewItem {
 				const modes = delegate.currentChatModes.get();
 				const currentMode = delegate.currentMode.get();
 				const agentMode = modes.builtin.find(mode => mode.id === ChatMode.Agent.id);
+				// SafeAppeals: detect extension-contributed Ask so built-in Ask can be restored when absent
+				const hasExtensionAskMode = [...modes.builtin, ...modes.custom].some(
+					mode => mode.id !== ChatMode.Ask.id && mode.name.get().toLowerCase() === 'ask'
+				);
 
 				const otherBuiltinModes = modes.builtin.filter(mode => {
-					return mode.id !== ChatMode.Agent.id && shouldShowBuiltInMode(mode, assignments.get(), agentModeDisabledViaPolicy);
+					return mode.id !== ChatMode.Agent.id && shouldShowBuiltInMode(mode, assignments.get(), agentModeDisabledViaPolicy, hasExtensionAskMode);
 				});
 				const filteredCustomModes = modes.custom.filter(mode => {
 					if (isModeConsideredBuiltIn(mode, this._productService)) {
-						return shouldShowBuiltInMode(mode, assignments.get(), agentModeDisabledViaPolicy);
+						return shouldShowBuiltInMode(mode, assignments.get(), agentModeDisabledViaPolicy, hasExtensionAskMode);
 					}
 					return true;
 				});
@@ -339,7 +343,7 @@ export function isModeConsideredBuiltIn(mode: IChatMode, productService: IProduc
 	return !isOrganizationPromptFile(modeUri, mode.source.extensionId, productService);
 }
 
-function shouldShowBuiltInMode(mode: IChatMode, assignments: { showOldAskMode: boolean }, agentModeDisabledViaPolicy: boolean): boolean {
+function shouldShowBuiltInMode(mode: IChatMode, assignments: { showOldAskMode: boolean }, agentModeDisabledViaPolicy: boolean, hasExtensionAskMode: boolean): boolean {
 	// The built-in "Edit" mode is deprecated, but still shown when agent mode is disabled via policy.
 	if (mode.id === ChatMode.Edit.id) {
 		return agentModeDisabledViaPolicy;
@@ -349,7 +353,8 @@ function shouldShowBuiltInMode(mode: IChatMode, assignments: { showOldAskMode: b
 	// We still support the old "Ask" mode for conversations that already use it.
 	if (mode.id === ChatMode.Ask.id || mode.name.get().toLowerCase() === 'ask') {
 		if (mode.id === ChatMode.Ask.id) {
-			return assignments.showOldAskMode || agentModeDisabledViaPolicy;
+			// SafeAppeals: restore built-in Ask when no extension contributed an Ask mode
+			return assignments.showOldAskMode || agentModeDisabledViaPolicy || !hasExtensionAskMode;
 		} else {
 			return !(assignments.showOldAskMode || agentModeDisabledViaPolicy);
 		}

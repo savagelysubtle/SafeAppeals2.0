@@ -13,6 +13,7 @@ import { defaultButtonStyles } from '../../../../../../platform/theme/browser/de
 import { IAction, toAction } from '../../../../../../base/common/actions.js';
 import { IStringDictionary } from '../../../../../../base/common/collections.js';
 import { Codicon } from '../../../../../../base/common/codicons.js';
+import { isCancellationError } from '../../../../../../base/common/errors.js';
 import { Emitter, Event } from '../../../../../../base/common/event.js';
 import { MarkdownString } from '../../../../../../base/common/htmlContent.js';
 import { renderMarkdown } from '../../../../../../base/browser/markdownRenderer.js';
@@ -34,8 +35,9 @@ import { ITelemetryService } from '../../../../../../platform/telemetry/common/t
 import { IStorageService, StorageScope, StorageTarget } from '../../../../../../platform/storage/common/storage.js';
 import { TelemetryTrustedValue } from '../../../../../../platform/telemetry/common/telemetryUtils.js';
 import { MANAGE_CHAT_COMMAND_ID } from '../../../common/constants.js';
-import { IModelControlEntry, ILanguageModelChatMetadata, ILanguageModelChatMetadataAndIdentifier, ILanguageModelsService, IModelsControlManifest } from '../../../common/languageModels.js';
+import { IModelControlEntry, ILanguageModelChatMetadata, ILanguageModelChatMetadataAndIdentifier, ILanguageModelsService, IModelsControlManifest, SAFEAPPEALS_CLOUD_VENDOR_ID } from '../../../common/languageModels.js';
 import { ChatEntitlement, chatRequiresSetup, IChatEntitlementService, isProUser } from '../../../../../services/chat/common/chatEntitlementService.js';
+import { IAuthenticationService } from '../../../../../services/authentication/common/authentication.js';
 import * as semver from '../../../../../../base/common/semver/semver.js';
 import { IModelConfigurationAccess, IModelPickerDelegate } from './modelPickerActionItem.js';
 import { getModelProviderIcon } from './modelProviderIcons.js';
@@ -95,9 +97,9 @@ const ModelPickerSection = {
 const RESTRICTED_MODE_TRUST_ACTION_ID = 'restrictedModeTrust';
 
 /**
- * Id of the synthetic "Sign in to use Copilot..." entry shown when Chat still
- * requires sign-in / setup. Like the Trust entry it is a command, so it gets a
- * plain `menuitem` role.
+ * Id of the synthetic "Sign in to use Copilot..." / SafeAppeals Cloud entry shown
+ * when Chat still requires sign-in / setup. Like the Trust entry it is a command,
+ * so it gets a plain `menuitem` role.
  */
 const SETUP_REQUIRED_SIGN_IN_ACTION_ID = 'setupRequiredSignIn';
 
@@ -469,8 +471,9 @@ function createManageModelsAction(commandService: ICommandService): IActionWidge
  * models..." action (invoking `onRequestTrust`) replace all of the above.
  * Likewise, when
  * `setupRequired` is set (trusted, but Chat still needs sign-in / setup), a
- * "Sign in to use Copilot" header and a Sign In action (invoking
- * `onRequestSetup`) replace all of the above. `restrictedMode` takes precedence.
+ * sign-in header and Sign In action (invoking `onRequestSetup`) replace all of
+ * the above. When `useSafeAppealsCloudSetup` is set those strings brand as
+ * SafeAppeals Cloud instead of GitHub Copilot. `restrictedMode` takes precedence.
  */
 export function buildModelPickerItems(
 	models: ILanguageModelChatMetadataAndIdentifier[],
@@ -497,6 +500,7 @@ export function buildModelPickerItems(
 	setupRequired: boolean = false,
 	onRequestSetup?: () => void,
 	isUBB: boolean = false,
+	useSafeAppealsCloudSetup: boolean = false,
 ): IActionListItem<IActionWidgetDropdownAction>[] {
 	const items: IActionListItem<IActionWidgetDropdownAction>[] = [];
 	if (restrictedMode) {
@@ -533,9 +537,19 @@ export function buildModelPickerItems(
 		// prompt) instead of a misleading lone "Auto". Like restricted mode this
 		// is checked before the empty-list branch since stale machine-cached
 		// entries can make `models` non-empty.
+		// SafeAppeals: brand as SafeAppeals Cloud when that vendor is the path.
+		const headerLabel = useSafeAppealsCloudSetup
+			? localize('chat.modelPicker.setupRequiredSafeAppeals', "Sign in to SafeAppeals Cloud")
+			: localize('chat.modelPicker.setupRequired', "Sign in to use Copilot");
+		const signInLabel = useSafeAppealsCloudSetup
+			? localize('chat.modelPicker.setupRequired.signInSafeAppeals', "Sign in to SafeAppeals Cloud...")
+			: localize('chat.modelPicker.setupRequired.signIn', "Sign in to use Copilot...");
+		const signInTooltip = useSafeAppealsCloudSetup
+			? localize('chat.modelPicker.setupRequired.signInTooltipSafeAppeals', "Sign in to SafeAppeals Cloud to choose a model.")
+			: localize('chat.modelPicker.setupRequired.signInTooltip', "Sign in to GitHub Copilot to choose a model.");
 		items.push({
 			kind: ActionListItemKind.Header,
-			label: localize('chat.modelPicker.setupRequired', "Sign in to use Copilot"),
+			label: headerLabel,
 		});
 		items.push({
 			item: {
@@ -543,12 +557,12 @@ export function buildModelPickerItems(
 				enabled: !!onRequestSetup,
 				checked: false,
 				class: undefined,
-				tooltip: localize('chat.modelPicker.setupRequired.signInTooltip', "Sign in to GitHub Copilot to choose a model."),
-				label: localize('chat.modelPicker.setupRequired.signIn', "Sign in to use Copilot..."),
+				tooltip: signInTooltip,
+				label: signInLabel,
 				run: () => onRequestSetup?.()
 			},
 			kind: ActionListItemKind.Action,
-			label: localize('chat.modelPicker.setupRequired.signIn', "Sign in to use Copilot..."),
+			label: signInLabel,
 			group: { title: '', icon: ThemeIcon.fromId(Codicon.signIn.id) },
 			disabled: !onRequestSetup,
 			hideIcon: false,
@@ -1074,6 +1088,8 @@ export class ModelPickerWidget extends Disposable {
 	private _workspaceTrustInitialized = false;
 	private _activatingAfterTrust = false;
 	private readonly _activatingTimer = this._register(new MutableDisposable());
+	/** SafeAppeals: whether a `safeappeals-cloud` auth session is present. */
+	private _safeAppealsCloudSignedIn = false;
 
 	private _domNode: HTMLElement | undefined;
 	private _badgeIcon: HTMLElement | undefined;
@@ -1107,6 +1123,7 @@ export class ModelPickerWidget extends Disposable {
 		@IWorkspaceTrustManagementService private readonly _workspaceTrustManagementService: IWorkspaceTrustManagementService,
 		@IWorkspaceTrustRequestService private readonly _workspaceTrustRequestService: IWorkspaceTrustRequestService,
 		@IStorageService private readonly _storageService: IStorageService,
+		@IAuthenticationService private readonly _authenticationService: IAuthenticationService,
 	) {
 		super();
 		this._register(this._languageModelsService.onDidChangeLanguageModels(() => {
@@ -1152,6 +1169,26 @@ export class ModelPickerWidget extends Disposable {
 		this._register(this._entitlementService.onDidChangeEntitlement(() => this._renderLabel()));
 		this._register(this._entitlementService.onDidChangeSentiment(() => this._renderLabel()));
 		this._register(this._entitlementService.onDidChangeAnonymous(() => this._renderLabel()));
+
+		// SafeAppeals: refresh when cloud auth session appears/disappears so the
+		// unsigned dead-end (hasByokModels, no live models) can offer sign-in.
+		this._register(this._authenticationService.onDidChangeSessions(e => {
+			if (e.providerId === SAFEAPPEALS_CLOUD_VENDOR_ID) {
+				void this._refreshSafeAppealsCloudSession();
+			}
+		}));
+		this._register(this._authenticationService.onDidRegisterAuthenticationProvider(e => {
+			if (e.id === SAFEAPPEALS_CLOUD_VENDOR_ID) {
+				void this._refreshSafeAppealsCloudSession();
+			}
+		}));
+		this._register(this._authenticationService.onDidUnregisterAuthenticationProvider(e => {
+			if (e.id === SAFEAPPEALS_CLOUD_VENDOR_ID) {
+				this._safeAppealsCloudSignedIn = false;
+				this._renderLabel();
+			}
+		}));
+		void this._refreshSafeAppealsCloudSession();
 
 		// Also refresh the label when the per-editor config layer (if any) reports
 		// a change. The global service path is already covered above via
@@ -1208,7 +1245,7 @@ export class ModelPickerWidget extends Disposable {
 
 	private _requiresSetup(): boolean {
 		const sentiment = this._entitlementService.sentiment;
-		return chatRequiresSetup({
+		if (chatRequiresSetup({
 			completed: !!sentiment.completed,
 			disabled: !!sentiment.disabled,
 			// Don't derive `untrusted` from sentiment (it lags after a Trust grant): trust is handled
@@ -1217,7 +1254,69 @@ export class ModelPickerWidget extends Disposable {
 			entitlement: this._entitlementService.entitlement,
 			anonymous: this._entitlementService.anonymous,
 			hasByokModels: this._entitlementService.hasByokModels,
-		});
+		})) {
+			// SafeAppeals: Cloud session means Models should not show Copilot/Cloud "sign in"
+			// setup. Signed-in + no live models falls through to Auto / Activating / No models.
+			if (!(this._safeAppealsCloudSignedIn && this._hasSafeAppealsCloudVendor())) {
+				return true;
+			}
+		}
+		// SafeAppeals: hasByokModels short-circuits chatRequiresSetup, but unsigned
+		// cloud with no live models must still show a sign-in affordance (not a
+		// dead-end "No models available" / lone Auto).
+		return this._needsSafeAppealsCloudSignIn();
+	}
+
+	/** SafeAppeals: true when the SafeAppeals Cloud LM vendor is registered. */
+	private _hasSafeAppealsCloudVendor(): boolean {
+		return this._languageModelsService.getVendors().some(v => v.vendor === SAFEAPPEALS_CLOUD_VENDOR_ID);
+	}
+
+	/**
+	 * SafeAppeals: cloud vendor present, no live picker models, and no cloud session.
+	 */
+	private _needsSafeAppealsCloudSignIn(): boolean {
+		if (!this._hasSafeAppealsCloudVendor() || this._safeAppealsCloudSignedIn) {
+			return false;
+		}
+		const pickerModels = this._delegate.getModels();
+		const live = new Set(this._languageModelsService.getLanguageModelIds());
+		return !pickerModels.some(model => live.has(model.identifier));
+	}
+
+	/**
+	 * SafeAppeals: use SafeAppeals Cloud branding + createSession for setup-required UI.
+	 */
+	usesSafeAppealsCloudSetup(): boolean {
+		return this._hasSafeAppealsCloudVendor();
+	}
+
+	private async _refreshSafeAppealsCloudSession(): Promise<void> {
+		try {
+			if (!this._authenticationService.isAuthenticationProviderRegistered(SAFEAPPEALS_CLOUD_VENDOR_ID)) {
+				if (this._safeAppealsCloudSignedIn) {
+					this._safeAppealsCloudSignedIn = false;
+					this._renderLabel();
+				}
+				return;
+			}
+			// SafeAppeals: activateImmediate so the cloud auth extension wakes when needed
+			const sessions = await this._authenticationService.getSessions(SAFEAPPEALS_CLOUD_VENDOR_ID, undefined, undefined, true);
+			const signedIn = sessions.length > 0;
+			if (signedIn !== this._safeAppealsCloudSignedIn) {
+				this._safeAppealsCloudSignedIn = signedIn;
+				this._renderLabel();
+				// SafeAppeals: re-resolve cloud LMs after sign-in (belt if extension event is slow)
+				if (signedIn) {
+					void this._languageModelsService.selectLanguageModels({ vendor: SAFEAPPEALS_CLOUD_VENDOR_ID });
+				}
+			}
+		} catch {
+			if (this._safeAppealsCloudSignedIn) {
+				this._safeAppealsCloudSignedIn = false;
+				this._renderLabel();
+			}
+		}
 	}
 
 	/**
@@ -1231,7 +1330,8 @@ export class ModelPickerWidget extends Disposable {
 	/**
 	 * Whether the picker has no usable model because Chat still needs sign-in /
 	 * setup (and the workspace is trusted, so it is not Restricted Mode). BYOK
-	 * and anonymous access never report this state.
+	 * and anonymous access never report this state — except SafeAppeals Cloud
+	 * when the vendor is registered but the user is unsigned with no live models.
 	 */
 	isSetupRequired(): boolean {
 		return this._unavailableReason() === ModelPickerUnavailableReason.SetupRequired;
@@ -1253,11 +1353,28 @@ export class ModelPickerWidget extends Disposable {
 	}
 
 	/**
-	 * Starts the Chat setup / sign-in flow (same command as the title-bar Sign In
-	 * affordance). On completion the entitlement and model registry change, which
-	 * refreshes the picker.
+	 * Starts sign-in. SafeAppeals Cloud path uses createSession (never CHAT_SETUP /
+	 * chatSetupRunner). Upstream Copilot path keeps the setup command.
 	 */
-	private _requestSetup(): void {
+	private async _requestSetup(): Promise<void> {
+		// SafeAppeals: never open the GitHub Copilot setup modal for these surfaces
+		if (this.usesSafeAppealsCloudSetup()) {
+			try {
+				await this._authenticationService.createSession(SAFEAPPEALS_CLOUD_VENDOR_ID, [], { activateImmediate: true });
+			} catch (error) {
+				// SafeAppeals: cancelled sign-in must not surface an error toast (mirror onboarding)
+				if (isCancellationError(error)) {
+					return;
+				}
+				// Extension already surfaces a specific, actionable error toast — leave picker as-is
+				return;
+			}
+			// SafeAppeals: force session refresh + LM resolve so setup clears immediately after sign-in
+			await this._refreshSafeAppealsCloudSession();
+			await this._languageModelsService.selectLanguageModels({ vendor: SAFEAPPEALS_CLOUD_VENDOR_ID });
+			this._renderLabel();
+			return;
+		}
 		this._commandService.executeCommand(CHAT_SETUP_ACTION_ID);
 	}
 
@@ -1441,8 +1558,9 @@ export class ModelPickerWidget extends Disposable {
 			this.isRestrictedMode(),
 			() => { void this._requestWorkspaceTrust(); },
 			this.isSetupRequired(),
-			() => { this._requestSetup(); },
+			() => { void this._requestSetup(); },
 			!!this._entitlementService.quotas.usageBasedBilling,
+			this.usesSafeAppealsCloudSetup(),
 		);
 
 		// Collect all hover disposables so they are properly cleaned up when the
@@ -1610,7 +1728,9 @@ export class ModelPickerWidget extends Disposable {
 		const ariaLabel = restrictedMode
 			? localize('chat.modelPicker.ariaLabelRestricted', "Models, unavailable while in Restricted mode")
 			: setupRequired
-				? localize('chat.modelPicker.ariaLabelSetupRequired', "Models, sign in to use Copilot")
+				? (this.usesSafeAppealsCloudSetup()
+					? localize('chat.modelPicker.ariaLabelSetupRequiredSafeAppeals', "Models, sign in to SafeAppeals Cloud")
+					: localize('chat.modelPicker.ariaLabelSetupRequired', "Models, sign in to use Copilot"))
 				: localize('chat.modelPicker.ariaLabel', "Models, {0}", modelLabel);
 		this._domNode.ariaLabel = ariaLabel;
 		this._nameButton.ariaLabel = ariaLabel;

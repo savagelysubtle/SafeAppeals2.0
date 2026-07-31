@@ -185,6 +185,7 @@ function callBuild(
 		onRequestTrust?: () => void;
 		setupRequired?: boolean;
 		onRequestSetup?: () => void;
+		useSafeAppealsCloudSetup?: boolean;
 	} = {},
 ): IActionListItem<IActionWidgetDropdownAction>[] {
 	const onSelect = () => { };
@@ -216,6 +217,8 @@ function callBuild(
 		opts.onRequestTrust,
 		opts.setupRequired ?? false,
 		opts.onRequestSetup,
+		false,
+		opts.useSafeAppealsCloudSetup ?? false,
 	);
 }
 
@@ -382,6 +385,18 @@ suite('buildModelPickerItems', () => {
 		assert.strictEqual(actions[0].item?.enabled, true);
 		assert.strictEqual(actions.some(a => a.label === 'Auto'), false);
 		assert.strictEqual(actions.some(a => a.item?.id === 'manageModels'), false);
+	});
+
+	// SafeAppeals: setup-required brands as SafeAppeals Cloud when that path applies
+	test('setupRequired with SafeAppeals Cloud brands header and Sign In action', () => {
+		const items = callBuild([], { setupRequired: true, useSafeAppealsCloudSetup: true, onRequestSetup: () => { } });
+		const actions = getActionItems(items);
+		assert.ok(items.some(i => i.kind === ActionListItemKind.Header && i.label === 'Sign in to SafeAppeals Cloud'));
+		assert.strictEqual(actions.length, 1);
+		assert.strictEqual(actions[0].item?.id, 'setupRequiredSignIn');
+		assert.strictEqual(actions[0].label, 'Sign in to SafeAppeals Cloud...');
+		assert.strictEqual(actions[0].item?.tooltip, 'Sign in to SafeAppeals Cloud to choose a model.');
+		assert.strictEqual(actions.some(a => a.label === 'Auto'), false);
 	});
 
 	test('setupRequired Sign In action is disabled without a setup callback', () => {

@@ -3,10 +3,14 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import './media/chatSetup.css';
+import { $ } from '../../../../../base/browser/dom.js';
+import { Dialog, DialogContentsAlignment } from '../../../../../base/browser/ui/dialog/dialog.js';
 import { WorkbenchActionExecutedClassification, WorkbenchActionExecutedEvent } from '../../../../../base/common/actions.js';
 import { raceTimeout, timeout } from '../../../../../base/common/async.js';
 import { CancellationToken } from '../../../../../base/common/cancellation.js';
 import { Codicon } from '../../../../../base/common/codicons.js';
+import { isCancellationError } from '../../../../../base/common/errors.js';
 import { toErrorMessage } from '../../../../../base/common/errorMessage.js';
 import { Emitter, Event } from '../../../../../base/common/event.js';
 import { MarkdownString } from '../../../../../base/common/htmlContent.js';
@@ -14,16 +18,22 @@ import { Lazy } from '../../../../../base/common/lazy.js';
 import { Disposable, DisposableStore, IDisposable, toDisposable } from '../../../../../base/common/lifecycle.js';
 import { URI } from '../../../../../base/common/uri.js';
 import { localize, localize2 } from '../../../../../nls.js';
+import { createWorkbenchDialogOptions } from '../../../../browser/parts/dialogs/dialog.js';
 import { ContextKeyExpr, IContextKeyService } from '../../../../../platform/contextkey/common/contextkey.js';
 import { IInstantiationService } from '../../../../../platform/instantiation/common/instantiation.js';
+import { IKeybindingService } from '../../../../../platform/keybinding/common/keybinding.js';
+import { ILayoutService } from '../../../../../platform/layout/browser/layoutService.js';
 import { ILogService } from '../../../../../platform/log/common/log.js';
+import { IMarkdownRendererService } from '../../../../../platform/markdown/browser/markdownRenderer.js';
 import product from '../../../../../platform/product/common/product.js';
 import { ITelemetryService } from '../../../../../platform/telemetry/common/telemetry.js';
 import { IWorkspaceTrustManagementService } from '../../../../../platform/workspace/common/workspaceTrust.js';
+import { IAuthenticationService } from '../../../../services/authentication/common/authentication.js';
 import { IWorkbenchEnvironmentService } from '../../../../services/environment/common/environmentService.js';
 import { nullExtensionDescription } from '../../../../services/extensions/common/extensions.js';
+import { IWorkbenchLayoutService } from '../../../../services/layout/browser/layoutService.js';
 import { CountTokensCallback, ILanguageModelToolsService, IPreparedToolInvocation, IToolData, IToolImpl, IToolInvocation, IToolResult, ToolDataSource, ToolProgress } from '../../common/tools/languageModelToolsService.js';
-import { IChatAgentImplementation, IChatAgentRequest, IChatAgentResult, IChatAgentService } from '../../common/participants/chatAgents.js';
+import { IChatAgentHistoryEntry, IChatAgentImplementation, IChatAgentRequest, IChatAgentResult, IChatAgentService } from '../../common/participants/chatAgents.js';
 import { ChatEntitlementContext, chatRequiresSetup, IChatEntitlementService } from '../../../../services/chat/common/chatEntitlementService.js';
 import { ChatModel, ChatRequestModel, IChatRequestModel, IChatRequestVariableData } from '../../common/model/chatModel.js';
 import { ChatMode } from '../../common/chatModes.js';
@@ -31,7 +41,8 @@ import { ChatRequestAgentPart, ChatRequestToolPart } from '../../common/requestP
 import { IChatProgress, IChatService } from '../../common/chatService/chatService.js';
 import { IChatRequestToolEntry } from '../../common/attachments/chatVariableEntries.js';
 import { ChatAgentLocation, ChatConfiguration, ChatModeKind } from '../../common/constants.js';
-import { ILanguageModelsService } from '../../common/languageModels.js';
+import { ILanguageModelsService, SAFEAPPEALS_CLOUD_VENDOR_ID } from '../../common/languageModels.js';
+import { buildSafeAppealsCloudChatMessages, pickSafeAppealsCloudModelId, resolveChatSetupTimeoutWarning } from '../../common/chatSetupCloudHelpers.js';
 import { CHAT_OPEN_ACTION_ID, CHAT_SETUP_ACTION_ID } from '../actions/chatActions.js';
 import { ChatViewId, IChatWidgetService } from '../chat.js';
 import { IViewsService } from '../../../../services/views/common/viewsService.js';
@@ -166,7 +177,7 @@ export class SetupAgent extends Disposable implements IChatAgentImplementation {
 			extensionPublisherId: nullExtensionDescription.publisher
 		}));
 
-		const agent = disposables.add(instantiationService.createInstance(SetupAgent, context, controller, location));
+		const agent = disposables.add(instantiationService.createInstance(SetupAgent, context, controller, location, mode));
 		disposables.add(chatAgentService.registerAgentImplementation(id, agent));
 		if (mode === ChatModeKind.Agent) {
 			chatAgentService.updateAgent(id, { themeIcon: Codicon.tools });
@@ -175,7 +186,8 @@ export class SetupAgent extends Disposable implements IChatAgentImplementation {
 		return { agent, disposable: disposables };
 	}
 
-	private static readonly SETUP_NEEDED_MESSAGE = new MarkdownString(localize('settingUpCopilotNeeded', "You need to set up GitHub Copilot and be signed in to use Chat."));
+	// SafeAppeals: product fork — Chat cancel/setup copy points at SafeAppeals Cloud, not Copilot
+	private static readonly SETUP_NEEDED_MESSAGE = new MarkdownString(localize('settingUpSafeAppealsCloudNeeded', "You need to sign in to SafeAppeals Cloud to use Chat."));
 	private static readonly TRUST_NEEDED_MESSAGE = new MarkdownString(localize('trustNeeded', "You need to trust this workspace to use Chat."));
 
 	private static readonly CHAT_RETRY_COMMAND_ID = 'workbench.action.chat.retrySetup';
@@ -190,21 +202,32 @@ export class SetupAgent extends Disposable implements IChatAgentImplementation {
 		private readonly context: ChatEntitlementContext,
 		private readonly controller: Lazy<ChatSetupController>,
 		private readonly location: ChatAgentLocation,
+		private readonly mode: ChatModeKind,
 		@IInstantiationService private readonly instantiationService: IInstantiationService,
 		@ILogService private readonly logService: ILogService,
 		@ITelemetryService private readonly telemetryService: ITelemetryService,
 		@IWorkbenchEnvironmentService private readonly environmentService: IWorkbenchEnvironmentService,
 		@IWorkspaceTrustManagementService private readonly workspaceTrustManagementService: IWorkspaceTrustManagementService,
 		@IChatEntitlementService private readonly chatEntitlementService: IChatEntitlementService,
+		@IAuthenticationService private readonly authenticationService: IAuthenticationService,
 		@IViewsService private readonly viewsService: IViewsService,
 		@IContextKeyService private readonly contextKeyService: IContextKeyService,
 		@IOutputService private readonly outputService: IOutputService,
 		@IExtensionsWorkbenchService private readonly extensionsWorkbenchService: IExtensionsWorkbenchService,
 		@ICommandService private readonly commandService: ICommandService,
+		@ILayoutService private readonly layoutService: IWorkbenchLayoutService,
+		@IKeybindingService private readonly keybindingService: IKeybindingService,
+		@IHostService private readonly hostService: IHostService,
+		@IMarkdownRendererService private readonly markdownRendererService: IMarkdownRendererService,
 	) {
 		super();
 
 		this.registerCommands();
+	}
+
+	/** SafeAppeals: Ask (and Edit) can answer via Cloud LM vendor; Agent needs tools/Copilot. */
+	private usesCloudLanguageModelPath(): boolean {
+		return this.mode === ChatModeKind.Ask || this.mode === ChatModeKind.Edit;
 	}
 
 	private registerCommands(): void {
@@ -242,7 +265,7 @@ export class SetupAgent extends Disposable implements IChatAgentImplementation {
 		}));
 	}
 
-	async invoke(request: IChatAgentRequest, progress: (parts: IChatProgress[]) => void): Promise<IChatAgentResult> {
+	async invoke(request: IChatAgentRequest, progress: (parts: IChatProgress[]) => void, history: IChatAgentHistoryEntry[], token: CancellationToken): Promise<IChatAgentResult> {
 		return this.instantiationService.invokeFunction(async accessor /* using accessor for lazy loading */ => {
 			const chatService = accessor.get(IChatService);
 			const languageModelsService = accessor.get(ILanguageModelsService);
@@ -251,11 +274,24 @@ export class SetupAgent extends Disposable implements IChatAgentImplementation {
 			const languageModelToolsService = accessor.get(ILanguageModelToolsService);
 			const defaultAccountService = accessor.get(IDefaultAccountService);
 
-			return this.doInvoke(request, part => progress([part]), chatService, languageModelsService, chatWidgetService, chatAgentService, languageModelToolsService, defaultAccountService);
+			return this.doInvoke(request, part => progress([part]), chatService, languageModelsService, chatWidgetService, chatAgentService, languageModelToolsService, defaultAccountService, history, token);
 		});
 	}
 
-	private async doInvoke(request: IChatAgentRequest, progress: (part: IChatProgress) => void, chatService: IChatService, languageModelsService: ILanguageModelsService, chatWidgetService: IChatWidgetService, chatAgentService: IChatAgentService, languageModelToolsService: ILanguageModelToolsService, defaultAccountService: IDefaultAccountService): Promise<IChatAgentResult> {
+	private async doInvoke(request: IChatAgentRequest, progress: (part: IChatProgress) => void, chatService: IChatService, languageModelsService: ILanguageModelsService, chatWidgetService: IChatWidgetService, chatAgentService: IChatAgentService, languageModelToolsService: ILanguageModelToolsService, defaultAccountService: IDefaultAccountService, history: IChatAgentHistoryEntry[] = [], token: CancellationToken = CancellationToken.None): Promise<IChatAgentResult> {
+		// SafeAppeals: Cloud shortcut must not bypass workspace trust — fall through to ChatSetup.run() trust gate
+		const workspaceTrusted = !this.context.state.untrusted && this.workspaceTrustManagementService.isWorkspaceTrusted();
+		if (workspaceTrusted && this.usesSafeAppealsCloudSetup(languageModelsService)) {
+			if (await this.hasSafeAppealsCloudSession()) {
+				// SafeAppeals: Ask/Edit answer via Cloud LM — do not wait for GitHub.copilot-chat
+				if (this.usesCloudLanguageModelPath()) {
+					return this.doInvokeWithCloudLanguageModel(request, progress, languageModelsService, chatWidgetService, history, token);
+				}
+				return this.doInvokeWithoutSetup(request, progress, chatService, languageModelsService, chatWidgetService, chatAgentService, languageModelToolsService);
+			}
+			return this.doInvokeWithSetup(request, progress, chatService, languageModelsService, chatWidgetService, chatAgentService, languageModelToolsService, defaultAccountService, history, token);
+		}
+
 		if (chatRequiresSetup({
 			completed: !!this.context.state.completed,
 			disabled: !!this.context.state.disabled,
@@ -264,10 +300,155 @@ export class SetupAgent extends Disposable implements IChatAgentImplementation {
 			anonymous: this.chatEntitlementService.anonymous,
 			hasByokModels: this.chatEntitlementService.hasByokModels,
 		})) {
-			return this.doInvokeWithSetup(request, progress, chatService, languageModelsService, chatWidgetService, chatAgentService, languageModelToolsService, defaultAccountService);
+			return this.doInvokeWithSetup(request, progress, chatService, languageModelsService, chatWidgetService, chatAgentService, languageModelToolsService, defaultAccountService, history, token);
 		}
 
 		return this.doInvokeWithoutSetup(request, progress, chatService, languageModelsService, chatWidgetService, chatAgentService, languageModelToolsService);
+	}
+
+	/**
+	 * SafeAppeals: answer Ask/Edit directly via the Cloud LM vendor.
+	 * Cloud registers models only (toolCalling:false) — never wait for Copilot chat agent.
+	 */
+	private async doInvokeWithCloudLanguageModel(request: IChatAgentRequest, progress: (part: IChatProgress) => void, languageModelsService: ILanguageModelsService, chatWidgetService: IChatWidgetService, history: IChatAgentHistoryEntry[], token: CancellationToken): Promise<IChatAgentResult> {
+		const userText = request.message.trim();
+		if (!userText) {
+			return {};
+		}
+
+		try {
+			const widget = chatWidgetService.getWidgetBySessionResource(request.sessionResource);
+			const preferredModelId = request.userSelectedModelId
+				?? widget?.getSelectedModelRequestOptions().userSelectedModelId
+				?? widget?.viewModel?.model.getRequests().at(-1)?.modelId;
+
+			let cloudModelIds = languageModelsService.getLanguageModelIds().filter(id => languageModelsService.lookupLanguageModel(id)?.vendor === SAFEAPPEALS_CLOUD_VENDOR_ID);
+			if (cloudModelIds.length === 0) {
+				cloudModelIds = await languageModelsService.selectLanguageModels({ vendor: SAFEAPPEALS_CLOUD_VENDOR_ID });
+			}
+
+			const modelId = pickSafeAppealsCloudModelId(preferredModelId, cloudModelIds);
+			if (!modelId) {
+				progress({
+					kind: 'warning',
+					content: new MarkdownString(localize('safeAppealsCloudNoModel', "No SafeAppeals Cloud model is available. Sign in to SafeAppeals Cloud and ensure a cloud model is selected, then try again."))
+				});
+				return {};
+			}
+
+			const messages = buildSafeAppealsCloudChatMessages({
+				systemPrompt: 'You are SafeAppeals Cloud assistant. Be concise and helpful.',
+				history: history.map(entry => ({
+					userText: entry.request.message,
+					assistantText: this.cloudHistoryResponseToText(entry),
+				})),
+				userText,
+			});
+
+			const response = await languageModelsService.sendChatRequest(modelId, undefined, messages, {}, token);
+
+			for await (const part of response.stream) {
+				if (token.isCancellationRequested) {
+					return {};
+				}
+				const textParts = Array.isArray(part) ? part : [part];
+				for (const p of textParts) {
+					if (p.type === 'text' && p.value) {
+						progress({
+							kind: 'markdownContent',
+							content: new MarkdownString(p.value, { supportThemeIcons: true })
+						});
+					}
+				}
+			}
+
+			await response.result;
+		} catch (error) {
+			if (isCancellationError(error) || token.isCancellationRequested) {
+				return {};
+			}
+			this.logService.error('[chat setup] SafeAppeals Cloud language model request failed', error);
+			const message = toErrorMessage(error);
+			const creditsHint = /credit/i.test(message)
+				? localize('safeAppealsCloudCreditsWarning', "Not enough SafeAppeals Cloud credits for this request. Add credits to continue.")
+				: localize('safeAppealsCloudRequestFailed', "SafeAppeals Cloud failed to respond: {0}", message);
+			progress({
+				kind: 'warning',
+				content: new MarkdownString(creditsHint)
+			});
+		}
+
+		return {};
+	}
+
+	/** SafeAppeals: flatten prior assistant markdown parts to plain text for LM history. */
+	private cloudHistoryResponseToText(entry: IChatAgentHistoryEntry): string {
+		const parts: string[] = [];
+		for (const part of entry.response) {
+			if (part.kind === 'markdownContent') {
+				parts.push(part.content.value);
+			}
+		}
+		return parts.join('');
+	}
+
+	/** SafeAppeals: true when Cloud LM vendor is registered (or hasByokModels + cloud auth ready). */
+	private usesSafeAppealsCloudSetup(languageModelsService: ILanguageModelsService): boolean {
+		if (languageModelsService.getVendors().some(v => v.vendor === SAFEAPPEALS_CLOUD_VENDOR_ID)) {
+			return true;
+		}
+		// SafeAppeals: hasByokModels alone can mean other BYOK vendors — require cloud auth provider
+		return this.chatEntitlementService.hasByokModels
+			&& this.authenticationService.isAuthenticationProviderRegistered(SAFEAPPEALS_CLOUD_VENDOR_ID);
+	}
+
+	/** SafeAppeals: whether a SafeAppeals Cloud auth session already exists. */
+	private async hasSafeAppealsCloudSession(): Promise<boolean> {
+		try {
+			if (!this.authenticationService.isAuthenticationProviderRegistered(SAFEAPPEALS_CLOUD_VENDOR_ID)) {
+				return false;
+			}
+			const sessions = await this.authenticationService.getSessions(SAFEAPPEALS_CLOUD_VENDOR_ID, undefined, undefined, true);
+			return sessions.length > 0;
+		} catch {
+			return false;
+		}
+	}
+
+	/**
+	 * SafeAppeals: small branded modal before OAuth. Returns true if the user
+	 * chose Sign in; false if they cancelled the dialog.
+	 */
+	private async showSafeAppealsCloudSignInDialog(): Promise<boolean> {
+		const disposables = new DisposableStore();
+		try {
+			const primaryLabel = localize('signInSafeAppealsCloudButton', "Sign in to SafeAppeals Cloud...");
+			const dialog = disposables.add(new Dialog(
+				this.layoutService.activeContainer,
+				localize('signInSafeAppealsCloud', "Sign in to SafeAppeals Cloud"),
+				[primaryLabel],
+				createWorkbenchDialogOptions({
+					type: 'none',
+					extraClasses: ['chat-setup-dialog'],
+					detail: ' ',
+					icon: Codicon.account,
+					alignment: DialogContentsAlignment.Vertical,
+					cancelId: 1,
+					renderFooter: footer => {
+						const element = $('.chat-setup-dialog-footer');
+						const text = localize('safeAppealsCloudFooter', "Continue to sign in to SafeAppeals Cloud and use Chat.");
+						element.appendChild($('p', undefined, disposables.add(this.markdownRendererService.render(new MarkdownString(text, { isTrusted: true }))).element));
+						footer.appendChild(element);
+					},
+					buttonOptions: [{ styleButton: (button) => button.element.classList.add('continue-button', 'default') }],
+				}, this.keybindingService, this.layoutService, this.hostService)
+			));
+
+			const { button } = await dialog.show();
+			return button === 0;
+		} finally {
+			disposables.dispose();
+		}
 	}
 
 	private async doInvokeWithoutSetup(request: IChatAgentRequest, progress: (part: IChatProgress) => void, chatService: IChatService, languageModelsService: ILanguageModelsService, chatWidgetService: IChatWidgetService, chatAgentService: IChatAgentService, languageModelToolsService: ILanguageModelToolsService): Promise<IChatAgentResult> {
@@ -341,7 +522,16 @@ export class SetupAgent extends Disposable implements IChatAgentImplementation {
 		markChatGlobal(ChatGlobalPerfMark.WillWaitForActivation);
 
 		const whenAgentActivated = this.whenAgentActivated(chatService).then(() => agentActivated = true);
-		const whenAgentReady = this.whenAgentReady(chatAgentService, modeInfo?.kind)?.then(() => agentReady = true);
+		let whenAgentReady = this.whenAgentReady(chatAgentService, modeInfo?.kind)?.then(() => agentReady = true);
+		// SafeAppeals: Ask/Edit + Cloud session + live models — skip Copilot agent wait (never for Agent mode)
+		if (whenAgentReady && this.usesCloudLanguageModelPath() && this.usesSafeAppealsCloudSetup(languageModelsService) && await this.hasSafeAppealsCloudSession()) {
+			const hasLiveCloudModel = languageModelsService.getLanguageModelIds().some(id => languageModelsService.lookupLanguageModel(id)?.vendor === SAFEAPPEALS_CLOUD_VENDOR_ID)
+				|| (await languageModelsService.selectLanguageModels({ vendor: SAFEAPPEALS_CLOUD_VENDOR_ID })).length > 0;
+			if (hasLiveCloudModel) {
+				agentReady = true;
+				whenAgentReady = undefined;
+			}
+		}
 		if (!whenAgentReady) {
 			agentReady = true;
 		}
@@ -393,12 +583,12 @@ export class SetupAgent extends Disposable implements IChatAgentImplementation {
 				}
 
 				if (ready === 'timedout') {
-					let warningMessage: string;
-					if (this.chatEntitlementService.anonymous) {
-						warningMessage = localize('chatTookLongWarningAnonymous', "Chat took too long to get ready. Please ensure that the extension `{0}` is installed and enabled. Click restart to try again if this issue persists.", defaultChat.chatExtensionId);
-					} else {
-						warningMessage = localize('chatTookLongWarning', "Chat took too long to get ready. Please ensure you are signed in to {0} and that the extension `{1}` is installed and enabled. Click restart to try again if this issue persists.", defaultChat.provider.default.name, defaultChat.chatExtensionId);
-					}
+					const warningMessage = resolveChatSetupTimeoutWarning({
+						usesSafeAppealsCloud: this.usesSafeAppealsCloudSetup(languageModelsService),
+						anonymous: this.chatEntitlementService.anonymous,
+						providerName: defaultChat.provider.default.name,
+						chatExtensionId: defaultChat.chatExtensionId,
+					});
 
 					const diagnosticInfo = this.computeDiagnosticInfo(agentActivated, agentReady, languageModelReady, toolsModelReady, requestModel, languageModelsService, chatAgentService, modeInfo);
 
@@ -676,11 +866,57 @@ export class SetupAgent extends Disposable implements IChatAgentImplementation {
 		};
 	}
 
-	private async doInvokeWithSetup(request: IChatAgentRequest, progress: (part: IChatProgress) => void, chatService: IChatService, languageModelsService: ILanguageModelsService, chatWidgetService: IChatWidgetService, chatAgentService: IChatAgentService, languageModelToolsService: ILanguageModelToolsService, defaultAccountService: IDefaultAccountService): Promise<IChatAgentResult> {
+	private async doInvokeWithSetup(request: IChatAgentRequest, progress: (part: IChatProgress) => void, chatService: IChatService, languageModelsService: ILanguageModelsService, chatWidgetService: IChatWidgetService, chatAgentService: IChatAgentService, languageModelToolsService: ILanguageModelToolsService, defaultAccountService: IDefaultAccountService, history: IChatAgentHistoryEntry[] = [], token: CancellationToken = CancellationToken.None): Promise<IChatAgentResult> {
 		this.telemetryService.publicLog2<WorkbenchActionExecutedEvent, WorkbenchActionExecutedClassification>('workbenchActionExecuted', { id: CHAT_SETUP_ACTION_ID, from: 'chat' });
 
 		const widget = chatWidgetService.getWidgetBySessionResource(request.sessionResource);
 		const requestModel = widget?.viewModel?.model.getRequests().at(-1);
+
+		// SafeAppeals: branded modal + createSession only in trusted workspaces (untrusted uses ChatSetup.run trust gate)
+		if (this.usesSafeAppealsCloudSetup(languageModelsService)
+			&& !this.context.state.untrusted
+			&& this.workspaceTrustManagementService.isWorkspaceTrusted()) {
+			const confirmed = await this.showSafeAppealsCloudSignInDialog();
+			if (!confirmed) {
+				progress({
+					kind: 'markdownContent',
+					content: SetupAgent.SETUP_NEEDED_MESSAGE
+				});
+				return {};
+			}
+			progress({
+				kind: 'progressMessage',
+				content: new MarkdownString(localize('setupSafeAppealsCloudSignIn', "Signing in to SafeAppeals Cloud")),
+				shimmer: true,
+			});
+			try {
+				await this.authenticationService.createSession(SAFEAPPEALS_CLOUD_VENDOR_ID, [], { activateImmediate: true });
+				await this.context.update({ completed: true });
+				void languageModelsService.selectLanguageModels({ vendor: SAFEAPPEALS_CLOUD_VENDOR_ID });
+				// SafeAppeals: Ask/Edit go straight to Cloud LM; Agent still forwards when Copilot is present
+				if (this.usesCloudLanguageModelPath()) {
+					return this.doInvokeWithCloudLanguageModel(request, progress, languageModelsService, chatWidgetService, history, token);
+				}
+				if (requestModel) {
+					await this.forwardRequestToChat(requestModel, progress, chatService, languageModelsService, chatAgentService, chatWidgetService, languageModelToolsService);
+				}
+			} catch (error) {
+				if (isCancellationError(error)) {
+					// SafeAppeals: cancelled OAuth must not surface an error toast (mirror Accounts/Models)
+					progress({
+						kind: 'markdownContent',
+						content: this.workspaceTrustManagementService.isWorkspaceTrusted() ? SetupAgent.SETUP_NEEDED_MESSAGE : SetupAgent.TRUST_NEEDED_MESSAGE
+					});
+					return {};
+				}
+				this.logService.error(`[chat setup] SafeAppeals Cloud sign-in failed: ${toErrorMessage(error)}`);
+				progress({
+					kind: 'warning',
+					content: new MarkdownString(localize('chatSetupError', "Chat setup failed."))
+				});
+			}
+			return {};
+		}
 
 		const setupListener = Event.runAndSubscribe(this.controller.value.onDidChange, (() => {
 			switch (this.controller.value.step) {

@@ -27,6 +27,20 @@ export function shouldSettlePendingOnExchangeFailure(stateMatched: boolean): boo
 }
 
 /**
+ * True when GoTrue rejected a replay of a single-use PKCE auth code
+ * (`flow_state_not_found` / expired / "invalid flow state"). Callers should
+ * try adopting a session already written to SecretStorage before toasting.
+ */
+export function isPkceFlowStateReplayError(message: string): boolean {
+	const normalized = message.toLowerCase();
+	return (
+		normalized.includes('invalid flow state')
+		|| normalized.includes('flow_state_not_found')
+		|| normalized.includes('flow_state_expired')
+	);
+}
+
+/**
  * Parses a persisted pending-sign-in payload, returning undefined when missing,
  * malformed, or older than {@link maxAgeMs}.
  */

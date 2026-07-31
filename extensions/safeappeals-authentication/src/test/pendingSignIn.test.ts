@@ -6,6 +6,7 @@
 import 'mocha';
 import * as assert from 'assert';
 import {
+	isPkceFlowStateReplayError,
 	parseRestoredPendingSignIn,
 	pickNewestPending,
 	shouldSettlePendingOnExchangeFailure,
@@ -19,6 +20,20 @@ suite('shouldSettlePendingOnExchangeFailure', () => {
 				mismatched: shouldSettlePendingOnExchangeFailure(false),
 			},
 			{ matched: true, mismatched: false },
+		);
+	});
+});
+
+suite('isPkceFlowStateReplayError', () => {
+	test('matches GoTrue burned-code / expired flow messages', () => {
+		assert.deepStrictEqual(
+			{
+				invalid: isPkceFlowStateReplayError('Sign in failed: invalid flow state, no valid flow state found'),
+				notFound: isPkceFlowStateReplayError('flow_state_not_found'),
+				expired: isPkceFlowStateReplayError('Error: flow_state_expired'),
+				other: isPkceFlowStateReplayError('Invalid code verifier'),
+			},
+			{ invalid: true, notFound: true, expired: true, other: false },
 		);
 	});
 });

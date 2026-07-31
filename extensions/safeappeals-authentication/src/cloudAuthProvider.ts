@@ -21,6 +21,7 @@ import {
 	parseOrphanedAuthCode,
 } from './orphanedAuthCode';
 import {
+	isPkceFlowStateReplayError,
 	parseRestoredPendingSignIn,
 	PendingSignIn,
 	PendingSignInWithSource,
@@ -275,7 +276,7 @@ export class CloudAuthProvider implements vscode.AuthenticationProvider, vscode.
 		try {
 			return await this.exchangeAndStore(parsed.code, pending.codeVerifier, pending.state);
 		} catch (error) {
-			const adopted = await this.tryAdoptSessionFromSecrets();
+			const adopted = await this.tryAdoptSessionAfterExchangeFailure(error);
 			if (adopted) {
 				return adopted;
 			}
@@ -504,7 +505,7 @@ export class CloudAuthProvider implements vscode.AuthenticationProvider, vscode.
 				vscode.l10n.t('Signed in to SafeAppeals Cloud as {0}.', session.account.label),
 			);
 		} catch (error) {
-			const adopted = await this.tryAdoptSessionFromSecrets();
+			const adopted = await this.tryAdoptSessionAfterExchangeFailure(error);
 			if (adopted) {
 				await this.clearDurableOAuthCallback();
 				void vscode.window.showInformationMessage(
@@ -773,6 +774,27 @@ export class CloudAuthProvider implements vscode.AuthenticationProvider, vscode.
 	}
 
 	/**
+	 * Soft-recover after exchange failure: adopt a session from SecretStorage when
+	 * present. For burned-code / flow_state replay errors, briefly re-read once in
+	 * case persistence was still in flight. Callers must suppress the error toast
+	 * when this returns a session.
+	 */
+	private async tryAdoptSessionAfterExchangeFailure(
+		error: unknown,
+	): Promise<vscode.AuthenticationSession | undefined> {
+		const adopted = await this.tryAdoptSessionFromSecrets();
+		if (adopted) {
+			return adopted;
+		}
+		const message = error instanceof Error ? error.message : String(error);
+		if (!isPkceFlowStateReplayError(message)) {
+			return undefined;
+		}
+		await new Promise<void>(resolve => setTimeout(resolve, 150));
+		return this.tryAdoptSessionFromSecrets();
+	}
+
+	/**
 	 * Purges SecretStorage and in-memory session/balance state.
 	 */
 	private async purgeSession(): Promise<void> {
@@ -947,7 +969,7 @@ export class CloudAuthProvider implements vscode.AuthenticationProvider, vscode.
 				vscode.l10n.t('Signed in to SafeAppeals Cloud as {0}.', session.account.label),
 			);
 		} catch (error) {
-			const adopted = await this.tryAdoptSessionFromSecrets();
+			const adopted = await this.tryAdoptSessionAfterExchangeFailure(error);
 			if (adopted) {
 				await this.clearDurableOAuthCallback();
 				void vscode.window.showInformationMessage(

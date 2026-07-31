@@ -19,7 +19,7 @@ import { TestExtensionService } from '../../../../test/common/workbenchTestServi
 import { HasByokModelsContribution } from '../../browser/hasByokModelsContribution.js';
 import { ChatContextKeys } from '../../common/actions/chatContextKeys.js';
 import { ChatConfiguration } from '../../common/constants.js';
-import { COPILOT_VENDOR_ID } from '../../common/languageModels.js';
+import { COPILOT_VENDOR_ID, ILanguageModelProviderDescriptor, ILanguageModelsService, SAFEAPPEALS_CLOUD_VENDOR_ID } from '../../common/languageModels.js';
 import { ILanguageModelsConfigurationService, ILanguageModelsProviderGroup } from '../../common/languageModelsConfiguration.js';
 
 suite('HasByokModelsContribution', () => {
@@ -27,9 +27,22 @@ suite('HasByokModelsContribution', () => {
 	const disposables = ensureNoDisposablesAreLeakedInTestSuite();
 
 	type FakeProviderGroup = Pick<ILanguageModelsProviderGroup, 'vendor' | 'name'>;
+	type FakeVendor = Pick<ILanguageModelProviderDescriptor, 'vendor' | 'displayName' | 'isDefault'>;
+
+	function toVendorDescriptor(v: FakeVendor): ILanguageModelProviderDescriptor {
+		return {
+			vendor: v.vendor,
+			displayName: v.displayName,
+			isDefault: v.isDefault,
+			configuration: undefined,
+			managementCommand: undefined,
+			when: undefined,
+		};
+	}
 
 	interface IScenarioOptions {
 		readonly groups?: readonly FakeProviderGroup[];
+		readonly vendors?: readonly FakeVendor[];
 		readonly contextKeys?: {
 			readonly clientByokEnabled?: boolean;
 			readonly nonCopilotUserSelectable?: boolean;
@@ -82,9 +95,35 @@ suite('HasByokModelsContribution', () => {
 		}
 	}
 
+	/** Injectable fake — only the surface HasByokModelsContribution reads. */
+	class FakeLanguageModelsService {
+		_serviceBrand: undefined;
+		private readonly _onDidChangeLanguageModelVendors = new Emitter<readonly string[]>();
+		readonly onDidChangeLanguageModelVendors = this._onDidChangeLanguageModelVendors.event;
+		private _vendors: readonly ILanguageModelProviderDescriptor[] = [];
+
+		constructor(vendors: readonly FakeVendor[] = []) {
+			this._vendors = vendors.map(toVendorDescriptor);
+		}
+
+		setVendors(vendors: readonly FakeVendor[]): void {
+			this._vendors = vendors.map(toVendorDescriptor);
+			this._onDidChangeLanguageModelVendors.fire(this._vendors.map(v => v.vendor));
+		}
+
+		getVendors(): ILanguageModelProviderDescriptor[] {
+			return [...this._vendors];
+		}
+
+		dispose(): void {
+			this._onDidChangeLanguageModelVendors.dispose();
+		}
+	}
+
 	interface IScenario {
 		readonly storage: InMemoryStorageService;
 		readonly configService: FakeLanguageModelsConfigurationService;
+		readonly languageModelsService: FakeLanguageModelsService;
 		readonly hasByokModels: IContextKey<boolean>;
 		readonly nonCopilotUserSelectable: IContextKey<boolean>;
 		readonly clientByokEnabled: IContextKey<boolean>;
@@ -112,17 +151,21 @@ suite('HasByokModelsContribution', () => {
 			(configService as unknown as { _groups: readonly FakeProviderGroup[] })._groups = options.groups;
 		}
 
+		const languageModelsService = new FakeLanguageModelsService(options.vendors ?? []);
+		store.add({ dispose: () => languageModelsService.dispose() });
+
 		const instantiation = store.add(new TestInstantiationService());
 		instantiation.stub(IStorageService, storage);
 		instantiation.stub(IExtensionService, new TestExtensionService());
 		instantiation.stub(IContextKeyService, contextKeyService);
 		instantiation.stub(IConfigurationService, configurationService);
 		instantiation.stub(ILanguageModelsConfigurationService, configService as unknown as ILanguageModelsConfigurationService);
+		instantiation.stub(ILanguageModelsService, languageModelsService as unknown as ILanguageModelsService);
 
 		const hasByokModels = ChatEntitlementContextKeys.hasByokModels.bindTo(contextKeyService);
 		store.add(instantiation.createInstance(HasByokModelsContribution));
 
-		return { storage, configService, hasByokModels, nonCopilotUserSelectable, clientByokEnabled };
+		return { storage, configService, languageModelsService, hasByokModels, nonCopilotUserSelectable, clientByokEnabled };
 	}
 
 	/** Allow the `whenInstalledExtensionsRegistered()` continuation to run. */
@@ -139,13 +182,16 @@ suite('HasByokModelsContribution', () => {
 		};
 	}
 
-	test('feature disabled (clientByokEnabled=false) → result is false', async () => {
+	test('feature disabled (clientByokEnabled=false) → result is false after extensions settle', async () => {
 		const store = disposables.add(new DisposableStore());
 		const scenario = createScenario(store, {
 			groups: [{ vendor: 'ollama', name: 'Ollama' }],
 			contextKeys: { clientByokEnabled: false },
 			storage: { lastKnown: true },
 		});
+		// SafeAppeals: unsettled startup keeps lastKnown (vendors not parsed yet).
+		assert.deepStrictEqual(snapshot(scenario, true), { hasByokModels: true, persistedLastKnown: true });
+
 		await flush();
 
 		assert.deepStrictEqual(snapshot(scenario, true), { hasByokModels: false, persistedLastKnown: false });
@@ -307,6 +353,89 @@ suite('HasByokModelsContribution', () => {
 		assert.strictEqual(scenario.hasByokModels.get(), true);
 
 		scenario.configService.resolveReady();
+		await flush();
+
+		assert.deepStrictEqual(snapshot(scenario, true), { hasByokModels: false, persistedLastKnown: false });
+	});
+
+	// SafeAppeals: cloud vendor unblocks hasByokModels without Copilot client BYOK
+	test('SafeAppeals cloud vendor present → true even with clientByokEnabled false', async () => {
+		const store = disposables.add(new DisposableStore());
+		const scenario = createScenario(store, {
+			contextKeys: { clientByokEnabled: false },
+			vendors: [{ vendor: SAFEAPPEALS_CLOUD_VENDOR_ID, displayName: 'SafeAppeals Cloud', isDefault: false }],
+			storage: { lastKnown: false },
+		});
+		await flush();
+
+		assert.deepStrictEqual(snapshot(scenario), { hasByokModels: true, persistedLastKnown: true });
+	});
+
+	test('SafeAppeals cloud vendor absent → clientByokEnabled false still yields false', async () => {
+		const store = disposables.add(new DisposableStore());
+		const scenario = createScenario(store, {
+			groups: [{ vendor: 'ollama', name: 'Ollama' }],
+			contextKeys: { clientByokEnabled: false },
+			vendors: [{ vendor: 'ollama', displayName: 'Ollama', isDefault: false }],
+			storage: { lastKnown: true },
+		});
+		await flush();
+
+		assert.deepStrictEqual(snapshot(scenario, true), { hasByokModels: false, persistedLastKnown: false });
+	});
+
+	test('SafeAppeals cloud vendor present but aiDisabled forces false', async () => {
+		const store = disposables.add(new DisposableStore());
+		const scenario = createScenario(store, {
+			configuration: { aiDisabled: true },
+			vendors: [{ vendor: SAFEAPPEALS_CLOUD_VENDOR_ID, displayName: 'SafeAppeals Cloud', isDefault: false }],
+			storage: { lastKnown: true },
+		});
+		await flush();
+
+		assert.deepStrictEqual(snapshot(scenario, true), { hasByokModels: false, persistedLastKnown: false });
+	});
+
+	test('SafeAppeals cloud vendor appearing at runtime flips hasByokModels true', async () => {
+		const store = disposables.add(new DisposableStore());
+		const scenario = createScenario(store, {
+			contextKeys: { clientByokEnabled: false },
+		});
+		await flush();
+		assert.strictEqual(scenario.hasByokModels.get(), false);
+
+		scenario.languageModelsService.setVendors([
+			{ vendor: SAFEAPPEALS_CLOUD_VENDOR_ID, displayName: 'SafeAppeals Cloud', isDefault: false },
+		]);
+		await flush();
+
+		assert.deepStrictEqual(snapshot(scenario), { hasByokModels: true, persistedLastKnown: true });
+	});
+
+	test('SafeAppeals: unsettled startup with clientByokEnabled=false preserves lastKnown', () => {
+		const store = disposables.add(new DisposableStore());
+		const scenario = createScenario(store, {
+			contextKeys: { clientByokEnabled: false },
+			storage: { lastKnown: true },
+		});
+		// No flush — extensions not registered; must not wipe persisted true.
+		assert.deepStrictEqual(snapshot(scenario, true), { hasByokModels: true, persistedLastKnown: true });
+	});
+
+	test('SafeAppeals cloud vendor removal at runtime flips hasByokModels false', async () => {
+		const store = disposables.add(new DisposableStore());
+		const scenario = createScenario(store, {
+			contextKeys: { clientByokEnabled: false },
+		});
+		await flush();
+
+		scenario.languageModelsService.setVendors([
+			{ vendor: SAFEAPPEALS_CLOUD_VENDOR_ID, displayName: 'SafeAppeals Cloud', isDefault: false },
+		]);
+		await flush();
+		assert.deepStrictEqual(snapshot(scenario), { hasByokModels: true, persistedLastKnown: true });
+
+		scenario.languageModelsService.setVendors([]);
 		await flush();
 
 		assert.deepStrictEqual(snapshot(scenario, true), { hasByokModels: false, persistedLastKnown: false });

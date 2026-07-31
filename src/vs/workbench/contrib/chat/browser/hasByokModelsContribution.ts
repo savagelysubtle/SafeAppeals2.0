@@ -13,7 +13,7 @@ import { ChatEntitlementContextKeys } from '../../../services/chat/common/chatEn
 import { IExtensionService } from '../../../services/extensions/common/extensions.js';
 import { ChatContextKeys } from '../common/actions/chatContextKeys.js';
 import { ChatConfiguration } from '../common/constants.js';
-import { COPILOT_VENDOR_ID } from '../common/languageModels.js';
+import { COPILOT_VENDOR_ID, ILanguageModelsService, SAFEAPPEALS_CLOUD_VENDOR_ID } from '../common/languageModels.js';
 import { ILanguageModelsConfigurationService } from '../common/languageModelsConfiguration.js';
 
 /**
@@ -22,6 +22,8 @@ import { ILanguageModelsConfigurationService } from '../common/languageModelsCon
  *  - `chat.aiDisabled` is off, and
  *  - the language-models configuration has at least one non-Copilot vendor group (at any time),
  *    or — pre extension scan — the `chatNonCopilotModelsAreUserSelectable` signal is on.
+ *  - SafeAppeals: or the `safeappeals-cloud` language-model vendor is registered (bypasses
+ *    `clientByokEnabled` so Cloud models unblock the picker without GitHub Copilot sign-in).
  *
  * Strategy (avoids activating BYOK extensions just to gate UI):
  *  1. Restore the last persisted answer for correct warm-reload UI.
@@ -50,6 +52,7 @@ export class HasByokModelsContribution extends Disposable implements IWorkbenchC
 
 	constructor(
 		@ILanguageModelsConfigurationService private readonly _languageModelsConfigurationService: ILanguageModelsConfigurationService,
+		@ILanguageModelsService private readonly _languageModelsService: ILanguageModelsService,
 		@IContextKeyService private readonly _contextKeyService: IContextKeyService,
 		@IConfigurationService private readonly _configurationService: IConfigurationService,
 		@IStorageService private readonly _storageService: IStorageService,
@@ -80,19 +83,36 @@ export class HasByokModelsContribution extends Disposable implements IWorkbenchC
 			Event.filter(this._configurationService.onDidChangeConfiguration, e => e.affectsConfiguration(ChatConfiguration.AIDisabled)),
 			Event.filter(this._contextKeyService.onDidChangeContext, e => e.affectsSome(HasByokModelsContribution.TRACKED_KEYS)),
 			this._languageModelsConfigurationService.onDidChangeLanguageModelGroups,
+			// SafeAppeals: re-evaluate when cloud LM vendor is contributed or removed
+			this._languageModelsService.onDidChangeLanguageModelVendors,
 		)(() => this._update()));
 	}
 
-	private _isFeatureEnabled(): boolean {
-		return !this._configurationService.getValue<boolean>(ChatConfiguration.AIDisabled)
-			&& !!this._contextKeyService.getContextKeyValue<boolean>(ChatEntitlementContextKeys.clientByokEnabled.key);
+	private _isAiDisabled(): boolean {
+		return !!this._configurationService.getValue<boolean>(ChatConfiguration.AIDisabled);
+	}
+
+	private _isClientByokEnabled(): boolean {
+		return !!this._contextKeyService.getContextKeyValue<boolean>(ChatEntitlementContextKeys.clientByokEnabled.key);
+	}
+
+	/** SafeAppeals: true when our cloud LM vendor is registered (extension contribution). */
+	private _hasSafeAppealsCloudVendor(): boolean {
+		return this._languageModelsService.getVendors().some(v => v.vendor === SAFEAPPEALS_CLOUD_VENDOR_ID);
 	}
 
 	private _restore(): void {
-		if (!this._isFeatureEnabled()) {
+		if (this._isAiDisabled()) {
 			this._hasByokModels.set(false);
 			return;
 		}
+		// SafeAppeals: cloud vendor bypasses clientByokEnabled before the Copilot BYOK gate
+		if (this._hasSafeAppealsCloudVendor()) {
+			this._hasByokModels.set(true);
+			return;
+		}
+		// SafeAppeals: do not hard-false on restore when clientByokEnabled is off — vendors
+		// are empty before extensions parse; keep lastKnown to avoid cold-start flicker.
 		this._hasByokModels.set(this._storageService.getBoolean(HasByokModelsContribution.STORAGE_KEY_LAST_KNOWN, StorageScope.APPLICATION, false));
 	}
 
@@ -102,7 +122,23 @@ export class HasByokModelsContribution extends Disposable implements IWorkbenchC
 	}
 
 	private _update(): void {
-		if (!this._isFeatureEnabled()) {
+		if (this._isAiDisabled()) {
+			this._setResult(false);
+			return;
+		}
+
+		// SafeAppeals: cloud vendor bypasses clientByokEnabled before the Copilot BYOK gate
+		if (this._hasSafeAppealsCloudVendor()) {
+			this._setResult(true);
+			return;
+		}
+
+		if (!this._isClientByokEnabled()) {
+			// SafeAppeals: before extensions settle, getVendors() is empty — hard-false would
+			// persist and wipe lastKnown every launch for cloud-only users. Keep restored value.
+			if (!this._extensionsRegistered) {
+				return;
+			}
 			this._setResult(false);
 			return;
 		}
