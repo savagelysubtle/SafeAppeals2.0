@@ -7,7 +7,7 @@ import 'mocha';
 import * as assert from 'assert';
 import * as fs from 'fs';
 import * as path from 'path';
-import { JURISDICTIONS } from '../types';
+import { BOARDS_BY_COUNTRY, BOARDS_BY_STATE_PROVINCE, JURISDICTIONS } from '../types';
 
 /**
  * Relative path from this compiled test (`out/test/`) to the workbench onboarding
@@ -51,8 +51,45 @@ function extractProfileJurisdictions(source: string, filePath: string): string[]
 	return entries;
 }
 
+/**
+ * Parses a `const NAME: … = { … };` string→string[] map from workbench source text.
+ */
+function extractProfileStringArrayMap(
+	source: string,
+	constName: string,
+	filePath: string,
+): Record<string, string[]> {
+	const declMatch = new RegExp(
+		`const ${constName}\\s*(?::\\s*[^=]+)?=\\s*\\{([\\s\\S]*?)\\n\\};`,
+	).exec(source);
+	if (!declMatch) {
+		assert.fail(
+			`Could not locate ${constName} map in ${filePath}. ` +
+			`The drift guard cannot pass silently — fix the parser or restore the map.`,
+		);
+	}
+
+	const result: Record<string, string[]> = {};
+	const entryRegex = /'((?:\\'|[^'])*)'\s*:\s*\[([^\]]*)\]/g;
+	let match: RegExpExecArray | null;
+	while ((match = entryRegex.exec(declMatch[1])) !== null) {
+		const key = match[1].replace(/\\'/g, "'");
+		const values = [...match[2].matchAll(/'((?:\\'|[^'])*)'/g)].map(valueMatch =>
+			valueMatch[1].replace(/\\'/g, "'"),
+		);
+		result[key] = values;
+	}
+	if (Object.keys(result).length === 0) {
+		assert.fail(
+			`${constName} in ${filePath} matched but contained no entries. ` +
+			`The drift guard cannot pass silently — fix the parser or restore the map.`,
+		);
+	}
+	return result;
+}
+
 suite('jurisdictionsDrift', () => {
-	test('PROFILE_JURISDICTIONS stays identical to extension JURISDICTIONS', () => {
+	test('PROFILE_* jurisdiction mirrors stay identical to extension types', () => {
 		const onboardingPath = path.resolve(__dirname, ONBOARDING_RELATIVE_PATH);
 		const canonicalPath = path.resolve(__dirname, CANONICAL_RELATIVE_PATH);
 
@@ -65,14 +102,28 @@ suite('jurisdictionsDrift', () => {
 
 		const source = fs.readFileSync(onboardingPath, 'utf8');
 		const profileJurisdictions = extractProfileJurisdictions(source, onboardingPath);
+		const profileBoardsByStateProvince = extractProfileStringArrayMap(
+			source, 'PROFILE_BOARDS_BY_STATE_PROVINCE', onboardingPath,
+		);
+		const profileBoardsByCountry = extractProfileStringArrayMap(
+			source, 'PROFILE_BOARDS_BY_COUNTRY', onboardingPath,
+		);
 
 		assert.deepStrictEqual(
-			profileJurisdictions,
-			[...JURISDICTIONS],
-			`PROFILE_JURISDICTIONS and JURISDICTIONS have diverged. ` +
+			{
+				jurisdictions: profileJurisdictions,
+				boardsByStateProvince: profileBoardsByStateProvince,
+				boardsByCountry: profileBoardsByCountry,
+			},
+			{
+				jurisdictions: [...JURISDICTIONS],
+				boardsByStateProvince: { ...BOARDS_BY_STATE_PROVINCE },
+				boardsByCountry: { ...BOARDS_BY_COUNTRY },
+			},
+			`Workbench PROFILE_* jurisdiction mirrors have diverged from the extension. ` +
 			`Onboarding copy: ${onboardingPath}. ` +
-			`Canonical source of truth: ${canonicalPath} (extensions/safeappeals-case/src/types.ts JURISDICTIONS). ` +
-			`Update the onboarding list to match the extension.`,
+			`Canonical source of truth: ${canonicalPath} (extensions/safeappeals-case/src/types.ts). ` +
+			`Update the onboarding mirrors to match the extension.`,
 		);
 	});
 });

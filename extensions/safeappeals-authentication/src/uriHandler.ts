@@ -6,7 +6,11 @@
 import * as vscode from 'vscode';
 
 /**
- * Successful authorization-code callback after state verification.
+ * Successful authorization-code callback.
+ *
+ * `state` is required — VS Code delivers these URIs only when the authority is
+ * the extension id (`safeappeals.safeappeals-authentication`), and the OAuth
+ * round-trip always echoes state.
  */
 export interface AuthCallbackResult {
 	readonly code: string;
@@ -15,15 +19,20 @@ export interface AuthCallbackResult {
 
 /**
  * Failed or cancelled authorization-code callback.
- * `access_denied` is user cancellation; every other OAuth/security reject is a real error.
+ * Only fired for real OAuth `error=` responses that include a state value.
+ * `access_denied` is user cancellation; every other OAuth reject is a real error.
  */
 export type AuthCallbackError =
-	| { readonly cancelled: true }
-	| { readonly cancelled: false; readonly message: string };
+	| { readonly cancelled: true; readonly state: string }
+	| { readonly cancelled: false; readonly message: string; readonly state: string };
 
 /**
- * Parses SafeAppeals Cloud OAuth callbacks delivered via the private-use URI scheme.
- * Rejects fragment tokens outright (defense in depth against implicit-flow regressions).
+ * Parses SafeAppeals Cloud OAuth callbacks delivered via the private-use URI scheme
+ * or the web `asExternalUri` reconstruction path.
+ *
+ * Path must be `/auth/callback`. Authority is the extension id (enforced by
+ * ExtensionUrlHandler before this runs). Garbage (fragment tokens, missing state,
+ * missing code) is logged and ignored — never settles a pending sign-in.
  */
 export class CloudUriHandler implements vscode.UriHandler, vscode.Disposable {
 	private readonly _emitter = new vscode.EventEmitter<AuthCallbackResult>();
@@ -33,7 +42,7 @@ export class CloudUriHandler implements vscode.UriHandler, vscode.Disposable {
 	/** Fires when a verified authorization code arrives. */
 	readonly onCallback = this._emitter.event;
 
-	/** Fires when the callback carries an OAuth error or is rejected. */
+	/** Fires when the callback carries an OAuth error that includes state. */
 	readonly onError = this._errorEmitter.event;
 
 	constructor(private readonly output: vscode.OutputChannel) {
@@ -41,12 +50,13 @@ export class CloudUriHandler implements vscode.UriHandler, vscode.Disposable {
 	}
 
 	/**
-	 * Handles `safe-appeals-navigator://auth/callback?...` URIs.
+	 * Handles `safe-appeals-navigator://safeappeals.safeappeals-authentication/auth/callback?...` URIs.
 	 */
 	handleUri(uri: vscode.Uri): vscode.ProviderResult<void> {
 		this.output.appendLine(`[uri] received ${uri.scheme}://${uri.authority}${uri.path}`);
 
-		if (uri.authority !== 'auth' || !uri.path.startsWith('/callback')) {
+		if (uri.path !== '/auth/callback') {
+			this.output.appendLine(`[uri] ignored unexpected path ${uri.path}`);
 			return;
 		}
 
@@ -54,36 +64,40 @@ export class CloudUriHandler implements vscode.UriHandler, vscode.Disposable {
 		const fragment = uri.fragment ?? '';
 
 		// Defense in depth: never accept bearer tokens from the fragment.
+		// Log and ignore — do not settle a pending (e.g. loopback) sign-in.
 		if (fragmentContainsTokens(fragment)) {
-			const message = vscode.l10n.t('Sign-in rejected: tokens in the URL fragment are not allowed. Please try again.');
-			this.output.appendLine('[uri] rejected fragment tokens');
-			this._errorEmitter.fire({ cancelled: false, message });
-			void vscode.window.showErrorMessage(message);
+			this.output.appendLine('[uri] ignored fragment tokens');
 			return;
 		}
 
+		const state = queryParams.get('state');
 		const error = queryParams.get('error');
+		const code = queryParams.get('code');
+
 		if (error) {
+			if (!state) {
+				this.output.appendLine(`[uri] ignored oauth error without state: ${error}`);
+				return;
+			}
 			// Distinguish strictly on the OAuth error code, never error_description.
 			if (error === 'access_denied') {
 				this.output.appendLine('[uri] oauth cancelled: access_denied');
-				this._errorEmitter.fire({ cancelled: true });
+				this._errorEmitter.fire({ cancelled: true, state });
 				return;
 			}
 			const description = queryParams.get('error_description') || error;
 			this.output.appendLine(`[uri] oauth error: ${description}`);
-			this._errorEmitter.fire({ cancelled: false, message: description });
-			void vscode.window.showErrorMessage(vscode.l10n.t('Sign in failed: {0}', description));
+			this._errorEmitter.fire({ cancelled: false, message: description, state });
 			return;
 		}
 
-		const code = queryParams.get('code');
-		const state = queryParams.get('state');
-		if (!code || !state) {
-			const message = vscode.l10n.t('Sign in failed: No authorization code received.');
-			this.output.appendLine('[uri] missing code or state in query');
-			this._errorEmitter.fire({ cancelled: false, message });
-			void vscode.window.showErrorMessage(message);
+		if (!state) {
+			this.output.appendLine('[uri] ignored callback: missing state');
+			return;
+		}
+
+		if (!code) {
+			this.output.appendLine('[uri] ignored callback: missing code');
 			return;
 		}
 

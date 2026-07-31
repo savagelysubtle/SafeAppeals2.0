@@ -89,6 +89,14 @@ const extensions = [
 		mocha: { timeout: 60_000 }
 	},
 	{
+		label: 'safeappeals-calendar',
+		mocha: { timeout: 60_000 }
+	},
+	{
+		label: 'safeappeals-authentication',
+		mocha: { timeout: 60_000 }
+	},
+	{
 		label: 'safeappeals-case',
 		mocha: { timeout: 60_000 }
 	},

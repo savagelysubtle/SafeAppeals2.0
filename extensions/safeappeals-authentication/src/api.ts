@@ -8,8 +8,14 @@ import * as vscode from 'vscode';
 /** Default production SafeAppeals Cloud API origin. */
 export const DEFAULT_API_URL = 'https://api.safeappeals.com';
 
-/** Desktop private-use redirect URI (exact allow-list match on the API). */
-export const DESKTOP_AUTH_CALLBACK = 'safe-appeals-navigator://auth/callback';
+/** Default production dashboard origin (finish page + paste fallback). */
+export const DEFAULT_DASHBOARD_URL = 'https://safeappeals.com';
+
+/** RFC 8252 loopback redirect URI — single source in oauthLoopback.ts. */
+export { LOOPBACK_REDIRECT_URI } from './oauthLoopback';
+
+/** Default allow-list for automatic web OAuth callbacks via asExternalUri. */
+export const DEFAULT_WEB_CALLBACK_ORIGINS = ['http://localhost:8080'];
 
 const CLIENT_VERSION = '2.0.0';
 const DEFAULT_REQUEST_TIMEOUT_MS = 60_000;
@@ -73,18 +79,43 @@ export function getApiUrl(): string {
 }
 
 /**
+ * Resolves the branded finish-page URI used after loopback success and as the
+ * copy/paste fallback redirect target.
+ *
+ * Optional machine setting `safeappeals.cloud.dashboardUrl` overrides the
+ * production dashboard origin for local dashboard development.
+ */
+export function getFinishPageUri(): string {
+	const configured = vscode.workspace.getConfiguration('safeappeals.cloud').get<string>('dashboardUrl');
+	const trimmed = configured?.trim();
+	const origin = (trimmed || DEFAULT_DASHBOARD_URL).replace(/\/+$/, '');
+	return `${origin}/auth/finish`;
+}
+
+/**
+ * Origins permitted for automatic web OAuth via `vscode.env.asExternalUri`.
+ * Origins outside this machine-scoped allow-list use the finish-page paste flow.
+ */
+export function getWebCallbackOrigins(): readonly string[] {
+	const configured = vscode.workspace.getConfiguration('safeappeals.cloud').get<string[]>('webCallbackOrigins');
+	const origins = configured?.length ? configured : DEFAULT_WEB_CALLBACK_ORIGINS;
+	return origins
+		.map(origin => origin.trim().replace(/\/+$/, ''))
+		.filter(origin => origin.length > 0);
+}
+
+/**
  * Builds the Google authorize URL with required PKCE + state query params.
  * Does not request calendar scopes for plain sign-in.
  */
 export function buildGoogleAuthorizeUrl(params: {
 	readonly codeChallenge: string;
 	readonly state: string;
-	readonly redirectUri?: string;
+	readonly redirectUri: string;
 }): string {
 	const apiUrl = getApiUrl();
-	const redirectUri = params.redirectUri ?? DESKTOP_AUTH_CALLBACK;
 	const query = new URLSearchParams({
-		redirect_uri: redirectUri,
+		redirect_uri: params.redirectUri,
 		code_challenge: params.codeChallenge,
 		code_challenge_method: 'S256',
 		state: params.state,

@@ -9,7 +9,7 @@ import * as fsPromises from 'fs/promises';
 import * as os from 'os';
 import * as path from 'path';
 import * as vscode from 'vscode';
-import { acquireDek } from './shared/encryptedStore';
+import { acquireDek, createMementoDekDurabilityMarker, type DekDurabilityMarker } from './shared/encryptedStore';
 import { deleteFileIfExists, ensureDir, quarantineFile } from './shared/secureFs';
 import type { BillingRate, ExportOptions, Matter, TimeEntry, TimeEntryWithDetails } from './types';
 
@@ -253,8 +253,13 @@ export class StorageService {
 	}
 
 	/**
-	 * Delete this workspace's encrypted DB (+ WAL/SHM) and its DEK.
+	 * Delete this workspace's encrypted DB (+ WAL/SHM).
 	 * Safe to call when initialize() failed — does not require an open connection.
+	 *
+	 * The DEK is shared by every workspace's database, so it is only dropped once
+	 * the last database is gone. Deleting it while another workspace still has a
+	 * database would leave that workspace permanently undecryptable — the exact
+	 * failure this command exists to recover from.
 	 */
 	async clearLocalDatabase(): Promise<void> {
 		this.close();
@@ -265,12 +270,54 @@ export class StorageService {
 				log(`Deleted ${filePath}`);
 			}
 		}
+		await removeEmptyDirBestEffort(path.dirname(this.dbPath));
+
+		const remaining = await this.otherWorkspaceDbPaths();
+		if (remaining.length > 0) {
+			log(`Keeping DEK ${DEK_KEY_ID}: ${remaining.length} other workspace database(s) still use it`);
+			return;
+		}
 		try {
 			await this.context.secrets.delete(DEK_KEY_ID);
 			log(`Deleted SecretStorage key ${DEK_KEY_ID}`);
 		} catch (error) {
 			log(`Failed to delete DEK ${DEK_KEY_ID}: ${error instanceof Error ? error.message : String(error)}`);
 		}
+		try {
+			await this.durabilityMarker().setStored(false);
+			log(`Cleared durability marker for ${DEK_KEY_ID}`);
+		} catch (error) {
+			log(`Failed to clear durability marker for ${DEK_KEY_ID}: ${error instanceof Error ? error.message : String(error)}`);
+		}
+	}
+
+	private durabilityMarker(): DekDurabilityMarker {
+		return createMementoDekDurabilityMarker(this.context.globalState, DEK_KEY_ID);
+	}
+
+	/**
+	 * Databases belonging to other workspaces that share this extension's DEK.
+	 */
+	private async otherWorkspaceDbPaths(): Promise<string[]> {
+		const workspacesDir = path.dirname(path.dirname(this.dbPath));
+		let entries: string[];
+		try {
+			entries = await fsPromises.readdir(workspacesDir);
+		} catch {
+			return [];
+		}
+
+		const found: string[] = [];
+		for (const entry of entries) {
+			if (entry === this.workspaceId) {
+				continue;
+			}
+			const candidate = path.join(workspacesDir, entry, 'timetracker.db');
+			if (await pathExists(candidate)) {
+				found.push(candidate);
+			}
+		}
+		return found;
 	}
 
 	async initialize(): Promise<void> {
@@ -295,11 +342,17 @@ export class StorageService {
 				keyId: DEK_KEY_ID,
 				existingDataPaths: [this.dbPath],
 				log,
+				marker: this.durabilityMarker(),
 			});
 			if (dekResult.kind === 'unavailable') {
 				if (dekResult.reason === 'secret-storage-unusable') {
 					throw new Error(
 						'Secure storage is unavailable, so time tracking is disabled. Enable OS keychain/SecretStorage and reload.'
+					);
+				}
+				if (dekResult.reason === 'secret-storage-not-durable') {
+					throw new Error(
+						'The encryption key for time tracking did not survive a restart. This build cannot keep that key across reloads, so any existing time entries are unrecoverable. Time tracking is off until this is resolved.'
 					);
 				}
 				throw new Error(
@@ -346,6 +399,7 @@ export class StorageService {
 		} catch (error) {
 			if (error instanceof Error && (
 				error.message.startsWith('Secure storage is unavailable')
+				|| error.message.startsWith('The encryption key for time tracking did not survive')
 				|| error.message.startsWith('The encrypted time-tracker database cannot be decrypted')
 				|| error.message.startsWith('Time tracker database is plaintext')
 				|| error.message.startsWith('Failed to unlock')

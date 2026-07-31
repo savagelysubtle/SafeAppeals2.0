@@ -136,3 +136,64 @@ export const ONBOARDING_STORAGE_KEY = 'welcomeOnboarding.state';
  * Cap is enforced by the startup-page consumer; once reached, the wizard stops showing.
  */
 export const ONBOARDING_DISMISS_ATTEMPTS_STORAGE_KEY = 'welcomeOnboarding.dismissAttempts';
+
+/**
+ * APPLICATION-scope flag: onboarding overlay is currently in progress.
+ * Used on web to reopen the walkthrough after a hard reload (e.g. OAuth) kills the in-flight show.
+ * Cleared on any explicit dismiss (complete/skip/Esc/overlay). Survives only across hard reloads.
+ * Stored with StorageTarget.MACHINE — must not Settings Sync across devices.
+ */
+export const ONBOARDING_IN_PROGRESS_STORAGE_KEY = 'welcomeOnboarding.inProgress';
+
+/**
+ * Inputs for the startup-page decision of whether to show Welcome Onboarding.
+ */
+export interface IOnboardingShowGateInput {
+	readonly skipWelcome: boolean;
+	readonly completed: boolean;
+	readonly isWeb: boolean;
+	readonly inProgress: boolean;
+	readonly experimentalOnboardingEnabled: boolean;
+	readonly chatEntitlementHidden: boolean;
+	readonly dismissAttempts: number;
+	readonly dismissAttemptCap: number;
+	readonly isFirstRun: boolean;
+}
+
+/**
+ * Result of {@link shouldShowOnboarding}.
+ */
+export type OnboardingShowGateResult =
+	| { readonly show: false }
+	| { readonly show: true; readonly resumeAfterOAuthReload: boolean };
+
+/**
+ * Pure gate for tryShowOnboarding — web cold-start stays off; web resume only when
+ * `inProgress` is set (hard reload mid-flow). Desktop keeps first-run / dismiss gates.
+ */
+export function shouldShowOnboarding(input: IOnboardingShowGateInput): OnboardingShowGateResult {
+	if (input.skipWelcome || input.completed) {
+		return { show: false };
+	}
+
+	const resumeAfterOAuthReload = input.isWeb && input.inProgress;
+	if (input.isWeb && !resumeAfterOAuthReload) {
+		return { show: false };
+	}
+
+	if (!input.experimentalOnboardingEnabled || input.chatEntitlementHidden) {
+		return { show: false };
+	}
+
+	if (!resumeAfterOAuthReload) {
+		if (input.dismissAttempts >= input.dismissAttemptCap) {
+			return { show: false };
+		}
+		const hasIncompleteAttempt = input.dismissAttempts > 0;
+		if (!input.isFirstRun && !hasIncompleteAttempt) {
+			return { show: false };
+		}
+	}
+
+	return { show: true, resumeAfterOAuthReload };
+}

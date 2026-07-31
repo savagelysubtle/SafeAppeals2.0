@@ -389,6 +389,8 @@ export class WebClientServer {
 			Object.assign(productConfiguration, {
 				nameShort: this._productService.nameShort,
 				nameLong: this._productService.nameLong,
+				urlProtocol: this._productService.urlProtocol,
+				trustedExtensionProtocolHandlers: this._productService.trustedExtensionProtocolHandlers,
 				defaultChatAgent: this._productService.defaultChatAgent,
 				onboardingSkipSignInStep: this._productService.onboardingSkipSignInStep,
 				onboardingKeymaps: this._productService.onboardingKeymaps,
@@ -525,14 +527,24 @@ export class WebClientServer {
 	 */
 	private async _handleCallback(res: http.ServerResponse): Promise<void> {
 		const filePath = FileAccess.asFileUri('vs/code/browser/workbench/callback.html').fsPath;
-		const data = (await promises.readFile(filePath)).toString();
+		const template = (await promises.readFile(filePath)).toString();
+		// Branding is hardcoded in callback.html ("Safe Appeals"); keep replaces as belt-and-braces
+		// for any leftover placeholders and to absolute-ize the icon under the static route.
+		const productName = 'Safe Appeals';
+		const staticRoute = posix.join(this._basePath, this._productPath, STATIC_PATH);
+		const callbackIconUrl = `${staticRoute}/resources/server/safe-appeals-icon.png`;
+		const data = template
+			.replace(/\{\{PRODUCT_NAME\}\}/g, () => productName)
+			.replace(/\{\{CALLBACK_ICON_URL\}\}/g, () => callbackIconUrl)
+			.replace(/static\/resources\/server\/safe-appeals-icon\.png/g, () => callbackIconUrl);
 		const cspDirectives = [
 			'default-src \'self\';',
 			'img-src \'self\' https: data: blob:;',
 			'media-src \'none\';',
 			`script-src 'self' ${this._getScriptCspHashes(data).join(' ')};`,
-			'style-src \'self\' \'unsafe-inline\';',
-			'font-src \'self\' blob:;'
+			'style-src \'self\' \'unsafe-inline\' https://fonts.googleapis.com;',
+			'font-src \'self\' blob: https://fonts.gstatic.com;',
+			'connect-src \'self\' https://fonts.googleapis.com https://fonts.gstatic.com;'
 		].join(' ');
 
 		res.writeHead(200, {

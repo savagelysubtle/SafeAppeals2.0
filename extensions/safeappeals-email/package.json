@@ -114,6 +114,11 @@
         "category": "Safe Appeals Email"
       },
       {
+        "command": "safeappeals-email.updateThreadStatus",
+        "title": "Update Thread Status",
+        "category": "Safe Appeals Email"
+      },
+      {
         "command": "safeappeals-email.parseEml",
         "title": "Parse EML File",
         "category": "Safe Appeals Email"

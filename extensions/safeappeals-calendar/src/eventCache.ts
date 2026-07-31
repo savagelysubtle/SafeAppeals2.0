@@ -5,7 +5,13 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as vscode from 'vscode';
-import { acquireDek, loadJson, writeEncryptedJson } from './shared/encryptedStore';
+import {
+	acquireDek,
+	createMementoDekDurabilityMarker,
+	type DekDurabilityMarker,
+	loadJson,
+	writeEncryptedJson,
+} from './shared/encryptedStore';
 import { deleteFileIfExists, ensureDir } from './shared/secureFs';
 import {
 	CalendarEvent,
@@ -33,12 +39,16 @@ export class EventCache {
 	private dek: Buffer | undefined;
 	private mode: 'encrypted' | 'memory' = 'memory';
 	private hasWarnedUnavailable = false;
+	private readonly marker: DekDurabilityMarker;
 
 	constructor(
 		private readonly storageUri: vscode.Uri,
 		private readonly secrets: vscode.SecretStorage,
+		globalState: vscode.Memento,
 		private readonly log?: (msg: string) => void,
-	) {}
+	) {
+		this.marker = createMementoDekDurabilityMarker(globalState, DEK_KEY_ID);
+	}
 
 	async initialize(): Promise<void> {
 		try {
@@ -70,6 +80,13 @@ export class EventCache {
 			await this.secrets.delete(DEK_KEY_ID);
 		} catch (error) {
 			this.log?.(`Failed to delete DEK ${DEK_KEY_ID}: ${error instanceof Error ? error.message : String(error)}`);
+		}
+		try {
+			await this.marker.setStored(false);
+		} catch (error) {
+			this.log?.(
+				`Failed to clear durability marker for ${DEK_KEY_ID}: ${error instanceof Error ? error.message : String(error)}`,
+			);
 		}
 		await this.acquireEncryptionKey();
 	}
@@ -202,6 +219,7 @@ export class EventCache {
 			keyId: DEK_KEY_ID,
 			existingDataPaths: [this.eventsPath(), this.metaPath()],
 			log: this.log,
+			marker: this.marker,
 		});
 		if (result.kind === 'ok') {
 			this.dek = result.dek;
@@ -214,7 +232,9 @@ export class EventCache {
 		this.log?.(`EventCache encryption unavailable (${result.reason})`);
 		if (!this.hasWarnedUnavailable) {
 			this.hasWarnedUnavailable = true;
-			const message = result.reason === 'key-lost-with-data'
+			const keyUnusable =
+				result.reason === 'key-lost-with-data' || result.reason === 'secret-storage-not-durable';
+			const message = keyUnusable
 				? 'Safe Appeals Calendar: the local calendar cache cannot be decrypted — run "Clear Local Calendar Cache" to reset it.'
 				: 'Safe Appeals Calendar: calendar events will not be cached on disk because secure storage is unavailable.';
 			void vscode.window.showWarningMessage(message);

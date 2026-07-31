@@ -74,16 +74,53 @@ export function open(envelope: Buffer, dek: Buffer): Buffer {
 	return Buffer.concat([decipher.update(ciphertext), decipher.final()]);
 }
 
+/**
+ * Records whether a DEK was previously stored under a given key id.
+ * Structural (not a vscode.Memento) so unit tests can fake it without the vscode API.
+ */
+export interface DekDurabilityMarker {
+	/** True when a DEK was previously minted and stored under this key id. */
+	wasStored(): boolean;
+	/** Records whether a DEK is currently expected to exist in SecretStorage. */
+	setStored(stored: boolean): Promise<void>;
+}
+
 export interface DekRequest {
 	readonly secrets: vscode.SecretStorage;
 	readonly keyId: string;
 	readonly existingDataPaths: readonly string[];
 	readonly log?: (message: string) => void;
+	/**
+	 * Optional durability marker (typically backed by `context.globalState`).
+	 * Distinguishes "key was never minted" from "key was stored then lost across restart".
+	 */
+	readonly marker?: DekDurabilityMarker;
 }
+
+export type DekUnavailableReason =
+	| 'secret-storage-unusable'
+	| 'key-lost-with-data'
+	| 'secret-storage-not-durable';
 
 export type DekResult =
 	| { readonly kind: 'ok'; readonly dek: Buffer }
-	| { readonly kind: 'unavailable'; readonly reason: 'secret-storage-unusable' | 'key-lost-with-data' };
+	| { readonly kind: 'unavailable'; readonly reason: DekUnavailableReason };
+
+/**
+ * Build a {@link DekDurabilityMarker} from a Memento, keyed off `keyId` so stores do not collide.
+ */
+export function createMementoDekDurabilityMarker(
+	memento: vscode.Memento,
+	keyId: string,
+): DekDurabilityMarker {
+	const stateKey = `encryptedStore.dekStored.${keyId}`;
+	return {
+		wasStored: () => memento.get<boolean>(stateKey) === true,
+		setStored: async (stored: boolean) => {
+			await memento.update(stateKey, stored ? true : undefined);
+		},
+	};
+}
 
 function decodeDek(stored: string): Buffer | undefined {
 	try {
@@ -106,9 +143,12 @@ async function anyPathExists(paths: readonly string[]): Promise<boolean> {
 
 /**
  * Acquire or mint a 32-byte DEK from SecretStorage. Never throws.
+ *
+ * Uses an optional durability marker to detect when SecretStorage accepted a key
+ * in a prior session but no longer has it (e.g. in-memory web SecretStorage).
  */
 export async function acquireDek(request: DekRequest): Promise<DekResult> {
-	const { secrets, keyId, existingDataPaths, log } = request;
+	const { secrets, keyId, existingDataPaths, log, marker } = request;
 	const probeKey = `${keyId}.probe`;
 	const probeValue = randomBytes(16).toString('base64');
 	try {
@@ -134,9 +174,17 @@ export async function acquireDek(request: DekRequest): Promise<DekResult> {
 		if (existing !== undefined) {
 			const dek = decodeDek(existing);
 			if (dek) {
+				if (marker && !marker.wasStored()) {
+					await marker.setStored(true);
+				}
 				return { kind: 'ok', dek };
 			}
 			log?.(`Ignoring invalid DEK for ${keyId}`);
+		}
+
+		if (marker?.wasStored()) {
+			log?.(`DEK previously stored but missing from SecretStorage for ${keyId}`);
+			return { kind: 'unavailable', reason: 'secret-storage-not-durable' };
 		}
 
 		if (await anyPathExists(existingDataPaths)) {
@@ -146,6 +194,7 @@ export async function acquireDek(request: DekRequest): Promise<DekResult> {
 
 		const dek = randomBytes(DEK_LENGTH);
 		await secrets.store(keyId, dek.toString('base64'));
+		await marker?.setStored(true);
 		return { kind: 'ok', dek };
 	} catch (error) {
 		log?.(`acquireDek failed for ${keyId}: ${error instanceof Error ? error.message : String(error)}`);

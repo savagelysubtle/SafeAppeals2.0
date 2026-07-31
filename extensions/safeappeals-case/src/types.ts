@@ -67,6 +67,39 @@ export const JURISDICTIONS = [
 	'New York WCB',
 	'Florida DWC',
 	'Washington L&I',
+	// Verified against official sources July 2026. Deliberately omitted superseded
+	// names Q-COMP, the AAT (now ART), and Victoria Accident Compensation
+	// Conciliation Service (now WIC); Scotland Employment Injury Assistance is
+	// absent because it has not commenced.
+	'UK DWP IIDB',
+	'UK FTT SSCS',
+	'NI DfC IIDB',
+	'NI Appeal Tribunal',
+	'IE DSP OIB',
+	'IE SWAO',
+	'NSW icare',
+	'NSW PIC',
+	'VIC WorkSafe',
+	'VIC WIC',
+	'QLD WorkCover',
+	'QLD WC Regulator',
+	'QLD QIRC',
+	'WA WorkCover',
+	'WA WC Arbitration',
+	'SA ReturnToWorkSA',
+	'SA SAET',
+	'TAS WorkSafe',
+	'TASCAT Workers',
+	'ACT WorkSafe',
+	'ACT WC Arbitration',
+	'NT WorkSafe',
+	'NT Work Health Ct',
+	'AU Comcare',
+	'AU ART',
+	'NZ ACC',
+	'NZ ACC Appeals',
+	'ZA Comp Fund',
+	'ZA COIDA Tribunal',
 ] as const;
 
 /** Canadian provinces and territories for profile location picks. */
@@ -141,9 +174,55 @@ export const US_STATES = [
 	'Wyoming',
 ] as const;
 
+/** Australian states and territories for profile location picks. */
+export const AUSTRALIA_STATES = [
+	'Australian Capital Territory',
+	'New South Wales',
+	'Northern Territory',
+	'Queensland',
+	'South Australia',
+	'Tasmania',
+	'Victoria',
+	'Western Australia',
+] as const;
+
+/** UK nations for profile location picks. */
+export const UK_NATIONS = [
+	'England',
+	'Northern Ireland',
+	'Scotland',
+	'Wales',
+] as const;
+
 /**
- * Maps a state/province name to known compensation boards from {@link JURISDICTIONS}.
- * Provinces/states without an entry yield no filter (callers should show the full list).
+ * Subdivision list for countries that use a state/province/nation picker.
+ * National schemes (Ireland, New Zealand, South Africa) return undefined so
+ * callers fall through to free-text State / Province.
+ */
+export function subdivisionsForCountry(country: string): readonly string[] | undefined {
+	if (country === 'Canada') {
+		return CANADA_PROVINCES;
+	}
+	if (country === 'United States') {
+		return US_STATES;
+	}
+	if (country === 'Australia') {
+		return AUSTRALIA_STATES;
+	}
+	if (country === 'United Kingdom') {
+		return UK_NATIONS;
+	}
+	return undefined;
+}
+
+/**
+ * Maps a state/province/nation name to known compensation boards from
+ * {@link JURISDICTIONS}. Subdivisions without an entry fall through to
+ * {@link BOARDS_BY_COUNTRY} via {@link boardsFor}.
+ *
+ * 'AU Comcare' / 'AU ART' repeat in every Australian entry on purpose: Comcare
+ * is the Commonwealth scheme covering federal employees in every state, and the
+ * flat repetition is preferred over a second indirection layer.
  */
 export const BOARDS_BY_STATE_PROVINCE: Readonly<Record<string, readonly string[]>> = {
 	'British Columbia': ['BC WCB'],
@@ -158,16 +237,101 @@ export const BOARDS_BY_STATE_PROVINCE: Readonly<Record<string, readonly string[]
 	'New York': ['New York WCB'],
 	'Florida': ['Florida DWC'],
 	'Washington': ['Washington L&I'],
+	'England': ['UK DWP IIDB', 'UK FTT SSCS'],
+	'Scotland': ['UK DWP IIDB', 'UK FTT SSCS'],
+	'Wales': ['UK DWP IIDB', 'UK FTT SSCS'],
+	'Northern Ireland': ['NI DfC IIDB', 'NI Appeal Tribunal'],
+	'New South Wales': ['NSW icare', 'NSW PIC', 'AU Comcare', 'AU ART'],
+	'Victoria': ['VIC WorkSafe', 'VIC WIC', 'AU Comcare', 'AU ART'],
+	'Queensland': ['QLD WorkCover', 'QLD WC Regulator', 'QLD QIRC', 'AU Comcare', 'AU ART'],
+	'Western Australia': ['WA WorkCover', 'WA WC Arbitration', 'AU Comcare', 'AU ART'],
+	'South Australia': ['SA ReturnToWorkSA', 'SA SAET', 'AU Comcare', 'AU ART'],
+	'Tasmania': ['TAS WorkSafe', 'TASCAT Workers', 'AU Comcare', 'AU ART'],
+	'Australian Capital Territory': ['ACT WorkSafe', 'ACT WC Arbitration', 'AU Comcare', 'AU ART'],
+	'Northern Territory': ['NT WorkSafe', 'NT Work Health Ct', 'AU Comcare', 'AU ART'],
 };
 
 /**
- * Returns boards for a state/province. When none match, returns the full
- * {@link JURISDICTIONS} list so the picker is never empty.
+ * Boards offered when a country is chosen but no subdivision has been picked
+ * (or the subdivision has no entry in {@link BOARDS_BY_STATE_PROVINCE}).
  */
-export function boardsForStateProvince(stateProvince: string): readonly string[] {
-	const matched = stateProvince ? BOARDS_BY_STATE_PROVINCE[stateProvince] : undefined;
-	if (matched && matched.length > 0) {
-		return matched;
+export const BOARDS_BY_COUNTRY: Readonly<Record<string, readonly string[]>> = {
+	'Canada': [
+		'BC WCB',
+		'Ontario WSIB',
+		'Alberta WCB',
+		'Quebec CNESST',
+		'Manitoba WCB',
+		'Saskatchewan WCB',
+		'Nova Scotia WCB',
+	],
+	'United States': [
+		'California DWC',
+		'Texas DWC',
+		'New York WCB',
+		'Florida DWC',
+		'Washington L&I',
+	],
+	'United Kingdom': [
+		'UK DWP IIDB',
+		'UK FTT SSCS',
+		'NI DfC IIDB',
+		'NI Appeal Tribunal',
+	],
+	'Ireland': [
+		'IE DSP OIB',
+		'IE SWAO',
+	],
+	'Australia': [
+		'NSW icare',
+		'NSW PIC',
+		'VIC WorkSafe',
+		'VIC WIC',
+		'QLD WorkCover',
+		'QLD WC Regulator',
+		'QLD QIRC',
+		'WA WorkCover',
+		'WA WC Arbitration',
+		'SA ReturnToWorkSA',
+		'SA SAET',
+		'TAS WorkSafe',
+		'TASCAT Workers',
+		'ACT WorkSafe',
+		'ACT WC Arbitration',
+		'NT WorkSafe',
+		'NT Work Health Ct',
+		'AU Comcare',
+		'AU ART',
+	],
+	'New Zealand': [
+		'NZ ACC',
+		'NZ ACC Appeals',
+	],
+	'South Africa': [
+		'ZA Comp Fund',
+		'ZA COIDA Tribunal',
+	],
+};
+
+/**
+ * Resolves compensation boards for a country and optional subdivision.
+ *
+ * Order: subdivision map → country map → all {@link JURISDICTIONS} when
+ * country is empty → empty list for Other / unrecognised countries.
+ */
+export function boardsFor(country: string, stateProvince: string): readonly string[] {
+	if (stateProvince) {
+		const bySubdivision = BOARDS_BY_STATE_PROVINCE[stateProvince];
+		if (bySubdivision && bySubdivision.length > 0) {
+			return bySubdivision;
+		}
+	}
+	if (country) {
+		const byCountry = BOARDS_BY_COUNTRY[country];
+		if (byCountry && byCountry.length > 0) {
+			return byCountry;
+		}
+		return [];
 	}
 	return JURISDICTIONS;
 }

@@ -38,7 +38,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 	log('Activating…');
 
 	accounts = new AccountStore(context.secrets, log);
-	index = new EmailIndex(context.globalStorageUri, context.secrets, log);
+	index = new EmailIndex(context.globalStorageUri, context.secrets, context.globalState, log);
 	await index.initialize();
 
 	statusBar = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 49);

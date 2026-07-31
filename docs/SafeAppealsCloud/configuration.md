@@ -34,7 +34,7 @@ model_list:
       output_cost_per_token: <cost>
 
 litellm_settings:
-  set_verbose: true
+  set_verbose: false  # Never true in deployment — logs prompt content
   return_usage: true
   cache: false
   request_timeout: 600

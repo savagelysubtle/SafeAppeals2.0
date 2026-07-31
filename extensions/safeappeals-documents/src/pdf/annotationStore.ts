@@ -6,7 +6,12 @@
 import { randomUUID } from 'crypto';
 import * as path from 'path';
 import * as vscode from 'vscode';
-import { acquireDek, loadJson, writeEncryptedJson } from '../shared/encryptedStore';
+import {
+	acquireDek,
+	createMementoDekDurabilityMarker,
+	loadJson,
+	writeEncryptedJson,
+} from '../shared/encryptedStore';
 
 /**
  * Annotation model matches the old workbench PDFAnnotationService
@@ -83,6 +88,7 @@ export class PdfAnnotationStore {
 				keyId: ANNOTATIONS_DEK_KEY,
 				existingDataPaths: [annotationsPath],
 				log,
+				marker: createMementoDekDurabilityMarker(context.globalState, ANNOTATIONS_DEK_KEY),
 			});
 			if (dekResult.kind === 'ok') {
 				dek = dekResult.dek;
@@ -90,8 +96,13 @@ export class PdfAnnotationStore {
 				log?.(
 					`PDF annotations DEK unavailable (${dekResult.reason}); running memory-only`,
 				);
+				const keyUnusable =
+					dekResult.reason === 'key-lost-with-data'
+					|| dekResult.reason === 'secret-storage-not-durable';
 				void vscode.window.showWarningMessage(
-					'Safe Appeals Documents: PDF annotations cannot be encrypted at rest (SecretStorage unavailable). Annotations will not persist to disk for this session.',
+					keyUnusable
+						? 'Safe Appeals Documents: the local PDF annotations file cannot be decrypted (encryption key missing). Annotations will not persist to disk for this session.'
+						: 'Safe Appeals Documents: PDF annotations cannot be encrypted at rest (secure storage unavailable). Annotations will not persist to disk for this session.',
 				);
 				annotationsPath = undefined;
 			}

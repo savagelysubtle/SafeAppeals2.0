@@ -31,7 +31,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 	log('Activating…');
 
 	const tokens = new TokenStore(context.secrets);
-	cache = new EventCache(context.globalStorageUri, context.secrets, log);
+	cache = new EventCache(context.globalStorageUri, context.secrets, context.globalState, log);
 	await cache.initialize();
 
 	statusBar = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 50);
@@ -105,7 +105,7 @@ function registerCommands(
 			}
 			if (!isProviderConfigured(provider)) {
 				const hint = provider === 'google'
-					? 'Set safeappealsCalendar.google.clientId + clientSecret (or GOOGLE_CALENDAR_CLIENT_ID / GOOGLE_CALENDAR_CLIENT_SECRET).'
+					? 'Set safeappealsCalendar.google.clientId (or GOOGLE_CALENDAR_CLIENT_ID). Desktop clients use PKCE — no client secret required.'
 					: 'Set safeappealsCalendar.outlook.clientId (or OUTLOOK_CLIENT_ID).';
 				vscode.window.showWarningMessage(`Safe Appeals Calendar: ${provider} is not configured. ${hint}`);
 				log(`Connect aborted — ${provider} not configured`);

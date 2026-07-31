@@ -1,5 +1,5 @@
 /*--------------------------------------------------------------------------------------
- *  Google Calendar — OAuth2 auth-code + raw REST (no googleapis SDK)
+ *  Google Calendar — OAuth2 auth-code + PKCE + raw REST (no googleapis SDK)
  *--------------------------------------------------------------------------------------*/
 
 import * as vscode from 'vscode';
@@ -9,7 +9,7 @@ import {
 	getGoogleClientSecret,
 	isGoogleConfigured,
 } from './config';
-import { createOAuthState, getRedirectUri, waitForAuthCode } from './oauthLoopback';
+import { createOAuthState, createPkcePair, startOAuthLoopback } from './oauthLoopback';
 import { TokenStore } from './tokenStore';
 import type { CalendarEvent, CalendarEventData, CalendarSyncResult, OAuthTokens } from './types';
 
@@ -21,6 +21,14 @@ const SCOPES = [
 const AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
 const TOKEN_URL = 'https://oauth2.googleapis.com/token';
 const CALENDAR_API = 'https://www.googleapis.com/calendar/v3';
+
+/** Append client_secret only when set (legacy Web clients); Desktop + PKCE omits it. */
+function appendOptionalClientSecret(body: URLSearchParams): void {
+	const secret = getGoogleClientSecret();
+	if (secret) {
+		body.set('client_secret', secret);
+	}
+}
 
 export class GoogleCalendarClient {
 	constructor(
@@ -35,75 +43,84 @@ export class GoogleCalendarClient {
 	async connect(): Promise<OAuthTokens> {
 		if (!this.isConfigured()) {
 			throw new Error(
-				'Google Calendar not configured. Set safeappealsCalendar.google.clientId/clientSecret ' +
-				'or GOOGLE_CALENDAR_CLIENT_ID / GOOGLE_CALENDAR_CLIENT_SECRET.'
+				'Google Calendar not configured. Set safeappealsCalendar.google.clientId ' +
+				'or GOOGLE_CALENDAR_CLIENT_ID.'
 			);
 		}
 
 		const clientId = getGoogleClientId();
-		const clientSecret = getGoogleClientSecret();
-		const redirectUri = getRedirectUri();
 		const state = createOAuthState();
+		const pkce = createPkcePair();
 
-		const params = new URLSearchParams({
-			client_id: clientId,
-			redirect_uri: redirectUri,
-			response_type: 'code',
-			scope: SCOPES,
-			access_type: 'offline',
-			prompt: 'consent',
-			state,
-		});
+		// Start listener first so redirect_uri uses the OS-assigned ephemeral port.
+		const loopback = await startOAuthLoopback({ expectedState: state, hostname: '127.0.0.1' });
+		try {
+			const redirectUri = loopback.redirectUri;
 
-		const authUrl = `${AUTH_URL}?${params.toString()}`;
-		this.log('Starting Google OAuth (localhost loopback)');
+			const params = new URLSearchParams({
+				client_id: clientId,
+				redirect_uri: redirectUri,
+				response_type: 'code',
+				scope: SCOPES,
+				access_type: 'offline',
+				prompt: 'consent',
+				state,
+				code_challenge: pkce.challenge,
+				code_challenge_method: 'S256',
+			});
 
-		const callbackPromise = waitForAuthCode(state);
-		await vscode.env.openExternal(vscode.Uri.parse(authUrl));
-		const callback = await callbackPromise;
+			const authUrl = `${AUTH_URL}?${params.toString()}`;
+			this.log('Starting Google OAuth (ephemeral loopback + PKCE)');
 
-		if (!callback.code) {
-			throw new Error(callback.error || 'No authorization code received');
+			await vscode.env.openExternal(vscode.Uri.parse(authUrl));
+			const callback = await loopback.waitForCode;
+
+			if (!callback.code) {
+				throw new Error(callback.error || 'No authorization code received');
+			}
+
+			const body = new URLSearchParams({
+				code: callback.code,
+				client_id: clientId,
+				redirect_uri: redirectUri,
+				grant_type: 'authorization_code',
+				code_verifier: pkce.verifier,
+			});
+			appendOptionalClientSecret(body);
+
+			const res = await fetch(TOKEN_URL, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+				body: body.toString(),
+			});
+			const json = await res.json() as {
+				access_token?: string;
+				refresh_token?: string;
+				expires_in?: number;
+				error?: string;
+				error_description?: string;
+			};
+
+			if (!res.ok || !json.access_token) {
+				throw new Error(json.error_description || json.error || 'Token exchange failed');
+			}
+
+			const tokens: OAuthTokens = {
+				accessToken: json.access_token,
+				refreshToken: json.refresh_token || '',
+				expiresAt: new Date(Date.now() + (json.expires_in || 3600) * 1000).toISOString(),
+			};
+
+			if (!tokens.refreshToken) {
+				this.log('Warning: no refresh_token returned — re-consent may be required later');
+			}
+
+			await this.tokens.set('google', tokens);
+			this.log('Google OAuth completed');
+			return tokens;
+		} finally {
+			loopback.close();
 		}
-
-		const body = new URLSearchParams({
-			code: callback.code,
-			client_id: clientId,
-			client_secret: clientSecret,
-			redirect_uri: redirectUri,
-			grant_type: 'authorization_code',
-		});
-
-		const res = await fetch(TOKEN_URL, {
-			method: 'POST',
-			headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-			body: body.toString(),
-		});
-		const json = await res.json() as {
-			access_token?: string;
-			refresh_token?: string;
-			expires_in?: number;
-			error?: string;
-			error_description?: string;
-		};
-
-		if (!res.ok || !json.access_token) {
-			throw new Error(json.error_description || json.error || 'Token exchange failed');
-		}
-
-		const tokens: OAuthTokens = {
-			accessToken: json.access_token,
-			refreshToken: json.refresh_token || '',
-			expiresAt: new Date(Date.now() + (json.expires_in || 3600) * 1000).toISOString(),
-		};
-
-		if (!tokens.refreshToken) {
-			this.log('Warning: no refresh_token returned — re-consent may be required later');
-		}
-
-		await this.tokens.set('google', tokens);
-		this.log('Google OAuth completed');
-		return tokens;
 	}
 
 	async disconnect(): Promise<void> {
@@ -129,10 +146,10 @@ export class GoogleCalendarClient {
 		this.log('Refreshing Google access token');
 		const body = new URLSearchParams({
 			client_id: getGoogleClientId(),
-			client_secret: getGoogleClientSecret(),
 			refresh_token: tokens.refreshToken,
 			grant_type: 'refresh_token',
 		});
+		appendOptionalClientSecret(body);
 
 		const res = await fetch(TOKEN_URL, {
 			method: 'POST',

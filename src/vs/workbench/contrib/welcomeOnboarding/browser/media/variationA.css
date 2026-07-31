@@ -11,7 +11,12 @@
 .onboarding-a-overlay {
 	position: fixed;
 	inset: 0;
-	z-index: 10000;
+	/*
+	 * Must stay below the context view layer (2575) or the wizard paints over its
+	 * own select dropdowns, which are hosted there — they open but are invisible.
+	 * Matches the issue reporter overlay, the other full-screen modal of this kind.
+	 */
+	z-index: 2520;
 	display: flex;
 	align-items: center;
 	justify-content: center;
@@ -194,6 +199,13 @@
 	min-height: 0;
 	overflow-y: auto;
 	/*
+	 * Wheel events are stopped at the overlay so the workbench container's
+	 * gesture-suppressing handler cannot cancel this scroller. Containing the
+	 * overscroll keeps that local exception from letting a wheel gesture chain
+	 * out into browser history navigation.
+	 */
+	overscroll-behavior: contain;
+	/*
 	 * Header and footer are flex siblings of this scroller — they never overlap it —
 	 * so WCAG 2.2 §2.4.11 Focus Not Obscured is satisfied by the layout. This padding
 	 * is only a comfort margin so a focused control is not flush against the header
@@ -214,6 +226,12 @@
 	display: flex;
 	align-items: center;
 	gap: 12px;
+}
+
+.onboarding-a-footer-hint {
+	font-size: 12px;
+	line-height: 1.4;
+	color: var(--vscode-descriptionForeground);
 }
 
 .onboarding-a-footer-right {
@@ -249,8 +267,14 @@
 		0 0 0 4px var(--vscode-focusBorder);
 }
 
-.onboarding-a-btn-primary:hover {
+.onboarding-a-btn-primary:hover:not(:disabled):not([aria-disabled='true']) {
 	background: var(--vscode-button-hoverBackground);
+}
+
+.onboarding-a-btn-primary:disabled,
+.onboarding-a-btn-primary[aria-disabled='true'] {
+	opacity: 0.4;
+	cursor: default;
 }
 
 .onboarding-a-btn-secondary {
@@ -698,9 +722,13 @@
 	display: flex;
 	flex-direction: column;
 	gap: 18px;
-	flex: 1;
 	width: 100%;
-	min-height: 0;
+	/*
+	 * Must not shrink: this is a flex item of the scroller, and letting it shrink
+	 * to the visible height squeezes its own children — the approval-mode section
+	 * collapses to zero height and its cards spill over the link below it.
+	 */
+	flex: 0 0 auto;
 	margin: 0 auto;
 	padding: 0;
 	text-align: left;
@@ -796,7 +824,6 @@
 	display: flex;
 	align-items: center;
 	gap: 16px;
-	margin-top: auto;
 	padding: 4px 4px 0 4px;
 }
 
@@ -1189,11 +1216,24 @@
 	margin: 0;
 }
 
-.onboarding-a-profile-field .monaco-select-box {
+.onboarding-a-profile-select {
 	width: 100%;
 }
 
-.onboarding-a-profile-country-other {
+/*
+ * Match sibling InputBox height (~26px: 1px border ×2 + 4px padding ×2 + ~16px
+ * content at 13px font) and left text inset (6px). Right padding reserves the
+ * workbench `.select-container:after` chevron.
+ */
+.onboarding-a-profile-field .monaco-select-box {
+	width: 100%;
+	box-sizing: border-box;
+	height: 26px;
+	padding: 2px 23px 2px 6px;
+}
+
+.onboarding-a-profile-country-other,
+.onboarding-a-profile-board-other {
 	display: flex;
 	flex-direction: column;
 	gap: 4px;

@@ -404,9 +404,7 @@
 				ribbon = new window.DocxRibbon({
 					onSave: handleSaveRequest,
 					onPrint: handlePrint,
-					onExportPDF: handleExportPDF,
 					onInsertSignatureLine: handleInsertSignatureLine,
-					onSendForSignature: handleSendForSignature,
 					onModification: trackModification,
 					onPageSizeChange: (pageSize) => {
 						console.log('[DOCX Webview] Page size changed to:', pageSize);
@@ -1082,113 +1080,6 @@
 		}
 	}
 
-	async function handleExportPDF() {
-		if (!tiptapEditor) {
-			console.warn('[DOCX Webview] Editor not initialized for PDF export');
-			return;
-		}
-
-		console.log('[DOCX Webview] Starting PDF export process...');
-
-		try {
-			// Get HTML content from Tiptap editor
-			const htmlContent = tiptapEditor.getHTML();
-
-			// Get current page settings
-			const pageSize = pageSizeSelect ? pageSizeSelect.value : 'letter';
-			const marginPreset = marginPresetSelect ? marginPresetSelect.value : 'normal';
-
-			// Page dimensions in CSS
-			const pageSizes = {
-				letter: { width: '8.5in', height: '11in' },
-				legal: { width: '8.5in', height: '14in' },
-				tabloid: { width: '11in', height: '17in' },
-				a4: { width: '210mm', height: '297mm' },
-				a3: { width: '297mm', height: '420mm' }
-			};
-
-			const margins = {
-				normal: '1in',
-				narrow: '0.5in',
-				moderate: '0.75in',
-				wide: '2in'
-			};
-
-			const pageStyle = pageSizes[pageSize] || pageSizes.letter;
-			const marginStyle = margins[marginPreset] || margins.normal;
-
-			// Build export HTML with proper styling
-			const exportHTML = `
-				<!DOCTYPE html>
-				<html>
-				<head>
-					<meta charset="UTF-8">
-					<title>Export Document</title>
-					<style>
-						@page {
-							size: ${pageStyle.width} ${pageStyle.height};
-							margin: ${marginStyle};
-						}
-						body {
-							margin: 0;
-							padding: 0;
-							font-family: 'Calibri', 'Arial', sans-serif;
-							font-size: 11pt;
-							line-height: 1.5;
-							color: #000;
-							background: #fff;
-						}
-						.ProseMirror {
-							outline: none;
-							white-space: pre-wrap;
-							word-wrap: break-word;
-						}
-						h1 { font-size: 24pt; margin: 12pt 0; font-weight: bold; }
-						h2 { font-size: 18pt; margin: 10pt 0; font-weight: bold; }
-						h3 { font-size: 14pt; margin: 8pt 0; font-weight: bold; }
-						h4 { font-size: 12pt; margin: 6pt 0; font-weight: bold; }
-						p { margin: 0 0 10pt 0; }
-						ul, ol { margin: 0 0 10pt 0; padding-left: 40px; }
-						li { margin: 0 0 5pt 0; }
-						strong { font-weight: bold; }
-						em { font-style: italic; }
-						u { text-decoration: underline; }
-						s { text-decoration: line-through; }
-						.page-break { page-break-after: always; }
-					</style>
-				</head>
-				<body>
-					<div class="ProseMirror">
-						${htmlContent}
-					</div>
-				</body>
-				</html>
-			`;
-
-			// Send to host to handle PDF export
-			// Extract filename from docxUri if available
-			let filename = 'document';
-			if (docxUri) {
-				try {
-					const parts = docxUri.split('/');
-					filename = parts[parts.length - 1] || 'document';
-				} catch (e) {
-					console.warn('[DOCX Webview] Could not extract filename from URI');
-				}
-			}
-
-			vscode.postMessage({
-				type: 'exportToPDF',
-				html: exportHTML,
-				title: filename
-			});
-			console.log('[DOCX Webview] Sent PDF export request to host');
-
-		} catch (error) {
-			console.error('[DOCX Webview] PDF export error:', error);
-		}
-	}
-
 	async function handleInsertSignatureLine() {
 		if (!tiptapEditor || !tiptapEditor.editor) {
 			console.warn('[DOCX Webview] Editor not initialized for signature line');
@@ -1215,54 +1106,6 @@
 			}
 		} catch (error) {
 			console.warn('[DOCX Webview] Signature line insertion failed:', error);
-		}
-	}
-
-	// Send for Signature (DocuSign) - sends document to host for e-signature workflow
-	async function handleSendForSignature() {
-		if (!tiptapEditor) {
-			console.warn('[DOCX Webview] Editor not initialized for signature');
-			return;
-		}
-
-		console.log('[DOCX Webview] Starting Send for Signature process...');
-
-		try {
-			// Export to DOCX blob to get the current document state
-			const blob = await tiptapEditor.saveToDocx();
-
-			// Convert blob to base64
-			const arrayBuffer = await blob.arrayBuffer();
-			const uint8Array = new Uint8Array(arrayBuffer);
-			let binaryString = '';
-			for (let i = 0; i < uint8Array.length; i++) {
-				binaryString += String.fromCharCode(uint8Array[i]);
-			}
-			const base64 = btoa(binaryString);
-
-			// Extract filename from docxUri if available
-			let filename = 'document';
-			if (docxUri) {
-				try {
-					const parts = docxUri.split('/');
-					filename = parts[parts.length - 1] || 'document';
-				} catch (e) {
-					console.warn('[DOCX Webview] Could not extract filename from URI');
-				}
-			}
-
-			// Send to host to initiate DocuSign flow
-			vscode.postMessage({
-				type: 'sendForSignature',
-				docxData: base64,
-				docxUri: docxUri,
-				filename: filename
-			});
-
-			console.log('[DOCX Webview] Sent signature request to host');
-
-		} catch (error) {
-			console.error('[DOCX Webview] Send for Signature error:', error);
 		}
 	}
 

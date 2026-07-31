@@ -15,6 +15,7 @@ import { posix } from '../../../base/common/path.js';
 import { isEqual } from '../../../base/common/resources.js';
 import { ltrim } from '../../../base/common/strings.js';
 import { URI, UriComponents } from '../../../base/common/uri.js';
+import { CommandsRegistry } from '../../../platform/commands/common/commands.js';
 import product from '../../../platform/product/common/product.js';
 import { ISecretStorageProvider } from '../../../platform/secrets/common/secrets.js';
 import { isFolderToOpen, isWorkspaceToOpen } from '../../../platform/window/common/window.js';
@@ -22,6 +23,181 @@ import type { IWorkbenchConstructionOptions, IWorkspace, IWorkspaceProvider } fr
 import { AuthenticationSessionInfo } from '../../../workbench/services/authentication/browser/authenticationService.js';
 import type { IURLCallbackProvider } from '../../../workbench/services/url/browser/urlService.js';
 import { create } from '../../../workbench/workbench.web.main.internal.js';
+
+/** Origin-shared key for in-flight PKCE (same semantic as extension PENDING_SIGN_IN_KEY). */
+const PENDING_PKCE_LOCAL_STORAGE_KEY = 'safeappeals-cloud.pendingSignIn';
+const PENDING_PKCE_MAX_AGE_MS = 5 * 60 * 1000;
+
+/** Written by callback.html; survives workbench reload when pendingCallbacks is empty. */
+const DURABLE_OAUTH_CALLBACK_KEY = 'safeappeals-cloud.oauthCallback';
+const DURABLE_OAUTH_CALLBACK_MAX_AGE_MS = 5 * 60 * 1000;
+/** Extension id / path used by CloudUriHandler for asExternalUri OAuth callbacks. */
+const SAFEAPPEALS_AUTH_AUTHORITY = 'safeappeals.safeappeals-authentication';
+const SAFEAPPEALS_AUTH_CALLBACK_PATH = '/auth/callback';
+
+interface PendingPkcePayload {
+	readonly codeVerifier: string;
+	readonly state: string;
+	readonly startedAt: number;
+}
+
+interface DurableOAuthCodeState {
+	readonly code: string;
+	readonly state: string;
+}
+
+function isPendingPkcePayload(value: unknown): value is PendingPkcePayload {
+	if (!value || typeof value !== 'object') {
+		return false;
+	}
+	const candidate = value as { codeVerifier?: unknown; state?: unknown; startedAt?: unknown };
+	return typeof candidate.codeVerifier === 'string'
+		&& !!candidate.codeVerifier
+		&& typeof candidate.state === 'string'
+		&& !!candidate.state
+		&& typeof candidate.startedAt === 'number'
+		&& Number.isFinite(candidate.startedAt);
+}
+
+/**
+ * Bridge for SafeAppeals Cloud web OAuth: persist PKCE pending in origin-shared
+ * localStorage so empty-window vs workspace / reload can restore it when
+ * SecretStorage and profile-scoped globalState cannot.
+ * Plaintext localStorage is a deliberate web-OAuth exception to SecretStorage-only,
+ * mitigated by a 5-minute TTL and clear-on-consume.
+ */
+CommandsRegistry.registerCommand('_safeappeals.cloud.storePendingPkce', (_accessor, arg: unknown) => {
+	if (!isPendingPkcePayload(arg)) {
+		return;
+	}
+	localStorage.setItem(PENDING_PKCE_LOCAL_STORAGE_KEY, JSON.stringify({
+		codeVerifier: arg.codeVerifier,
+		state: arg.state,
+		startedAt: arg.startedAt,
+	}));
+});
+
+CommandsRegistry.registerCommand('_safeappeals.cloud.readPendingPkce', (): PendingPkcePayload | undefined => {
+	const raw = localStorage.getItem(PENDING_PKCE_LOCAL_STORAGE_KEY);
+	if (!raw) {
+		return undefined;
+	}
+	try {
+		const parsed: unknown = JSON.parse(raw);
+		if (!isPendingPkcePayload(parsed)) {
+			return undefined;
+		}
+		if (Date.now() - parsed.startedAt > PENDING_PKCE_MAX_AGE_MS) {
+			localStorage.removeItem(PENDING_PKCE_LOCAL_STORAGE_KEY);
+			return undefined;
+		}
+		return {
+			codeVerifier: parsed.codeVerifier,
+			state: parsed.state,
+			startedAt: parsed.startedAt,
+		};
+	} catch {
+		return undefined;
+	}
+});
+
+CommandsRegistry.registerCommand('_safeappeals.cloud.clearPendingPkce', () => {
+	localStorage.removeItem(PENDING_PKCE_LOCAL_STORAGE_KEY);
+});
+
+/**
+ * Read a valid SafeAppeals durable OAuth callback (code+state) without removing it.
+ * Cleared after successful exchange / pending settle via
+ * `_safeappeals.cloud.clearDurableOAuthCallback`, or immediately on
+ * TTL/malformed/wrong-authority/code-less payloads (aligns with recoverOrphanedCallbacks).
+ */
+CommandsRegistry.registerCommand('_safeappeals.cloud.peekDurableOAuthCallback', (): DurableOAuthCodeState | undefined => {
+	const raw = localStorage.getItem(DURABLE_OAUTH_CALLBACK_KEY);
+	if (!raw) {
+		return undefined;
+	}
+	try {
+		const parsed = JSON.parse(raw) as UriComponents & { ts?: number };
+		const ts = typeof parsed.ts === 'number' ? parsed.ts : 0;
+		if (Date.now() - ts > DURABLE_OAUTH_CALLBACK_MAX_AGE_MS) {
+			localStorage.removeItem(DURABLE_OAUTH_CALLBACK_KEY);
+			return undefined;
+		}
+		const { ts: _ts, ...uriComponents } = parsed;
+		const uri = URI.revive(uriComponents);
+		if (uri.authority !== SAFEAPPEALS_AUTH_AUTHORITY || uri.path !== SAFEAPPEALS_AUTH_CALLBACK_PATH) {
+			localStorage.removeItem(DURABLE_OAUTH_CALLBACK_KEY);
+			return undefined;
+		}
+		const params = new URLSearchParams(uri.query ?? '');
+		const code = params.get('code');
+		const state = params.get('state');
+		if (!code || !state) {
+			localStorage.removeItem(DURABLE_OAUTH_CALLBACK_KEY);
+			return undefined;
+		}
+		return { code, state };
+	} catch {
+		localStorage.removeItem(DURABLE_OAUTH_CALLBACK_KEY);
+		return undefined;
+	}
+});
+
+/**
+ * Removes the durable SafeAppeals OAuth callback key after exchange success or
+ * when pending sign-in settles unsuccessfully.
+ */
+CommandsRegistry.registerCommand('_safeappeals.cloud.clearDurableOAuthCallback', () => {
+	localStorage.removeItem(DURABLE_OAUTH_CALLBACK_KEY);
+});
+
+/**
+ * Safety net when the durable key was already burned but an ephemeral
+ * `vscode-web.url-callbacks[*]` SafeAppeals callback remains (e.g. after reload).
+ * Finds the newest matching entry, removes that key, and returns code+state.
+ */
+CommandsRegistry.registerCommand('_safeappeals.cloud.takeOrphanedUrlCallback', (): DurableOAuthCodeState | undefined => {
+	let best: { readonly key: string; readonly id: number; readonly code: string; readonly state: string } | undefined;
+
+	for (let i = 0; i < localStorage.length; i++) {
+		const key = localStorage.key(i);
+		if (!key || !key.startsWith('vscode-web.url-callbacks[')) {
+			continue;
+		}
+		const match = /^vscode-web\.url-callbacks\[(\d+)\]$/.exec(key);
+		if (!match) {
+			continue;
+		}
+		const id = Number(match[1]);
+		const result = localStorage.getItem(key);
+		if (result === null) {
+			continue;
+		}
+		try {
+			const uri = URI.revive(JSON.parse(result));
+			if (uri.authority !== SAFEAPPEALS_AUTH_AUTHORITY || uri.path !== SAFEAPPEALS_AUTH_CALLBACK_PATH) {
+				continue;
+			}
+			const params = new URLSearchParams(uri.query ?? '');
+			const code = params.get('code');
+			const state = params.get('state');
+			if (!code || !state) {
+				continue;
+			}
+			if (!best || id > best.id) {
+				best = { key, id, code, state };
+			}
+		} catch {
+			// Ignore malformed ephemeral entries.
+		}
+	}
+
+	if (!best) {
+		return undefined;
+	}
+	localStorage.removeItem(best.key);
+	return { code: best.code, state: best.state };
+});
 
 interface ISecretStorageCrypto {
 	seal(data: string): Promise<string>;
@@ -304,6 +480,9 @@ class LocalStorageURLCallbackProvider extends Disposable implements IURLCallback
 		'fragment'
 	];
 
+	/** Debounce recover fires so an unhandled open does not spin-fire forever. */
+	private static readonly RECOVER_FIRE_DEBOUNCE_MS = 1000;
+
 	private readonly _onCallback = this._register(new Emitter<URI>());
 	readonly onCallback = this._onCallback.event;
 
@@ -311,9 +490,14 @@ class LocalStorageURLCallbackProvider extends Disposable implements IURLCallback
 	private lastTimeChecked = Date.now();
 	private checkCallbacksTimeout: Timeout | undefined = undefined;
 	private onDidChangeLocalStorageDisposable: IDisposable | undefined;
+	/** Timestamp of last recover/orphan fire for the durable SafeAppeals key. */
+	private lastDurableFireTs = 0;
 
 	constructor(private readonly _callbackRoute: string) {
 		super();
+		// Always listen: after a workbench reload, pendingCallbacks is empty but a
+		// popup may still write safeappeals-cloud.oauthCallback a moment later.
+		this.startListening();
 	}
 
 	create(options: Partial<UriComponents> = {}): URI {
@@ -340,6 +524,163 @@ class LocalStorageURLCallbackProvider extends Disposable implements IURLCallback
 		}
 
 		return URI.parse(mainWindow.location.href).with({ path: this._callbackRoute, query: queryParams.join('&') });
+	}
+
+	/**
+	 * Opens a SafeAppeals OAuth callback persisted in localStorage across reload.
+	 * Must run only after a listener is attached to {@link onCallback}.
+	 * Fires without removing the durable key — the auth extension clears it only
+	 * after a successful code exchange (open()===true is not enough: ExtensionUrlHandler
+	 * returns true after buffer+activate before exchange finishes).
+	 *
+	 * @returns `true` when a URI was fired (or expired/invalid and cleared);
+	 * `false` when nothing to recover / no listeners / debounce blocked (retry later).
+	 */
+	recoverOrphanedCallbacks(): boolean {
+		if (!this._onCallback.hasListeners()) {
+			return false;
+		}
+
+		const raw = localStorage.getItem(DURABLE_OAUTH_CALLBACK_KEY);
+		if (raw === null) {
+			return false;
+		}
+
+		try {
+			const parsed = JSON.parse(raw) as UriComponents & { ts?: number };
+			const ts = typeof parsed.ts === 'number' ? parsed.ts : 0;
+			if (Date.now() - ts > DURABLE_OAUTH_CALLBACK_MAX_AGE_MS) {
+				localStorage.removeItem(DURABLE_OAUTH_CALLBACK_KEY);
+				return true;
+			}
+
+			const now = Date.now();
+			if (now - this.lastDurableFireTs < LocalStorageURLCallbackProvider.RECOVER_FIRE_DEBOUNCE_MS) {
+				return false;
+			}
+
+			const { ts: _ts, ...uriComponents } = parsed;
+			const durableUri = URI.revive(uriComponents);
+			// Authority guard: never replay GitHub / other provider URIs from the durable key.
+			if (!this.isSafeAppealsOAuthCallbackUri(durableUri)) {
+				localStorage.removeItem(DURABLE_OAUTH_CALLBACK_KEY);
+				return true;
+			}
+			// Drop matching orphaned vscode-web copies; leave durable key until open succeeds.
+			this.sweepOrphanedSafeAppealsUrlCallbackKeys(durableUri);
+			this.lastDurableFireTs = now;
+			this._onCallback.fire(durableUri);
+			return true;
+		} catch (error) {
+			localStorage.removeItem(DURABLE_OAUTH_CALLBACK_KEY);
+			console.error(error);
+			return true;
+		}
+	}
+
+	/**
+	 * Removes the durable SafeAppeals OAuth key after a successful code exchange.
+	 * Prefer the `_safeappeals.cloud.clearDurableOAuthCallback` command from the
+	 * auth extension; this remains for direct provider callers.
+	 * When {@link uri} is provided, removes only if it matches the stored payload.
+	 * When omitted, clears any valid SafeAppeals durable callback.
+	 *
+	 * @returns `true` when the durable key was actually removed; `false` otherwise.
+	 */
+	clearDurableOAuthCallback(uri?: URI): boolean {
+		if (uri !== undefined) {
+			if (!this.matchesDurableOAuthCallback(uri)) {
+				return false;
+			}
+			localStorage.removeItem(DURABLE_OAUTH_CALLBACK_KEY);
+			return true;
+		}
+
+		const raw = localStorage.getItem(DURABLE_OAUTH_CALLBACK_KEY);
+		if (raw === null) {
+			return false;
+		}
+		try {
+			const parsed = JSON.parse(raw) as UriComponents & { ts?: number };
+			const { ts: _ts, ...uriComponents } = parsed;
+			const durableUri = URI.revive(uriComponents);
+			if (!this.isSafeAppealsOAuthCallbackUri(durableUri)) {
+				return false;
+			}
+			localStorage.removeItem(DURABLE_OAUTH_CALLBACK_KEY);
+			return true;
+		} catch {
+			localStorage.removeItem(DURABLE_OAUTH_CALLBACK_KEY);
+			return true;
+		}
+	}
+
+	/**
+	 * Removes orphaned vscode-web.url-callbacks[*] entries that are SafeAppeals OAuth
+	 * callbacks matching {@link durableUri} and are not in this window's pendingCallbacks.
+	 * Called when {@link recoverOrphanedCallbacks} fires a durable URI.
+	 */
+	private sweepOrphanedSafeAppealsUrlCallbackKeys(durableUri: URI): void {
+		if (!this.isSafeAppealsOAuthCallbackUri(durableUri)) {
+			return;
+		}
+
+		const keysToRemove: string[] = [];
+		for (let i = 0; i < localStorage.length; i++) {
+			const key = localStorage.key(i);
+			if (!key || !key.startsWith('vscode-web.url-callbacks[')) {
+				continue;
+			}
+			const match = /^vscode-web\.url-callbacks\[(\d+)\]$/.exec(key);
+			if (!match) {
+				continue;
+			}
+			const id = Number(match[1]);
+			if (this.pendingCallbacks.has(id)) {
+				continue;
+			}
+			const result = localStorage.getItem(key);
+			if (result === null) {
+				continue;
+			}
+			try {
+				const uri = URI.revive(JSON.parse(result));
+				if (this.isSafeAppealsOAuthCallbackUri(uri) && isEqual(uri, durableUri)) {
+					keysToRemove.push(key);
+				}
+			} catch {
+				// Ignore malformed entries; do not delete unknown payloads.
+			}
+		}
+		for (const key of keysToRemove) {
+			localStorage.removeItem(key);
+		}
+	}
+
+	/**
+	 * True for SafeAppeals Cloud asExternalUri OAuth callbacks
+	 * (`…://safeappeals.safeappeals-authentication/auth/callback`).
+	 */
+	private isSafeAppealsOAuthCallbackUri(uri: URI): boolean {
+		return uri.authority === SAFEAPPEALS_AUTH_AUTHORITY
+			&& uri.path === SAFEAPPEALS_AUTH_CALLBACK_PATH;
+	}
+
+	/**
+	 * True when {@link uri} matches the durable SafeAppeals OAuth callback in localStorage.
+	 */
+	private matchesDurableOAuthCallback(uri: URI): boolean {
+		const raw = localStorage.getItem(DURABLE_OAUTH_CALLBACK_KEY);
+		if (raw === null) {
+			return false;
+		}
+		try {
+			const parsed = JSON.parse(raw) as UriComponents & { ts?: number };
+			const { ts: _ts, ...uriComponents } = parsed;
+			return isEqual(uri, URI.revive(uriComponents));
+		} catch {
+			return false;
+		}
 	}
 
 	private startListening(): void {
@@ -372,6 +713,7 @@ class LocalStorageURLCallbackProvider extends Disposable implements IURLCallback
 
 	private checkCallbacks(): void {
 		let pendingCallbacks: Set<number> | undefined;
+		let deliveredSafeAppealsOAuth = false;
 
 		for (const id of this.pendingCallbacks) {
 			const key = `vscode-web.url-callbacks[${id}]`;
@@ -379,23 +721,33 @@ class LocalStorageURLCallbackProvider extends Disposable implements IURLCallback
 
 			if (result !== null) {
 				try {
-					this._onCallback.fire(URI.revive(JSON.parse(result)));
+					const uri = URI.revive(JSON.parse(result));
+					// Mark SafeAppeals durable delivery so recover does not double-fire.
+					// Do NOT clear durable here — auth extension clears after successful exchange.
+					if (this.matchesDurableOAuthCallback(uri)) {
+						deliveredSafeAppealsOAuth = true;
+						this.lastDurableFireTs = Date.now();
+					}
+					this._onCallback.fire(uri);
 				} catch (error) {
 					console.error(error);
 				}
 
 				pendingCallbacks = pendingCallbacks ?? new Set(this.pendingCallbacks);
 				pendingCallbacks.delete(id);
+				// Ephemeral pending-id key can clear immediately after fire.
 				localStorage.removeItem(key);
 			}
 		}
 
 		if (pendingCallbacks) {
 			this.pendingCallbacks = pendingCallbacks;
+			// Keep listening for durable late-completion after reload (do not stopListening).
+		}
 
-			if (this.pendingCallbacks.size === 0) {
-				this.stopListening();
-			}
+		// Popup finished after a workbench reload: no in-session pending id, use durable key.
+		if (!deliveredSafeAppealsOAuth) {
+			this.recoverOrphanedCallbacks();
 		}
 
 		this.lastTimeChecked = Date.now();

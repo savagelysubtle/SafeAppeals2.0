@@ -83,15 +83,15 @@
         },
         "safeappealsCalendar.google.clientId": {
           "type": "string",
-          "default": "",
+          "default": "22322032344-hv8og33fig8n5gjjj2o1mu2tpu0bvm1t.apps.googleusercontent.com",
           "scope": "machine",
-          "description": "Google OAuth client ID (falls back to GOOGLE_CALENDAR_CLIENT_ID env)"
+          "description": "Google OAuth Desktop client ID for SafeAppeals Calendar (falls back to GOOGLE_CALENDAR_CLIENT_ID env). Public; PKCE is used for auth."
         },
         "safeappealsCalendar.google.clientSecret": {
           "type": "string",
           "default": "",
           "scope": "machine",
-          "description": "Google OAuth client secret (falls back to GOOGLE_CALENDAR_CLIENT_SECRET env)"
+          "description": "Optional Google OAuth client secret for legacy Web clients. Desktop clients use PKCE and do not require a secret (falls back to GOOGLE_CALENDAR_CLIENT_SECRET env)."
         },
         "safeappealsCalendar.google.calendarId": {
           "type": "string",

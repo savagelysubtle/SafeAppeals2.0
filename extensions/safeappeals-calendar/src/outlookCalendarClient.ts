@@ -9,7 +9,7 @@ import {
 	getOutlookTenantId,
 	isOutlookConfigured,
 } from './config';
-import { createOAuthState, createPkcePair, getRedirectUri, waitForAuthCode } from './oauthLoopback';
+import { createOAuthState, createPkcePair, startOAuthLoopback } from './oauthLoopback';
 import { TokenStore } from './tokenStore';
 import type { CalendarEvent, CalendarEventData, CalendarSyncResult, OAuthTokens } from './types';
 
@@ -37,67 +37,73 @@ export class OutlookCalendarClient {
 		}
 
 		const clientId = getOutlookClientId();
-		const redirectUri = getRedirectUri();
 		const state = createOAuthState();
 		const pkce = createPkcePair();
 
-		const params = new URLSearchParams({
-			client_id: clientId,
-			response_type: 'code',
-			redirect_uri: redirectUri,
-			response_mode: 'query',
-			scope: SCOPES,
-			state,
-			code_challenge: pkce.challenge,
-			code_challenge_method: 'S256',
-		});
+		// Microsoft ignores port only for http://localhost (not 127.0.0.1).
+		const loopback = await startOAuthLoopback({ expectedState: state, hostname: 'localhost' });
+		try {
+			const redirectUri = loopback.redirectUri;
 
-		const authUrl = `${this.authBase()}/authorize?${params.toString()}`;
-		this.log('Starting Outlook OAuth (localhost loopback + PKCE)');
+			const params = new URLSearchParams({
+				client_id: clientId,
+				response_type: 'code',
+				redirect_uri: redirectUri,
+				response_mode: 'query',
+				scope: SCOPES,
+				state,
+				code_challenge: pkce.challenge,
+				code_challenge_method: 'S256',
+			});
 
-		const callbackPromise = waitForAuthCode(state);
-		await vscode.env.openExternal(vscode.Uri.parse(authUrl));
-		const callback = await callbackPromise;
+			const authUrl = `${this.authBase()}/authorize?${params.toString()}`;
+			this.log('Starting Outlook OAuth (ephemeral loopback + PKCE)');
 
-		if (!callback.code) {
-			throw new Error(callback.error || 'No authorization code received');
+			await vscode.env.openExternal(vscode.Uri.parse(authUrl));
+			const callback = await loopback.waitForCode;
+
+			if (!callback.code) {
+				throw new Error(callback.error || 'No authorization code received');
+			}
+
+			const body = new URLSearchParams({
+				client_id: clientId,
+				scope: SCOPES,
+				code: callback.code,
+				redirect_uri: redirectUri,
+				grant_type: 'authorization_code',
+				code_verifier: pkce.verifier,
+			});
+
+			const res = await fetch(`${this.authBase()}/token`, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+				body: body.toString(),
+			});
+			const json = await res.json() as {
+				access_token?: string;
+				refresh_token?: string;
+				expires_in?: number;
+				error?: string;
+				error_description?: string;
+			};
+
+			if (!res.ok || !json.access_token) {
+				throw new Error(json.error_description || json.error || 'Outlook token exchange failed');
+			}
+
+			const tokens: OAuthTokens = {
+				accessToken: json.access_token,
+				refreshToken: json.refresh_token || '',
+				expiresAt: new Date(Date.now() + (json.expires_in || 3600) * 1000).toISOString(),
+			};
+
+			await this.tokens.set('outlook', tokens);
+			this.log('Outlook OAuth completed');
+			return tokens;
+		} finally {
+			loopback.close();
 		}
-
-		const body = new URLSearchParams({
-			client_id: clientId,
-			scope: SCOPES,
-			code: callback.code,
-			redirect_uri: redirectUri,
-			grant_type: 'authorization_code',
-			code_verifier: pkce.verifier,
-		});
-
-		const res = await fetch(`${this.authBase()}/token`, {
-			method: 'POST',
-			headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-			body: body.toString(),
-		});
-		const json = await res.json() as {
-			access_token?: string;
-			refresh_token?: string;
-			expires_in?: number;
-			error?: string;
-			error_description?: string;
-		};
-
-		if (!res.ok || !json.access_token) {
-			throw new Error(json.error_description || json.error || 'Outlook token exchange failed');
-		}
-
-		const tokens: OAuthTokens = {
-			accessToken: json.access_token,
-			refreshToken: json.refresh_token || '',
-			expiresAt: new Date(Date.now() + (json.expires_in || 3600) * 1000).toISOString(),
-		};
-
-		await this.tokens.set('outlook', tokens);
-		this.log('Outlook OAuth completed');
-		return tokens;
 	}
 
 	async disconnect(): Promise<void> {

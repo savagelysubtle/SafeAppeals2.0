@@ -222,13 +222,11 @@ export class DocxEditorProvider implements vscode.CustomEditorProvider<DocxDocum
 						}
 						break;
 					}
-					case 'exportToPDF':
-					case 'sendForSignature':
 					case 'inlineEditRequest':
 					case 'executeCommand':
 					case 'textSelected':
 					case 'clearSelection':
-						// Out of scope for rung 5b (AI / DocuSign / chat bridge).
+						// Out of scope for rung 5b (AI / chat bridge).
 						break;
 					case 'error': {
 						const err = String(data.error ?? 'Unknown DOCX editor error');
@@ -394,10 +392,6 @@ export class DocxEditorProvider implements vscode.CustomEditorProvider<DocxDocum
 						<span class="ribbon-btn-icon">🖨️</span>
 						<span class="ribbon-btn-label">Print</span>
 					</button>
-					<button class="ribbon-btn" id="export-pdf-btn" title="Export to PDF (deferred)" style="opacity:0.5">
-						<span class="ribbon-btn-icon">📄</span>
-						<span class="ribbon-btn-label">Export PDF</span>
-					</button>
 				</div>
 				<span class="ribbon-section-label">File</span>
 			</div>
@@ -464,10 +458,6 @@ export class DocxEditorProvider implements vscode.CustomEditorProvider<DocxDocum
 					<button class="ribbon-btn" id="insert-signature-line-btn" title="Insert a signature line">
 						<span class="ribbon-btn-icon">✍️</span>
 						<span class="ribbon-btn-label">Signature Line</span>
-					</button>
-					<button class="ribbon-btn" id="send-signature-btn" title="Send for e-Signature (deferred)" style="opacity:0.5">
-						<span class="ribbon-btn-icon">✍️</span>
-						<span class="ribbon-btn-label">Send for Signature</span>
 					</button>
 				</div>
 				<span class="ribbon-section-label">Signature</span>

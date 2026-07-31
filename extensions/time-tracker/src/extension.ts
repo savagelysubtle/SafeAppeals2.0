@@ -93,7 +93,33 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 		console.log('Time Tracker extension activated successfully');
 	} catch (error) {
 		console.error('Failed to activate Time Tracker extension:', error);
-		vscode.window.showErrorMessage(`Time Tracker: Failed to initialize - ${error}`);
+		await reportInitializationFailure(error);
+	}
+}
+
+/**
+ * Surfaces an initialize() failure. When the database is unreadable because its
+ * key is gone, the only way forward is deleting it, so offer that inline rather
+ * than naming a command the user has to go and find.
+ */
+async function reportInitializationFailure(error: unknown): Promise<void> {
+	const message = error instanceof Error ? error.message : String(error);
+	const keyNotDurable = message.startsWith('The encryption key for time tracking did not survive');
+	const keyLost = message.startsWith('The encrypted time-tracker database cannot be decrypted');
+	if (!keyNotDurable && !keyLost) {
+		vscode.window.showErrorMessage(`Time Tracker: Failed to initialize - ${message}`);
+		return;
+	}
+
+	// On the not-durable path deleting is cleanup, not repair: the next session
+	// will lose its key the same way, so the label must not promise a fix.
+	const deleteAction = keyNotDurable ? 'Delete Unreadable Database' : 'Delete Database';
+	const body = keyNotDurable
+		? 'Time Tracker: the encryption key for time tracking did not survive a restart, so this workspace\'s entries cannot be read and are unrecoverable. This will keep happening until the app can store keys that outlast a restart — in a browser-served build, use the desktop app instead. Deleting only clears the unreadable file.'
+		: 'Time Tracker: this workspace\'s time-tracking database cannot be opened because its encryption key is no longer in secure storage. The entries in it are unrecoverable. Delete the database to start tracking again — other workspaces are unaffected.';
+	const choice = await vscode.window.showErrorMessage(body, deleteAction);
+	if (choice === deleteAction) {
+		await vscode.commands.executeCommand('timeTracker.clearLocalDatabase');
 	}
 }
 

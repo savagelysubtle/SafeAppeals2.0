@@ -6,7 +6,13 @@ import { createHash, randomUUID } from 'crypto';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as vscode from 'vscode';
-import { acquireDek, loadJson, writeEncryptedJson } from './shared/encryptedStore';
+import {
+	acquireDek,
+	createMementoDekDurabilityMarker,
+	type DekDurabilityMarker,
+	loadJson,
+	writeEncryptedJson,
+} from './shared/encryptedStore';
 import { deleteFileIfExists, ensureDir } from './shared/secureFs';
 import type {
 	DraftStatus,
@@ -107,12 +113,16 @@ export class EmailIndex {
 	private mode: 'encrypted' | 'memory' = 'memory';
 	private warnedUnavailable = false;
 	private warnedMemoryDraft = false;
+	private readonly marker: DekDurabilityMarker;
 
 	constructor(
 		private readonly storageUri: vscode.Uri,
 		private readonly secrets: vscode.SecretStorage,
+		globalState: vscode.Memento,
 		private readonly log?: (msg: string) => void,
-	) {}
+	) {
+		this.marker = createMementoDekDurabilityMarker(globalState, DEK_KEY_ID);
+	}
 
 	/**
 	 * Open the store: ensure the storage dir, acquire a DEK, and load encrypted files.
@@ -173,6 +183,13 @@ export class EmailIndex {
 		} catch (error) {
 			this.log?.(
 				`Failed to delete DEK ${DEK_KEY_ID}: ${error instanceof Error ? error.message : String(error)}`,
+			);
+		}
+		try {
+			await this.marker.setStored(false);
+		} catch (error) {
+			this.log?.(
+				`Failed to clear durability marker for ${DEK_KEY_ID}: ${error instanceof Error ? error.message : String(error)}`,
 			);
 		}
 		await this.acquireEncryptionKey();
@@ -674,6 +691,7 @@ export class EmailIndex {
 			keyId: DEK_KEY_ID,
 			existingDataPaths: this.dataPaths(),
 			log: this.log,
+			marker: this.marker,
 		});
 		if (result.kind === 'ok') {
 			this.dek = result.dek;
@@ -693,6 +711,7 @@ export class EmailIndex {
 				'Emails will not be saved to disk because secure storage is unavailable.',
 			);
 		} else {
+			// key-lost-with-data and secret-storage-not-durable
 			void vscode.window.showWarningMessage(
 				'The local email cache cannot be decrypted (key missing). Run "Clear Local Email Cache" to reset it.',
 			);

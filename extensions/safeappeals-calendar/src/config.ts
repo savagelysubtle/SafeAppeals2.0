@@ -5,21 +5,6 @@
 import * as vscode from 'vscode';
 import type { CalendarProvider } from './types';
 
-const AUTH_CALLBACK_PORT = 47294;
-const AUTH_CALLBACK_PATH = '/auth/callback';
-
-export function getLoopbackRedirectUri(): string {
-	return `http://127.0.0.1:${AUTH_CALLBACK_PORT}${AUTH_CALLBACK_PATH}`;
-}
-
-export function getAuthCallbackPort(): number {
-	return AUTH_CALLBACK_PORT;
-}
-
-export function getAuthCallbackPath(): string {
-	return AUTH_CALLBACK_PATH;
-}
-
 function cfg(): vscode.WorkspaceConfiguration {
 	return vscode.workspace.getConfiguration('safeappealsCalendar');
 }
@@ -42,6 +27,10 @@ export function getGoogleClientId(): string {
 	).trim();
 }
 
+/**
+ * Optional — Desktop OAuth clients use PKCE and do not require a secret.
+ * Kept for backward compatibility with older Web/Installed clients.
+ */
 export function getGoogleClientSecret(): string {
 	return (
 		cfg().get<string>('google.clientSecret', '') ||
@@ -75,7 +64,7 @@ export function getOutlookCalendarId(): string {
 }
 
 export function isGoogleConfigured(): boolean {
-	return !!(getGoogleClientId() && getGoogleClientSecret());
+	return !!getGoogleClientId();
 }
 
 export function isOutlookConfigured(): boolean {

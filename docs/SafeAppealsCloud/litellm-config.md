@@ -112,7 +112,7 @@ model_list:
       output_cost_per_token: 0.0000006  # $0.60/MTok
 
 litellm_settings:
-  set_verbose: true
+  set_verbose: false  # Never true in deployment — logs prompt content
   return_usage: true
   cache: false
   request_timeout: 600  # 10 minute timeout
@@ -147,7 +147,7 @@ Runtime behavior settings:
 
 | Setting | Description | Default |
 |---------|-------------|---------|
-| `set_verbose` | Enable detailed logging | `false` |
+| `set_verbose` | Enable detailed logging. Logs full request payloads including prompt content — must stay `false` in any deployment handling client data | `false` |
 | `return_usage` | Include token usage in response | `true` |
 | `cache` | Enable response caching | `false` |
 | `request_timeout` | Timeout in seconds | `600` |
@@ -375,6 +375,10 @@ curl http://localhost:4000/v1/chat/completions \
 ## Debugging
 
 ### Enable Verbose Logging
+
+Local development only. Verbose mode writes the full request payload — the
+user's prompt and any attached case documents — to the container log. Never
+turn it on against a deployment that serves real client data.
 
 ```yaml
 litellm_settings:

@@ -9,6 +9,7 @@ import * as path from 'node:path';
 import type * as vscode from 'vscode';
 import {
 	acquireDek,
+	type DekDurabilityMarker,
 	loadJson,
 	open,
 	seal,
@@ -52,6 +53,22 @@ class FakeSecretStorage implements vscode.SecretStorage {
 	/** Test helper: inspect stored secrets without going through SecretStorage API. */
 	snapshot(): ReadonlyMap<string, string> {
 		return new Map(this.map);
+	}
+}
+
+class FakeDurabilityMarker implements DekDurabilityMarker {
+	private stored = false;
+
+	constructor(initiallyStored = false) {
+		this.stored = initiallyStored;
+	}
+
+	wasStored(): boolean {
+		return this.stored;
+	}
+
+	async setStored(stored: boolean): Promise<void> {
+		this.stored = stored;
 	}
 }
 
@@ -179,6 +196,53 @@ suite('encryptedStore', () => {
 			result: { kind: 'unavailable', reason: 'key-lost-with-data' },
 			secretsBefore: 0,
 			dekKeysAfter: [],
+		});
+	});
+
+	test('marker stored + secret absent is secret-storage-not-durable without minting', async () => {
+		const secrets = new FakeSecretStorage();
+		const marker = new FakeDurabilityMarker(true);
+		const filePath = path.join(tempDir, 'sealed-not-durable.json');
+		await writeEncryptedJson(filePath, { orphan: true }, randomBytes(32));
+
+		const result = await acquireDek({
+			secrets,
+			keyId: 'safeappeals-email.dek.not-durable',
+			existingDataPaths: [filePath],
+			marker,
+		});
+		const afterKeys = [...secrets.snapshot().keys()].filter(k => !k.endsWith('.probe'));
+
+		assert.deepStrictEqual({
+			result,
+			dekKeysAfter: afterKeys,
+			markerStillStored: marker.wasStored(),
+		}, {
+			result: { kind: 'unavailable', reason: 'secret-storage-not-durable' },
+			dekKeysAfter: [],
+			markerStillStored: true,
+		});
+	});
+
+	test('minted DEK sets the durability marker', async () => {
+		const secrets = new FakeSecretStorage();
+		const marker = new FakeDurabilityMarker(false);
+		const keyId = 'safeappeals-email.dek.mint-marker';
+		const result = await acquireDek({
+			secrets,
+			keyId,
+			existingDataPaths: [],
+			marker,
+		});
+
+		assert.deepStrictEqual({
+			kind: result.kind,
+			markerStored: marker.wasStored(),
+			hasDek: result.kind === 'ok' && secrets.snapshot().has(keyId),
+		}, {
+			kind: 'ok',
+			markerStored: true,
+			hasDek: true,
 		});
 	});
 

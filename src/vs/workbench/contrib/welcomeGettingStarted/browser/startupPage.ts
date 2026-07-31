@@ -33,7 +33,7 @@ import { mainWindow } from '../../../../base/browser/window.js';
 import { getActiveElement } from '../../../../base/browser/dom.js';
 import { isWeb } from '../../../../base/common/platform.js';
 import { IOnboardingService, OnboardingDismissReason } from '../../welcomeOnboarding/common/onboardingService.js';
-import { ONBOARDING_DISMISS_ATTEMPTS_STORAGE_KEY, ONBOARDING_STORAGE_KEY } from '../../welcomeOnboarding/common/onboardingTypes.js';
+import { ONBOARDING_DISMISS_ATTEMPTS_STORAGE_KEY, ONBOARDING_IN_PROGRESS_STORAGE_KEY, ONBOARDING_STORAGE_KEY, shouldShowOnboarding } from '../../welcomeOnboarding/common/onboardingTypes.js';
 import { IChatEntitlementService } from '../../../services/chat/common/chatEntitlementService.js';
 
 export const restoreWalkthroughsConfigurationKey = 'workbench.welcomePage.restorableWalkthroughs';
@@ -237,47 +237,31 @@ export class StartupPageRunnerContribution extends Disposable implements IWorkbe
 	}
 
 	private tryShowOnboarding(): void {
-		if (this.environmentService.skipWelcome) {
-			return; // skip welcome flag is set
-		}
-
-		if (isWeb) {
-			// SafeAppeals: web onboarding intentionally disabled — see plan
-			return;
-		}
-
-		if (!this.configurationService.getValue<boolean>('workbench.welcomePage.experimentalOnboarding')) {
-			return; // experimental onboarding is disabled
-		}
-
-		if (this.chatEntitlementService.sentiment.hidden) {
-			return; // AI features are hidden, do not show AI-focused onboarding
-		}
-
-		if (this.storageService.getBoolean(ONBOARDING_STORAGE_KEY, StorageScope.APPLICATION)) {
-			return; // onboarding already completed or explicitly skipped
-		}
-
 		const dismissAttempts = this.storageService.getNumber(ONBOARDING_DISMISS_ATTEMPTS_STORAGE_KEY, StorageScope.APPLICATION, 0);
-		if (dismissAttempts >= ONBOARDING_DISMISS_ATTEMPT_CAP) {
-			return; // Esc/overlay dismissed enough times — stop showing
-		}
-
-		// First-run (isNew) or a prior Esc/overlay that left an incomplete attempt.
-		// Existing installs have no dismiss counter, so they stay gated out.
-		const isFirstRun = this.storageService.isNew(StorageScope.APPLICATION);
-		const hasIncompleteAttempt = dismissAttempts > 0;
-		if (!isFirstRun && !hasIncompleteAttempt) {
+		const gate = shouldShowOnboarding({
+			skipWelcome: !!this.environmentService.skipWelcome,
+			completed: this.storageService.getBoolean(ONBOARDING_STORAGE_KEY, StorageScope.APPLICATION, false),
+			isWeb,
+			inProgress: this.storageService.getBoolean(ONBOARDING_IN_PROGRESS_STORAGE_KEY, StorageScope.APPLICATION, false),
+			experimentalOnboardingEnabled: !!this.configurationService.getValue<boolean>('workbench.welcomePage.experimentalOnboarding'),
+			chatEntitlementHidden: !!this.chatEntitlementService.sentiment.hidden,
+			dismissAttempts,
+			dismissAttemptCap: ONBOARDING_DISMISS_ATTEMPT_CAP,
+			isFirstRun: this.storageService.isNew(StorageScope.APPLICATION),
+		});
+		if (!gate.show) {
 			return;
 		}
 
 		// Show the onboarding overlay on top of the welcome page
 		this.onboardingService.show();
 
-		// Seen-flag only on explicit complete/skip; Esc/overlay increments attempt counter
+		// Seen-flag only on explicit complete/skip; Esc/overlay increments attempt counter.
+		// inProgress is cleared by the onboarding overlay on any dismiss; belt-and-suspenders here on finish.
 		this._register(this.onboardingService.onDidDismiss((reason: OnboardingDismissReason) => {
 			if (reason === 'complete' || reason === 'skip') {
 				this.storageService.store(ONBOARDING_STORAGE_KEY, true, StorageScope.APPLICATION, StorageTarget.USER);
+				this.storageService.remove(ONBOARDING_IN_PROGRESS_STORAGE_KEY, StorageScope.APPLICATION);
 				return;
 			}
 

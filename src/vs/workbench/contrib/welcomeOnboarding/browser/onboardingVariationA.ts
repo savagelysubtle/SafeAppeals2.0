@@ -41,6 +41,7 @@ import {
 	getOnboardingStepSubtitle,
 	ApprovalMode,
 	ONBOARDING_APPROVAL_MODE_OPTIONS,
+	ONBOARDING_IN_PROGRESS_STORAGE_KEY,
 } from '../common/onboardingTypes.js';
 import { IOnboardingService, OnboardingDismissReason } from '../common/onboardingService.js';
 
@@ -85,11 +86,60 @@ const PROFILE_JURISDICTIONS = [
 	'New York WCB',
 	'Florida DWC',
 	'Washington L&I',
+	// Verified against official sources July 2026. Deliberately omitted superseded
+	// names Q-COMP, the AAT (now ART), and Victoria Accident Compensation
+	// Conciliation Service (now WIC); Scotland Employment Injury Assistance is
+	// absent because it has not commenced.
+	'UK DWP IIDB',
+	'UK FTT SSCS',
+	'NI DfC IIDB',
+	'NI Appeal Tribunal',
+	'IE DSP OIB',
+	'IE SWAO',
+	'NSW icare',
+	'NSW PIC',
+	'VIC WorkSafe',
+	'VIC WIC',
+	'QLD WorkCover',
+	'QLD WC Regulator',
+	'QLD QIRC',
+	'WA WorkCover',
+	'WA WC Arbitration',
+	'SA ReturnToWorkSA',
+	'SA SAET',
+	'TAS WorkSafe',
+	'TASCAT Workers',
+	'ACT WorkSafe',
+	'ACT WC Arbitration',
+	'NT WorkSafe',
+	'NT Work Health Ct',
+	'AU Comcare',
+	'AU ART',
+	'NZ ACC',
+	'NZ ACC Appeals',
+	'ZA Comp Fund',
+	'ZA COIDA Tribunal',
 ] as const;
 
 const PROFILE_COUNTRY_CANADA = 'Canada';
 const PROFILE_COUNTRY_US = 'United States';
+const PROFILE_COUNTRY_AUSTRALIA = 'Australia';
+const PROFILE_COUNTRY_IRELAND = 'Ireland';
+const PROFILE_COUNTRY_NEW_ZEALAND = 'New Zealand';
+const PROFILE_COUNTRY_SOUTH_AFRICA = 'South Africa';
+const PROFILE_COUNTRY_UK = 'United Kingdom';
 const PROFILE_COUNTRY_OTHER = 'Other';
+
+/** Known countries for the profile picker (Canada/US first, then alphabetical; Other is separate). */
+const PROFILE_KNOWN_COUNTRIES = [
+	PROFILE_COUNTRY_CANADA,
+	PROFILE_COUNTRY_US,
+	PROFILE_COUNTRY_AUSTRALIA,
+	PROFILE_COUNTRY_IRELAND,
+	PROFILE_COUNTRY_NEW_ZEALAND,
+	PROFILE_COUNTRY_SOUTH_AFRICA,
+	PROFILE_COUNTRY_UK,
+] as const;
 
 /** Canonical English values persisted to `safeappeals.profile.role`. */
 const PROFILE_ROLE_LAWYER = 'Lawyer';
@@ -174,6 +224,30 @@ const PROFILE_US_STATES = [
 	'Wyoming',
 ] as const;
 
+const PROFILE_AUSTRALIA_STATES = [
+	'Australian Capital Territory',
+	'New South Wales',
+	'Northern Territory',
+	'Queensland',
+	'South Australia',
+	'Tasmania',
+	'Victoria',
+	'Western Australia',
+] as const;
+
+const PROFILE_UK_NATIONS = [
+	'England',
+	'Northern Ireland',
+	'Scotland',
+	'Wales',
+] as const;
+
+/**
+ * Mirrored from extension `BOARDS_BY_STATE_PROVINCE`.
+ * 'AU Comcare' / 'AU ART' repeat in every Australian entry on purpose: Comcare
+ * is the Commonwealth scheme covering federal employees in every state, and the
+ * flat repetition is preferred over a second indirection layer.
+ */
 const PROFILE_BOARDS_BY_STATE_PROVINCE: Readonly<Record<string, readonly string[]>> = {
 	'British Columbia': ['BC WCB'],
 	'Ontario': ['Ontario WSIB'],
@@ -187,6 +261,77 @@ const PROFILE_BOARDS_BY_STATE_PROVINCE: Readonly<Record<string, readonly string[
 	'New York': ['New York WCB'],
 	'Florida': ['Florida DWC'],
 	'Washington': ['Washington L&I'],
+	'England': ['UK DWP IIDB', 'UK FTT SSCS'],
+	'Scotland': ['UK DWP IIDB', 'UK FTT SSCS'],
+	'Wales': ['UK DWP IIDB', 'UK FTT SSCS'],
+	'Northern Ireland': ['NI DfC IIDB', 'NI Appeal Tribunal'],
+	'New South Wales': ['NSW icare', 'NSW PIC', 'AU Comcare', 'AU ART'],
+	'Victoria': ['VIC WorkSafe', 'VIC WIC', 'AU Comcare', 'AU ART'],
+	'Queensland': ['QLD WorkCover', 'QLD WC Regulator', 'QLD QIRC', 'AU Comcare', 'AU ART'],
+	'Western Australia': ['WA WorkCover', 'WA WC Arbitration', 'AU Comcare', 'AU ART'],
+	'South Australia': ['SA ReturnToWorkSA', 'SA SAET', 'AU Comcare', 'AU ART'],
+	'Tasmania': ['TAS WorkSafe', 'TASCAT Workers', 'AU Comcare', 'AU ART'],
+	'Australian Capital Territory': ['ACT WorkSafe', 'ACT WC Arbitration', 'AU Comcare', 'AU ART'],
+	'Northern Territory': ['NT WorkSafe', 'NT Work Health Ct', 'AU Comcare', 'AU ART'],
+};
+
+/** Mirrored from extension `BOARDS_BY_COUNTRY`. */
+const PROFILE_BOARDS_BY_COUNTRY: Readonly<Record<string, readonly string[]>> = {
+	'Canada': [
+		'BC WCB',
+		'Ontario WSIB',
+		'Alberta WCB',
+		'Quebec CNESST',
+		'Manitoba WCB',
+		'Saskatchewan WCB',
+		'Nova Scotia WCB',
+	],
+	'United States': [
+		'California DWC',
+		'Texas DWC',
+		'New York WCB',
+		'Florida DWC',
+		'Washington L&I',
+	],
+	'United Kingdom': [
+		'UK DWP IIDB',
+		'UK FTT SSCS',
+		'NI DfC IIDB',
+		'NI Appeal Tribunal',
+	],
+	'Ireland': [
+		'IE DSP OIB',
+		'IE SWAO',
+	],
+	'Australia': [
+		'NSW icare',
+		'NSW PIC',
+		'VIC WorkSafe',
+		'VIC WIC',
+		'QLD WorkCover',
+		'QLD WC Regulator',
+		'QLD QIRC',
+		'WA WorkCover',
+		'WA WC Arbitration',
+		'SA ReturnToWorkSA',
+		'SA SAET',
+		'TAS WorkSafe',
+		'TASCAT Workers',
+		'ACT WorkSafe',
+		'ACT WC Arbitration',
+		'NT WorkSafe',
+		'NT Work Health Ct',
+		'AU Comcare',
+		'AU ART',
+	],
+	'New Zealand': [
+		'NZ ACC',
+		'NZ ACC Appeals',
+	],
+	'South Africa': [
+		'ZA Comp Fund',
+		'ZA COIDA Tribunal',
+	],
 };
 
 type ProfileFieldKey = 'name' | 'organization' | 'role' | 'practiceArea' | 'country' | 'stateProvince' | 'city' | 'jurisdiction';
@@ -197,13 +342,23 @@ type ProfileFieldDescriptor =
 	| { readonly type: 'select'; readonly key: 'country' | 'stateProvince' | 'jurisdiction'; readonly label: string };
 
 /**
- * Boards for a state/province. When none match, returns the full list so the
- * dropdown is never empty.
+ * Resolves boards for a country and optional subdivision. Mirrors extension
+ * `boardsFor`: subdivision → country → all boards when country empty → empty
+ * for Other / unrecognised.
  */
-function profileBoardsForStateProvince(stateProvince: string): readonly string[] {
-	const matched = stateProvince ? PROFILE_BOARDS_BY_STATE_PROVINCE[stateProvince] : undefined;
-	if (matched && matched.length > 0) {
-		return matched;
+function profileBoardsFor(country: string, stateProvince: string): readonly string[] {
+	if (stateProvince) {
+		const bySubdivision = PROFILE_BOARDS_BY_STATE_PROVINCE[stateProvince];
+		if (bySubdivision && bySubdivision.length > 0) {
+			return bySubdivision;
+		}
+	}
+	if (country) {
+		const byCountry = PROFILE_BOARDS_BY_COUNTRY[country];
+		if (byCountry && byCountry.length > 0) {
+			return byCountry;
+		}
+		return [];
 	}
 	return PROFILE_JURISDICTIONS;
 }
@@ -215,11 +370,17 @@ function profileSubdivisionsForCountry(country: string): readonly string[] | und
 	if (country === PROFILE_COUNTRY_US) {
 		return PROFILE_US_STATES;
 	}
+	if (country === PROFILE_COUNTRY_AUSTRALIA) {
+		return PROFILE_AUSTRALIA_STATES;
+	}
+	if (country === PROFILE_COUNTRY_UK) {
+		return PROFILE_UK_NATIONS;
+	}
 	return undefined;
 }
 
 function isKnownProfileCountry(country: string): boolean {
-	return country === PROFILE_COUNTRY_CANADA || country === PROFILE_COUNTRY_US;
+	return (PROFILE_KNOWN_COUNTRIES as readonly string[]).includes(country);
 }
 
 /**
@@ -292,6 +453,10 @@ export class OnboardingVariationA extends Disposable implements IOnboardingServi
 	private footerLeft: HTMLElement | undefined;
 	private _footerSignInBtn: HTMLButtonElement | undefined;
 	private readonly _footerSignInDisposable = this._register(new MutableDisposable());
+	/** Footer hint explaining why Continue is disabled on the Agent Intro step. */
+	private _agentIntroAckHint: HTMLElement | undefined;
+	/** Lives only as long as the Agent Intro step is rendered; cleared in `_renderStep`. */
+	private _aiLiteracyCheckbox: HTMLInputElement | undefined;
 
 	private currentStepIndex = 0;
 	private readonly steps: readonly OnboardingStepId[];
@@ -321,12 +486,16 @@ export class OnboardingVariationA extends Disposable implements IOnboardingServi
 	};
 	/** When true, Country select is "Other" and a free-text country input is shown. */
 	private profileCountryOtherMode = false;
+	/** When true, Board select is "Other" and a free-text jurisdiction input is shown. */
+	private profileBoardOtherMode = false;
 	private profileStateControlHost: HTMLElement | undefined;
 	private profileBoardControlHost: HTMLElement | undefined;
 	private profileCountryOtherHost: HTMLElement | undefined;
+	private profileBoardOtherHost: HTMLElement | undefined;
 	private profileStateControlStore: DisposableStore | undefined;
 	private profileBoardControlStore: DisposableStore | undefined;
 	private profileCountryOtherStore: DisposableStore | undefined;
+	private profileBoardOtherStore: DisposableStore | undefined;
 
 	/** SafeAppeals: hallucination acknowledgment gates Continue on the Agent Intro step. */
 	private _aiLiteracyAcknowledged = false;
@@ -373,6 +542,10 @@ export class OnboardingVariationA extends Disposable implements IOnboardingServi
 
 		// Overlay
 		this.overlay = append(container, $('.onboarding-a-overlay'));
+		// Persist only after mount so a throw during build does not stick a resume flag.
+		// MACHINE: local to this browser/profile; must not Settings Sync. Cleared on any dismiss;
+		// survives only a hard reload that kills the overlay without running dismiss cleanup.
+		this.storageService.store(ONBOARDING_IN_PROGRESS_STORAGE_KEY, true, StorageScope.APPLICATION, StorageTarget.MACHINE);
 		this.overlay.setAttribute('role', 'dialog');
 		this.overlay.setAttribute('aria-modal', 'true');
 		this.overlay.setAttribute('aria-label', localize('onboarding.a.aria', "Welcome to {0}", this.productService.nameLong));
@@ -439,13 +612,14 @@ export class OnboardingVariationA extends Disposable implements IOnboardingServi
 			this._prevStep();
 		}));
 		this.disposables.add(addDisposableListener(this.nextButton, EventType.CLICK, () => {
-			if (this.nextButton?.disabled) {
+			if (this.nextButton?.getAttribute('aria-disabled') === 'true') {
+				this._focusAgentIntroAck();
 				return;
 			}
 			if (this._isLastStep()) {
 				this._logAction('complete');
 				this._dismiss('complete');
-			} else if (this.currentStepIndex === 0) {
+			} else if (this.steps[this.currentStepIndex] === OnboardingStepId.SignIn) {
 				this._logAction('continueWithoutSignIn');
 				this._nextStep();
 			} else {
@@ -459,6 +633,15 @@ export class OnboardingVariationA extends Disposable implements IOnboardingServi
 				this._dismiss('dismiss');
 			}
 		}));
+
+		// The web workbench cancels every wheel event on the container this overlay
+		// mounts into, to suppress the macOS back/forward swipe gesture. That also
+		// cancels native scrolling of the step content, so keep wheel events from
+		// reaching it; `overscroll-behavior` on the scroller prevents the gesture
+		// the container-level handler exists to block.
+		this.disposables.add(addDisposableListener(this.overlay, EventType.WHEEL, (e: WheelEvent) => {
+			e.stopPropagation();
+		}, { passive: true }));
 
 		this.disposables.add(addDisposableListener(this.overlay, EventType.KEY_DOWN, (e: KeyboardEvent) => {
 			const event = new StandardKeyboardEvent(e);
@@ -485,6 +668,26 @@ export class OnboardingVariationA extends Disposable implements IOnboardingServi
 		});
 
 		this._focusCurrentStepElement();
+
+		// After OAuth reload, SecretStorage may already hold a session while createSession never resolved.
+		void this._hydrateSignInFromExistingSession();
+
+		// Exchange may finish after the first hydrate (pending PKCE restore + orphaned callback).
+		// Listen until signed in or the overlay is dismissed (_removeFromDOM clears disposables).
+		this.disposables.add(this.authenticationService.onDidChangeSessions(e => {
+			if (e.providerId !== SAFEAPPEALS_CLOUD_AUTH_PROVIDER_ID) {
+				return;
+			}
+			if (!this._isShowing || this._userSignedIn) {
+				return;
+			}
+			const added = e.event.added?.length ?? 0;
+			const changed = e.event.changed?.length ?? 0;
+			if (!added && !changed) {
+				return;
+			}
+			void this._hydrateSignInFromExistingSession();
+		}));
 	}
 
 	private _dismiss(reason: OnboardingDismissReason): void {
@@ -496,6 +699,10 @@ export class OnboardingVariationA extends Disposable implements IOnboardingServi
 		if (this.steps[this.currentStepIndex] === OnboardingStepId.Profile) {
 			this._saveProfile();
 		}
+
+		// Any explicit dismiss (complete/skip/Esc/overlay) clears the resume flag.
+		// Only a hard reload mid-flow leaves it set so web can reopen after OAuth.
+		this.storageService.remove(ONBOARDING_IN_PROGRESS_STORAGE_KEY, StorageScope.APPLICATION);
 
 		this._logAction('dismiss', undefined, reason);
 
@@ -517,6 +724,65 @@ export class OnboardingVariationA extends Disposable implements IOnboardingServi
 
 		this.overlay.addEventListener('transitionend', onTransitionEnd, { once: true });
 		setTimeout(onTransitionEnd, 400);
+	}
+
+	/**
+	 * If a Safe Appeals Cloud session already exists (e.g. restored after web OAuth reload),
+	 * mark signed-in and advance past the Sign In step so onboarding matches desktop UX.
+	 */
+	private async _hydrateSignInFromExistingSession(): Promise<void> {
+		if (this._userSignedIn) {
+			return;
+		}
+
+		const generation = this._showGeneration;
+
+		try {
+			const providerReady = await waitForAuthenticationProvider(
+				this.authenticationService,
+				SAFEAPPEALS_CLOUD_AUTH_PROVIDER_ID,
+				AUTH_PROVIDER_REGISTRATION_TIMEOUT_MS,
+				this.disposables,
+			);
+
+			if (!this._isShowing || this._showGeneration !== generation) {
+				return;
+			}
+
+			if (!providerReady) {
+				return;
+			}
+
+			const sessions = await this.authenticationService.getSessions(
+				SAFEAPPEALS_CLOUD_AUTH_PROVIDER_ID,
+				undefined,
+				undefined,
+				true,
+			);
+
+			if (!this._isShowing || this._showGeneration !== generation || this._userSignedIn) {
+				return;
+			}
+
+			if (sessions.length === 0) {
+				return;
+			}
+
+			this._userSignedIn = true;
+			this._signedInAccountLabel = sessions[0].account.label;
+			this._signInInProgress = false;
+			this._logAction('signInHydrated', undefined, SAFEAPPEALS_CLOUD_AUTH_PROVIDER_ID);
+
+			if (this.steps[this.currentStepIndex] === OnboardingStepId.SignIn) {
+				this._nextStep();
+			} else {
+				// Not on Sign In (e.g. Credits) — still mark signed-in and refresh dependent UI.
+				this._renderStep();
+				this._updateButtonStates();
+			}
+		} catch (error) {
+			onUnexpectedError(error);
+		}
 	}
 
 	private _nextStep(): void {
@@ -591,6 +857,7 @@ export class OnboardingVariationA extends Disposable implements IOnboardingServi
 
 		this.stepDisposables.clear();
 		this.stepFocusableElements.length = 0;
+		this._aiLiteracyCheckbox = undefined;
 
 		const stepId = this.steps[this.currentStepIndex];
 		const useSignInHero = stepId === OnboardingStepId.SignIn;
@@ -626,11 +893,15 @@ export class OnboardingVariationA extends Disposable implements IOnboardingServi
 	}
 
 	private _updateButtonStates(): void {
+		const onSignInStep = this.steps[this.currentStepIndex] === OnboardingStepId.SignIn;
+		const onAgentIntro = this.steps[this.currentStepIndex] === OnboardingStepId.AgentIntro;
+		const showAgentIntroAckHint = onAgentIntro && !this._aiLiteracyAcknowledged;
+
 		if (this.backButton) {
 			this.backButton.style.display = this.currentStepIndex === 0 ? 'none' : '';
 		}
 		if (this.nextButton) {
-			if (this.currentStepIndex === 0) {
+			if (onSignInStep) {
 				if (this._userSignedIn) {
 					this.nextButton.className = 'onboarding-a-btn onboarding-a-btn-primary';
 					this.nextButton.textContent = localize('onboarding.continue', "Continue");
@@ -646,12 +917,22 @@ export class OnboardingVariationA extends Disposable implements IOnboardingServi
 				this.nextButton.textContent = localize('onboarding.next', "Continue");
 			}
 
-			// SafeAppeals: Meet Your AI Assistant — Continue stays disabled until hallucination acknowledgment.
-			const onAgentIntro = this.steps[this.currentStepIndex] === OnboardingStepId.AgentIntro;
-			this.nextButton.disabled = onAgentIntro && !this._aiLiteracyAcknowledged;
+			// SafeAppeals: Meet Your AI Assistant — Continue is blocked until the
+			// hallucination acknowledgment. Marked `aria-disabled` rather than
+			// `disabled` so it keeps its place in the tab order; a natively disabled
+			// button is skipped, and the reason in `aria-describedby` would never be
+			// announced to the keyboard user it is meant for.
+			if (showAgentIntroAckHint) {
+				this.nextButton.setAttribute('aria-disabled', 'true');
+				this.nextButton.setAttribute('aria-describedby', 'onboarding-a-agent-intro-ack-hint');
+			} else {
+				this.nextButton.removeAttribute('aria-disabled');
+				this.nextButton.removeAttribute('aria-describedby');
+			}
 		}
 		if (this.footerLeft) {
 			if (this._isLastStep()) {
+				this._clearAgentIntroAckHint();
 				// Show sign-in nudge in footer
 				if (!this._footerSignInBtn && !this._userSignedIn) {
 					this._footerSignInBtn = append(this.footerLeft, $<HTMLButtonElement>('button.onboarding-a-signin-nudge-btn'));
@@ -666,6 +947,11 @@ export class OnboardingVariationA extends Disposable implements IOnboardingServi
 				}
 			} else {
 				this._clearFooterSignInBtn();
+				if (showAgentIntroAckHint) {
+					this._showAgentIntroAckHint();
+				} else {
+					this._clearAgentIntroAckHint();
+				}
 			}
 		}
 	}
@@ -787,7 +1073,7 @@ export class OnboardingVariationA extends Disposable implements IOnboardingServi
 		spinner.classList.add(...ThemeIcon.asClassNameArray(Codicon.loading), 'codicon-modifier-spin');
 		spinner.setAttribute('aria-hidden', 'true');
 		const message = append(container, $('.onboarding-a-signin-progress-message'));
-		message.textContent = localize('onboarding.signIn.progress', "Waiting for sign-in to complete…");
+		message.textContent = localize('onboarding.signIn.progress', "Finish signing in with Google in your browser — we'll bring you back automatically.");
 	}
 
 	/**
@@ -955,14 +1241,18 @@ export class OnboardingVariationA extends Disposable implements IOnboardingServi
 				}
 			}
 			this.profileCountryOtherMode = !!this.profileValues.country && !isKnownProfileCountry(this.profileValues.country);
+			this.profileBoardOtherMode = !!this.profileValues.jurisdiction
+				&& !(PROFILE_JURISDICTIONS as readonly string[]).includes(this.profileValues.jurisdiction);
 		}
 
 		this.profileStateControlHost = undefined;
 		this.profileBoardControlHost = undefined;
 		this.profileCountryOtherHost = undefined;
+		this.profileBoardOtherHost = undefined;
 		this.profileStateControlStore = this.stepDisposables.add(new DisposableStore());
 		this.profileBoardControlStore = this.stepDisposables.add(new DisposableStore());
 		this.profileCountryOtherStore = this.stepDisposables.add(new DisposableStore());
+		this.profileBoardOtherStore = this.stepDisposables.add(new DisposableStore());
 
 		const layout = append(container, $('.onboarding-a-profile-layout'));
 
@@ -1169,8 +1459,8 @@ export class OnboardingVariationA extends Disposable implements IOnboardingServi
 	}
 
 	/**
-	 * Country select (Canada / United States / Other) with optional free-text
-	 * when Other is chosen.
+	 * Country select (known markets + Other) with optional free-text when Other
+	 * is chosen.
 	 */
 	private _renderProfileCountryField(form: HTMLElement, labelText: string): void {
 		const fieldEl = append(form, $('.onboarding-a-profile-field'));
@@ -1182,24 +1472,23 @@ export class OnboardingVariationA extends Disposable implements IOnboardingServi
 		const notSpecified = localize('onboarding.profile.notSpecified', "Not specified");
 		const options: ISelectOptionItem[] = [
 			{ text: notSpecified },
-			{ text: PROFILE_COUNTRY_CANADA },
-			{ text: PROFILE_COUNTRY_US },
+			...PROFILE_KNOWN_COUNTRIES.map(c => ({ text: c })),
 			{ text: PROFILE_COUNTRY_OTHER },
 		];
 		let selected = 0;
 		if (this.profileCountryOtherMode) {
-			selected = 3;
-		} else if (this.profileValues.country === PROFILE_COUNTRY_CANADA) {
-			selected = 1;
-		} else if (this.profileValues.country === PROFILE_COUNTRY_US) {
-			selected = 2;
+			selected = options.length - 1;
+		} else if (this.profileValues.country) {
+			const idx = options.findIndex(o => o.text === this.profileValues.country);
+			selected = idx < 0 ? 0 : idx;
 		}
 
 		const selectBox = this.stepDisposables.add(new SelectBox(options, selected, this.contextViewService, defaultSelectBoxStyles, {
 			ariaLabel: labelText,
 		}));
-		selectBox.render(fieldEl);
-		const countrySelectEl = asSelectElement(fieldEl.lastElementChild);
+		const selectWrapper = append(fieldEl, $('.onboarding-a-profile-select'));
+		selectBox.render(selectWrapper);
+		const countrySelectEl = asSelectElement(selectWrapper.lastElementChild);
 		if (countrySelectEl) {
 			countrySelectEl.id = inputId;
 			this._registerStepFocusable(countrySelectEl);
@@ -1208,17 +1497,14 @@ export class OnboardingVariationA extends Disposable implements IOnboardingServi
 			if (e.index === 0) {
 				this.profileCountryOtherMode = false;
 				this.profileValues.country = '';
-			} else if (e.index === 1) {
-				this.profileCountryOtherMode = false;
-				this.profileValues.country = PROFILE_COUNTRY_CANADA;
-			} else if (e.index === 2) {
-				this.profileCountryOtherMode = false;
-				this.profileValues.country = PROFILE_COUNTRY_US;
-			} else {
+			} else if (e.index === options.length - 1) {
 				this.profileCountryOtherMode = true;
 				if (isKnownProfileCountry(this.profileValues.country)) {
 					this.profileValues.country = '';
 				}
+			} else {
+				this.profileCountryOtherMode = false;
+				this.profileValues.country = e.selected;
 			}
 			this._syncProfileCountryOtherInput();
 			this._rebuildProfileStateControl();
@@ -1341,7 +1627,8 @@ export class OnboardingVariationA extends Disposable implements IOnboardingServi
 	}
 
 	/**
-	 * Compensation board / tribunal select, filtered by State / Province.
+	 * Compensation board / tribunal select, filtered by country / subdivision,
+	 * with an Other free-text escape hatch.
 	 */
 	private _renderProfileBoardField(form: HTMLElement, labelText: string): void {
 		const fieldEl = append(form, $('.onboarding-a-profile-field'));
@@ -1351,12 +1638,14 @@ export class OnboardingVariationA extends Disposable implements IOnboardingServi
 		label.textContent = labelText;
 
 		this.profileBoardControlHost = append(fieldEl, $('.onboarding-a-profile-board-control'));
+		this.profileBoardOtherHost = append(fieldEl, $('.onboarding-a-profile-board-other'));
 		this._rebuildProfileBoardControl();
 	}
 
 	/**
-	 * Rebuilds board options when State / Province changes. Falls back to the
-	 * full board list when the selected province has no matches.
+	 * Rebuilds board options when Country or State / Province changes. Uses
+	 * country/subdivision resolution; Other / unrecognised countries yield an
+	 * empty board list (Not specified + typed escape hatch only).
 	 */
 	private _rebuildProfileBoardControl(): void {
 		const host = this.profileBoardControlHost;
@@ -1369,10 +1658,16 @@ export class OnboardingVariationA extends Disposable implements IOnboardingServi
 
 		const labelText = localize('onboarding.profile.jurisdiction', "Compensation Board / Tribunal");
 		const inputId = 'onboarding-profile-jurisdiction';
-		const boards = profileBoardsForStateProvince(this.profileValues.stateProvince);
+		// Other-country mode stores free text (possibly empty); treat empty Other
+		// as unrecognised so the board list stays empty rather than all boards.
+		const countryForBoards = this.profileCountryOtherMode
+			? (this.profileValues.country || PROFILE_COUNTRY_OTHER)
+			: this.profileValues.country;
+		const boards = profileBoardsFor(countryForBoards, this.profileValues.stateProvince);
+		const otherLabel = localize('onboarding.profile.jurisdictionOther.option', "Other (type your own)…");
 
-		// Known board that doesn't match the province filter → reset. Custom
-		// (non-list) values are preserved and appended to the options below.
+		// Known board that doesn't match the filter → reset. Custom (non-list)
+		// values reopen in the typed Other state below.
 		if (
 			this.profileValues.jurisdiction &&
 			!(boards as readonly string[]).includes(this.profileValues.jurisdiction) &&
@@ -1380,20 +1675,29 @@ export class OnboardingVariationA extends Disposable implements IOnboardingServi
 		) {
 			this.profileValues.jurisdiction = '';
 		}
+		if (
+			this.profileValues.jurisdiction &&
+			!(boards as readonly string[]).includes(this.profileValues.jurisdiction) &&
+			!(PROFILE_JURISDICTIONS as readonly string[]).includes(this.profileValues.jurisdiction)
+		) {
+			this.profileBoardOtherMode = true;
+		}
 
 		const notSpecified = localize('onboarding.profile.notSpecified', "Not specified");
 		const options: ISelectOptionItem[] = [
 			{ text: notSpecified },
 			...boards.map(b => ({ text: b })),
+			{ text: otherLabel },
 		];
-		if (this.profileValues.jurisdiction && !options.some(o => o.text === this.profileValues.jurisdiction)) {
-			options.push({ text: this.profileValues.jurisdiction });
+		let selected = 0;
+		if (this.profileBoardOtherMode) {
+			selected = options.length - 1;
+		} else if (this.profileValues.jurisdiction) {
+			const idx = options.findIndex(o => o.text === this.profileValues.jurisdiction);
+			selected = idx < 0 ? 0 : idx;
 		}
-		const selected = this.profileValues.jurisdiction
-			? options.findIndex(o => o.text === this.profileValues.jurisdiction)
-			: 0;
 
-		const selectBox = store.add(new SelectBox(options, selected < 0 ? 0 : selected, this.contextViewService, defaultSelectBoxStyles, {
+		const selectBox = store.add(new SelectBox(options, selected, this.contextViewService, defaultSelectBoxStyles, {
 			ariaLabel: labelText,
 		}));
 		selectBox.render(host);
@@ -1402,8 +1706,63 @@ export class OnboardingVariationA extends Disposable implements IOnboardingServi
 			boardSelectEl.id = inputId;
 			this._registerStepFocusable(boardSelectEl);
 		}
+		// Selecting Other only toggles the free-text input; the option list itself
+		// is unchanged, so this must not rebuild (and therefore dispose) the
+		// SelectBox that is currently dispatching this event.
 		store.add(selectBox.onDidSelect(e => {
-			this.profileValues.jurisdiction = e.index === 0 ? '' : e.selected;
+			if (e.index === 0) {
+				this.profileBoardOtherMode = false;
+				this.profileValues.jurisdiction = '';
+			} else if (e.index === options.length - 1) {
+				this.profileBoardOtherMode = true;
+				if (
+					(boards as readonly string[]).includes(this.profileValues.jurisdiction)
+					|| (PROFILE_JURISDICTIONS as readonly string[]).includes(this.profileValues.jurisdiction)
+				) {
+					this.profileValues.jurisdiction = '';
+				}
+			} else {
+				this.profileBoardOtherMode = false;
+				this.profileValues.jurisdiction = e.selected;
+			}
+			this._syncProfileBoardOtherInput();
+		}));
+
+		this._syncProfileBoardOtherInput();
+	}
+
+	/**
+	 * Shows or hides the free-text board input used when Board / Tribunal is Other.
+	 */
+	private _syncProfileBoardOtherInput(): void {
+		const host = this.profileBoardOtherHost;
+		const store = this.profileBoardOtherStore;
+		if (!host || !store) {
+			return;
+		}
+		store.clear();
+		clearNode(host);
+		host.style.display = this.profileBoardOtherMode ? '' : 'none';
+		if (!this.profileBoardOtherMode) {
+			return;
+		}
+
+		const otherLabel = localize('onboarding.profile.jurisdictionOther', "Board / tribunal name");
+		const inputId = 'onboarding-profile-jurisdiction-other';
+		const label = append(host, $<HTMLLabelElement>('label.onboarding-a-section-label'));
+		label.htmlFor = inputId;
+		label.textContent = otherLabel;
+
+		const inputBox = store.add(new InputBox(host, undefined, {
+			placeholder: localize('onboarding.profile.jurisdictionOther.placeholder', "e.g. WSIB, WorkSafeBC"),
+			ariaLabel: otherLabel,
+			inputBoxStyles: defaultInputBoxStyles,
+		}));
+		inputBox.inputElement.id = inputId;
+		inputBox.value = this.profileValues.jurisdiction;
+		this._registerStepFocusable(inputBox.inputElement);
+		store.add(inputBox.onDidChange(value => {
+			this.profileValues.jurisdiction = value;
 		}));
 	}
 
@@ -1535,8 +1894,15 @@ export class OnboardingVariationA extends Disposable implements IOnboardingServi
 
 	/**
 	 * ABA Op. 512 / Florida Bar 24-1 aligned data-flow disclosure — shown
-	 * before any AI capability framing. Softened retention wording only;
-	 * do not strengthen to an unverified "not used to train" claim.
+	 * before any AI capability framing.
+	 *
+	 * Every clause below is traceable to the gateway in `void-cloud/`: it forwards
+	 * the message array to LiteLLM and persists only `log_usage_with_cost`
+	 * (model, token counts, cost, latency), and the Supabase schema has no column
+	 * that could hold prompt or completion text. Do NOT claim the upstream
+	 * provider discards the request — OpenAI, Anthropic and Google all retain API
+	 * traffic for abuse monitoring by default, and zero-retention is a per-provider
+	 * contract SafeAppeals has not confirmed.
 	 */
 	private _renderAgentIntroDisclosure(parent: HTMLElement): void {
 		const panel = append(parent, $('.onboarding-a-disclosure'));
@@ -1547,7 +1913,7 @@ export class OnboardingVariationA extends Disposable implements IOnboardingServi
 		const privacyLabel = localize('onboarding.agentIntro.disclosure.privacy', "Privacy Policy");
 		const bodyText = localize(
 			'onboarding.agentIntro.disclosure.body',
-			"Your case files stay on this computer. When you ask the AI assistant a question, the text you send — and any documents you attach — go to SafeAppeals Cloud to generate the answer, then to the AI model provider. Your prompts and documents are used only to generate your answer and are handled under the model provider's retention policy. You remain responsible for reviewing everything the assistant produces: its output is a drafting aid, not legal advice and not a court-ready filing. Read our {0} for details.",
+			"Your case files stay on this computer. When you ask the AI assistant a question, the text of your question — and any documents you attach — pass through SafeAppeals to the AI provider that generates the answer. SafeAppeals does not keep any of it: we record which model you used and how many tokens it cost, and nothing of what you wrote or what the assistant answered. The provider receives your question in order to answer it and does not use it to train its models; how long it holds the request is governed by that provider's own policy, which is worth reading before you send confidential client information. You remain responsible for reviewing everything the assistant produces: its output is a drafting aid, not legal advice and not a court-ready filing. Read our {0} for details.",
 			privacyLabel
 		);
 		const privacyIndex = bodyText.lastIndexOf(privacyLabel);
@@ -1607,6 +1973,7 @@ export class OnboardingVariationA extends Disposable implements IOnboardingServi
 		checkbox.type = 'checkbox';
 		checkbox.id = 'onboarding-ai-literacy-ack';
 		checkbox.checked = this._aiLiteracyAcknowledged;
+		this._aiLiteracyCheckbox = checkbox;
 
 		const ackText = append(ackRow, $('span.onboarding-a-inoculation-ack-text'));
 		ackText.textContent = localize(
@@ -1983,6 +2350,42 @@ export class OnboardingVariationA extends Disposable implements IOnboardingServi
 		this._footerSignInBtn = undefined;
 	}
 
+	/**
+	 * Shows a footer hint that Continue is blocked until the AI literacy checkbox is checked.
+	 */
+	private _showAgentIntroAckHint(): void {
+		if (!this.footerLeft) {
+			return;
+		}
+		if (!this._agentIntroAckHint) {
+			this._agentIntroAckHint = append(this.footerLeft, $('span.onboarding-a-footer-hint'));
+			this._agentIntroAckHint.id = 'onboarding-a-agent-intro-ack-hint';
+		}
+		this._agentIntroAckHint.textContent = localize(
+			'onboarding.agentIntro.ackRequired',
+			"Confirm the statement above to continue."
+		);
+	}
+
+	/**
+	 * Sends focus to the acknowledgment the user must tick before Continue works,
+	 * so pressing a blocked Continue points at what is blocking it.
+	 */
+	private _focusAgentIntroAck(): void {
+		this._aiLiteracyCheckbox?.focus();
+	}
+
+	/**
+	 * Clears the Agent Intro Continue-blocked footer hint.
+	 */
+	private _clearAgentIntroAckHint(): void {
+		if (!this._agentIntroAckHint) {
+			return;
+		}
+		this._agentIntroAckHint.remove();
+		this._agentIntroAckHint = undefined;
+	}
+
 	// =====================================================================
 	// Focus trap
 	// =====================================================================
@@ -2012,12 +2415,23 @@ export class OnboardingVariationA extends Disposable implements IOnboardingServi
 	}
 
 	private _getFocusableElements(): HTMLElement[] {
-		return [...(this.closeButton ? [this.closeButton] : []), ...this.stepFocusableElements, ...this.footerFocusableElements].filter(element => this._isTabbable(element));
+		return [...(this.closeButton ? [this.closeButton] : []), ...this._getTabbableStepElements(), ...this.footerFocusableElements].filter(element => this._isTabbable(element));
 	}
 
 	private _focusCurrentStepElement(): void {
-		const stepFocusable = this.stepFocusableElements.find(element => this._isTabbable(element));
+		const stepFocusable = this._getTabbableStepElements()[0];
 		(stepFocusable ?? this.nextButton ?? this.closeButton)?.focus();
+	}
+
+	/**
+	 * Live step controls in visual order. Controls that get rebuilt in place —
+	 * State / Province and Board / Tribunal, which re-render when Country
+	 * changes — re-register at the end of the list, so registration order is not
+	 * tab order; sort by document position instead.
+	 */
+	private _getTabbableStepElements(): HTMLElement[] {
+		return [...new Set(this.stepFocusableElements.filter(element => this._isTabbable(element)))]
+			.sort((a, b) => (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING) ? -1 : 1);
 	}
 
 	private _registerStepFocusable<T extends HTMLElement>(element: T): T {
@@ -2076,6 +2490,7 @@ export class OnboardingVariationA extends Disposable implements IOnboardingServi
 		this.closeButton = undefined;
 		this.footerLeft = undefined;
 		this._clearFooterSignInBtn();
+		this._clearAgentIntroAckHint();
 		this.footerFocusableElements.length = 0;
 		this.stepFocusableElements.length = 0;
 		this._signInInProgress = false;

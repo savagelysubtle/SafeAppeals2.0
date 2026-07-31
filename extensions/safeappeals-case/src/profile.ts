@@ -6,7 +6,7 @@
 import * as os from 'os';
 import * as path from 'path';
 import * as vscode from 'vscode';
-import { CANADA_PROVINCES, JURISDICTIONS, US_STATES, UserProfile } from './types';
+import { JURISDICTIONS, subdivisionsForCountry, UserProfile } from './types';
 
 const SECTION = 'safeappeals.profile';
 
@@ -225,12 +225,21 @@ export async function runProfileSetup(): Promise<boolean> {
 }
 
 /**
- * Quick-pick for country: Canada, United States, Other (free text), or blank.
+ * Quick-pick for country: known markets, Other (free text), or blank.
  */
 async function pickCountry(current: string, title: string): Promise<string | undefined> {
 	const notSpecified = '(Not specified)';
 	const other = 'Other (type your own)…';
-	const known = ['Canada', 'United States'] as const;
+	// Canada/US first (primary markets), then alphabetical; Other is separate.
+	const known = [
+		'Canada',
+		'United States',
+		'Australia',
+		'Ireland',
+		'New Zealand',
+		'South Africa',
+		'United Kingdom',
+	] as const;
 	const items: vscode.QuickPickItem[] = [
 		{ label: notSpecified, description: 'Leave blank' },
 		...known.map(c => ({ label: c, picked: c === current })),
@@ -260,14 +269,10 @@ async function pickCountry(current: string, title: string): Promise<string | und
 }
 
 /**
- * Quick-pick for state/province when country is Canada or the US; free text otherwise.
+ * Quick-pick for state/province when the country has subdivisions; free text otherwise.
  */
 async function pickStateProvince(country: string, current: string, title: string): Promise<string | undefined> {
-	const subdivisions = country === 'Canada'
-		? CANADA_PROVINCES
-		: country === 'United States'
-			? US_STATES
-			: undefined;
+	const subdivisions = subdivisionsForCountry(country);
 
 	if (!subdivisions) {
 		return vscode.window.showInputBox({

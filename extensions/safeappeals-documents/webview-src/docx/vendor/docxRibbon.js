@@ -15,7 +15,6 @@ class DocxRibbon {
 			// Home Tab
 			saveBtn: document.getElementById('save-btn'),
 			printBtn: document.getElementById('print-btn'),
-			exportPdfBtn: document.getElementById('export-pdf-btn'),
 			undoBtn: document.getElementById('undo-btn'),
 			redoBtn: document.getElementById('redo-btn'),
 			fontFamilySelect: document.getElementById('font-family-select'),
@@ -45,9 +44,8 @@ class DocxRibbon {
 			orientationPortraitBtn: document.getElementById('orientation-portrait-btn'),
 			orientationLandscapeBtn: document.getElementById('orientation-landscape-btn'),
 
-			// Signature (DocuSign)
-			insertSignatureLineBtn: document.getElementById('insert-signature-line-btn'),
-			sendSignatureBtn: document.getElementById('send-signature-btn')
+			// Signature line insertion
+			insertSignatureLineBtn: document.getElementById('insert-signature-line-btn')
 		};
 
 		this.initialize();
@@ -154,19 +152,12 @@ class DocxRibbon {
 		// File Operations
 		if (e.saveBtn) e.saveBtn.addEventListener('click', () => this.callbacks.onSave?.());
 		if (e.printBtn) e.printBtn.addEventListener('click', () => this.callbacks.onPrint?.());
-		if (e.exportPdfBtn) e.exportPdfBtn.addEventListener('click', () => this.callbacks.onExportPDF?.());
 
-		// Signature (DocuSign)
+		// Signature line
 		if (e.insertSignatureLineBtn) {
 			e.insertSignatureLineBtn.addEventListener('click', () => {
 				console.log('[DocxRibbon] Insert signature line clicked');
 				this.callbacks.onInsertSignatureLine?.();
-			});
-		}
-		if (e.sendSignatureBtn) {
-			e.sendSignatureBtn.addEventListener('click', () => {
-				console.log('[DocxRibbon] Send for Signature clicked');
-				this.callbacks.onSendForSignature?.();
 			});
 		}
 

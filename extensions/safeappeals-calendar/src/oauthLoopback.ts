@@ -1,11 +1,16 @@
 /*--------------------------------------------------------------------------------------
- *  Localhost OAuth loopback — mirrors old DevAuthServer (127.0.0.1:47294)
+ *  Localhost OAuth loopback — ephemeral port (avoids colliding with cloud auth on 47294)
  *--------------------------------------------------------------------------------------*/
 
 import * as crypto from 'crypto';
 import * as http from 'http';
+import type { AddressInfo } from 'net';
 import { URL } from 'url';
-import { getAuthCallbackPath, getAuthCallbackPort, getLoopbackRedirectUri } from './config';
+
+/** Path segment for the OAuth loopback redirect (port is ephemeral). */
+const AUTH_CALLBACK_PATH = '/auth/callback';
+
+export type OAuthLoopbackHostname = '127.0.0.1' | 'localhost';
 
 export interface AuthCallbackResult {
 	code?: string;
@@ -13,19 +18,79 @@ export interface AuthCallbackResult {
 	state?: string;
 }
 
-/**
- * Start a one-shot HTTP server that resolves when the OAuth redirect hits /auth/callback.
- */
-export async function waitForAuthCode(expectedState?: string, timeoutMs = 5 * 60 * 1000): Promise<AuthCallbackResult> {
-	const port = getAuthCallbackPort();
-	const callbackPath = getAuthCallbackPath();
+export interface StartOAuthLoopbackOptions {
+	expectedState?: string;
+	timeoutMs?: number;
+	/**
+	 * Hostname used in redirect_uri (and as the listen host).
+	 * Default `127.0.0.1` for Google Desktop loopback.
+	 * Use `localhost` for Microsoft — Azure ignores port only for that host.
+	 */
+	hostname?: OAuthLoopbackHostname;
+}
 
-	return new Promise((resolve, reject) => {
+/**
+ * One-shot loopback listener. Start before building the authorize URL so
+ * `redirect_uri` matches the OS-assigned port.
+ */
+export interface OAuthLoopback {
+	readonly redirectUri: string;
+	readonly waitForCode: Promise<AuthCallbackResult>;
+	/** Close the server and cancel waitForCode if still pending. Idempotent. */
+	close(): void;
+}
+
+/**
+ * Bind an ephemeral port and return the concrete redirect URI plus a promise
+ * that resolves when `/auth/callback` receives the OAuth redirect.
+ *
+ * Bind host matches redirect host so the browser callback reaches this process
+ * whether the OS resolves `localhost` to 127.0.0.1 or ::1.
+ */
+export async function startOAuthLoopback(options: StartOAuthLoopbackOptions = {}): Promise<OAuthLoopback> {
+	const {
+		expectedState,
+		timeoutMs = 5 * 60 * 1000,
+		hostname = '127.0.0.1',
+	} = options;
+	const callbackPath = AUTH_CALLBACK_PATH;
+
+	return new Promise<OAuthLoopback>((resolveStart, rejectStart) => {
 		let settled = false;
+		let started = false;
+		let redirectUri = '';
+
+		let resolveCode!: (result: AuthCallbackResult) => void;
+		let rejectCode!: (err: Error) => void;
+		const waitForCode = new Promise<AuthCallbackResult>((resolve, reject) => {
+			resolveCode = resolve;
+			rejectCode = reject;
+		});
+		// If connect() fails before awaiting waitForCode, close() still rejects it —
+		// attach a no-op so that path does not surface as an unhandled rejection.
+		waitForCode.catch(() => { /* consumed by close()/caller */ });
+
+		const settle = (result: AuthCallbackResult) => {
+			if (settled) {
+				return;
+			}
+			settled = true;
+			clearTimeout(timer);
+			server.close();
+			if (result.error && !result.code) {
+				rejectCode(new Error(result.error));
+			} else {
+				resolveCode(result);
+			}
+		};
+
+		const close = () => {
+			settle({ error: 'OAuth loopback closed' });
+		};
 
 		const server = http.createServer((req, res) => {
 			try {
-				const url = new URL(req.url || '/', `http://127.0.0.1:${port}`);
+				const url = new URL(req.url || '/', redirectUri || `http://${hostname}`);
 				if (url.pathname !== callbackPath) {
 					res.writeHead(404, { 'Content-Type': 'text/plain' });
 					res.end('Not found');
@@ -36,7 +101,7 @@ export async function waitForAuthCode(expectedState?: string, timeoutMs = 5 * 60
 				const error = url.searchParams.get('error') || undefined;
 				const state = url.searchParams.get('state') || undefined;
 
-				if (expectedState && state && state !== expectedState) {
+				if (expectedState !== undefined && state !== expectedState) {
 					res.writeHead(400, { 'Content-Type': 'text/html' });
 					res.end(htmlPage('OAuth Error', 'Invalid state parameter. You can close this window.'));
 					settle({ error: 'invalid_state' });
@@ -67,34 +132,31 @@ export async function waitForAuthCode(expectedState?: string, timeoutMs = 5 * 60
 			settle({ error: 'OAuth timeout — no callback received within 5 minutes' });
 		}, timeoutMs);
 
-		const settle = (result: AuthCallbackResult) => {
-			if (settled) {
+		server.on('error', (err) => {
+			clearTimeout(timer);
+			if (!started) {
+				rejectStart(err);
 				return;
 			}
-			settled = true;
-			clearTimeout(timer);
-			server.close();
-			if (result.error && !result.code) {
-				reject(new Error(result.error));
-			} else {
-				resolve(result);
-			}
-		};
-
-		server.on('error', (err) => {
 			if (!settled) {
 				settled = true;
-				clearTimeout(timer);
-				reject(err);
+				rejectCode(err instanceof Error ? err : new Error(String(err)));
 			}
 		});
 
-		server.listen(port, '127.0.0.1');
+		// Listen on the same hostname as redirect_uri (see StartOAuthLoopbackOptions.hostname).
+		server.listen(0, hostname, () => {
+			const address = server.address() as AddressInfo | null;
+			if (!address || typeof address.port !== 'number') {
+				server.close();
+				rejectStart(new Error('Unable to determine ephemeral OAuth loopback port'));
+				return;
+			}
+			redirectUri = `http://${hostname}:${address.port}${callbackPath}`;
+			started = true;
+			resolveStart({ redirectUri, waitForCode, close });
+		});
 	});
-}
-
-export function getRedirectUri(): string {
-	return getLoopbackRedirectUri();
 }
 
 export function createPkcePair(): { verifier: string; challenge: string } {

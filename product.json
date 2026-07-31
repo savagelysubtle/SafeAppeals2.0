@@ -176,7 +176,10 @@
 			"safeappeals.safeappeals-calendar"
 		]
 	},
-	"onboardingSkipSignInStep": true,
+	"trustedExtensionProtocolHandlers": [
+		"safeappeals.safeappeals-authentication"
+	],
+	"onboardingSkipSignInStep": false,
 	"onboardingKeymaps": [
 		{
 			"id": "vscode",

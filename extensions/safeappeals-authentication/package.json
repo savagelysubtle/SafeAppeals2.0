@@ -64,6 +64,23 @@
 					"default": "https://api.safeappeals.com",
 					"scope": "machine",
 					"markdownDescription": "%config.apiUrl.description%"
+				},
+				"safeappeals.cloud.dashboardUrl": {
+					"type": "string",
+					"default": "https://safeappeals.com",
+					"scope": "machine",
+					"markdownDescription": "%config.dashboardUrl.description%"
+				},
+				"safeappeals.cloud.webCallbackOrigins": {
+					"type": "array",
+					"items": {
+						"type": "string"
+					},
+					"default": [
+						"http://localhost:8080"
+					],
+					"scope": "machine",
+					"markdownDescription": "%config.webCallbackOrigins.description%"
 				}
 			}
 		}
