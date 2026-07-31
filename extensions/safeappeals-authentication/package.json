@@ -52,6 +52,11 @@
 				"category": "%command.category%"
 			},
 			{
+				"command": "safeappeals.cloud.getCreditPacks",
+				"title": "%command.getCreditPacks.title%",
+				"category": "%command.category%"
+			},
+			{
 				"command": "safeappeals.cloud.pasteAuthCode",
 				"title": "%command.pasteAuthCode.title%",
 				"category": "%command.category%"

@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { Disposable, DisposableStore, MutableDisposable } from '../../../../base/common/lifecycle.js';
+import { Disposable, DisposableStore } from '../../../../base/common/lifecycle.js';
 import { Emitter, Event } from '../../../../base/common/event.js';
 import { VSBuffer } from '../../../../base/common/buffer.js';
 import { dirname, joinPath } from '../../../../base/common/resources.js';
@@ -44,6 +44,15 @@ import {
 	ONBOARDING_IN_PROGRESS_STORAGE_KEY,
 } from '../common/onboardingTypes.js';
 import { IOnboardingService, OnboardingDismissReason } from '../common/onboardingService.js';
+import {
+	PROFILE_ROLES,
+	VISIBLE_FIELDS_BY_GROUP,
+	getPersonaGroup,
+	renderProfileRule,
+	type ProfileFieldKey,
+	type ProfilePersonaGroupOrUnknown,
+	type ProfileRole,
+} from '../common/profileRuleTemplate.js';
 
 /** Pricing page opened from the Credits & First Steps step. */
 const CREDITS_PRICING_URL = 'https://safeappeals.com/#pricing';
@@ -54,6 +63,21 @@ const AI_ASSISTANT_DOCS_URL = 'https://safeappeals.com/docs/ai-assistant';
 /** APPLICATION-scope flag: user acknowledged hallucination risk in Meet Your AI Assistant. */
 const AI_LITERACY_STORAGE_KEY = 'safeappeals.aiLiteracy.acknowledged';
 
+/**
+ * Credit pack shape returned by `safeappeals.cloud.getCreditPacks`. Mirrors
+ * `CreditPack` in `extensions/safeappeals-authentication/src/api.ts`; kept as
+ * a local interface because the workbench cannot import extension sources.
+ */
+interface OnboardingCreditPack {
+	readonly id: string;
+	readonly name: string;
+	readonly credits: number;
+	readonly price: number;
+	readonly currency: string;
+	readonly description: string;
+	readonly popular?: boolean;
+}
+
 /** Auth provider contributed by `extensions/safeappeals-authentication`. */
 const SAFEAPPEALS_CLOUD_AUTH_PROVIDER_ID = 'safeappeals-cloud';
 /**
@@ -61,13 +85,6 @@ const SAFEAPPEALS_CLOUD_AUTH_PROVIDER_ID = 'safeappeals-cloud';
  * Cold starts can lag; shorter waits strand the user on a spinner with no escape.
  */
 const AUTH_PROVIDER_REGISTRATION_TIMEOUT_MS = 15_000;
-
-/** Where a Safe Appeals Cloud sign-in request was started from. */
-const enum OnboardingSignInOrigin {
-	SignInStep = 'signInStep',
-	FooterNudge = 'footerNudge',
-	CreditsStep = 'creditsStep',
-}
 
 /**
  * Compensation boards mirrored from `extensions/safeappeals-case/src/types.ts`
@@ -139,19 +156,6 @@ const PROFILE_KNOWN_COUNTRIES = [
 	PROFILE_COUNTRY_NEW_ZEALAND,
 	PROFILE_COUNTRY_SOUTH_AFRICA,
 	PROFILE_COUNTRY_UK,
-] as const;
-
-/** Canonical English values persisted to `safeappeals.profile.role`. */
-const PROFILE_ROLE_LAWYER = 'Lawyer';
-const PROFILE_ROLE_PARALEGAL = 'Paralegal';
-const PROFILE_ROLE_ADVOCATE = 'Advocate';
-const PROFILE_ROLE_SELF = 'Representing Myself';
-
-const PROFILE_ROLES = [
-	PROFILE_ROLE_LAWYER,
-	PROFILE_ROLE_PARALEGAL,
-	PROFILE_ROLE_ADVOCATE,
-	PROFILE_ROLE_SELF,
 ] as const;
 
 const PROFILE_CANADA_PROVINCES = [
@@ -334,10 +338,10 @@ const PROFILE_BOARDS_BY_COUNTRY: Readonly<Record<string, readonly string[]>> = {
 	],
 };
 
-type ProfileFieldKey = 'name' | 'organization' | 'role' | 'practiceArea' | 'country' | 'stateProvince' | 'city' | 'jurisdiction';
+type ProfileTextFieldKey = 'name' | 'organization' | 'practiceArea' | 'focusArea' | 'citationStyle' | 'city';
 
 type ProfileFieldDescriptor =
-	| { readonly type: 'text'; readonly key: 'name' | 'organization' | 'practiceArea' | 'city'; readonly label: string; readonly placeholder: string }
+	| { readonly type: 'text'; readonly key: ProfileTextFieldKey; readonly label: string; readonly placeholder: string }
 	| { readonly type: 'pills'; readonly key: 'role'; readonly label: string }
 	| { readonly type: 'select'; readonly key: 'country' | 'stateProvince' | 'jurisdiction'; readonly label: string };
 
@@ -451,8 +455,6 @@ export class OnboardingVariationA extends Disposable implements IOnboardingServi
 	private nextButton: HTMLButtonElement | undefined;
 	private closeButton: HTMLButtonElement | undefined;
 	private footerLeft: HTMLElement | undefined;
-	private _footerSignInBtn: HTMLButtonElement | undefined;
-	private readonly _footerSignInDisposable = this._register(new MutableDisposable());
 	/** Footer hint explaining why Continue is disabled on the Agent Intro step. */
 	private _agentIntroAckHint: HTMLElement | undefined;
 	/** Lives only as long as the Agent Intro step is rendered; cleared in `_renderStep`. */
@@ -479,6 +481,8 @@ export class OnboardingVariationA extends Disposable implements IOnboardingServi
 		organization: '',
 		role: '',
 		practiceArea: '',
+		focusArea: '',
+		citationStyle: '',
 		country: '',
 		stateProvince: '',
 		city: '',
@@ -488,6 +492,10 @@ export class OnboardingVariationA extends Disposable implements IOnboardingServi
 	private profileCountryOtherMode = false;
 	/** When true, Board select is "Other" and a free-text jurisdiction input is shown. */
 	private profileBoardOtherMode = false;
+	/** Host for role-conditional profile fields; cleared and rebuilt on role change. */
+	private profileFormFieldsHost: HTMLElement | undefined;
+	/** Disposables for the role-conditional field region (not stepDisposables — avoids leaks on pill click). */
+	private profileFormFieldsStore: DisposableStore | undefined;
 	private profileStateControlHost: HTMLElement | undefined;
 	private profileBoardControlHost: HTMLElement | undefined;
 	private profileCountryOtherHost: HTMLElement | undefined;
@@ -933,25 +941,10 @@ export class OnboardingVariationA extends Disposable implements IOnboardingServi
 		if (this.footerLeft) {
 			if (this._isLastStep()) {
 				this._clearAgentIntroAckHint();
-				// Show sign-in nudge in footer
-				if (!this._footerSignInBtn && !this._userSignedIn) {
-					this._footerSignInBtn = append(this.footerLeft, $<HTMLButtonElement>('button.onboarding-a-signin-nudge-btn'));
-					this._footerSignInBtn.type = 'button';
-					this._footerSignInBtn.textContent = localize('onboarding.sessions.signInNudge', "Sign In to Sync Your Profile");
-					// DOM order is footer-left (nudge) then footer-right (Back/Next).
-					this.footerFocusableElements.unshift(this._footerSignInBtn);
-					this._footerSignInDisposable.value = addDisposableListener(this._footerSignInBtn, EventType.CLICK, () => {
-						this._logAction('signInNudge');
-						void this._handleSignIn(OnboardingSignInOrigin.FooterNudge);
-					});
-				}
+			} else if (showAgentIntroAckHint) {
+				this._showAgentIntroAckHint();
 			} else {
-				this._clearFooterSignInBtn();
-				if (showAgentIntroAckHint) {
-					this._showAgentIntroAckHint();
-				} else {
-					this._clearAgentIntroAckHint();
-				}
+				this._clearAgentIntroAckHint();
 			}
 		}
 	}
@@ -1059,7 +1052,7 @@ export class OnboardingVariationA extends Disposable implements IOnboardingServi
 		}));
 		this.stepDisposables.add(addDisposableListener(googleBtn, EventType.CLICK, () => {
 			this._logAction('signIn', undefined, SAFEAPPEALS_CLOUD_AUTH_PROVIDER_ID);
-			void this._handleSignIn(OnboardingSignInOrigin.SignInStep);
+			void this._handleSignIn();
 		}));
 	}
 
@@ -1097,13 +1090,8 @@ export class OnboardingVariationA extends Disposable implements IOnboardingServi
 		return btn;
 	}
 
-	/**
-	 * Signs in via Safe Appeals Cloud (`safeappeals-cloud`).
-	 *
-	 * @param origin Which UI started the request — controls post-success behavior
-	 * and must be captured up front because `createSession` can outlive the step.
-	 */
-	private async _handleSignIn(origin: OnboardingSignInOrigin): Promise<void> {
+	/** Signs in via Safe Appeals Cloud (`safeappeals-cloud`). */
+	private async _handleSignIn(): Promise<void> {
 		if (this._signInInProgress) {
 			return;
 		}
@@ -1113,9 +1101,7 @@ export class OnboardingVariationA extends Disposable implements IOnboardingServi
 		const stepId = this.steps[stepIndex];
 
 		this._signInInProgress = true;
-		if (origin === OnboardingSignInOrigin.SignInStep) {
-			this._refreshSignInStepUi();
-		}
+		this._refreshSignInStepUi();
 
 		/** Wizard still the same showing that started this request. */
 		const isSameShowing = (): boolean => this._isShowing && this._showGeneration === generation;
@@ -1166,21 +1152,7 @@ export class OnboardingVariationA extends Disposable implements IOnboardingServi
 				return;
 			}
 
-			switch (origin) {
-				case OnboardingSignInOrigin.SignInStep:
-					this._nextStep();
-					break;
-				case OnboardingSignInOrigin.FooterNudge:
-					if (this._footerSignInBtn) {
-						this._footerSignInBtn.style.display = 'none';
-					}
-					this._updateButtonStates();
-					break;
-				case OnboardingSignInOrigin.CreditsStep:
-					this._renderStep();
-					this._updateButtonStates();
-					break;
-			}
+			this._nextStep();
 		} catch (error) {
 			if (!isSameShowing()) {
 				return;
@@ -1195,7 +1167,7 @@ export class OnboardingVariationA extends Disposable implements IOnboardingServi
 			this._logAction('signInFailed', undefined, SAFEAPPEALS_CLOUD_AUTH_PROVIDER_ID);
 		} finally {
 			this._signInInProgress = false;
-			if (isContinuationValid() && origin === OnboardingSignInOrigin.SignInStep && !this._userSignedIn) {
+			if (isContinuationValid() && !this._userSignedIn) {
 				this._refreshSignInStepUi();
 			}
 		}
@@ -1216,19 +1188,9 @@ export class OnboardingVariationA extends Disposable implements IOnboardingServi
 	// Step: Profile (SafeAppeals)
 	// =====================================================================
 
-	private static readonly PROFILE_FIELDS: ReadonlyArray<ProfileFieldDescriptor> = [
-		{ type: 'text', key: 'name', label: localize('onboarding.profile.name', "Your Name"), placeholder: localize('onboarding.profile.name.placeholder', "As it should appear in drafted documents") },
-		{ type: 'text', key: 'organization', label: localize('onboarding.profile.organization', "Firm / Organization"), placeholder: localize('onboarding.profile.organization.placeholder', "Leave empty if self-represented") },
-		{ type: 'pills', key: 'role', label: localize('onboarding.profile.role', "Your Role") },
-		{ type: 'text', key: 'practiceArea', label: localize('onboarding.profile.practiceArea', "Area of Law"), placeholder: localize('onboarding.profile.practiceArea.placeholder', "e.g. Workers' Compensation") },
-		{ type: 'select', key: 'country', label: localize('onboarding.profile.country', "Country") },
-		{ type: 'select', key: 'stateProvince', label: localize('onboarding.profile.stateProvince', "State / Province") },
-		{ type: 'text', key: 'city', label: localize('onboarding.profile.city', "City"), placeholder: localize('onboarding.profile.city.placeholder', "e.g. Vancouver, Los Angeles") },
-		{ type: 'select', key: 'jurisdiction', label: localize('onboarding.profile.jurisdiction', "Compensation Board / Tribunal") },
-	];
-
 	private static readonly PROFILE_KEYS: readonly ProfileFieldKey[] = [
-		'name', 'organization', 'role', 'practiceArea', 'country', 'stateProvince', 'city', 'jurisdiction',
+		'name', 'organization', 'role', 'practiceArea', 'focusArea', 'citationStyle',
+		'country', 'stateProvince', 'city', 'jurisdiction',
 	];
 
 	private _renderProfileStep(container: HTMLElement): void {
@@ -1245,15 +1207,6 @@ export class OnboardingVariationA extends Disposable implements IOnboardingServi
 				&& !(PROFILE_JURISDICTIONS as readonly string[]).includes(this.profileValues.jurisdiction);
 		}
 
-		this.profileStateControlHost = undefined;
-		this.profileBoardControlHost = undefined;
-		this.profileCountryOtherHost = undefined;
-		this.profileBoardOtherHost = undefined;
-		this.profileStateControlStore = this.stepDisposables.add(new DisposableStore());
-		this.profileBoardControlStore = this.stepDisposables.add(new DisposableStore());
-		this.profileCountryOtherStore = this.stepDisposables.add(new DisposableStore());
-		this.profileBoardOtherStore = this.stepDisposables.add(new DisposableStore());
-
 		const layout = append(container, $('.onboarding-a-profile-layout'));
 
 		// SafeAppeals: plain-language explainer for people who have never used
@@ -1267,12 +1220,12 @@ export class OnboardingVariationA extends Disposable implements IOnboardingServi
 		infoIntro.textContent = localize('onboarding.profile.info.intro', "Safe Appeals includes an AI assistant that works with you on your cases and documents — think of it as a junior colleague, not a chatbot.");
 
 		const infoHow = append(info, $('p.onboarding-a-profile-info-text'));
-		infoHow.textContent = localize('onboarding.profile.info.how', "Whatever you enter here is automatically shared with the assistant at the start of every conversation. It will already know who you are — you never have to introduce yourself or re-explain your practice.");
+		infoHow.textContent = localize('onboarding.profile.info.how', "Whatever you enter here is automatically shared with the assistant at the start of every conversation. It will already know who you are — you never have to introduce yourself or re-explain your work.");
 
 		const infoList = append(info, $('ul.onboarding-a-profile-info-list'));
 		const infoPoints = [
-			localize('onboarding.profile.info.point.drafts', "Drafted documents and letters use your name, firm, and jurisdiction automatically"),
-			localize('onboarding.profile.info.point.relevant', "Answers are framed for your area of law instead of being generic"),
+			localize('onboarding.profile.info.point.drafts', "Drafted documents and letters use your name, organization, and jurisdiction automatically"),
+			localize('onboarding.profile.info.point.relevant', "Answers are framed for your field instead of being generic"),
 			localize('onboarding.profile.info.point.control', "Everything stays on this computer — change or clear it anytime"),
 		];
 		for (const point of infoPoints) {
@@ -1284,42 +1237,167 @@ export class OnboardingVariationA extends Disposable implements IOnboardingServi
 		}
 
 		const form = append(layout, $('.onboarding-a-profile'));
-
-		for (const field of OnboardingVariationA.PROFILE_FIELDS) {
-			if (field.type === 'text') {
-				this._renderProfileTextField(form, field);
-				continue;
-			}
-			if (field.type === 'pills') {
-				this._renderProfileRoleField(form, field.label);
-				continue;
-			}
-			if (field.key === 'country') {
-				this._renderProfileCountryField(form, field.label);
-				continue;
-			}
-			if (field.key === 'stateProvince') {
-				this._renderProfileStateField(form, field.label);
-				continue;
-			}
-			this._renderProfileBoardField(form, field.label);
-		}
+		this.profileFormFieldsHost = append(form, $('.onboarding-a-profile-fields'));
+		this.profileFormFieldsStore = this.stepDisposables.add(new DisposableStore());
+		this._renderProfileFormFields();
 
 		const hint = append(form, $('div.onboarding-a-theme-hint'));
 		hint.textContent = localize('onboarding.profile.hint', "All fields are optional and stay on this computer. The AI agent uses them when organizing cases and drafting documents. Change them anytime with the \"Set Up Profile\" command.");
 	}
 
 	/**
-	 * Renders a labeled text InputBox for a profile field.
+	 * Rebuilds profile fields for the current persona group (including role pills).
+	 * Clears {@link profileFormFieldsStore} so repeated pill clicks do not leak.
+	 * Hidden-field values stay in {@link profileValues} (not blanked on role change).
+	 * Role is in every {@link VISIBLE_FIELDS_BY_GROUP} set, so pills stay visible.
 	 */
-	private _renderProfileTextField(form: HTMLElement, field: Extract<ProfileFieldDescriptor, { type: 'text' }>): void {
+	private _renderProfileFormFields(): void {
+		const host = this.profileFormFieldsHost;
+		const store = this.profileFormFieldsStore;
+		if (!host || !store) {
+			return;
+		}
+
+		store.clear();
+		clearNode(host);
+
+		this.profileStateControlHost = undefined;
+		this.profileBoardControlHost = undefined;
+		this.profileCountryOtherHost = undefined;
+		this.profileBoardOtherHost = undefined;
+		this.profileStateControlStore = store.add(new DisposableStore());
+		this.profileBoardControlStore = store.add(new DisposableStore());
+		this.profileCountryOtherStore = store.add(new DisposableStore());
+		this.profileBoardOtherStore = store.add(new DisposableStore());
+
+		const group = getPersonaGroup(this.profileValues.role);
+		const visible = VISIBLE_FIELDS_BY_GROUP[group];
+
+		for (const key of visible) {
+			if (key === 'name') {
+				this._renderProfileTextField(host, store, {
+					type: 'text',
+					key: 'name',
+					label: localize('onboarding.profile.name', "Your Name"),
+					placeholder: localize('onboarding.profile.name.placeholder', "As it should appear in drafted documents"),
+				});
+				continue;
+			}
+			if (key === 'organization') {
+				this._renderProfileTextField(host, store, {
+					type: 'text',
+					key: 'organization',
+					label: this._organizationLabel(group),
+					placeholder: localize('onboarding.profile.organization.placeholder', "Leave empty if not applicable"),
+				});
+				continue;
+			}
+			if (key === 'role') {
+				this._renderProfileRoleField(host, store, localize('onboarding.profile.role', "Your Role"));
+				continue;
+			}
+			if (key === 'practiceArea') {
+				this._renderProfileTextField(host, store, {
+					type: 'text',
+					key: 'practiceArea',
+					label: localize('onboarding.profile.practiceArea', "Area of Law"),
+					placeholder: localize('onboarding.profile.practiceArea.placeholder', "e.g. Workers' Compensation"),
+				});
+				continue;
+			}
+			if (key === 'focusArea') {
+				this._renderProfileTextField(host, store, {
+					type: 'text',
+					key: 'focusArea',
+					label: this._focusAreaLabel(this.profileValues.role),
+					placeholder: localize('onboarding.profile.focusArea.placeholder', "Optional"),
+				});
+				continue;
+			}
+			if (key === 'citationStyle') {
+				this._renderProfileTextField(host, store, {
+					type: 'text',
+					key: 'citationStyle',
+					label: localize('onboarding.profile.citationStyle', "Citation Style"),
+					placeholder: localize('onboarding.profile.citationStyle.placeholder', "e.g. APA, MLA, McGill Guide"),
+				});
+				continue;
+			}
+			if (key === 'country') {
+				this._renderProfileCountryField(host, store, localize('onboarding.profile.country', "Country"));
+				continue;
+			}
+			if (key === 'stateProvince') {
+				this._renderProfileStateField(host, store, localize('onboarding.profile.stateProvince', "State / Province"));
+				continue;
+			}
+			if (key === 'city') {
+				this._renderProfileTextField(host, store, {
+					type: 'text',
+					key: 'city',
+					label: localize('onboarding.profile.city', "City"),
+					placeholder: localize('onboarding.profile.city.placeholder', "e.g. Vancouver, Los Angeles"),
+				});
+				continue;
+			}
+			if (key === 'jurisdiction') {
+				this._renderProfileBoardField(host, store, localize('onboarding.profile.jurisdiction', "Compensation Board / Tribunal"));
+			}
+		}
+	}
+
+	/**
+	 * Localized organization field label for the active persona group.
+	 */
+	private _organizationLabel(group: ProfilePersonaGroupOrUnknown): string {
+		switch (group) {
+			case 'education':
+				return localize('onboarding.profile.organization.school', "School / Institution");
+			case 'research':
+				return localize('onboarding.profile.organization.institution', "Institution / Affiliation");
+			case 'office':
+				return localize('onboarding.profile.organization.company', "Company / Organization");
+			case 'developer':
+				return localize('onboarding.profile.organization.team', "Company / Team");
+			case 'legal':
+			case 'self':
+			case 'unknown':
+			default:
+				return localize('onboarding.profile.organization', "Firm / Organization");
+		}
+	}
+
+	/**
+	 * Localized focus-area label for the selected role (education / research / office / developer).
+	 */
+	private _focusAreaLabel(role: string): string {
+		switch (role as ProfileRole) {
+			case 'Student':
+				return localize('onboarding.profile.focusArea.student', "Field of Study");
+			case 'Teacher':
+				return localize('onboarding.profile.focusArea.teacher', "Subject / Level");
+			case 'Researcher':
+				return localize('onboarding.profile.focusArea.researcher', "Research Field");
+			case 'Office Worker':
+				return localize('onboarding.profile.focusArea.office', "Works On");
+			case 'Software Developer':
+				return localize('onboarding.profile.focusArea.developer', "Languages / Stack");
+			default:
+				return localize('onboarding.profile.focusArea', "Focus Area");
+		}
+	}
+
+	/**
+	 * Renders a labeled text InputBox for a profile field into the given store.
+	 */
+	private _renderProfileTextField(form: HTMLElement, store: DisposableStore, field: Extract<ProfileFieldDescriptor, { type: 'text' }>): void {
 		const fieldEl = append(form, $('.onboarding-a-profile-field'));
 		const inputId = `onboarding-profile-${field.key}`;
 		const label = append(fieldEl, $<HTMLLabelElement>('label.onboarding-a-section-label'));
 		label.htmlFor = inputId;
 		label.textContent = field.label;
 
-		const inputBox = this.stepDisposables.add(new InputBox(fieldEl, undefined, {
+		const inputBox = store.add(new InputBox(fieldEl, undefined, {
 			placeholder: field.placeholder,
 			ariaLabel: field.label,
 			inputBoxStyles: defaultInputBoxStyles,
@@ -1327,7 +1405,7 @@ export class OnboardingVariationA extends Disposable implements IOnboardingServi
 		inputBox.inputElement.id = inputId;
 		inputBox.value = this.profileValues[field.key];
 		this._registerStepFocusable(inputBox.inputElement);
-		this.stepDisposables.add(inputBox.onDidChange(value => {
+		store.add(inputBox.onDidChange(value => {
 			this.profileValues[field.key] = value;
 		}));
 	}
@@ -1337,14 +1415,30 @@ export class OnboardingVariationA extends Disposable implements IOnboardingServi
 	 */
 	private _profileRoleLabel(role: string): string {
 		switch (role) {
-			case PROFILE_ROLE_LAWYER:
+			case 'Lawyer':
 				return localize('onboarding.profile.role.lawyer', "Lawyer");
-			case PROFILE_ROLE_PARALEGAL:
+			case 'Paralegal':
 				return localize('onboarding.profile.role.paralegal', "Paralegal");
-			case PROFILE_ROLE_ADVOCATE:
+			case 'Advocate':
 				return localize('onboarding.profile.role.advocate', "Advocate");
-			case PROFILE_ROLE_SELF:
+			case 'Appeals Representative':
+				return localize('onboarding.profile.role.appealsRep', "Appeals Representative");
+			case 'Union Representative':
+				return localize('onboarding.profile.role.unionRep', "Union Representative");
+			case 'Injured Worker':
+				return localize('onboarding.profile.role.injuredWorker', "Injured Worker");
+			case 'Representing Myself':
 				return localize('onboarding.profile.role.self', "Representing Myself");
+			case 'Student':
+				return localize('onboarding.profile.role.student', "Student");
+			case 'Teacher':
+				return localize('onboarding.profile.role.teacher', "Teacher");
+			case 'Researcher':
+				return localize('onboarding.profile.role.researcher', "Researcher");
+			case 'Office Worker':
+				return localize('onboarding.profile.role.officeWorker', "Office Worker");
+			case 'Software Developer':
+				return localize('onboarding.profile.role.softwareDeveloper', "Software Developer");
 			default:
 				return role;
 		}
@@ -1354,8 +1448,9 @@ export class OnboardingVariationA extends Disposable implements IOnboardingServi
 	 * Role pills with radio-group semantics. Persists the English canonical
 	 * value to `safeappeals.profile.role` (same pattern as country/board).
 	 * Clicking the already-selected pill clears the field (optional like the rest).
+	 * Present for every persona group; pill click rebuilds the form field region.
 	 */
-	private _renderProfileRoleField(form: HTMLElement, labelText: string): void {
+	private _renderProfileRoleField(form: HTMLElement, store: DisposableStore, labelText: string): void {
 		const fieldEl = append(form, $('.onboarding-a-profile-field'));
 		const label = append(fieldEl, $('div.onboarding-a-section-label'));
 		label.id = 'onboarding-profile-role-label';
@@ -1394,21 +1489,25 @@ export class OnboardingVariationA extends Disposable implements IOnboardingServi
 			this._registerStepFocusable(pill);
 			pills.push(pill);
 
-			this.stepDisposables.add(addDisposableListener(pill, EventType.CLICK, () => {
+			store.add(addDisposableListener(pill, EventType.CLICK, () => {
 				// Toggle-off: re-clicking the selected pill clears the optional field.
 				// Arrow-key nav only .click()s a *different* index, so it never hits this branch.
+				// Update role first, then rebuild — rebuild disposes this listener via store.clear().
 				if (this.profileValues.role === role) {
 					this.profileValues.role = '';
-					syncRolePillState(-1);
-					return;
+				} else {
+					this.profileValues.role = role;
 				}
-				this.profileValues.role = role;
-				syncRolePillState(i);
+				this._renderProfileFormFields();
+				const roleGroup = this.profileFormFieldsHost?.querySelector('.onboarding-a-role-pills');
+				const focusPill = roleGroup?.querySelector<HTMLElement>('.onboarding-a-role-pill.selected')
+					?? roleGroup?.querySelector<HTMLElement>('.onboarding-a-role-pill');
+				focusPill?.focus();
 			}));
 		}
 
 		syncRolePillState(selectedIndex);
-		this._setupRadioGroupNavigation(pills, Math.max(0, selectedIndex));
+		this._setupRadioGroupNavigation(pills, Math.max(0, selectedIndex), store);
 	}
 
 	/**
@@ -1421,14 +1520,14 @@ export class OnboardingVariationA extends Disposable implements IOnboardingServi
 	 * re-click), so toggle-to-deselect on role pills cannot fire from keyboard
 	 * navigation — only from an explicit activation of the selected pill.
 	 */
-	private _setupRadioGroupNavigation(items: HTMLElement[], selectedIndex: number): void {
+	private _setupRadioGroupNavigation(items: HTMLElement[], selectedIndex: number, store: DisposableStore = this.stepDisposables): void {
 		// Initialise roving tabindex: only the selected item is tab-reachable
 		for (let i = 0; i < items.length; i++) {
 			items[i].setAttribute('tabindex', i === selectedIndex ? '0' : '-1');
 		}
 
 		for (let i = 0; i < items.length; i++) {
-			this.stepDisposables.add(addDisposableListener(items[i], EventType.KEY_DOWN, (e: KeyboardEvent) => {
+			store.add(addDisposableListener(items[i], EventType.KEY_DOWN, (e: KeyboardEvent) => {
 				const event = new StandardKeyboardEvent(e);
 				let newIndex: number | undefined;
 
@@ -1462,7 +1561,7 @@ export class OnboardingVariationA extends Disposable implements IOnboardingServi
 	 * Country select (known markets + Other) with optional free-text when Other
 	 * is chosen.
 	 */
-	private _renderProfileCountryField(form: HTMLElement, labelText: string): void {
+	private _renderProfileCountryField(form: HTMLElement, store: DisposableStore, labelText: string): void {
 		const fieldEl = append(form, $('.onboarding-a-profile-field'));
 		const inputId = 'onboarding-profile-country';
 		const label = append(fieldEl, $<HTMLLabelElement>('label.onboarding-a-section-label'));
@@ -1483,7 +1582,7 @@ export class OnboardingVariationA extends Disposable implements IOnboardingServi
 			selected = idx < 0 ? 0 : idx;
 		}
 
-		const selectBox = this.stepDisposables.add(new SelectBox(options, selected, this.contextViewService, defaultSelectBoxStyles, {
+		const selectBox = store.add(new SelectBox(options, selected, this.contextViewService, defaultSelectBoxStyles, {
 			ariaLabel: labelText,
 		}));
 		const selectWrapper = append(fieldEl, $('.onboarding-a-profile-select'));
@@ -1493,7 +1592,7 @@ export class OnboardingVariationA extends Disposable implements IOnboardingServi
 			countrySelectEl.id = inputId;
 			this._registerStepFocusable(countrySelectEl);
 		}
-		this.stepDisposables.add(selectBox.onDidSelect(e => {
+		store.add(selectBox.onDidSelect(e => {
 			if (e.index === 0) {
 				this.profileCountryOtherMode = false;
 				this.profileValues.country = '';
@@ -1553,7 +1652,7 @@ export class OnboardingVariationA extends Disposable implements IOnboardingServi
 	/**
 	 * State / Province control — select for Canada/US, free text otherwise.
 	 */
-	private _renderProfileStateField(form: HTMLElement, labelText: string): void {
+	private _renderProfileStateField(form: HTMLElement, _store: DisposableStore, labelText: string): void {
 		const fieldEl = append(form, $('.onboarding-a-profile-field'));
 		const inputId = 'onboarding-profile-stateProvince';
 		const label = append(fieldEl, $<HTMLLabelElement>('label.onboarding-a-section-label'));
@@ -1630,7 +1729,7 @@ export class OnboardingVariationA extends Disposable implements IOnboardingServi
 	 * Compensation board / tribunal select, filtered by country / subdivision,
 	 * with an Other free-text escape hatch.
 	 */
-	private _renderProfileBoardField(form: HTMLElement, labelText: string): void {
+	private _renderProfileBoardField(form: HTMLElement, _store: DisposableStore, labelText: string): void {
 		const fieldEl = append(form, $('.onboarding-a-profile-field'));
 		const inputId = 'onboarding-profile-jurisdiction';
 		const label = append(fieldEl, $<HTMLLabelElement>('label.onboarding-a-section-label'));
@@ -1796,50 +1895,13 @@ export class OnboardingVariationA extends Disposable implements IOnboardingServi
 	}
 
 	/**
-	 * Writes the user-level profile instructions file. Must stay byte-identical
-	 * to `renderProfileRule` in `extensions/safeappeals-case/src/profile.ts`.
+	 * Writes the user-level profile instructions file via the shared
+	 * {@link renderProfileRule} template (byte-identical to the extension path).
 	 */
 	private async _writeProfileRule(): Promise<void> {
 		const home = await this.pathService.userHome();
 		const target = joinPath(home, '.copilot', 'instructions', 'safeappeals-profile.instructions.md');
-
-		const facts: string[] = [];
-		const push = (label: string, value: string) => {
-			if (value.trim()) {
-				facts.push(`- **${label}:** ${value.trim()}`);
-			}
-		};
-		push('Name', this.profileValues.name);
-		push('Firm / organization', this.profileValues.organization);
-		push('Role', this.profileValues.role);
-		push('Practice area', this.profileValues.practiceArea);
-		push('Country', this.profileValues.country);
-		push('State / province', this.profileValues.stateProvince);
-		push('City', this.profileValues.city);
-		push('Compensation board / tribunal', this.profileValues.jurisdiction);
-
-		const content = [
-			'---',
-			`description: 'Safe Appeals user profile — who the user is and how they practice'`,
-			`applyTo: '**'`,
-			'---',
-			'',
-			'# About the Safe Appeals user',
-			'',
-			'This profile was set up during the Safe Appeals welcome onboarding',
-			'(rerun "Safe Appeals Case: Set Up Profile" to change it).',
-			'',
-			...facts,
-			'',
-			'When drafting documents, correspondence, or appeals, write from this',
-			'person\'s perspective and jurisdiction unless the case brief (AGENTS.md',
-			'in the case folder) says otherwise. Case-specific facts always take',
-			'precedence over this profile.',
-			'',
-			'Flag every legal citation you produce as *unverified* and tell the user',
-			'to confirm it against a primary source before relying on it.',
-			'',
-		].join('\n');
+		const content = renderProfileRule(this.profileValues);
 
 		await this.fileService.createFolder(dirname(target));
 		await this.fileService.writeFile(target, VSBuffer.fromString(content));
@@ -2047,7 +2109,7 @@ export class OnboardingVariationA extends Disposable implements IOnboardingServi
 		}
 
 		const selectedIndex = ONBOARDING_APPROVAL_MODE_OPTIONS.findIndex(o => o.id === this._selectedApprovalMode);
-		this._setupRadioGroupNavigation(allCards, Math.max(0, selectedIndex));
+		this._setupRadioGroupNavigation(allCards, Math.max(0, selectedIndex), this.stepDisposables);
 	}
 
 	/**
@@ -2079,7 +2141,7 @@ export class OnboardingVariationA extends Disposable implements IOnboardingServi
 		const copy = append(wrapper, $('p.onboarding-a-credits-copy'));
 		copy.textContent = localize(
 			'onboarding.credits.copy',
-			"AI drafting and research run on credits. Your account starts with zero credits — nothing runs, and nothing is charged, until you choose to buy a pack. There is no subscription."
+			"AI drafting and research run on credits — 1 credit equals 1 token (input and output both count). Every account starts at zero, so nothing runs and nothing is charged until you buy a pack below. There is no subscription."
 		);
 
 		const balanceRegion = append(wrapper, $('.onboarding-a-credits-balance'));
@@ -2087,18 +2149,24 @@ export class OnboardingVariationA extends Disposable implements IOnboardingServi
 		balanceRegion.setAttribute('aria-atomic', 'true');
 		this._renderCreditsBalanceRegion(balanceRegion);
 
+		const packsHeading = append(wrapper, $('h3.onboarding-a-credits-packs-heading'));
+		packsHeading.textContent = localize('onboarding.credits.packs.heading', "Credit Packs");
+		const packsRegion = append(wrapper, $('.onboarding-a-credits-packs'));
+		packsRegion.setAttribute('aria-live', 'polite');
+		this._renderCreditsPacksRegion(packsRegion);
+
 		const linksRow = append(wrapper, $('.onboarding-a-credits-links'));
-		this._createCreditsExternalLink(
-			linksRow,
-			localize('onboarding.credits.viewPricing', "View Pricing"),
-			CREDITS_PRICING_URL,
-			'viewPricing'
-		);
 		this._createCreditsExternalLink(
 			linksRow,
 			localize('onboarding.credits.howCreditsWork', "How Credits Work"),
 			CREDITS_DOCS_URL,
 			'howCreditsWork'
+		);
+		this._createCreditsExternalLink(
+			linksRow,
+			localize('onboarding.credits.viewPricing', "View Pricing"),
+			CREDITS_PRICING_URL,
+			'viewPricing'
 		);
 
 		const firstAction = append(wrapper, $('.onboarding-a-credits-first-action'));
@@ -2128,45 +2196,24 @@ export class OnboardingVariationA extends Disposable implements IOnboardingServi
 	}
 
 	/**
-	 * Fills the balance region: live balance when signed in, or a sign-in path
-	 * when not. Failed lookups never blank the step or show a fake zero.
+	 * Fills the balance region: live balance when signed in; a quiet note when
+	 * not (no sign-in CTA — step 1 owns that; buying a pack below prompts sign-in
+	 * itself). Failed lookups never blank the step or show a fake zero.
 	 */
 	private _renderCreditsBalanceRegion(balanceRegion: HTMLElement): void {
 		clearNode(balanceRegion);
 
 		if (!this._userSignedIn) {
-			const unsigned = append(balanceRegion, $('.onboarding-a-credits-unsigned'));
-			const unsignedCopy = append(unsigned, $('p.onboarding-a-credits-unsigned-copy'));
+			const unsignedCopy = append(balanceRegion, $('p.onboarding-a-credits-unsigned-copy'));
 			unsignedCopy.textContent = localize(
-				'onboarding.credits.unsigned',
-				"Sign in to see your credit balance and buy a pack when you are ready for AI help. Everything else stays free either way."
+				'onboarding.credits.unsignedNoCta',
+				"Buying a pack below will ask you to sign in first — everything else here stays free either way."
 			);
-			const signInBtn = this._registerStepFocusable(append(unsigned, $<HTMLButtonElement>('button.onboarding-a-btn.onboarding-a-btn-secondary')));
-			signInBtn.type = 'button';
-			signInBtn.textContent = localize('onboarding.credits.signIn', "Sign In");
-			this.stepDisposables.add(addDisposableListener(signInBtn, EventType.CLICK, () => {
-				this._logAction('creditsSignIn');
-				void this._handleSignIn(OnboardingSignInOrigin.CreditsStep);
-			}));
 			return;
 		}
 
 		const status = append(balanceRegion, $('p.onboarding-a-credits-balance-status'));
 		status.textContent = localize('onboarding.credits.checking', "Checking credit balance…");
-
-		const actions = append(balanceRegion, $('.onboarding-a-credits-balance-actions'));
-		const addCreditsBtn = this._registerStepFocusable(append(actions, $<HTMLButtonElement>('button.onboarding-a-btn.onboarding-a-btn-secondary')));
-		addCreditsBtn.type = 'button';
-		addCreditsBtn.textContent = localize('onboarding.credits.addCredits', "Add Credits");
-		this.stepDisposables.add(addDisposableListener(addCreditsBtn, EventType.CLICK, () => {
-			this._logAction('openCheckout');
-			void this.commandService.executeCommand('safeappeals.cloud.openCheckout').catch(() => {
-				this.notificationService.notify({
-					severity: Severity.Info,
-					message: localize('onboarding.credits.checkoutUnavailable', "Could not open checkout right now. Use View Pricing to see packs in your browser."),
-				});
-			});
-		}));
 
 		let cancelled = false;
 		this.stepDisposables.add({ dispose: () => { cancelled = true; } });
@@ -2186,7 +2233,7 @@ export class OnboardingVariationA extends Disposable implements IOnboardingServi
 				}
 				status.textContent = localize(
 					'onboarding.credits.balanceUnavailable',
-					"Your balance could not be loaded right now. You can still explore the sample case for free, or buy a pack from View Pricing."
+					"Your balance could not be loaded right now. You can still explore the sample case for free, or buy a pack below."
 				);
 			}, () => {
 				if (cancelled || !status.isConnected) {
@@ -2194,9 +2241,137 @@ export class OnboardingVariationA extends Disposable implements IOnboardingServi
 				}
 				status.textContent = localize(
 					'onboarding.credits.balanceUnavailable',
-					"Your balance could not be loaded right now. You can still explore the sample case for free, or buy a pack from View Pricing."
+					"Your balance could not be loaded right now. You can still explore the sample case for free, or buy a pack below."
 				);
 			});
+	}
+
+	/**
+	 * Loads and renders the live credit pack list from the cloud packs API
+	 * (`safeappeals.cloud.getCreditPacks`) — never hardcoded prices. Guards
+	 * against a step change mid-flight the same way the balance fetch does.
+	 */
+	private _renderCreditsPacksRegion(host: HTMLElement): void {
+		clearNode(host);
+
+		const loading = append(host, $('p.onboarding-a-credits-packs-status'));
+		loading.textContent = localize('onboarding.credits.packs.loading', "Loading credit packs…");
+
+		let cancelled = false;
+		this.stepDisposables.add({ dispose: () => { cancelled = true; } });
+
+		void this.commandService.executeCommand<OnboardingCreditPack[]>('safeappeals.cloud.getCreditPacks')
+			.then(packs => {
+				if (cancelled || !host.isConnected) {
+					return;
+				}
+				if (!Array.isArray(packs) || packs.length === 0) {
+					this._renderCreditsPacksFallback(host);
+					return;
+				}
+				this._renderCreditsPacksList(host, packs);
+			}, () => {
+				if (cancelled || !host.isConnected) {
+					return;
+				}
+				this._renderCreditsPacksFallback(host);
+			});
+	}
+
+	/**
+	 * Renders compact pack rows (name + popular badge, credits, price,
+	 * description, Buy button) — not heavy marketing cards.
+	 */
+	private _renderCreditsPacksList(host: HTMLElement, packs: readonly OnboardingCreditPack[]): void {
+		clearNode(host);
+
+		for (const pack of packs) {
+			const row = append(host, $('.onboarding-a-credits-pack'));
+			if (pack.popular) {
+				row.classList.add('onboarding-a-credits-pack-popular');
+			}
+
+			const meta = append(row, $('.onboarding-a-credits-pack-meta'));
+			const nameRow = append(meta, $('.onboarding-a-credits-pack-name'));
+			const nameEl = append(nameRow, $('span.onboarding-a-credits-pack-name-text'));
+			nameEl.textContent = pack.name;
+			if (pack.popular) {
+				const badge = append(nameRow, $('span.onboarding-a-credits-pack-badge'));
+				badge.textContent = localize('onboarding.credits.packs.popular', "Popular");
+			}
+
+			const details = append(meta, $('span.onboarding-a-credits-pack-details'));
+			details.textContent = localize(
+				'onboarding.credits.packs.detail',
+				"{0} — {1}",
+				this._formatCreditsAmount(pack.credits),
+				this._formatPackPrice(pack.price, pack.currency)
+			);
+
+			const desc = append(meta, $('span.onboarding-a-credits-pack-desc'));
+			desc.textContent = pack.description;
+
+			const buyBtnClass = pack.popular ? 'onboarding-a-btn-primary' : 'onboarding-a-btn-secondary';
+			const buyBtn = this._registerStepFocusable(append(row, $<HTMLButtonElement>(`button.onboarding-a-btn.${buyBtnClass}.onboarding-a-credits-pack-buy`)));
+			buyBtn.type = 'button';
+			buyBtn.textContent = localize('onboarding.credits.packs.buy', "Buy");
+			buyBtn.setAttribute('aria-label', localize('onboarding.credits.packs.buyAria', "Buy {0}", pack.name));
+			this.stepDisposables.add(addDisposableListener(buyBtn, EventType.CLICK, () => {
+				this._openCreditsCheckout(pack.id);
+			}));
+		}
+	}
+
+	/**
+	 * Shown when the live pack list fails to load or comes back empty — keeps
+	 * a purchase path available via the quick-pick fallback in `openCheckout`.
+	 */
+	private _renderCreditsPacksFallback(host: HTMLElement): void {
+		clearNode(host);
+
+		const fallback = append(host, $('p.onboarding-a-credits-packs-status'));
+		fallback.textContent = localize(
+			'onboarding.credits.packs.unavailable',
+			"Credit packs could not be loaded right now."
+		);
+
+		const chooseBtn = this._registerStepFocusable(append(host, $<HTMLButtonElement>('button.onboarding-a-btn.onboarding-a-btn-secondary')));
+		chooseBtn.type = 'button';
+		chooseBtn.textContent = localize('onboarding.credits.packs.choosePack', "Choose a Pack");
+		this.stepDisposables.add(addDisposableListener(chooseBtn, EventType.CLICK, () => {
+			this._openCreditsCheckout();
+		}));
+	}
+
+	/**
+	 * Opens Stripe checkout for an optional pack id via the cloud extension
+	 * command. `openCheckout` handles sign-in (createIfNone) itself when
+	 * needed — this is a purchase path, not a Sign In CTA.
+	 */
+	private _openCreditsCheckout(packId?: string): void {
+		this._logAction('openCheckout', undefined, packId);
+		void this.commandService.executeCommand('safeappeals.cloud.openCheckout', packId).catch(() => {
+			this.notificationService.notify({
+				severity: Severity.Info,
+				message: localize('onboarding.credits.checkoutUnavailable', "Could not open checkout right now. Use View Pricing to see packs in your browser."),
+			});
+		});
+	}
+
+	/**
+	 * Formats a credit amount with locale thousands separators, e.g. "10,000 credits".
+	 */
+	private _formatCreditsAmount(n: number): string {
+		return localize('onboarding.credits.packs.creditsAmount', "{0} credits", n.toLocaleString());
+	}
+
+	/**
+	 * Formats a pack price as `$X.XX`, appending the currency code when it is
+	 * not USD (the common case is left unadorned).
+	 */
+	private _formatPackPrice(price: number, currency: string): string {
+		const amount = `$${price.toFixed(2)}`;
+		return currency.toUpperCase() === 'USD' ? amount : `${amount} ${currency}`;
 	}
 
 	/**
@@ -2226,19 +2401,26 @@ export class OnboardingVariationA extends Disposable implements IOnboardingServi
 				"Try It on a Sample File — No Credits Needed"
 			);
 		}
-		if (/\badvocate\b/.test(role)) {
+		if (/\b(advocate|appeals representative|union representative)\b/.test(role)) {
 			return localize(
 				'onboarding.credits.firstHeading.advocate',
 				"Try It on a Sample Case — No Credits Needed"
 			);
 		}
-		if (/\b(worker|claimant|representing myself|self-represented|self represented)\b/.test(role)) {
+		// Prefer "injured worker" over bare "worker" so Office Worker stays neutral.
+		if (/\b(injured worker|claimant|representing myself|self-represented|self represented)\b/.test(role)) {
 			return localize(
 				'onboarding.credits.firstHeading.claimant',
 				"Explore a Sample Appeal — No Credits Needed"
 			);
 		}
-		// Unrecognized free-text role: stay neutral rather than echoing arbitrary input.
+		if (/\b(student|teacher|researcher)\b/.test(role)) {
+			return localize(
+				'onboarding.credits.firstHeading.education',
+				"Try It on a Sample Project — No Credits Needed"
+			);
+		}
+		// Office Worker, Software Developer, and unrecognized roles: stay neutral.
 		return localize(
 			'onboarding.credits.firstHeading.neutral',
 			"Try the Sample Case — No Credits Needed"
@@ -2332,22 +2514,6 @@ export class OnboardingVariationA extends Disposable implements IOnboardingServi
 	 */
 	private _syncReducedMotionClass(): void {
 		this.overlay?.classList.toggle('reduce-motion', this.accessibilityService.isMotionReduced());
-	}
-
-	/**
-	 * Removes the credits-step footer sign-in nudge and drops it from the focus trap.
-	 */
-	private _clearFooterSignInBtn(): void {
-		if (!this._footerSignInBtn) {
-			return;
-		}
-		const idx = this.footerFocusableElements.indexOf(this._footerSignInBtn);
-		if (idx !== -1) {
-			this.footerFocusableElements.splice(idx, 1);
-		}
-		this._footerSignInDisposable.clear();
-		this._footerSignInBtn.remove();
-		this._footerSignInBtn = undefined;
 	}
 
 	/**
@@ -2489,7 +2655,6 @@ export class OnboardingVariationA extends Disposable implements IOnboardingServi
 		this.nextButton = undefined;
 		this.closeButton = undefined;
 		this.footerLeft = undefined;
-		this._clearFooterSignInBtn();
 		this._clearAgentIntroAckHint();
 		this.footerFocusableElements.length = 0;
 		this.stepFocusableElements.length = 0;

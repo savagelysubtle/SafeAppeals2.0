@@ -6,6 +6,7 @@
 	"command.category": "SafeAppeals Cloud",
 	"command.getBalance.title": "Show Credit Balance",
 	"command.openCheckout.title": "Add Credits",
+	"command.getCreditPacks.title": "Get Credit Packs",
 	"command.pasteAuthCode.title": "Paste Auth Code",
 	"command.signOut.title": "Sign Out",
 	"config.title": "SafeAppeals Cloud",

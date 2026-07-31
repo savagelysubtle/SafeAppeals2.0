@@ -45,8 +45,8 @@ todos:
     content: "T13 (phase B): cloud LLM provider over POST /llm/chat, zero-credit error UX with checkout link; SSE strongly preferred. DONE Jul 31 — Ask-mode only (toolCalling:false) until server tools; vendor safeappeals-cloud in safeappeals-authentication."
     status: completed
   - id: onb-t14-product-swap
-    content: "T14 (phase B, BREAKING): product.json — remove GitHub.copilot-chat built-in, trim defaultChatAgent, suppress chatSetupRunner; regression pass on chatEntitlementService sentiment.hidden gate"
-    status: pending
+    content: "T14 (phase B, BREAKING): UNBLOCKING SLICE DONE Jul 31 — hasByokModels counts safeappeals-cloud vendor (unblocks model picker without GitHub), Ask mode restored when no extension ask, GitHub.copilot-chat removed from builtInExtensionsEnabledWithAutoUpdates. DEFERRED to rung 11: defaultChatAgent value trim/rebrand (still required by vendored runtime). Uncommitted pending Steve smoke."
+    status: completed
 isProject: false
 ---
 
@@ -234,9 +234,8 @@ Defers: everything about AI.
   `onDidRegisterAuthenticationProvider` if the extension host is still
   starting (mirror chat-setup's pattern), then shows the signed-in
   confirmation with the account email.
-- Last-step footer nudge (`onboarding.sessions.signInNudge`, currently "Sign in
-  to unlock AI features", onboardingVariationA.ts line 483) → **"Sign In to
-  Sync Your Profile"**.
+- Last-step footer sign-in nudge: **removed**. Sign-in already lives on step 1;
+  the Credits step unsigned balance region is copy-only (no Sign In button).
 
 ### Step 2 — Who You Are (kept, light rewrite)
 
@@ -347,6 +346,19 @@ purchase (link out only).
   NOT achievable with zero credits. Sample case + scripted spotlight tour +
   static approval mock is the honest substitute; the first real agent run is
   the user's first credit spend, and step 4 says so plainly.
+- **Update (live purchase surface):** step 4 no longer just links out to
+  pricing — it lists every credit pack live via the new
+  `safeappeals.cloud.getCreditPacks` command (thin wrapper over
+  `provider.getCreditPacks()` / `GET /credits/packs`) and renders a compact
+  row per pack with a Buy button. Buy calls `_openCreditsCheckout(pack.id)`,
+  which executes `safeappeals.cloud.openCheckout(packId)`; the command now
+  accepts an optional pack id and skips its quick pick when it matches a
+  fetched pack, falling through to the quick pick otherwise. No prices are
+  hardcoded in the wizard — everything (name, credits, price, currency,
+  description, `popular`) comes from the live API response. The balance
+  region drops the standalone "Add Credits" button (the packs list is the
+  purchase UI); the unsigned state is one quiet sentence noting that buying a
+  pack will prompt sign-in, with no Sign In button on this step.
 
 ## 3. Credits / trust / ethics disclosure
 
@@ -1219,10 +1231,10 @@ a duplicate generic message. Core only logs telemetry now — so if the extensio
 stops notifying, the failure goes silent and core must take the toast back.
 
 **Jul 30 2026 — sign-in is async, so every continuation is guarded.**
-`_handleSignIn` can now be started from three places (sign-in step, footer
-nudge, credits step) and awaits an unbounded user round-trip through a browser.
-The user can change step or dismiss the wizard while it is pending, so the
-handler captures `origin`, a `_showGeneration`, and the step index at call time
+`_handleSignIn` is started only from step 1 and awaits an unbounded user
+round-trip through a browser. The user can change step or dismiss the wizard
+while it is pending, so the handler captures a `_showGeneration` and the step
+index at call time
 and re-checks them (`isSameShowing` / `isContinuationValid`) after *every*
 await before touching UI. The first cut called `_nextStep()` unconditionally on
 success, which advanced whatever step the user had since navigated to. **New
@@ -1274,3 +1286,14 @@ server tools. `extensions/safeappeals-authentication` registers vendor
 forwards `tools`/`tool_calls`). SSE `POST /llm/chat` + `GET /llm/models`; 402 →
 `safeappeals.cloud.openCheckout` (never Copilot sign-in). Server follow-ups:
 stream credit deduction, native tools. **Next: T14.**
+
+**Jul 31 2026 — T14 unblocking slice (smoke pending).** Steve could not test T13
+because the model picker was gated on Copilot entitlement ("sign in to use
+Copilot") and Ask was hidden by upstream `chat.showOldAskMode`. T14 ships the
+unblock: `HasByokModelsContribution` treats registered vendor `safeappeals-cloud`
+as `hasByokModels`; mode picker shows built-in Ask when no extension Ask exists;
+`GitHub.copilot-chat` removed from `builtInExtensionsEnabledWithAutoUpdates`.
+**Deviation from plan text:** `defaultChatAgent` left byte-identical — every field
+is required-typed and still consumed by the vendored copilot runtime; value-level
+GitHub→SafeAppeals rebrand is rung 11, not this unblock. Cold-start flicker fix:
+do not persist false `hasByokModels` until extensions settle.

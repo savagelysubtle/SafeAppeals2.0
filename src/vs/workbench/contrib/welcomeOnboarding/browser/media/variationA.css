@@ -956,29 +956,6 @@
 	line-height: 1.5;
 }
 
-/* Sign-in nudge */
-.onboarding-a-signin-nudge-btn {
-	padding: 4px 12px;
-	border-radius: 6px;
-	border: 1px solid var(--vscode-widget-border, rgba(255, 255, 255, 0.1));
-	background: var(--vscode-button-secondaryBackground);
-	color: var(--vscode-button-secondaryForeground);
-	font-size: 12px;
-	font-family: inherit;
-	cursor: pointer;
-	white-space: nowrap;
-	transition: background 0.12s ease;
-}
-
-.onboarding-a-signin-nudge-btn:hover {
-	background: var(--vscode-button-secondaryHoverBackground);
-}
-
-.onboarding-a-signin-nudge-btn:focus-visible {
-	outline: 2px solid var(--vscode-focusBorder);
-	outline-offset: -2px;
-}
-
 .onboarding-a-doc-link {
 	font-size: 12px;
 	color: var(--vscode-textLink-foreground, #3794ff);
@@ -1244,6 +1221,7 @@
 	display: flex;
 	flex-wrap: wrap;
 	gap: 10px;
+	width: 100%;
 }
 
 .onboarding-a-role-pill {
@@ -1317,14 +1295,6 @@
 	color: var(--vscode-foreground);
 }
 
-.onboarding-a-credits-unsigned {
-	display: flex;
-	flex-direction: column;
-	align-items: flex-start;
-	gap: 10px;
-}
-
-.onboarding-a-credits-balance-actions,
 .onboarding-a-credits-actions {
 	display: flex;
 	flex-wrap: wrap;
@@ -1337,6 +1307,84 @@
 	flex-wrap: wrap;
 	align-items: center;
 	gap: 16px;
+}
+
+/* Credit packs (live from the cloud packs API — no hardcoded prices) */
+.onboarding-a-credits-packs-heading {
+	margin: 0;
+	font-size: 13px;
+	font-weight: 600;
+	color: var(--vscode-foreground);
+}
+
+.onboarding-a-credits-packs {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+}
+
+.onboarding-a-credits-packs-status {
+	margin: 0;
+	font-size: 12px;
+	line-height: 1.5;
+	color: var(--vscode-descriptionForeground);
+}
+
+.onboarding-a-credits-pack {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	padding: 10px 12px;
+	border-radius: 6px;
+	border: 1px solid var(--vscode-widget-border, rgba(127, 127, 127, 0.2));
+	background: var(--vscode-textBlockQuote-background, rgba(127, 127, 127, 0.05));
+}
+
+.onboarding-a-credits-pack-popular {
+	border-color: var(--vscode-focusBorder);
+}
+
+.onboarding-a-credits-pack-meta {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	min-width: 0;
+}
+
+.onboarding-a-credits-pack-name {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	font-size: 13px;
+	font-weight: 600;
+	color: var(--vscode-editor-foreground);
+}
+
+.onboarding-a-credits-pack-badge {
+	font-size: 10px;
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.3px;
+	padding: 1px 6px;
+	border-radius: 999px;
+	color: var(--vscode-button-foreground);
+	background: var(--vscode-focusBorder);
+}
+
+.onboarding-a-credits-pack-details {
+	font-size: 12px;
+	color: var(--vscode-descriptionForeground);
+}
+
+.onboarding-a-credits-pack-desc {
+	font-size: 12px;
+	line-height: 1.4;
+	color: var(--vscode-descriptionForeground);
+}
+
+.onboarding-a-credits-pack-buy {
+	flex-shrink: 0;
 }
 
 .onboarding-a-credits-first-action {

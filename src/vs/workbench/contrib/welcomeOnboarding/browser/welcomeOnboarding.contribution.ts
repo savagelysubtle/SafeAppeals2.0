@@ -49,7 +49,19 @@ Registry.as<IConfigurationRegistry>(ConfigurationExtensions.Configuration).regis
 			type: 'string',
 			default: '',
 			scope: ConfigurationScope.MACHINE,
-			description: localize('safeappealsProfile.role', "Your role, e.g. lawyer, paralegal, claimant advocate, self-represented worker."),
+			description: localize('safeappealsProfile.role', "Your role, e.g. Lawyer, Paralegal, Advocate, Appeals Representative, Union Representative, Injured Worker, Representing Myself, Student, Teacher, Researcher, Office Worker, Software Developer."),
+		},
+		'safeappeals.profile.focusArea': {
+			type: 'string',
+			default: '',
+			scope: ConfigurationScope.MACHINE,
+			description: localize('safeappealsProfile.focusArea', "Your main focus — field of study, subject taught, research field, what you work on, or tech stack, depending on role."),
+		},
+		'safeappeals.profile.citationStyle': {
+			type: 'string',
+			default: '',
+			scope: ConfigurationScope.MACHINE,
+			description: localize('safeappealsProfile.citationStyle', "Preferred citation style for research and study output, e.g. APA, MLA, McGill Guide."),
 		},
 		'safeappeals.profile.practiceArea': {
 			type: 'string',

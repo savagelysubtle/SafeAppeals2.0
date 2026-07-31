@@ -12,6 +12,10 @@ export interface UserProfile {
 	organization: string;
 	role: string;
 	practiceArea: string;
+	/** Field of study / subject / research field / work focus / tech stack. */
+	focusArea: string;
+	/** Preferred citation style (education / research), e.g. APA, McGill Guide. */
+	citationStyle: string;
 	country: string;
 	stateProvince: string;
 	city: string;
