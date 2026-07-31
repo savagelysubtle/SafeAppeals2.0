@@ -16,7 +16,7 @@ todos:
     status: completed
   - id: onb-t4-profile-step
     content: "T4: profile step — role pills (Lawyer/Paralegal/Advocate/ Representing Myself), standing unverified-citation instruction in profile rule file"
-    status: in_progress
+    status: completed
   - id: onb-t5-agent-step
     content: "T5: new 'Meet Your AI Assistant' step — 3 cards, data-flow disclosure panel, inoculation block with gating checkbox, approval-mode choice writing the FULL default-shaped chat.tools.edits.autoApprove object with only '**/*' varied (see §4.1a)"
     status: completed
@@ -42,8 +42,8 @@ todos:
     content: "T12: bundled fake sample case + openSampleCase command + spotlight-tour scenario (verify workbench-layer registration first)"
     status: completed
   - id: onb-t13-cloud-llm
-    content: "T13 (phase B): cloud LLM provider over POST /llm/chat, zero-credit error UX with checkout link; SSE strongly preferred"
-    status: pending
+    content: "T13 (phase B): cloud LLM provider over POST /llm/chat, zero-credit error UX with checkout link; SSE strongly preferred. DONE Jul 31 — Ask-mode only (toolCalling:false) until server tools; vendor safeappeals-cloud in safeappeals-authentication."
+    status: completed
   - id: onb-t14-product-swap
     content: "T14 (phase B, BREAKING): product.json — remove GitHub.copilot-chat built-in, trim defaultChatAgent, suppress chatSetupRunner; regression pass on chatEntitlementService sentiment.hidden gate"
     status: pending
@@ -1147,11 +1147,10 @@ preserve:
 - `safeappeals.cloud.apiUrl` is `"scope": "machine"`, so Settings Sync cannot upload a redirected endpoint.
 - `product.json` `trustedExtensionAuthAccess` grants silent session access to `safeappeals.safeappeals-case`, `-email`, and `-calendar`; the identifiers match each manifest's `publisher`/`name`, so the grant actually applies.
 
-Three open items carried forward:
+Open items carried forward (sign-in gap closed — see Jul 30 late deviation):
 
-1. **No live sign-in round trip has ever run.** Browser → URI handler → code exchange → session persisted is unexercised; compile and lint gates cannot cover it. This is the single largest verification gap in Phase A and needs a real Electron run against the deployed API before sign-in can be called done.
-2. **Calendar scopes are not requested at sign-in** (`include_calendar_scopes` omitted) even though `safeappeals-calendar` holds a trusted-access grant, so that extension would receive a session lacking Google Calendar scopes. Recommended resolution is **incremental consent** — have the calendar feature request the added scopes when it first needs them — rather than widening the consent screen at first sign-in for users who never open the calendar. Needs an owner in the calendar workstream.
-3. **The paste fallback skips the state check for a bare code.** `parsePastedAuthInput` returns `state: undefined` for a bare paste, and the guard is `if (state && state !== pending.state)`, so no CSRF state is enforced on that path. This is **accepted, not overlooked**: PKCE binds the code to the in-memory verifier, so a code an attacker obtained against their own `code_challenge` cannot be redeemed by this client. Do not "fix" it by requiring state on a bare paste — that removes the fallback's reason to exist. Do preserve the PKCE binding, which is what makes it safe.
+1. **Calendar scopes are not requested at sign-in** (`include_calendar_scopes` omitted) even though `safeappeals-calendar` holds a trusted-access grant, so that extension would receive a session lacking Google Calendar scopes. Recommended resolution is **incremental consent** — have the calendar feature request the added scopes when it first needs them — rather than widening the consent screen at first sign-in for users who never open the calendar. Needs an owner in the calendar workstream.
+2. **The paste fallback skips the state check for a bare code.** `parsePastedAuthInput` returns `state: undefined` for a bare paste, and the guard is `if (state && state !== pending.state)`, so no CSRF state is enforced on that path. This is **accepted, not overlooked**: PKCE binds the code to the in-memory verifier, so a code an attacker obtained against their own `code_challenge` cannot be redeemed by this client. Do not "fix" it by requiring state on a bare paste — that removes the fallback's reason to exist. Do preserve the PKCE binding, which is what makes it safe.
 
 **Jul 30 2026 — status audit corrected two wrong entries.** A code audit at the
 start of this session found the previous status note ("REMAINING = T3, T4, T5,
@@ -1260,3 +1259,18 @@ product. The watermark now renders the `dt` label alone and skips the `dd` /
 `New Case` and `Take the Tour` ship without keybindings, so any future tip,
 walkthrough, or hover that pairs a label with a keybinding chip must handle the
 unbound case the same way.
+
+**Jul 30 2026 (late) — Phase A ship gate closed; frontmatter synced.** User
+confirmed SafeAppeals Cloud sign-in and the welcome/onboarding flow are working
+end-to-end. The earlier T1 open item "no live sign-in round trip has ever run"
+is closed. Frontmatter: `onb-t4-profile-step` flipped `in_progress` →
+`completed` (code had already landed the Jul 30 expanded scope; only the status
+field was stale). Phase A (T0–T12) is complete. **Next: Phase B — T13 then T14.**
+
+**Jul 31 2026 — T13 landed (Ask-mode).** User chose ship-now over waiting for
+server tools. `extensions/safeappeals-authentication` registers vendor
+`safeappeals-cloud` via `vscode.lm.registerLanguageModelChatProvider` with
+`capabilities.toolCalling: false` (agent mode stays on Copilot until void-cloud
+forwards `tools`/`tool_calls`). SSE `POST /llm/chat` + `GET /llm/models`; 402 →
+`safeappeals.cloud.openCheckout` (never Copilot sign-in). Server follow-ups:
+stream credit deduction, native tools. **Next: T14.**

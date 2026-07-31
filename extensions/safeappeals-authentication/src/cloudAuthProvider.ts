@@ -332,6 +332,14 @@ export class CloudAuthProvider implements vscode.AuthenticationProvider, vscode.
 	}
 
 	/**
+	 * Narrow API client access for the language-model provider.
+	 * Callers must not log tokens or persist request bodies to disk.
+	 */
+	getApiClient(): CloudApiClient {
+		return this._api;
+	}
+
+	/**
 	 * True when the OS keyring is unavailable and the session is memory-only.
 	 */
 	isSessionMemoryOnly(): boolean {

@@ -52,41 +52,24 @@ todos:
       package.json. Detail: §M0 below."
     status: completed
   - id: m1-onboarding-phase-a
-    content: "M1 ACTIVE: onboarding redesign Phase 0 + Phase A (T0 void-cloud
-      PKCE/security fixes → T1 safeappeals-authentication extension +
-      safeappeals-cloud provider; T2–T12 wizard rebuild, approval-default
-      flip, walkthrough→checklist, sample case + tour). Plan:
+    content: "M1 DONE (Jul 30, user-verified): onboarding redesign Phase 0 + Phase A
+      (T0–T12). Auth + first-run wizard exercised end-to-end — SafeAppeals
+      Cloud sign-in and welcome/onboarding working on desktop (and web
+      reload recovery per 91da6dff). Plan:
       onboarding_redesign_newcomer.plan.md.
-      STATUS Jul 30 end-of-session (committed): DONE = T0, T1, T2, T3, T4,
-      T5, T6, T7, T8, T9, T10, T11, T12 — the whole of Phase A, all
-      reviewed, including the five deferred T5 review items folded into T9.
-      What remains before Phase A can ship is NOT a task in this list:
-      sign-in has never been exercised end-to-end against a live API.
-      Gates green at commit time: typecheck-client,
-      compile-extensions (0 errors), valid-layers-check, and all 9
-      onboarding unit tests.
-      Two things the next session must know: (a) run the unit tests as
+      Gates at commit time: typecheck-client, compile-extensions (0 errors),
+      valid-layers-check, and all 9 onboarding unit tests. Test-runner note
+      for next session: run as
       `env -u ELECTRON_RUN_AS_NODE VSCODE_SKIP_PRELAUNCH=1 ./scripts/test.sh
-      --grep onboarding` AND outside the agent sandbox. The runner needs the
-      real Electron binary (an inherited ELECTRON_RUN_AS_NODE makes it start
-      as plain Node and die on `app.setPath`) and needs the X socket, which
-      the sandbox blocks — the resulting "Missing X server or $DISPLAY"
-      segfault looks like a missing display but the machine does have one at
-      :0. Running bare mocha instead silently skips the browser-layer suites
-      and undercounts 9 as 6; if you do need it, `--ui tdd` is required.
-      (b) T9 edits browser/onboardingVariationA.ts, so nothing else may edit
-      that file concurrently — earlier concurrent edits caused
-      noUnusedLocals churn.
-      Phase A must not ship partially: sign-in has never been exercised
-      end-to-end against a live API, which is the milestone's biggest gap."
-    status: in_progress
+      --grep onboarding` outside the agent sandbox (needs real Electron + X)."
+    status: completed
   - id: m2-onboarding-phase-b
-    content: "M2 (deps: M1): onboarding Phase B — T13 cloud LLM provider over
-      POST /llm/chat (carved from rung 13) then T14 BREAKING product.json
-      Copilot removal (carved from rung 11). After this the app runs on
-      SafeAppeals Cloud inference. Plan: onboarding_redesign_newcomer.plan.md
-      §9 Phase B."
-    status: pending
+    content: "M2 ACTIVE (deps: M1): onboarding Phase B — T13 DONE Jul 31 (Ask-mode
+      cloud LM provider in safeappeals-authentication; toolCalling:false until
+      server tools). REMAINING = T14 BREAKING product.json Copilot removal
+      (carved from rung 11). After T14 the app's default inference path is
+      SafeAppeals Cloud. Plan: onboarding_redesign_newcomer.plan.md §9 Phase B."
+    status: in_progress
   - id: r7-timeline
     content: "Rung 7 slice 2 (deps: M1 ships — same-extension collision with
       T10/T12, deferred Jul 29): timeline + deadlines in safeappeals-case —
@@ -447,21 +430,16 @@ parts:
    not contributed, so it is unreachable. One-line fix. Gate:
    `bun run gulp compile-extensions` clean.
 
-### M1 — Onboarding redesign, Phase 0 + Phase A — ACTIVE
+### M1 — Onboarding redesign, Phase 0 + Phase A — DONE (Jul 30)
 
-The current workstream; runs ahead of the ladder (user, Jul 29) because the
-inherited wizard speaks developer to a legal audience and promises sign-in
-"unlocks AI features" (false under the zero-credit model) — a
-product-credibility problem that outranks ladder order. T0 (void-cloud repo:
-PKCE end-to-end, redirect-URI allow-list, state, disable implicit flow,
-close the unauthenticated callback that leaks Google provider tokens) is a
-standalone security fix and a **hard blocker** for T1
-(`extensions/safeappeals-authentication` + `safeappeals-cloud` provider,
-SecretStorage, build wiring). T2–T12 rebuild the wizard as 4 steps, flip the
-`chat.tools.edits.autoApprove` default, convert the case walkthrough to a
-checklist, and add the bundled sample case + spotlight tour. Carves pieces
-out of rungs 6.5/7/11/13 — exact split table: merge plan "Status (Jul 29)".
+Shipped ahead of the ladder (user, Jul 29) because the inherited wizard spoke
+developer to a legal audience and promised sign-in "unlocks AI features"
+(false under the zero-credit model). T0–T12 complete; user-verified
+SafeAppeals Cloud sign-in and welcome/onboarding working (`91da6dff` + live
+run). Carved pieces out of rungs 6.5/7/11/13 — exact split table: merge plan
+"Status (Jul 29)".
 → **Plan: `onboarding_redesign_newcomer.plan.md`** (T0–T12, §9 Phase 0/A).
+**Next workstream: M2** (T13 → T14).
 
 ### M2 — Onboarding Phase B (deps: M1)
 
@@ -761,3 +739,8 @@ four move from "needs confirmation" to settled:
 Consequence for scope accounting: ~5,000 lines of `void-reference/` leave the
 rebuild set. Anyone re-estimating remaining work should use the corrected
 figures in "Not built anywhere" above, not the older merge-plan inventory.
+
+**Jul 30 2026 (late) — M1 closed.** User confirmed SafeAppeals Cloud sign-in
+and the welcome/onboarding wizard are working. Frontmatter `m1-onboarding-phase-a`
+flipped `in_progress` → `completed`. The earlier "sign-in never exercised"
+blocker is obsolete. **Next workstream: M2** (onboarding T13 → T14).

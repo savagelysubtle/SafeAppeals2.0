@@ -6,6 +6,8 @@
 import * as vscode from 'vscode';
 import { CloudAuthProvider, AUTH_PROVIDER_ID } from './cloudAuthProvider';
 import type { CreditPack } from './api';
+import { CloudChatProvider } from './llm/cloudChatProvider';
+import { isAllowedExternalHttpsUrl } from './llm/externalUrl';
 
 let output: vscode.OutputChannel;
 let provider: CloudAuthProvider;
@@ -20,6 +22,12 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 	provider = new CloudAuthProvider(context, output);
 	context.subscriptions.push(provider);
 	await provider.initialize();
+
+	const chatProvider = new CloudChatProvider(provider, provider.getApiClient(), output);
+	context.subscriptions.push(
+		chatProvider,
+		vscode.lm.registerLanguageModelChatProvider('safeappeals-cloud', chatProvider),
+	);
 
 	context.subscriptions.push(
 		vscode.commands.registerCommand('safeappeals.cloud.getBalance', async () => {
@@ -38,6 +46,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 		vscode.commands.registerCommand('safeappeals.cloud.openCheckout', async () => {
 			try {
 				if (!provider.isSignedIn()) {
+					// Intentional command path — may prompt for SafeAppeals Cloud sign-in.
 					await vscode.authentication.getSession(AUTH_PROVIDER_ID, [], { createIfNone: true });
 				}
 				const packs = await provider.getCreditPacks();
@@ -57,6 +66,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 					return;
 				}
 				const checkoutUrl = await provider.createCheckoutSession(picked.packId);
+				if (!isAllowedExternalHttpsUrl(checkoutUrl)) {
+					throw new Error(vscode.l10n.t('Checkout URL from server failed safety validation.'));
+				}
 				await vscode.env.openExternal(vscode.Uri.parse(checkoutUrl));
 			} catch (error) {
 				const message = error instanceof Error ? error.message : String(error);

@@ -2,6 +2,7 @@
 	"displayName": "SafeAppeals Cloud Authentication",
 	"description": "Sign in to SafeAppeals Cloud for profile sync and AI credits",
 	"auth.safeappealsCloud.label": "SafeAppeals Cloud",
+	"llm.provider.displayName": "SafeAppeals Cloud",
 	"command.category": "SafeAppeals Cloud",
 	"command.getBalance.title": "Show Credit Balance",
 	"command.openCheckout.title": "Add Credits",

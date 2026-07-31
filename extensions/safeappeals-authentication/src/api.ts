@@ -4,6 +4,13 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as vscode from 'vscode';
+import {
+	InsufficientCreditsError,
+	isInsufficientCreditsPayload,
+	parseInsufficientCreditsError,
+} from './llm/insufficientCredits';
+import { extractJsonChatContent, OpenAiSseParser } from './llm/sse';
+import type { CloudChatMessage } from './llm/messageMapping';
 
 /** Default production SafeAppeals Cloud API origin. */
 export const DEFAULT_API_URL = 'https://api.safeappeals.com';
@@ -14,13 +21,40 @@ export const DEFAULT_DASHBOARD_URL = 'https://safeappeals.com';
 /** RFC 8252 loopback redirect URI — single source in oauthLoopback.ts. */
 export { LOOPBACK_REDIRECT_URI } from './oauthLoopback';
 
+export { InsufficientCreditsError } from './llm/insufficientCredits';
+
 /** Default allow-list for automatic web OAuth callbacks via asExternalUri. */
 export const DEFAULT_WEB_CALLBACK_ORIGINS = ['http://localhost:8080'];
 
 const CLIENT_VERSION = '2.0.0';
 const DEFAULT_REQUEST_TIMEOUT_MS = 60_000;
+/** Longer idle window for streaming chat completions (server LiteLLM timeout is 120s). */
+const STREAM_IDLE_TIMEOUT_MS = 180_000;
 const MAX_API_RETRIES = 3;
 const INITIAL_RETRY_DELAY_MS = 1_000;
+
+/**
+ * Model descriptor from GET /llm/models.
+ */
+export interface LlmModelInfo {
+	readonly id: string;
+	readonly name: string;
+	readonly provider: string;
+	readonly contextWindow: number;
+	readonly tier: string;
+	readonly inputCost: number;
+	readonly outputCost: number;
+}
+
+/**
+ * Request body for POST /llm/chat.
+ */
+export interface LlmChatRequestBody {
+	readonly model: string;
+	readonly messages: readonly CloudChatMessage[];
+	readonly max_tokens?: number;
+	readonly temperature?: number;
+}
 
 /**
  * Cloud user profile returned by /auth/callback and /auth/me.
@@ -219,6 +253,175 @@ export class CloudApiClient {
 	}
 
 	/**
+	 * Lists models available for cloud chat (GET /llm/models).
+	 */
+	async listModels(): Promise<LlmModelInfo[]> {
+		const response = await this.request<{ models: LlmModelInfo[] }>('/llm/models');
+		return Array.isArray(response.models) ? response.models : [];
+	}
+
+	/**
+	 * Streams a chat completion (POST /llm/chat with stream:true).
+	 *
+	 * 402 / insufficient credits is always thrown as {@link InsufficientCreditsError}
+	 * before any 401 refresh retry — including mid-stream SSE error events.
+	 * A partial stream is never retried after failure.
+	 */
+	async streamChat(
+		body: LlmChatRequestBody,
+		onDelta: (text: string) => void,
+		abortSignal?: AbortSignal,
+	): Promise<void> {
+		return this.streamChatOnce(body, onDelta, abortSignal, 0);
+	}
+
+	private async streamChatOnce(
+		body: LlmChatRequestBody,
+		onDelta: (text: string) => void,
+		abortSignal: AbortSignal | undefined,
+		retryCount: number,
+	): Promise<void> {
+		if (abortSignal?.aborted) {
+			const aborted = new Error('Aborted');
+			aborted.name = 'AbortError';
+			throw aborted;
+		}
+
+		const url = `${getApiUrl()}/llm/chat`;
+		this.output.appendLine(`[api] POST /llm/chat (stream) retry=${retryCount}`);
+
+		const headers: Record<string, string> = {
+			'Content-Type': 'application/json',
+			'Accept': 'text/event-stream, application/json',
+			'X-Client-Version': CLIENT_VERSION,
+		};
+		const token = this.getAccessToken();
+		if (token) {
+			headers['Authorization'] = `Bearer ${token}`;
+		}
+
+		const controller = new AbortController();
+		const onAbort = () => controller.abort();
+		abortSignal?.addEventListener('abort', onAbort, { once: true });
+		let idleTimer: ReturnType<typeof setTimeout> | undefined;
+		const armIdleTimeout = () => {
+			if (idleTimer) {
+				clearTimeout(idleTimer);
+			}
+			idleTimer = setTimeout(() => controller.abort(), STREAM_IDLE_TIMEOUT_MS);
+		};
+		armIdleTimeout();
+
+		let streamStarted = false;
+		try {
+			const response = await fetch(url, {
+				method: 'POST',
+				headers,
+				body: JSON.stringify({ ...body, stream: true }),
+				signal: controller.signal,
+			});
+			armIdleTimeout();
+
+			// 402 MUST be branched before any 401 refresh / retry.
+			if (response.status === 402) {
+				const errorBody = await response.json().catch(() => ({}));
+				throw parseInsufficientCreditsError(errorBody);
+			}
+
+			if (response.status === 401 && retryCount === 0) {
+				const refreshed = await this.onUnauthorized();
+				if (refreshed) {
+					return this.streamChatOnce(body, onDelta, abortSignal, retryCount + 1);
+				}
+				throw new Error(vscode.l10n.t('Session expired. Please sign in again.'));
+			}
+
+			if (!response.ok) {
+				const errorBody = await response.json().catch(() => ({}));
+				if (isInsufficientCreditsPayload(errorBody)) {
+					throw parseInsufficientCreditsError(errorBody);
+				}
+				const record = errorBody && typeof errorBody === 'object'
+					? (errorBody as { error?: { message?: string } })
+					: undefined;
+				const message = record?.error?.message
+					|| vscode.l10n.t('API request failed ({0}).', String(response.status));
+				this.output.appendLine(`[api] error ${response.status} on /llm/chat: ${message}`);
+				throw new Error(message);
+			}
+
+			const contentType = (response.headers.get('content-type') || '').toLowerCase();
+			if (contentType.includes('application/json') && !contentType.includes('text/event-stream')) {
+				const jsonBody = await response.json();
+				if (isInsufficientCreditsPayload(jsonBody)) {
+					throw parseInsufficientCreditsError(jsonBody);
+				}
+				const content = extractJsonChatContent(jsonBody);
+				if (content) {
+					onDelta(content);
+				}
+				return;
+			}
+
+			if (!response.body) {
+				throw new Error(vscode.l10n.t('Chat stream had no body.'));
+			}
+
+			streamStarted = true;
+			const reader = response.body.getReader();
+			const decoder = new TextDecoder();
+			const parser = new OpenAiSseParser();
+
+			while (true) {
+				const { done, value } = await reader.read();
+				armIdleTimeout();
+				if (done) {
+					const flushed = parser.flush();
+					for (const delta of flushed.deltas) {
+						onDelta(delta);
+					}
+					if (flushed.error) {
+						throw flushed.error;
+					}
+					break;
+				}
+				const step = parser.push(decoder.decode(value, { stream: true }));
+				for (const delta of step.deltas) {
+					onDelta(delta);
+				}
+				if (step.error) {
+					// Never retry a partial stream — including mid-stream 401-shaped errors.
+					throw step.error;
+				}
+				if (step.done) {
+					break;
+				}
+			}
+		} catch (error) {
+			if (error instanceof InsufficientCreditsError) {
+				throw error;
+			}
+			if (error instanceof Error && error.name === 'AbortError') {
+				if (abortSignal?.aborted) {
+					throw error;
+				}
+				throw new Error(vscode.l10n.t('Chat request timed out. Please try again.'));
+			}
+			// Do not refresh/retry after any bytes of the stream have been consumed.
+			if (!streamStarted && error instanceof TypeError && retryCount === 0) {
+				await sleep(INITIAL_RETRY_DELAY_MS);
+				return this.streamChatOnce(body, onDelta, abortSignal, retryCount + 1);
+			}
+			throw error;
+		} finally {
+			if (idleTimer) {
+				clearTimeout(idleTimer);
+			}
+			abortSignal?.removeEventListener('abort', onAbort);
+		}
+	}
+
+	/**
 	 * Performs an authenticated (or anonymous) JSON API request with retries.
 	 */
 	private async request<T>(
@@ -261,9 +464,12 @@ export class CloudApiClient {
 			});
 
 			if (!response.ok) {
-				const errorData = await response.json().catch(() => ({})) as {
-					error?: { message?: string };
-				};
+				const errorData = await response.json().catch(() => ({}));
+
+				// 402 before any 401 refresh / retry.
+				if (response.status === 402 || isInsufficientCreditsPayload(errorData)) {
+					throw parseInsufficientCreditsError(errorData);
+				}
 
 				if (response.status === 401 && !options.skipRefreshRetry && retryCount === 0) {
 					const refreshed = await this.onUnauthorized();
@@ -282,13 +488,19 @@ export class CloudApiClient {
 					return this.request(endpoint, { ...options, retryCount: retryCount + 1 });
 				}
 
-				const message = errorData.error?.message || vscode.l10n.t('API request failed ({0}).', String(response.status));
+				const record = errorData && typeof errorData === 'object'
+					? (errorData as { error?: { message?: string } })
+					: undefined;
+				const message = record?.error?.message || vscode.l10n.t('API request failed ({0}).', String(response.status));
 				this.output.appendLine(`[api] error ${response.status} on ${endpoint}: ${message}`);
 				throw new Error(message);
 			}
 
 			return await response.json() as T;
 		} catch (error) {
+			if (error instanceof InsufficientCreditsError) {
+				throw error;
+			}
 			if (error instanceof Error && error.name === 'AbortError') {
 				throw new Error(vscode.l10n.t('Request timed out after {0}s. Please try again.', String(timeoutMs / 1000)));
 			}

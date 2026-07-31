@@ -34,6 +34,12 @@
 				"label": "%auth.safeappealsCloud.label%"
 			}
 		],
+		"languageModelChatProviders": [
+			{
+				"vendor": "safeappeals-cloud",
+				"displayName": "%llm.provider.displayName%"
+			}
+		],
 		"commands": [
 			{
 				"command": "safeappeals.cloud.getBalance",
