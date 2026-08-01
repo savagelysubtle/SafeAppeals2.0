@@ -1543,6 +1543,10 @@ export class CanvasRenderer {
 
     // --- Event Handlers ---
 
+    forwardWheel(e: WheelEvent): void {
+        this.handleWheel(e);
+    }
+
     private handleWheel(e: WheelEvent) {
         e.preventDefault();
         if (e.ctrlKey || e.metaKey) {

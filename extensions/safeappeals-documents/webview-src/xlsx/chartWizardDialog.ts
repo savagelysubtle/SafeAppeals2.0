@@ -248,7 +248,10 @@ export class ChartWizardDialog {
 		const xAxisTitle = this.xAxisInput?.value || undefined;
 		const yAxisTitle = this.yAxisInput?.value || undefined;
 
-		const colorScheme = COLOR_SCHEMES.find(cs => cs.id === colorSchemeId)?.colors;
+		// "Default" leaves style undefined so the chart renderer applies the themed Okabe–Ito palette.
+		const colorScheme = colorSchemeId === 'default'
+			? undefined
+			: COLOR_SCHEMES.find(cs => cs.id === colorSchemeId)?.colors;
 
 		// Build a ChartDefinition from the form values
 		const anchor: ChartAnchor = {

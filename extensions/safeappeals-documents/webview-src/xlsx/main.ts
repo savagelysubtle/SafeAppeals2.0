@@ -3431,7 +3431,7 @@ function setupRendererCallbacks() {
 	if (!renderer) return;
 
 	// Initialize chart manager now that renderer is ready
-	chartManager = new ChartManager(renderer.getWrapper(), handleChartAction);
+	chartManager = new ChartManager(renderer.getWrapper(), handleChartAction, e => renderer.forwardWheel(e));
 
 	// Chart overlay repositioning on scroll/render
 	renderer.onScrollChanged = () => {

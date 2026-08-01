@@ -199,33 +199,31 @@ export class Ribbon {
 	private buildHomeTab(): HTMLElement {
 		const panel = this.tabPanel('home', true);
 
-		// --- Clipboard (Excel-style: tall Paste + stacked Cut/Copy) ---
+		// --- Clipboard (Paste + Cut/Copy/Paste Special in one row) ---
 		const clip = this.group('Clipboard');
 		const clipBody = this.el('div', 'group-body clip-layout');
-		const pasteBtn = this.tallBtn(IC.paste, 'Paste', 'paste');
-		clipBody.appendChild(pasteBtn);
+		clipBody.appendChild(this.tallBtn(IC.paste, 'Paste', 'paste'));
 		const clipStack = this.el('div', 'clip-stack');
-		clipStack.appendChild(this.iconBtn(IC.cut, 'Cut', 'cut', 'Ctrl+X'));
-		clipStack.appendChild(this.iconBtn(IC.copy, 'Copy', 'copy', 'Ctrl+C'));
-		clipStack.appendChild(this.iconBtn(IC.paste, 'Paste Special...', 'pasteSpecial', 'Ctrl+Shift+V'));
+		clipStack.appendChild(this.iconOnlyBtn(IC.cut, 'cut', 'Cut (Ctrl+X)'));
+		clipStack.appendChild(this.iconOnlyBtn(IC.copy, 'copy', 'Copy (Ctrl+C)'));
+		clipStack.appendChild(this.iconOnlyBtn(IC.paste, 'pasteSpecial', 'Paste Special... (Ctrl+Shift+V)'));
 		clipBody.appendChild(clipStack);
-		clip.insertBefore(clipBody, clip.lastChild);
+		clip.appendChild(clipBody);
 		panel.appendChild(clip);
 
 		// --- History ---
 		const hist = this.group('History');
 		const histBody = this.el('div', 'group-body');
-		const histRow = this.el('div', 'btn-col');
-		histRow.appendChild(this.iconBtn(IC.undo, 'Undo', 'undo', 'Ctrl+Z'));
-		histRow.appendChild(this.iconBtn(IC.redo, 'Redo', 'redo', 'Ctrl+Y'));
+		const histRow = this.el('div', 'btn-row');
+		histRow.appendChild(this.iconOnlyBtn(IC.undo, 'undo', 'Undo (Ctrl+Z)'));
+		histRow.appendChild(this.iconOnlyBtn(IC.redo, 'redo', 'Redo (Ctrl+Y)'));
 		histBody.appendChild(histRow);
-		hist.insertBefore(histBody, hist.lastChild);
+		hist.appendChild(histBody);
 		panel.appendChild(hist);
 
 		// --- Font ---
 		const font = this.group('Font');
 		const fontBody = this.el('div', 'group-body font-body');
-		// Row 1: dropdowns
 		const fontR1 = this.el('div', 'btn-row');
 		fontR1.appendChild(this.selectEl('fontFamily', [
 			'system-ui', 'Arial', 'Calibri', 'Courier New', 'Georgia',
@@ -235,7 +233,6 @@ export class Ribbon {
 			'8', '9', '10', '11', '12', '14', '16', '18', '20', '24', '28', '36', '48', '72'
 		], '13', 'size-select'));
 		fontBody.appendChild(fontR1);
-		// Row 2: format buttons + color
 		const fontR2 = this.el('div', 'btn-row');
 		fontR2.appendChild(this.fmtBtn('B', 'bold', 'fmt-bold'));
 		fontR2.appendChild(this.fmtBtn('I', 'italic', 'fmt-italic'));
@@ -245,90 +242,80 @@ export class Ribbon {
 		fontR2.appendChild(this.colorBtn('A', 'textColor', '#cccccc'));
 		fontR2.appendChild(this.colorBtn('\u25A0', 'fillColor', '#3c3c3c'));
 		fontBody.appendChild(fontR2);
-		font.insertBefore(fontBody, font.lastChild);
+		font.appendChild(fontBody);
 		panel.appendChild(font);
 
-		// --- Alignment ---
+		// --- Alignment (icon-only dense group) ---
 		const align = this.group('Alignment');
 		const alignBody = this.el('div', 'group-body');
-		const alignR1 = this.el('div', 'btn-row');
-		alignR1.appendChild(this.iconOnlyBtn(IC.alignL, 'alignLeft', 'Align Left'));
-		alignR1.appendChild(this.iconOnlyBtn(IC.alignC, 'alignCenter', 'Align Center'));
-		alignR1.appendChild(this.iconOnlyBtn(IC.alignR, 'alignRight', 'Align Right'));
-		alignBody.appendChild(alignR1);
-		const alignR2 = this.el('div', 'btn-row');
-		alignR2.appendChild(this.iconBtn(IC.wrap, 'Wrap', 'wrapText'));
-		alignR2.appendChild(this.iconBtn(IC.merge, 'Merge', 'mergeCells'));
-		alignBody.appendChild(alignR2);
-		align.insertBefore(alignBody, align.lastChild);
+		const alignRow = this.el('div', 'btn-row');
+		alignRow.appendChild(this.iconOnlyBtn(IC.alignL, 'alignLeft', 'Align Left'));
+		alignRow.appendChild(this.iconOnlyBtn(IC.alignC, 'alignCenter', 'Align Center'));
+		alignRow.appendChild(this.iconOnlyBtn(IC.alignR, 'alignRight', 'Align Right'));
+		alignRow.appendChild(this.iconOnlyBtn(IC.wrap, 'wrapText', 'Wrap'));
+		alignRow.appendChild(this.iconOnlyBtn(IC.merge, 'mergeCells', 'Merge'));
+		alignBody.appendChild(alignRow);
+		align.appendChild(alignBody);
 		panel.appendChild(align);
 
 		// --- Number ---
 		const numGrp = this.group('Number');
 		const numBody = this.el('div', 'group-body');
-		const numR1 = this.el('div', 'btn-row');
-		numR1.appendChild(this.selectEl('numberFormat', [
+		const numRow = this.el('div', 'btn-row');
+		numRow.appendChild(this.selectEl('numberFormat', [
 			'General', 'Number', 'Currency', 'Percentage', 'Date', 'Text'
 		], undefined, 'num-select'));
-		numBody.appendChild(numR1);
-		const numR2 = this.el('div', 'btn-row');
-		numR2.appendChild(this.fmtBtn('$', 'currency'));
-		numR2.appendChild(this.fmtBtn('%', 'percent'));
-		numR2.appendChild(this.fmtBtn(',', 'comma'));
-		numR2.appendChild(this.el('span', 'btn-separator'));
-		numR2.appendChild(this.fmtBtn('.0+', 'increaseDecimal'));
-		numR2.appendChild(this.fmtBtn('.0\u2013', 'decreaseDecimal'));
-		numBody.appendChild(numR2);
-		numGrp.insertBefore(numBody, numGrp.lastChild);
+		numRow.appendChild(this.fmtBtn('$', 'currency'));
+		numRow.appendChild(this.fmtBtn('%', 'percent'));
+		numRow.appendChild(this.fmtBtn(',', 'comma'));
+		numRow.appendChild(this.el('span', 'btn-separator'));
+		numRow.appendChild(this.fmtBtn('.0+', 'increaseDecimal'));
+		numRow.appendChild(this.fmtBtn('.0\u2013', 'decreaseDecimal'));
+		numBody.appendChild(numRow);
+		numGrp.appendChild(numBody);
 		panel.appendChild(numGrp);
 
-		// --- Cells ---
+		// --- Cells (icon-only dense group) ---
 		const cells = this.group('Cells');
 		const cellsBody = this.el('div', 'group-body');
-		const cellR1 = this.el('div', 'btn-row');
-		cellR1.appendChild(this.iconBtn(IC.insertRow, '+ Row', 'insertRow', 'Insert Row'));
-		cellR1.appendChild(this.iconBtn(IC.insertCol, '+ Col', 'insertCol', 'Insert Column'));
-		cellsBody.appendChild(cellR1);
-		const cellR2 = this.el('div', 'btn-row');
-		cellR2.appendChild(this.iconBtn(IC.deleteRow, '\u2013 Row', 'deleteRow', 'Delete Row'));
-		cellR2.appendChild(this.iconBtn(IC.deleteCol, '\u2013 Col', 'deleteCol', 'Delete Column'));
-		cellsBody.appendChild(cellR2);
-		cells.insertBefore(cellsBody, cells.lastChild);
+		const cellRow = this.el('div', 'btn-row');
+		cellRow.appendChild(this.iconOnlyBtn(IC.insertRow, 'insertRow', 'Insert Row'));
+		cellRow.appendChild(this.iconOnlyBtn(IC.insertCol, 'insertCol', 'Insert Column'));
+		cellRow.appendChild(this.iconOnlyBtn(IC.deleteRow, 'deleteRow', 'Delete Row'));
+		cellRow.appendChild(this.iconOnlyBtn(IC.deleteCol, 'deleteCol', 'Delete Column'));
+		cellsBody.appendChild(cellRow);
+		cells.appendChild(cellsBody);
 		panel.appendChild(cells);
 
-		// --- Editing (Fill) ---
+		// --- Editing (icon-only dense group) ---
 		const editGroup = this.group('Editing');
 		const editBody = this.el('div', 'group-body');
-		const editR1 = this.el('div', 'btn-row');
-		editR1.appendChild(this.iconBtn(IC.fillDown, 'Fill ↓', 'fillDown', 'Fill Down (Ctrl+D)'));
-		editR1.appendChild(this.iconBtn(IC.fillRight, 'Fill →', 'fillRight', 'Fill Right (Ctrl+R)'));
-		editBody.appendChild(editR1);
-		const editR2 = this.el('div', 'btn-row');
-		editR2.appendChild(this.iconBtn(IC.flashFill, 'Flash Fill', 'flashFill', 'Flash Fill (Ctrl+E)'));
-		editBody.appendChild(editR2);
-		editGroup.insertBefore(editBody, editGroup.lastChild);
+		const editRow = this.el('div', 'btn-row');
+		editRow.appendChild(this.iconOnlyBtn(IC.fillDown, 'fillDown', 'Fill Down (Ctrl+D)'));
+		editRow.appendChild(this.iconOnlyBtn(IC.fillRight, 'fillRight', 'Fill Right (Ctrl+R)'));
+		editRow.appendChild(this.iconOnlyBtn(IC.flashFill, 'flashFill', 'Flash Fill (Ctrl+E)'));
+		editBody.appendChild(editRow);
+		editGroup.appendChild(editBody);
 		panel.appendChild(editGroup);
 
 		// --- Styles ---
 		const stylesGroup = this.group('Styles');
 		const stylesBody = this.el('div', 'group-body');
-		stylesBody.appendChild(this.tallBtn(IC.condFormat, 'Cond.\nFormat', 'conditionalFormatting'));
-		stylesGroup.insertBefore(stylesBody, stylesGroup.lastChild);
+		stylesBody.appendChild(this.tallBtn(IC.condFormat, 'Cond. Format', 'conditionalFormatting'));
+		stylesGroup.appendChild(stylesBody);
 		panel.appendChild(stylesGroup);
 
 		// --- Formulas ---
 		const fx = this.group('Formulas');
 		const fxBody = this.el('div', 'group-body');
-		const fxR1 = this.el('div', 'btn-row');
-		fxR1.appendChild(this.iconBtn(IC.sigma, 'SUM', 'formulaSum'));
-		fxR1.appendChild(this.fmtBtn('AVG', 'formulaAvg'));
-		fxR1.appendChild(this.fmtBtn('CNT', 'formulaCount'));
-		fxBody.appendChild(fxR1);
-		const fxR2 = this.el('div', 'btn-row');
-		fxR2.appendChild(this.fmtBtn('MIN', 'formulaMin'));
-		fxR2.appendChild(this.fmtBtn('MAX', 'formulaMax'));
-		fxBody.appendChild(fxR2);
-		fx.insertBefore(fxBody, fx.lastChild);
+		const fxRow = this.el('div', 'btn-row');
+		fxRow.appendChild(this.iconBtn(IC.sigma, 'SUM', 'formulaSum'));
+		fxRow.appendChild(this.fmtBtn('AVG', 'formulaAvg'));
+		fxRow.appendChild(this.fmtBtn('CNT', 'formulaCount'));
+		fxRow.appendChild(this.fmtBtn('MIN', 'formulaMin'));
+		fxRow.appendChild(this.fmtBtn('MAX', 'formulaMax'));
+		fxBody.appendChild(fxRow);
+		fx.appendChild(fxBody);
 		panel.appendChild(fx);
 
 		return panel;
@@ -342,14 +329,14 @@ export class Ribbon {
 		const pivotGroup = this.group('PivotTable');
 		const pivotBody = this.el('div', 'group-body');
 		pivotBody.appendChild(this.tallBtn(IC.pivotTable, 'PivotTable', 'insertPivotTable'));
-		pivotGroup.insertBefore(pivotBody, pivotGroup.lastChild);
+		pivotGroup.appendChild(pivotBody);
 		panel.appendChild(pivotGroup);
 
 		// --- Charts group ---
 		const chartGroup = this.group('Charts');
 		const chartBody = this.el('div', 'group-body');
 		chartBody.appendChild(this.tallBtn(IC.chart, 'Chart', 'insertChart'));
-		chartGroup.insertBefore(chartBody, chartGroup.lastChild);
+		chartGroup.appendChild(chartBody);
 		panel.appendChild(chartGroup);
 
 		// --- Tables group ---
@@ -357,29 +344,27 @@ export class Ribbon {
 		const tblBody = this.el('div', 'group-body');
 		tblBody.appendChild(this.tallBtn(IC.table, 'Table', 'createTable'));
 		tblBody.appendChild(this.buildTableStylePicker());
-		tblBody.appendChild(this.iconBtn(IC.convertRange, 'To Range', 'convertToRange', 'Convert Table to Range'));
-		tblGroup.insertBefore(tblBody, tblGroup.lastChild);
+		tblBody.appendChild(this.iconOnlyBtn(IC.convertRange, 'convertToRange', 'Convert Table to Range'));
+		tblGroup.appendChild(tblBody);
 		panel.appendChild(tblGroup);
 
 		// --- Rows & Columns group ---
 		const rcGroup = this.group('Rows & Columns');
 		const rcBody = this.el('div', 'group-body');
-		const rcR1 = this.el('div', 'btn-row');
-		rcR1.appendChild(this.iconBtn(IC.insertRow, '+ Row', 'insertRow', 'Insert Row'));
-		rcR1.appendChild(this.iconBtn(IC.insertCol, '+ Col', 'insertCol', 'Insert Column'));
-		rcBody.appendChild(rcR1);
-		const rcR2 = this.el('div', 'btn-row');
-		rcR2.appendChild(this.iconBtn(IC.deleteRow, '\u2013 Row', 'deleteRow', 'Delete Row'));
-		rcR2.appendChild(this.iconBtn(IC.deleteCol, '\u2013 Col', 'deleteCol', 'Delete Column'));
-		rcBody.appendChild(rcR2);
-		rcGroup.insertBefore(rcBody, rcGroup.lastChild);
+		const rcRow = this.el('div', 'btn-row');
+		rcRow.appendChild(this.iconOnlyBtn(IC.insertRow, 'insertRow', 'Insert Row'));
+		rcRow.appendChild(this.iconOnlyBtn(IC.insertCol, 'insertCol', 'Insert Column'));
+		rcRow.appendChild(this.iconOnlyBtn(IC.deleteRow, 'deleteRow', 'Delete Row'));
+		rcRow.appendChild(this.iconOnlyBtn(IC.deleteCol, 'deleteCol', 'Delete Column'));
+		rcBody.appendChild(rcRow);
+		rcGroup.appendChild(rcBody);
 		panel.appendChild(rcGroup);
 
 		// --- Links group ---
 		const linkGroup = this.group('Links');
 		const linkBody = this.el('div', 'group-body');
 		linkBody.appendChild(this.tallBtn(IC.hyperlink, 'Hyperlink', 'insertHyperlink'));
-		linkGroup.insertBefore(linkBody, linkGroup.lastChild);
+		linkGroup.appendChild(linkBody);
 		panel.appendChild(linkGroup);
 
 		return panel;
@@ -500,7 +485,7 @@ export class Ribbon {
 		const namesBody = this.el('div', 'group-body');
 		namesBody.appendChild(this.tallBtn(IC.nameManager, 'Name Manager', 'nameManager'));
 		namesBody.appendChild(this.iconBtn(IC.defineName, 'Define Name', 'defineName'));
-		namesGroup.insertBefore(namesBody, namesGroup.lastChild);
+		namesGroup.appendChild(namesBody);
 		panel.appendChild(namesGroup);
 
 		return panel;
@@ -510,52 +495,44 @@ export class Ribbon {
 	private buildPageLayoutTab(): HTMLElement {
 		const panel = this.tabPanel('page-layout', false);
 
-		// --- Page Setup group ---
+		// --- Page Setup group (icon + select per control, single row) ---
 		const pg = this.group('Page Setup');
 		const pgBody = this.el('div', 'group-body');
 
-		// Margins dropdown
-		const marginsSel = this.el('div', 'btn-col gap-4');
-		const marginsLbl = this.el('div', 'ribbon-btn-label');
-		marginsLbl.textContent = 'Margins';
-		const marginsDropdown = this.selectEl('pageMargins', ['Normal', 'Wide', 'Narrow', 'Custom...'], 'Normal', 'ribbon-select-sm');
-		marginsSel.appendChild(this.el('span', 'btn-icon').cloneNode(false) as HTMLElement);
-		const marginsWrap = this.el('div', 'btn-col gap-2');
+		const marginsWrap = this.el('div', 'btn-row');
 		const marginsIcon = document.createElement('div');
 		marginsIcon.innerHTML = IC.margins;
 		marginsIcon.className = 'btn-icon';
+		marginsIcon.title = 'Margins';
+		const marginsDropdown = this.selectEl('pageMargins', ['Normal', 'Wide', 'Narrow', 'Custom...'], 'Normal', 'ribbon-select-sm');
+		marginsDropdown.title = 'Margins';
 		marginsWrap.appendChild(marginsIcon);
-		marginsWrap.appendChild(marginsLbl);
 		marginsWrap.appendChild(marginsDropdown);
 		pgBody.appendChild(marginsWrap);
 
-		// Orientation dropdown
-		const orientWrap = this.el('div', 'btn-col gap-2');
-		const orientLbl = this.el('div', 'ribbon-btn-label');
-		orientLbl.textContent = 'Orientation';
+		const orientWrap = this.el('div', 'btn-row');
 		const orientIcon = document.createElement('div');
 		orientIcon.innerHTML = IC.orientation;
 		orientIcon.className = 'btn-icon';
+		orientIcon.title = 'Orientation';
 		const orientDropdown = this.selectEl('pageOrientation', ['Portrait', 'Landscape'], 'Portrait', 'ribbon-select-sm');
+		orientDropdown.title = 'Orientation';
 		orientWrap.appendChild(orientIcon);
-		orientWrap.appendChild(orientLbl);
 		orientWrap.appendChild(orientDropdown);
 		pgBody.appendChild(orientWrap);
 
-		// Paper size dropdown
-		const sizeWrap = this.el('div', 'btn-col gap-2');
-		const sizeLbl = this.el('div', 'ribbon-btn-label');
-		sizeLbl.textContent = 'Size';
+		const sizeWrap = this.el('div', 'btn-row');
 		const sizeIcon = document.createElement('div');
 		sizeIcon.innerHTML = IC.pageSetupDlg;
 		sizeIcon.className = 'btn-icon';
+		sizeIcon.title = 'Size';
 		const sizeDropdown = this.selectEl('paperSize', ['Letter', 'A4', 'Legal', 'A3', 'Tabloid'], 'Letter', 'ribbon-select-sm');
+		sizeDropdown.title = 'Size';
 		sizeWrap.appendChild(sizeIcon);
-		sizeWrap.appendChild(sizeLbl);
 		sizeWrap.appendChild(sizeDropdown);
 		pgBody.appendChild(sizeWrap);
 
-		pg.insertBefore(pgBody, pg.lastChild);
+		pg.appendChild(pgBody);
 		panel.appendChild(pg);
 
 		// --- Print Area group ---
@@ -563,28 +540,28 @@ export class Ribbon {
 		const paBody = this.el('div', 'group-body');
 		paBody.appendChild(this.smallBtn(IC.printArea, 'Set Print Area', 'setPrintArea'));
 		paBody.appendChild(this.smallBtn(IC.printArea, 'Clear Print Area', 'clearPrintArea'));
-		paGrp.insertBefore(paBody, paGrp.lastChild);
+		paGrp.appendChild(paBody);
 		panel.appendChild(paGrp);
 
 		// --- Page Breaks group ---
 		const pbGrp = this.group('Breaks');
-		const pbBody = this.el('div', 'group-body btn-col gap-4');
+		const pbBody = this.el('div', 'group-body btn-row');
 		pbBody.appendChild(this.smallBtn(IC.pageBreak, 'Insert Page Break', 'insertPageBreak'));
 		pbBody.appendChild(this.smallBtn(IC.pageBreak, 'Remove Page Break', 'removePageBreak'));
 		pbBody.appendChild(this.smallBtn(IC.pageBreak, 'Reset All Breaks', 'resetPageBreaks'));
-		pbGrp.insertBefore(pbBody, pbGrp.lastChild);
+		pbGrp.appendChild(pbBody);
 		panel.appendChild(pbGrp);
 
 		// --- Print Titles group ---
 		const ptGrp = this.group('Print Titles');
 		const ptBody = this.el('div', 'group-body');
-		ptBody.appendChild(this.tallBtn(IC.printTitles, 'Print\nTitles', 'printTitles'));
-		ptGrp.insertBefore(ptBody, ptGrp.lastChild);
+		ptBody.appendChild(this.tallBtn(IC.printTitles, 'Print Titles', 'printTitles'));
+		ptGrp.appendChild(ptBody);
 		panel.appendChild(ptGrp);
 
 		// --- Scale to Fit group ---
 		const sfGrp = this.group('Scale to Fit');
-		const sfBody = this.el('div', 'group-body btn-col gap-4');
+		const sfBody = this.el('div', 'group-body btn-row');
 
 		const widthWrap = this.el('div', 'ribbon-label-row');
 		const widthLbl = document.createElement('span');
@@ -622,25 +599,25 @@ export class Ribbon {
 		scaleWrap.appendChild(scalePct);
 		sfBody.appendChild(scaleWrap);
 
-		sfGrp.insertBefore(sfBody, sfGrp.lastChild);
+		sfGrp.appendChild(sfBody);
 		panel.appendChild(sfGrp);
 
 		// --- Sheet Options group ---
 		const soGrp = this.group('Sheet Options');
-		const soBody = this.el('div', 'group-body btn-col gap-4');
+		const soBody = this.el('div', 'group-body btn-row');
 		soBody.appendChild(this.toggleBtn(IC.gridlines, 'Print Gridlines', 'printGridlines', false));
 		soBody.appendChild(this.toggleBtn(IC.headers, 'Print Headings', 'printHeadings', false));
 		soBody.appendChild(this.toggleBtn(IC.headers, 'Center Horiz.', 'centerHorizontally', false));
 		soBody.appendChild(this.toggleBtn(IC.headers, 'Center Vert.', 'centerVertically', false));
-		soGrp.insertBefore(soBody, soGrp.lastChild);
+		soGrp.appendChild(soBody);
 		panel.appendChild(soGrp);
 
 		// --- Page Setup Dialog + Print Preview ---
 		const dlgGrp = this.group('');
-		const dlgBody = this.el('div', 'group-body btn-col gap-6');
-		dlgBody.appendChild(this.tallBtn(IC.pageSetupDlg, 'Page\nSetup', 'pageSetupDialog'));
-		dlgBody.appendChild(this.tallBtn(IC.printPreview, 'Print\nPreview', 'printPreview'));
-		dlgGrp.insertBefore(dlgBody, dlgGrp.lastChild);
+		const dlgBody = this.el('div', 'group-body btn-row');
+		dlgBody.appendChild(this.tallBtn(IC.pageSetupDlg, 'Page Setup', 'pageSetupDialog'));
+		dlgBody.appendChild(this.tallBtn(IC.printPreview, 'Print Preview', 'printPreview'));
+		dlgGrp.appendChild(dlgBody);
 		panel.appendChild(dlgGrp);
 
 		return panel;
@@ -652,30 +629,30 @@ export class Ribbon {
 
 		const show = this.group('Show');
 		const showBody = this.el('div', 'group-body');
-		const showR = this.el('div', 'btn-col gap-6');
+		const showR = this.el('div', 'btn-row');
 		showR.appendChild(this.toggleBtn(IC.gridlines, 'Gridlines', 'gridlines', true));
 		showR.appendChild(this.toggleBtn(IC.headers, 'Headers', 'headers', true));
 		showBody.appendChild(showR);
-		show.insertBefore(showBody, show.lastChild);
+		show.appendChild(showBody);
 		panel.appendChild(show);
 
 		const win = this.group('Window');
 		const winBody = this.el('div', 'group-body');
-		winBody.appendChild(this.tallBtn(IC.freeze, 'Freeze\nPanes', 'freezePanes'));
-		win.insertBefore(winBody, win.lastChild);
+		winBody.appendChild(this.tallBtn(IC.freeze, 'Freeze Panes', 'freezePanes'));
+		win.appendChild(winBody);
 		panel.appendChild(win);
 
 		const views = this.group('Workbook Views');
-		const viewsBody = this.el('div', 'group-body btn-col gap-6');
-		viewsBody.appendChild(this.toggleBtn(IC.pageBreak, 'Page Break\nPreview', 'pageBreakPreview', false));
-		views.insertBefore(viewsBody, views.lastChild);
+		const viewsBody = this.el('div', 'group-body btn-row');
+		viewsBody.appendChild(this.toggleBtn(IC.pageBreak, 'Page Break Preview', 'pageBreakPreview', false));
+		views.appendChild(viewsBody);
 		panel.appendChild(views);
 
 		const zoomGrp = this.group('Zoom');
 		const zoomBody = this.el('div', 'group-body');
-		zoomBody.appendChild(this.tallBtn(IC.zoomIn, 'Zoom\nIn', 'zoomIn'));
-		zoomBody.appendChild(this.tallBtn(IC.zoomOut, 'Zoom\nOut', 'zoomOut'));
-		const zoomStack = this.el('div', 'btn-col gap-6');
+		zoomBody.appendChild(this.tallBtn(IC.zoomIn, 'Zoom In', 'zoomIn'));
+		zoomBody.appendChild(this.tallBtn(IC.zoomOut, 'Zoom Out', 'zoomOut'));
+		const zoomStack = this.el('div', 'btn-row');
 		zoomStack.appendChild(this.iconBtn(IC.zoomFit, '100%', 'zoomReset', 'Reset to 100%'));
 		zoomStack.appendChild(this.iconBtn(IC.zoomFit, 'Fit', 'zoomToFit', 'Zoom to Fit'));
 
@@ -696,7 +673,7 @@ export class Ribbon {
 		});
 		zoomStack.appendChild(presetSel);
 		zoomBody.appendChild(zoomStack);
-		zoomGrp.insertBefore(zoomBody, zoomGrp.lastChild);
+		zoomGrp.appendChild(zoomBody);
 		panel.appendChild(zoomGrp);
 
 		return panel;
@@ -708,46 +685,44 @@ export class Ribbon {
 
 		const sort = this.group('Sort & Filter');
 		const sortBody = this.el('div', 'group-body');
-		sortBody.appendChild(this.tallBtn(IC.sortAsc, 'Sort\nA\u2192Z', 'sortAZ'));
-		sortBody.appendChild(this.tallBtn(IC.sortDesc, 'Sort\nZ\u2192A', 'sortZA'));
-		const filterStack = this.el('div', 'btn-col gap-6');
-		filterStack.appendChild(this.iconBtn(IC.filter, 'Filter', 'toggleTableFilter', 'Toggle Table Filter'));
-		filterStack.appendChild(this.iconBtn(IC.totals, 'Totals', 'toggleTotalsRow', 'Toggle Totals Row'));
+		sortBody.appendChild(this.tallBtn(IC.sortAsc, 'Sort A\u2192Z', 'sortAZ'));
+		sortBody.appendChild(this.tallBtn(IC.sortDesc, 'Sort Z\u2192A', 'sortZA'));
+		const filterStack = this.el('div', 'btn-row');
+		filterStack.appendChild(this.iconOnlyBtn(IC.filter, 'toggleTableFilter', 'Toggle Table Filter'));
+		filterStack.appendChild(this.iconOnlyBtn(IC.totals, 'toggleTotalsRow', 'Toggle Totals Row'));
 		sortBody.appendChild(filterStack);
-		sort.insertBefore(sortBody, sort.lastChild);
+		sort.appendChild(sortBody);
 		panel.appendChild(sort);
 
 		// Data Validation group
 		const dvGroup = this.group('Data Tools');
 		const dvBody = this.el('div', 'group-body');
-		dvBody.appendChild(this.tallBtn(IC.dataValid, 'Data\nValidation', 'dataValidation'));
-		const dvStack = this.el('div', 'btn-col gap-6');
-		dvStack.appendChild(this.iconBtn(IC.circleInvalid, 'Circle\nInvalid', 'circleInvalidData', 'Circle Invalid Data'));
-		dvBody.appendChild(dvStack);
-		dvGroup.insertBefore(dvBody, dvGroup.lastChild);
+		dvBody.appendChild(this.tallBtn(IC.dataValid, 'Data Validation', 'dataValidation'));
+		dvBody.appendChild(this.iconOnlyBtn(IC.circleInvalid, 'circleInvalidData', 'Circle Invalid Data'));
+		dvGroup.appendChild(dvBody);
 		panel.appendChild(dvGroup);
 
 		const edit = this.group('Edit');
 		const editBody = this.el('div', 'group-body');
 		editBody.appendChild(this.tallBtn(IC.clear, 'Clear', 'clear'));
-		edit.insertBefore(editBody, edit.lastChild);
+		edit.appendChild(editBody);
 		panel.appendChild(edit);
 
 		// Outline / Group group
 		const outlineGroup = this.group('Outline');
 		const outlineBody = this.el('div', 'group-body');
-		outlineBody.appendChild(this.tallBtn(IC.group, 'Group\nRows', 'groupRows'));
-		outlineBody.appendChild(this.tallBtn(IC.group, 'Group\nColumns', 'groupCols'));
-		outlineBody.appendChild(this.tallBtn(IC.ungroup, 'Ungroup\nRows', 'ungroupRows'));
-		outlineBody.appendChild(this.tallBtn(IC.ungroup, 'Ungroup\nColumns', 'ungroupCols'));
-		outlineGroup.insertBefore(outlineBody, outlineGroup.lastChild);
+		outlineBody.appendChild(this.tallBtn(IC.group, 'Group Rows', 'groupRows'));
+		outlineBody.appendChild(this.tallBtn(IC.group, 'Group Columns', 'groupCols'));
+		outlineBody.appendChild(this.tallBtn(IC.ungroup, 'Ungroup Rows', 'ungroupRows'));
+		outlineBody.appendChild(this.tallBtn(IC.ungroup, 'Ungroup Columns', 'ungroupCols'));
+		outlineGroup.appendChild(outlineBody);
 		panel.appendChild(outlineGroup);
 
 		// PivotTable connections group
 		const pvGroup = this.group('PivotTable');
 		const pvBody = this.el('div', 'group-body');
-		pvBody.appendChild(this.tallBtn(IC.pivotTable, 'Refresh\nAll', 'refreshAllPivots'));
-		pvGroup.insertBefore(pvBody, pvGroup.lastChild);
+		pvBody.appendChild(this.tallBtn(IC.pivotTable, 'Refresh All', 'refreshAllPivots'));
+		pvGroup.appendChild(pvBody);
 		panel.appendChild(pvGroup);
 
 		return panel;
@@ -787,12 +762,13 @@ export class Ribbon {
 		return b;
 	}
 
-	/** Tall (primary) button: icon above, text below */
+	/** Tall (primary) button: icon + label in a single row */
 	private tallBtn(svg: string, label: string, action: string): HTMLButtonElement {
 		const b = document.createElement('button');
 		b.className = 'ribbon-btn tall-btn';
-		b.innerHTML = `<span class="btn-icon lg">${svg}</span><span class="btn-label-below">${label.replace('\n', '<br>')}</span>`;
-		b.title = label.replace('\n', ' ');
+		const flat = label.replace(/\n/g, ' ');
+		b.innerHTML = `<span class="btn-icon lg">${svg}</span><span class="btn-label-below">${flat}</span>`;
+		b.title = flat;
 		b.onclick = () => this.onAction({ action });
 		return b;
 	}
@@ -955,12 +931,8 @@ export class Ribbon {
 		return el;
 	}
 
-	private group(label: string): HTMLElement {
-		const g = this.el('div', 'ribbon-group');
-		const lbl = this.el('div', 'group-label');
-		lbl.textContent = label;
-		g.appendChild(lbl);
-		return g;
+	private group(_label: string): HTMLElement {
+		return this.el('div', 'ribbon-group');
 	}
 
 	private tabPanel(key: string, active: boolean): HTMLElement {

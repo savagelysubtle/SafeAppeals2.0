@@ -1,3 +1,16 @@
+		/* ============================== THEME TOKENS ============================== */
+		:root {
+			/* Okabe–Ito colorblind-safe categorical palette for charts */
+			--xlsx-chart-c1: #E69F00;
+			--xlsx-chart-c2: #56B4E9;
+			--xlsx-chart-c3: #009E73;
+			--xlsx-chart-c4: #F0E442;
+			--xlsx-chart-c5: #0072B2;
+			--xlsx-chart-c6: #D55E00;
+			--xlsx-chart-c7: #CC79A7;
+			--xlsx-chart-c8: #000000;
+		}
+
 		/* ============================== LAYOUT ============================== */
 		* { box-sizing: border-box; margin: 0; padding: 0; }
 		body {
@@ -109,7 +122,7 @@
 		.ribbon-tab-bar {
 			display: flex; align-items: stretch; justify-content: space-between;
 			background: var(--vscode-titleBar-activeBackground, #1e1e1e);
-			height: 32px;
+			height: 28px;
 		}
 		.ribbon-tabs-left { display: flex; }
 		.ribbon-tab {
@@ -137,35 +150,30 @@
 
 		/* --- Content Area --- */
 		.ribbon-content {
-			display: flex; padding: 4px 2px 0; min-height: 72px;
+			display: flex; align-items: center; padding: 2px 4px; min-height: 40px;
 			overflow-x: auto; overflow-y: hidden;
 		}
-		.ribbon-tab-panel { display: flex; width: 100%; }
+		.ribbon-tab-panel { display: flex; align-items: center; width: 100%; }
 
 		/* --- Groups --- */
 		.ribbon-group {
-			display: flex; flex-direction: column;
-			align-items: center; justify-content: space-between;
-			padding: 0 10px 0;
+			display: flex; flex-direction: row;
+			align-items: center; justify-content: center;
+			padding: 0 6px;
 			border-right: 1px solid var(--vscode-panel-border, #3c3c3c);
 			position: relative;
 		}
 		.ribbon-group:last-child { border-right: none; }
 		.group-body {
 			display: flex; gap: 4px; align-items: center;
-			flex: 1; padding: 2px 0;
+			padding: 0;
 		}
-		.group-label {
-			font-size: 9px; text-transform: uppercase; letter-spacing: 0.8px;
-			color: var(--vscode-descriptionForeground, #666);
-			padding: 2px 0 3px; white-space: nowrap;
-			text-align: center; width: 100%;
-		}
+		.group-label { display: none; }
 
 		/* --- Button rows/cols --- */
 		.btn-row { display: flex; gap: 2px; align-items: center; }
-		.btn-col { display: flex; flex-direction: column; gap: 2px; }
-		.btn-col.gap-6 { gap: 6px; }
+		.btn-col { display: flex; flex-direction: row; gap: 2px; align-items: center; }
+		.btn-col.gap-6 { gap: 4px; }
 		.btn-separator { width: 1px; height: 16px; background: var(--vscode-panel-border, #3c3c3c); margin: 0 2px; }
 
 		/* --- Base button --- */
@@ -189,24 +197,24 @@
 		.ribbon-btn svg { width: 16px; height: 16px; flex-shrink: 0; }
 		.btn-icon { display: flex; align-items: center; justify-content: center; }
 		.btn-icon svg { width: 16px; height: 16px; }
-		.btn-icon.lg svg { width: 22px; height: 22px; }
+		.btn-icon.lg svg { width: 16px; height: 16px; }
 		.btn-label { font-size: 11px; }
 
 		/* Icon-only buttons */
 		.icon-only-btn { padding: 4px 5px; }
 		.icon-only-btn svg { width: 16px; height: 16px; }
 
-		/* --- Tall (primary) buttons --- */
+		/* --- Tall (primary) buttons — compact single-row --- */
 		.tall-btn {
-			flex-direction: column; gap: 2px;
-			padding: 5px 8px 3px;
-			min-width: 46px; min-height: 54px;
-			justify-content: center; text-align: center;
+			flex-direction: row; gap: 4px;
+			padding: 2px 6px;
+			min-height: 26px;
+			justify-content: center; text-align: left;
 		}
-		.tall-btn .btn-icon.lg { margin-bottom: 1px; }
+		.tall-btn .btn-icon.lg { margin-bottom: 0; }
 		.btn-label-below {
-			font-size: 10px; line-height: 1.3;
-			text-align: center;
+			font-size: 11px; line-height: 1.2;
+			text-align: left;
 		}
 
 		/* --- Format (text) buttons --- */
@@ -271,10 +279,10 @@
 
 		/* --- Clipboard Excel-style layout --- */
 		.clip-layout { gap: 3px; }
-		.clip-stack { display: flex; flex-direction: column; gap: 2px; }
+		.clip-stack { display: flex; flex-direction: row; gap: 2px; align-items: center; }
 
 		/* --- Font group --- */
-		.font-body { flex-direction: column; gap: 3px; align-items: flex-start; }
+		.font-body { flex-direction: row; gap: 4px; align-items: center; }
 
 		/* ============================== CONTEXT MENU ============================== */
 		.xlsx-context-menu {
@@ -598,13 +606,13 @@
 			background: var(--vscode-editor-background, #1e1e1e);
 			pointer-events: auto;
 			cursor: move;
-			box-shadow: 0 2px 8px rgba(0,0,0,0.15);
-			border-radius: 4px;
+			box-shadow: 0 1px 3px rgba(0,0,0,0.12), 0 4px 12px rgba(0,0,0,0.08);
+			border-radius: 6px;
 			overflow: hidden;
 		}
 		.chart-overlay.selected {
 			border: 2px solid var(--vscode-focusBorder, #007acc);
-			box-shadow: 0 0 0 1px var(--vscode-focusBorder, #007acc), 0 4px 12px rgba(0,0,0,0.3);
+			box-shadow: 0 0 0 1px var(--vscode-focusBorder, #007acc), 0 1px 3px rgba(0,0,0,0.12), 0 4px 12px rgba(0,0,0,0.08);
 		}
 		.chart-resize-handle {
 			position: absolute;

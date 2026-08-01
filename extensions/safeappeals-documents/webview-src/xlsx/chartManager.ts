@@ -83,13 +83,23 @@ export interface RendererCoords {
 	getHeaderHeight(): number;
 }
 
-// --- Default color palette ---
+// --- Okabe–Ito colorblind-safe categorical palette (hardcoded fallback) ---
 
-const DEFAULT_COLORS = [
-	'#4472C4', '#ED7D31', '#A5A5A5', '#FFC000',
-	'#5B9BD5', '#70AD47', '#264478', '#9B57A1',
-	'#636363', '#FF585D', '#7030A0', '#00B0F0',
+const OKABE_ITO_FALLBACK = [
+	'#E69F00', '#56B4E9', '#009E73', '#F0E442',
+	'#0072B2', '#D55E00', '#CC79A7', '#000000',
 ];
+
+/** Wizard COLOR_SCHEMES ids → hex arrays (mirrors chartWizardDialog.ts). */
+const WIZARD_SCHEME_COLORS: Record<string, string[]> = {
+	blue: ['#0077B6', '#00B4D8', '#90E0EF', '#CAF0F8', '#023E8A', '#03045E'],
+	warm: ['#FF595E', '#FFCA3A', '#FF924C', '#C8553D', '#8AC926', '#FF6B6B'],
+	mono: ['#2B2D42', '#8D99AE', '#EDF2F4', '#4A4E69', '#C9CCD5', '#636363'],
+	nature: ['#386641', '#6A994E', '#A7C957', '#F2E8CF', '#BC4749', '#774936'],
+};
+
+const GRIDLINE_COLOR = 'rgba(128,128,128,0.14)';
+const MAX_BAR_THICKNESS = 48;
 
 // --- ChartOverlay ---
 
@@ -102,7 +112,7 @@ class ChartOverlay {
 	selected = false;
 	private handles: HTMLDivElement[] = [];
 
-	constructor(def: ChartDefinition, index: number, wrapper: HTMLElement, onSelect: (idx: number) => void, onDelete: (idx: number) => void, onDblClick: (idx: number) => void) {
+	constructor(def: ChartDefinition, index: number, wrapper: HTMLElement, onSelect: (idx: number) => void, onDelete: (idx: number) => void, onDblClick: (idx: number) => void, onWheel: (e: WheelEvent) => void) {
 		this.def = def;
 		this.index = index;
 
@@ -138,6 +148,7 @@ class ChartOverlay {
 				onDelete(this.index);
 			}
 		});
+		this.container.addEventListener('wheel', onWheel, { passive: false });
 		this.container.tabIndex = -1;
 	}
 
@@ -230,10 +241,12 @@ export class ChartManager {
 	private dragOrigAnchor: ChartAnchor | null = null;
 	private dragHandle = '';
 	private dragCoords: RendererCoords | null = null;
+	private onWheel: (e: WheelEvent) => void;
 
-	constructor(wrapper: HTMLElement, onAction: ChartManagerCallback) {
+	constructor(wrapper: HTMLElement, onAction: ChartManagerCallback, onWheel: (e: WheelEvent) => void) {
 		this.wrapper = wrapper;
 		this.onAction = onAction;
+		this.onWheel = onWheel;
 
 		// Global mouse handlers for drag
 		window.addEventListener('mousemove', this.onMouseMove);
@@ -254,6 +267,7 @@ export class ChartManager {
 				(idx) => this.selectChart(idx),
 				(idx) => this.deleteChart(idx),
 				(idx) => this.onAction('editChart', idx, this.overlays[idx]?.def),
+				this.onWheel,
 			);
 			overlay.updatePosition(coords);
 			this.setupDrag(overlay, coords);
@@ -421,11 +435,67 @@ export class ChartManager {
 	}
 }
 
+// --- Theme helpers ---
+
+function resolveCssVar(name: string, fallback: string): string {
+	const value = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+	return value || fallback;
+}
+
+function resolveThemePalette(): string[] {
+	return Array.from({ length: 8 }, (_, i) =>
+		resolveCssVar(`--xlsx-chart-c${i + 1}`, OKABE_ITO_FALLBACK[i])
+	);
+}
+
+/**
+ * Palette order: explicit style.color_scheme → CSS-var Okabe–Ito → hardcoded fallback.
+ * color_scheme may be a hex array (wizard non-default) or a single scheme id (e.g. ['blue']).
+ */
+function resolvePalette(def: ChartDefinition): string[] {
+	const scheme = def.style?.color_scheme;
+	if (scheme && scheme.length > 0) {
+		if (scheme.length === 1) {
+			const id = scheme[0];
+			if (id === 'default') {
+				return resolveThemePalette();
+			}
+			const mapped = WIZARD_SCHEME_COLORS[id];
+			if (mapped) {
+				return mapped;
+			}
+		}
+		if (scheme[0].startsWith('#')) {
+			return scheme;
+		}
+	}
+	return resolveThemePalette();
+}
+
+function hexToRgba(hex: string, alpha: number): string {
+	const raw = hex.trim().replace(/^#/, '');
+	const full = raw.length === 3
+		? raw.split('').map(c => c + c).join('')
+		: raw;
+	if (full.length !== 6 || !/^[0-9a-fA-F]{6}$/.test(full)) {
+		return `rgba(128,128,128,${alpha})`;
+	}
+	const r = parseInt(full.slice(0, 2), 16);
+	const g = parseInt(full.slice(2, 4), 16);
+	const b = parseInt(full.slice(4, 6), 16);
+	return `rgba(${r},${g},${b},${alpha})`;
+}
+
 // --- Build Chart.js Config ---
 
 function buildChartConfig(def: ChartDefinition): any {
 	const chartType = mapChartType(def.chart_type);
 	const isCategorical = chartType !== 'scatter';
+	const palette = resolvePalette(def);
+
+	const titleColor = resolveCssVar('--vscode-foreground', '#cccccc');
+	const mutedColor = resolveCssVar('--vscode-descriptionForeground', '#999');
+	const overlayBg = resolveCssVar('--vscode-editor-background', '#1e1e1e');
 
 	// Extract labels from first series with categories
 	let labels: string[] = [];
@@ -436,8 +506,20 @@ function buildChartConfig(def: ChartDefinition): any {
 		}
 	}
 
+	const isPieLike = chartType === 'pie' || chartType === 'doughnut';
+	const isArea = def.chart_type === 'area';
+	const isLineLike = chartType === 'line' || isArea;
+
 	// Build datasets
 	const datasets: any[] = def.series.map((s, i) => {
+		const seriesColor = getColor(palette, i, 1) as string;
+		const segmentCount = isPieLike ? Math.max(s.values_cache.length, 1) : 1;
+		const fillColor = isPieLike
+			? getColor(palette, i, segmentCount)
+			: isArea
+				? hexToRgba(seriesColor, 0.15)
+				: seriesColor;
+
 		const ds: any = {
 			label: s.name || `Series ${i + 1}`,
 			data: chartType === 'scatter'
@@ -446,24 +528,58 @@ function buildChartConfig(def: ChartDefinition): any {
 					y: v
 				}))
 				: s.values_cache,
-			backgroundColor: getColor(i, chartType === 'pie' || chartType === 'doughnut' ? s.values_cache.length : 1),
-			borderColor: DEFAULT_COLORS[i % DEFAULT_COLORS.length],
-			borderWidth: chartType === 'bar' || chartType === 'pie' || chartType === 'doughnut' ? 1 : 2,
+			backgroundColor: fillColor,
+			borderColor: isPieLike ? overlayBg : seriesColor,
+			borderWidth: isPieLike ? 2 : (chartType === 'bar' ? 0 : 2),
 		};
 
-		if (chartType === 'line' || def.chart_type === 'area') {
-			ds.fill = def.chart_type === 'area';
-			ds.tension = 0.3;
-			ds.pointRadius = 3;
+		if (chartType === 'bar') {
+			ds.borderRadius = 2;
+			ds.maxBarThickness = MAX_BAR_THICKNESS;
+		}
+
+		if (isLineLike || chartType === 'scatter') {
+			ds.tension = isLineLike ? 0.3 : undefined;
+			ds.pointRadius = 2;
+			ds.pointHoverRadius = 4;
+			if (isArea) {
+				ds.fill = true;
+			} else if (chartType === 'line') {
+				ds.fill = false;
+			}
 		}
 
 		// Combo chart: per-dataset type override
 		if (s.chart_type) {
-			ds.type = mapChartType(s.chart_type);
+			const dsType = mapChartType(s.chart_type);
+			ds.type = dsType;
+			if (dsType === 'bar') {
+				ds.borderWidth = 0;
+				ds.borderRadius = 2;
+				ds.maxBarThickness = MAX_BAR_THICKNESS;
+				ds.backgroundColor = seriesColor;
+			} else if (dsType === 'line') {
+				ds.borderWidth = 2;
+				ds.tension = 0.3;
+				ds.pointRadius = 2;
+				ds.pointHoverRadius = 4;
+				ds.fill = false;
+			}
 		}
 
 		return ds;
 	});
+
+	// Legend: respect explicit def.legend; when undefined, hide single-series, bottom for multi
+	let legendDisplay: boolean;
+	let legendPosition: 'top' | 'bottom' | 'left' | 'right';
+	if (def.legend !== undefined) {
+		legendDisplay = def.legend.visible !== false;
+		legendPosition = mapLegendPosition(def.legend.position);
+	} else {
+		legendDisplay = def.series.length > 1;
+		legendPosition = 'bottom';
+	}
 
 	const config: any = {
 		type: chartType,
@@ -479,16 +595,18 @@ function buildChartConfig(def: ChartDefinition): any {
 				title: {
 					display: !!def.title,
 					text: def.title || '',
-					color: '#cccccc',
+					color: titleColor,
 					font: { size: 14, weight: 'bold' },
 				},
 				legend: {
-					display: def.legend?.visible !== false,
-					position: mapLegendPosition(def.legend?.position),
-					labels: { color: '#cccccc', font: { size: 11 } },
+					display: legendDisplay,
+					position: legendPosition,
+					labels: { color: mutedColor, font: { size: 11 } },
 				},
 				tooltip: {
 					enabled: true,
+					padding: 10,
+					cornerRadius: 6,
 				},
 			},
 			scales: {} as Record<string, any>,
@@ -498,24 +616,37 @@ function buildChartConfig(def: ChartDefinition): any {
 	// Axes for non-pie/doughnut charts
 	if (chartType !== 'pie' && chartType !== 'doughnut' && chartType !== 'radar') {
 		const xAxis: any = {
-			ticks: { color: '#999' },
-			grid: { color: 'rgba(255,255,255,0.08)' },
+			ticks: { color: mutedColor },
+			grid: { color: GRIDLINE_COLOR },
+			border: { display: false },
 		};
 		const yAxis: any = {
-			ticks: { color: '#999' },
-			grid: { color: 'rgba(255,255,255,0.08)' },
+			ticks: { color: mutedColor },
+			grid: { color: GRIDLINE_COLOR },
+			border: { display: false },
 		};
 
 		for (const ax of def.axes) {
 			const target = ax.axis_type === 'category' ? xAxis : yAxis;
 			if (ax.title) {
-				target.title = { display: true, text: ax.title, color: '#ccc' };
+				target.title = { display: true, text: ax.title, color: mutedColor };
 			}
 			if (ax.min_val !== undefined) target.min = ax.min_val;
 			if (ax.max_val !== undefined) target.max = ax.max_val;
 		}
 
 		config.options.scales = { x: xAxis, y: yAxis };
+	}
+
+	if (chartType === 'radar') {
+		config.options.scales = {
+			r: {
+				ticks: { color: mutedColor, backdropColor: 'transparent' },
+				grid: { color: GRIDLINE_COLOR },
+				angleLines: { color: GRIDLINE_COLOR },
+				pointLabels: { color: mutedColor },
+			},
+		};
 	}
 
 	return config;
@@ -544,10 +675,9 @@ function mapLegendPosition(pos?: string): 'top' | 'bottom' | 'left' | 'right' {
 	}
 }
 
-function getColor(index: number, count: number): string | string[] {
+function getColor(palette: string[], index: number, count: number): string | string[] {
 	if (count > 1) {
-		// For pie/doughnut, generate an array of colors
-		return Array.from({ length: count }, (_, i) => DEFAULT_COLORS[i % DEFAULT_COLORS.length]);
+		return Array.from({ length: count }, (_, i) => palette[i % palette.length]);
 	}
-	return DEFAULT_COLORS[index % DEFAULT_COLORS.length];
+	return palette[index % palette.length];
 }

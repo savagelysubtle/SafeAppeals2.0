@@ -2088,6 +2088,9 @@
       this.render();
     }
     // --- Event Handlers ---
+    forwardWheel(e) {
+      this.handleWheel(e);
+    }
     handleWheel(e) {
       e.preventDefault();
       if (e.ctrlKey || e.metaKey) {
@@ -6031,22 +6034,21 @@
       const panel = this.tabPanel("home", true);
       const clip = this.group("Clipboard");
       const clipBody = this.el("div", "group-body clip-layout");
-      const pasteBtn = this.tallBtn(IC.paste, "Paste", "paste");
-      clipBody.appendChild(pasteBtn);
+      clipBody.appendChild(this.tallBtn(IC.paste, "Paste", "paste"));
       const clipStack = this.el("div", "clip-stack");
-      clipStack.appendChild(this.iconBtn(IC.cut, "Cut", "cut", "Ctrl+X"));
-      clipStack.appendChild(this.iconBtn(IC.copy, "Copy", "copy", "Ctrl+C"));
-      clipStack.appendChild(this.iconBtn(IC.paste, "Paste Special...", "pasteSpecial", "Ctrl+Shift+V"));
+      clipStack.appendChild(this.iconOnlyBtn(IC.cut, "cut", "Cut (Ctrl+X)"));
+      clipStack.appendChild(this.iconOnlyBtn(IC.copy, "copy", "Copy (Ctrl+C)"));
+      clipStack.appendChild(this.iconOnlyBtn(IC.paste, "pasteSpecial", "Paste Special... (Ctrl+Shift+V)"));
       clipBody.appendChild(clipStack);
-      clip.insertBefore(clipBody, clip.lastChild);
+      clip.appendChild(clipBody);
       panel.appendChild(clip);
       const hist = this.group("History");
       const histBody = this.el("div", "group-body");
-      const histRow = this.el("div", "btn-col");
-      histRow.appendChild(this.iconBtn(IC.undo, "Undo", "undo", "Ctrl+Z"));
-      histRow.appendChild(this.iconBtn(IC.redo, "Redo", "redo", "Ctrl+Y"));
+      const histRow = this.el("div", "btn-row");
+      histRow.appendChild(this.iconOnlyBtn(IC.undo, "undo", "Undo (Ctrl+Z)"));
+      histRow.appendChild(this.iconOnlyBtn(IC.redo, "redo", "Redo (Ctrl+Y)"));
       histBody.appendChild(histRow);
-      hist.insertBefore(histBody, hist.lastChild);
+      hist.appendChild(histBody);
       panel.appendChild(hist);
       const font = this.group("Font");
       const fontBody = this.el("div", "group-body font-body");
@@ -6087,25 +6089,23 @@
       fontR2.appendChild(this.colorBtn("A", "textColor", "#cccccc"));
       fontR2.appendChild(this.colorBtn("\u25A0", "fillColor", "#3c3c3c"));
       fontBody.appendChild(fontR2);
-      font.insertBefore(fontBody, font.lastChild);
+      font.appendChild(fontBody);
       panel.appendChild(font);
       const align = this.group("Alignment");
       const alignBody = this.el("div", "group-body");
-      const alignR1 = this.el("div", "btn-row");
-      alignR1.appendChild(this.iconOnlyBtn(IC.alignL, "alignLeft", "Align Left"));
-      alignR1.appendChild(this.iconOnlyBtn(IC.alignC, "alignCenter", "Align Center"));
-      alignR1.appendChild(this.iconOnlyBtn(IC.alignR, "alignRight", "Align Right"));
-      alignBody.appendChild(alignR1);
-      const alignR2 = this.el("div", "btn-row");
-      alignR2.appendChild(this.iconBtn(IC.wrap, "Wrap", "wrapText"));
-      alignR2.appendChild(this.iconBtn(IC.merge, "Merge", "mergeCells"));
-      alignBody.appendChild(alignR2);
-      align.insertBefore(alignBody, align.lastChild);
+      const alignRow = this.el("div", "btn-row");
+      alignRow.appendChild(this.iconOnlyBtn(IC.alignL, "alignLeft", "Align Left"));
+      alignRow.appendChild(this.iconOnlyBtn(IC.alignC, "alignCenter", "Align Center"));
+      alignRow.appendChild(this.iconOnlyBtn(IC.alignR, "alignRight", "Align Right"));
+      alignRow.appendChild(this.iconOnlyBtn(IC.wrap, "wrapText", "Wrap"));
+      alignRow.appendChild(this.iconOnlyBtn(IC.merge, "mergeCells", "Merge"));
+      alignBody.appendChild(alignRow);
+      align.appendChild(alignBody);
       panel.appendChild(align);
       const numGrp = this.group("Number");
       const numBody = this.el("div", "group-body");
-      const numR1 = this.el("div", "btn-row");
-      numR1.appendChild(this.selectEl("numberFormat", [
+      const numRow = this.el("div", "btn-row");
+      numRow.appendChild(this.selectEl("numberFormat", [
         "General",
         "Number",
         "Currency",
@@ -6113,57 +6113,49 @@
         "Date",
         "Text"
       ], void 0, "num-select"));
-      numBody.appendChild(numR1);
-      const numR2 = this.el("div", "btn-row");
-      numR2.appendChild(this.fmtBtn("$", "currency"));
-      numR2.appendChild(this.fmtBtn("%", "percent"));
-      numR2.appendChild(this.fmtBtn(",", "comma"));
-      numR2.appendChild(this.el("span", "btn-separator"));
-      numR2.appendChild(this.fmtBtn(".0+", "increaseDecimal"));
-      numR2.appendChild(this.fmtBtn(".0\u2013", "decreaseDecimal"));
-      numBody.appendChild(numR2);
-      numGrp.insertBefore(numBody, numGrp.lastChild);
+      numRow.appendChild(this.fmtBtn("$", "currency"));
+      numRow.appendChild(this.fmtBtn("%", "percent"));
+      numRow.appendChild(this.fmtBtn(",", "comma"));
+      numRow.appendChild(this.el("span", "btn-separator"));
+      numRow.appendChild(this.fmtBtn(".0+", "increaseDecimal"));
+      numRow.appendChild(this.fmtBtn(".0\u2013", "decreaseDecimal"));
+      numBody.appendChild(numRow);
+      numGrp.appendChild(numBody);
       panel.appendChild(numGrp);
       const cells = this.group("Cells");
       const cellsBody = this.el("div", "group-body");
-      const cellR1 = this.el("div", "btn-row");
-      cellR1.appendChild(this.iconBtn(IC.insertRow, "+ Row", "insertRow", "Insert Row"));
-      cellR1.appendChild(this.iconBtn(IC.insertCol, "+ Col", "insertCol", "Insert Column"));
-      cellsBody.appendChild(cellR1);
-      const cellR2 = this.el("div", "btn-row");
-      cellR2.appendChild(this.iconBtn(IC.deleteRow, "\u2013 Row", "deleteRow", "Delete Row"));
-      cellR2.appendChild(this.iconBtn(IC.deleteCol, "\u2013 Col", "deleteCol", "Delete Column"));
-      cellsBody.appendChild(cellR2);
-      cells.insertBefore(cellsBody, cells.lastChild);
+      const cellRow = this.el("div", "btn-row");
+      cellRow.appendChild(this.iconOnlyBtn(IC.insertRow, "insertRow", "Insert Row"));
+      cellRow.appendChild(this.iconOnlyBtn(IC.insertCol, "insertCol", "Insert Column"));
+      cellRow.appendChild(this.iconOnlyBtn(IC.deleteRow, "deleteRow", "Delete Row"));
+      cellRow.appendChild(this.iconOnlyBtn(IC.deleteCol, "deleteCol", "Delete Column"));
+      cellsBody.appendChild(cellRow);
+      cells.appendChild(cellsBody);
       panel.appendChild(cells);
       const editGroup = this.group("Editing");
       const editBody = this.el("div", "group-body");
-      const editR1 = this.el("div", "btn-row");
-      editR1.appendChild(this.iconBtn(IC.fillDown, "Fill \u2193", "fillDown", "Fill Down (Ctrl+D)"));
-      editR1.appendChild(this.iconBtn(IC.fillRight, "Fill \u2192", "fillRight", "Fill Right (Ctrl+R)"));
-      editBody.appendChild(editR1);
-      const editR2 = this.el("div", "btn-row");
-      editR2.appendChild(this.iconBtn(IC.flashFill, "Flash Fill", "flashFill", "Flash Fill (Ctrl+E)"));
-      editBody.appendChild(editR2);
-      editGroup.insertBefore(editBody, editGroup.lastChild);
+      const editRow = this.el("div", "btn-row");
+      editRow.appendChild(this.iconOnlyBtn(IC.fillDown, "fillDown", "Fill Down (Ctrl+D)"));
+      editRow.appendChild(this.iconOnlyBtn(IC.fillRight, "fillRight", "Fill Right (Ctrl+R)"));
+      editRow.appendChild(this.iconOnlyBtn(IC.flashFill, "flashFill", "Flash Fill (Ctrl+E)"));
+      editBody.appendChild(editRow);
+      editGroup.appendChild(editBody);
       panel.appendChild(editGroup);
       const stylesGroup = this.group("Styles");
       const stylesBody = this.el("div", "group-body");
-      stylesBody.appendChild(this.tallBtn(IC.condFormat, "Cond.\nFormat", "conditionalFormatting"));
-      stylesGroup.insertBefore(stylesBody, stylesGroup.lastChild);
+      stylesBody.appendChild(this.tallBtn(IC.condFormat, "Cond. Format", "conditionalFormatting"));
+      stylesGroup.appendChild(stylesBody);
       panel.appendChild(stylesGroup);
       const fx = this.group("Formulas");
       const fxBody = this.el("div", "group-body");
-      const fxR1 = this.el("div", "btn-row");
-      fxR1.appendChild(this.iconBtn(IC.sigma, "SUM", "formulaSum"));
-      fxR1.appendChild(this.fmtBtn("AVG", "formulaAvg"));
-      fxR1.appendChild(this.fmtBtn("CNT", "formulaCount"));
-      fxBody.appendChild(fxR1);
-      const fxR2 = this.el("div", "btn-row");
-      fxR2.appendChild(this.fmtBtn("MIN", "formulaMin"));
-      fxR2.appendChild(this.fmtBtn("MAX", "formulaMax"));
-      fxBody.appendChild(fxR2);
-      fx.insertBefore(fxBody, fx.lastChild);
+      const fxRow = this.el("div", "btn-row");
+      fxRow.appendChild(this.iconBtn(IC.sigma, "SUM", "formulaSum"));
+      fxRow.appendChild(this.fmtBtn("AVG", "formulaAvg"));
+      fxRow.appendChild(this.fmtBtn("CNT", "formulaCount"));
+      fxRow.appendChild(this.fmtBtn("MIN", "formulaMin"));
+      fxRow.appendChild(this.fmtBtn("MAX", "formulaMax"));
+      fxBody.appendChild(fxRow);
+      fx.appendChild(fxBody);
       panel.appendChild(fx);
       return panel;
     }
@@ -6173,36 +6165,34 @@
       const pivotGroup = this.group("PivotTable");
       const pivotBody = this.el("div", "group-body");
       pivotBody.appendChild(this.tallBtn(IC.pivotTable, "PivotTable", "insertPivotTable"));
-      pivotGroup.insertBefore(pivotBody, pivotGroup.lastChild);
+      pivotGroup.appendChild(pivotBody);
       panel.appendChild(pivotGroup);
       const chartGroup = this.group("Charts");
       const chartBody = this.el("div", "group-body");
       chartBody.appendChild(this.tallBtn(IC.chart, "Chart", "insertChart"));
-      chartGroup.insertBefore(chartBody, chartGroup.lastChild);
+      chartGroup.appendChild(chartBody);
       panel.appendChild(chartGroup);
       const tblGroup = this.group("Tables");
       const tblBody = this.el("div", "group-body");
       tblBody.appendChild(this.tallBtn(IC.table, "Table", "createTable"));
       tblBody.appendChild(this.buildTableStylePicker());
-      tblBody.appendChild(this.iconBtn(IC.convertRange, "To Range", "convertToRange", "Convert Table to Range"));
-      tblGroup.insertBefore(tblBody, tblGroup.lastChild);
+      tblBody.appendChild(this.iconOnlyBtn(IC.convertRange, "convertToRange", "Convert Table to Range"));
+      tblGroup.appendChild(tblBody);
       panel.appendChild(tblGroup);
       const rcGroup = this.group("Rows & Columns");
       const rcBody = this.el("div", "group-body");
-      const rcR1 = this.el("div", "btn-row");
-      rcR1.appendChild(this.iconBtn(IC.insertRow, "+ Row", "insertRow", "Insert Row"));
-      rcR1.appendChild(this.iconBtn(IC.insertCol, "+ Col", "insertCol", "Insert Column"));
-      rcBody.appendChild(rcR1);
-      const rcR2 = this.el("div", "btn-row");
-      rcR2.appendChild(this.iconBtn(IC.deleteRow, "\u2013 Row", "deleteRow", "Delete Row"));
-      rcR2.appendChild(this.iconBtn(IC.deleteCol, "\u2013 Col", "deleteCol", "Delete Column"));
-      rcBody.appendChild(rcR2);
-      rcGroup.insertBefore(rcBody, rcGroup.lastChild);
+      const rcRow = this.el("div", "btn-row");
+      rcRow.appendChild(this.iconOnlyBtn(IC.insertRow, "insertRow", "Insert Row"));
+      rcRow.appendChild(this.iconOnlyBtn(IC.insertCol, "insertCol", "Insert Column"));
+      rcRow.appendChild(this.iconOnlyBtn(IC.deleteRow, "deleteRow", "Delete Row"));
+      rcRow.appendChild(this.iconOnlyBtn(IC.deleteCol, "deleteCol", "Delete Column"));
+      rcBody.appendChild(rcRow);
+      rcGroup.appendChild(rcBody);
       panel.appendChild(rcGroup);
       const linkGroup = this.group("Links");
       const linkBody = this.el("div", "group-body");
       linkBody.appendChild(this.tallBtn(IC.hyperlink, "Hyperlink", "insertHyperlink"));
-      linkGroup.insertBefore(linkBody, linkGroup.lastChild);
+      linkGroup.appendChild(linkBody);
       panel.appendChild(linkGroup);
       return panel;
     }
@@ -6293,7 +6283,7 @@
       const namesBody = this.el("div", "group-body");
       namesBody.appendChild(this.tallBtn(IC.nameManager, "Name Manager", "nameManager"));
       namesBody.appendChild(this.iconBtn(IC.defineName, "Define Name", "defineName"));
-      namesGroup.insertBefore(namesBody, namesGroup.lastChild);
+      namesGroup.appendChild(namesBody);
       panel.appendChild(namesGroup);
       return panel;
     }
@@ -6302,63 +6292,58 @@
       const panel = this.tabPanel("page-layout", false);
       const pg = this.group("Page Setup");
       const pgBody = this.el("div", "group-body");
-      const marginsSel = this.el("div", "btn-col gap-4");
-      const marginsLbl = this.el("div", "ribbon-btn-label");
-      marginsLbl.textContent = "Margins";
-      const marginsDropdown = this.selectEl("pageMargins", ["Normal", "Wide", "Narrow", "Custom..."], "Normal", "ribbon-select-sm");
-      marginsSel.appendChild(this.el("span", "btn-icon").cloneNode(false));
-      const marginsWrap = this.el("div", "btn-col gap-2");
+      const marginsWrap = this.el("div", "btn-row");
       const marginsIcon = document.createElement("div");
       marginsIcon.innerHTML = IC.margins;
       marginsIcon.className = "btn-icon";
+      marginsIcon.title = "Margins";
+      const marginsDropdown = this.selectEl("pageMargins", ["Normal", "Wide", "Narrow", "Custom..."], "Normal", "ribbon-select-sm");
+      marginsDropdown.title = "Margins";
       marginsWrap.appendChild(marginsIcon);
-      marginsWrap.appendChild(marginsLbl);
       marginsWrap.appendChild(marginsDropdown);
       pgBody.appendChild(marginsWrap);
-      const orientWrap = this.el("div", "btn-col gap-2");
-      const orientLbl = this.el("div", "ribbon-btn-label");
-      orientLbl.textContent = "Orientation";
+      const orientWrap = this.el("div", "btn-row");
       const orientIcon = document.createElement("div");
       orientIcon.innerHTML = IC.orientation;
       orientIcon.className = "btn-icon";
+      orientIcon.title = "Orientation";
       const orientDropdown = this.selectEl("pageOrientation", ["Portrait", "Landscape"], "Portrait", "ribbon-select-sm");
+      orientDropdown.title = "Orientation";
       orientWrap.appendChild(orientIcon);
-      orientWrap.appendChild(orientLbl);
       orientWrap.appendChild(orientDropdown);
       pgBody.appendChild(orientWrap);
-      const sizeWrap = this.el("div", "btn-col gap-2");
-      const sizeLbl = this.el("div", "ribbon-btn-label");
-      sizeLbl.textContent = "Size";
+      const sizeWrap = this.el("div", "btn-row");
       const sizeIcon = document.createElement("div");
       sizeIcon.innerHTML = IC.pageSetupDlg;
       sizeIcon.className = "btn-icon";
+      sizeIcon.title = "Size";
       const sizeDropdown = this.selectEl("paperSize", ["Letter", "A4", "Legal", "A3", "Tabloid"], "Letter", "ribbon-select-sm");
+      sizeDropdown.title = "Size";
       sizeWrap.appendChild(sizeIcon);
-      sizeWrap.appendChild(sizeLbl);
       sizeWrap.appendChild(sizeDropdown);
       pgBody.appendChild(sizeWrap);
-      pg.insertBefore(pgBody, pg.lastChild);
+      pg.appendChild(pgBody);
       panel.appendChild(pg);
       const paGrp = this.group("Print Area");
       const paBody = this.el("div", "group-body");
       paBody.appendChild(this.smallBtn(IC.printArea, "Set Print Area", "setPrintArea"));
       paBody.appendChild(this.smallBtn(IC.printArea, "Clear Print Area", "clearPrintArea"));
-      paGrp.insertBefore(paBody, paGrp.lastChild);
+      paGrp.appendChild(paBody);
       panel.appendChild(paGrp);
       const pbGrp = this.group("Breaks");
-      const pbBody = this.el("div", "group-body btn-col gap-4");
+      const pbBody = this.el("div", "group-body btn-row");
       pbBody.appendChild(this.smallBtn(IC.pageBreak, "Insert Page Break", "insertPageBreak"));
       pbBody.appendChild(this.smallBtn(IC.pageBreak, "Remove Page Break", "removePageBreak"));
       pbBody.appendChild(this.smallBtn(IC.pageBreak, "Reset All Breaks", "resetPageBreaks"));
-      pbGrp.insertBefore(pbBody, pbGrp.lastChild);
+      pbGrp.appendChild(pbBody);
       panel.appendChild(pbGrp);
       const ptGrp = this.group("Print Titles");
       const ptBody = this.el("div", "group-body");
-      ptBody.appendChild(this.tallBtn(IC.printTitles, "Print\nTitles", "printTitles"));
-      ptGrp.insertBefore(ptBody, ptGrp.lastChild);
+      ptBody.appendChild(this.tallBtn(IC.printTitles, "Print Titles", "printTitles"));
+      ptGrp.appendChild(ptBody);
       panel.appendChild(ptGrp);
       const sfGrp = this.group("Scale to Fit");
-      const sfBody = this.el("div", "group-body btn-col gap-4");
+      const sfBody = this.el("div", "group-body btn-row");
       const widthWrap = this.el("div", "ribbon-label-row");
       const widthLbl = document.createElement("span");
       widthLbl.textContent = "Width:";
@@ -6394,21 +6379,21 @@
       scaleWrap.appendChild(scaleInput);
       scaleWrap.appendChild(scalePct);
       sfBody.appendChild(scaleWrap);
-      sfGrp.insertBefore(sfBody, sfGrp.lastChild);
+      sfGrp.appendChild(sfBody);
       panel.appendChild(sfGrp);
       const soGrp = this.group("Sheet Options");
-      const soBody = this.el("div", "group-body btn-col gap-4");
+      const soBody = this.el("div", "group-body btn-row");
       soBody.appendChild(this.toggleBtn(IC.gridlines, "Print Gridlines", "printGridlines", false));
       soBody.appendChild(this.toggleBtn(IC.headers, "Print Headings", "printHeadings", false));
       soBody.appendChild(this.toggleBtn(IC.headers, "Center Horiz.", "centerHorizontally", false));
       soBody.appendChild(this.toggleBtn(IC.headers, "Center Vert.", "centerVertically", false));
-      soGrp.insertBefore(soBody, soGrp.lastChild);
+      soGrp.appendChild(soBody);
       panel.appendChild(soGrp);
       const dlgGrp = this.group("");
-      const dlgBody = this.el("div", "group-body btn-col gap-6");
-      dlgBody.appendChild(this.tallBtn(IC.pageSetupDlg, "Page\nSetup", "pageSetupDialog"));
-      dlgBody.appendChild(this.tallBtn(IC.printPreview, "Print\nPreview", "printPreview"));
-      dlgGrp.insertBefore(dlgBody, dlgGrp.lastChild);
+      const dlgBody = this.el("div", "group-body btn-row");
+      dlgBody.appendChild(this.tallBtn(IC.pageSetupDlg, "Page Setup", "pageSetupDialog"));
+      dlgBody.appendChild(this.tallBtn(IC.printPreview, "Print Preview", "printPreview"));
+      dlgGrp.appendChild(dlgBody);
       panel.appendChild(dlgGrp);
       return panel;
     }
@@ -6417,27 +6402,27 @@
       const panel = this.tabPanel("view", false);
       const show = this.group("Show");
       const showBody = this.el("div", "group-body");
-      const showR = this.el("div", "btn-col gap-6");
+      const showR = this.el("div", "btn-row");
       showR.appendChild(this.toggleBtn(IC.gridlines, "Gridlines", "gridlines", true));
       showR.appendChild(this.toggleBtn(IC.headers, "Headers", "headers", true));
       showBody.appendChild(showR);
-      show.insertBefore(showBody, show.lastChild);
+      show.appendChild(showBody);
       panel.appendChild(show);
       const win = this.group("Window");
       const winBody = this.el("div", "group-body");
-      winBody.appendChild(this.tallBtn(IC.freeze, "Freeze\nPanes", "freezePanes"));
-      win.insertBefore(winBody, win.lastChild);
+      winBody.appendChild(this.tallBtn(IC.freeze, "Freeze Panes", "freezePanes"));
+      win.appendChild(winBody);
       panel.appendChild(win);
       const views = this.group("Workbook Views");
-      const viewsBody = this.el("div", "group-body btn-col gap-6");
-      viewsBody.appendChild(this.toggleBtn(IC.pageBreak, "Page Break\nPreview", "pageBreakPreview", false));
-      views.insertBefore(viewsBody, views.lastChild);
+      const viewsBody = this.el("div", "group-body btn-row");
+      viewsBody.appendChild(this.toggleBtn(IC.pageBreak, "Page Break Preview", "pageBreakPreview", false));
+      views.appendChild(viewsBody);
       panel.appendChild(views);
       const zoomGrp = this.group("Zoom");
       const zoomBody = this.el("div", "group-body");
-      zoomBody.appendChild(this.tallBtn(IC.zoomIn, "Zoom\nIn", "zoomIn"));
-      zoomBody.appendChild(this.tallBtn(IC.zoomOut, "Zoom\nOut", "zoomOut"));
-      const zoomStack = this.el("div", "btn-col gap-6");
+      zoomBody.appendChild(this.tallBtn(IC.zoomIn, "Zoom In", "zoomIn"));
+      zoomBody.appendChild(this.tallBtn(IC.zoomOut, "Zoom Out", "zoomOut"));
+      const zoomStack = this.el("div", "btn-row");
       zoomStack.appendChild(this.iconBtn(IC.zoomFit, "100%", "zoomReset", "Reset to 100%"));
       zoomStack.appendChild(this.iconBtn(IC.zoomFit, "Fit", "zoomToFit", "Zoom to Fit"));
       const presetSel = document.createElement("select");
@@ -6456,7 +6441,7 @@
       });
       zoomStack.appendChild(presetSel);
       zoomBody.appendChild(zoomStack);
-      zoomGrp.insertBefore(zoomBody, zoomGrp.lastChild);
+      zoomGrp.appendChild(zoomBody);
       panel.appendChild(zoomGrp);
       return panel;
     }
@@ -6465,39 +6450,37 @@
       const panel = this.tabPanel("data", false);
       const sort = this.group("Sort & Filter");
       const sortBody = this.el("div", "group-body");
-      sortBody.appendChild(this.tallBtn(IC.sortAsc, "Sort\nA\u2192Z", "sortAZ"));
-      sortBody.appendChild(this.tallBtn(IC.sortDesc, "Sort\nZ\u2192A", "sortZA"));
-      const filterStack = this.el("div", "btn-col gap-6");
-      filterStack.appendChild(this.iconBtn(IC.filter, "Filter", "toggleTableFilter", "Toggle Table Filter"));
-      filterStack.appendChild(this.iconBtn(IC.totals, "Totals", "toggleTotalsRow", "Toggle Totals Row"));
+      sortBody.appendChild(this.tallBtn(IC.sortAsc, "Sort A\u2192Z", "sortAZ"));
+      sortBody.appendChild(this.tallBtn(IC.sortDesc, "Sort Z\u2192A", "sortZA"));
+      const filterStack = this.el("div", "btn-row");
+      filterStack.appendChild(this.iconOnlyBtn(IC.filter, "toggleTableFilter", "Toggle Table Filter"));
+      filterStack.appendChild(this.iconOnlyBtn(IC.totals, "toggleTotalsRow", "Toggle Totals Row"));
       sortBody.appendChild(filterStack);
-      sort.insertBefore(sortBody, sort.lastChild);
+      sort.appendChild(sortBody);
       panel.appendChild(sort);
       const dvGroup = this.group("Data Tools");
       const dvBody = this.el("div", "group-body");
-      dvBody.appendChild(this.tallBtn(IC.dataValid, "Data\nValidation", "dataValidation"));
-      const dvStack = this.el("div", "btn-col gap-6");
-      dvStack.appendChild(this.iconBtn(IC.circleInvalid, "Circle\nInvalid", "circleInvalidData", "Circle Invalid Data"));
-      dvBody.appendChild(dvStack);
-      dvGroup.insertBefore(dvBody, dvGroup.lastChild);
+      dvBody.appendChild(this.tallBtn(IC.dataValid, "Data Validation", "dataValidation"));
+      dvBody.appendChild(this.iconOnlyBtn(IC.circleInvalid, "circleInvalidData", "Circle Invalid Data"));
+      dvGroup.appendChild(dvBody);
       panel.appendChild(dvGroup);
       const edit = this.group("Edit");
       const editBody = this.el("div", "group-body");
       editBody.appendChild(this.tallBtn(IC.clear, "Clear", "clear"));
-      edit.insertBefore(editBody, edit.lastChild);
+      edit.appendChild(editBody);
       panel.appendChild(edit);
       const outlineGroup = this.group("Outline");
       const outlineBody = this.el("div", "group-body");
-      outlineBody.appendChild(this.tallBtn(IC.group, "Group\nRows", "groupRows"));
-      outlineBody.appendChild(this.tallBtn(IC.group, "Group\nColumns", "groupCols"));
-      outlineBody.appendChild(this.tallBtn(IC.ungroup, "Ungroup\nRows", "ungroupRows"));
-      outlineBody.appendChild(this.tallBtn(IC.ungroup, "Ungroup\nColumns", "ungroupCols"));
-      outlineGroup.insertBefore(outlineBody, outlineGroup.lastChild);
+      outlineBody.appendChild(this.tallBtn(IC.group, "Group Rows", "groupRows"));
+      outlineBody.appendChild(this.tallBtn(IC.group, "Group Columns", "groupCols"));
+      outlineBody.appendChild(this.tallBtn(IC.ungroup, "Ungroup Rows", "ungroupRows"));
+      outlineBody.appendChild(this.tallBtn(IC.ungroup, "Ungroup Columns", "ungroupCols"));
+      outlineGroup.appendChild(outlineBody);
       panel.appendChild(outlineGroup);
       const pvGroup = this.group("PivotTable");
       const pvBody = this.el("div", "group-body");
-      pvBody.appendChild(this.tallBtn(IC.pivotTable, "Refresh\nAll", "refreshAllPivots"));
-      pvGroup.insertBefore(pvBody, pvGroup.lastChild);
+      pvBody.appendChild(this.tallBtn(IC.pivotTable, "Refresh All", "refreshAllPivots"));
+      pvGroup.appendChild(pvBody);
       panel.appendChild(pvGroup);
       return panel;
     }
@@ -6531,12 +6514,13 @@
       b.onclick = () => this.onAction({ action });
       return b;
     }
-    /** Tall (primary) button: icon above, text below */
+    /** Tall (primary) button: icon + label in a single row */
     tallBtn(svg, label, action) {
       const b = document.createElement("button");
       b.className = "ribbon-btn tall-btn";
-      b.innerHTML = `<span class="btn-icon lg">${svg}</span><span class="btn-label-below">${label.replace("\n", "<br>")}</span>`;
-      b.title = label.replace("\n", " ");
+      const flat = label.replace(/\n/g, " ");
+      b.innerHTML = `<span class="btn-icon lg">${svg}</span><span class="btn-label-below">${flat}</span>`;
+      b.title = flat;
       b.onclick = () => this.onAction({ action });
       return b;
     }
@@ -6685,12 +6669,8 @@
       el.className = className;
       return el;
     }
-    group(label) {
-      const g = this.el("div", "ribbon-group");
-      const lbl = this.el("div", "group-label");
-      lbl.textContent = label;
-      g.appendChild(lbl);
-      return g;
+    group(_label) {
+      return this.el("div", "ribbon-group");
     }
     tabPanel(key, active) {
       const panel = this.el("div", "ribbon-tab-panel");
@@ -12263,9 +12243,9 @@
     }
     return valueInPixels;
   }
-  var getComputedStyle = (element) => element.ownerDocument.defaultView.getComputedStyle(element, null);
+  var getComputedStyle2 = (element) => element.ownerDocument.defaultView.getComputedStyle(element, null);
   function getStyle(el, property) {
-    return getComputedStyle(el).getPropertyValue(property);
+    return getComputedStyle2(el).getPropertyValue(property);
   }
   var positions = [
     "top",
@@ -12311,7 +12291,7 @@
       return event;
     }
     const { canvas, currentDevicePixelRatio } = chart;
-    const style = getComputedStyle(canvas);
+    const style = getComputedStyle2(canvas);
     const borderBox = style.boxSizing === "border-box";
     const paddings = getPositionedStyle(style, "padding");
     const borders = getPositionedStyle(style, "border", "width");
@@ -12337,7 +12317,7 @@
         height = canvas.clientHeight;
       } else {
         const rect = container.getBoundingClientRect();
-        const containerStyle = getComputedStyle(container);
+        const containerStyle = getComputedStyle2(container);
         const containerBorder = getPositionedStyle(containerStyle, "border", "width");
         const containerPadding = getPositionedStyle(containerStyle, "padding");
         width = rect.width - containerPadding.width - containerBorder.width;
@@ -12355,7 +12335,7 @@
   }
   var round1 = (v) => Math.round(v * 10) / 10;
   function getMaximumSize(canvas, bbWidth, bbHeight, aspectRatio) {
-    const style = getComputedStyle(canvas);
+    const style = getComputedStyle2(canvas);
     const margins = getPositionedStyle(style, "margin");
     const maxWidth = parseMaxStyle(style.maxWidth, canvas, "clientWidth") || INFINITY;
     const maxHeight = parseMaxStyle(style.maxHeight, canvas, "clientHeight") || INFINITY;
@@ -23688,22 +23668,26 @@
     plugin_tooltip,
     plugin_legend
   );
-  var DEFAULT_COLORS = [
-    "#4472C4",
-    "#ED7D31",
-    "#A5A5A5",
-    "#FFC000",
-    "#5B9BD5",
-    "#70AD47",
-    "#264478",
-    "#9B57A1",
-    "#636363",
-    "#FF585D",
-    "#7030A0",
-    "#00B0F0"
+  var OKABE_ITO_FALLBACK = [
+    "#E69F00",
+    "#56B4E9",
+    "#009E73",
+    "#F0E442",
+    "#0072B2",
+    "#D55E00",
+    "#CC79A7",
+    "#000000"
   ];
+  var WIZARD_SCHEME_COLORS = {
+    blue: ["#0077B6", "#00B4D8", "#90E0EF", "#CAF0F8", "#023E8A", "#03045E"],
+    warm: ["#FF595E", "#FFCA3A", "#FF924C", "#C8553D", "#8AC926", "#FF6B6B"],
+    mono: ["#2B2D42", "#8D99AE", "#EDF2F4", "#4A4E69", "#C9CCD5", "#636363"],
+    nature: ["#386641", "#6A994E", "#A7C957", "#F2E8CF", "#BC4749", "#774936"]
+  };
+  var GRIDLINE_COLOR = "rgba(128,128,128,0.14)";
+  var MAX_BAR_THICKNESS = 48;
   var ChartOverlay = class {
-    constructor(def, index2, wrapper, onSelect, onDelete, onDblClick) {
+    constructor(def, index2, wrapper, onSelect, onDelete, onDblClick, onWheel) {
       __publicField(this, "container");
       __publicField(this, "chartCanvas");
       __publicField(this, "chart");
@@ -23737,6 +23721,7 @@
           onDelete(this.index);
         }
       });
+      this.container.addEventListener("wheel", onWheel, { passive: false });
       this.container.tabIndex = -1;
     }
     createHandles() {
@@ -23797,7 +23782,7 @@
     }
   };
   var ChartManager = class {
-    constructor(wrapper, onAction) {
+    constructor(wrapper, onAction, onWheel) {
       __publicField(this, "wrapper");
       __publicField(this, "overlays", []);
       __publicField(this, "onAction");
@@ -23814,6 +23799,7 @@
       __publicField(this, "dragOrigAnchor", null);
       __publicField(this, "dragHandle", "");
       __publicField(this, "dragCoords", null);
+      __publicField(this, "onWheel");
       __publicField(this, "onMouseMove", (e) => {
         if (!this.dragMode || !this.dragOverlay || !this.dragOrigAnchor) return;
         const dx = e.clientX - this.dragStartX;
@@ -23892,6 +23878,7 @@
       });
       this.wrapper = wrapper;
       this.onAction = onAction;
+      this.onWheel = onWheel;
       window.addEventListener("mousemove", this.onMouseMove);
       window.addEventListener("mouseup", this.onMouseUp);
     }
@@ -23907,7 +23894,8 @@
           this.wrapper,
           (idx) => this.selectChart(idx),
           (idx) => this.deleteChart(idx),
-          (idx) => this.onAction("editChart", idx, this.overlays[idx]?.def)
+          (idx) => this.onAction("editChart", idx, this.overlays[idx]?.def),
+          this.onWheel
         );
         overlay.updatePosition(coords);
         this.setupDrag(overlay, coords);
@@ -23977,9 +23965,53 @@
       window.removeEventListener("mouseup", this.onMouseUp);
     }
   };
+  function resolveCssVar(name, fallback) {
+    const value = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+    return value || fallback;
+  }
+  function resolveThemePalette() {
+    return Array.from(
+      { length: 8 },
+      (_, i) => resolveCssVar(`--xlsx-chart-c${i + 1}`, OKABE_ITO_FALLBACK[i])
+    );
+  }
+  function resolvePalette(def) {
+    const scheme = def.style?.color_scheme;
+    if (scheme && scheme.length > 0) {
+      if (scheme.length === 1) {
+        const id = scheme[0];
+        if (id === "default") {
+          return resolveThemePalette();
+        }
+        const mapped = WIZARD_SCHEME_COLORS[id];
+        if (mapped) {
+          return mapped;
+        }
+      }
+      if (scheme[0].startsWith("#")) {
+        return scheme;
+      }
+    }
+    return resolveThemePalette();
+  }
+  function hexToRgba(hex2, alpha2) {
+    const raw = hex2.trim().replace(/^#/, "");
+    const full = raw.length === 3 ? raw.split("").map((c) => c + c).join("") : raw;
+    if (full.length !== 6 || !/^[0-9a-fA-F]{6}$/.test(full)) {
+      return `rgba(128,128,128,${alpha2})`;
+    }
+    const r = parseInt(full.slice(0, 2), 16);
+    const g = parseInt(full.slice(2, 4), 16);
+    const b = parseInt(full.slice(4, 6), 16);
+    return `rgba(${r},${g},${b},${alpha2})`;
+  }
   function buildChartConfig(def) {
     const chartType = mapChartType(def.chart_type);
     const isCategorical = chartType !== "scatter";
+    const palette = resolvePalette(def);
+    const titleColor = resolveCssVar("--vscode-foreground", "#cccccc");
+    const mutedColor = resolveCssVar("--vscode-descriptionForeground", "#999");
+    const overlayBg = resolveCssVar("--vscode-editor-background", "#1e1e1e");
     let labels = [];
     for (const s of def.series) {
       if (s.categories_cache && s.categories_cache.length > 0) {
@@ -23987,27 +24019,64 @@
         break;
       }
     }
+    const isPieLike = chartType === "pie" || chartType === "doughnut";
+    const isArea = def.chart_type === "area";
+    const isLineLike = chartType === "line" || isArea;
     const datasets = def.series.map((s, i) => {
+      const seriesColor = getColor(palette, i, 1);
+      const segmentCount = isPieLike ? Math.max(s.values_cache.length, 1) : 1;
+      const fillColor = isPieLike ? getColor(palette, i, segmentCount) : isArea ? hexToRgba(seriesColor, 0.15) : seriesColor;
       const ds = {
         label: s.name || `Series ${i + 1}`,
         data: chartType === "scatter" ? s.values_cache.map((v, j) => ({
           x: s.categories_cache?.[j] ? parseFloat(s.categories_cache[j]) || j : j,
           y: v
         })) : s.values_cache,
-        backgroundColor: getColor(i, chartType === "pie" || chartType === "doughnut" ? s.values_cache.length : 1),
-        borderColor: DEFAULT_COLORS[i % DEFAULT_COLORS.length],
-        borderWidth: chartType === "bar" || chartType === "pie" || chartType === "doughnut" ? 1 : 2
+        backgroundColor: fillColor,
+        borderColor: isPieLike ? overlayBg : seriesColor,
+        borderWidth: isPieLike ? 2 : chartType === "bar" ? 0 : 2
       };
-      if (chartType === "line" || def.chart_type === "area") {
-        ds.fill = def.chart_type === "area";
-        ds.tension = 0.3;
-        ds.pointRadius = 3;
+      if (chartType === "bar") {
+        ds.borderRadius = 2;
+        ds.maxBarThickness = MAX_BAR_THICKNESS;
+      }
+      if (isLineLike || chartType === "scatter") {
+        ds.tension = isLineLike ? 0.3 : void 0;
+        ds.pointRadius = 2;
+        ds.pointHoverRadius = 4;
+        if (isArea) {
+          ds.fill = true;
+        } else if (chartType === "line") {
+          ds.fill = false;
+        }
       }
       if (s.chart_type) {
-        ds.type = mapChartType(s.chart_type);
+        const dsType = mapChartType(s.chart_type);
+        ds.type = dsType;
+        if (dsType === "bar") {
+          ds.borderWidth = 0;
+          ds.borderRadius = 2;
+          ds.maxBarThickness = MAX_BAR_THICKNESS;
+          ds.backgroundColor = seriesColor;
+        } else if (dsType === "line") {
+          ds.borderWidth = 2;
+          ds.tension = 0.3;
+          ds.pointRadius = 2;
+          ds.pointHoverRadius = 4;
+          ds.fill = false;
+        }
       }
       return ds;
     });
+    let legendDisplay;
+    let legendPosition;
+    if (def.legend !== void 0) {
+      legendDisplay = def.legend.visible !== false;
+      legendPosition = mapLegendPosition(def.legend.position);
+    } else {
+      legendDisplay = def.series.length > 1;
+      legendPosition = "bottom";
+    }
     const config = {
       type: chartType,
       data: {
@@ -24022,16 +24091,18 @@
           title: {
             display: !!def.title,
             text: def.title || "",
-            color: "#cccccc",
+            color: titleColor,
             font: { size: 14, weight: "bold" }
           },
           legend: {
-            display: def.legend?.visible !== false,
-            position: mapLegendPosition(def.legend?.position),
-            labels: { color: "#cccccc", font: { size: 11 } }
+            display: legendDisplay,
+            position: legendPosition,
+            labels: { color: mutedColor, font: { size: 11 } }
           },
           tooltip: {
-            enabled: true
+            enabled: true,
+            padding: 10,
+            cornerRadius: 6
           }
         },
         scales: {}
@@ -24039,22 +24110,34 @@
     };
     if (chartType !== "pie" && chartType !== "doughnut" && chartType !== "radar") {
       const xAxis = {
-        ticks: { color: "#999" },
-        grid: { color: "rgba(255,255,255,0.08)" }
+        ticks: { color: mutedColor },
+        grid: { color: GRIDLINE_COLOR },
+        border: { display: false }
       };
       const yAxis = {
-        ticks: { color: "#999" },
-        grid: { color: "rgba(255,255,255,0.08)" }
+        ticks: { color: mutedColor },
+        grid: { color: GRIDLINE_COLOR },
+        border: { display: false }
       };
       for (const ax of def.axes) {
         const target = ax.axis_type === "category" ? xAxis : yAxis;
         if (ax.title) {
-          target.title = { display: true, text: ax.title, color: "#ccc" };
+          target.title = { display: true, text: ax.title, color: mutedColor };
         }
         if (ax.min_val !== void 0) target.min = ax.min_val;
         if (ax.max_val !== void 0) target.max = ax.max_val;
       }
       config.options.scales = { x: xAxis, y: yAxis };
+    }
+    if (chartType === "radar") {
+      config.options.scales = {
+        r: {
+          ticks: { color: mutedColor, backdropColor: "transparent" },
+          grid: { color: GRIDLINE_COLOR },
+          angleLines: { color: GRIDLINE_COLOR },
+          pointLabels: { color: mutedColor }
+        }
+      };
     }
     return config;
   }
@@ -24093,11 +24176,11 @@
         return "right";
     }
   }
-  function getColor(index2, count) {
+  function getColor(palette, index2, count) {
     if (count > 1) {
-      return Array.from({ length: count }, (_, i) => DEFAULT_COLORS[i % DEFAULT_COLORS.length]);
+      return Array.from({ length: count }, (_, i) => palette[i % palette.length]);
     }
-    return DEFAULT_COLORS[index2 % DEFAULT_COLORS.length];
+    return palette[index2 % palette.length];
   }
 
   // webview-src/xlsx/chartWizardDialog.ts
@@ -24304,7 +24387,7 @@
       const colorSchemeId = this.colorSchemeSelect?.value || "default";
       const xAxisTitle = this.xAxisInput?.value || void 0;
       const yAxisTitle = this.yAxisInput?.value || void 0;
-      const colorScheme = COLOR_SCHEMES.find((cs) => cs.id === colorSchemeId)?.colors;
+      const colorScheme = colorSchemeId === "default" ? void 0 : COLOR_SCHEMES.find((cs) => cs.id === colorSchemeId)?.colors;
       const anchor = {
         from_col: anchorCol,
         from_row: anchorRow,
@@ -29801,7 +29884,7 @@
   }
   function setupRendererCallbacks() {
     if (!renderer) return;
-    chartManager = new ChartManager(renderer.getWrapper(), handleChartAction);
+    chartManager = new ChartManager(renderer.getWrapper(), handleChartAction, (e) => renderer.forwardWheel(e));
     renderer.onScrollChanged = () => {
       if (chartManager) {
         const coords = getRendererCoords();
