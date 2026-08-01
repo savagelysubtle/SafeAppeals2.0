@@ -5,10 +5,16 @@
 
 import 'mocha';
 import * as assert from 'assert';
-import { estimateTokens, mapChatMessages } from '../llm/messageMapping';
+import {
+	estimateMappedMessagesTokens,
+	estimateTokens,
+	mapChatMessages,
+	mapToolChoice,
+	mapTools,
+} from '../llm/messageMapping';
 
 suite('mapChatMessages', () => {
-	test('maps roles, concatenates text, stringifies tool results, drops images', () => {
+	test('maps text, tool_calls, and role:tool results; drops images', () => {
 		const mapped = mapChatMessages([
 			{
 				role: 1,
@@ -44,26 +50,98 @@ suite('mapChatMessages', () => {
 			{ role: 'user', content: 'Hello world' },
 			{
 				role: 'assistant',
-				content: 'Sure.' + JSON.stringify({
-					toolCall: 'search',
-					callId: 'c1',
-					input: { q: 'x' },
-				}),
+				content: 'Sure.',
+				tool_calls: [
+					{
+						id: 'c1',
+						type: 'function',
+						function: {
+							name: 'search',
+							arguments: JSON.stringify({ q: 'x' }),
+						},
+					},
+				],
 			},
 			{
-				role: 'user',
-				content: JSON.stringify({
-					toolResult: 'c1',
-					content: 'tool says hi',
-				}),
+				role: 'tool',
+				tool_call_id: 'c1',
+				content: 'tool says hi',
 			},
 		]);
+	});
+
+	test('assistant-only tool_calls uses null content', () => {
+		assert.deepStrictEqual(
+			mapChatMessages([{
+				role: 2,
+				content: [{ callId: 'call_9', name: 'read_file', input: { path: 'a.ts' } }],
+			}]),
+			[{
+				role: 'assistant',
+				content: null,
+				tool_calls: [{
+					id: 'call_9',
+					type: 'function',
+					function: {
+						name: 'read_file',
+						arguments: JSON.stringify({ path: 'a.ts' }),
+					},
+				}],
+			}],
+		);
 	});
 
 	test('skips empty messages after filtering', () => {
 		assert.deepStrictEqual(
 			mapChatMessages([{ role: 1, content: [{ mimeType: 'image/png' }] }]),
 			[],
+		);
+	});
+
+	test('mixed tool results + text emits tool roles before user text', () => {
+		assert.deepStrictEqual(
+			mapChatMessages([{
+				role: 1,
+				content: [
+					{ value: 'thanks' },
+					{ callId: 'c1', content: [{ value: 'result-a' }] },
+					{ callId: 'c2', content: [{ value: 'result-b' }] },
+					{ value: ' continue' },
+				],
+			}]),
+			[
+				{ role: 'tool', tool_call_id: 'c1', content: 'result-a' },
+				{ role: 'tool', tool_call_id: 'c2', content: 'result-b' },
+				{ role: 'user', content: 'thanks continue' },
+			],
+		);
+	});
+});
+
+suite('mapTools / mapToolChoice', () => {
+	test('maps tools and toolMode', () => {
+		assert.deepStrictEqual(
+			{
+				tools: mapTools([{
+					name: 'read_file',
+					description: 'Read a file',
+					inputSchema: { type: 'object', properties: { path: { type: 'string' } } },
+				}]),
+				auto: mapToolChoice(1),
+				required: mapToolChoice(2),
+			},
+			{
+				tools: [{
+					type: 'function',
+					function: {
+						name: 'read_file',
+						description: 'Read a file',
+						parameters: { type: 'object', properties: { path: { type: 'string' } } },
+					},
+				}],
+				auto: 'auto',
+				required: 'required',
+			},
 		);
 	});
 });
@@ -78,5 +156,18 @@ suite('estimateTokens', () => {
 			},
 			{ empty: 0, four: 1, five: 2 },
 		);
+	});
+
+	test('estimateMappedMessagesTokens includes tool payloads', () => {
+		const tokens = estimateMappedMessagesTokens([{
+			role: 'assistant',
+			content: null,
+			tool_calls: [{
+				id: 'c1',
+				type: 'function',
+				function: { name: 'search', arguments: '{"q":"ab"}' },
+			}],
+		}]);
+		assert.ok(tokens > 0);
 	});
 });

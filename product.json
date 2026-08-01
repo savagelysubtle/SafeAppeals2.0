@@ -179,6 +179,13 @@
 	"trustedExtensionProtocolHandlers": [
 		"safeappeals.safeappeals-authentication"
 	],
+	"extensionEnabledApiProposals": {
+		"safeappeals.safeappeals-authentication": [
+			"defaultChatParticipant",
+			"chatParticipantAdditions",
+			"chatParticipantPrivate"
+		]
+	},
 	"onboardingSkipSignInStep": false,
 	"onboardingKeymaps": [
 		{

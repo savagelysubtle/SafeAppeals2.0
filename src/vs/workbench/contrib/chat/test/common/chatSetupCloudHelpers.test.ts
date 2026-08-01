@@ -5,12 +5,153 @@
 
 import assert from 'assert';
 import { ensureNoDisposablesAreLeakedInTestSuite } from '../../../../../base/test/common/utils.js';
-import { buildSafeAppealsCloudChatMessages, pickSafeAppealsCloudModelId, resolveChatSetupTimeoutWarning, SAFEAPPEALS_CLOUD_LM_HISTORY_TURN_CAP } from '../../common/chatSetupCloudHelpers.js';
+import { buildSafeAppealsCloudChatMessages, hasLiveSafeAppealsCloudModel, hasUsableNonCoreDefaultAgent, isSafeAppealsCloudAgentActivated, pickSafeAppealsCloudModelId, resolveChatSetupTimeoutWarning, resolveCloudAgentModeUnavailableMessage, SAFEAPPEALS_AGENT_PARTICIPANT_ID, SAFEAPPEALS_CLOUD_LM_HISTORY_TURN_CAP, shouldFailFastCloudAgentMode, shouldSkipAuthExtensionEnableForCloudAgent, shouldSkipToolsModelWaitForCloudAgent, shouldTreatLiveCloudModelAsLanguageModelReady, shouldUseCloudAgentReadinessPath } from '../../common/chatSetupCloudHelpers.js';
+import { ChatModeKind } from '../../common/constants.js';
 import { ChatMessageRole, SAFEAPPEALS_CLOUD_VENDOR_ID } from '../../common/languageModels.js';
 
 suite('SafeAppeals Cloud SetupAgent helpers', () => {
 
 	ensureNoDisposablesAreLeakedInTestSuite();
+
+	suite('hasUsableNonCoreDefaultAgent', () => {
+
+		test('true for activated non-core default', () => {
+			assert.strictEqual(hasUsableNonCoreDefaultAgent({
+				activatedDefaultAgent: { isCore: false },
+				contributedDefaultAgent: undefined,
+				mode: ChatModeKind.Agent,
+			}), true);
+		});
+
+		test('true for contributed non-core default covering mode before activation', () => {
+			assert.strictEqual(hasUsableNonCoreDefaultAgent({
+				activatedDefaultAgent: { isCore: true },
+				contributedDefaultAgent: { isCore: false, modes: [ChatModeKind.Agent] },
+				mode: ChatModeKind.Agent,
+			}), true);
+		});
+
+		test('false when contributed non-core does not cover mode', () => {
+			assert.strictEqual(hasUsableNonCoreDefaultAgent({
+				activatedDefaultAgent: undefined,
+				contributedDefaultAgent: { isCore: false, modes: [ChatModeKind.Ask] },
+				mode: ChatModeKind.Agent,
+			}), false);
+		});
+
+		test('false when only core agents exist', () => {
+			assert.strictEqual(hasUsableNonCoreDefaultAgent({
+				activatedDefaultAgent: { isCore: true },
+				contributedDefaultAgent: { isCore: true, modes: [ChatModeKind.Agent] },
+				mode: ChatModeKind.Agent,
+			}), false);
+		});
+	});
+
+	suite('shouldFailFastCloudAgentMode', () => {
+
+		test('fails fast for Agent + Cloud session without non-core default agent', () => {
+			assert.strictEqual(shouldFailFastCloudAgentMode({
+				isAgentMode: true,
+				hasSafeAppealsCloudSession: true,
+				hasUsableNonCoreDefaultAgent: false,
+			}), true);
+		});
+
+		test('does not fail fast when a non-core Agent exists', () => {
+			assert.strictEqual(shouldFailFastCloudAgentMode({
+				isAgentMode: true,
+				hasSafeAppealsCloudSession: true,
+				hasUsableNonCoreDefaultAgent: true,
+			}), false);
+		});
+
+		test('does not fail fast for Ask/Edit or without Cloud session', () => {
+			assert.deepStrictEqual([
+				shouldFailFastCloudAgentMode({
+					isAgentMode: false,
+					hasSafeAppealsCloudSession: true,
+					hasUsableNonCoreDefaultAgent: false,
+				}),
+				shouldFailFastCloudAgentMode({
+					isAgentMode: true,
+					hasSafeAppealsCloudSession: false,
+					hasUsableNonCoreDefaultAgent: false,
+				}),
+			], [false, false]);
+		});
+	});
+
+	suite('resolveCloudAgentModeUnavailableMessage', () => {
+
+		test('brands SafeAppeals Cloud and points to Ask or Edit', () => {
+			const message = resolveCloudAgentModeUnavailableMessage();
+			assert.match(message, /SafeAppeals Cloud/);
+			assert.match(message, /Ask/);
+			assert.match(message, /Edit/);
+			assert.doesNotMatch(message, /GitHub/);
+			assert.doesNotMatch(message, /[Cc]opilot/);
+		});
+	});
+
+	suite('shouldUseCloudAgentReadinessPath', () => {
+
+		test('true only for Agent + Cloud setup + Cloud session', () => {
+			assert.deepStrictEqual([
+				shouldUseCloudAgentReadinessPath({
+					isAgentMode: true,
+					usesSafeAppealsCloudSetup: true,
+					hasSafeAppealsCloudSession: true,
+				}),
+				shouldUseCloudAgentReadinessPath({
+					isAgentMode: false,
+					usesSafeAppealsCloudSetup: true,
+					hasSafeAppealsCloudSession: true,
+				}),
+				shouldUseCloudAgentReadinessPath({
+					isAgentMode: true,
+					usesSafeAppealsCloudSetup: true,
+					hasSafeAppealsCloudSession: false,
+				}),
+			], [true, false, false]);
+		});
+	});
+
+	suite('Cloud Agent readiness predicates', () => {
+
+		test('skips auth extension enable and copilot tools wait on Cloud Agent path', () => {
+			assert.deepStrictEqual([
+				shouldSkipAuthExtensionEnableForCloudAgent({ isCloudAgentReadinessPath: true }),
+				shouldSkipAuthExtensionEnableForCloudAgent({ isCloudAgentReadinessPath: false }),
+				shouldSkipToolsModelWaitForCloudAgent({ isCloudAgentReadinessPath: true }),
+				shouldSkipToolsModelWaitForCloudAgent({ isCloudAgentReadinessPath: false }),
+			], [true, false, true, false]);
+		});
+
+		test('detects activated safeappeals.agent', () => {
+			assert.deepStrictEqual([
+				isSafeAppealsCloudAgentActivated([SAFEAPPEALS_AGENT_PARTICIPANT_ID, 'setup.agent']),
+				isSafeAppealsCloudAgentActivated(['setup.agent', 'github.copilot.editsAgent']),
+			], [true, false]);
+		});
+
+		test('treats live Cloud models as LM-ready without isDefaultForLocation', () => {
+			assert.deepStrictEqual([
+				shouldTreatLiveCloudModelAsLanguageModelReady({
+					usesSafeAppealsCloudSetup: true,
+					hasSafeAppealsCloudSession: true,
+					hasLiveCloudModel: true,
+				}),
+				shouldTreatLiveCloudModelAsLanguageModelReady({
+					usesSafeAppealsCloudSetup: true,
+					hasSafeAppealsCloudSession: true,
+					hasLiveCloudModel: false,
+				}),
+				hasLiveSafeAppealsCloudModel([SAFEAPPEALS_CLOUD_VENDOR_ID, 'other']),
+				hasLiveSafeAppealsCloudModel(['other', undefined]),
+			], [true, false, true, false]);
+		});
+	});
 
 	suite('pickSafeAppealsCloudModelId', () => {
 

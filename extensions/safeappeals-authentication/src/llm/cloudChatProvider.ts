@@ -8,7 +8,7 @@ import { AUTH_PROVIDER_ID, CloudAuthProvider } from '../cloudAuthProvider';
 import { CloudApiClient } from '../api';
 import { InsufficientCreditsError } from './insufficientCredits';
 import { isAllowedExternalHttpsUrl } from './externalUrl';
-import { estimateTokens, mapChatMessages } from './messageMapping';
+import { estimateMappedMessagesTokens, estimateTokens, mapChatMessages, mapToolChoice, mapTools } from './messageMapping';
 
 /** Max completion tokens advertised for every cloud model (matches server estimate default). */
 export const CLOUD_MAX_OUTPUT_TOKENS = 4096;
@@ -97,7 +97,7 @@ export class CloudChatProvider implements vscode.LanguageModelChatProvider, vsco
 				detail: model.tier,
 				tooltip: vscode.l10n.t('{0} via SafeAppeals Cloud ({1})', model.name, model.provider),
 				capabilities: {
-					toolCalling: false,
+					toolCalling: true,
 					imageInput: false,
 				},
 			}));
@@ -112,11 +112,12 @@ export class CloudChatProvider implements vscode.LanguageModelChatProvider, vsco
 	async provideLanguageModelChatResponse(
 		model: vscode.LanguageModelChatInformation,
 		messages: readonly vscode.LanguageModelChatRequestMessage[],
-		_options: vscode.ProvideLanguageModelChatResponseOptions,
+		options: vscode.ProvideLanguageModelChatResponseOptions,
 		progress: vscode.Progress<vscode.LanguageModelResponsePart>,
 		token: vscode.CancellationToken,
 	): Promise<void> {
 		const mapped = mapChatMessages(messages);
+		const tools = options.tools?.length ? mapTools(options.tools) : undefined;
 		const controller = new AbortController();
 		const cancelSub = token.onCancellationRequested(() => controller.abort());
 		try {
@@ -125,9 +126,14 @@ export class CloudChatProvider implements vscode.LanguageModelChatProvider, vsco
 					model: model.id,
 					messages: mapped,
 					max_tokens: model.maxOutputTokens,
+					...(tools ? { tools, tool_choice: mapToolChoice(options.toolMode) } : {}),
 				},
-				delta => {
-					progress.report(new vscode.LanguageModelTextPart(delta));
+				part => {
+					if (part.kind === 'text') {
+						progress.report(new vscode.LanguageModelTextPart(part.text));
+						return;
+					}
+					progress.report(new vscode.LanguageModelToolCallPart(part.callId, part.name, part.input));
 				},
 				controller.signal,
 			);
@@ -155,8 +161,7 @@ export class CloudChatProvider implements vscode.LanguageModelChatProvider, vsco
 		if (typeof text === 'string') {
 			return estimateTokens(text);
 		}
-		const mapped = mapChatMessages([text]);
-		return estimateTokens(mapped.map(m => m.content).join(''));
+		return estimateMappedMessagesTokens(mapChatMessages([text]));
 	}
 
 	/**

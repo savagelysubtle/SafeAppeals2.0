@@ -16,10 +16,16 @@
 		"ui",
 		"workspace"
 	],
+	"enabledApiProposals": [
+		"defaultChatParticipant",
+		"chatParticipantAdditions",
+		"chatParticipantPrivate"
+	],
 	"activationEvents": [
 		"onStartupFinished",
 		"onUri",
-		"onAuthenticationRequest:safeappeals-cloud"
+		"onAuthenticationRequest:safeappeals-cloud",
+		"onChatParticipant:safeappeals.agent"
 	],
 	"capabilities": {
 		"virtualWorkspaces": true,
@@ -38,6 +44,62 @@
 			{
 				"vendor": "safeappeals-cloud",
 				"displayName": "%llm.provider.displayName%"
+			}
+		],
+		"chatParticipants": [
+			{
+				"id": "safeappeals.agent",
+				"name": "safeappeals",
+				"fullName": "SafeAppeals",
+				"description": "%chat.agent.description%",
+				"isDefault": true,
+				"locations": [
+					"panel"
+				],
+				"modes": [
+					"agent"
+				]
+			}
+		],
+		"languageModelTools": [
+			{
+				"name": "safeappeals_readFile",
+				"toolReferenceName": "safeappeals_readFile",
+				"displayName": "%tool.readFile.displayName%",
+				"modelDescription": "%tool.readFile.modelDescription%",
+				"userDescription": "%tool.readFile.userDescription%",
+				"canBeReferencedInPrompt": true,
+				"icon": "$(file)",
+				"inputSchema": {
+					"type": "object",
+					"properties": {
+						"path": {
+							"type": "string",
+							"description": "Workspace-relative or absolute path to the file to read."
+						}
+					},
+					"required": [
+						"path"
+					]
+				}
+			},
+			{
+				"name": "safeappeals_listDir",
+				"toolReferenceName": "safeappeals_listDir",
+				"displayName": "%tool.listDir.displayName%",
+				"modelDescription": "%tool.listDir.modelDescription%",
+				"userDescription": "%tool.listDir.userDescription%",
+				"canBeReferencedInPrompt": true,
+				"icon": "$(folder)",
+				"inputSchema": {
+					"type": "object",
+					"properties": {
+						"path": {
+							"type": "string",
+							"description": "Workspace-relative or absolute directory path. Defaults to the workspace root."
+						}
+					}
+				}
 			}
 		],
 		"commands": [

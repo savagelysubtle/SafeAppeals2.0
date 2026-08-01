@@ -6,7 +6,7 @@
 import 'mocha';
 import * as assert from 'assert';
 import { InsufficientCreditsError, parseInsufficientCreditsError } from '../llm/insufficientCredits';
-import { extractJsonChatContent, OpenAiSseParser, SSE_MAX_BUFFER_CHARS } from '../llm/sse';
+import { extractJsonChatContent, extractJsonChatResult, OpenAiSseParser, SSE_MAX_BUFFER_CHARS } from '../llm/sse';
 
 suite('OpenAiSseParser', () => {
 	test('assembles chunked deltas and respects [DONE]', () => {
@@ -18,12 +18,12 @@ suite('OpenAiSseParser', () => {
 			{
 				first: first.deltas,
 				second: second.deltas,
-				third: { deltas: third.deltas, done: third.done },
+				third: { deltas: third.deltas, done: third.done, toolCalls: third.toolCalls },
 			},
 			{
 				first: ['Hel'],
 				second: ['lo'],
-				third: { deltas: [], done: true },
+				third: { deltas: [], done: true, toolCalls: [] },
 			},
 		);
 	});
@@ -41,14 +41,65 @@ suite('OpenAiSseParser', () => {
 		);
 	});
 
-	test('drops tool_calls while keeping text content', () => {
+	test('accumulates streamed tool_calls and emits on DONE', () => {
 		const parser = new OpenAiSseParser();
-		const step = parser.push(
-			'data: {"choices":[{"delta":{"content":"hi","tool_calls":[{"index":0}]}}]}\n\n' +
-			'data: {"choices":[{"delta":{"tool_calls":[{"id":"x"}]}}]}\n\n' +
-			'data: [DONE]\n\n',
+		const first = parser.push(
+			'data: {"choices":[{"delta":{"content":"hi","tool_calls":[{"index":0,"id":"call_1","type":"function","function":{"name":"read_file","arguments":""}}]}}]}\n\n',
 		);
-		assert.deepStrictEqual(step.deltas, ['hi']);
+		const second = parser.push(
+			'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"{\\"path\\":\\"x\\"}"}}]}}]}\n\n',
+		);
+		const third = parser.push('data: [DONE]\n\n');
+		assert.deepStrictEqual(
+			{
+				first: { deltas: first.deltas, toolCalls: first.toolCalls },
+				second: second.toolCalls,
+				third: { deltas: third.deltas, done: third.done, toolCalls: third.toolCalls },
+			},
+			{
+				first: { deltas: ['hi'], toolCalls: [] },
+				second: [],
+				third: {
+					deltas: [],
+					done: true,
+					toolCalls: [{ id: 'call_1', name: 'read_file', input: { path: 'x' } }],
+				},
+			},
+		);
+	});
+
+	test('finalizes tool_calls on finish_reason without double-emit on DONE', () => {
+		const parser = new OpenAiSseParser();
+		const mid = parser.push(
+			'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"c2","type":"function","function":{"name":"list_dir","arguments":"{}"}}]},"finish_reason":"tool_calls"}]}\n\n',
+		);
+		const done = parser.push('data: [DONE]\n\n');
+		assert.deepStrictEqual(
+			{ mid: mid.toolCalls, done: done.toolCalls },
+			{
+				mid: [{ id: 'c2', name: 'list_dir', input: {} }],
+				done: [],
+			},
+		);
+	});
+
+	test('flush finalizes tool_calls when stream ends without DONE or finish_reason', () => {
+		const parser = new OpenAiSseParser();
+		const mid = parser.push(
+			'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"c3","type":"function","function":{"name":"read_file","arguments":"{\\"p\\":1}"}}]}}]}\n\n',
+		);
+		const flushed = parser.flush();
+		assert.deepStrictEqual(
+			{ mid: mid.toolCalls, flushed: { deltas: flushed.deltas, done: flushed.done, toolCalls: flushed.toolCalls } },
+			{
+				mid: [],
+				flushed: {
+					deltas: [],
+					done: true,
+					toolCalls: [{ id: 'c3', name: 'read_file', input: { p: 1 } }],
+				},
+			},
+		);
 	});
 
 	test('surfaces mid-stream insufficient credits without treating as 401', () => {
@@ -131,6 +182,28 @@ suite('extractJsonChatContent', () => {
 	test('returns empty string for missing content', () => {
 		assert.strictEqual(extractJsonChatContent({ choices: [{}] }), '');
 		assert.strictEqual(extractJsonChatContent({}), '');
+	});
+
+	test('extractJsonChatResult reads message.tool_calls', () => {
+		assert.deepStrictEqual(
+			extractJsonChatResult({
+				choices: [{
+					message: {
+						role: 'assistant',
+						content: null,
+						tool_calls: [{
+							id: 'call_9',
+							type: 'function',
+							function: { name: 'read_file', arguments: '{"path":"a.ts"}' },
+						}],
+					},
+				}],
+			}),
+			{
+				content: '',
+				toolCalls: [{ id: 'call_9', name: 'read_file', input: { path: 'a.ts' } }],
+			},
+		);
 	});
 });
 

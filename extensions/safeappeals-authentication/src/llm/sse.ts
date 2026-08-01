@@ -9,13 +9,30 @@ import { isInsufficientCreditsPayload, parseInsufficientCreditsError } from './i
 export const SSE_MAX_BUFFER_CHARS = 256 * 1024;
 
 /**
+ * A completed tool call assembled from streamed `delta.tool_calls` fragments.
+ */
+export interface SseToolCall {
+	readonly id: string;
+	readonly name: string;
+	readonly input: object;
+}
+
+/**
  * One incremental parse step from an OpenAI-compatible chat completion SSE stream.
  */
 export interface SseParseStep {
 	readonly deltas: readonly string[];
+	/** Newly finalized tool calls (emitted on finish / [DONE] / flush). */
+	readonly toolCalls: readonly SseToolCall[];
 	readonly done: boolean;
 	/** Set when the stream reports an error; caller must not retry a partial stream. */
 	readonly error: Error | undefined;
+}
+
+interface AccumulatedToolCall {
+	id: string;
+	name: string;
+	arguments: string;
 }
 
 /**
@@ -23,26 +40,29 @@ export interface SseParseStep {
  *
  * - Skips malformed events / JSON
  * - Treats `data: [DONE]` as completion
- * - Drops `tool_calls` / `delta.tool_calls` (Ask-mode has no native tool calling)
+ * - Accumulates `delta.tool_calls` by index and finalizes on finish / [DONE]
  * - Bounds the unfinished buffer
  * - Surfaces 402 / insufficient-credit error payloads without treating them as 401
  */
 export class OpenAiSseParser {
 	private _buffer = '';
 	private _done = false;
+	private _toolCallsEmitted = false;
+	private readonly _toolCalls = new Map<number, AccumulatedToolCall>();
 
 	/**
 	 * Feeds the next decoded text chunk and returns newly extracted text deltas.
 	 */
 	push(chunk: string): SseParseStep {
 		if (this._done) {
-			return { deltas: [], done: true, error: undefined };
+			return { deltas: [], toolCalls: [], done: true, error: undefined };
 		}
 		this._buffer += chunk;
 		if (this._buffer.length > SSE_MAX_BUFFER_CHARS) {
 			this._done = true;
 			return {
 				deltas: [],
+				toolCalls: [],
 				done: true,
 				error: new Error('SSE buffer exceeded maximum size'),
 			};
@@ -55,14 +75,26 @@ export class OpenAiSseParser {
 	 */
 	flush(): SseParseStep {
 		if (this._done) {
-			return { deltas: [], done: true, error: undefined };
+			return { deltas: [], toolCalls: [], done: true, error: undefined };
 		}
-		return this._drain(true);
+		const step = this._drain(true);
+		if (!this._done) {
+			this._done = true;
+			const toolCalls = this._finalizeToolCalls();
+			return {
+				deltas: step.deltas,
+				toolCalls: toolCalls.length > 0 ? toolCalls : step.toolCalls,
+				done: true,
+				error: step.error,
+			};
+		}
+		return step;
 	}
 
 	private _drain(flush: boolean): SseParseStep {
 		this._normalizeCrlf(flush);
 		const deltas: string[] = [];
+		let toolCalls: SseToolCall[] = [];
 		let error: Error | undefined;
 
 		while (true) {
@@ -72,6 +104,7 @@ export class OpenAiSseParser {
 					const step = this._handleEventBlock(this._buffer);
 					this._buffer = '';
 					deltas.push(...step.deltas);
+					toolCalls = toolCalls.concat(step.toolCalls);
 					if (step.error) {
 						error = step.error;
 						this._done = true;
@@ -87,6 +120,7 @@ export class OpenAiSseParser {
 			this._buffer = this._buffer.slice(sep + 2);
 			const step = this._handleEventBlock(block);
 			deltas.push(...step.deltas);
+			toolCalls = toolCalls.concat(step.toolCalls);
 			if (step.error) {
 				error = step.error;
 				this._done = true;
@@ -98,7 +132,7 @@ export class OpenAiSseParser {
 			}
 		}
 
-		return { deltas, done: this._done, error };
+		return { deltas, toolCalls, done: this._done, error };
 	}
 
 	/**
@@ -131,12 +165,17 @@ export class OpenAiSseParser {
 			}
 		}
 		if (dataLines.length === 0) {
-			return { deltas: [], done: false, error: undefined };
+			return { deltas: [], toolCalls: [], done: false, error: undefined };
 		}
 
 		const data = dataLines.join('\n');
 		if (data === '[DONE]') {
-			return { deltas: [], done: true, error: undefined };
+			return {
+				deltas: [],
+				toolCalls: this._finalizeToolCalls(),
+				done: true,
+				error: undefined,
+			};
 		}
 
 		let parsed: unknown;
@@ -144,12 +183,13 @@ export class OpenAiSseParser {
 			parsed = JSON.parse(data);
 		} catch {
 			// Skip malformed JSON — hostile or truncated events must not abort the stream.
-			return { deltas: [], done: false, error: undefined };
+			return { deltas: [], toolCalls: [], done: false, error: undefined };
 		}
 
 		if (isInsufficientCreditsPayload(parsed)) {
 			return {
 				deltas: [],
+				toolCalls: [],
 				done: true,
 				error: parseInsufficientCreditsError(parsed),
 			};
@@ -163,6 +203,7 @@ export class OpenAiSseParser {
 			if (status === 401) {
 				return {
 					deltas: [],
+					toolCalls: [],
 					done: true,
 					error: new Error(typeof errObj?.message === 'string' ? errObj.message : 'Unauthorized'),
 				};
@@ -170,51 +211,159 @@ export class OpenAiSseParser {
 			const message = typeof errObj?.message === 'string'
 				? errObj.message
 				: 'Stream error';
-			return { deltas: [], done: true, error: new Error(message) };
+			return { deltas: [], toolCalls: [], done: true, error: new Error(message) };
 		}
 
-		const text = extractDeltaText(parsed);
+		const { text, finishReason } = extractDelta(parsed);
+		this._accumulateToolCalls(parsed);
+		const shouldFinalize = finishReason === 'tool_calls'
+			|| finishReason === 'stop'
+			|| finishReason === 'length';
+		const toolCalls = shouldFinalize ? this._finalizeToolCalls() : [];
+
 		return {
 			deltas: text ? [text] : [],
+			toolCalls,
 			done: false,
 			error: undefined,
 		};
 	}
+
+	private _accumulateToolCalls(parsed: unknown): void {
+		const record = asRecord(parsed);
+		const choices = record?.choices;
+		if (!Array.isArray(choices) || choices.length === 0) {
+			return;
+		}
+		const first = asRecord(choices[0]);
+		const delta = asRecord(first?.delta);
+		const message = asRecord(first?.message);
+		const rawCalls = delta?.tool_calls ?? message?.tool_calls;
+		if (!Array.isArray(rawCalls)) {
+			return;
+		}
+		for (const raw of rawCalls) {
+			const call = asRecord(raw);
+			if (!call) {
+				continue;
+			}
+			const index = asFiniteNumber(call.index) ?? this._toolCalls.size;
+			const existing = this._toolCalls.get(index) ?? { id: '', name: '', arguments: '' };
+			if (typeof call.id === 'string' && call.id.length > 0) {
+				existing.id = call.id;
+			}
+			const fn = asRecord(call.function);
+			if (fn) {
+				if (typeof fn.name === 'string' && fn.name.length > 0) {
+					existing.name = fn.name;
+				}
+				if (typeof fn.arguments === 'string') {
+					existing.arguments += fn.arguments;
+				}
+			}
+			this._toolCalls.set(index, existing);
+		}
+	}
+
+	private _finalizeToolCalls(): SseToolCall[] {
+		if (this._toolCallsEmitted || this._toolCalls.size === 0) {
+			return [];
+		}
+		this._toolCallsEmitted = true;
+		const indices = [...this._toolCalls.keys()].sort((a, b) => a - b);
+		const result: SseToolCall[] = [];
+		for (const index of indices) {
+			const call = this._toolCalls.get(index);
+			if (!call || !call.id || !call.name) {
+				continue;
+			}
+			result.push({
+				id: call.id,
+				name: call.name,
+				input: parseToolArguments(call.arguments),
+			});
+		}
+		return result;
+	}
+}
+
+/**
+ * Non-streaming chat completion extraction result.
+ */
+export interface JsonChatResult {
+	readonly content: string;
+	readonly toolCalls: readonly SseToolCall[];
 }
 
 /**
  * Extracts assistant text from a non-streaming OpenAI-style chat completion JSON body.
  */
 export function extractJsonChatContent(body: unknown): string {
+	return extractJsonChatResult(body).content;
+}
+
+/**
+ * Extracts assistant text and tool_calls from a non-streaming completion body.
+ */
+export function extractJsonChatResult(body: unknown): JsonChatResult {
 	const record = asRecord(body);
 	const choices = record?.choices;
 	if (!Array.isArray(choices) || choices.length === 0) {
-		return '';
+		return { content: '', toolCalls: [] };
 	}
 	const first = asRecord(choices[0]);
 	const message = asRecord(first?.message);
-	if (typeof message?.content === 'string') {
-		return message.content;
+	const content = typeof message?.content === 'string' ? message.content : '';
+	const toolCalls: SseToolCall[] = [];
+	if (Array.isArray(message?.tool_calls)) {
+		for (const raw of message.tool_calls) {
+			const call = asRecord(raw);
+			if (!call) {
+				continue;
+			}
+			const fn = asRecord(call.function);
+			const id = typeof call.id === 'string' ? call.id : '';
+			const name = typeof fn?.name === 'string' ? fn.name : '';
+			if (!id || !name) {
+				continue;
+			}
+			toolCalls.push({
+				id,
+				name,
+				input: parseToolArguments(typeof fn?.arguments === 'string' ? fn.arguments : '{}'),
+			});
+		}
 	}
-	return '';
+	return { content, toolCalls };
 }
 
-function extractDeltaText(parsed: unknown): string {
+function extractDelta(parsed: unknown): { text: string; finishReason: string | undefined } {
 	const record = asRecord(parsed);
 	const choices = record?.choices;
 	if (!Array.isArray(choices) || choices.length === 0) {
-		return '';
+		return { text: '', finishReason: undefined };
 	}
 	const first = asRecord(choices[0]);
+	const finishReason = typeof first?.finish_reason === 'string' ? first.finish_reason : undefined;
 	const delta = asRecord(first?.delta);
-	if (!delta) {
-		return '';
+	const text = typeof delta?.content === 'string' ? delta.content : '';
+	return { text, finishReason };
+}
+
+function parseToolArguments(raw: string): object {
+	const trimmed = raw.trim();
+	if (!trimmed) {
+		return {};
 	}
-	// Drop native tool_calls — Ask-mode advertises toolCalling:false.
-	if (delta.tool_calls !== undefined) {
-		return typeof delta.content === 'string' ? delta.content : '';
+	try {
+		const parsed = JSON.parse(trimmed);
+		if (parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed)) {
+			return parsed as object;
+		}
+		return { value: parsed };
+	} catch {
+		return { raw: trimmed };
 	}
-	return typeof delta.content === 'string' ? delta.content : '';
 }
 
 function asRecord(value: unknown): Record<string, unknown> | undefined {

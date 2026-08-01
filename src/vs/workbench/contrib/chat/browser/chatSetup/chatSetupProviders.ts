@@ -42,7 +42,7 @@ import { IChatProgress, IChatService } from '../../common/chatService/chatServic
 import { IChatRequestToolEntry } from '../../common/attachments/chatVariableEntries.js';
 import { ChatAgentLocation, ChatConfiguration, ChatModeKind } from '../../common/constants.js';
 import { ILanguageModelsService, SAFEAPPEALS_CLOUD_VENDOR_ID } from '../../common/languageModels.js';
-import { buildSafeAppealsCloudChatMessages, pickSafeAppealsCloudModelId, resolveChatSetupTimeoutWarning } from '../../common/chatSetupCloudHelpers.js';
+import { buildSafeAppealsCloudChatMessages, hasLiveSafeAppealsCloudModel, hasUsableNonCoreDefaultAgent, isSafeAppealsCloudAgentActivated, pickSafeAppealsCloudModelId, resolveChatSetupTimeoutWarning, resolveCloudAgentModeUnavailableMessage, SAFEAPPEALS_AGENT_PARTICIPANT_ID, SAFEAPPEALS_AUTH_EXTENSION_ID, shouldFailFastCloudAgentMode, shouldSkipAuthExtensionEnableForCloudAgent, shouldSkipToolsModelWaitForCloudAgent, shouldTreatLiveCloudModelAsLanguageModelReady, shouldUseCloudAgentReadinessPath } from '../../common/chatSetupCloudHelpers.js';
 import { CHAT_OPEN_ACTION_ID, CHAT_SETUP_ACTION_ID } from '../actions/chatActions.js';
 import { ChatViewId, IChatWidgetService } from '../chat.js';
 import { IViewsService } from '../../../../services/views/common/viewsService.js';
@@ -67,6 +67,8 @@ import { IDefaultAccountService } from '../../../../../platform/defaultAccount/c
 import { IHostService } from '../../../../services/host/browser/host.js';
 import { IOutputService } from '../../../../services/output/common/output.js';
 import { IExtensionsWorkbenchService } from '../../../extensions/common/extensions.js';
+import { ExtensionIdentifier } from '../../../../../platform/extensions/common/extensions.js';
+import { IExtensionService } from '../../../../services/extensions/common/extensions.js';
 
 const defaultChat = {
 	extensionId: product.defaultChatAgent?.extensionId ?? '',
@@ -219,6 +221,7 @@ export class SetupAgent extends Disposable implements IChatAgentImplementation {
 		@IKeybindingService private readonly keybindingService: IKeybindingService,
 		@IHostService private readonly hostService: IHostService,
 		@IMarkdownRendererService private readonly markdownRendererService: IMarkdownRendererService,
+		@IExtensionService private readonly extensionService: IExtensionService,
 	) {
 		super();
 
@@ -286,6 +289,10 @@ export class SetupAgent extends Disposable implements IChatAgentImplementation {
 				// SafeAppeals: Ask/Edit answer via Cloud LM — do not wait for GitHub.copilot-chat
 				if (this.usesCloudLanguageModelPath()) {
 					return this.doInvokeWithCloudLanguageModel(request, progress, languageModelsService, chatWidgetService, history, token);
+				}
+				// SafeAppeals: Agent + Cloud without a tools agent hangs on activateDefaultAgent — fail fast
+				if (this.isCloudAgentModeUnavailable(chatAgentService, true)) {
+					return this.replyCloudAgentModeUnavailable(progress);
 				}
 				return this.doInvokeWithoutSetup(request, progress, chatService, languageModelsService, chatWidgetService, chatAgentService, languageModelToolsService);
 			}
@@ -390,6 +397,33 @@ export class SetupAgent extends Disposable implements IChatAgentImplementation {
 			}
 		}
 		return parts.join('');
+	}
+
+	/** SafeAppeals: Agent on Cloud with only the core setup agent — do not wait/resend. */
+	private isCloudAgentModeUnavailable(chatAgentService: IChatAgentService, hasSafeAppealsCloudSession: boolean): boolean {
+		const defaultAgent = chatAgentService.getDefaultAgent(this.location, this.mode);
+		// Prefer a contributed (possibly not-yet-activated) non-core default for this mode/location
+		// so fail-fast does not race extension activation. Fall back to location-wide contributed default.
+		const contributedForMode = chatAgentService.getAgents().find(a =>
+			!!a.isDefault && !a.isCore && a.locations.includes(this.location) && a.modes.includes(this.mode));
+		const contributedDefaultAgent = contributedForMode ?? chatAgentService.getContributedDefaultAgent(this.location);
+		return shouldFailFastCloudAgentMode({
+			isAgentMode: this.mode === ChatModeKind.Agent,
+			hasSafeAppealsCloudSession,
+			hasUsableNonCoreDefaultAgent: hasUsableNonCoreDefaultAgent({
+				activatedDefaultAgent: defaultAgent,
+				contributedDefaultAgent,
+				mode: this.mode,
+			}),
+		});
+	}
+
+	private replyCloudAgentModeUnavailable(progress: (part: IChatProgress) => void): IChatAgentResult {
+		progress({
+			kind: 'markdownContent',
+			content: new MarkdownString(resolveCloudAgentModeUnavailableMessage())
+		});
+		return {};
 	}
 
 	/** SafeAppeals: true when Cloud LM vendor is registered (or hasByokModels + cloud auth ready). */
@@ -499,12 +533,34 @@ export class SetupAgent extends Disposable implements IChatAgentImplementation {
 
 	private async doForwardRequestToChatWhenReady(requestModel: IChatRequestModel, progress: (part: IChatProgress) => void, chatService: IChatService, languageModelsService: ILanguageModelsService, chatAgentService: IChatAgentService, chatWidgetService: IChatWidgetService, languageModelToolsService: ILanguageModelToolsService): Promise<void> {
 
+		const usesSafeAppealsCloud = this.usesSafeAppealsCloudSetup(languageModelsService);
+		const hasSafeAppealsCloudSession = usesSafeAppealsCloud && await this.hasSafeAppealsCloudSession();
+
+		// SafeAppeals: Cloud-only Agent never becomes ready — skip wait/resend loop
+		if (
+			usesSafeAppealsCloud
+			&& hasSafeAppealsCloudSession
+			&& this.isCloudAgentModeUnavailable(chatAgentService, true)
+		) {
+			this.replyCloudAgentModeUnavailable(progress);
+			return;
+		}
+
+		const isCloudAgentReadinessPath = shouldUseCloudAgentReadinessPath({
+			isAgentMode: this.mode === ChatModeKind.Agent,
+			usesSafeAppealsCloudSetup: usesSafeAppealsCloud,
+			hasSafeAppealsCloudSession,
+		});
+
 		// Ensure auth extension is enabled before waiting for chat readiness.
 		// This must run before the readiness event listeners are set up because
 		// updateRunningExtensions restarts all extension hosts.
-		const authExtensionReEnabled = await maybeEnableAuthExtension(this.extensionsWorkbenchService, this.logService);
-		if (authExtensionReEnabled) {
-			refreshTokens(this.commandService);
+		// SafeAppeals: Cloud Agent must not trigger GitHub auth extension-host restart.
+		if (!shouldSkipAuthExtensionEnableForCloudAgent({ isCloudAgentReadinessPath })) {
+			const authExtensionReEnabled = await maybeEnableAuthExtension(this.extensionsWorkbenchService, this.logService);
+			if (authExtensionReEnabled) {
+				refreshTokens(this.commandService);
+			}
 		}
 
 		const widget = chatWidgetService.getWidgetBySessionResource(requestModel.session.sessionResource);
@@ -521,25 +577,56 @@ export class SetupAgent extends Disposable implements IChatAgentImplementation {
 
 		markChatGlobal(ChatGlobalPerfMark.WillWaitForActivation);
 
-		const whenAgentActivated = this.whenAgentActivated(chatService).then(() => agentActivated = true);
-		let whenAgentReady = this.whenAgentReady(chatAgentService, modeInfo?.kind)?.then(() => agentReady = true);
-		// SafeAppeals: Ask/Edit + Cloud session + live models — skip Copilot agent wait (never for Agent mode)
-		if (whenAgentReady && this.usesCloudLanguageModelPath() && this.usesSafeAppealsCloudSetup(languageModelsService) && await this.hasSafeAppealsCloudSession()) {
-			const hasLiveCloudModel = languageModelsService.getLanguageModelIds().some(id => languageModelsService.lookupLanguageModel(id)?.vendor === SAFEAPPEALS_CLOUD_VENDOR_ID)
-				|| (await languageModelsService.selectLanguageModels({ vendor: SAFEAPPEALS_CLOUD_VENDOR_ID })).length > 0;
-			if (hasLiveCloudModel) {
-				agentReady = true;
-				whenAgentReady = undefined;
+		// SafeAppeals: Cloud Agent activates/waits for `safeappeals.agent` — not Copilot default agent.
+		let whenAgentActivated: Promise<void>;
+		let whenAgentReady: Promise<boolean> | undefined;
+		if (isCloudAgentReadinessPath) {
+			whenAgentActivated = this.whenSafeAppealsCloudAgentActivated().then(() => { agentActivated = true; });
+			whenAgentReady = this.whenSafeAppealsCloudAgentReady(chatAgentService)?.then(() => agentReady = true);
+		} else {
+			whenAgentActivated = this.whenAgentActivated(chatService).then(() => { agentActivated = true; });
+			whenAgentReady = this.whenAgentReady(chatAgentService, modeInfo?.kind)?.then(() => agentReady = true);
+			// SafeAppeals: Ask/Edit + Cloud session + live models — skip Copilot agent wait
+			if (whenAgentReady && this.usesCloudLanguageModelPath() && usesSafeAppealsCloud && hasSafeAppealsCloudSession) {
+				const hasLiveCloudModel = await this.resolveHasLiveCloudModel(languageModelsService);
+				if (hasLiveCloudModel) {
+					agentReady = true;
+					whenAgentReady = undefined;
+				}
 			}
 		}
 		if (!whenAgentReady) {
 			agentReady = true;
 		}
-		const whenLanguageModelReady = this.whenLanguageModelReady(languageModelsService, requestModel.modelId)?.then(() => languageModelReady = true);
+
+		// SafeAppeals: Cloud models never set isDefaultForLocation — treat any live cloud model as LM-ready.
+		let whenLanguageModelReady: Promise<boolean> | undefined;
+		const hasLiveCloudModel = (usesSafeAppealsCloud && hasSafeAppealsCloudSession)
+			? await this.resolveHasLiveCloudModel(languageModelsService)
+			: false;
+		if (shouldTreatLiveCloudModelAsLanguageModelReady({
+			usesSafeAppealsCloudSetup: usesSafeAppealsCloud,
+			hasSafeAppealsCloudSession,
+			hasLiveCloudModel,
+		})) {
+			languageModelReady = true;
+			whenLanguageModelReady = undefined;
+		} else if (isCloudAgentReadinessPath) {
+			whenLanguageModelReady = this.whenCloudLanguageModelReady(languageModelsService)?.then(() => languageModelReady = true);
+		} else {
+			whenLanguageModelReady = this.whenLanguageModelReady(languageModelsService, requestModel.modelId)?.then(() => languageModelReady = true);
+		}
 		if (!whenLanguageModelReady) {
 			languageModelReady = true;
 		}
-		const whenToolsModelReady = this.whenToolsModelReady(languageModelToolsService, requestModel)?.then(() => toolsModelReady = true);
+
+		let whenToolsModelReady: Promise<boolean> | undefined;
+		if (shouldSkipToolsModelWaitForCloudAgent({ isCloudAgentReadinessPath })) {
+			toolsModelReady = true;
+			whenToolsModelReady = undefined;
+		} else {
+			whenToolsModelReady = this.whenToolsModelReady(languageModelToolsService, requestModel)?.then(() => toolsModelReady = true);
+		}
 		if (!whenToolsModelReady) {
 			toolsModelReady = true;
 		}
@@ -786,6 +873,27 @@ export class SetupAgent extends Disposable implements IChatAgentImplementation {
 		return Event.toPromise(Event.filter(languageModelsService.onDidChangeLanguageModels, () => hasModelForRequest()));
 	}
 
+	/** SafeAppeals: resolve whether any live `safeappeals-cloud` model is registered. */
+	private async resolveHasLiveCloudModel(languageModelsService: ILanguageModelsService): Promise<boolean> {
+		const registeredVendors = languageModelsService.getLanguageModelIds().map(id => languageModelsService.lookupLanguageModel(id)?.vendor);
+		if (hasLiveSafeAppealsCloudModel(registeredVendors)) {
+			return true;
+		}
+		const selected = await languageModelsService.selectLanguageModels({ vendor: SAFEAPPEALS_CLOUD_VENDOR_ID });
+		return selected.length > 0;
+	}
+
+	/** SafeAppeals: wait until any Cloud LM vendor model appears (no isDefaultForLocation required). */
+	private whenCloudLanguageModelReady(languageModelsService: ILanguageModelsService): Promise<unknown> | void {
+		const hasLiveCloudModel = () => hasLiveSafeAppealsCloudModel(
+			languageModelsService.getLanguageModelIds().map(id => languageModelsService.lookupLanguageModel(id)?.vendor)
+		);
+		if (hasLiveCloudModel()) {
+			return;
+		}
+		return Event.toPromise(Event.filter(languageModelsService.onDidChangeLanguageModels, () => hasLiveCloudModel()));
+	}
+
 	private whenToolsModelReady(languageModelToolsService: ILanguageModelToolsService, requestModel: IChatRequestModel): Promise<unknown> | void {
 		const needsToolsModel = requestModel.message.parts.some(part => part instanceof ChatRequestToolPart);
 		if (!needsToolsModel) {
@@ -828,6 +936,35 @@ export class SetupAgent extends Disposable implements IChatAgentImplementation {
 		} catch (error) {
 			this.logService.error(error);
 		}
+	}
+
+	/**
+	 * SafeAppeals: activate the auth extension for `safeappeals.agent` specifically.
+	 * Do not use mode-agnostic getContributedDefaultAgent (may pick vendored Copilot).
+	 */
+	private async whenSafeAppealsCloudAgentActivated(): Promise<void> {
+		try {
+			await this.extensionService.whenInstalledExtensionsRegistered();
+			const extensionId = new ExtensionIdentifier(SAFEAPPEALS_AUTH_EXTENSION_ID);
+			await this.extensionService.activateById(extensionId, {
+				activationEvent: `onChatParticipant:${SAFEAPPEALS_AGENT_PARTICIPANT_ID}`,
+				extensionId,
+				startup: false,
+			});
+		} catch (error) {
+			this.logService.error('[chat setup] Failed to activate SafeAppeals Cloud agent', error);
+		}
+	}
+
+	/** SafeAppeals: wait until `safeappeals.agent` appears in activated agents. */
+	private whenSafeAppealsCloudAgentReady(chatAgentService: IChatAgentService): Promise<unknown> | void {
+		const isReady = () => isSafeAppealsCloudAgentActivated(
+			chatAgentService.getActivatedAgents().map(agent => agent.id)
+		);
+		if (isReady()) {
+			return;
+		}
+		return Event.toPromise(Event.filter(chatAgentService.onDidChangeAgents, () => isReady()));
 	}
 
 	private computeDiagnosticInfo(agentActivated: boolean, agentReady: boolean, languageModelReady: boolean, toolsModelReady: boolean, requestModel: IChatRequestModel, languageModelsService: ILanguageModelsService, chatAgentService: IChatAgentService, modeInfo: { kind?: ChatModeKind } | undefined) {
@@ -893,9 +1030,12 @@ export class SetupAgent extends Disposable implements IChatAgentImplementation {
 				await this.authenticationService.createSession(SAFEAPPEALS_CLOUD_VENDOR_ID, [], { activateImmediate: true });
 				await this.context.update({ completed: true });
 				void languageModelsService.selectLanguageModels({ vendor: SAFEAPPEALS_CLOUD_VENDOR_ID });
-				// SafeAppeals: Ask/Edit go straight to Cloud LM; Agent still forwards when Copilot is present
+				// SafeAppeals: Ask/Edit go straight to Cloud LM; Agent still forwards when a tools agent is present
 				if (this.usesCloudLanguageModelPath()) {
 					return this.doInvokeWithCloudLanguageModel(request, progress, languageModelsService, chatWidgetService, history, token);
+				}
+				if (this.isCloudAgentModeUnavailable(chatAgentService, true)) {
+					return this.replyCloudAgentModeUnavailable(progress);
 				}
 				if (requestModel) {
 					await this.forwardRequestToChat(requestModel, progress, chatService, languageModelsService, chatAgentService, chatWidgetService, languageModelToolsService);

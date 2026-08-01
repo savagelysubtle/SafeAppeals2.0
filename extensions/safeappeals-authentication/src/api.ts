@@ -9,8 +9,8 @@ import {
 	isInsufficientCreditsPayload,
 	parseInsufficientCreditsError,
 } from './llm/insufficientCredits';
-import { extractJsonChatContent, OpenAiSseParser } from './llm/sse';
-import type { CloudChatMessage } from './llm/messageMapping';
+import { extractJsonChatResult, OpenAiSseParser, type SseParseStep } from './llm/sse';
+import type { CloudChatMessage, CloudChatTool } from './llm/messageMapping';
 
 /** Default production SafeAppeals Cloud API origin. */
 export const DEFAULT_API_URL = 'https://api.safeappeals.com';
@@ -54,7 +54,16 @@ export interface LlmChatRequestBody {
 	readonly messages: readonly CloudChatMessage[];
 	readonly max_tokens?: number;
 	readonly temperature?: number;
+	readonly tools?: readonly CloudChatTool[];
+	readonly tool_choice?: 'none' | 'auto' | 'required' | { readonly type: 'function'; readonly function: { readonly name: string } };
 }
+
+/**
+ * Incremental stream part from POST /llm/chat (text or completed tool call).
+ */
+export type LlmChatStreamPart =
+	| { readonly kind: 'text'; readonly text: string }
+	| { readonly kind: 'tool_call'; readonly callId: string; readonly name: string; readonly input: object };
 
 /**
  * Cloud user profile returned by /auth/callback and /auth/me.
@@ -269,15 +278,15 @@ export class CloudApiClient {
 	 */
 	async streamChat(
 		body: LlmChatRequestBody,
-		onDelta: (text: string) => void,
+		onPart: (part: LlmChatStreamPart) => void,
 		abortSignal?: AbortSignal,
 	): Promise<void> {
-		return this.streamChatOnce(body, onDelta, abortSignal, 0);
+		return this.streamChatOnce(body, onPart, abortSignal, 0);
 	}
 
 	private async streamChatOnce(
 		body: LlmChatRequestBody,
-		onDelta: (text: string) => void,
+		onPart: (part: LlmChatStreamPart) => void,
 		abortSignal: AbortSignal | undefined,
 		retryCount: number,
 	): Promise<void> {
@@ -331,7 +340,7 @@ export class CloudApiClient {
 			if (response.status === 401 && retryCount === 0) {
 				const refreshed = await this.onUnauthorized();
 				if (refreshed) {
-					return this.streamChatOnce(body, onDelta, abortSignal, retryCount + 1);
+					return this.streamChatOnce(body, onPart, abortSignal, retryCount + 1);
 				}
 				throw new Error(vscode.l10n.t('Session expired. Please sign in again.'));
 			}
@@ -356,10 +365,7 @@ export class CloudApiClient {
 				if (isInsufficientCreditsPayload(jsonBody)) {
 					throw parseInsufficientCreditsError(jsonBody);
 				}
-				const content = extractJsonChatContent(jsonBody);
-				if (content) {
-					onDelta(content);
-				}
+				emitJsonChatParts(jsonBody, onPart);
 				return;
 			}
 
@@ -377,18 +383,14 @@ export class CloudApiClient {
 				armIdleTimeout();
 				if (done) {
 					const flushed = parser.flush();
-					for (const delta of flushed.deltas) {
-						onDelta(delta);
-					}
+					emitSseStep(flushed, onPart);
 					if (flushed.error) {
 						throw flushed.error;
 					}
 					break;
 				}
 				const step = parser.push(decoder.decode(value, { stream: true }));
-				for (const delta of step.deltas) {
-					onDelta(delta);
-				}
+				emitSseStep(step, onPart);
 				if (step.error) {
 					// Never retry a partial stream — including mid-stream 401-shaped errors.
 					throw step.error;
@@ -410,7 +412,7 @@ export class CloudApiClient {
 			// Do not refresh/retry after any bytes of the stream have been consumed.
 			if (!streamStarted && error instanceof TypeError && retryCount === 0) {
 				await sleep(INITIAL_RETRY_DELAY_MS);
-				return this.streamChatOnce(body, onDelta, abortSignal, retryCount + 1);
+				return this.streamChatOnce(body, onPart, abortSignal, retryCount + 1);
 			}
 			throw error;
 		} finally {
@@ -520,4 +522,26 @@ export class CloudApiClient {
  */
 function sleep(ms: number): Promise<void> {
 	return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+function emitSseStep(
+	step: Pick<SseParseStep, 'deltas' | 'toolCalls'>,
+	onPart: (part: LlmChatStreamPart) => void,
+): void {
+	for (const text of step.deltas) {
+		onPart({ kind: 'text', text });
+	}
+	for (const call of step.toolCalls) {
+		onPart({ kind: 'tool_call', callId: call.id, name: call.name, input: call.input });
+	}
+}
+
+function emitJsonChatParts(body: unknown, onPart: (part: LlmChatStreamPart) => void): void {
+	const result = extractJsonChatResult(body);
+	if (result.content) {
+		onPart({ kind: 'text', text: result.content });
+	}
+	for (const call of result.toolCalls) {
+		onPart({ kind: 'tool_call', callId: call.id, name: call.name, input: call.input });
+	}
 }

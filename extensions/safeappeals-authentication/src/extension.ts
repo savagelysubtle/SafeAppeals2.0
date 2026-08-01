@@ -6,6 +6,8 @@
 import * as vscode from 'vscode';
 import { CloudAuthProvider, AUTH_PROVIDER_ID } from './cloudAuthProvider';
 import type { CreditPack } from './api';
+import { registerSafeAppealsAgentParticipant } from './chat/agentParticipant';
+import { registerSafeAppealsAgentTools } from './chat/tools';
 import { CloudChatProvider } from './llm/cloudChatProvider';
 import { isAllowedExternalHttpsUrl } from './llm/externalUrl';
 
@@ -35,6 +37,13 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 	context.subscriptions.push(
 		chatProvider,
 		vscode.lm.registerLanguageModelChatProvider('safeappeals-cloud', chatProvider),
+	);
+
+	// Agent participant + tools before initialize so a failed/slow init cannot leave
+	// Agent mode without a non-core default (Phase 0 fail-fast / activation race).
+	context.subscriptions.push(
+		registerSafeAppealsAgentTools(),
+		registerSafeAppealsAgentParticipant(),
 	);
 
 	await provider.initialize();
