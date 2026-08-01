@@ -1,6 +1,6 @@
 # LiteLLM Configuration
 
-LiteLLM is the AI model proxy that routes requests to various providers (OpenAI, Anthropic, Google, etc.).
+LiteLLM is the AI model proxy that routes requests to providers (OpenAI, Anthropic, xAI, Google).
 
 ## File Location
 
@@ -8,114 +8,84 @@ LiteLLM is the AI model proxy that routes requests to various providers (OpenAI,
 void-cloud/litellm/config.yaml
 ```
 
-## Current Configuration
+The API catalog in `void-cloud/api/src/routes/llm.ts` (`GET /models`) must use the same `model_name` ids — the app forwards `body.model` to LiteLLM unchanged.
+
+## Current Catalog (July 2026)
+
+| model_name | litellm_params.model | Input $/MTok | Output $/MTok |
+|------------|----------------------|--------------|---------------|
+| `gpt-5.6-sol` | `openai/gpt-5.6-sol` | $5 | $30 |
+| `gpt-5.6` | `openai/gpt-5.6-sol` (alias) | $5 | $30 |
+| `gpt-5.6-terra` | `openai/gpt-5.6-terra` | $2 | $12 |
+| `gpt-5.6-luna` | `openai/gpt-5.6-luna` | $0.20 | $1.20 |
+| `gpt-5.4` | `openai/gpt-5.4-2026-03-05` | $2.50 | $15 |
+| `gpt-5.2` | `openai/gpt-5.2-2025-12-11` | $1.75 | $14 |
+| `claude-opus-5` | `anthropic/claude-opus-5` | $5 | $25 |
+| `claude-sonnet-5` | `anthropic/claude-sonnet-5` | $2* | $10* |
+| `claude-fable-5` | `anthropic/claude-fable-5` | $10 | $50 |
+| `claude-haiku-4-5` | `anthropic/claude-haiku-4-5` | $1 | $5 |
+| `claude-opus-4-6` | `anthropic/claude-opus-4-6` | $5 | $25 |
+| `claude-sonnet-4-6` | `anthropic/claude-sonnet-4-6` | $3 | $15 |
+| `grok-4.5` | `xai/grok-4.5` | $2 | $6 |
+| `grok-4.3` | `xai/grok-4.3` | $1.25 | $2.50 |
+| `gemini-3-pro` | `gemini/gemini-3.1-pro-preview` | $2 | $12 |
+| `gemini-3.6-flash` | `gemini/gemini-3.6-flash` | ~$0.30† | ~$2.50† |
+| `gemini-2.5-pro` | `gemini/gemini-2.5-pro` | $1.25 | $10 |
+| `gemini-2.5-flash` | `gemini/gemini-2.5-flash` | $0.15 | $0.60 |
+
+\* Sonnet 5 intro pricing thru Aug 31 2026; then $3/$15.  
+† Gemini 3.6 Flash costs estimated pending Google publish.
+
+## Configuration Shape
 
 ```yaml
-# LiteLLM Proxy Configuration
-# Docs: https://docs.litellm.ai/docs/proxy/configs
-# Last Updated: March 2026
-
+# Last Updated: July 2026
 model_list:
-  # ============================================
-  # OPENAI GPT-5.4 (Released Mar 5, 2026)
-  # ============================================
-  - model_name: gpt-5.4
+  - model_name: gpt-5.6-sol
     litellm_params:
-      model: openai/gpt-5.4
+      model: openai/gpt-5.6-sol
       api_key: os.environ/OPENAI_API_KEY
     model_info:
-      input_cost_per_token: 0.0000025    # $2.50/MTok
-      output_cost_per_token: 0.000015    # $15/MTok
+      input_cost_per_token: 0.000005     # $5/MTok
+      output_cost_per_token: 0.00003     # $30/MTok
+      rpm: 500
+      tpm: 200000
 
-  # ============================================
-  # OPENAI GPT-5.2 MODELS (Released Dec 11, 2025)
-  # ============================================
-  - model_name: gpt-5.2
+  - model_name: claude-opus-5
     litellm_params:
-      model: openai/gpt-5.2
-      api_key: os.environ/OPENAI_API_KEY
-    model_info:
-      input_cost_per_token: 0.00000175   # $1.75/MTok
-      output_cost_per_token: 0.000014    # $14/MTok
-
-  - model_name: gpt-5.2-pro
-    litellm_params:
-      model: openai/gpt-5.2-pro
-      api_key: os.environ/OPENAI_API_KEY
-    model_info:
-      input_cost_per_token: 0.000021     # $21/MTok
-      output_cost_per_token: 0.000168    # $168/MTok
-
-  # ============================================
-  # ANTHROPIC CLAUDE 4.6 MODELS (Released Feb 2026)
-  # ============================================
-  - model_name: claude-opus-4-6
-    litellm_params:
-      model: anthropic/claude-opus-4-6
+      model: anthropic/claude-opus-5
       api_key: os.environ/ANTHROPIC_API_KEY
     model_info:
-      input_cost_per_token: 0.000005    # $5/MTok
-      output_cost_per_token: 0.000025   # $25/MTok
+      input_cost_per_token: 0.000005
+      output_cost_per_token: 0.000025
+      rpm: 50
+      tpm: 40000
 
-  - model_name: claude-sonnet-4-6
+  - model_name: grok-4.5
     litellm_params:
-      model: anthropic/claude-sonnet-4-6
-      api_key: os.environ/ANTHROPIC_API_KEY
+      model: xai/grok-4.5
+      api_key: os.environ/XAI_API_KEY
     model_info:
-      input_cost_per_token: 0.000003    # $3/MTok
-      output_cost_per_token: 0.000015   # $15/MTok
+      input_cost_per_token: 0.000002
+      output_cost_per_token: 0.000006
+      rpm: 100
+      tpm: 100000
 
-  # ============================================
-  # ANTHROPIC CLAUDE 4.5 MODELS (Legacy)
-  # ============================================
-  - model_name: claude-opus-4-5
+  - model_name: gemini-3-pro
     litellm_params:
-      model: anthropic/claude-opus-4-5-20251022
-      api_key: os.environ/ANTHROPIC_API_KEY
-    model_info:
-      input_cost_per_token: 0.000005    # $5/MTok
-      output_cost_per_token: 0.000025   # $25/MTok
-
-  - model_name: claude-sonnet-4-5
-    litellm_params:
-      model: anthropic/claude-sonnet-4-5-20250929
-      api_key: os.environ/ANTHROPIC_API_KEY
-    model_info:
-      input_cost_per_token: 0.000003    # $3/MTok
-      output_cost_per_token: 0.000015   # $15/MTok
-
-  # ============================================
-  # GOOGLE GEMINI MODELS
-  # ============================================
-  - model_name: gemini-3-pro-preview
-    litellm_params:
-      model: gemini/gemini-3-pro-preview
+      model: gemini/gemini-3.1-pro-preview
       api_key: os.environ/GOOGLE_API_KEY
     model_info:
-      input_cost_per_token: 0.000002    # $2/MTok
-      output_cost_per_token: 0.000012   # $12/MTok
-
-  - model_name: gemini-2.5-pro
-    litellm_params:
-      model: gemini/gemini-2.5-pro
-      api_key: os.environ/GOOGLE_API_KEY
-    model_info:
-      input_cost_per_token: 0.00000125  # $1.25/MTok
-      output_cost_per_token: 0.00001    # $10/MTok
-
-  - model_name: gemini-2.5-flash
-    litellm_params:
-      model: gemini/gemini-2.5-flash
-      api_key: os.environ/GOOGLE_API_KEY
-    model_info:
-      input_cost_per_token: 0.00000015  # $0.15/MTok
-      output_cost_per_token: 0.0000006  # $0.60/MTok
+      input_cost_per_token: 0.000002
+      output_cost_per_token: 0.000012
+      rpm: 10
+      tpm: 32000
 
 litellm_settings:
   set_verbose: false  # Never true in deployment — logs prompt content
   return_usage: true
   cache: false
-  request_timeout: 600  # 10 minute timeout
+  request_timeout: 600
 
 general_settings:
   master_key: os.environ/LITELLM_MASTER_KEY
@@ -124,26 +94,25 @@ general_settings:
   health_check_details: false
 ```
 
+Full `model_list` lives in `void-cloud/litellm/config.yaml`.
+
 ## Configuration Sections
 
 ### model_list
-
-Defines available models and their routing:
 
 ```yaml
 - model_name: <alias>              # Name used in API requests
   litellm_params:
     model: <provider>/<model-id>   # Actual provider model
     api_key: os.environ/<VAR>      # API key from environment
-    api_base: <url>                # Optional: custom endpoint
   model_info:
-    input_cost_per_token: <cost>   # Cost per input token
-    output_cost_per_token: <cost>  # Cost per output token
+    input_cost_per_token: <cost>   # Cost per input token ($/tok)
+    output_cost_per_token: <cost>  # Cost per output token ($/tok)
+    rpm: <n>
+    tpm: <n>
 ```
 
 ### litellm_settings
-
-Runtime behavior settings:
 
 | Setting | Description | Default |
 |---------|-------------|---------|
@@ -151,10 +120,9 @@ Runtime behavior settings:
 | `return_usage` | Include token usage in response | `true` |
 | `cache` | Enable response caching | `false` |
 | `request_timeout` | Timeout in seconds | `600` |
+| `num_retries` | Max retry attempts | `3` |
 
 ### general_settings
-
-Proxy-wide settings:
 
 | Setting | Description |
 |---------|-------------|
@@ -163,256 +131,67 @@ Proxy-wide settings:
 | `allow_requests_on_db_unavailable` | Continue if DB is down |
 | `health_check_details` | Include details in health endpoint |
 
+## Soft Rate Limits (config defaults)
+
+| Provider | rpm | tpm |
+|----------|-----|-----|
+| OpenAI | 500 | 200000 |
+| Anthropic | 50 | 40000 |
+| xAI | 100 | 100000 |
+| Gemini Pro | 10 | 32000 |
+| Gemini Flash | 15 | 100000 |
+
 ## Adding a New Model
 
-### Step 1: Get Provider Details
-
-Find the exact model ID from the provider:
-- OpenAI: https://platform.openai.com/docs/models
-- Anthropic: https://docs.anthropic.com/en/docs/models
-- Google: https://ai.google.dev/gemini-api/docs/models
-
-### Step 2: Add to Config
-
-```yaml
-- model_name: new-model-alias
-  litellm_params:
-    model: provider/exact-model-id
-    api_key: os.environ/PROVIDER_API_KEY
-  model_info:
-    input_cost_per_token: 0.000001    # Check provider pricing
-    output_cost_per_token: 0.000003
-```
-
-### Step 3: Add API Key
-
-Set the environment variable:
-
-```bash
-# In Railway or .env
-PROVIDER_API_KEY=sk-...
-```
-
-### Step 4: Redeploy
-
-```bash
-git add void-cloud/litellm/config.yaml
-git commit -m "Add new-model-alias"
-git push
-```
-
-## Provider-Specific Configuration
-
-### OpenAI
-
-```yaml
-- model_name: gpt-4o
-  litellm_params:
-    model: openai/gpt-4o
-    api_key: os.environ/OPENAI_API_KEY
-```
-
-### OpenAI-Compatible (Custom Endpoint)
-
-```yaml
-- model_name: local-llama
-  litellm_params:
-    model: openai/llama-3-70b
-    api_key: fake-key
-    api_base: http://localhost:8000/v1
-```
-
-### Anthropic
-
-```yaml
-- model_name: claude-3-opus
-  litellm_params:
-    model: anthropic/claude-3-opus-20240229
-    api_key: os.environ/ANTHROPIC_API_KEY
-```
-
-### Google Gemini
-
-```yaml
-- model_name: gemini-pro
-  litellm_params:
-    model: gemini/gemini-1.5-pro
-    api_key: os.environ/GOOGLE_API_KEY
-```
-
-### Azure OpenAI
-
-```yaml
-- model_name: azure-gpt-4
-  litellm_params:
-    model: azure/gpt-4-deployment-name
-    api_key: os.environ/AZURE_API_KEY
-    api_base: https://your-resource.openai.azure.com
-    api_version: 2024-02-01
-```
-
-### Ollama (Local)
-
-```yaml
-- model_name: ollama-llama3
-  litellm_params:
-    model: ollama/llama3
-    api_base: http://localhost:11434
-```
-
-## Cost Tracking
-
-### Cost per Token Format
-
-Costs are specified in dollars per token (not per million):
-
-```yaml
-input_cost_per_token: 0.000001  # = $1.00 per 1M tokens
-```
-
-### Conversion
-
-```
-$/MTok to $/token:  Divide by 1,000,000
-$/token to $/MTok:  Multiply by 1,000,000
-
-Example:
-$1.75/MTok = $1.75 / 1,000,000 = 0.00000175 per token
-```
-
-### Pricing Reference
-
-| Rate | Per Token | Per 1K Tokens | Per 1M Tokens |
-|------|-----------|---------------|---------------|
-| $0.15/MTok | 0.00000015 | $0.00015 | $0.15 |
-| $1.00/MTok | 0.000001 | $0.001 | $1.00 |
-| $5.00/MTok | 0.000005 | $0.005 | $5.00 |
-| $15.00/MTok | 0.000015 | $0.015 | $15.00 |
-
-## Load Balancing
-
-### Multiple Deployments
-
-```yaml
-- model_name: gpt-4o
-  litellm_params:
-    model: openai/gpt-4o
-    api_key: os.environ/OPENAI_API_KEY_1
-
-- model_name: gpt-4o
-  litellm_params:
-    model: openai/gpt-4o
-    api_key: os.environ/OPENAI_API_KEY_2
-```
-
-LiteLLM automatically load-balances between same-named models.
-
-### Fallback Models
-
-```yaml
-- model_name: main-model
-  litellm_params:
-    model: openai/gpt-4o
-    api_key: os.environ/OPENAI_API_KEY
-  model_info:
-    fallback_models: ["backup-model"]
-
-- model_name: backup-model
-  litellm_params:
-    model: anthropic/claude-3-sonnet
-    api_key: os.environ/ANTHROPIC_API_KEY
-```
+1. Get the exact provider model ID (OpenAI / Anthropic / xAI / Google docs).
+2. Add an entry to `void-cloud/litellm/config.yaml` with matching `model_name`.
+3. Add the same `id` to `GET /models` in `void-cloud/api/src/routes/llm.ts`.
+4. Insert a `model_pricing` row (migration under `void-cloud/supabase/migrations/`).
+5. Set the provider env key if new (e.g. `XAI_API_KEY`).
+6. Redeploy LiteLLM + API.
 
 ## Environment Variables
 
-### Required
-
 ```bash
 LITELLM_MASTER_KEY=sk-your-admin-key
-```
-
-### Provider Keys (as needed)
-
-```bash
 OPENAI_API_KEY=sk-...
 ANTHROPIC_API_KEY=sk-ant-...
 GOOGLE_API_KEY=AIza...
 XAI_API_KEY=xai-...
-AZURE_API_KEY=...
+```
+
+## Cost per Token Format
+
+Costs in config are dollars per token (not per million):
+
+```
+$/MTok to $/token:  Divide by 1,000,000
+Example: $1.75/MTok = 0.00000175 per token
 ```
 
 ## Running Locally
 
-### With Docker
-
 ```bash
 cd void-cloud/litellm
 docker build -t litellm-proxy .
-docker run -p 4000:4000 --env-file .env litellm-proxy
+docker run -p 4000:4000 --env-file ../.env litellm-proxy
 ```
 
-### With Python
-
 ```bash
-pip install litellm[proxy]
-litellm --config config.yaml --port 4000
-```
-
-### Testing
-
-```bash
-curl http://localhost:4000/health
-
 curl http://localhost:4000/v1/chat/completions \
   -H "Authorization: Bearer $LITELLM_MASTER_KEY" \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "gpt-5.2",
+    "model": "gpt-5.6-sol",
     "messages": [{"role": "user", "content": "Hello!"}]
   }'
 ```
 
 ## Debugging
 
-### Enable Verbose Logging
-
-Local development only. Verbose mode writes the full request payload — the
-user's prompt and any attached case documents — to the container log. Never
-turn it on against a deployment that serves real client data.
-
-```yaml
-litellm_settings:
-  set_verbose: true
-```
-
-### Check Logs
-
-```bash
-# Railway logs
-railway logs
-
-# Docker logs
-docker logs <container-id>
-```
-
-### Common Issues
-
-**Model not found:**
-- Check `model_name` matches exactly
-- Verify provider prefix is correct
-
-**Authentication failed:**
-- Check API key environment variable is set
-- Verify key is valid and has credits
-
-**Timeout errors:**
-- Increase `request_timeout`
-- Check network connectivity to provider
-
----
+`set_verbose: true` is for local development only — never enable against deployments that handle real client data.
 
 **See Also:**
 - [Model Pricing](./model-pricing.md)
 - [Configuration Guide](./configuration.md)
 - [LiteLLM Docs](https://docs.litellm.ai/)
-

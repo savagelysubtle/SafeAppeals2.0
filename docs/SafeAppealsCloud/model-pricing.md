@@ -1,6 +1,6 @@
 # Model Pricing
 
-This document covers all AI model pricing in SafeAppeals Cloud, including how to update pricing and the relationship between provider costs and user charges.
+This document covers AI model pricing in SafeAppeals Cloud, how to update it, and how provider costs relate to user charges.
 
 ## Pricing Overview
 
@@ -12,25 +12,39 @@ User Charge = Provider Cost + Margin
 
 | Component | Description |
 |-----------|-------------|
-| **Provider Cost** | What we pay OpenAI, Anthropic, Google, etc. |
+| **Provider Cost** | What we pay OpenAI, Anthropic, xAI, Google, etc. |
 | **User Charge** | What the user pays (in tokens/credits) |
 | **Margin** | Our profit per request |
 
 ## Current Model Pricing
 
-### Active Models (December 2024)
+### Active Models (July 2026)
 
-Synced with `void-cloud/litellm/config.yaml`:
+Synced with `void-cloud/litellm/config.yaml` and `GET /models` in `void-cloud/api/src/routes/llm.ts`:
 
-| Model | Provider | Input $/MTok | Output $/MTok | Use Case |
-|-------|----------|--------------|---------------|----------|
-| `gpt-5.2` | OpenAI | $1.75 | $14.00 | General coding, agents |
-| `gpt-5.2-pro` | OpenAI | $21.00 | $168.00 | Complex reasoning, 400K context |
-| `claude-opus-4-5` | Anthropic | $5.00 | $25.00 | Premium flagship |
-| `claude-sonnet-4-5` | Anthropic | $3.00 | $15.00 | Best balance quality/speed |
-| `gemini-3-pro-preview` | Google | $2.00 | $12.00 | Latest Google flagship |
-| `gemini-2.5-pro` | Google | $1.25 | $10.00 | Production ready |
-| `gemini-2.5-flash` | Google | $0.15 | $0.60 | High-volume, fast |
+| Model | Provider | Input $/MTok | Output $/MTok | Tier |
+|-------|----------|--------------|---------------|------|
+| `gpt-5.6-sol` | OpenAI | $5.00 | $30.00 | premium |
+| `gpt-5.6` | OpenAI | $5.00 | $30.00 | premium (alias → sol) |
+| `gpt-5.6-terra` | OpenAI | $2.00 | $12.00 | standard |
+| `gpt-5.6-luna` | OpenAI | $0.20 | $1.20 | economy |
+| `gpt-5.4` | OpenAI | $2.50 | $15.00 | premium |
+| `gpt-5.2` | OpenAI | $1.75 | $14.00 | standard |
+| `claude-opus-5` | Anthropic | $5.00 | $25.00 | premium |
+| `claude-sonnet-5` | Anthropic | $2.00* | $10.00* | standard |
+| `claude-fable-5` | Anthropic | $10.00 | $50.00 | premium |
+| `claude-haiku-4-5` | Anthropic | $1.00 | $5.00 | economy |
+| `claude-opus-4-6` | Anthropic | $5.00 | $25.00 | premium |
+| `claude-sonnet-4-6` | Anthropic | $3.00 | $15.00 | standard |
+| `grok-4.5` | xAI | $2.00 | $6.00 | standard |
+| `grok-4.3` | xAI | $1.25 | $2.50 | economy |
+| `gemini-3-pro` | Google | $2.00 | $12.00 | premium |
+| `gemini-3.6-flash` | Google | ~$0.30† | ~$2.50† | economy |
+| `gemini-2.5-pro` | Google | $1.25 | $10.00 | premium |
+| `gemini-2.5-flash` | Google | $0.15 | $0.60 | standard |
+
+\* Sonnet 5 intro pricing thru Aug 31 2026; then $3/$15.  
+† Estimated pending Google publish.
 
 ### Web Search Pricing
 
@@ -40,163 +54,92 @@ Synced with `void-cloud/litellm/config.yaml`:
 | `brave_search_base` | $5 | 20M | ⚫ Inactive |
 | `brave_search_pro` | $9 | Unlimited | ⚫ Inactive |
 
-### Inactive/Legacy Models
+### Inactive / Legacy Models
 
-Kept for historical usage logs:
+Kept for historical usage logs (soft-deactivated in migration `008_model_pricing_jul2026.sql`):
 
-| Model | Provider | Status | Replaced By |
-|-------|----------|--------|-------------|
-| `gpt-5` | OpenAI | ⚫ Inactive | `gpt-5.2` |
-| `gpt-5-mini` | OpenAI | ⚫ Inactive | - |
-| `gpt-5-nano` | OpenAI | ⚫ Inactive | - |
-| `gemini-3-pro` | Google | ⚫ Inactive | `gemini-3-pro-preview` |
-| `claude-opus-4-1` | Anthropic | ⚫ Inactive | `claude-opus-4-5` |
+| Model | Provider | Replaced By |
+|-------|----------|-------------|
+| `gpt-5`, `gpt-5.1`, `gpt-5.1-codex-max` | OpenAI | GPT-5.6 family |
+| `gpt-5.2-pro`, `gpt-5-mini`, `gpt-5-nano` | OpenAI | `gpt-5.6-sol` / `gpt-5.6-luna` |
+| Dated Claude 4.5 / 4.1 ids | Anthropic | Claude 5 + 4.6 |
+| `claude-opus-4.6` / `claude-sonnet-4.6` (dot form) | Anthropic | hyphenated `claude-*-4-6` |
+| `gemini-3-pro-preview` | Google | `gemini-3-pro` |
 
 ## How Pricing Works
 
-### 1. LiteLLM Config (Source of Truth)
+### 1. LiteLLM Config (Source of Truth for Routing + Provider Cost)
 
-The `void-cloud/litellm/config.yaml` file defines model routing and **actual provider costs**:
+`void-cloud/litellm/config.yaml`:
 
 ```yaml
-model_list:
-  - model_name: gpt-5.2
-    litellm_params:
-      model: openai/gpt-5.2
-      api_key: os.environ/OPENAI_API_KEY
-    model_info:
-      input_cost_per_token: 0.00000175   # $1.75/MTok
-      output_cost_per_token: 0.000014    # $14/MTok
+- model_name: gpt-5.6-sol
+  litellm_params:
+    model: openai/gpt-5.6-sol
+    api_key: os.environ/OPENAI_API_KEY
+  model_info:
+    input_cost_per_token: 0.000005     # $5/MTok
+    output_cost_per_token: 0.00003     # $30/MTok
 ```
 
 ### 2. Supabase `model_pricing` Table
 
-The database table stores pricing for **cost tracking and analytics**:
+Used for cost tracking and analytics:
 
 ```sql
 SELECT model_name, provider, input_cost_per_million, output_cost_per_million, is_active
 FROM model_pricing
-WHERE is_active = true;
+WHERE is_active = true
+ORDER BY provider, model_name;
 ```
 
-### 3. App Model Definitions
+Latest sync migration: `void-cloud/supabase/migrations/008_model_pricing_jul2026.sql`.
 
-The app has model definitions in `src/vs/workbench/contrib/void/common/models/`:
+### 3. API Model Catalog
 
-```typescript
-// src/vs/workbench/contrib/void/common/models/openai/index.ts
-export const openAIModelOptions = {
-  'gpt-5.2': {
-    contextWindow: 128_000,
-    cost: { input: 1.75, output: 14.00 },
-    // ...
-  },
-}
-```
+`void-cloud/api/src/routes/llm.ts` — `GET /models` returns ids that **must** match LiteLLM `model_name` exactly (the chat handler forwards `body.model` to LiteLLM).
 
 ## Updating Pricing
 
 ### Step 1: Update LiteLLM Config
 
-Edit `void-cloud/litellm/config.yaml`:
-
-```yaml
-- model_name: gpt-5.2
-  litellm_params:
-    model: openai/gpt-5.2
-    api_key: os.environ/OPENAI_API_KEY
-  model_info:
-    input_cost_per_token: 0.00000175   # $1.75/MTok - UPDATE THIS
-    output_cost_per_token: 0.000014    # $14/MTok - UPDATE THIS
-```
+Edit `void-cloud/litellm/config.yaml` costs (`input_cost_per_token` / `output_cost_per_token` = $/MTok ÷ 1e6).
 
 ### Step 2: Update Supabase
 
-Run SQL migration or use Supabase MCP:
+Prefer a new migration (do not edit old ones):
 
 ```sql
+-- void-cloud/supabase/migrations/00N_update_pricing.sql
 UPDATE model_pricing
 SET
-    input_cost_per_million = 1.75,    -- New input price
-    output_cost_per_million = 14.00,  -- New output price
+    input_cost_per_million = 5.00,
+    output_cost_per_million = 30.00,
     updated_at = NOW()
-WHERE model_name = 'gpt-5.2';
+WHERE model_name = 'gpt-5.6-sol';
 ```
 
-Or create a migration file:
+### Step 3: Update API Catalog
 
-```sql
--- void-cloud/supabase/migrations/007_update_pricing.sql
-UPDATE model_pricing
-SET input_cost_per_million = 1.75, output_cost_per_million = 14.00
-WHERE model_name = 'gpt-5.2';
-```
+Keep `inputCost` / `outputCost` in `GET /models` aligned ($/MTok numbers).
 
-### Step 3: Update App Model Definitions
+### Step 4: Deploy
 
-Edit the provider file in `src/vs/workbench/contrib/void/common/models/`:
-
-```typescript
-'gpt-5.2': {
-  cost: { input: 1.75, output: 14.00 },  // Update here
-}
-```
-
-### Step 4: Deploy Changes
-
-```bash
-# Rebuild app
-bun run compile
-
-# Deploy LiteLLM (if on Railway)
-cd void-cloud
-git add -A && git commit -m "Update model pricing"
-git push  # Railway auto-deploys
-```
+Redeploy LiteLLM and the API service after config/catalog changes.
 
 ## Adding New Models
 
-### 1. Add to LiteLLM Config
-
-```yaml
-- model_name: new-model-name
-  litellm_params:
-    model: provider/actual-model-id
-    api_key: os.environ/PROVIDER_API_KEY
-  model_info:
-    input_cost_per_token: 0.000001    # $/token
-    output_cost_per_token: 0.000005   # $/token
-```
-
-### 2. Add to Supabase
+1. Add to `void-cloud/litellm/config.yaml`.
+2. Add matching `id` to `GET /models` in `llm.ts`.
+3. Insert into `model_pricing` via migration.
+4. Add provider env key if needed (`XAI_API_KEY`, etc.).
 
 ```sql
 INSERT INTO model_pricing (model_name, provider, input_cost_per_million, output_cost_per_million, is_active)
 VALUES ('new-model-name', 'provider', 1.00, 5.00, true);
 ```
 
-### 3. Add to App
-
-Create or update provider file:
-
-```typescript
-// src/vs/workbench/contrib/void/common/models/provider/index.ts
-export const providerModelOptions = {
-  'new-model-name': {
-    contextWindow: 128_000,
-    reservedOutputTokenSpace: 8_192,
-    cost: { input: 1.00, output: 5.00 },
-    downloadable: false,
-    supportsFIM: false,
-    specialToolFormat: 'openai-style',
-    supportsSystemMessage: 'separated',
-  },
-}
-```
-
 ## Cost Calculation
-
-### Formula
 
 ```
 Input Cost = (input_tokens / 1,000,000) × input_cost_per_million
@@ -204,131 +147,63 @@ Output Cost = (output_tokens / 1,000,000) × output_cost_per_million
 Total Cost = Input Cost + Output Cost
 ```
 
-### Example
-
-For a request with 5,000 input tokens and 1,000 output tokens using `gpt-5.2`:
+Example — 5,000 in / 1,000 out on `gpt-5.6-terra` ($2 / $12):
 
 ```
-Input Cost  = (5,000 / 1,000,000) × $1.75 = $0.00875
-Output Cost = (1,000 / 1,000,000) × $14.00 = $0.014
-Total Cost  = $0.00875 + $0.014 = $0.02275
+Input Cost  = (5,000 / 1,000,000) × $2.00  = $0.01
+Output Cost = (1,000 / 1,000,000) × $12.00 = $0.012
+Total Cost  = $0.022
 ```
-
-### Database Function
-
-The `calculate_request_cost` function does this automatically:
 
 ```sql
-SELECT * FROM calculate_request_cost('gpt-5.2', 5000, 1000);
--- Returns: input_cost: 0.00875, output_cost: 0.014, total_cost: 0.02275
+SELECT * FROM calculate_request_cost('gpt-5.6-terra', 5000, 1000);
 ```
 
 ## Price Monitoring
 
-### Check Current Pricing
+Provider pricing pages:
 
-```sql
-SELECT
-    model_name,
-    provider,
-    input_cost_per_million as "Input $/MTok",
-    output_cost_per_million as "Output $/MTok",
-    is_active
-FROM model_pricing
-ORDER BY provider, model_name;
-```
-
-### Compare with Provider Pricing
-
-Regularly check provider pricing pages:
-
-- **OpenAI**: https://openai.com/api/pricing
-- **Anthropic**: https://www.anthropic.com/pricing
+- **OpenAI**: https://developers.openai.com/api/docs/models
+- **Anthropic**: https://platform.claude.com/docs/en/about-claude/models/overview
+- **xAI**: https://docs.x.ai/developers/models
 - **Google**: https://ai.google.dev/gemini-api/docs/models
 
-### Usage Analytics
-
 ```sql
--- Cost by model (last 30 days)
 SELECT * FROM cost_by_model;
-
--- Daily costs
 SELECT * FROM daily_cost_summary;
-
--- User costs
-SELECT * FROM user_cost_summary;
 ```
 
 ## Pricing Strategy
 
-### Current Markup
+Token pack sell rates (approx.):
 
-Based on token pack pricing (rate varies by tier):
 - **$30** = 700,000 tokens (Starter: $42.86/MTok)
 - **$65** = 2,000,000 tokens (Pro: $32.50/MTok)
 - **$130** = 5,000,000 tokens (Power: $26.00/MTok)
 
-### Margin Calculation
-
-For `gpt-5.2` (most used model), provider cost ~$5.50/MTok average:
-```
-Starter ($42.86/MTok): Margin ~87%
-Pro ($32.50/MTok):     Margin ~83%
-Power ($26.00/MTok):   Margin ~79%
-```
-
-For `gemini-2.5-flash` (cheapest), provider cost ~$0.30/MTok average:
-```
-Starter ($42.86/MTok): Margin ~99%
-Pro ($32.50/MTok):     Margin ~99%
-Power ($26.00/MTok):   Margin ~99%
-```
-
-### Break-Even Analysis
-
-If you want to break even on a specific model:
-
-```
-Break-even tokens = Pack Price / Provider Cost per Token
-
-For gpt-5.2-pro ($21 input, $168 output), assuming 80% input, 20% output:
-Avg cost = (0.8 × $21) + (0.2 × $168) = $50.40/MTok
-
-Starter ($30): Break-even = $30 / $0.0000504 = 595,238 tokens
-Pro ($65):     Break-even = $65 / $0.0000504 = 1,289,683 tokens
-Power ($130):  Break-even = $130 / $0.0000504 = 2,579,365 tokens
-```
+Margins stay healthy on economy models (`gpt-5.6-luna`, `gemini-2.5-flash`, `grok-4.3`) and thinner on premium flagships (`claude-fable-5`, `gpt-5.6-sol`).
 
 ## Troubleshooting
 
-### Model Not Found
-
-If `calculate_request_cost` returns 0:
+### Model Not Found / Zero Cost
 
 ```sql
--- Check if model exists
-SELECT * FROM model_pricing WHERE model_name = 'your-model-name';
-
--- Check if active
 SELECT * FROM model_pricing WHERE model_name = 'your-model-name' AND is_active = true;
 ```
 
+Confirm the id matches LiteLLM `model_name` and the API catalog id.
+
 ### Pricing Mismatch
 
-If LiteLLM and Supabase have different prices:
-
 ```bash
-# Check LiteLLM config
-cat void-cloud/litellm/config.yaml | grep -A5 "model_name: your-model"
-
-# Check Supabase
-# Use MCP or run SQL
+rg "model_name:" void-cloud/litellm/config.yaml
+# Compare with GET /models ids and model_pricing rows
 ```
 
 ---
 
 **See Also:**
+- [LiteLLM Configuration](./litellm-config.md)
 - [Credit System](./credit-system.md)
 - [Web Search Pricing](./web-search.md)
 - [Configuration Guide](./configuration.md)
-

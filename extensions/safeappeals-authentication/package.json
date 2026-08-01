@@ -132,11 +132,11 @@
 		"configuration": {
 			"title": "%config.title%",
 			"properties": {
-				"safeappeals.cloud.apiUrl": {
+				"safeappeals.cloud.debug.apiUrl": {
 					"type": "string",
-					"default": "https://api.safeappeals.com",
+					"default": "",
 					"scope": "machine",
-					"markdownDescription": "%config.apiUrl.description%"
+					"markdownDescription": "%config.debug.apiUrl.description%"
 				},
 				"safeappeals.cloud.dashboardUrl": {
 					"type": "string",

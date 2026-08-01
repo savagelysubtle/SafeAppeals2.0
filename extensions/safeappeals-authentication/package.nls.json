@@ -17,7 +17,7 @@
 	"command.pasteAuthCode.title": "Paste Auth Code",
 	"command.signOut.title": "Sign Out",
 	"config.title": "SafeAppeals Cloud",
-	"config.apiUrl.description": "Base URL for the SafeAppeals Cloud API. Machine-scoped so Settings Sync never uploads it.",
+	"config.debug.apiUrl.description": "Dev-only override for the SafeAppeals Cloud API base URL. Honored only when running a development build (`VSCODE_DEV`); production always uses `https://api.safeappeals.com`. Machine-scoped so Settings Sync never uploads it. Prefer the `SAFEAPPEALS_CLOUD_API_URL` environment variable when both are set.",
 	"config.dashboardUrl.description": "Base URL for the SafeAppeals dashboard (finish page and paste fallback).",
 	"config.webCallbackOrigins.description": "Allowed origins for automatic web OAuth callbacks via asExternalUri. Origins not in this list fall back to the finish-page paste flow."
 }

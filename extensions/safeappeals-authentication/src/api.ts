@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as vscode from 'vscode';
+import { resolveApiUrl } from './apiUrl';
 import {
 	InsufficientCreditsError,
 	isInsufficientCreditsPayload,
@@ -12,8 +13,7 @@ import {
 import { extractJsonChatResult, OpenAiSseParser, type SseParseStep } from './llm/sse';
 import type { CloudChatMessage, CloudChatTool } from './llm/messageMapping';
 
-/** Default production SafeAppeals Cloud API origin. */
-export const DEFAULT_API_URL = 'https://api.safeappeals.com';
+export { DEFAULT_API_URL } from './apiUrl';
 
 /** Default production dashboard origin (finish page + paste fallback). */
 export const DEFAULT_DASHBOARD_URL = 'https://safeappeals.com';
@@ -110,15 +110,29 @@ export interface CreditPack {
 }
 
 /**
- * Resolves the configured API base URL (machine-scoped setting).
+ * Whether this process is a development (from-source) build.
+ * Uses `VSCODE_DEV` (set by `scripts/code*.sh`). Guarded for browser where `process` is absent.
+ */
+function isDevBuild(): boolean {
+	return typeof process !== 'undefined' && !!process.env?.['VSCODE_DEV'];
+}
+
+/**
+ * Resolves the Cloud API base URL.
+ *
+ * Production always uses {@link DEFAULT_API_URL}. Dev builds may override via
+ * `SAFEAPPEALS_CLOUD_API_URL` or machine-scoped `safeappeals.cloud.debug.apiUrl`.
+ * The former user setting `safeappeals.cloud.apiUrl` is intentionally ignored.
  */
 export function getApiUrl(): string {
-	const configured = vscode.workspace.getConfiguration('safeappeals.cloud').get<string>('apiUrl');
-	const trimmed = configured?.trim();
-	if (trimmed) {
-		return trimmed.replace(/\/+$/, '');
-	}
-	return DEFAULT_API_URL;
+	const isDev = isDevBuild();
+	const envUrl = isDev && typeof process !== 'undefined'
+		? process.env?.['SAFEAPPEALS_CLOUD_API_URL']
+		: undefined;
+	const debugSettingUrl = isDev
+		? vscode.workspace.getConfiguration('safeappeals.cloud.debug').get<string>('apiUrl')
+		: undefined;
+	return resolveApiUrl({ isDev, envUrl, debugSettingUrl });
 }
 
 /**

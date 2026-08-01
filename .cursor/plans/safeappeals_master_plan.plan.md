@@ -64,12 +64,12 @@ todos:
       --grep onboarding` outside the agent sandbox (needs real Electron + X)."
     status: completed
   - id: m2-onboarding-phase-b
-    content: "M2 ACTIVE (deps: M1): onboarding Phase B — T13 DONE Jul 31 (Ask-mode
-      cloud LM provider in safeappeals-authentication; toolCalling:false until
-      server tools). REMAINING = T14 BREAKING product.json Copilot removal
-      (carved from rung 11). After T14 the app's default inference path is
-      SafeAppeals Cloud. Plan: onboarding_redesign_newcomer.plan.md §9 Phase B."
-    status: in_progress
+    content: "M2 DONE Jul 31 (unblock slice): T13 Ask-mode cloud LM + T14 entitlement
+      de-gate (hasByokModels counts safeappeals-cloud; Ask restored; copilot-chat
+      off auto-updates). defaultChatAgent string rebrand deferred to rung 11.
+      Agent mode on cloud still needs server tools. Plan:
+      onboarding_redesign_newcomer.plan.md §9 Phase B."
+    status: completed
   - id: r7-timeline
     content: "Rung 7 slice 2 (deps: M1 ships — same-extension collision with
       T10/T12, deferred Jul 29): timeline + deadlines in safeappeals-case —
