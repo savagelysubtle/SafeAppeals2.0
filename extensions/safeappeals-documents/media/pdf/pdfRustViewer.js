@@ -1020,8 +1020,8 @@ ${val.stack}`;
   };
   var AnnotationManager = class {
     constructor(getCurrentPage, getScale, getPdfUri, postMessage) {
-      __publicField(this, "getCurrentPage", getCurrentPage);
-      __publicField(this, "getScale", getScale);
+      this.getCurrentPage = getCurrentPage;
+      this.getScale = getScale;
       __publicField(this, "annotations", []);
       __publicField(this, "selectedAnnotationId", null);
       __publicField(this, "currentHighlightColor", "yellow");
@@ -1939,13 +1939,13 @@ ${val.stack}`;
   // webview-src/pdf/continuousScroll.ts
   var ContinuousScrollManager = class {
     constructor(scrollContainer, pageCount2, pageDimensions2, scale2, renderPageImageData, getTextBlocks, onPageChange) {
-      __publicField(this, "scrollContainer", scrollContainer);
-      __publicField(this, "pageCount", pageCount2);
-      __publicField(this, "pageDimensions", pageDimensions2);
-      __publicField(this, "scale", scale2);
-      __publicField(this, "renderPageImageData", renderPageImageData);
-      __publicField(this, "getTextBlocks", getTextBlocks);
-      __publicField(this, "onPageChange", onPageChange);
+      this.scrollContainer = scrollContainer;
+      this.pageCount = pageCount2;
+      this.pageDimensions = pageDimensions2;
+      this.scale = scale2;
+      this.renderPageImageData = renderPageImageData;
+      this.getTextBlocks = getTextBlocks;
+      this.onPageChange = onPageChange;
       __publicField(this, "pageWrappers", /* @__PURE__ */ new Map());
       __publicField(this, "renderedPages", /* @__PURE__ */ new Set());
       __publicField(this, "renderQueue", []);
@@ -2096,7 +2096,7 @@ ${val.stack}`;
   // webview-src/pdf/forms.ts
   var FormOverlayManager = class {
     constructor(renderContainer) {
-      __publicField(this, "renderContainer", renderContainer);
+      this.renderContainer = renderContainer;
       __publicField(this, "overlay", null);
       __publicField(this, "fieldValues", /* @__PURE__ */ new Map());
     }
@@ -2820,12 +2820,12 @@ ${val.stack}`;
       container.appendChild(row);
       input.select();
     });
-    document.addEventListener("deleteBookmark", ((e) => {
+    document.addEventListener("deleteBookmark", (e) => {
       const annotationId = e.detail;
       if (annotationId) {
         vscode.postMessage({ type: "deleteAnnotation", annotationId });
       }
-    }));
+    });
     const fitWidthButton = document.getElementById("fit-width");
     const fitPageButton = document.getElementById("fit-page");
     const actualSizeButton = document.getElementById("actual-size");

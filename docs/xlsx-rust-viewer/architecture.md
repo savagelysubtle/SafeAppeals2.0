@@ -2,9 +2,11 @@
 
 ## Overview
 
-The XLSX Rust Viewer is a full-featured document editor integrated into the SafeAppealNavigator VSCode fork. It uses a Rust/WASM backend for parsing, writing, formula evaluation, and table operations, with a Canvas 2D + Chart.js frontend for rendering inside a VSCode webview.
+The XLSX Rust Viewer is a full-featured spreadsheet editor. It uses a Rust/WASM backend for parsing, writing, formula evaluation, and table operations, with a **Canvas 2D + Chart.js** frontend (not Luckysheet/Univer) inside a VS Code webview.
 
-The system runs inside the VSCode Electron application. The rendering context communicates with the extension host via `postMessage`, and all file I/O is handled by the extension host via `IFileService`.
+**Current shipping path:** `extensions/safeappeals-documents` — custom editor `safeappeals.xlsxViewer` (`XlsxEditorProvider`), webview under `webview-src/xlsx/`, LM tools in `src/agentTools.ts`. Diagrams below still describe the Canvas/WASM/Chart.js shape; file names that mention Void `EditorPane` classes are historical — prefer the extension layout in [README.md](./README.md).
+
+The rendering context communicates with the extension host via `postMessage`. File I/O for the open editor goes through the custom editor provider (`vscode.workspace.fs` / save pipeline).
 
 ## High-Level Architecture
 
@@ -259,10 +261,20 @@ connect-src {wasmUri};
 | `vscode.setState/getState` | In-session persistence of chart state and editor state across tab switches |
 | `URI.revive()` | Safe deserialization of URIs in the input serializer |
 
+## Agent / LM tools (current)
+
+| Tool | Behavior |
+|------|----------|
+| `safeappeals_xlsx_create` | Host `xlsxWriter.ts` (JSZip) writes a new `.xlsx` — **no open editor required** |
+| `safeappeals_xlsx_read` | Requires file open in XLSX editor (headless Node WASM not shipped) |
+| `safeappeals_xlsx_edit` | Open editor → `applyEditsAndWait` → webview `handleApplyEdits`; host normalizer in `xlsxEditOperations.ts` |
+
+Edit ops include tables (`create_table`, `resize_table`, …), charts (`create_chart` alias of `insert_chart`, camelCase `chartType`/`dataRange` accepted), and `format_range` (A1:B10; use `format_cell` or `A1:A1` for a single cell). Charts/tables/edits still require the file open except create.
+
 ## Future Architecture (planned)
 
 - **Web Worker** — move WASM execution off the main webview thread to prevent UI freezes on large files
 - **Arrow IPC / Transferables** — zero-copy data transfer between Worker and main thread
 - **Streaming viewport** — request only visible cell data from Rust instead of the full model
 - **Shared WorkbookModel** — keep model in Rust memory, query it via viewport requests
-- **AI table/chart creation** — allow AI agents to create tables and charts via the `edit_document` tool
+- **Headless XLSX read/edit** — Node WASM for agent tools without an open editor (not shipped today)

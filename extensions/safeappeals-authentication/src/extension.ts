@@ -1,5 +1,5 @@
 /*---------------------------------------------------------------------------------------------
- *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Copyright (c) Safe Appeals. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
@@ -42,7 +42,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 	// Agent participant + tools before initialize so a failed/slow init cannot leave
 	// Agent mode without a non-core default (Phase 0 fail-fast / activation race).
 	context.subscriptions.push(
-		registerSafeAppealsAgentTools(),
+		registerSafeAppealsAgentTools(provider.getApiClient()),
 		registerSafeAppealsAgentParticipant(),
 	);
 

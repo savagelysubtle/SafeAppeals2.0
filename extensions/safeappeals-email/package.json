@@ -249,6 +249,57 @@
         "priority": "default"
       }
     ],
+    "languageModelTools": [
+      {
+        "name": "safeappeals_email_createDraft",
+        "toolReferenceName": "emailCreateDraft",
+        "displayName": "Create Email Draft",
+        "modelDescription": "Save a local email draft (does NOT send). Requires to, subject, and content. accountId optional when exactly one account is configured. Never use this to send mail.",
+        "userDescription": "Create a local email draft without sending",
+        "canBeReferencedInPrompt": true,
+        "icon": "$(mail)",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "to": {
+              "type": "string",
+              "description": "Recipient address(es)."
+            },
+            "subject": {
+              "type": "string",
+              "description": "Draft subject line."
+            },
+            "content": {
+              "type": "string",
+              "description": "Draft body (plain text or HTML as stored by the dashboard)."
+            },
+            "accountId": {
+              "type": "string",
+              "description": "Email account id. Required when multiple accounts exist."
+            },
+            "cc": {
+              "type": "string"
+            },
+            "bcc": {
+              "type": "string"
+            },
+            "emailId": {
+              "type": "string",
+              "description": "Optional related message id for reply drafts."
+            },
+            "draftId": {
+              "type": "string",
+              "description": "Optional existing draft id to update."
+            }
+          },
+          "required": [
+            "to",
+            "subject",
+            "content"
+          ]
+        }
+      }
+    ],
     "configuration": {
       "title": "Safe Appeals Email",
       "properties": {

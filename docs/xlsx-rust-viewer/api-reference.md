@@ -456,12 +456,24 @@ Modal dialog for creating and editing charts.
 
 ### AI Edit Operations (`applyEdits`)
 
+Posted by the open custom editor (`XlsxEditorProvider.applyEditsAndWait`) after host normalization in `extensions/safeappeals-documents/src/xlsx/xlsxEditOperations.ts`. Agent tool: `safeappeals_xlsx_edit`. Field names below match the webview handler (A1 refs preferred over raw row/col).
+
 | Operation Type | Fields | Description |
 |---------------|--------|-------------|
-| `set_cell_value` | `row, col, value` | Set a cell's value |
-| `set_cell_formula` | `row, col, formula` | Set a cell's formula |
-| `format_cell` | `row, col, style` | Apply formatting to a cell |
-| `insert_row` | `row` | Insert a row at the given index |
-| `insert_column` | `col` | Insert a column at the given index |
-| `delete_row` | `row` | Delete a row |
-| `delete_column` | `col` | Delete a column |
+| `set_cell_value` | `cell`, `value`, `sheet?` | Set a cell's value (A1) |
+| `set_cell_formula` | `cell`, `formula`, `sheet?` | Set a cell's formula |
+| `format_cell` | `cell`, `format`, `sheet?` | Format a single cell |
+| `format_range` | `range`, `format`, `sheet?` | Format A1:B10-style range (`format_cells` aliases here) |
+| `insert_row` | `rowIndex`, `sheet?` | Insert a row |
+| `insert_column` | `colIndex`, `sheet?` | Insert a column |
+| `delete_row` | `rowIndex`, `sheet?` | Delete a row |
+| `delete_column` | `colIndex`, `sheet?` | Delete a column |
+| `create_table` | `range`, `tableName?`, `styleName?`, `sheet?` | Create table on selection; omitted/invalid sheet → **active sheet** |
+| `resize_table` | `tableName`, `range`, `sheet?` | Resize table to A1:B10 range |
+| `rename_table` | `oldName`, `newName` | Rename table |
+| `set_table_style` | `tableName`, `styleName` | Apply Excel table style |
+| `toggle_table_filter` | `tableName` | Toggle header filters |
+| `set_totals_row` | `tableName`, `enabled` | Totals row on/off |
+| `convert_table_to_range` | `tableName` | Convert table to plain range |
+| `create_chart` / `insert_chart` | `chart_type` or `chartType`, `data_range` or `dataRange`, `title?`, `position?`, `sheet?` | Insert chart (`create_chart` is an alias) |
+| `delete_chart` | `chart_index` or `chartIndex`, `sheet?` | Remove chart by 0-based index |

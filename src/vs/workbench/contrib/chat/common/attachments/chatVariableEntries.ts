@@ -264,6 +264,10 @@ export function toPasteVariableEntry(
 		readonly language?: string;
 		readonly fileName?: string;
 		readonly pastedLines?: string;
+		readonly copiedFrom?: {
+			readonly uri: URI;
+			readonly range: IRange;
+		};
 		readonly _meta?: Record<string, unknown>;
 	}
 ): IChatRequestPasteVariableEntry {
@@ -280,7 +284,7 @@ export function toPasteVariableEntry(
 		language,
 		pastedLines,
 		fileName,
-		copiedFrom: undefined,
+		copiedFrom: options?.copiedFrom,
 		_meta: {
 			...options?._meta,
 			[ChatPasteAttachmentMetadata.Kind]: 'paste',

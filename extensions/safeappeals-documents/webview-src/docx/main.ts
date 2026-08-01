@@ -1,8 +1,8 @@
 /**
  * DOCX webview entry: load TipTap/docx globals, then the legacy editor scripts.
  *
- * AI quick-edit / DocuSign / main-process PDF export messages still fire from
- * the ported scripts but are ignored by the extension host (rung 12 / later).
+ * Host↔webview agent bridge: applyDocxEdits / getText / applyInlineEdit /
+ * inlineEditRequest (Phase D). DocuSign / PDF export remain later.
  */
 import './deps';
 import './vendor/tiptapBundle.js';

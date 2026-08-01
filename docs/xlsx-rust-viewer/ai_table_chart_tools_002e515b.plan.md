@@ -1,6 +1,7 @@
 ---
 name: AI Table Chart Tools
 overview: Wire existing table and chart functionality into the AI agent's edit_document tool so the AI can create/manage tables and insert charts in XLSX files.
+status: Superseded in product by LM tools on safeappeals-documents — safeappeals_xlsx_edit (open editor → applyEditsAndWait → handleApplyEdits), with host normalizer xlsxEditOperations.ts (create_chart alias, format_range, resize_table wired). Historical plan body below still describes the Void edit_document path.
 todos:
   - id: update-type
     content: Add insert_chart and delete_chart to XLSXEditOperation type in documentEditorService.ts

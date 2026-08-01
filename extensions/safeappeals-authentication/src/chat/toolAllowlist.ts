@@ -1,5 +1,5 @@
 /*---------------------------------------------------------------------------------------------
- *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Copyright (c) Safe Appeals. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
@@ -7,12 +7,31 @@ import * as path from 'path';
 
 export const SAFEAPPEALS_READ_FILE_TOOL = 'safeappeals_readFile';
 export const SAFEAPPEALS_LIST_DIR_TOOL = 'safeappeals_listDir';
+export const SAFEAPPEALS_EDIT_FILE_TOOL = 'safeappeals_editFile';
+export const SAFEAPPEALS_CREATE_FILE_TOOL = 'safeappeals_createFile';
+export const SAFEAPPEALS_CREATE_DIRECTORY_TOOL = 'safeappeals_createDirectory';
+export const SAFEAPPEALS_FIND_FILES_TOOL = 'safeappeals_findFiles';
+export const SAFEAPPEALS_FIND_TEXT_IN_FILES_TOOL = 'safeappeals_findTextInFiles';
+export const SAFEAPPEALS_SEARCH_WORKSPACE_SYMBOLS_TOOL = 'safeappeals_searchWorkspaceSymbols';
+export const SAFEAPPEALS_GET_ERRORS_TOOL = 'safeappeals_getErrors';
+export const SAFEAPPEALS_GET_CHANGED_FILES_TOOL = 'safeappeals_getChangedFiles';
+export const SAFEAPPEALS_SEARCH_CODEBASE_TOOL = 'safeappeals_searchCodebase';
+export const SAFEAPPEALS_REPLACE_STRING_TOOL = 'safeappeals_replaceString';
+export const SAFEAPPEALS_MULTI_REPLACE_STRING_TOOL = 'safeappeals_multiReplaceString';
+export const SAFEAPPEALS_APPLY_PATCH_TOOL = 'safeappeals_applyPatch';
+export const SAFEAPPEALS_RUN_VSCODE_COMMAND_TOOL = 'safeappeals_runVscodeCommand';
+export const SAFEAPPEALS_FETCH_WEB_PAGE_TOOL = 'safeappeals_fetchWebPage';
+export const SAFEAPPEALS_WEB_SEARCH_TOOL = 'safeappeals_webSearch';
+export const SAFEAPPEALS_MULTI_WEB_SEARCH_TOOL = 'safeappeals_multiWebSearch';
 
 /** Registered core edit tool id (extension API may also surface the legacy alias). */
 export const VSCODE_EDIT_FILE_TOOL = 'vscode_editFile_internal';
 
 /** Legacy / extension-facing edit id — invoke remaps to {@link VSCODE_EDIT_FILE_TOOL}. */
 export const VSCODE_EDIT_FILE_TOOL_ALIAS = 'vscode_editFile';
+
+/** Core host fetch tool id (electron built-in). */
+export const VSCODE_FETCH_WEB_PAGE_TOOL = 'vscode_fetchWebPage_internal';
 
 /** Plain tool shape for `sendRequest` (avoids spreading LanguageModelToolInformation class instances). */
 export interface AgentChatToolDescriptor {
@@ -21,21 +40,78 @@ export interface AgentChatToolDescriptor {
 	readonly inputSchema?: object;
 }
 
-/** MVP allowlist of host tools (present when core/extension registered them). */
+/**
+ * Allowlisted host tools (present when core/extension registered them).
+ * Includes terminal/todo, edit, fetch, and known browser tool ids.
+ */
 export const CORE_AGENT_TOOL_NAMES: readonly string[] = [
 	VSCODE_EDIT_FILE_TOOL,
+	VSCODE_FETCH_WEB_PAGE_TOOL,
 	'run_in_terminal',
 	'manage_todo_list',
+	'browserTool',
+	'open_browser_page',
+	'click_element',
+	'screenshot_page',
+	'navigate_page',
+	'read_page',
+	'hover_element',
+	'drag_element',
+	'type_in_page',
+	'handle_dialog',
+	'run_playwright_code',
 ];
 
 /**
  * Tools force-added unless the picker explicitly disabled them (or a mapped Copilot alias).
- * Terminal / todo / edit are never force-added — picker opt-out wins.
+ * Terminal / todo are never force-added — picker opt-out wins.
  */
 export const ENSURED_AGENT_TOOL_NAMES: readonly string[] = [
 	SAFEAPPEALS_READ_FILE_TOOL,
 	SAFEAPPEALS_LIST_DIR_TOOL,
+	SAFEAPPEALS_EDIT_FILE_TOOL,
+	SAFEAPPEALS_CREATE_FILE_TOOL,
+	SAFEAPPEALS_CREATE_DIRECTORY_TOOL,
+	SAFEAPPEALS_FIND_FILES_TOOL,
+	SAFEAPPEALS_FIND_TEXT_IN_FILES_TOOL,
+	SAFEAPPEALS_SEARCH_WORKSPACE_SYMBOLS_TOOL,
+	SAFEAPPEALS_GET_ERRORS_TOOL,
+	SAFEAPPEALS_GET_CHANGED_FILES_TOOL,
+	SAFEAPPEALS_SEARCH_CODEBASE_TOOL,
+	SAFEAPPEALS_REPLACE_STRING_TOOL,
+	SAFEAPPEALS_MULTI_REPLACE_STRING_TOOL,
+	SAFEAPPEALS_APPLY_PATCH_TOOL,
+	SAFEAPPEALS_RUN_VSCODE_COMMAND_TOOL,
+	SAFEAPPEALS_FETCH_WEB_PAGE_TOOL,
+	SAFEAPPEALS_WEB_SEARCH_TOOL,
+	SAFEAPPEALS_MULTI_WEB_SEARCH_TOOL,
 ];
+
+const WEB_SEARCH_MODEL_DESCRIPTION =
+	'Search the web via SafeAppeals Cloud (Brave Search). Ideal for general queries, news, articles, and recent events. ' +
+	'Searches go through SafeAppeals Cloud with your account JWT — credits apply (~250 per search). There is no local Brave API key. ' +
+	'Maximum 20 results per request; use offset for pagination.';
+
+const MULTI_WEB_SEARCH_MODEL_DESCRIPTION =
+	'Run multiple sequential web searches via SafeAppeals Cloud (Brave Search). Ideal for batch information gathering across topics. ' +
+	'Searches go through SafeAppeals Cloud with your account JWT — credits apply (~250 per query). There is no local Brave API key. ' +
+	'Maximum 10 queries, 20 results per query.';
+
+const EDIT_FILE_MODEL_DESCRIPTION =
+	'Insert new code into an existing file in the workspace. Use this tool once per file that needs to be modified, even if there are multiple changes for a file. Generate the "explanation" property first.\n' +
+	'The system is very smart and can understand how to apply your edits to the files, you just need to provide minimal hints.\n' +
+	'Avoid repeating existing code, instead use comments to represent regions of unchanged code. Be as concise as possible. For example:\n' +
+	'// ...existing code...\n{ changed code }\n// ...existing code...\n{ changed code }\n// ...existing code...\n\n' +
+	'Here is an example of how you should use format an edit to an existing Person class:\n' +
+	'class Person {\n\t// ...existing code...\n\tage: number;\n\t// ...existing code...\n\tgetAge() {\n\treturn this.age;\n\t}\n}';
+
+const EDIT_FILE_CODE_DESCRIPTION =
+	'The code change to apply to the file.\n' +
+	'The system is very smart and can understand how to apply your edits to the files, you just need to provide minimal hints.\n' +
+	'Avoid repeating existing code, instead use comments to represent regions of unchanged code. Be as concise as possible. For example:\n' +
+	'// ...existing code...\n{ changed code }\n// ...existing code...\n{ changed code }\n// ...existing code...\n\n' +
+	'Here is an example of how you should use format an edit to an existing Person class:\n' +
+	'class Person {\n\t// ...existing code...\n\tage: number;\n\t// ...existing code...\n\tgetAge() {\n\t\treturn this.age;\n\t}\n}';
 
 /**
  * Hardcoded descriptors matching `package.json` languageModelTools (used when absent from `lm.tools`).
@@ -68,14 +144,356 @@ export const ENSURED_AGENT_TOOL_DESCRIPTORS: Readonly<Record<string, AgentChatTo
 			},
 		},
 	},
+	[SAFEAPPEALS_EDIT_FILE_TOOL]: {
+		name: SAFEAPPEALS_EDIT_FILE_TOOL,
+		description: EDIT_FILE_MODEL_DESCRIPTION,
+		inputSchema: {
+			type: 'object',
+			properties: {
+				explanation: {
+					type: 'string',
+					description: 'A short explanation of the edit being made.',
+				},
+				filePath: {
+					type: 'string',
+					description: 'An absolute path to the file to edit.',
+				},
+				code: {
+					type: 'string',
+					description: EDIT_FILE_CODE_DESCRIPTION,
+				},
+			},
+			required: ['explanation', 'filePath', 'code'],
+		},
+	},
+	[SAFEAPPEALS_CREATE_FILE_TOOL]: {
+		name: SAFEAPPEALS_CREATE_FILE_TOOL,
+		description: 'This is a tool for creating a new file in the workspace. The file will be created with the specified content. The directory will be created if it does not already exist. Never use this tool to edit a file that already exists.',
+		inputSchema: {
+			type: 'object',
+			properties: {
+				filePath: {
+					type: 'string',
+					description: 'The absolute path to the file to create.',
+				},
+				content: {
+					type: 'string',
+					description: 'The content to write to the file.',
+				},
+			},
+			required: ['filePath', 'content'],
+		},
+	},
+	[SAFEAPPEALS_CREATE_DIRECTORY_TOOL]: {
+		name: SAFEAPPEALS_CREATE_DIRECTORY_TOOL,
+		description: 'Create a new directory structure in the workspace. Will recursively create all directories in the path, like mkdir -p. You do not need to use this tool before using create_file, that tool will automatically create the needed directories.',
+		inputSchema: {
+			type: 'object',
+			properties: {
+				dirPath: {
+					type: 'string',
+					description: 'The absolute path to the directory to create.',
+				},
+			},
+			required: ['dirPath'],
+		},
+	},
+	[SAFEAPPEALS_FIND_FILES_TOOL]: {
+		name: SAFEAPPEALS_FIND_FILES_TOOL,
+		description: 'Search for files in the workspace by glob pattern. This only returns the paths of matching files. Use this tool when you know the exact filename pattern of the files you\'re searching for.',
+		inputSchema: {
+			type: 'object',
+			properties: {
+				query: {
+					type: 'string',
+					description: 'Search for files with names or paths matching this glob pattern.',
+				},
+				maxResults: {
+					type: 'number',
+					description: 'The maximum number of results to return (capped).',
+				},
+			},
+			required: ['query'],
+		},
+	},
+	[SAFEAPPEALS_FIND_TEXT_IN_FILES_TOOL]: {
+		name: SAFEAPPEALS_FIND_TEXT_IN_FILES_TOOL,
+		description: 'Do a fast text search in the workspace. Use this tool when you want to search with an exact string or regex.',
+		inputSchema: {
+			type: 'object',
+			properties: {
+				query: {
+					type: 'string',
+					description: 'The pattern to search for in files in the workspace.',
+				},
+				isRegexp: {
+					type: 'boolean',
+					description: 'Whether the pattern is a regex.',
+				},
+				includePattern: {
+					type: 'string',
+					description: 'Search files matching this glob pattern.',
+				},
+				maxResults: {
+					type: 'number',
+					description: 'The maximum number of results to return (capped).',
+				},
+				includeIgnoredFiles: {
+					type: 'boolean',
+					description: 'Whether to include files normally ignored by .gitignore and exclude settings.',
+				},
+			},
+			required: ['query'],
+		},
+	},
+	[SAFEAPPEALS_SEARCH_WORKSPACE_SYMBOLS_TOOL]: {
+		name: SAFEAPPEALS_SEARCH_WORKSPACE_SYMBOLS_TOOL,
+		description: 'Search the user\'s workspace for code symbols using language services. Use this tool when the user is looking for a specific symbol in their workspace.',
+		inputSchema: {
+			type: 'object',
+			properties: {
+				symbolName: {
+					type: 'string',
+					description: 'The symbol to search for, such as a function name, class name, or variable name.',
+				},
+			},
+			required: ['symbolName'],
+		},
+	},
+	[SAFEAPPEALS_GET_ERRORS_TOOL]: {
+		name: SAFEAPPEALS_GET_ERRORS_TOOL,
+		description: 'Get any compile or lint errors in a specific file or across all files. Also use this tool after editing a file to validate the change.',
+		inputSchema: {
+			type: 'object',
+			properties: {
+				filePaths: {
+					type: 'array',
+					items: { type: 'string' },
+					description: 'Optional list of workspace file paths. If omitted, returns problems across the workspace. An empty array returns no results.',
+				},
+			},
+		},
+	},
+	[SAFEAPPEALS_GET_CHANGED_FILES_TOOL]: {
+		name: SAFEAPPEALS_GET_CHANGED_FILES_TOOL,
+		description: 'Get git-changed files in a git repository via the vscode.git extension API. Don\'t forget that you can use run_in_terminal to run git commands as well.',
+		inputSchema: {
+			type: 'object',
+			properties: {
+				repositoryPath: {
+					type: 'string',
+					description: 'The absolute path to the git repository to look for changes in. If not provided, the first git repository is used.',
+				},
+				sourceControlState: {
+					type: 'array',
+					items: {
+						type: 'string',
+						enum: ['staged', 'unstaged', 'merge-conflicts'],
+					},
+					description: 'The kinds of git state to filter by. If not provided, all states are included.',
+				},
+			},
+		},
+	},
+	[SAFEAPPEALS_SEARCH_CODEBASE_TOOL]: {
+		name: SAFEAPPEALS_SEARCH_CODEBASE_TOOL,
+		description: 'Search the workspace codebase for relevant code using enhanced text search over query tokens. Returns path and snippet matches (no Copilot index).',
+		inputSchema: {
+			type: 'object',
+			properties: {
+				query: {
+					type: 'string',
+					description: 'The query to search the codebase for. Should ideally be text that might appear in the codebase, such as function names, variable names, or comments.',
+				},
+			},
+			required: ['query'],
+		},
+	},
+	[SAFEAPPEALS_REPLACE_STRING_TOOL]: {
+		name: SAFEAPPEALS_REPLACE_STRING_TOOL,
+		description:
+			'Replace exactly one occurrence of a literal string in an existing workspace file. Provide filePath, oldString (exact match including whitespace), and newString. Fails if oldString matches zero or multiple times.',
+		inputSchema: {
+			type: 'object',
+			properties: {
+				filePath: {
+					type: 'string',
+					description: 'An absolute path to the file to edit.',
+				},
+				oldString: {
+					type: 'string',
+					description: 'The exact literal text to replace. Must uniquely identify one occurrence.',
+				},
+				newString: {
+					type: 'string',
+					description: 'The exact literal text to replace oldString with.',
+				},
+				explanation: {
+					type: 'string',
+					description: 'A short explanation of the edit being made.',
+				},
+			},
+			required: ['filePath', 'oldString', 'newString'],
+		},
+	},
+	[SAFEAPPEALS_MULTI_REPLACE_STRING_TOOL]: {
+		name: SAFEAPPEALS_MULTI_REPLACE_STRING_TOOL,
+		description:
+			'Apply multiple exact one-occurrence string replacements in a single call. Each replacement has filePath, oldString, and newString. Replacements are applied sequentially.',
+		inputSchema: {
+			type: 'object',
+			properties: {
+				explanation: {
+					type: 'string',
+					description: 'A brief explanation of what the multi-replace operation will accomplish.',
+				},
+				replacements: {
+					type: 'array',
+					description: 'Replacement operations to apply sequentially.',
+					items: {
+						type: 'object',
+						properties: {
+							filePath: { type: 'string', description: 'An absolute path to the file to edit.' },
+							oldString: { type: 'string', description: 'The exact literal text to replace.' },
+							newString: { type: 'string', description: 'The exact literal replacement text.' },
+						},
+						required: ['filePath', 'oldString', 'newString'],
+					},
+					minItems: 1,
+				},
+			},
+			required: ['explanation', 'replacements'],
+		},
+	},
+	[SAFEAPPEALS_APPLY_PATCH_TOOL]: {
+		name: SAFEAPPEALS_APPLY_PATCH_TOOL,
+		description:
+			'Apply a V4A-lite / unified-diff-style patch to workspace files. Pass an "input" string wrapped in *** Begin Patch / *** End Patch with *** Add File, *** Update File, or *** Delete File sections and @@ hunks using space/-/+ line prefixes.',
+		inputSchema: {
+			type: 'object',
+			properties: {
+				input: {
+					type: 'string',
+					description: 'The edit patch to apply (*** Begin Patch … *** End Patch).',
+				},
+				explanation: {
+					type: 'string',
+					description: 'A short description of what the patch aims to achieve.',
+				},
+			},
+			required: ['input', 'explanation'],
+		},
+	},
+	[SAFEAPPEALS_RUN_VSCODE_COMMAND_TOOL]: {
+		name: SAFEAPPEALS_RUN_VSCODE_COMMAND_TOOL,
+		description:
+			'Run a VS Code command via executeCommand. Commands with known-safe prefixes run directly; others require user confirmation.',
+		inputSchema: {
+			type: 'object',
+			properties: {
+				commandId: {
+					type: 'string',
+					description: 'The ID of the command to execute.',
+				},
+				name: {
+					type: 'string',
+					description: 'A clear, concise description of the command for the user.',
+				},
+				args: {
+					type: 'array',
+					description: 'Optional arguments to pass to the command.',
+					items: {},
+				},
+			},
+			required: ['commandId', 'name'],
+		},
+	},
+	[SAFEAPPEALS_FETCH_WEB_PAGE_TOOL]: {
+		name: SAFEAPPEALS_FETCH_WEB_PAGE_TOOL,
+		description:
+			'Fetch the main content from one or more web pages. Prefer this when summarizing or analyzing a specific URL.',
+		inputSchema: {
+			type: 'object',
+			properties: {
+				urls: {
+					type: 'array',
+					items: { type: 'string' },
+					description: 'An array of URLs to fetch content from.',
+				},
+				query: {
+					type: 'string',
+					description: 'What content to look for on the page(s).',
+				},
+			},
+			required: ['urls'],
+		},
+	},
+	[SAFEAPPEALS_WEB_SEARCH_TOOL]: {
+		name: SAFEAPPEALS_WEB_SEARCH_TOOL,
+		description: WEB_SEARCH_MODEL_DESCRIPTION,
+		inputSchema: {
+			type: 'object',
+			properties: {
+				query: {
+					type: 'string',
+					description: 'Search query (max 400 chars, 50 words). Be specific and include relevant keywords for better results.',
+				},
+				count: {
+					type: 'number',
+					description: 'Number of results (1-20, default 10). Optional.',
+				},
+				offset: {
+					type: 'number',
+					description: 'Pagination offset (max 9, default 0). Optional.',
+				},
+			},
+			required: ['query'],
+		},
+	},
+	[SAFEAPPEALS_MULTI_WEB_SEARCH_TOOL]: {
+		name: SAFEAPPEALS_MULTI_WEB_SEARCH_TOOL,
+		description: MULTI_WEB_SEARCH_MODEL_DESCRIPTION,
+		inputSchema: {
+			type: 'object',
+			properties: {
+				queries: {
+					type: 'array',
+					items: { type: 'string' },
+					description: 'Array of search queries (1-10 items, each max 400 chars). Searches are executed sequentially.',
+				},
+				count: {
+					type: 'number',
+					description: 'Number of results per query (1-20, default 10). Optional.',
+				},
+			},
+			required: ['queries'],
+		},
+	},
 };
 
 /**
- * Allowlisted host tools used when the picker is absent or yields no enabled tools after mapping.
+ * Production allowlist of host tools used when the picker is absent or yields no enabled tools after mapping.
+ * Export name kept as `MVP_AGENT_TOOL_NAMES` for compatibility with existing imports.
  */
 export const MVP_AGENT_TOOL_NAMES: readonly string[] = [
 	SAFEAPPEALS_READ_FILE_TOOL,
 	SAFEAPPEALS_LIST_DIR_TOOL,
+	SAFEAPPEALS_EDIT_FILE_TOOL,
+	SAFEAPPEALS_CREATE_FILE_TOOL,
+	SAFEAPPEALS_CREATE_DIRECTORY_TOOL,
+	SAFEAPPEALS_FIND_FILES_TOOL,
+	SAFEAPPEALS_FIND_TEXT_IN_FILES_TOOL,
+	SAFEAPPEALS_SEARCH_WORKSPACE_SYMBOLS_TOOL,
+	SAFEAPPEALS_GET_ERRORS_TOOL,
+	SAFEAPPEALS_GET_CHANGED_FILES_TOOL,
+	SAFEAPPEALS_SEARCH_CODEBASE_TOOL,
+	SAFEAPPEALS_REPLACE_STRING_TOOL,
+	SAFEAPPEALS_MULTI_REPLACE_STRING_TOOL,
+	SAFEAPPEALS_APPLY_PATCH_TOOL,
+	SAFEAPPEALS_RUN_VSCODE_COMMAND_TOOL,
+	SAFEAPPEALS_FETCH_WEB_PAGE_TOOL,
+	SAFEAPPEALS_WEB_SEARCH_TOOL,
+	SAFEAPPEALS_MULTI_WEB_SEARCH_TOOL,
 	'run_in_terminal',
 	'manage_todo_list',
 	VSCODE_EDIT_FILE_TOOL,
@@ -84,11 +502,27 @@ export const MVP_AGENT_TOOL_NAMES: readonly string[] = [
 /**
  * UI / Copilot picker names → SafeAppeals or host tool ids.
  * Raw `copilot_*` tools are never allowed through; only these substitutions apply.
+ * Void-style `web_search` / `multi_link_search` map to SafeAppeals cloud search tools.
  */
 export const AGENT_TOOL_NAME_SUBSTITUTIONS: Readonly<Record<string, string>> = {
 	copilot_readFile: SAFEAPPEALS_READ_FILE_TOOL,
 	copilot_listDirectory: SAFEAPPEALS_LIST_DIR_TOOL,
-	copilot_insertEdit: VSCODE_EDIT_FILE_TOOL,
+	copilot_insertEdit: SAFEAPPEALS_EDIT_FILE_TOOL,
+	copilot_createFile: SAFEAPPEALS_CREATE_FILE_TOOL,
+	copilot_createDirectory: SAFEAPPEALS_CREATE_DIRECTORY_TOOL,
+	copilot_findFiles: SAFEAPPEALS_FIND_FILES_TOOL,
+	copilot_findTextInFiles: SAFEAPPEALS_FIND_TEXT_IN_FILES_TOOL,
+	copilot_searchWorkspaceSymbols: SAFEAPPEALS_SEARCH_WORKSPACE_SYMBOLS_TOOL,
+	copilot_getErrors: SAFEAPPEALS_GET_ERRORS_TOOL,
+	copilot_getChangedFiles: SAFEAPPEALS_GET_CHANGED_FILES_TOOL,
+	copilot_searchCodebase: SAFEAPPEALS_SEARCH_CODEBASE_TOOL,
+	copilot_replaceString: SAFEAPPEALS_REPLACE_STRING_TOOL,
+	copilot_multiReplaceString: SAFEAPPEALS_MULTI_REPLACE_STRING_TOOL,
+	copilot_applyPatch: SAFEAPPEALS_APPLY_PATCH_TOOL,
+	copilot_runVscodeCommand: SAFEAPPEALS_RUN_VSCODE_COMMAND_TOOL,
+	copilot_fetchWebPage: SAFEAPPEALS_FETCH_WEB_PAGE_TOOL,
+	web_search: SAFEAPPEALS_WEB_SEARCH_TOOL,
+	multi_link_search: SAFEAPPEALS_MULTI_WEB_SEARCH_TOOL,
 	[VSCODE_EDIT_FILE_TOOL_ALIAS]: VSCODE_EDIT_FILE_TOOL,
 };
 
@@ -130,7 +564,7 @@ export function resolveAllowedInvokeToolName(
 }
 
 /**
- * Whether a tool name is allowed for the SafeAppeals agent MVP loop.
+ * Whether a tool name is allowed for the SafeAppeals agent loop.
  * Names must not start with `copilot_` (vendor-reserved); use substitutions instead.
  */
 export function isAgentToolAllowed(name: string): boolean {
@@ -144,7 +578,7 @@ export function isAgentToolAllowed(name: string): boolean {
 }
 
 /**
- * Filters a tool list to the MVP allowlist (no picker mapping).
+ * Filters a tool list to the production allowlist (no picker mapping).
  */
 export function filterAgentTools<T extends { name: string }>(tools: readonly T[]): T[] {
 	return tools.filter(tool => isAgentToolAllowed(tool.name));
@@ -180,9 +614,9 @@ function descriptorForResolvedName(
  *
  * - Enabled picker entries are mapped via {@link resolveAgentToolName}; raw `copilot_*` names are never returned.
  * - When the resolved id is missing from `pool`, synthesizes a plain descriptor (from the picker source,
- *   or {@link ENSURED_AGENT_TOOL_DESCRIPTORS} for SafeAppeals read/list).
+ *   or {@link ENSURED_AGENT_TOOL_DESCRIPTORS} for SafeAppeals ensured tools).
  * - Force-adds ensured tools when not explicitly disabled, even if absent from `pool`.
- * - Never force-adds terminal/todo/edit over a picker `false`.
+ * - Never force-adds terminal/todo over a picker `false`.
  */
 export function selectAgentTools(options: {
 	readonly pool: readonly NamedToolSource[];
@@ -245,7 +679,7 @@ export function selectAgentTools(options: {
  * Returns true when `candidateFsPath` resolves inside one of `rootFsPaths`.
  *
  * Collapses `..` via {@link path.resolve} before checking with {@link path.relative}.
- * MVP does not resolve symlinks — a symlink under the workspace may still point outside.
+ * Does not resolve symlinks — a symlink under the workspace may still point outside.
  */
 export function isPathInsideWorkspaceRoot(candidateFsPath: string, rootFsPaths: readonly string[]): boolean {
 	const candidate = path.resolve(candidateFsPath);

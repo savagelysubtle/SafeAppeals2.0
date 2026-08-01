@@ -19,7 +19,10 @@
 	"enabledApiProposals": [
 		"defaultChatParticipant",
 		"chatParticipantAdditions",
-		"chatParticipantPrivate"
+		"chatParticipantPrivate",
+		"contribLanguageModelToolSets",
+		"findTextInFiles",
+		"textSearchProvider"
 	],
 	"activationEvents": [
 		"onStartupFinished",
@@ -64,7 +67,7 @@
 		"languageModelTools": [
 			{
 				"name": "safeappeals_readFile",
-				"toolReferenceName": "safeappeals_readFile",
+				"toolReferenceName": "readFile",
 				"displayName": "%tool.readFile.displayName%",
 				"modelDescription": "%tool.readFile.modelDescription%",
 				"userDescription": "%tool.readFile.userDescription%",
@@ -85,7 +88,7 @@
 			},
 			{
 				"name": "safeappeals_listDir",
-				"toolReferenceName": "safeappeals_listDir",
+				"toolReferenceName": "listDirectory",
 				"displayName": "%tool.listDir.displayName%",
 				"modelDescription": "%tool.listDir.modelDescription%",
 				"userDescription": "%tool.listDir.userDescription%",
@@ -100,6 +103,536 @@
 						}
 					}
 				}
+			},
+			{
+				"name": "safeappeals_editFile",
+				"toolReferenceName": "editFile",
+				"displayName": "%tool.editFile.displayName%",
+				"modelDescription": "%tool.editFile.modelDescription%",
+				"userDescription": "%tool.editFile.userDescription%",
+				"canBeReferencedInPrompt": true,
+				"icon": "$(pencil)",
+				"inputSchema": {
+					"type": "object",
+					"properties": {
+						"explanation": {
+							"type": "string",
+							"description": "A short explanation of the edit being made."
+						},
+						"filePath": {
+							"type": "string",
+							"description": "An absolute path to the file to edit."
+						},
+						"code": {
+							"type": "string",
+							"description": "The code change to apply to the file.\nThe system is very smart and can understand how to apply your edits to the files, you just need to provide minimal hints.\nAvoid repeating existing code, instead use comments to represent regions of unchanged code. Be as concise as possible. For example:\n// ...existing code...\n{ changed code }\n// ...existing code...\n{ changed code }\n// ...existing code...\n\nHere is an example of how you should use format an edit to an existing Person class:\nclass Person {\n\t// ...existing code...\n\tage: number;\n\t// ...existing code...\n\tgetAge() {\n\t\treturn this.age;\n\t}\n}"
+						}
+					},
+					"required": [
+						"explanation",
+						"filePath",
+						"code"
+					]
+				}
+			},
+			{
+				"name": "safeappeals_createFile",
+				"toolReferenceName": "createFile",
+				"displayName": "%tool.createFile.displayName%",
+				"modelDescription": "%tool.createFile.modelDescription%",
+				"userDescription": "%tool.createFile.userDescription%",
+				"canBeReferencedInPrompt": true,
+				"icon": "$(new-file)",
+				"inputSchema": {
+					"type": "object",
+					"properties": {
+						"filePath": {
+							"type": "string",
+							"description": "The absolute path to the file to create."
+						},
+						"content": {
+							"type": "string",
+							"description": "The content to write to the file."
+						}
+					},
+					"required": [
+						"filePath",
+						"content"
+					]
+				}
+			},
+			{
+				"name": "safeappeals_createDirectory",
+				"toolReferenceName": "createDirectory",
+				"displayName": "%tool.createDirectory.displayName%",
+				"modelDescription": "%tool.createDirectory.modelDescription%",
+				"userDescription": "%tool.createDirectory.userDescription%",
+				"canBeReferencedInPrompt": true,
+				"icon": "$(new-folder)",
+				"inputSchema": {
+					"type": "object",
+					"properties": {
+						"dirPath": {
+							"type": "string",
+							"description": "The absolute path to the directory to create."
+						}
+					},
+					"required": [
+						"dirPath"
+					]
+				}
+			},
+			{
+				"name": "safeappeals_findFiles",
+				"toolReferenceName": "fileSearch",
+				"displayName": "%tool.findFiles.displayName%",
+				"modelDescription": "%tool.findFiles.modelDescription%",
+				"userDescription": "%tool.findFiles.userDescription%",
+				"canBeReferencedInPrompt": true,
+				"icon": "$(file-directory)",
+				"inputSchema": {
+					"type": "object",
+					"properties": {
+						"query": {
+							"type": "string",
+							"description": "Search for files with names or paths matching this glob pattern."
+						},
+						"maxResults": {
+							"type": "number",
+							"description": "The maximum number of results to return (capped)."
+						}
+					},
+					"required": [
+						"query"
+					]
+				}
+			},
+			{
+				"name": "safeappeals_findTextInFiles",
+				"toolReferenceName": "textSearch",
+				"displayName": "%tool.findTextInFiles.displayName%",
+				"modelDescription": "%tool.findTextInFiles.modelDescription%",
+				"userDescription": "%tool.findTextInFiles.userDescription%",
+				"canBeReferencedInPrompt": true,
+				"icon": "$(search)",
+				"inputSchema": {
+					"type": "object",
+					"properties": {
+						"query": {
+							"type": "string",
+							"description": "The pattern to search for in files in the workspace."
+						},
+						"isRegexp": {
+							"type": "boolean",
+							"description": "Whether the pattern is a regex."
+						},
+						"includePattern": {
+							"type": "string",
+							"description": "Search files matching this glob pattern."
+						},
+						"maxResults": {
+							"type": "number",
+							"description": "The maximum number of results to return (capped)."
+						},
+						"includeIgnoredFiles": {
+							"type": "boolean",
+							"description": "Whether to include files normally ignored by .gitignore and exclude settings."
+						}
+					},
+					"required": [
+						"query"
+					]
+				}
+			},
+			{
+				"name": "safeappeals_searchWorkspaceSymbols",
+				"toolReferenceName": "symbols",
+				"displayName": "%tool.searchWorkspaceSymbols.displayName%",
+				"modelDescription": "%tool.searchWorkspaceSymbols.modelDescription%",
+				"userDescription": "%tool.searchWorkspaceSymbols.userDescription%",
+				"canBeReferencedInPrompt": true,
+				"icon": "$(symbol-misc)",
+				"inputSchema": {
+					"type": "object",
+					"properties": {
+						"symbolName": {
+							"type": "string",
+							"description": "The symbol to search for, such as a function name, class name, or variable name."
+						}
+					},
+					"required": [
+						"symbolName"
+					]
+				}
+			},
+			{
+				"name": "safeappeals_getErrors",
+				"toolReferenceName": "problems",
+				"displayName": "%tool.getErrors.displayName%",
+				"modelDescription": "%tool.getErrors.modelDescription%",
+				"userDescription": "%tool.getErrors.userDescription%",
+				"canBeReferencedInPrompt": true,
+				"icon": "$(error)",
+				"inputSchema": {
+					"type": "object",
+					"properties": {
+						"filePaths": {
+							"type": "array",
+							"items": {
+								"type": "string"
+							},
+							"description": "Optional list of workspace file paths. If omitted, returns problems across the workspace. An empty array returns no results."
+						}
+					}
+				}
+			},
+			{
+				"name": "safeappeals_getChangedFiles",
+				"toolReferenceName": "changes",
+				"displayName": "%tool.getChangedFiles.displayName%",
+				"modelDescription": "%tool.getChangedFiles.modelDescription%",
+				"userDescription": "%tool.getChangedFiles.userDescription%",
+				"canBeReferencedInPrompt": true,
+				"icon": "$(diff)",
+				"inputSchema": {
+					"type": "object",
+					"properties": {
+						"repositoryPath": {
+							"type": "string",
+							"description": "The absolute path to the git repository to look for changes in. If not provided, the first git repository is used."
+						},
+						"sourceControlState": {
+							"type": "array",
+							"items": {
+								"type": "string",
+								"enum": [
+									"staged",
+									"unstaged",
+									"merge-conflicts"
+								]
+							},
+							"description": "The kinds of git state to filter by. If not provided, all states are included."
+						}
+					}
+				}
+			},
+			{
+				"name": "safeappeals_searchCodebase",
+				"toolReferenceName": "codebase",
+				"displayName": "%tool.searchCodebase.displayName%",
+				"modelDescription": "%tool.searchCodebase.modelDescription%",
+				"userDescription": "%tool.searchCodebase.userDescription%",
+				"canBeReferencedInPrompt": true,
+				"icon": "$(folder)",
+				"inputSchema": {
+					"type": "object",
+					"properties": {
+						"query": {
+							"type": "string",
+							"description": "The query to search the codebase for. Should ideally be text that might appear in the codebase, such as function names, variable names, or comments."
+						}
+					},
+					"required": [
+						"query"
+					]
+				}
+			},
+			{
+				"name": "safeappeals_replaceString",
+				"toolReferenceName": "replaceString",
+				"displayName": "%tool.replaceString.displayName%",
+				"modelDescription": "%tool.replaceString.modelDescription%",
+				"userDescription": "%tool.replaceString.userDescription%",
+				"canBeReferencedInPrompt": true,
+				"icon": "$(replace)",
+				"inputSchema": {
+					"type": "object",
+					"properties": {
+						"filePath": {
+							"type": "string",
+							"description": "An absolute path to the file to edit."
+						},
+						"oldString": {
+							"type": "string",
+							"description": "The exact literal text to replace. Must uniquely identify one occurrence."
+						},
+						"newString": {
+							"type": "string",
+							"description": "The exact literal text to replace oldString with."
+						},
+						"explanation": {
+							"type": "string",
+							"description": "A short explanation of the edit being made."
+						}
+					},
+					"required": [
+						"filePath",
+						"oldString",
+						"newString"
+					]
+				}
+			},
+			{
+				"name": "safeappeals_multiReplaceString",
+				"toolReferenceName": "multiReplaceString",
+				"displayName": "%tool.multiReplaceString.displayName%",
+				"modelDescription": "%tool.multiReplaceString.modelDescription%",
+				"userDescription": "%tool.multiReplaceString.userDescription%",
+				"canBeReferencedInPrompt": true,
+				"icon": "$(replace-all)",
+				"inputSchema": {
+					"type": "object",
+					"properties": {
+						"explanation": {
+							"type": "string",
+							"description": "A brief explanation of what the multi-replace operation will accomplish."
+						},
+						"replacements": {
+							"type": "array",
+							"description": "Replacement operations to apply sequentially.",
+							"items": {
+								"type": "object",
+								"properties": {
+									"filePath": {
+										"type": "string",
+										"description": "An absolute path to the file to edit."
+									},
+									"oldString": {
+										"type": "string",
+										"description": "The exact literal text to replace."
+									},
+									"newString": {
+										"type": "string",
+										"description": "The exact literal replacement text."
+									}
+								},
+								"required": [
+									"filePath",
+									"oldString",
+									"newString"
+								]
+							},
+							"minItems": 1
+						}
+					},
+					"required": [
+						"explanation",
+						"replacements"
+					]
+				}
+			},
+			{
+				"name": "safeappeals_applyPatch",
+				"toolReferenceName": "applyPatch",
+				"displayName": "%tool.applyPatch.displayName%",
+				"modelDescription": "%tool.applyPatch.modelDescription%",
+				"userDescription": "%tool.applyPatch.userDescription%",
+				"canBeReferencedInPrompt": true,
+				"icon": "$(diff)",
+				"inputSchema": {
+					"type": "object",
+					"properties": {
+						"input": {
+							"type": "string",
+							"description": "The edit patch to apply (*** Begin Patch … *** End Patch)."
+						},
+						"explanation": {
+							"type": "string",
+							"description": "A short description of what the patch aims to achieve."
+						}
+					},
+					"required": [
+						"input",
+						"explanation"
+					]
+				}
+			},
+			{
+				"name": "safeappeals_runVscodeCommand",
+				"toolReferenceName": "runCommand",
+				"displayName": "%tool.runVscodeCommand.displayName%",
+				"modelDescription": "%tool.runVscodeCommand.modelDescription%",
+				"userDescription": "%tool.runVscodeCommand.userDescription%",
+				"canBeReferencedInPrompt": true,
+				"icon": "$(play)",
+				"inputSchema": {
+					"type": "object",
+					"properties": {
+						"commandId": {
+							"type": "string",
+							"description": "The ID of the command to execute."
+						},
+						"name": {
+							"type": "string",
+							"description": "A clear, concise description of the command for the user."
+						},
+						"args": {
+							"type": "array",
+							"description": "Optional arguments to pass to the command.",
+							"items": {}
+						}
+					},
+					"required": [
+						"commandId",
+						"name"
+					]
+				}
+			},
+			{
+				"name": "safeappeals_fetchWebPage",
+				"toolReferenceName": "fetch",
+				"displayName": "%tool.fetchWebPage.displayName%",
+				"modelDescription": "%tool.fetchWebPage.modelDescription%",
+				"userDescription": "%tool.fetchWebPage.userDescription%",
+				"canBeReferencedInPrompt": true,
+				"icon": "$(globe)",
+				"inputSchema": {
+					"type": "object",
+					"properties": {
+						"urls": {
+							"type": "array",
+							"items": {
+								"type": "string"
+							},
+							"description": "An array of URLs to fetch content from."
+						},
+						"query": {
+							"type": "string",
+							"description": "What content to look for on the page(s)."
+						}
+					},
+					"required": [
+						"urls"
+					]
+				}
+			},
+			{
+				"name": "safeappeals_webSearch",
+				"toolReferenceName": "webSearch",
+				"displayName": "%tool.webSearch.displayName%",
+				"modelDescription": "%tool.webSearch.modelDescription%",
+				"userDescription": "%tool.webSearch.userDescription%",
+				"canBeReferencedInPrompt": true,
+				"icon": "$(search)",
+				"inputSchema": {
+					"type": "object",
+					"properties": {
+						"query": {
+							"type": "string",
+							"description": "Search query (max 400 chars, 50 words). Be specific and include relevant keywords for better results."
+						},
+						"count": {
+							"type": "number",
+							"description": "Number of results (1-20, default 10). Optional."
+						},
+						"offset": {
+							"type": "number",
+							"description": "Pagination offset (max 9, default 0). Optional."
+						}
+					},
+					"required": [
+						"query"
+					]
+				}
+			},
+			{
+				"name": "safeappeals_multiWebSearch",
+				"toolReferenceName": "multiWebSearch",
+				"displayName": "%tool.multiWebSearch.displayName%",
+				"modelDescription": "%tool.multiWebSearch.modelDescription%",
+				"userDescription": "%tool.multiWebSearch.userDescription%",
+				"canBeReferencedInPrompt": true,
+				"icon": "$(search-fuzzy)",
+				"inputSchema": {
+					"type": "object",
+					"properties": {
+						"queries": {
+							"type": "array",
+							"items": {
+								"type": "string"
+							},
+							"description": "Array of search queries (1-10 items, each max 400 chars). Searches are executed sequentially."
+						},
+						"count": {
+							"type": "number",
+							"description": "Number of results per query (1-20, default 10). Optional."
+						}
+					},
+					"required": [
+						"queries"
+					]
+				}
+			}
+		],
+		"languageModelToolSets": [
+			{
+				"name": "safeappeals_edit",
+				"description": "%toolSet.edit.description%",
+				"icon": "$(pencil)",
+				"tools": [
+					"createDirectory",
+					"createFile",
+					"editFile",
+					"replaceString",
+					"multiReplaceString",
+					"applyPatch"
+				]
+			},
+			{
+				"name": "safeappeals_read",
+				"description": "%toolSet.read.description%",
+				"icon": "$(eye)",
+				"tools": [
+					"readFile",
+					"listDirectory",
+					"problems"
+				]
+			},
+			{
+				"name": "search",
+				"description": "%toolSet.search.description%",
+				"icon": "$(search)",
+				"tools": [
+					"fileSearch",
+					"textSearch",
+					"symbols",
+					"codebase",
+					"listDirectory",
+					"changes"
+				]
+			},
+			{
+				"name": "safeappeals_search",
+				"description": "%toolSet.search.description%",
+				"icon": "$(search)",
+				"tools": [
+					"fileSearch",
+					"textSearch",
+					"symbols",
+					"codebase",
+					"listDirectory",
+					"changes"
+				]
+			},
+			{
+				"name": "vscode",
+				"description": "%toolSet.vscode.description%",
+				"icon": "$(code)",
+				"tools": [
+					"runCommand",
+					"problems",
+					"changes"
+				]
+			},
+			{
+				"name": "web",
+				"description": "%toolSet.web.description%",
+				"icon": "$(globe)",
+				"tools": [
+					"fetch",
+					"webSearch",
+					"multiWebSearch"
+				]
 			}
 		],
 		"commands": [

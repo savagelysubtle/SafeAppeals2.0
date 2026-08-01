@@ -1,16 +1,34 @@
 # Tools System Documentation
 
-Documentation for the Void VSCode extension's tool calling system, including tool definitions, execution, and approval workflows.
+Documentation for Safe Appeals agent tools. The **current** agent loop uses VS Code `vscode.lm` language-model tools registered from extensions (`safeappeals_*`). Sections below that describe Void ANTML `edit_document` / `web_search` are historical reference for the old Void tools framework.
 
-## Overview
+## Current SafeAppeals LM tools (shipping)
 
-The Tools System enables AI agents to interact with the development environment through structured tool calls. It provides:
+Registered from extensions (see each extension’s `package.json` `languageModelTools` and allowlist in `extensions/safeappeals-authentication/src/chat/toolAllowlist.ts`):
 
-- **Tool Call Parsing**: Extracting tool calls from LLM streaming responses using ANTML format
-- **Tool Execution**: Safe execution of tools with approval workflows and error handling
-- **Approval System**: Categorizing tools by risk level (edits, terminal, MCP)
+### Documents (`extensions/safeappeals-documents`)
 
-## Architecture
+| Tool | Notes |
+|------|--------|
+| `safeappeals_docx_read` / `_create` / `_edit` | Create/overwrite via host writer; structured edit prefers open DOCX editor |
+| `safeappeals_xlsx_read` | Open editor required (no headless Node WASM) |
+| `safeappeals_xlsx_create` | JSZip host writer — no open editor required |
+| `safeappeals_xlsx_edit` | Open editor → `applyEditsAndWait` → webview `handleApplyEdits` |
+
+XLSX edit operation types (host-normalized): `set_cell_value`, `set_cell_formula`, `format_cell`, `format_range`, `insert_row`, `insert_column`, `delete_row`, `delete_column`, `create_table`, `resize_table`, `rename_table`, `set_table_style`, `toggle_table_filter`, `set_totals_row`, `convert_table_to_range`, `create_chart` (alias of `insert_chart`), `insert_chart`, `delete_chart`. Details: [xlsx-rust-viewer API](../xlsx-rust-viewer/api-reference.md#ai-edit-operations-applyedits).
+
+### Web search (`extensions/safeappeals-authentication`)
+
+| Tool | Cloud API |
+|------|-----------|
+| `safeappeals_webSearch` | `POST /web-search` |
+| `safeappeals_multiWebSearch` | `POST /web-search/multi` |
+
+Brave API key stays on the server. Credit-charging POSTs use `skipTransientRetry` (no 5xx auto-retry double-charge). `CloudAuthError` maps 401. See [Web Search](../SafeAppealsCloud/web-search.md). Void-style picker names `web_search` / `multi_link_search` substitute to these tools.
+
+## Historical Void tools framework
+
+The Tools System (Void) enabled agents via ANTML tool calls with approval workflows. Source for that path lived under Void `common/tools` / `browser/tools` (now largely reference under `void-reference/`).
 
 ```text
 common/tools/
@@ -26,9 +44,9 @@ browser/tools/
 └── toolsService.ts       # Tool execution and parameter validation
 ```
 
-Parameter validation is handled inline in `toolsService.ts` via per-operation switch cases. There is no separate schema validation class.
+Parameter validation was handled inline in `toolsService.ts` via per-operation switch cases.
 
-## Tool Categories
+## Tool Categories (Void / historical)
 
 ### File System (Read)
 
@@ -38,14 +56,14 @@ Parameter validation is handled inline in `toolsService.ts` via per-operation sw
 
 `edit_file`, `rewrite_file`, `create_file_or_folder`, `delete_file_or_folder`
 
-### Document Editing
+### Document Editing (Void `edit_document` — superseded by `safeappeals_*_edit`)
 
-`edit_document` supports:
+`edit_document` supported:
 
 - **DOCX**: `insert_text`, `replace_text`, `format_text`, `insert_table`, `insert_page_break`, `set_margins`
-- **XLSX cell**: `set_cell_value`, `set_cell_formula`, `format_cell`, `insert_row`, `insert_column`, `delete_row`, `delete_column`
-- **XLSX table**: `create_table`, `rename_table`, `set_table_style`, `toggle_table_filter`, `set_totals_row`, `convert_table_to_range`
-- **XLSX chart**: `insert_chart`, `delete_chart`
+- **XLSX cell**: `set_cell_value`, `set_cell_formula`, `format_cell`, `format_range`, `insert_row`, `insert_column`, `delete_row`, `delete_column`
+- **XLSX table**: `create_table`, `resize_table`, `rename_table`, `set_table_style`, `toggle_table_filter`, `set_totals_row`, `convert_table_to_range`
+- **XLSX chart**: `create_chart` / `insert_chart`, `delete_chart`
 
 ### Terminal
 
@@ -55,7 +73,7 @@ Parameter validation is handled inline in `toolsService.ts` via per-operation sw
 
 `rag_index_document`, `rag_search_reference`, `rag_search_workspace`, `rag_search_all`, `rag_get_stats`
 
-### Web Search
+### Web Search (Void names → map to SafeAppeals LM tools above)
 
 `web_search`, `multi_link_search`
 

@@ -22,6 +22,8 @@
 		"../../src/vscode-dts/vscode.d.ts",
 		"../../src/vscode-dts/vscode.proposed.defaultChatParticipant.d.ts",
 		"../../src/vscode-dts/vscode.proposed.chatParticipantAdditions.d.ts",
-		"../../src/vscode-dts/vscode.proposed.chatParticipantPrivate.d.ts"
+		"../../src/vscode-dts/vscode.proposed.chatParticipantPrivate.d.ts",
+		"../../src/vscode-dts/vscode.proposed.findTextInFiles.d.ts",
+		"../../src/vscode-dts/vscode.proposed.textSearchProvider.d.ts"
 	]
 }

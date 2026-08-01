@@ -5,6 +5,7 @@
 
 import { randomUUID } from 'crypto';
 import * as vscode from 'vscode';
+import { cancelDocumentInlineEdit } from '../inlineEditSession';
 import { XlsxDocument } from './xlsxDocument';
 
 /**
@@ -24,8 +25,22 @@ import { XlsxDocument } from './xlsxDocument';
  * Undo/redo: webview-owned (CanvasRenderer undoStack), same framework as DOCX
  * (TipTap history) — not VS Code CustomDocumentEditEvent.
  */
+export interface XlsxSelectionInfo {
+	uri: string;
+	sheet?: string;
+	range?: string;
+	valuesTsv?: string;
+}
+
 export class XlsxEditorProvider implements vscode.CustomEditorProvider<XlsxDocument> {
 	public static readonly viewType = 'safeappeals.xlsxViewer';
+
+	private static _instance: XlsxEditorProvider | undefined;
+
+	/** Active provider used by agent tools / commands. */
+	public static get instance(): XlsxEditorProvider | undefined {
+		return XlsxEditorProvider._instance;
+	}
 
 	private readonly _onDidChangeCustomDocument =
 		new vscode.EventEmitter<vscode.CustomDocumentContentChangeEvent<XlsxDocument>>();
@@ -36,12 +51,23 @@ export class XlsxEditorProvider implements vscode.CustomEditorProvider<XlsxDocum
 		resolve: (ok: boolean) => void;
 		timer: ReturnType<typeof setTimeout>;
 	}>();
+	private readonly _applyWaiters = new Map<string, {
+		resolve: (result: { ok: boolean; error?: string; results?: unknown }) => void;
+		timer: ReturnType<typeof setTimeout>;
+	}>();
+	private readonly _textWaiters = new Map<string, {
+		resolve: (text: string | undefined) => void;
+		timer: ReturnType<typeof setTimeout>;
+	}>();
 	/** Bytes already refreshed by a user-initiated webview save; skip re-serialize. */
 	private readonly _freshFromWebview = new Set<string>();
+	/** Last selection reported by an XLSX webview (Phase E bridge). */
+	private _lastSelection: XlsxSelectionInfo | undefined;
 
 	public static register(context: vscode.ExtensionContext): vscode.Disposable {
 		const provider = new XlsxEditorProvider(context);
-		return vscode.window.registerCustomEditorProvider(
+		XlsxEditorProvider._instance = provider;
+		const registration = vscode.window.registerCustomEditorProvider(
 			XlsxEditorProvider.viewType,
 			provider,
 			{
@@ -51,9 +77,134 @@ export class XlsxEditorProvider implements vscode.CustomEditorProvider<XlsxDocum
 				supportsMultipleEditorsPerDocument: false,
 			},
 		);
+		return vscode.Disposable.from(
+			registration,
+			{ dispose: () => {
+				if (XlsxEditorProvider._instance === provider) {
+					XlsxEditorProvider._instance = undefined;
+				}
+			} },
+		);
 	}
 
 	private constructor(private readonly context: vscode.ExtensionContext) { }
+
+	public get lastSelection(): XlsxSelectionInfo | undefined {
+		return this._lastSelection;
+	}
+
+	public isOpen(uri: vscode.Uri): boolean {
+		return this._panels.has(uri.toString());
+	}
+
+	public findPanel(uri: vscode.Uri): vscode.WebviewPanel | undefined {
+		return this._panels.get(uri.toString());
+	}
+
+	/**
+	 * Ask the active XLSX webview to open its in-document inline-edit popup (Ctrl+K).
+	 * Returns true when a panel was messaged.
+	 */
+	public showInlineEditPopup(): boolean {
+		const uri = this.resolveActiveEditorUri();
+		if (!uri) {
+			return false;
+		}
+		const panel = this._panels.get(uri.toString());
+		if (!panel) {
+			return false;
+		}
+		panel.webview.postMessage({ type: 'showInlineEdit' });
+		return true;
+	}
+
+	private resolveActiveEditorUri(): vscode.Uri | undefined {
+		const tab = vscode.window.tabGroups.activeTabGroup.activeTab;
+		const input = tab?.input;
+		if (input instanceof vscode.TabInputCustom && input.viewType === XlsxEditorProvider.viewType) {
+			return input.uri;
+		}
+		return undefined;
+	}
+
+	/**
+	 * Post applyEdits to the open XLSX webview, wait for ack, then serialize/save.
+	 */
+	public async applyEditsAndWait(
+		uri: vscode.Uri,
+		operations: readonly unknown[],
+		options?: { save?: boolean; timeoutMs?: number },
+	): Promise<{ ok: boolean; error?: string; results?: unknown }> {
+		const key = uri.toString();
+		const panel = this._panels.get(key);
+		if (!panel) {
+			return { ok: false, error: 'XLSX editor is not open for this URI' };
+		}
+		const requestId = randomUUID();
+		const timeoutMs = options?.timeoutMs ?? 30_000;
+		const applyResult = await new Promise<{ ok: boolean; error?: string; results?: unknown }>(resolve => {
+			const existing = this._applyWaiters.get(key);
+			if (existing) {
+				clearTimeout(existing.timer);
+				existing.resolve({ ok: false, error: 'Superseded by a newer applyEdits request' });
+			}
+			const timer = setTimeout(() => {
+				this._applyWaiters.delete(key);
+				resolve({ ok: false, error: 'Timed out waiting for applyEditsResult' });
+			}, timeoutMs);
+			this._applyWaiters.set(key, { resolve, timer });
+			panel.webview.postMessage({
+				type: 'applyEdits',
+				requestId,
+				operations,
+				ops: operations,
+			});
+		});
+		if (!applyResult.ok) {
+			return applyResult;
+		}
+		if (options?.save !== false) {
+			const saved = await this.saveAndWait(uri);
+			if (!saved) {
+				return { ok: false, error: 'Edits applied but serialize/save failed' };
+			}
+		}
+		return applyResult;
+	}
+
+	public async requestTextAndWait(uri: vscode.Uri, timeoutMs = 15_000): Promise<string | undefined> {
+		const key = uri.toString();
+		const panel = this._panels.get(key);
+		if (!panel) {
+			return undefined;
+		}
+		const requestId = randomUUID();
+		return new Promise(resolve => {
+			const existing = this._textWaiters.get(key);
+			if (existing) {
+				clearTimeout(existing.timer);
+				existing.resolve(undefined);
+			}
+			const timer = setTimeout(() => {
+				this._textWaiters.delete(key);
+				resolve(undefined);
+			}, timeoutMs);
+			this._textWaiters.set(key, { resolve, timer });
+			panel.webview.postMessage({ type: 'getText', requestId });
+		});
+	}
+
+	public async saveAndWait(uri: vscode.Uri): Promise<boolean> {
+		const panel = this._panels.get(uri.toString());
+		if (!panel) {
+			return false;
+		}
+		const requestSave = (panel as unknown as { __xlsxRequestSave?: () => Promise<boolean> }).__xlsxRequestSave;
+		if (!requestSave) {
+			return false;
+		}
+		return requestSave();
+	}
 
 	async openCustomDocument(
 		uri: vscode.Uri,
@@ -236,9 +387,91 @@ export class XlsxEditorProvider implements vscode.CustomEditorProvider<XlsxDocum
 						break;
 					}
 					case 'testChartResult':
-					case 'applyEdits':
-						// Chart self-test / AI applyEdits — out of scope (rung 12 / later).
+						// Chart self-test — ignored for now.
 						break;
+					case 'applyEditsResult': {
+						const waiter = this._applyWaiters.get(key);
+						if (waiter) {
+							clearTimeout(waiter.timer);
+							this._applyWaiters.delete(key);
+							waiter.resolve({
+								ok: data.ok !== false && data.success !== false,
+								error: typeof data.error === 'string' ? data.error : undefined,
+								results: data.results,
+							});
+						}
+						break;
+					}
+					case 'getTextResult': {
+						const waiter = this._textWaiters.get(key);
+						if (waiter) {
+							clearTimeout(waiter.timer);
+							this._textWaiters.delete(key);
+							waiter.resolve(typeof data.text === 'string' ? data.text : undefined);
+						}
+						break;
+					}
+					case 'selectionChanged':
+					case 'textSelected': {
+						this._lastSelection = {
+							uri: key,
+							sheet: typeof data.sheet === 'string' ? data.sheet : undefined,
+							range: typeof data.range === 'string' ? data.range : undefined,
+							valuesTsv: typeof data.valuesTsv === 'string'
+								? data.valuesTsv
+								: (typeof data.text === 'string' ? data.text : undefined),
+						};
+						break;
+					}
+					case 'inlineEditRequest': {
+						const selection = data.selection as {
+							text?: string;
+							sheet?: string;
+							range?: string;
+						} | undefined;
+						const instructions = typeof data.instructions === 'string' ? data.instructions : undefined;
+						const text = String(selection?.text ?? '');
+						this._lastSelection = {
+							uri: key,
+							sheet: typeof selection?.sheet === 'string' ? selection.sheet : undefined,
+							range: typeof selection?.range === 'string' ? selection.range : undefined,
+							valuesTsv: text || undefined,
+						};
+						await vscode.commands.executeCommand('safeappeals.documents.inlineEdit', {
+							uri: key,
+							text,
+							instructions,
+							kind: 'xlsx',
+							sheet: this._lastSelection.sheet,
+							range: this._lastSelection.range,
+						});
+						break;
+					}
+					case 'inlineEditCancel': {
+						cancelDocumentInlineEdit(key);
+						break;
+					}
+					case 'addToChat': {
+						const text = String(data.text ?? this._lastSelection?.valuesTsv ?? '');
+						const sheet = typeof data.sheet === 'string' ? data.sheet : this._lastSelection?.sheet;
+						const range = typeof data.range === 'string' ? data.range : this._lastSelection?.range;
+						if (text.trim()) {
+							this._lastSelection = {
+								uri: key,
+								sheet,
+								range,
+								valuesTsv: text.trim(),
+							};
+						}
+						await vscode.commands.executeCommand('safeappeals.documents.addToChat', {
+							uri: key,
+							text: text.trim(),
+							kind: 'xlsx',
+							sheet,
+							range,
+						});
+						break;
+					}
 					case 'error': {
 						const err = String(data.message ?? data.error ?? 'Unknown XLSX editor error');
 						void vscode.window.showErrorMessage(err);
@@ -258,6 +491,19 @@ export class XlsxEditorProvider implements vscode.CustomEditorProvider<XlsxDocum
 					clearTimeout(waiter.timer);
 					this._saveWaiters.delete(key);
 					waiter.resolve(false);
+				}
+				const applyWaiter = this._applyWaiters.get(key);
+				if (applyWaiter) {
+					clearTimeout(applyWaiter.timer);
+					this._applyWaiters.delete(key);
+					applyWaiter.resolve({ ok: false, error: 'XLSX webview disposed' });
+				}
+				cancelDocumentInlineEdit(key);
+				const textWaiter = this._textWaiters.get(key);
+				if (textWaiter) {
+					clearTimeout(textWaiter.timer);
+					this._textWaiters.delete(key);
+					textWaiter.resolve(undefined);
 				}
 				for (const d of disposables) {
 					d.dispose();

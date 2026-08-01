@@ -1,14 +1,16 @@
 ---
 name: SafeAppeals Agent Tools
 overview:
-  "[DEFERRED — user decision Jul 20, 2026: runs at the END of the migration
-  ladder, after all extensions land and SafeAppeals cloud + agent backend are
-  linked (rung 13). Tools will be added one extension at a time with live
+  "[ACTIVE / in progress — Jul 31, 2026: unblocked; runs in-ladder alongside
+  Cloud Agent (safeappeals_cloud_agent), not deferred to end of ladder. Host
+  tool surface phases A–F land in safeappeals-authentication + documents +
+  timer + email; domain tools still added one extension at a time with live
   agent testing. Scope will grow: RAG tools (~5), timeline tools (~6), case
-  organizer, PDF-email import.] Add agent (language model) tools so the
-  Copilot agent can write/edit DOCX and XLSX documents, drive the time
-  tracker, and read/draft (never send) emails — enabling the 'discuss task →
-  start timer → write pages → draft email → stop timer' workflow."
+  organizer, PDF-email import. Pilot/gates still pending.] Add agent
+  (language model) tools so the SafeAppeals agent can write/edit DOCX and
+  XLSX documents, drive the time tracker, and read/draft (never send) emails
+  — enabling the 'discuss task → start timer → write pages → draft email →
+  stop timer' workflow."
 todos:
   - id: timer-args
     content:
@@ -69,6 +71,8 @@ isProject: false
 ---
 
 # Agent Tools for DOCX, XLSX, Time Tracker, and Email
+
+**Status (Jul 31, 2026):** ACTIVE / in progress alongside Cloud Agent — in-ladder, not deferred. Host surface phases A–F land in `safeappeals-authentication` + `safeappeals-documents` + `time-tracker` + `safeappeals-email`. Pilot/gates still pending.
 
 ## How tools work in this fork (research summary)
 

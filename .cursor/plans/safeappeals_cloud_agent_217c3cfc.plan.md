@@ -18,8 +18,8 @@ todos:
     content: "Phase 4: Tests, sentinel, pilot smoke, Ask regression"
     status: pending
   - id: later-tools-pass
-    content: "Later (not MVP): tools pass — DOCX/XLSX/email/time-tracker LM tools"
-    status: pending
+    content: "Tools pass (ACTIVE / in progress, in-ladder with Cloud Agent): host surface phases A–F landing in safeappeals-authentication + documents + timer + email — not deferred; pilot/gates still pending"
+    status: in_progress
 isProject: false
 ---
 
@@ -33,9 +33,9 @@ Cloud-signed-in **Agent** uses SafeAppeals (Cloud LM + tools). No GitHub Copilot
 
 **Register a SafeAppeals default chat participant** in [`extensions/safeappeals-authentication`](extensions/safeappeals-authentication) — id `safeappeals.agent`, `isDefault: true`, `modes: ["agent"]`, **not** `isCore`. Own tool loop: `request.model` (Cloud) → `vscode.lm.invokeTool` → repeat (cap ~25).
 
-**Do not** turn core SetupAgent into a tool loop, and **do not** rebrand vendored [`extensions/copilot`](extensions/copilot) for MVP (GitHub-entitlement-gated; being removed). Core already fail-fasts Agent when no non-core default exists (`shouldFailFastCloudAgentMode`); once our participant registers, setup routing prefers it automatically.
+**Do not** turn core SetupAgent into a tool loop, and **do not** rebrand vendored [`extensions/copilot`](extensions/copilot) as the product path (GitHub-entitlement-gated; being removed). Core already fail-fasts Agent when no non-core default exists (`shouldFailFastCloudAgentMode`); once our participant registers, setup routing prefers it automatically.
 
-MVP tools: core edit/terminal/todo + thin `safeappeals_readFile` / `safeappeals_listDir` (core lacks read tools). Legal tools stay in the later **tools pass**.
+Host tools: full agent surface via core (edit/terminal/todo/browser where owned) + SafeAppeals-owned wrappers/replacements for Copilot-owned tools. The **tools pass is in-ladder / in progress** alongside this Cloud Agent work: phases A–F land in `safeappeals-authentication` + `safeappeals-documents` + `time-tracker` + `safeappeals-email` (workspace edit/search/web first; then DOCX/XLSX; then timer/email). Production bar — pilot/gates still open.
 
 ```mermaid
 flowchart LR
@@ -52,7 +52,7 @@ flowchart LR
 | 1 | Rung 13 — void-cloud `tool_calls` + stream credits |
 | 2 | Client `toolCalling: true` |
 | 3 | Agent delivery (new participant; fuller `defaultChatAgent` string rebrand can follow) |
-| Later | Tools pass — last |
+| Tools | Tools pass — ACTIVE / in progress (phases A–F in auth + documents + timer + email); not deferred |
 
 Diverges from older “rebrand vendored copilot” wording: extension-first participant is smaller and avoids Copilot auth. Tell Steve if he prefers full copilot rebrand instead.
 
@@ -81,16 +81,17 @@ Diverges from older “rebrand vendored copilot” wording: extension-first part
 
 - Reviewer, verifier, sentinel (logging), pilot smoke; Ask regression.
 
-### Later — Tools pass
+### Tools pass (ACTIVE / in progress)
 
-- Timer/DOCX/XLSX/email tools auto-appear in `vscode.lm.tools` with zero loop changes.
+- In-ladder with Cloud Agent (not deferred to end of migration). Phases A–F land in `safeappeals-authentication` (host workspace/edit/search/web tools + allowlist), `safeappeals-documents` (DOCX/XLSX), `time-tracker`, and `safeappeals-email`. Domain tools auto-appear in `vscode.lm.tools` with zero loop changes. Pilot/gates still pending — do not treat as done.
 
-## Definition of done (MVP)
+## Definition of done
 
 1. Agent works on Cloud without Copilot; no hang.
-2. At least one real tool round-trip (read/edit).
+2. Real tool round-trips for the host surface users expect (read/edit/create at minimum; expand to match Built-In sets the UI advertises).
 3. Ask still works; no chat bodies in SafeAppeals DB.
 4. Participant branded SafeAppeals.
+5. Tool picker enablement and agent allowlist stay aligned — checking a Built-In set must not silently no-op.
 
 ## After you approve
 

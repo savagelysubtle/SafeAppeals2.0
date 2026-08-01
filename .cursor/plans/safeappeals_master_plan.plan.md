@@ -132,14 +132,14 @@ todos:
       merge plan rung 13 + C.1 server prerequisite."
     status: pending
   - id: tools-pass
-    content: "Agent tools pass (user decision Jul 20: LAST, after cloud +
-      agent backend — deps: M2, r13): LM tools for time-tracker, documents,
-      email one extension at a time with live agent testing; will absorb RAG
-      ×5 + timeline ×6 tools. The DOCX inlineEdit + XLSX applyEdits webview
-      seams it builds on are code-verified (Jul 29). Resolve the XLSX WASM
-      node-target tension first (§Q3). Plan:
-      safeappeals_agent_tools_da04f06e.plan.md."
-    status: pending
+    content: "Agent tools pass — ACTIVE / in progress alongside Cloud Agent
+      (Jul 31: unblocked, in-ladder; not deferred). Host surface phases A–F
+      in safeappeals-authentication + documents + timer + email; LM tools for
+      time-tracker, documents, email one extension at a time with live agent
+      testing; will absorb RAG ×5 + timeline ×6. DOCX/XLSX webview seams
+      code-verified (Jul 29). Pilot/gates still pending. Plan:
+      safeappeals_agent_tools_da04f06e.plan.md (+ full_agent_tool_surface)."
+    status: in_progress
   - id: r14-packaging
     content: "Rung 14: data migrations (merge plan section I; decide if old
       Void user data still needs migrating at all; known live case: PDF
@@ -186,7 +186,7 @@ A future agent can follow these blindly, with the caveats listed:
 | `onboarding_redesign_newcomer.plan.md` | **Trustworthy, current, ACTIVE** | none — this is the live workstream |
 | `safeappeals_case_extension_rung7.plan.md` | Trustworthy, current (updated Jul 29) | slice 1b superseded by onboarding T4/T10; slice 2 deferred until M1 ships |
 | `unified_safeappeals_sign-in_225af75a.plan.md` | Trustworthy, current (updated Jul 29) | its front third (extension shell + cloud provider) moved to onboarding T1; its workstream-1 "endpoints are sound" assumption is void — T0 fixes them first |
-| `safeappeals_agent_tools_da04f06e.plan.md` | Trustworthy — its code assumptions are now **code-verified** (Jul 29 audit: the XLSX `applyEdits` webview handler exists and the host never posts to it, exactly as the plan assumed) | deferred to the END of the ladder (user, Jul 20); will grow to absorb RAG/timeline tools. Bonus it did not know: DOCX has an equivalent usable seam (`inlineEditRequest`/`applyInlineEdit` webview protocol, host side inert) — see "three inert AI seams" below |
+| `safeappeals_agent_tools_da04f06e.plan.md` | Trustworthy — its code assumptions are now **code-verified** (Jul 29 audit: the XLSX `applyEdits` webview handler exists and the host never posts to it, exactly as the plan assumed) | **ACTIVE / in progress** alongside Cloud Agent (Jul 31: unblocked, in-ladder — not deferred). Will grow to absorb RAG/timeline tools. Bonus it did not know: DOCX has an equivalent usable seam (`inlineEditRequest`/`applyInlineEdit` webview protocol, host side inert) — see "three inert AI seams" below |
 | `upstream_vs_code_merge_spike_2245beba.plan.md` | Trustworthy for: rung ladder, dated status sections, Rust strategy, sections A/B/E/F/G/I/K | **Sections C.2/C.3, D, D.2's "stay in contrib" list, parts of H, and ladder J are pre-Jul-21 and superseded** — see "The contrib hub is dead" below. Read its Jul 29 → Jul 21 → Jul 20 status sections top-down before trusting any older inline text. |
 
 Two plans were **deleted Jul 29** (`rust_acceleration_plan_b2c6b37e`,
@@ -448,7 +448,8 @@ T13: cloud LLM provider over `POST /llm/chat` with zero-credit error UX
 `product.json` removes `GitHub.copilot-chat`, trims `defaultChatAgent`,
 regression pass on the `chatEntitlementService` gate (carved from rung 11).
 After M2 the app's inference runs on SafeAppeals Cloud — which is what
-unblocks rung 12 (classifier) and, eventually, the tools pass.
+unblocks rung 12 (classifier). The tools pass is now unblocked / in
+progress alongside Cloud Agent (see Tools pass below).
 → **Plan: `onboarding_redesign_newcomer.plan.md` §9 Phase B.**
 
 ### Rung 7 slice 2 — Timeline + deadlines (deps: M1 shipped)
@@ -549,10 +550,13 @@ native tool_calls if not already landed with T13, and the final
 keep/slim/drop verdict on metrics + update services. → **Detail: merge plan
 rung 13 + C.1 "server prerequisite".**
 
-### Tools pass — Agent LM tools (deps: M2 + rung 13 remainder; user decision Jul 20: LAST)
+### Tools pass — Agent LM tools (ACTIVE / in progress alongside Cloud Agent)
 
-Deferred to the end because tools need live agent testing, which needs cloud
-+ agent backend. One extension at a time: time-tracker
+**Jul 31 status:** unblocked and in-ladder with Cloud Agent — not deferred to
+the end of the migration. Host tool surface phases A–F land in
+`safeappeals-authentication` + `safeappeals-documents` + `time-tracker` +
+`safeappeals-email`. Pilot/gates still pending (do not mark done). One
+extension at a time for domain tools: time-tracker
 (start/stop/getState/updateEntry/listMatters), documents (docx/xlsx
 create/edit/read with hybrid open-editor/headless routing), email
 (read + draft-only — **no send tool ever** — + organize tools wrapping the
@@ -563,7 +567,7 @@ plan assumed, and DOCX already has a four-message
 `inlineEditRequest`/`applyInlineEdit` protocol the plan did not know about —
 evaluate reusing it before building `applyDocxEdits` fresh. Prerequisite
 decision: the XLSX WASM node-target tension (§Q3). → **Plan:
-`safeappeals_agent_tools_da04f06e.plan.md`.**
+`safeappeals_agent_tools_da04f06e.plan.md` (+ `full_agent_tool_surface`).**
 
 ### Rung 14 — Migrations + packaging/CI
 

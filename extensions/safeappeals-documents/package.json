@@ -18,7 +18,10 @@
   "activationEvents": [
     "onCustomEditor:safeappeals.pdfViewer",
     "onCustomEditor:safeappeals.docxViewer",
-    "onCustomEditor:safeappeals.xlsxViewer"
+    "onCustomEditor:safeappeals.xlsxViewer",
+    "onCommand:safeappeals.documents.inlineEdit",
+    "onCommand:safeappeals.documents.addToChat",
+    "onCommand:safeappeals.documents.showInlineEdit"
   ],
   "capabilities": {
     "virtualWorkspaces": true,
@@ -67,6 +70,390 @@
         "command": "safeappeals-documents.pdf.exportAnnotations",
         "title": "Export PDF Annotations",
         "category": "Safe Appeals Documents"
+      },
+      {
+        "command": "safeappeals.documents.inlineEdit",
+        "title": "Inline Edit Selection",
+        "category": "Safe Appeals Documents"
+      },
+      {
+        "command": "safeappeals.documents.showInlineEdit",
+        "title": "Show Inline Edit Popup",
+        "category": "Safe Appeals Documents"
+      },
+      {
+        "command": "safeappeals.documents.addToChat",
+        "title": "Add Selection to Chat",
+        "category": "Safe Appeals Documents"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "safeappeals.documents.showInlineEdit",
+        "key": "ctrl+k",
+        "mac": "cmd+k",
+        "when": "activeCustomEditorId == 'safeappeals.docxViewer'"
+      },
+      {
+        "command": "safeappeals.documents.showInlineEdit",
+        "key": "ctrl+k",
+        "mac": "cmd+k",
+        "when": "activeCustomEditorId == 'safeappeals.xlsxViewer'"
+      }
+    ],
+    "languageModelTools": [
+      {
+        "name": "safeappeals_docx_read",
+        "toolReferenceName": "docxRead",
+        "displayName": "Read DOCX",
+        "modelDescription": "Read plain text from a .docx in the workspace. Prefers the open Safe Appeals DOCX editor; otherwise extracts text from word/document.xml. Use before editing.",
+        "userDescription": "Read text from a Word document",
+        "canBeReferencedInPrompt": true,
+        "icon": "$(file)",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string",
+              "description": "Workspace-relative or absolute path to a .docx file."
+            }
+          },
+          "required": [
+            "path"
+          ]
+        }
+      },
+      {
+        "name": "safeappeals_docx_create",
+        "toolReferenceName": "docxCreate",
+        "displayName": "Create DOCX",
+        "modelDescription": "Create a new .docx in the workspace from a title, body paragraphs, and optional structured blocks (heading/paragraph/listItem). Overwrites if the file exists.",
+        "userDescription": "Create a Word document",
+        "canBeReferencedInPrompt": true,
+        "icon": "$(new-file)",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string",
+              "description": "Workspace-relative or absolute path for the new .docx file."
+            },
+            "title": {
+              "type": "string",
+              "description": "Optional document title."
+            },
+            "body": {
+              "type": "string",
+              "description": "Plain text body; blank lines start new paragraphs."
+            },
+            "blocks": {
+              "type": "array",
+              "description": "Optional structured blocks instead of or in addition to body.",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "heading",
+                      "paragraph",
+                      "listItem"
+                    ]
+                  },
+                  "text": {
+                    "type": "string"
+                  },
+                  "level": {
+                    "type": "number",
+                    "description": "Heading level 1-4 when type is heading."
+                  }
+                },
+                "required": [
+                  "type",
+                  "text"
+                ]
+              }
+            }
+          },
+          "required": [
+            "path"
+          ]
+        }
+      },
+      {
+        "name": "safeappeals_docx_edit",
+        "toolReferenceName": "docxEdit",
+        "displayName": "Edit DOCX",
+        "modelDescription": "Edit a .docx. If open in the Safe Appeals DOCX editor, apply operations (appendParagraph, appendHeading, replaceSelection, replaceAll, insertAtEnd) or editedText with useLastSelection. If not open, headless overwrite via title/body/blocks.",
+        "userDescription": "Edit a Word document",
+        "canBeReferencedInPrompt": true,
+        "icon": "$(pencil)",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string",
+              "description": "Workspace-relative or absolute path to the .docx file."
+            },
+            "operations": {
+              "type": "array",
+              "description": "Structured edit operations for the open editor.",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "appendParagraph",
+                      "appendHeading",
+                      "replaceSelection",
+                      "replaceAll",
+                      "insertAtEnd"
+                    ]
+                  },
+                  "text": {
+                    "type": "string"
+                  },
+                  "level": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "type",
+                  "text"
+                ]
+              }
+            },
+            "editedText": {
+              "type": "string",
+              "description": "Replacement text for the last inline selection, or content to insert/overwrite."
+            },
+            "useLastSelection": {
+              "type": "boolean",
+              "description": "When true with editedText, apply via applyInlineEdit against the stored TipTap selection."
+            },
+            "title": {
+              "type": "string"
+            },
+            "body": {
+              "type": "string"
+            },
+            "blocks": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string"
+                  },
+                  "text": {
+                    "type": "string"
+                  },
+                  "level": {
+                    "type": "number"
+                  }
+                }
+              }
+            }
+          },
+          "required": [
+            "path"
+          ]
+        }
+      },
+      {
+        "name": "safeappeals_xlsx_read",
+        "toolReferenceName": "xlsxRead",
+        "displayName": "Read XLSX",
+        "modelDescription": "Read sheet values as TSV from an .xlsx open in the Safe Appeals XLSX editor. Headless parse is not available yet — open the file in the editor first.",
+        "userDescription": "Read spreadsheet values",
+        "canBeReferencedInPrompt": true,
+        "icon": "$(table)",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string",
+              "description": "Workspace-relative or absolute path to an .xlsx/.xls file."
+            }
+          },
+          "required": [
+            "path"
+          ]
+        }
+      },
+      {
+        "name": "safeappeals_xlsx_create",
+        "toolReferenceName": "xlsxCreate",
+        "displayName": "Create XLSX",
+        "modelDescription": "Create a new .xlsx in the workspace from sheets/rows/tsv. Overwrites if exists. Prefer this when the file does not exist; use xlsx_edit only when the file is already open in the Safe Appeals XLSX editor.",
+        "userDescription": "Create a spreadsheet",
+        "canBeReferencedInPrompt": true,
+        "icon": "$(new-file)",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string",
+              "description": "Workspace-relative or absolute path for the new .xlsx file."
+            },
+            "sheetName": {
+              "type": "string",
+              "description": "Optional name for a single-sheet workbook when sheets is omitted."
+            },
+            "tsv": {
+              "type": "string",
+              "description": "Optional TSV (tabs + newlines) for a single sheet when sheets is omitted."
+            },
+            "rows": {
+              "type": "array",
+              "description": "Optional row-major values for a single sheet when sheets is omitted.",
+              "items": {
+                "type": "array",
+                "items": {
+                  "type": [
+                    "string",
+                    "number"
+                  ]
+                }
+              }
+            },
+            "sheets": {
+              "type": "array",
+              "description": "Optional multi-sheet content. Each entry may include name, rows, and/or tsv.",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "tsv": {
+                    "type": "string"
+                  },
+                  "rows": {
+                    "type": "array",
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": [
+                          "string",
+                          "number"
+                        ]
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "required": [
+            "path"
+          ]
+        }
+      },
+      {
+        "name": "safeappeals_xlsx_edit",
+        "toolReferenceName": "xlsxEdit",
+        "displayName": "Edit XLSX",
+        "modelDescription": "Edit an already-open XLSX (headless WASM not shipped — open the file in the Safe Appeals XLSX editor first). To create a new workbook, use safeappeals_xlsx_create. Supported operation types: set_cell_value, set_cell_formula, format_cell, format_range, insert_row, insert_column, delete_row, delete_column, create_table, resize_table, rename_table, set_table_style, toggle_table_filter, set_totals_row, convert_table_to_range, create_chart (alias of insert_chart), insert_chart, delete_chart. Saves after apply.",
+        "userDescription": "Edit a spreadsheet",
+        "canBeReferencedInPrompt": true,
+        "icon": "$(edit)",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string",
+              "description": "Workspace-relative or absolute path to the spreadsheet."
+            },
+            "operations": {
+              "type": "array",
+              "description": "Spreadsheet ops. Required fields by type: set_cell_value {cell,value}; set_cell_formula {cell,formula}; format_cell {cell,format}; format_range {range,format}; insert_row/delete_row {rowIndex}; insert_column/delete_column {colIndex}; create_table {range,tableName?,styleName?}; resize_table {tableName,range}; rename_table {oldName,newName}; set_table_style {tableName,styleName}; toggle_table_filter {tableName}; set_totals_row {tableName,enabled}; convert_table_to_range {tableName}; create_chart/insert_chart {chart_type|chartType, data_range|dataRange, title?, position?}; delete_chart {chart_index|chartIndex}. Optional sheet (name or index) on most ops. format keys: bold, italic, underline, strikethrough, wrapText, backgroundColor/fillColor, textColor, fontSize, fontFamily, alignment, numberFormat.",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "description": "Operation type (see tool modelDescription)."
+                  },
+                  "sheet": {
+                    "type": [
+                      "string",
+                      "number"
+                    ],
+                    "description": "Target sheet name or 0-based index."
+                  },
+                  "cell": {
+                    "type": "string",
+                    "description": "A1 cell ref for set_cell_* / format_cell."
+                  },
+                  "value": {},
+                  "formula": {
+                    "type": "string"
+                  },
+                  "rowIndex": {
+                    "type": "number"
+                  },
+                  "colIndex": {
+                    "type": "number"
+                  },
+                  "format": {
+                    "type": "object",
+                    "description": "Style fields for format_cell / format_range (explicit values, not toggles)."
+                  },
+                  "range": {
+                    "type": "string",
+                    "description": "A1:B10 range for format_range, create_table, resize_table. Must contain ':'; for a single cell use A1:A1 or format_cell."
+                  },
+                  "tableName": {
+                    "type": "string"
+                  },
+                  "styleName": {
+                    "type": "string",
+                    "description": "Excel table style name (e.g. TableStyleMedium2)."
+                  },
+                  "oldName": {
+                    "type": "string"
+                  },
+                  "newName": {
+                    "type": "string"
+                  },
+                  "enabled": {
+                    "type": "boolean",
+                    "description": "Totals row on/off for set_totals_row."
+                  },
+                  "chart_type": {
+                    "type": "string",
+                    "description": "Chart type for create_chart/insert_chart (alias: chartType)."
+                  },
+                  "data_range": {
+                    "type": "string",
+                    "description": "Data range A1:Bn for charts (alias: dataRange)."
+                  },
+                  "title": {
+                    "type": "string",
+                    "description": "Optional chart title."
+                  },
+                  "position": {
+                    "type": "string",
+                    "description": "Optional A1 anchor cell for chart placement."
+                  },
+                  "chart_index": {
+                    "type": "number",
+                    "description": "0-based chart index for delete_chart (alias: chartIndex)."
+                  }
+                },
+                "required": [
+                  "type"
+                ]
+              }
+            }
+          },
+          "required": [
+            "path",
+            "operations"
+          ]
+        }
       }
     ]
   },
@@ -75,6 +462,10 @@
     "watch": "npm run watch-webview",
     "build-webview": "node ./esbuild.mjs",
     "watch-webview": "node ./esbuild.mjs --watch"
+  },
+  "dependencies": {
+    "docx": "^9.7.1",
+    "jszip": "^3.10.1"
   },
   "devDependencies": {
     "@adalat-ai/page-extension": "^1.0.9",
@@ -98,10 +489,8 @@
     "@types/react": "^18.3.31",
     "@types/react-dom": "^18.3.7",
     "chart.js": "^4.5.1",
-    "docx": "^9.7.1",
     "docx-preview": "^0.3.7",
     "esbuild": "^0.25.0",
-    "jszip": "^3.10.1",
     "pica": "^9.0.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",

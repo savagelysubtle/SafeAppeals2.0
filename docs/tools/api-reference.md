@@ -239,50 +239,43 @@ export const toolApprovalTypes = new Set<ToolApprovalType>([
 ]);
 ```
 
-## edit_document Operations
+## Document edit operations (current: `safeappeals_xlsx_edit` / `safeappeals_docx_edit`)
 
-The `edit_document` tool accepts an array of operations. Operation type and parameters depend on the document format (DOCX or XLSX).
+Shipping path: VS Code LM tools on `extensions/safeappeals-documents` (not Void `edit_document`). XLSX ops are normalized in `src/xlsx/xlsxEditOperations.ts` and applied only when the file is open in `safeappeals.xlsxViewer`. Create a new workbook with `safeappeals_xlsx_create` (JSZip) without an open editor.
 
-### DOCX Operations
-
-| Operation | Parameters |
-|-----------|------------|
-| `insert_text` | `position` (number), `text` (string) |
-| `replace_text` | `search` (string), `replace` (string), `all?` (boolean) |
-| `format_text` | `range` (`{ start, end }`), `format` (bold, italic, underline, fontSize, fontFamily, color) |
-| `insert_table` | table definition |
-| `insert_page_break` | — |
-| `set_margins` | margin values |
+Canonical XLSX op table: [xlsx-rust-viewer API — applyEdits](../xlsx-rust-viewer/api-reference.md#ai-edit-operations-applyedits).
 
 ### XLSX Cell Operations
 
 | Operation | Parameters |
 |-----------|------------|
-| `set_cell_value` | `sheet`, `cell`, `value` |
-| `set_cell_formula` | `sheet`, `cell`, `formula` |
-| `format_cell` | `sheet`, `cell`, format options |
-| `insert_row` | `sheet`, row index |
-| `insert_column` | `sheet`, column index |
-| `delete_row` | `sheet`, row index |
-| `delete_column` | `sheet`, column index |
+| `set_cell_value` | `sheet?`, `cell`, `value` |
+| `set_cell_formula` | `sheet?`, `cell`, `formula` |
+| `format_cell` | `sheet?`, `cell`, `format` |
+| `format_range` | `sheet?`, `range` (A1:B10), `format` |
+| `insert_row` | `sheet?`, `rowIndex` |
+| `insert_column` | `sheet?`, `colIndex` |
+| `delete_row` | `sheet?`, `rowIndex` |
+| `delete_column` | `sheet?`, `colIndex` |
 
 ### XLSX Table Operations
 
 | Operation | Parameters |
 |-----------|------------|
-| `create_table` | `sheet`, `range`, `tableName` |
-| `rename_table` | `sheet`, table identifier, `name` |
-| `set_table_style` | `sheet`, table identifier, style |
-| `toggle_table_filter` | `sheet`, table identifier |
-| `set_totals_row` | `sheet`, table identifier, totals config |
-| `convert_table_to_range` | `sheet`, table identifier |
+| `create_table` | `range`, `tableName?`, `styleName?`, `sheet?` (defaults to active sheet) |
+| `resize_table` | `tableName`, `range`, `sheet?` |
+| `rename_table` | `oldName`, `newName` |
+| `set_table_style` | `tableName`, `styleName` |
+| `toggle_table_filter` | `tableName` |
+| `set_totals_row` | `tableName`, `enabled` |
+| `convert_table_to_range` | `tableName` |
 
 ### XLSX Chart Operations
 
 | Operation | Parameters |
 |-----------|------------|
-| `insert_chart` | `sheet`, `chart_type`, `data_range`, `title?`, `position?` |
-| `delete_chart` | `sheet`, `chart_index` |
+| `create_chart` / `insert_chart` | `sheet?`, `chart_type` or `chartType`, `data_range` or `dataRange`, `title?`, `position?` |
+| `delete_chart` | `sheet?`, `chart_index` or `chartIndex` |
 
 **Chart types:** `column`, `bar`, `line`, `pie`, `scatter`, `area`, `doughnut`, `radar`
 
@@ -291,10 +284,15 @@ The `edit_document` tool accepts an array of operations. Operation type and para
 [
   {"type": "set_cell_value", "sheet": 0, "cell": "A1", "value": "Month"},
   {"type": "set_cell_value", "sheet": 0, "cell": "B1", "value": "Sales"},
-  {"type": "insert_chart", "sheet": 0, "chart_type": "column", "data_range": "A1:B3", "title": "Monthly Sales", "position": "D2"}
+  {"type": "format_range", "range": "A1:B1", "format": {"bold": true}},
+  {"type": "create_chart", "sheet": 0, "chartType": "column", "dataRange": "A1:B3", "title": "Monthly Sales", "position": "D2"}
 ]
 ```
 
+### Historical Void `edit_document`
+
+The Void builtin `edit_document` tool and its DOCX op list (`insert_text`, `replace_text`, …) are no longer the shipping agent path. Prefer `safeappeals_docx_*` / `safeappeals_xlsx_*`.
+
 ---
 
-This API reference provides the complete type system for the Void tools framework, enabling type-safe tool calling and execution across the AI agent system.
+Sections above under “BuiltinToolCallParams” still document the historical Void tools type surface for reference.

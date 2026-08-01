@@ -1,5 +1,5 @@
 /*---------------------------------------------------------------------------------------------
- *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Copyright (c) Safe Appeals. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
@@ -23,11 +23,26 @@ export { LOOPBACK_REDIRECT_URI } from './oauthLoopback';
 
 export { InsufficientCreditsError } from './llm/insufficientCredits';
 
+/**
+ * Thrown when the cloud API rejects the request as unauthenticated (HTTP 401)
+ * after refresh failed or was skipped. Prefer {@code instanceof} over message matching.
+ */
+export class CloudAuthError extends Error {
+	constructor(message?: string) {
+		super(message ?? 'Session expired. Please sign in again.');
+		this.name = 'CloudAuthError';
+	}
+}
+
 /** Default allow-list for automatic web OAuth callbacks via asExternalUri. */
 export const DEFAULT_WEB_CALLBACK_ORIGINS = ['http://localhost:8080'];
 
 const CLIENT_VERSION = '2.0.0';
 const DEFAULT_REQUEST_TIMEOUT_MS = 60_000;
+/** Web search may wait on Brave; keep at least 30s (void-cloud default). */
+const WEB_SEARCH_TIMEOUT_MS = 60_000;
+/** Multi-search runs queries sequentially server-side; allow a longer client wait. */
+const MULTI_WEB_SEARCH_TIMEOUT_MS = 180_000;
 /** Longer idle window for streaming chat completions (server LiteLLM timeout is 120s). */
 const STREAM_IDLE_TIMEOUT_MS = 180_000;
 const MAX_API_RETRIES = 3;
@@ -108,6 +123,45 @@ export interface CreditPack {
 	readonly description: string;
 	readonly popular?: boolean;
 }
+
+/**
+ * Single Brave web search hit from POST /web-search.
+ */
+export interface WebSearchResultItem {
+	readonly title: string;
+	readonly url: string;
+	readonly description: string;
+	readonly age?: string;
+}
+
+/**
+ * Response from POST /web-search.
+ */
+export interface WebSearchResponse {
+	readonly results: WebSearchResultItem[];
+	readonly totalResults: number;
+	readonly creditsUsed: number;
+	readonly creditsRemaining: number;
+}
+
+/**
+ * Per-query block from POST /web-search/multi.
+ */
+export interface MultiWebSearchQueryResult {
+	readonly query: string;
+	readonly results: WebSearchResultItem[];
+	readonly error?: string;
+}
+
+/**
+ * Response from POST /web-search/multi.
+ */
+export interface MultiWebSearchResponse {
+	readonly searchResults: MultiWebSearchQueryResult[];
+	readonly totalCreditsUsed: number;
+	readonly creditsRemaining: number;
+}
+
 
 /**
  * Whether this process is a development (from-source) build.
@@ -284,6 +338,34 @@ export class CloudApiClient {
 	}
 
 	/**
+	 * Runs a single Brave web search via SafeAppeals Cloud (POST /web-search).
+	 * Credits are deducted server-side; the Brave API key never leaves the server.
+	 */
+	async webSearch(body: { query: string; count?: number; offset?: number }): Promise<WebSearchResponse> {
+		return this.request<WebSearchResponse>('/web-search', {
+			method: 'POST',
+			body: JSON.stringify(body),
+			timeoutMs: WEB_SEARCH_TIMEOUT_MS,
+			// Credits are deducted before the upstream search — never auto-retry.
+			skipTransientRetry: true,
+		});
+	}
+
+	/**
+	 * Runs multiple Brave web searches via SafeAppeals Cloud (POST /web-search/multi).
+	 * Credits are deducted server-side; the Brave API key never leaves the server.
+	 */
+	async multiWebSearch(body: { queries: string[]; count?: number }): Promise<MultiWebSearchResponse> {
+		return this.request<MultiWebSearchResponse>('/web-search/multi', {
+			method: 'POST',
+			body: JSON.stringify(body),
+			timeoutMs: MULTI_WEB_SEARCH_TIMEOUT_MS,
+			// Credits are deducted per query before upstream search — never auto-retry.
+			skipTransientRetry: true,
+		});
+	}
+
+	/**
 	 * Streams a chat completion (POST /llm/chat with stream:true).
 	 *
 	 * 402 / insufficient credits is always thrown as {@link InsufficientCreditsError}
@@ -447,6 +529,8 @@ export class CloudApiClient {
 			body?: string;
 			skipAuth?: boolean;
 			skipRefreshRetry?: boolean;
+			/** When true, do not retry on 5xx/429/network errors (use for credit-charging POSTs). */
+			skipTransientRetry?: boolean;
 			retryCount?: number;
 			timeoutMs?: number;
 		} = {},
@@ -487,15 +571,21 @@ export class CloudApiClient {
 					throw parseInsufficientCreditsError(errorData);
 				}
 
-				if (response.status === 401 && !options.skipRefreshRetry && retryCount === 0) {
-					const refreshed = await this.onUnauthorized();
-					if (refreshed) {
-						return this.request(endpoint, { ...options, retryCount: retryCount + 1 });
+				if (response.status === 401) {
+					if (!options.skipRefreshRetry && retryCount === 0) {
+						const refreshed = await this.onUnauthorized();
+						if (refreshed) {
+							return this.request(endpoint, { ...options, retryCount: retryCount + 1 });
+						}
 					}
-					throw new Error(vscode.l10n.t('Session expired. Please sign in again.'));
+					throw new CloudAuthError(vscode.l10n.t('Session expired. Please sign in again.'));
 				}
 
-				if ((response.status >= 500 || response.status === 429) && retryCount < MAX_API_RETRIES) {
+				if (
+					!options.skipTransientRetry
+					&& (response.status >= 500 || response.status === 429)
+					&& retryCount < MAX_API_RETRIES
+				) {
 					const retryAfter = response.headers.get('Retry-After');
 					const delay = response.status === 429 && retryAfter
 						? parseInt(retryAfter, 10) * 1000
@@ -520,7 +610,7 @@ export class CloudApiClient {
 			if (error instanceof Error && error.name === 'AbortError') {
 				throw new Error(vscode.l10n.t('Request timed out after {0}s. Please try again.', String(timeoutMs / 1000)));
 			}
-			if (error instanceof TypeError && retryCount < MAX_API_RETRIES) {
+			if (!options.skipTransientRetry && error instanceof TypeError && retryCount < MAX_API_RETRIES) {
 				await sleep(INITIAL_RETRY_DELAY_MS * Math.pow(2, retryCount));
 				return this.request(endpoint, { ...options, retryCount: retryCount + 1 });
 			}

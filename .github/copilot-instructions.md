@@ -1,5 +1,9 @@
 # VS Code Copilot Instructions
 
+## Product stance (SafeAppeals)
+
+SafeAppeals is a **production product**, not an MVP, prototype, or throwaway demo. Plan and implement features for real users and real legal workflows. Do **not** frame work as "MVP-only", "good enough for now", or "stub until later" unless Steve explicitly asks for a temporary spike. Plan docs that still say "MVP" are outdated wording — treat shipping quality and a complete agent/tool surface as the default bar.
+
 ## Local tooling (this machine)
 
 On this PC, `npm` is **not** a general-purpose command. Use:
@@ -161,7 +165,7 @@ function f(x: number, y: string): void {}
 
 ### Code Quality
 
-- All files must include Microsoft copyright header
+- Copyright headers: use the Microsoft MIT header for forked upstream VS Code code (`src/`, `build/`, non-SafeAppeals `extensions/`, etc.). For SafeAppeals-owned code (`extensions/safeappeals-*`, `void-cloud/`, SafeAppeals docs/plans you author), use `Copyright (c) Safe Appeals. All rights reserved.` — do **not** put Microsoft headers on new SafeAppeals product code.
 - Prefer `async` and `await` over `Promise` and `then` calls
 - All user facing messages must be localized using the applicable localization framework (for example `nls.localize()` method)
 - Don't add tests to the wrong test suite (e.g., adding to end of file instead of inside relevant suite)

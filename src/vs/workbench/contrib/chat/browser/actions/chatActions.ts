@@ -54,7 +54,7 @@ import { ModifiedFileEntryState } from '../../common/editing/chatEditingService.
 import { IChatModel, IChatResponseModel } from '../../common/model/chatModel.js';
 import { ChatMode, IChatMode } from '../../common/chatModes.js';
 import { ElicitationState, IChatService, IChatToolInvocation } from '../../common/chatService/chatService.js';
-import { ISCMHistoryItemChangeRangeVariableEntry, ISCMHistoryItemChangeVariableEntry } from '../../common/attachments/chatVariableEntries.js';
+import { ISCMHistoryItemChangeRangeVariableEntry, ISCMHistoryItemChangeVariableEntry, toPasteVariableEntry } from '../../common/attachments/chatVariableEntries.js';
 import { IChatRequestViewModel, IChatResponseViewModel, isRequestVM } from '../../common/model/chatViewModel.js';
 import { IChatWidgetHistoryService } from '../../common/widget/chatWidgetHistoryService.js';
 import { ChatAgentLocation, ChatConfiguration, ChatModeKind, getDefaultNewChatSessionResource, getDefaultNewChatSessionType } from '../../common/constants.js';
@@ -124,6 +124,17 @@ export interface IChatViewOpenOptions {
 	 * A list of file URIs to attach to the chat as context.
 	 */
 	attachFiles?: (URI | { uri: URI; range: IRange })[];
+	/**
+	 * Paste/selection attachments (text excerpts) to attach as pills.
+	 */
+	attachPaste?: {
+		name: string;
+		code: string;
+		language?: string;
+		fileName?: string;
+		pastedLines?: string;
+		copiedFrom?: { uri: URI; range: IRange };
+	}[];
 	/**
 	 * A list of source control history item changes to attach to the chat as context.
 	 */
@@ -292,12 +303,26 @@ abstract class OpenChatGlobalAction extends Action2 {
 		}
 		if (opts?.attachFiles) {
 			for (const file of opts.attachFiles) {
-				const uri = file instanceof URI ? file : file.uri;
-				const range = file instanceof URI ? undefined : file.range;
+				const hasNestedUri = !!file && typeof file === 'object' && 'uri' in file && !URI.isUri(file);
+				const uri = URI.revive(hasNestedUri ? (file as { uri: URI }).uri : file as URI);
+				const range = hasNestedUri ? (file as { range?: IRange }).range : undefined;
 
 				if (await fileService.exists(uri)) {
 					chatWidget.attachmentModel.addFile(uri, range);
 				}
+			}
+		}
+		if (opts?.attachPaste) {
+			for (const paste of opts.attachPaste) {
+				const copiedFrom = paste.copiedFrom
+					? { uri: URI.revive(paste.copiedFrom.uri), range: paste.copiedFrom.range }
+					: undefined;
+				chatWidget.attachmentModel.addContext(toPasteVariableEntry(paste.name, paste.code, {
+					language: paste.language,
+					fileName: paste.fileName,
+					pastedLines: paste.pastedLines,
+					copiedFrom,
+				}));
 			}
 		}
 		if (opts?.attachHistoryItemChanges) {

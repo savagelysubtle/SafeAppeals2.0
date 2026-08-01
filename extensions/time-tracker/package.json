@@ -111,6 +111,70 @@
         }
       ]
     },
+    "languageModelTools": [
+      {
+        "name": "safeappeals_timer_getState",
+        "toolReferenceName": "timerGetState",
+        "displayName": "Timer Get State",
+        "modelDescription": "Return the current legal time-tracker state: whether a timer is running, elapsed time, matter/rate ids, description, and billable flag. Use before start/stop.",
+        "userDescription": "Get the current timer state",
+        "canBeReferencedInPrompt": true,
+        "icon": "$(clock)",
+        "inputSchema": {
+          "type": "object",
+          "properties": {}
+        }
+      },
+      {
+        "name": "safeappeals_timer_start",
+        "toolReferenceName": "timerStart",
+        "displayName": "Timer Start",
+        "modelDescription": "Start the legal time tracker non-interactively. Optional description, matterId, rateId, and isBillable. Stops any currently running timer first.",
+        "userDescription": "Start the time tracker",
+        "canBeReferencedInPrompt": true,
+        "icon": "$(play)",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "description": {
+              "type": "string",
+              "description": "What you are working on."
+            },
+            "matterId": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "description": "Optional matter id from the time tracker."
+            },
+            "rateId": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "description": "Optional billing rate id."
+            },
+            "isBillable": {
+              "type": "boolean",
+              "description": "Defaults to true."
+            }
+          }
+        }
+      },
+      {
+        "name": "safeappeals_timer_stop",
+        "toolReferenceName": "timerStop",
+        "displayName": "Timer Stop",
+        "modelDescription": "Stop the running timer and save a time entry. Uses the current description (or 'No description' if empty). Does not send email or export.",
+        "userDescription": "Stop the time tracker and save an entry",
+        "canBeReferencedInPrompt": true,
+        "icon": "$(debug-stop)",
+        "inputSchema": {
+          "type": "object",
+          "properties": {}
+        }
+      }
+    ],
     "configuration": {
       "title": "Time Tracker",
       "properties": {

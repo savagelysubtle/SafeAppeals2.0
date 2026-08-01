@@ -9,6 +9,16 @@
 	let currentZoom = 100;
 	let currentPage = 1;
 	let totalPages = 1;
+	/** Last non-empty text selection — for host textSelected / chat; not used to open Ctrl+K. */
+	let lastSelectionPayload = null;
+
+	function escapeHtml(text) {
+		return String(text)
+			.replace(/&/g, '&amp;')
+			.replace(/</g, '&lt;')
+			.replace(/>/g, '&gt;')
+			.replace(/"/g, '&quot;');
+	}
 
 	// Model selection state (for inline edit popup)
 	let availableModels = [];
@@ -122,6 +132,41 @@
 
 	// Store editor selection for inline edit (survives async LLM call)
 	let pendingInlineEditSelection = null; // { from: number, to: number }
+
+	/**
+	 * Live TipTap/window selection only — never falls back to lastSelectionPayload.
+	 * Requires a non-collapsed range (from ≠ to / !isCollapsed).
+	 */
+	function getLiveNonCollapsedSelectionPayload() {
+		if (tiptapEditor && tiptapEditor.editor) {
+			const { from, to } = tiptapEditor.editor.state.selection;
+			if (from !== to) {
+				const selectedText = tiptapEditor.editor.state.doc.textBetween(from, to, '\n').trim();
+				if (selectedText.length >= 1) {
+					let html = selectedText;
+					const winSel = window.getSelection();
+					if (winSel && !winSel.isCollapsed && winSel.rangeCount > 0) {
+						const range = winSel.getRangeAt(0);
+						const div = document.createElement('div');
+						div.appendChild(range.cloneContents());
+						html = div.innerHTML;
+					}
+					return { text: selectedText, html, from, to };
+				}
+			}
+		}
+		const selection = window.getSelection();
+		if (selection && !selection.isCollapsed && selection.rangeCount > 0) {
+			const selectedText = selection.toString().trim();
+			if (selectedText.length >= 1) {
+				const range = selection.getRangeAt(0);
+				const div = document.createElement('div');
+				div.appendChild(range.cloneContents());
+				return { text: selectedText, html: div.innerHTML };
+			}
+		}
+		return null;
+	}
 
 	// Debounce timer for content change notifications
 	let contentChangeDebounceTimer = null;
@@ -563,25 +608,20 @@
 			selectionTooltip.style.display = 'none';
 			document.body.appendChild(selectionTooltip);
 
-			// Create inline edit popup (Ctrl+K style)
+			// Create inline edit popup (Ctrl+K — VS Code inline-chat look)
 			const inlineEditPopup = document.createElement('div');
 			inlineEditPopup.className = 'docx-inline-edit-popup';
 			inlineEditPopup.innerHTML = `
-			<div class="inline-edit-header">
-				<span class="inline-edit-title">Quick Edit</span>
-				<button class="inline-edit-close" title="Close (Esc)">×</button>
+			<select id="inline-edit-model" class="inline-edit-model-select" hidden>
+				<option value="">Loading models...</option>
+			</select>
+			<div class="inline-edit-meta">
+				<span class="inline-edit-selection-preview"></span>
+				<button type="button" class="inline-edit-close" title="Close (Esc)">×</button>
 			</div>
-			<div class="inline-edit-model-selector">
-				<label for="inline-edit-model">Model:</label>
-				<select id="inline-edit-model" class="inline-edit-model-select">
-					<option value="">Loading models...</option>
-				</select>
-			</div>
-			<div class="inline-edit-selection-preview"></div>
-			<textarea class="inline-edit-input" placeholder="Enter instructions for editing this text..." rows="2"></textarea>
-			<div class="inline-edit-footer">
-				<span class="inline-edit-hint">Press Enter to submit, Esc to cancel</span>
-				<button class="inline-edit-submit">Submit</button>
+			<div class="inline-edit-input-row">
+				<textarea class="inline-edit-input" placeholder="Edit selected text…" rows="1"></textarea>
+				<button type="button" class="inline-edit-submit" title="Edit Selection (Enter)">↵</button>
 			</div>
 		`;
 			inlineEditPopup.style.display = 'none';
@@ -592,29 +632,50 @@
 
 			// Inline edit state
 			let inlineEditSelection = null;
+			let inlineEditPending = false;
 			const inlineEditInput = inlineEditPopup.querySelector('.inline-edit-input');
 			const inlineEditPreview = inlineEditPopup.querySelector('.inline-edit-selection-preview');
 			const inlineEditCloseBtn = inlineEditPopup.querySelector('.inline-edit-close');
 			const inlineEditSubmitBtn = inlineEditPopup.querySelector('.inline-edit-submit');
 
+			function resetInlineEditControls() {
+				inlineEditPending = false;
+				inlineEditSubmitBtn.disabled = false;
+				inlineEditSubmitBtn.textContent = '↵';
+				inlineEditInput.disabled = false;
+				if (modelSelectElement) modelSelectElement.disabled = false;
+			}
+
 			function showInlineEditPopup(selection) {
 				if (!selection || !selection.text) return;
 
-				inlineEditSelection = selection;
-
-				// Store the Tiptap editor selection immediately when popup is shown
-				// This ensures we capture the selection before any DOM changes
-				if (tiptapEditor && tiptapEditor.editor) {
+				// Require a live non-collapsed TipTap selection before opening (never use stale from/to).
+				let fromTo = null;
+				if (typeof selection.from === 'number' && typeof selection.to === 'number' && selection.from !== selection.to) {
+					fromTo = { from: selection.from, to: selection.to };
+				} else if (tiptapEditor && tiptapEditor.editor) {
 					const { from, to } = tiptapEditor.editor.state.selection;
-					pendingInlineEditSelection = { from, to };
-					console.log('[DOCX Webview] Captured editor selection on popup show:', pendingInlineEditSelection);
+					if (from !== to) {
+						fromTo = { from, to };
+					}
+				}
+				if (!fromTo) {
+					updateStatus('Select text to edit');
+					return;
 				}
 
-				// Show preview of selected text (truncated)
-				const preview = selection.text.length > 100
-					? selection.text.substring(0, 100) + '...'
+				inlineEditSelection = selection;
+				resetInlineEditControls();
+				pendingInlineEditSelection = fromTo;
+				console.log('[DOCX Webview] Captured editor selection on popup show:', pendingInlineEditSelection);
+
+				// Show preview of selected text (truncated, one-line meta)
+				const preview = selection.text.length > 80
+					? selection.text.substring(0, 80) + '…'
 					: selection.text;
-				inlineEditPreview.textContent = `"${preview}"`;
+				inlineEditPreview.textContent = preview;
+				inlineEditPreview.title = selection.text;
+				inlineEditPreview.style.color = '';
 
 				// Position the popup near the selection
 				const windowSelection = window.getSelection();
@@ -627,8 +688,8 @@
 					let top = rect.bottom + 8;
 
 					// Keep in viewport
-					const popupWidth = 400;
-					const popupHeight = 180;
+					const popupWidth = Math.min(480, window.innerWidth * 0.9);
+					const popupHeight = 88;
 
 					if (left + popupWidth > window.innerWidth - 20) {
 						left = window.innerWidth - popupWidth - 20;
@@ -652,22 +713,52 @@
 				selectionTooltip.style.display = 'none';
 			}
 
-			function hideInlineEditPopup() {
+			function hideInlineEditPopup(skipCancel) {
+				const wasPending = inlineEditPending;
 				inlineEditPopup.style.display = 'none';
 				inlineEditSelection = null;
 				inlineEditInput.value = '';
+				pendingInlineEditSelection = null;
+				resetInlineEditControls();
+				if (wasPending && !skipCancel) {
+					vscode.postMessage({ type: 'inlineEditCancel' });
+				}
+			}
+
+			function setInlineEditLoading() {
+				inlineEditPending = true;
+				inlineEditSubmitBtn.disabled = true;
+				inlineEditSubmitBtn.textContent = '…';
+				inlineEditInput.disabled = true;
+				if (modelSelectElement) modelSelectElement.disabled = true;
+			}
+
+			function showInlineEditFailure(message) {
+				resetInlineEditControls();
+				const err = message || 'Edit failed';
+				inlineEditPreview.textContent = err;
+				inlineEditPreview.title = err;
+				inlineEditPreview.style.color = 'var(--vscode-errorForeground, #f14c4c)';
+				inlineEditInput.focus();
 			}
 
 			function submitInlineEdit() {
 				const instructions = inlineEditInput.value.trim();
-				if (!instructions || !inlineEditSelection) return;
+				if (!instructions || !inlineEditSelection || inlineEditPending) return;
 
-				// Store the Tiptap editor selection BEFORE the async call
-				// This survives even if the DOM selection is cleared
+				// Prefer the selection captured when the popup opened. Focusing the
+				// textarea often collapses TipTap's live selection — do not overwrite
+				// a valid pending range with from===to.
 				if (tiptapEditor && tiptapEditor.editor) {
 					const { from, to } = tiptapEditor.editor.state.selection;
-					pendingInlineEditSelection = { from, to };
-					console.log('[DOCX Webview] Stored editor selection:', pendingInlineEditSelection);
+					if (from !== to) {
+						pendingInlineEditSelection = { from, to };
+						console.log('[DOCX Webview] Stored editor selection:', pendingInlineEditSelection);
+					}
+				}
+				if (!pendingInlineEditSelection || pendingInlineEditSelection.from === pendingInlineEditSelection.to) {
+					showInlineEditFailure('Select text to edit');
+					return;
 				}
 
 				// Get selected model
@@ -675,30 +766,24 @@
 					? availableModels[modelSelectElement.selectedIndex]
 					: null;
 
-				// Show loading state
-				inlineEditSubmitBtn.disabled = true;
-				inlineEditSubmitBtn.textContent = 'Processing...';
-				inlineEditInput.disabled = true;
-				if (modelSelectElement) modelSelectElement.disabled = true;
+				setInlineEditLoading();
 
-				// Send to host for processing
+				// Send to host for processing — stay open until apply / failure
 				vscode.postMessage({
 					type: 'inlineEditRequest',
 					selection: inlineEditSelection,
 					instructions: instructions,
 					modelSelection: selectedModel ? selectedModel.selection : null
 				});
-
-				// Hide popup after a short delay (the edit will be applied asynchronously)
-				setTimeout(() => {
-					hideInlineEditPopup();
-					// Reset button state
-					inlineEditSubmitBtn.disabled = false;
-					inlineEditSubmitBtn.textContent = 'Submit';
-					inlineEditInput.disabled = false;
-					if (modelSelectElement) modelSelectElement.disabled = false;
-				}, 300);
 			}
+
+			// Expose popup status hooks for host messages
+			window.__docxInlineEditPopup = {
+				setLoading: setInlineEditLoading,
+				showFailure: showInlineEditFailure,
+				hide: hideInlineEditPopup,
+				isOpen: () => inlineEditPopup.style.display !== 'none',
+			};
 
 			// Inline edit event handlers
 			inlineEditCloseBtn.addEventListener('click', hideInlineEditPopup);
@@ -724,6 +809,10 @@
 				if (e.detail) {
 					showInlineEditPopup(e.detail);
 				}
+			});
+
+			document.addEventListener('docx-add-to-chat', () => {
+				postAddToChat();
 			});
 
 			// Position and show tooltip near selection (above the selection)
@@ -766,11 +855,40 @@
 				selectionTooltip.style.visibility = 'visible';
 			}
 
+			function getEditorSelectionPayload() {
+				const selection = window.getSelection();
+				if (!selection || selection.isCollapsed) {
+					return undefined;
+				}
+				const selectedText = selection.toString().trim();
+				if (selectedText.length < 1) {
+					return undefined;
+				}
+				const range = selection.getRangeAt(0);
+				const clonedSelection = range.cloneContents();
+				const div = document.createElement('div');
+				div.appendChild(clonedSelection);
+				return { text: selectedText, html: div.innerHTML };
+			}
+
+			function postAddToChat() {
+				const payload = getEditorSelectionPayload();
+				if (!payload) {
+					return false;
+				}
+				vscode.postMessage({
+					type: 'addToChat',
+					text: payload.text,
+					html: payload.html,
+				});
+				return true;
+			}
+
 			// Handle tooltip button clicks
 			selectionTooltip.addEventListener('click', (e) => {
 				const action = e.target.dataset?.action || e.target.closest('button')?.dataset?.action;
 				if (action === 'addToChat') {
-					vscode.postMessage({ type: 'executeCommand', command: 'void.ctrlLAction' });
+					postAddToChat();
 					selectionTooltip.style.display = 'none';
 				} else if (action === 'editInline') {
 					// Get current selection and show inline edit popup
@@ -801,6 +919,7 @@
 							const clonedSelection = range.cloneContents();
 							const div = document.createElement('div');
 							div.appendChild(clonedSelection);
+							lastSelectionPayload = { text: selectedText, html: div.innerHTML };
 
 							// Send selection to host
 							vscode.postMessage({
@@ -1141,29 +1260,27 @@
 			handlePrint();
 		}
 
-		// Ctrl+L / Cmd+L - Add to Chat
+		// Ctrl+L / Cmd+L - Add selection to Chat
 		if ((e.ctrlKey || e.metaKey) && e.key === 'l') {
 			e.preventDefault();
-			vscode.postMessage({ type: 'executeCommand', command: 'void.ctrlLAction' });
+			document.dispatchEvent(new CustomEvent('docx-add-to-chat'));
 		}
 
 		// Ctrl+K / Cmd+K - Quick Edit (inline edit popup)
-		if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+		// Host also binds this via safeappeals.documents.showInlineEdit when the webview
+		// does not own the key event (VS Code chord prefix otherwise steals Ctrl+K).
+		// Never fall back to lastSelectionPayload — a collapsed live selection must not open.
+		if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
 			e.preventDefault();
-			const selection = window.getSelection();
-			if (selection && !selection.isCollapsed) {
-				const selectedText = selection.toString().trim();
-				if (selectedText.length >= 3) {
-					const range = selection.getRangeAt(0);
-					const clonedSelection = range.cloneContents();
-					const div = document.createElement('div');
-					div.appendChild(clonedSelection);
-					// Use the showInlineEditPopup function - it's defined inside initializeTiptapEditor
-					// We need to trigger it via a custom event or direct call
-					document.dispatchEvent(new CustomEvent('docx-show-inline-edit', {
-						detail: { text: selectedText, html: div.innerHTML }
-					}));
-				}
+			e.stopPropagation();
+			const payload = getLiveNonCollapsedSelectionPayload();
+			if (payload) {
+				lastSelectionPayload = { text: payload.text, html: payload.html };
+				document.dispatchEvent(new CustomEvent('docx-show-inline-edit', {
+					detail: payload
+				}));
+			} else {
+				updateStatus('Select text to edit');
 			}
 		}
 
@@ -1234,47 +1351,183 @@
 				}
 				break;
 
+			case 'showInlineEdit': {
+				const payload = getLiveNonCollapsedSelectionPayload();
+				if (payload) {
+					lastSelectionPayload = { text: payload.text, html: payload.html };
+					document.dispatchEvent(new CustomEvent('docx-show-inline-edit', {
+						detail: payload
+					}));
+				} else {
+					updateStatus('Select text to edit');
+				}
+				break;
+			}
+
 			case 'inlineEditStarted':
-				// Show loading indicator
 				updateStatus('Processing edit...');
+				if (window.__docxInlineEditPopup) {
+					window.__docxInlineEditPopup.setLoading();
+				}
 				break;
 
 			case 'inlineEditProgress':
 				// Could show streaming progress if desired
 				break;
 
-			case 'applyInlineEdit':
-				// Apply the edited text to replace the stored selection
-				if (tiptapEditor && tiptapEditor.editor && message.editedText) {
-					// Use the stored Tiptap selection (survives async call)
-					if (pendingInlineEditSelection) {
-						const { from, to } = pendingInlineEditSelection;
-						console.log('[DOCX Webview] Applying inline edit at positions:', from, to);
+			case 'inlineEditComplete':
+				if (window.__docxInlineEditPopup) {
+					window.__docxInlineEditPopup.hide(true);
+				}
+				updateStatus('Edit applied');
+				break;
 
-						// Replace the text at the stored positions
-						tiptapEditor.editor.chain()
-							.focus()
-							.setTextSelection({ from, to })
-							.deleteSelection()
-							.insertContent(message.editedText)
-							.run();
+			case 'inlineEditFailed':
+			case 'inlineEditError':
+				if (window.__docxInlineEditPopup) {
+					window.__docxInlineEditPopup.showFailure(String(message.message ?? 'Edit failed'));
+				}
+				updateStatus(String(message.message ?? 'Edit failed'));
+				break;
 
-						console.log('[DOCX Webview] Applied inline edit:', message.editedText.substring(0, 50) + '...');
-						trackModification();
-						updateStatus('Edit applied');
-
-						// Clear the pending selection
-						pendingInlineEditSelection = null;
-					} else {
-						console.warn('[DOCX Webview] No stored selection to apply edit to');
-						updateStatus('Could not apply edit - no selection stored');
+			case 'applyInlineEdit': {
+				const requestId = message.requestId;
+				const postApplyResult = (ok, error) => {
+					vscode.postMessage({
+						type: 'applyInlineEditResult',
+						requestId,
+						ok,
+						success: ok,
+						...(error ? { error } : {}),
+					});
+				};
+				try {
+					if (!tiptapEditor || !tiptapEditor.editor) {
+						throw new Error('TipTap editor not ready');
 					}
+					const content = typeof message.editedHtml === 'string' && message.editedHtml.length > 0
+						? message.editedHtml
+						: (typeof message.editedText === 'string' ? message.editedText : null);
+					if (content === null) {
+						throw new Error('Missing editedHtml/editedText');
+					}
+					if (!pendingInlineEditSelection) {
+						throw new Error('No selection stored');
+					}
+					const { from, to } = pendingInlineEditSelection;
+					if (from === to) {
+						throw new Error('Selection is collapsed');
+					}
+
+					console.log('[DOCX Webview] Applying inline edit at positions:', from, to);
+					// TipTap parses HTML strings in insertContent (<strong>, <em>, etc.).
+					tiptapEditor.editor.chain()
+						.focus()
+						.setTextSelection({ from, to })
+						.deleteSelection()
+						.insertContent(content)
+						.run();
+
+					console.log('[DOCX Webview] Applied inline edit:', content.substring(0, 50) + '...');
+					trackModification();
+					updateStatus('Edit applied');
+					pendingInlineEditSelection = null;
+					if (window.__docxInlineEditPopup) {
+						window.__docxInlineEditPopup.hide(true);
+					}
+					postApplyResult(true);
+				} catch (error) {
+					const errMsg = error && error.message ? error.message : String(error);
+					console.warn('[DOCX Webview] applyInlineEdit failed:', errMsg);
+					updateStatus(errMsg);
+					if (window.__docxInlineEditPopup) {
+						window.__docxInlineEditPopup.showFailure(errMsg);
+					}
+					postApplyResult(false, errMsg);
 				}
 				break;
+			}
 
-			case 'inlineEditError':
-				updateStatus('Edit failed: ' + (message.message || 'Unknown error'));
+			case 'applyDocxEdits': {
+				const requestId = message.requestId;
+				try {
+					if (!tiptapEditor || !tiptapEditor.editor) {
+						throw new Error('TipTap editor not ready');
+					}
+					const operations = Array.isArray(message.operations) ? message.operations : [];
+					for (const op of operations) {
+						const text = typeof op.text === 'string' ? op.text : '';
+						switch (op.type) {
+							case 'replaceAll': {
+								const html = text.split(/\n\s*\n/).map(p => `<p>${escapeHtml(p.replace(/\n/g, '<br>'))}</p>`).join('') || '<p></p>';
+								tiptapEditor.loadFromHTML(html);
+								break;
+							}
+							case 'replaceSelection': {
+								if (pendingInlineEditSelection) {
+									const { from, to } = pendingInlineEditSelection;
+									tiptapEditor.editor.chain()
+										.focus()
+										.setTextSelection({ from, to })
+										.deleteSelection()
+										.insertContent(text)
+										.run();
+									pendingInlineEditSelection = null;
+								} else {
+									tiptapEditor.editor.chain().focus().insertContent(text).run();
+								}
+								break;
+							}
+							case 'appendHeading': {
+								const level = Math.min(4, Math.max(1, Number(op.level) || 1));
+								tiptapEditor.editor.chain()
+									.focus('end')
+									.insertContent({ type: 'heading', attrs: { level }, content: [{ type: 'text', text }] })
+									.run();
+								break;
+							}
+							case 'appendParagraph':
+							case 'insertAtEnd':
+							default: {
+								tiptapEditor.editor.chain()
+									.focus('end')
+									.insertContent({ type: 'paragraph', content: text ? [{ type: 'text', text }] : [] })
+									.run();
+								break;
+							}
+						}
+					}
+					trackModification();
+					updateStatus('Agent edits applied');
+					vscode.postMessage({
+						type: 'applyDocxEditsResult',
+						requestId,
+						ok: true,
+						success: true,
+					});
+				} catch (error) {
+					const errMsg = error && error.message ? error.message : String(error);
+					console.error('[DOCX Webview] applyDocxEdits failed:', error);
+					vscode.postMessage({
+						type: 'applyDocxEditsResult',
+						requestId,
+						ok: false,
+						success: false,
+						error: errMsg,
+					});
+				}
 				break;
+			}
+
+			case 'getText': {
+				const text = tiptapEditor ? tiptapEditor.getText() : '';
+				vscode.postMessage({
+					type: 'getTextResult',
+					requestId: message.requestId,
+					text,
+				});
+				break;
+			}
 
 			case 'updateModels':
 				// Update available models for the inline edit dropdown

@@ -3,6 +3,7 @@
  *--------------------------------------------------------------------------------------*/
 
 import * as vscode from 'vscode';
+import { registerAgentTools } from './agentTools';
 import { AccountStore } from './accountStore';
 import { getCurrentCase, getDefaultFolder, getSyncIntervalMinutes, isWebClient } from './config';
 import { DashboardPanel, EmailSidebarProvider } from './dashboardPanel';
@@ -135,6 +136,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 	);
 
 	registerCommands(context, log, openDashboard, refreshUi);
+	registerAgentTools(context, () => index, () => accounts);
 	await refreshStatusBar();
 	engine.startBackgroundSync();
 	log('Activated');

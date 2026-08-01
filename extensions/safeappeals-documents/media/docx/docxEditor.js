@@ -77529,6 +77529,10 @@ ${err.toString()}`);
     let currentZoom = 100;
     let currentPage = 1;
     let totalPages = 1;
+    let lastSelectionPayload = null;
+    function escapeHtml(text2) {
+      return String(text2).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+    }
     let availableModels = [];
     let modelSelectElement = null;
     let signatureSetupDialog = null;
@@ -77622,6 +77626,36 @@ ${err.toString()}`);
       });
     }
     let pendingInlineEditSelection = null;
+    function getLiveNonCollapsedSelectionPayload() {
+      if (tiptapEditor && tiptapEditor.editor) {
+        const { from: from3, to } = tiptapEditor.editor.state.selection;
+        if (from3 !== to) {
+          const selectedText = tiptapEditor.editor.state.doc.textBetween(from3, to, "\n").trim();
+          if (selectedText.length >= 1) {
+            let html2 = selectedText;
+            const winSel = window.getSelection();
+            if (winSel && !winSel.isCollapsed && winSel.rangeCount > 0) {
+              const range = winSel.getRangeAt(0);
+              const div = document.createElement("div");
+              div.appendChild(range.cloneContents());
+              html2 = div.innerHTML;
+            }
+            return { text: selectedText, html: html2, from: from3, to };
+          }
+        }
+      }
+      const selection = window.getSelection();
+      if (selection && !selection.isCollapsed && selection.rangeCount > 0) {
+        const selectedText = selection.toString().trim();
+        if (selectedText.length >= 1) {
+          const range = selection.getRangeAt(0);
+          const div = document.createElement("div");
+          div.appendChild(range.cloneContents());
+          return { text: selectedText, html: div.innerHTML };
+        }
+      }
+      return null;
+    }
     let contentChangeDebounceTimer = null;
     const CONTENT_CHANGE_DEBOUNCE_MS = 300;
     const PAGE_SIZES = {
@@ -77815,24 +77849,43 @@ ${err.toString()}`);
     function initializeTiptapEditor() {
       console.log("[DOCX Webview] Initializing Tiptap editor");
       try {
-        let showInlineEditPopup2 = function(selection) {
+        let resetInlineEditControls2 = function() {
+          inlineEditPending = false;
+          inlineEditSubmitBtn.disabled = false;
+          inlineEditSubmitBtn.textContent = "\u21B5";
+          inlineEditInput.disabled = false;
+          if (modelSelectElement) modelSelectElement.disabled = false;
+        }, showInlineEditPopup2 = function(selection) {
           if (!selection || !selection.text) return;
-          inlineEditSelection = selection;
-          if (tiptapEditor && tiptapEditor.editor) {
+          let fromTo = null;
+          if (typeof selection.from === "number" && typeof selection.to === "number" && selection.from !== selection.to) {
+            fromTo = { from: selection.from, to: selection.to };
+          } else if (tiptapEditor && tiptapEditor.editor) {
             const { from: from3, to } = tiptapEditor.editor.state.selection;
-            pendingInlineEditSelection = { from: from3, to };
-            console.log("[DOCX Webview] Captured editor selection on popup show:", pendingInlineEditSelection);
+            if (from3 !== to) {
+              fromTo = { from: from3, to };
+            }
           }
-          const preview = selection.text.length > 100 ? selection.text.substring(0, 100) + "..." : selection.text;
-          inlineEditPreview.textContent = `"${preview}"`;
+          if (!fromTo) {
+            updateStatus("Select text to edit");
+            return;
+          }
+          inlineEditSelection = selection;
+          resetInlineEditControls2();
+          pendingInlineEditSelection = fromTo;
+          console.log("[DOCX Webview] Captured editor selection on popup show:", pendingInlineEditSelection);
+          const preview = selection.text.length > 80 ? selection.text.substring(0, 80) + "\u2026" : selection.text;
+          inlineEditPreview.textContent = preview;
+          inlineEditPreview.title = selection.text;
+          inlineEditPreview.style.color = "";
           const windowSelection = window.getSelection();
           if (windowSelection && windowSelection.rangeCount > 0) {
             const range = windowSelection.getRangeAt(0);
             const rect = range.getBoundingClientRect();
             let left = rect.left;
             let top = rect.bottom + 8;
-            const popupWidth = 400;
-            const popupHeight = 180;
+            const popupWidth = Math.min(480, window.innerWidth * 0.9);
+            const popupHeight = 88;
             if (left + popupWidth > window.innerWidth - 20) {
               left = window.innerWidth - popupWidth - 20;
             }
@@ -77848,36 +77901,51 @@ ${err.toString()}`);
           inlineEditInput.value = "";
           inlineEditInput.focus();
           selectionTooltip.style.display = "none";
-        }, hideInlineEditPopup2 = function() {
+        }, hideInlineEditPopup2 = function(skipCancel) {
+          const wasPending = inlineEditPending;
           inlineEditPopup.style.display = "none";
           inlineEditSelection = null;
           inlineEditInput.value = "";
-        }, submitInlineEdit2 = function() {
-          const instructions = inlineEditInput.value.trim();
-          if (!instructions || !inlineEditSelection) return;
-          if (tiptapEditor && tiptapEditor.editor) {
-            const { from: from3, to } = tiptapEditor.editor.state.selection;
-            pendingInlineEditSelection = { from: from3, to };
-            console.log("[DOCX Webview] Stored editor selection:", pendingInlineEditSelection);
+          pendingInlineEditSelection = null;
+          resetInlineEditControls2();
+          if (wasPending && !skipCancel) {
+            vscode.postMessage({ type: "inlineEditCancel" });
           }
-          const selectedModel = modelSelectElement && modelSelectElement.selectedIndex >= 0 ? availableModels[modelSelectElement.selectedIndex] : null;
+        }, setInlineEditLoading2 = function() {
+          inlineEditPending = true;
           inlineEditSubmitBtn.disabled = true;
-          inlineEditSubmitBtn.textContent = "Processing...";
+          inlineEditSubmitBtn.textContent = "\u2026";
           inlineEditInput.disabled = true;
           if (modelSelectElement) modelSelectElement.disabled = true;
+        }, showInlineEditFailure2 = function(message) {
+          resetInlineEditControls2();
+          const err = message || "Edit failed";
+          inlineEditPreview.textContent = err;
+          inlineEditPreview.title = err;
+          inlineEditPreview.style.color = "var(--vscode-errorForeground, #f14c4c)";
+          inlineEditInput.focus();
+        }, submitInlineEdit2 = function() {
+          const instructions = inlineEditInput.value.trim();
+          if (!instructions || !inlineEditSelection || inlineEditPending) return;
+          if (tiptapEditor && tiptapEditor.editor) {
+            const { from: from3, to } = tiptapEditor.editor.state.selection;
+            if (from3 !== to) {
+              pendingInlineEditSelection = { from: from3, to };
+              console.log("[DOCX Webview] Stored editor selection:", pendingInlineEditSelection);
+            }
+          }
+          if (!pendingInlineEditSelection || pendingInlineEditSelection.from === pendingInlineEditSelection.to) {
+            showInlineEditFailure2("Select text to edit");
+            return;
+          }
+          const selectedModel = modelSelectElement && modelSelectElement.selectedIndex >= 0 ? availableModels[modelSelectElement.selectedIndex] : null;
+          setInlineEditLoading2();
           vscode.postMessage({
             type: "inlineEditRequest",
             selection: inlineEditSelection,
             instructions,
             modelSelection: selectedModel ? selectedModel.selection : null
           });
-          setTimeout(() => {
-            hideInlineEditPopup2();
-            inlineEditSubmitBtn.disabled = false;
-            inlineEditSubmitBtn.textContent = "Submit";
-            inlineEditInput.disabled = false;
-            if (modelSelectElement) modelSelectElement.disabled = false;
-          }, 300);
         }, updateTooltipPosition2 = function(selection) {
           if (!selection || selection.rangeCount === 0) {
             selectionTooltip.style.display = "none";
@@ -77905,8 +77973,33 @@ ${err.toString()}`);
           selectionTooltip.style.left = `${left}px`;
           selectionTooltip.style.top = `${top}px`;
           selectionTooltip.style.visibility = "visible";
+        }, getEditorSelectionPayload2 = function() {
+          const selection = window.getSelection();
+          if (!selection || selection.isCollapsed) {
+            return void 0;
+          }
+          const selectedText = selection.toString().trim();
+          if (selectedText.length < 1) {
+            return void 0;
+          }
+          const range = selection.getRangeAt(0);
+          const clonedSelection = range.cloneContents();
+          const div = document.createElement("div");
+          div.appendChild(clonedSelection);
+          return { text: selectedText, html: div.innerHTML };
+        }, postAddToChat2 = function() {
+          const payload = getEditorSelectionPayload2();
+          if (!payload) {
+            return false;
+          }
+          vscode.postMessage({
+            type: "addToChat",
+            text: payload.text,
+            html: payload.html
+          });
+          return true;
         };
-        var showInlineEditPopup = showInlineEditPopup2, hideInlineEditPopup = hideInlineEditPopup2, submitInlineEdit = submitInlineEdit2, updateTooltipPosition = updateTooltipPosition2;
+        var resetInlineEditControls = resetInlineEditControls2, showInlineEditPopup = showInlineEditPopup2, hideInlineEditPopup = hideInlineEditPopup2, setInlineEditLoading = setInlineEditLoading2, showInlineEditFailure = showInlineEditFailure2, submitInlineEdit = submitInlineEdit2, updateTooltipPosition = updateTooltipPosition2, getEditorSelectionPayload = getEditorSelectionPayload2, postAddToChat = postAddToChat2;
         if (window.DocxRibbon) {
           ribbon = new window.DocxRibbon({
             onSave: handleSaveRequest,
@@ -78035,31 +78128,33 @@ ${err.toString()}`);
         const inlineEditPopup = document.createElement("div");
         inlineEditPopup.className = "docx-inline-edit-popup";
         inlineEditPopup.innerHTML = `
-			<div class="inline-edit-header">
-				<span class="inline-edit-title">Quick Edit</span>
-				<button class="inline-edit-close" title="Close (Esc)">\xD7</button>
+			<select id="inline-edit-model" class="inline-edit-model-select" hidden>
+				<option value="">Loading models...</option>
+			</select>
+			<div class="inline-edit-meta">
+				<span class="inline-edit-selection-preview"></span>
+				<button type="button" class="inline-edit-close" title="Close (Esc)">\xD7</button>
 			</div>
-			<div class="inline-edit-model-selector">
-				<label for="inline-edit-model">Model:</label>
-				<select id="inline-edit-model" class="inline-edit-model-select">
-					<option value="">Loading models...</option>
-				</select>
-			</div>
-			<div class="inline-edit-selection-preview"></div>
-			<textarea class="inline-edit-input" placeholder="Enter instructions for editing this text..." rows="2"></textarea>
-			<div class="inline-edit-footer">
-				<span class="inline-edit-hint">Press Enter to submit, Esc to cancel</span>
-				<button class="inline-edit-submit">Submit</button>
+			<div class="inline-edit-input-row">
+				<textarea class="inline-edit-input" placeholder="Edit selected text\u2026" rows="1"></textarea>
+				<button type="button" class="inline-edit-submit" title="Edit Selection (Enter)">\u21B5</button>
 			</div>
 		`;
         inlineEditPopup.style.display = "none";
         document.body.appendChild(inlineEditPopup);
         modelSelectElement = inlineEditPopup.querySelector("#inline-edit-model");
         let inlineEditSelection = null;
+        let inlineEditPending = false;
         const inlineEditInput = inlineEditPopup.querySelector(".inline-edit-input");
         const inlineEditPreview = inlineEditPopup.querySelector(".inline-edit-selection-preview");
         const inlineEditCloseBtn = inlineEditPopup.querySelector(".inline-edit-close");
         const inlineEditSubmitBtn = inlineEditPopup.querySelector(".inline-edit-submit");
+        window.__docxInlineEditPopup = {
+          setLoading: setInlineEditLoading2,
+          showFailure: showInlineEditFailure2,
+          hide: hideInlineEditPopup2,
+          isOpen: () => inlineEditPopup.style.display !== "none"
+        };
         inlineEditCloseBtn.addEventListener("click", hideInlineEditPopup2);
         inlineEditSubmitBtn.addEventListener("click", submitInlineEdit2);
         inlineEditInput.addEventListener("keydown", (e) => {
@@ -78079,10 +78174,13 @@ ${err.toString()}`);
             showInlineEditPopup2(e.detail);
           }
         });
+        document.addEventListener("docx-add-to-chat", () => {
+          postAddToChat2();
+        });
         selectionTooltip.addEventListener("click", (e) => {
           const action = e.target.dataset?.action || e.target.closest("button")?.dataset?.action;
           if (action === "addToChat") {
-            vscode.postMessage({ type: "executeCommand", command: "void.ctrlLAction" });
+            postAddToChat2();
             selectionTooltip.style.display = "none";
           } else if (action === "editInline") {
             const selection = window.getSelection();
@@ -78110,6 +78208,7 @@ ${err.toString()}`);
                 const clonedSelection = range.cloneContents();
                 const div = document.createElement("div");
                 div.appendChild(clonedSelection);
+                lastSelectionPayload = { text: selectedText, html: div.innerHTML };
                 vscode.postMessage({
                   type: "textSelected",
                   selection: { text: selectedText, html: div.innerHTML }
@@ -78367,22 +78466,19 @@ ${err.toString()}`);
       }
       if ((e.ctrlKey || e.metaKey) && e.key === "l") {
         e.preventDefault();
-        vscode.postMessage({ type: "executeCommand", command: "void.ctrlLAction" });
+        document.dispatchEvent(new CustomEvent("docx-add-to-chat"));
       }
-      if ((e.ctrlKey || e.metaKey) && e.key === "k") {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
         e.preventDefault();
-        const selection = window.getSelection();
-        if (selection && !selection.isCollapsed) {
-          const selectedText = selection.toString().trim();
-          if (selectedText.length >= 3) {
-            const range = selection.getRangeAt(0);
-            const clonedSelection = range.cloneContents();
-            const div = document.createElement("div");
-            div.appendChild(clonedSelection);
-            document.dispatchEvent(new CustomEvent("docx-show-inline-edit", {
-              detail: { text: selectedText, html: div.innerHTML }
-            }));
-          }
+        e.stopPropagation();
+        const payload = getLiveNonCollapsedSelectionPayload();
+        if (payload) {
+          lastSelectionPayload = { text: payload.text, html: payload.html };
+          document.dispatchEvent(new CustomEvent("docx-show-inline-edit", {
+            detail: payload
+          }));
+        } else {
+          updateStatus("Select text to edit");
         }
       }
       if ((e.ctrlKey || e.metaKey) && e.key === "z" && !e.shiftKey) {
@@ -78437,30 +78533,154 @@ ${err.toString()}`);
             updateStatus("Ready");
           }
           break;
+        case "showInlineEdit": {
+          const payload = getLiveNonCollapsedSelectionPayload();
+          if (payload) {
+            lastSelectionPayload = { text: payload.text, html: payload.html };
+            document.dispatchEvent(new CustomEvent("docx-show-inline-edit", {
+              detail: payload
+            }));
+          } else {
+            updateStatus("Select text to edit");
+          }
+          break;
+        }
         case "inlineEditStarted":
           updateStatus("Processing edit...");
+          if (window.__docxInlineEditPopup) {
+            window.__docxInlineEditPopup.setLoading();
+          }
           break;
         case "inlineEditProgress":
           break;
-        case "applyInlineEdit":
-          if (tiptapEditor && tiptapEditor.editor && message.editedText) {
-            if (pendingInlineEditSelection) {
-              const { from: from3, to } = pendingInlineEditSelection;
-              console.log("[DOCX Webview] Applying inline edit at positions:", from3, to);
-              tiptapEditor.editor.chain().focus().setTextSelection({ from: from3, to }).deleteSelection().insertContent(message.editedText).run();
-              console.log("[DOCX Webview] Applied inline edit:", message.editedText.substring(0, 50) + "...");
-              trackModification();
-              updateStatus("Edit applied");
-              pendingInlineEditSelection = null;
-            } else {
-              console.warn("[DOCX Webview] No stored selection to apply edit to");
-              updateStatus("Could not apply edit - no selection stored");
+        case "inlineEditComplete":
+          if (window.__docxInlineEditPopup) {
+            window.__docxInlineEditPopup.hide(true);
+          }
+          updateStatus("Edit applied");
+          break;
+        case "inlineEditFailed":
+        case "inlineEditError":
+          if (window.__docxInlineEditPopup) {
+            window.__docxInlineEditPopup.showFailure(String(message.message ?? "Edit failed"));
+          }
+          updateStatus(String(message.message ?? "Edit failed"));
+          break;
+        case "applyInlineEdit": {
+          const requestId = message.requestId;
+          const postApplyResult = (ok, error) => {
+            vscode.postMessage({
+              type: "applyInlineEditResult",
+              requestId,
+              ok,
+              success: ok,
+              ...error ? { error } : {}
+            });
+          };
+          try {
+            if (!tiptapEditor || !tiptapEditor.editor) {
+              throw new Error("TipTap editor not ready");
             }
+            const content = typeof message.editedHtml === "string" && message.editedHtml.length > 0 ? message.editedHtml : typeof message.editedText === "string" ? message.editedText : null;
+            if (content === null) {
+              throw new Error("Missing editedHtml/editedText");
+            }
+            if (!pendingInlineEditSelection) {
+              throw new Error("No selection stored");
+            }
+            const { from: from3, to } = pendingInlineEditSelection;
+            if (from3 === to) {
+              throw new Error("Selection is collapsed");
+            }
+            console.log("[DOCX Webview] Applying inline edit at positions:", from3, to);
+            tiptapEditor.editor.chain().focus().setTextSelection({ from: from3, to }).deleteSelection().insertContent(content).run();
+            console.log("[DOCX Webview] Applied inline edit:", content.substring(0, 50) + "...");
+            trackModification();
+            updateStatus("Edit applied");
+            pendingInlineEditSelection = null;
+            if (window.__docxInlineEditPopup) {
+              window.__docxInlineEditPopup.hide(true);
+            }
+            postApplyResult(true);
+          } catch (error) {
+            const errMsg = error && error.message ? error.message : String(error);
+            console.warn("[DOCX Webview] applyInlineEdit failed:", errMsg);
+            updateStatus(errMsg);
+            if (window.__docxInlineEditPopup) {
+              window.__docxInlineEditPopup.showFailure(errMsg);
+            }
+            postApplyResult(false, errMsg);
           }
           break;
-        case "inlineEditError":
-          updateStatus("Edit failed: " + (message.message || "Unknown error"));
+        }
+        case "applyDocxEdits": {
+          const requestId = message.requestId;
+          try {
+            if (!tiptapEditor || !tiptapEditor.editor) {
+              throw new Error("TipTap editor not ready");
+            }
+            const operations = Array.isArray(message.operations) ? message.operations : [];
+            for (const op of operations) {
+              const text2 = typeof op.text === "string" ? op.text : "";
+              switch (op.type) {
+                case "replaceAll": {
+                  const html2 = text2.split(/\n\s*\n/).map((p) => `<p>${escapeHtml(p.replace(/\n/g, "<br>"))}</p>`).join("") || "<p></p>";
+                  tiptapEditor.loadFromHTML(html2);
+                  break;
+                }
+                case "replaceSelection": {
+                  if (pendingInlineEditSelection) {
+                    const { from: from3, to } = pendingInlineEditSelection;
+                    tiptapEditor.editor.chain().focus().setTextSelection({ from: from3, to }).deleteSelection().insertContent(text2).run();
+                    pendingInlineEditSelection = null;
+                  } else {
+                    tiptapEditor.editor.chain().focus().insertContent(text2).run();
+                  }
+                  break;
+                }
+                case "appendHeading": {
+                  const level = Math.min(4, Math.max(1, Number(op.level) || 1));
+                  tiptapEditor.editor.chain().focus("end").insertContent({ type: "heading", attrs: { level }, content: [{ type: "text", text: text2 }] }).run();
+                  break;
+                }
+                case "appendParagraph":
+                case "insertAtEnd":
+                default: {
+                  tiptapEditor.editor.chain().focus("end").insertContent({ type: "paragraph", content: text2 ? [{ type: "text", text: text2 }] : [] }).run();
+                  break;
+                }
+              }
+            }
+            trackModification();
+            updateStatus("Agent edits applied");
+            vscode.postMessage({
+              type: "applyDocxEditsResult",
+              requestId,
+              ok: true,
+              success: true
+            });
+          } catch (error) {
+            const errMsg = error && error.message ? error.message : String(error);
+            console.error("[DOCX Webview] applyDocxEdits failed:", error);
+            vscode.postMessage({
+              type: "applyDocxEditsResult",
+              requestId,
+              ok: false,
+              success: false,
+              error: errMsg
+            });
+          }
           break;
+        }
+        case "getText": {
+          const text2 = tiptapEditor ? tiptapEditor.getText() : "";
+          vscode.postMessage({
+            type: "getTextResult",
+            requestId: message.requestId,
+            text: text2
+          });
+          break;
+        }
         case "updateModels":
           if (message.models && Array.isArray(message.models)) {
             availableModels = message.models;

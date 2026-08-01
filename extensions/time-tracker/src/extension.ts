@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------*/
 
 import * as vscode from 'vscode';
+import { registerAgentTools } from './agentTools';
 import { ExportService } from './exportService';
 import { MatterService } from './matterService';
 import { RateService } from './rateService';
@@ -82,6 +83,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
 		// Register commands
 		registerCommands(context);
+		registerAgentTools(context, () => timeTrackerService);
 
 		// Add disposables
 		context.subscriptions.push(

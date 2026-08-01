@@ -26378,6 +26378,161 @@
     }
   };
 
+  // webview-src/xlsx/inlineEditPopup.ts
+  var XlsxInlineEditPopup = class {
+    constructor(host) {
+      this.host = host;
+      __publicField(this, "root");
+      __publicField(this, "previewEl");
+      __publicField(this, "inputEl");
+      __publicField(this, "submitBtn");
+      __publicField(this, "closeBtn");
+      __publicField(this, "selection", null);
+      __publicField(this, "pending", false);
+      __publicField(this, "onDocMouseDown");
+      this.root = document.createElement("div");
+      this.root.className = "docx-inline-edit-popup xlsx-inline-edit-popup";
+      this.root.innerHTML = `
+			<select id="xlsx-inline-edit-model" class="inline-edit-model-select" hidden></select>
+			<div class="inline-edit-meta">
+				<span class="inline-edit-selection-preview"></span>
+				<button type="button" class="inline-edit-close" title="Close (Esc)">\xD7</button>
+			</div>
+			<div class="inline-edit-input-row">
+				<textarea class="inline-edit-input" placeholder="Edit selected cells\u2026" rows="1"></textarea>
+				<button type="button" class="inline-edit-submit" title="Edit Selection (Enter)">\u21B5</button>
+			</div>
+		`;
+      this.root.style.display = "none";
+      document.body.appendChild(this.root);
+      this.previewEl = this.root.querySelector(".inline-edit-selection-preview");
+      this.inputEl = this.root.querySelector(".inline-edit-input");
+      this.submitBtn = this.root.querySelector(".inline-edit-submit");
+      this.closeBtn = this.root.querySelector(".inline-edit-close");
+      this.closeBtn.addEventListener("click", () => this.hide());
+      this.submitBtn.addEventListener("click", () => this.submit());
+      this.inputEl.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" && !e.shiftKey) {
+          e.preventDefault();
+          e.stopPropagation();
+          this.submit();
+        } else if (e.key === "Escape") {
+          e.preventDefault();
+          e.stopPropagation();
+          this.hide();
+        }
+      });
+      this.root.addEventListener("mousedown", (e) => {
+        e.stopPropagation();
+      });
+      this.onDocMouseDown = (e) => {
+        if (this.root.style.display === "none" || this.pending) {
+          return;
+        }
+        const target = e.target;
+        if (target && !this.root.contains(target)) {
+          this.hide();
+        }
+      };
+      document.addEventListener("mousedown", this.onDocMouseDown, true);
+    }
+    isOpen() {
+      return this.root.style.display !== "none";
+    }
+    show(selection) {
+      const text = selection.text?.trim() ?? "";
+      if (!text) {
+        return;
+      }
+      this.selection = selection;
+      const preview = text.length > 80 ? `${text.substring(0, 80)}\u2026` : text;
+      this.previewEl.textContent = preview;
+      this.previewEl.title = text;
+      this.previewEl.style.color = "";
+      this.positionNearAnchor();
+      this.root.style.display = "flex";
+      this.inputEl.value = "";
+      this.resetControls();
+      this.inputEl.focus();
+    }
+    hide(options) {
+      const wasPending = this.pending;
+      this.root.style.display = "none";
+      this.selection = null;
+      this.inputEl.value = "";
+      this.resetControls();
+      if (wasPending && !options?.skipCancel) {
+        this.host.postMessage({ type: "inlineEditCancel" });
+      }
+    }
+    setLoading() {
+      this.pending = true;
+      this.submitBtn.disabled = true;
+      this.submitBtn.textContent = "\u2026";
+      this.inputEl.disabled = true;
+    }
+    showFailure(message) {
+      this.resetControls();
+      const err = message || "Edit failed";
+      this.previewEl.textContent = err;
+      this.previewEl.title = err;
+      this.previewEl.style.color = "var(--vscode-errorForeground, #f14c4c)";
+      this.inputEl.focus();
+    }
+    dispose() {
+      document.removeEventListener("mousedown", this.onDocMouseDown, true);
+      this.root.remove();
+    }
+    resetControls() {
+      this.pending = false;
+      this.submitBtn.disabled = false;
+      this.submitBtn.textContent = "\u21B5";
+      this.inputEl.disabled = false;
+    }
+    submit() {
+      const instructions = this.inputEl.value.trim();
+      if (!instructions || !this.selection || this.pending) {
+        return;
+      }
+      this.setLoading();
+      this.host.postMessage({
+        type: "inlineEditRequest",
+        selection: {
+          text: this.selection.text,
+          sheet: this.selection.sheet,
+          range: this.selection.range
+        },
+        instructions,
+        modelSelection: null
+      });
+    }
+    positionNearAnchor() {
+      const rect = this.host.getAnchorRect?.() ?? null;
+      const popupWidth = Math.min(480, window.innerWidth * 0.9);
+      const popupHeight = 88;
+      let left = 24;
+      let top = 80;
+      if (rect) {
+        left = rect.left;
+        top = rect.bottom + 8;
+        if (left + popupWidth > window.innerWidth - 20) {
+          left = window.innerWidth - popupWidth - 20;
+        }
+        if (left < 10) {
+          left = 10;
+        }
+        if (top + popupHeight > window.innerHeight - 20) {
+          top = rect.top - popupHeight - 8;
+        }
+        if (top < 10) {
+          top = 10;
+        }
+      }
+      this.root.style.left = `${left}px`;
+      this.root.style.top = `${top}px`;
+    }
+  };
+
   // webview-src/xlsx/main.ts
   var vscode = acquireVsCodeApi();
   var currentFileUri = "";
@@ -26400,6 +26555,7 @@
   var pageSetupDialog = null;
   var csvImportDialog = null;
   var ribbon = null;
+  var inlineEditPopup = null;
   var pivotTables = [];
   var pivotOutputCache = /* @__PURE__ */ new Map();
   var definedNames = [];
@@ -26418,6 +26574,10 @@
     }
     renderer = new CanvasRenderer(canvasContainer);
     renderer.setLoading(true);
+    inlineEditPopup = new XlsxInlineEditPopup({
+      postMessage: (msg) => vscode.postMessage(msg),
+      getAnchorRect: () => getInlineEditAnchorRect()
+    });
     if (ribbonContainer) {
       ribbon = new Ribbon(ribbonContainer, handleRibbonAction);
     }
@@ -26544,15 +26704,57 @@
       case "layout":
         renderer?.resize();
         break;
-      case "applyEdits":
-        if (renderer && message.operations) {
-          handleApplyEdits(message.operations);
+      case "applyEdits": {
+        const ops = message.operations ?? message.ops;
+        if (renderer && Array.isArray(ops)) {
+          const results = handleApplyEdits(ops);
+          const ok = !results.some((r) => r.ok === false);
+          const firstError = results.find((r) => r.ok === false)?.error;
+          vscode.postMessage({
+            type: "applyEditsResult",
+            requestId: message.requestId,
+            ok,
+            success: ok,
+            error: ok ? void 0 : firstError ?? "One or more XLSX edits failed",
+            results
+          });
+        } else {
+          vscode.postMessage({
+            type: "applyEditsResult",
+            requestId: message.requestId,
+            ok: false,
+            success: false,
+            error: !renderer ? "XLSX renderer not ready" : "Missing operations array"
+          });
         }
         break;
+      }
+      case "getText": {
+        const text = extractWorkbookText();
+        vscode.postMessage({
+          type: "getTextResult",
+          requestId: message.requestId,
+          text
+        });
+        break;
+      }
       case "fileContent":
         if (message.content && csvImportDialog) {
           csvImportDialog.previewFile(message.content, message.fileName || "");
         }
+        break;
+      case "showInlineEdit":
+        showXlsxInlineEditPopup();
+        break;
+      case "inlineEditStarted":
+        inlineEditPopup?.setLoading();
+        break;
+      case "inlineEditComplete":
+        inlineEditPopup?.hide({ skipCancel: true });
+        break;
+      case "inlineEditFailed":
+      case "inlineEditError":
+        inlineEditPopup?.showFailure(String(message.message ?? "Edit failed"));
         break;
     }
   });
@@ -26840,148 +27042,316 @@
       vscode.postMessage({ type: "error", message });
     }
   }
-  function handleApplyEdits(operations) {
-    if (!renderer) return;
+  function extractWorkbookText() {
+    if (!renderer) {
+      return "";
+    }
     const model = renderer.getData();
-    if (!model?.sheets) return;
+    if (!model?.sheets?.length) {
+      return "";
+    }
+    const parts = [];
+    for (const sheet of model.sheets) {
+      parts.push(`# Sheet: ${sheet.name ?? "(unnamed)"}`);
+      const rowCount = Math.min(sheet.row_count ?? 0, 200);
+      const colCount = Math.min(sheet.col_count ?? 0, 50);
+      for (let r = 0; r < rowCount; r++) {
+        const cells = [];
+        let any = false;
+        for (let c = 0; c < colCount; c++) {
+          const cell = sheet.cells?.[r]?.[c];
+          const value = cell?.value ?? "";
+          if (value !== "" && value !== void 0 && value !== null) {
+            any = true;
+          }
+          cells.push(String(value ?? ""));
+        }
+        if (any) {
+          parts.push(cells.join("	"));
+        }
+      }
+      parts.push("");
+    }
+    return parts.join("\n").trim();
+  }
+  function handleApplyEdits(operations) {
+    const results = [];
+    if (!renderer) {
+      return [{ ok: false, error: "Renderer not ready" }];
+    }
+    const model = renderer.getData();
+    if (!model?.sheets) {
+      return [{ ok: false, error: "No workbook model" }];
+    }
     for (const op of operations) {
       const sheetIdx = resolveSheetIndex(model, op.sheet);
-      if (sheetIdx < 0 && op.type !== "create_table" && op.type !== "resize_table" && op.type !== "rename_table" && op.type !== "set_table_style" && op.type !== "toggle_table_filter" && op.type !== "set_totals_row" && op.type !== "convert_table_to_range") {
+      if (sheetIdx < 0) {
         console.warn("[applyEdits] Sheet not found:", op.sheet);
+        results.push({ type: op.type, ok: false, error: `Sheet not found: ${op.sheet}` });
         continue;
       }
-      if (sheetIdx >= 0 && sheetIdx !== renderer.getActiveSheetIndex()) {
+      if (sheetIdx !== renderer.getActiveSheetIndex()) {
         renderer.setActiveSheetIndex(sheetIdx);
       }
-      switch (op.type) {
-        case "set_cell_value": {
-          const ref = parseCellRef(op.cell);
-          if (!ref) break;
-          const dataType = typeof op.value === "number" ? "n" : "s";
-          renderer.updateCell(ref.row, ref.col, String(op.value), dataType);
-          break;
-        }
-        case "set_cell_formula": {
-          const ref = parseCellRef(op.cell);
-          if (!ref) break;
-          renderer.updateCell(ref.row, ref.col, op.formula, "s");
-          break;
-        }
-        case "format_cell": {
-          const ref = parseCellRef(op.cell);
-          if (!ref) break;
-          renderer.setSelection(ref.row, ref.col, ref.row, ref.col);
-          if (op.format) {
-            if (op.format.bold !== void 0) renderer.toggleFormat("bold");
-            if (op.format.italic !== void 0) renderer.toggleFormat("italic");
-            if (op.format.backgroundColor) renderer.applyFormat("fillColor", op.format.backgroundColor);
-            if (op.format.fontSize) renderer.applyFormat("fontSize", String(op.format.fontSize));
-          }
-          break;
-        }
-        case "insert_row": {
-          renderer.insertRow(op.rowIndex);
-          break;
-        }
-        case "insert_column": {
-          renderer.insertCol(op.colIndex);
-          break;
-        }
-        case "delete_row": {
-          renderer.deleteRow(op.rowIndex);
-          break;
-        }
-        case "delete_column": {
-          renderer.deleteCol(op.colIndex);
-          break;
-        }
-        // --- Table operations (delegate to existing handleTableAction) ---
-        case "create_table": {
-          const range = parseCellRange(op.range);
-          if (!range) {
-            console.warn("[applyEdits] Invalid range for create_table:", op.range);
-            break;
-          }
-          renderer.setSelection(range.startRow, range.startCol, range.endRow, range.endCol);
-          handleTableAction("createTable", {
-            name: op.tableName,
-            style: op.styleName || "TableStyleMedium2"
-          });
-          break;
-        }
-        case "rename_table": {
-          handleTableAction("renameTable", { oldName: op.oldName, newName: op.newName });
-          break;
-        }
-        case "set_table_style": {
-          handleTableAction("setTableStyle", { tableName: op.tableName, style: op.styleName });
-          break;
-        }
-        case "toggle_table_filter": {
-          handleTableAction("toggleFilter", { tableName: op.tableName });
-          break;
-        }
-        case "set_totals_row": {
-          handleTableAction("setTotalsRow", { tableName: op.tableName, enabled: op.enabled });
-          break;
-        }
-        case "convert_table_to_range": {
-          handleTableAction("convertToRange", { tableName: op.tableName });
-          break;
-        }
-        // --- Chart operations ---
-        case "insert_chart": {
-          const sheet = model.sheets[sheetIdx];
-          if (!sheet) break;
-          if (!sheet.charts) sheet.charts = [];
-          const anchorCol = op.position ? parseCellRef(op.position)?.col ?? 0 : 0;
-          const anchorRow = op.position ? parseCellRef(op.position)?.row ?? (sheet.charts.length > 0 ? 20 : 10) : sheet.charts.length > 0 ? 20 : 10;
-          const chartDef = {
-            chart_type: op.chart_type,
-            title: op.title,
-            series: [{ values_ref: op.data_range, categories_cache: [], values_cache: [] }],
-            axes: [
-              { axis_type: "category", position: "bottom" },
-              { axis_type: "value", position: "left" }
-            ],
-            anchor: {
-              from_col: anchorCol,
-              from_row: anchorRow,
-              from_col_off: 0,
-              from_row_off: 0,
-              to_col: anchorCol + 8,
-              to_row: anchorRow + 15,
-              to_col_off: 0,
-              to_row_off: 0
+      try {
+        switch (op.type) {
+          case "set_cell_value": {
+            const ref = parseCellRef(op.cell);
+            if (!ref) {
+              results.push({ type: op.type, ok: false, error: `Invalid cell: ${op.cell}` });
+              break;
             }
-          };
-          resolveChartData(chartDef, sheet);
-          sheet.charts.push(chartDef);
-          syncChartOverlays();
-          break;
-        }
-        case "delete_chart": {
-          const sheet = model.sheets[sheetIdx];
-          if (!sheet?.charts || op.chart_index >= sheet.charts.length) {
-            console.warn("[applyEdits] Invalid chart_index for delete_chart:", op.chart_index);
+            const dataType = typeof op.value === "number" ? "n" : "s";
+            renderer.updateCell(ref.row, ref.col, String(op.value), dataType);
+            results.push({ type: op.type, ok: true });
             break;
           }
-          sheet.charts.splice(op.chart_index, 1);
-          syncChartOverlays();
-          break;
+          case "set_cell_formula": {
+            const ref = parseCellRef(op.cell);
+            if (!ref) {
+              results.push({ type: op.type, ok: false, error: `Invalid cell: ${op.cell}` });
+              break;
+            }
+            renderer.updateCell(ref.row, ref.col, op.formula, "s");
+            results.push({ type: op.type, ok: true });
+            break;
+          }
+          case "format_cell": {
+            const ref = parseCellRef(op.cell);
+            if (!ref) {
+              results.push({ type: op.type, ok: false, error: `Invalid cell: ${op.cell}` });
+              break;
+            }
+            renderer.setSelection(ref.row, ref.col, ref.row, ref.col);
+            if (op.format) {
+              renderer.applyStyle(formatOpToStyle(op.format));
+            }
+            results.push({ type: op.type, ok: true });
+            break;
+          }
+          case "format_range": {
+            const range = parseCellRange(op.range);
+            if (!range) {
+              results.push({ type: op.type, ok: false, error: `Invalid range: ${op.range}` });
+              break;
+            }
+            renderer.setSelection(range.startRow, range.startCol, range.endRow, range.endCol);
+            if (op.format) {
+              renderer.applyStyle(formatOpToStyle(op.format));
+            }
+            results.push({ type: op.type, ok: true });
+            break;
+          }
+          case "insert_row": {
+            renderer.insertRow(op.rowIndex);
+            results.push({ type: op.type, ok: true });
+            break;
+          }
+          case "insert_column": {
+            renderer.insertCol(op.colIndex);
+            results.push({ type: op.type, ok: true });
+            break;
+          }
+          case "delete_row": {
+            renderer.deleteRow(op.rowIndex);
+            results.push({ type: op.type, ok: true });
+            break;
+          }
+          case "delete_column": {
+            renderer.deleteCol(op.colIndex);
+            results.push({ type: op.type, ok: true });
+            break;
+          }
+          // --- Table operations (delegate to existing handleTableAction) ---
+          case "create_table": {
+            const range = parseCellRange(op.range);
+            if (!range) {
+              console.warn("[applyEdits] Invalid range for create_table:", op.range);
+              results.push({ type: op.type, ok: false, error: `Invalid range: ${op.range}` });
+              break;
+            }
+            renderer.setSelection(range.startRow, range.startCol, range.endRow, range.endCol);
+            const tableResult = handleTableAction("createTable", {
+              name: op.tableName,
+              style: op.styleName || "TableStyleMedium2"
+            });
+            results.push({ type: op.type, ok: tableResult.ok, error: tableResult.error });
+            break;
+          }
+          case "resize_table": {
+            const range = parseCellRange(op.range);
+            if (!op.tableName || !range) {
+              results.push({
+                type: op.type,
+                ok: false,
+                error: `resize_table requires tableName and range (A1:B10); got tableName=${op.tableName}, range=${op.range}`
+              });
+              break;
+            }
+            const rangeJson = JSON.stringify({
+              start_row: Math.min(range.startRow, range.endRow),
+              start_col: Math.min(range.startCol, range.endCol),
+              end_row: Math.max(range.startRow, range.endRow),
+              end_col: Math.max(range.startCol, range.endCol)
+            });
+            const tableResult = handleTableAction("resizeTable", { tableName: op.tableName, range: rangeJson });
+            results.push({ type: op.type, ok: tableResult.ok, error: tableResult.error });
+            break;
+          }
+          case "rename_table": {
+            const tableResult = handleTableAction("renameTable", { oldName: op.oldName, newName: op.newName });
+            results.push({ type: op.type, ok: tableResult.ok, error: tableResult.error });
+            break;
+          }
+          case "set_table_style": {
+            const tableResult = handleTableAction("setTableStyle", { tableName: op.tableName, style: op.styleName });
+            results.push({ type: op.type, ok: tableResult.ok, error: tableResult.error });
+            break;
+          }
+          case "toggle_table_filter": {
+            const tableResult = handleTableAction("toggleFilter", { tableName: op.tableName });
+            results.push({ type: op.type, ok: tableResult.ok, error: tableResult.error });
+            break;
+          }
+          case "set_totals_row": {
+            const tableResult = handleTableAction("setTotalsRow", { tableName: op.tableName, enabled: op.enabled });
+            results.push({ type: op.type, ok: tableResult.ok, error: tableResult.error });
+            break;
+          }
+          case "convert_table_to_range": {
+            const tableResult = handleTableAction("convertToRange", { tableName: op.tableName });
+            results.push({ type: op.type, ok: tableResult.ok, error: tableResult.error });
+            break;
+          }
+          // --- Chart operations (`create_chart` is an alias of `insert_chart`) ---
+          case "create_chart":
+          case "insert_chart": {
+            const sheet = model.sheets[sheetIdx];
+            if (!sheet) {
+              results.push({ type: op.type, ok: false, error: "Sheet missing" });
+              break;
+            }
+            const chartType = op.chart_type ?? op.chartType;
+            const dataRange = op.data_range ?? op.dataRange;
+            if (chartType === void 0 || chartType === null || chartType === "" || dataRange === void 0 || dataRange === null || dataRange === "") {
+              results.push({
+                type: op.type,
+                ok: false,
+                error: `${op.type} requires chart_type (or chartType) and data_range (or dataRange)`
+              });
+              break;
+            }
+            if (!sheet.charts) {
+              sheet.charts = [];
+            }
+            const anchorCol = op.position ? parseCellRef(op.position)?.col ?? 0 : 0;
+            const anchorRow = op.position ? parseCellRef(op.position)?.row ?? (sheet.charts.length > 0 ? 20 : 10) : sheet.charts.length > 0 ? 20 : 10;
+            const chartDef = {
+              chart_type: chartType,
+              title: op.title,
+              series: [{ values_ref: dataRange, categories_cache: [], values_cache: [] }],
+              axes: [
+                { axis_type: "category", position: "bottom" },
+                { axis_type: "value", position: "left" }
+              ],
+              anchor: {
+                from_col: anchorCol,
+                from_row: anchorRow,
+                from_col_off: 0,
+                from_row_off: 0,
+                to_col: anchorCol + 8,
+                to_row: anchorRow + 15,
+                to_col_off: 0,
+                to_row_off: 0
+              }
+            };
+            resolveChartData(chartDef, sheet);
+            sheet.charts.push(chartDef);
+            syncChartOverlays();
+            results.push({ type: op.type, ok: true });
+            break;
+          }
+          case "delete_chart": {
+            const sheet = model.sheets[sheetIdx];
+            if (!sheet?.charts || op.chart_index >= sheet.charts.length) {
+              console.warn("[applyEdits] Invalid chart_index for delete_chart:", op.chart_index);
+              results.push({ type: op.type, ok: false, error: "Invalid chart_index" });
+              break;
+            }
+            sheet.charts.splice(op.chart_index, 1);
+            syncChartOverlays();
+            results.push({ type: op.type, ok: true });
+            break;
+          }
+          default:
+            console.warn("[applyEdits] Unknown operation type:", op.type);
+            results.push({ type: op.type, ok: false, error: `Unknown operation type: ${op.type}` });
         }
-        default:
-          console.warn("[applyEdits] Unknown operation type:", op.type);
+      } catch (e) {
+        const message = e instanceof Error ? e.message : String(e);
+        results.push({ type: op?.type, ok: false, error: message });
       }
     }
     markDirty();
     renderer.render();
+    return results;
   }
   function resolveSheetIndex(model, sheet) {
-    if (sheet === void 0 || sheet === null) return 0;
-    if (typeof sheet === "number") return sheet;
-    const idx = model.sheets.findIndex((s) => s.name === sheet);
-    return idx >= 0 ? idx : 0;
+    if (sheet === void 0 || sheet === null) {
+      return 0;
+    }
+    const sheetCount = Array.isArray(model?.sheets) ? model.sheets.length : 0;
+    if (typeof sheet === "number") {
+      if (!Number.isInteger(sheet) || sheet < 0 || sheet >= sheetCount) {
+        return -1;
+      }
+      return sheet;
+    }
+    if (typeof sheet !== "string") {
+      return -1;
+    }
+    return model.sheets.findIndex((s) => s.name === sheet);
+  }
+  function formatOpToStyle(format) {
+    const style = {};
+    if (format.bold !== void 0) {
+      style.bold = !!format.bold;
+    }
+    if (format.italic !== void 0) {
+      style.italic = !!format.italic;
+    }
+    if (format.underline !== void 0) {
+      style.underline = !!format.underline;
+    }
+    if (format.strikethrough !== void 0) {
+      style.strikethrough = !!format.strikethrough;
+    }
+    if (format.wrapText !== void 0) {
+      style.wrapText = !!format.wrapText;
+    }
+    const fill2 = format.backgroundColor ?? format.fillColor;
+    if (fill2 !== void 0 && fill2 !== null) {
+      style.fillColor = String(fill2);
+    }
+    if (format.textColor !== void 0 && format.textColor !== null) {
+      style.textColor = String(format.textColor);
+    }
+    if (format.fontSize !== void 0 && format.fontSize !== null && format.fontSize !== "") {
+      const n = Number(format.fontSize);
+      if (!Number.isNaN(n)) {
+        style.fontSize = n;
+      }
+    }
+    if (format.fontFamily !== void 0 && format.fontFamily !== null) {
+      style.fontFamily = String(format.fontFamily);
+    }
+    if (format.alignment === "left" || format.alignment === "center" || format.alignment === "right") {
+      style.alignment = format.alignment;
+    }
+    if (format.numberFormat !== void 0 && format.numberFormat !== null) {
+      style.numberFormat = String(format.numberFormat);
+    }
+    return style;
   }
   function handleRibbonAction(event) {
     if (!renderer) return;
@@ -28355,14 +28725,18 @@
     }
   }
   function handleTableAction(action, params) {
-    if (!renderer || !tableOps) return;
+    if (!renderer || !tableOps) {
+      return { ok: false, error: "Renderer or table ops not ready" };
+    }
     const modelJson = JSON.stringify(renderer.getData());
     let result;
     try {
       switch (action) {
         case "createTable": {
           const sel = renderer.getSelectedRange();
-          if (!sel) return;
+          if (!sel) {
+            return { ok: false, error: "No selection for createTable" };
+          }
           const range = JSON.stringify({
             start_row: Math.min(sel.startRow, sel.endRow),
             start_col: Math.min(sel.startCol, sel.endCol),
@@ -28371,34 +28745,42 @@
           });
           const name = params?.name || `Table${Date.now()}`;
           const style = params?.style || (ribbon ? ribbon.getSelectedTableStyle() : "TableStyleMedium2");
-          result = tableOps.create_table(modelJson, 0, range, name, style);
+          result = tableOps.create_table(modelJson, renderer.getActiveSheetIndex(), range, name, style);
           break;
         }
         case "resizeTable": {
           const tableName = params?.tableName;
           const rangeJson = params?.range;
-          if (!tableName || !rangeJson) return;
+          if (!tableName || !rangeJson) {
+            return { ok: false, error: "resizeTable requires tableName and range" };
+          }
           result = tableOps.resize_table(modelJson, tableName, rangeJson);
           break;
         }
         case "renameTable": {
           const oldName = params?.oldName;
           const newName = params?.newName;
-          if (!oldName || !newName) return;
+          if (!oldName || !newName) {
+            return { ok: false, error: "renameTable requires oldName and newName" };
+          }
           result = tableOps.rename_table(modelJson, oldName, newName);
           break;
         }
         case "addTableColumn": {
           const tableName = params?.tableName;
           const colName = params?.colName || "NewColumn";
-          if (!tableName) return;
+          if (!tableName) {
+            return { ok: false, error: "addTableColumn requires tableName" };
+          }
           result = tableOps.add_table_column(modelJson, tableName, colName);
           break;
         }
         case "removeTableColumn": {
           const tableName = params?.tableName;
           const colIndex = params?.colIndex;
-          if (!tableName || colIndex === void 0) return;
+          if (!tableName || colIndex === void 0) {
+            return { ok: false, error: "removeTableColumn requires tableName and colIndex" };
+          }
           result = tableOps.remove_table_column(modelJson, tableName, colIndex);
           break;
         }
@@ -28406,40 +28788,52 @@
           const tableName = params?.tableName;
           const enabled = params?.enabled;
           const functions = params?.functions || "[]";
-          if (!tableName) return;
+          if (!tableName) {
+            return { ok: false, error: "setTotalsRow requires tableName" };
+          }
           result = tableOps.set_totals_row(modelJson, tableName, !!enabled, functions);
           break;
         }
         case "setTableStyle": {
           const tableName = params?.tableName;
           const styleName = params?.style || "";
-          if (!tableName) return;
+          if (!tableName) {
+            return { ok: false, error: "setTableStyle requires tableName" };
+          }
           result = tableOps.set_table_style(modelJson, tableName, styleName);
           break;
         }
         case "toggleFilter": {
           const tableName = params?.tableName;
-          if (!tableName) return;
+          if (!tableName) {
+            return { ok: false, error: "toggleFilter requires tableName" };
+          }
           result = tableOps.toggle_filter(modelJson, tableName);
           break;
         }
         case "convertToRange": {
           const tableName = params?.tableName;
-          if (!tableName) return;
+          if (!tableName) {
+            return { ok: false, error: "convertToRange requires tableName" };
+          }
           result = tableOps.convert_to_range(modelJson, tableName);
           break;
         }
+        default:
+          return { ok: false, error: `Unknown table action: ${action}` };
       }
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       console.error("[XLSX Rust Viewer] Table operation failed:", msg);
-      return;
+      return { ok: false, error: msg };
     }
-    if (result) {
-      const newModel = JSON.parse(result);
-      renderer.updateModel(newModel);
-      markDirty();
+    if (!result) {
+      return { ok: false, error: `Table action ${action} returned no model` };
     }
+    const newModel = JSON.parse(result);
+    renderer.updateModel(newModel);
+    markDirty();
+    return { ok: true };
   }
   function showRenameDialog(currentName, onConfirm) {
     const existing = document.getElementById("rename-dialog-overlay");
@@ -28701,9 +29095,92 @@
             }
           }
           return;
+        case "k":
+          e.preventDefault();
+          showXlsxInlineEditPopup();
+          return;
+        case "l":
+          e.preventDefault();
+          postXlsxAddToChat();
+          return;
       }
     }
   });
+  function getXlsxSelectionPayload() {
+    if (!renderer) {
+      return void 0;
+    }
+    const text = renderer.getSelectedCellsData()?.trim() ?? "";
+    if (!text) {
+      return void 0;
+    }
+    const data = renderer.getData();
+    const sheetIdx = renderer.getActiveSheetIndex();
+    const sheet = data?.sheets?.[sheetIdx]?.name;
+    const range = formatSelectionRangeA1(renderer.getSelectedRange());
+    return { text, sheet, range };
+  }
+  function showXlsxInlineEditPopup() {
+    if (!inlineEditPopup) {
+      return;
+    }
+    const payload = getXlsxSelectionPayload();
+    if (!payload) {
+      return;
+    }
+    inlineEditPopup.show(payload);
+  }
+  function postXlsxAddToChat() {
+    const payload = getXlsxSelectionPayload();
+    if (!payload) {
+      return;
+    }
+    vscode.postMessage({
+      type: "addToChat",
+      text: payload.text,
+      sheet: payload.sheet,
+      range: payload.range
+    });
+  }
+  function formatSelectionRangeA1(sel) {
+    if (!sel) {
+      return void 0;
+    }
+    const r1 = Math.min(sel.startRow, sel.endRow);
+    const r2 = Math.max(sel.startRow, sel.endRow);
+    const c1 = Math.min(sel.startCol, sel.endCol);
+    const c2 = Math.max(sel.startCol, sel.endCol);
+    const a = `${getColName(c1)}${r1 + 1}`;
+    const b = `${getColName(c2)}${r2 + 1}`;
+    return a === b ? a : `${a}:${b}`;
+  }
+  function getInlineEditAnchorRect() {
+    if (!renderer) {
+      return null;
+    }
+    const sel = renderer.getSelectedRange() ?? (() => {
+      const cell = renderer.getSelectedCell();
+      return cell ? { startRow: cell.row, startCol: cell.col, endRow: cell.row, endCol: cell.col } : null;
+    })();
+    if (!sel) {
+      return null;
+    }
+    const wrapper = renderer.getWrapper();
+    const canvas = wrapper.querySelector("canvas");
+    if (!canvas) {
+      return null;
+    }
+    const canvasRect = canvas.getBoundingClientRect();
+    const startRow = Math.min(sel.startRow, sel.endRow);
+    const endRow = Math.max(sel.startRow, sel.endRow);
+    const startCol = Math.min(sel.startCol, sel.endCol);
+    const endCol = Math.max(sel.startCol, sel.endCol);
+    const left = canvasRect.left + renderer.publicCx(startCol) - renderer.publicScrollLeft() + renderer.publicHeaderWidth();
+    const top = canvasRect.top + renderer.publicRy(startRow) - renderer.publicScrollTop() + renderer.publicHeaderHeight();
+    const right = canvasRect.left + renderer.publicCx(endCol) + renderer.publicCw(endCol) - renderer.publicScrollLeft() + renderer.publicHeaderWidth();
+    const bottom = canvasRect.top + renderer.publicRy(endRow) + renderer.publicRh(endRow) - renderer.publicScrollTop() + renderer.publicHeaderHeight();
+    return new DOMRect(left, top, Math.max(1, right - left), Math.max(1, bottom - top));
+  }
   function getRendererCoords() {
     if (!renderer) return null;
     return {

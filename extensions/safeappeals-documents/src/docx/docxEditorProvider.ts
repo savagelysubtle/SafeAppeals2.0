@@ -5,6 +5,7 @@
 
 import { randomUUID } from 'crypto';
 import * as vscode from 'vscode';
+import { cancelDocumentInlineEdit } from '../inlineEditSession';
 import { DocxDocument } from './docxDocument';
 
 /**
@@ -20,8 +21,30 @@ import { DocxDocument } from './docxDocument';
  * old editor — not VS Code CustomDocumentEditEvent. We fire content-change
  * events for dirty/auto-save only.
  */
+export interface DocxInlineEditSelection {
+	uri: string;
+	text: string;
+	html?: string;
+	instructions?: string;
+	from?: number;
+	to?: number;
+}
+
+export interface DocxApplyEditOp {
+	type: 'appendParagraph' | 'appendHeading' | 'replaceSelection' | 'replaceAll' | 'insertAtEnd';
+	text: string;
+	level?: number;
+}
+
 export class DocxEditorProvider implements vscode.CustomEditorProvider<DocxDocument> {
 	public static readonly viewType = 'safeappeals.docxViewer';
+
+	private static _instance: DocxEditorProvider | undefined;
+
+	/** Active provider used by agent tools / commands. */
+	public static get instance(): DocxEditorProvider | undefined {
+		return DocxEditorProvider._instance;
+	}
 
 	private readonly _onDidChangeCustomDocument =
 		new vscode.EventEmitter<vscode.CustomDocumentContentChangeEvent<DocxDocument>>();
@@ -33,12 +56,27 @@ export class DocxEditorProvider implements vscode.CustomEditorProvider<DocxDocum
 		resolve: (ok: boolean) => void;
 		timer: ReturnType<typeof setTimeout>;
 	}>();
+	private readonly _applyWaiters = new Map<string, {
+		resolve: (result: { ok: boolean; error?: string }) => void;
+		timer: ReturnType<typeof setTimeout>;
+	}>();
+	private readonly _inlineApplyWaiters = new Map<string, {
+		resolve: (result: { ok: boolean; error?: string }) => void;
+		timer: ReturnType<typeof setTimeout>;
+	}>();
+	private readonly _textWaiters = new Map<string, {
+		resolve: (text: string | undefined) => void;
+		timer: ReturnType<typeof setTimeout>;
+	}>();
 	/** Bytes already refreshed by a user-initiated webview save; skip re-serialize. */
 	private readonly _freshFromWebview = new Set<string>();
+	/** Last inline-edit / text selection from a DOCX webview (Phase E bridge). */
+	private _lastSelection: DocxInlineEditSelection | undefined;
 
 	public static register(context: vscode.ExtensionContext): vscode.Disposable {
 		const provider = new DocxEditorProvider(context);
-		return vscode.window.registerCustomEditorProvider(
+		DocxEditorProvider._instance = provider;
+		const registration = vscode.window.registerCustomEditorProvider(
 			DocxEditorProvider.viewType,
 			provider,
 			{
@@ -48,9 +86,184 @@ export class DocxEditorProvider implements vscode.CustomEditorProvider<DocxDocum
 				supportsMultipleEditorsPerDocument: false,
 			},
 		);
+		return vscode.Disposable.from(
+			registration,
+			{ dispose: () => {
+				if (DocxEditorProvider._instance === provider) {
+					DocxEditorProvider._instance = undefined;
+				}
+			} },
+		);
 	}
 
 	private constructor(private readonly context: vscode.ExtensionContext) { }
+
+	public get lastSelection(): DocxInlineEditSelection | undefined {
+		return this._lastSelection;
+	}
+
+	public isOpen(uri: vscode.Uri): boolean {
+		return this._panels.has(uri.toString());
+	}
+
+	public findPanel(uri: vscode.Uri): vscode.WebviewPanel | undefined {
+		return this._panels.get(uri.toString());
+	}
+
+	/**
+	 * Ask the active DOCX webview to open its in-document inline-edit popup (Ctrl+K).
+	 * Returns true when a panel was messaged.
+	 */
+	public showInlineEditPopup(): boolean {
+		const uri = this.resolveActiveEditorUri();
+		if (!uri) {
+			return false;
+		}
+		const panel = this._panels.get(uri.toString());
+		if (!panel) {
+			return false;
+		}
+		panel.webview.postMessage({ type: 'showInlineEdit' });
+		return true;
+	}
+
+	private resolveActiveEditorUri(): vscode.Uri | undefined {
+		const tab = vscode.window.tabGroups.activeTabGroup.activeTab;
+		const input = tab?.input;
+		if (input instanceof vscode.TabInputCustom && input.viewType === DocxEditorProvider.viewType) {
+			return input.uri;
+		}
+		return undefined;
+	}
+
+	/**
+	 * Apply structured edits in the open TipTap webview, then optionally serialize.
+	 */
+	public async applyEditsAndWait(
+		uri: vscode.Uri,
+		ops: readonly DocxApplyEditOp[],
+		options?: { save?: boolean; timeoutMs?: number },
+	): Promise<{ ok: boolean; error?: string }> {
+		const key = uri.toString();
+		const panel = this._panels.get(key);
+		if (!panel) {
+			return { ok: false, error: 'DOCX editor is not open for this URI' };
+		}
+		const requestId = randomUUID();
+		const timeoutMs = options?.timeoutMs ?? 30_000;
+		const applyResult = await new Promise<{ ok: boolean; error?: string }>(resolve => {
+			const existing = this._applyWaiters.get(key);
+			if (existing) {
+				clearTimeout(existing.timer);
+				existing.resolve({ ok: false, error: 'Superseded by a newer applyEdits request' });
+			}
+			const timer = setTimeout(() => {
+				this._applyWaiters.delete(key);
+				resolve({ ok: false, error: 'Timed out waiting for applyDocxEditsResult' });
+			}, timeoutMs);
+			this._applyWaiters.set(key, { resolve, timer });
+			panel.webview.postMessage({
+				type: 'applyDocxEdits',
+				requestId,
+				operations: ops,
+			});
+		});
+		if (!applyResult.ok) {
+			return applyResult;
+		}
+		if (options?.save !== false) {
+			const saved = await this.saveAndWait(uri);
+			if (!saved) {
+				return { ok: false, error: 'Edits applied but serialize/save failed' };
+			}
+		}
+		return { ok: true };
+	}
+
+	/**
+	 * Request plain text from the open TipTap webview.
+	 */
+	public async requestTextAndWait(uri: vscode.Uri, timeoutMs = 15_000): Promise<string | undefined> {
+		const key = uri.toString();
+		const panel = this._panels.get(key);
+		if (!panel) {
+			return undefined;
+		}
+		const requestId = randomUUID();
+		return new Promise(resolve => {
+			const existing = this._textWaiters.get(key);
+			if (existing) {
+				clearTimeout(existing.timer);
+				existing.resolve(undefined);
+			}
+			const timer = setTimeout(() => {
+				this._textWaiters.delete(key);
+				resolve(undefined);
+			}, timeoutMs);
+			this._textWaiters.set(key, { resolve, timer });
+			panel.webview.postMessage({ type: 'getText', requestId });
+		});
+	}
+
+	/**
+	 * Ask the webview to serialize and wait for bytes (same handshake as saveCustomDocument).
+	 */
+	public async saveAndWait(uri: vscode.Uri): Promise<boolean> {
+		const key = uri.toString();
+		const panel = this._panels.get(key);
+		if (!panel) {
+			return false;
+		}
+		const requestSave = (panel as unknown as { __docxRequestSave?: () => Promise<boolean> }).__docxRequestSave;
+		if (!requestSave) {
+			return false;
+		}
+		return requestSave();
+	}
+
+	/**
+	 * Post applyInlineEdit for a previously stored TipTap selection range,
+	 * wait for `applyInlineEditResult`, then serialize/save only on success.
+	 */
+	public async postApplyInlineEdit(
+		uri: vscode.Uri,
+		editedText: string,
+		options?: { timeoutMs?: number },
+	): Promise<{ ok: boolean; error?: string }> {
+		const key = uri.toString();
+		const panel = this._panels.get(key);
+		if (!panel) {
+			return { ok: false, error: 'DOCX editor is not open for this URI' };
+		}
+		const requestId = randomUUID();
+		const timeoutMs = options?.timeoutMs ?? 30_000;
+		const applyResult = await new Promise<{ ok: boolean; error?: string }>(resolve => {
+			const existing = this._inlineApplyWaiters.get(key);
+			if (existing) {
+				clearTimeout(existing.timer);
+				existing.resolve({ ok: false, error: 'Superseded by a newer applyInlineEdit request' });
+			}
+			const timer = setTimeout(() => {
+				this._inlineApplyWaiters.delete(key);
+				resolve({ ok: false, error: 'Timed out waiting for applyInlineEditResult' });
+			}, timeoutMs);
+			this._inlineApplyWaiters.set(key, { resolve, timer });
+			panel.webview.postMessage({
+				type: 'applyInlineEdit',
+				requestId,
+				editedText,
+				editedHtml: editedText,
+			});
+		});
+		if (!applyResult.ok) {
+			return applyResult;
+		}
+		const saved = await this.saveAndWait(uri);
+		if (!saved) {
+			return { ok: false, error: 'Edit applied but save/serialize failed.' };
+		}
+		return { ok: true };
+	}
 
 	async openCustomDocument(
 		uri: vscode.Uri,
@@ -222,12 +435,106 @@ export class DocxEditorProvider implements vscode.CustomEditorProvider<DocxDocum
 						}
 						break;
 					}
-					case 'inlineEditRequest':
-					case 'executeCommand':
-					case 'textSelected':
-					case 'clearSelection':
-						// Out of scope for rung 5b (AI / chat bridge).
+					case 'inlineEditRequest': {
+						const selection = data.selection as { text?: string; html?: string } | undefined;
+						const instructions = typeof data.instructions === 'string' ? data.instructions : undefined;
+						const text = String(selection?.text ?? '');
+						this._lastSelection = {
+							uri: key,
+							text,
+							html: typeof selection?.html === 'string' ? selection.html : undefined,
+							instructions,
+						};
+						await vscode.commands.executeCommand('safeappeals.documents.inlineEdit', {
+							uri: key,
+							text,
+							html: this._lastSelection.html,
+							instructions,
+							kind: 'docx' as const,
+						});
 						break;
+					}
+					case 'inlineEditCancel': {
+						cancelDocumentInlineEdit(key);
+						break;
+					}
+					case 'applyInlineEditResult': {
+						const waiter = this._inlineApplyWaiters.get(key);
+						if (waiter) {
+							clearTimeout(waiter.timer);
+							this._inlineApplyWaiters.delete(key);
+							waiter.resolve({
+								ok: data.ok !== false && data.success !== false,
+								error: typeof data.error === 'string' ? data.error : undefined,
+							});
+						}
+						break;
+					}
+					case 'textSelected': {
+						const text = String(data.text ?? data.selectedText ?? '');
+						if (text) {
+							this._lastSelection = {
+								uri: key,
+								text,
+								html: typeof data.html === 'string' ? data.html : undefined,
+							};
+						}
+						break;
+					}
+					case 'clearSelection':
+						if (this._lastSelection?.uri === key) {
+							this._lastSelection = undefined;
+						}
+						break;
+					case 'addToChat': {
+						const text = String(data.text ?? '');
+						const html = typeof data.html === 'string' ? data.html : undefined;
+						if (text.trim()) {
+							this._lastSelection = { uri: key, text, html };
+						}
+						await vscode.commands.executeCommand('safeappeals.documents.addToChat', {
+							uri: key,
+							text: text.trim() || this._lastSelection?.text || '',
+							html: html ?? this._lastSelection?.html,
+							kind: 'docx' as const,
+						});
+						break;
+					}
+					case 'applyDocxEditsResult': {
+						const waiter = this._applyWaiters.get(key);
+						if (waiter) {
+							clearTimeout(waiter.timer);
+							this._applyWaiters.delete(key);
+							waiter.resolve({
+								ok: data.ok !== false && data.success !== false,
+								error: typeof data.error === 'string' ? data.error : undefined,
+							});
+						}
+						break;
+					}
+					case 'getTextResult': {
+						const waiter = this._textWaiters.get(key);
+						if (waiter) {
+							clearTimeout(waiter.timer);
+							this._textWaiters.delete(key);
+							waiter.resolve(typeof data.text === 'string' ? data.text : undefined);
+						}
+						break;
+					}
+					case 'executeCommand': {
+						// Legacy Void command ids — map known ones; ignore the rest.
+						const command = typeof data.command === 'string' ? data.command : '';
+						if (command === 'void.ctrlLAction' || command === 'safeappeals.documents.addToChat') {
+							const text = this._lastSelection?.uri === key ? (this._lastSelection.text ?? '') : '';
+							await vscode.commands.executeCommand('safeappeals.documents.addToChat', {
+								uri: key,
+								text,
+								html: this._lastSelection?.html,
+								kind: 'docx' as const,
+							});
+						}
+						break;
+					}
 					case 'error': {
 						const err = String(data.error ?? 'Unknown DOCX editor error');
 						void vscode.window.showErrorMessage(err);
@@ -247,6 +554,25 @@ export class DocxEditorProvider implements vscode.CustomEditorProvider<DocxDocum
 					clearTimeout(waiter.timer);
 					this._saveWaiters.delete(key);
 					waiter.resolve(false);
+				}
+				const applyWaiter = this._applyWaiters.get(key);
+				if (applyWaiter) {
+					clearTimeout(applyWaiter.timer);
+					this._applyWaiters.delete(key);
+					applyWaiter.resolve({ ok: false, error: 'DOCX webview disposed' });
+				}
+				const inlineApplyWaiter = this._inlineApplyWaiters.get(key);
+				if (inlineApplyWaiter) {
+					clearTimeout(inlineApplyWaiter.timer);
+					this._inlineApplyWaiters.delete(key);
+					inlineApplyWaiter.resolve({ ok: false, error: 'DOCX webview disposed' });
+				}
+				cancelDocumentInlineEdit(key);
+				const textWaiter = this._textWaiters.get(key);
+				if (textWaiter) {
+					clearTimeout(textWaiter.timer);
+					this._textWaiters.delete(key);
+					textWaiter.resolve(undefined);
 				}
 				for (const d of disposables) {
 					d.dispose();

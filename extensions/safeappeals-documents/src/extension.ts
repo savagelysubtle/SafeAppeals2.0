@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as vscode from 'vscode';
+import { registerAgentTools } from './agentTools';
 import { DocxEditorProvider } from './docx/docxEditorProvider';
 import { PdfAnnotationStore } from './pdf/annotationStore';
 import { PdfEditorProvider } from './pdf/pdfEditorProvider';
@@ -15,12 +16,14 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 	};
 	const annotationStore = await PdfAnnotationStore.create(context, log);
 
-	// Rung 5a: PDF. Rung 5b: DOCX. Rung 5c: XLSX.
+	// Rung 5a: PDF. Rung 5b: DOCX. Rung 5c: XLSX. Phase D: agent tools.
 	context.subscriptions.push(
 		PdfEditorProvider.register(context, annotationStore),
 		DocxEditorProvider.register(context),
 		XlsxEditorProvider.register(context),
 	);
+
+	registerAgentTools(context);
 
 	context.subscriptions.push(
 		vscode.commands.registerCommand('safeappeals-documents.pdf.exportAnnotations', async () => {
