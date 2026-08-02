@@ -5,6 +5,13 @@
 
 import { randomUUID } from 'crypto';
 import * as vscode from 'vscode';
+import {
+	EXTERNAL_RELOAD_SETTLE_MS,
+	isWithinLoadSettleWindow,
+	nextIgnoreDirtyUntil,
+	shouldApplyWebviewDocumentBytes,
+	shouldSkipWebviewSerialize,
+} from '../documentExternalSync';
 import { cancelDocumentInlineEdit } from '../inlineEditSession';
 import { DocxDocument } from './docxDocument';
 
@@ -52,6 +59,14 @@ export class DocxEditorProvider implements vscode.CustomEditorProvider<DocxDocum
 
 	/** Per-document webview panels + pending save waiters. */
 	private readonly _panels = new Map<string, vscode.WebviewPanel>();
+	/** Open CustomDocuments (for dirty checks + host-byte sync after headless writes). */
+	private readonly _documents = new Map<string, DocxDocument>();
+	/** URIs whose webview has signaled TipTap ready. */
+	private readonly _readyUris = new Set<string>();
+	private readonly _readyWaiters = new Map<string, Array<{
+		resolve: (ok: boolean) => void;
+		timer: ReturnType<typeof setTimeout>;
+	}>>();
 	private readonly _saveWaiters = new Map<string, {
 		resolve: (ok: boolean) => void;
 		timer: ReturnType<typeof setTimeout>;
@@ -70,6 +85,14 @@ export class DocxEditorProvider implements vscode.CustomEditorProvider<DocxDocum
 	}>();
 	/** Bytes already refreshed by a user-initiated webview save; skip re-serialize. */
 	private readonly _freshFromWebview = new Set<string>();
+	/**
+	 * Host bytes synced from headless/external write; next save must write these
+	 * and must not re-serialize the pre-reload TipTap model.
+	 */
+	private readonly _freshFromExternalSync = new Set<string>();
+	/** Per-URI deadline for ignoring TipTap dirty/contentChanged after loadDOCX. */
+	private readonly _ignoreDirtyUntil = new Map<string, number>();
+	private readonly _externalSyncSettleTimers = new Map<string, ReturnType<typeof setTimeout>>();
 	/** Last inline-edit / text selection from a DOCX webview (Phase E bridge). */
 	private _lastSelection: DocxInlineEditSelection | undefined;
 
@@ -106,8 +129,136 @@ export class DocxEditorProvider implements vscode.CustomEditorProvider<DocxDocum
 		return this._panels.has(uri.toString());
 	}
 
+	/** True when the webview has signaled TipTap ready for this URI. */
+	public isReady(uri: vscode.Uri): boolean {
+		return this._readyUris.has(uri.toString());
+	}
+
+	public isDirty(uri: vscode.Uri): boolean {
+		return this._documents.get(uri.toString())?.isDirty ?? false;
+	}
+
+	/**
+	 * Wait until the webview signals ready, or `timeoutMs` elapses.
+	 * Returns true when ready; false when closed or timed out still not ready.
+	 */
+	public awaitReady(uri: vscode.Uri, timeoutMs = 8_000): Promise<boolean> {
+		const key = uri.toString();
+		if (this._readyUris.has(key)) {
+			return Promise.resolve(true);
+		}
+		if (!this._panels.has(key)) {
+			return Promise.resolve(false);
+		}
+		return new Promise(resolve => {
+			const timer = setTimeout(() => {
+				const list = this._readyWaiters.get(key);
+				if (list) {
+					const idx = list.findIndex(w => w.timer === timer);
+					if (idx >= 0) {
+						list.splice(idx, 1);
+					}
+					if (list.length === 0) {
+						this._readyWaiters.delete(key);
+					}
+				}
+				resolve(this._readyUris.has(key));
+			}, timeoutMs);
+			const list = this._readyWaiters.get(key) ?? [];
+			list.push({ resolve, timer });
+			this._readyWaiters.set(key, list);
+		});
+	}
+
 	public findPanel(uri: vscode.Uri): vscode.WebviewPanel | undefined {
 		return this._panels.get(uri.toString());
+	}
+
+	/**
+	 * Sync host CustomDocument bytes and reload the webview after a headless write.
+	 * Marks host bytes authoritative for the next save (skip stale TipTap serialize)
+	 * and suppresses dirty until the mid-session load settles.
+	 */
+	public reloadFromBytes(uri: vscode.Uri, bytes: Uint8Array): boolean {
+		const key = uri.toString();
+		const document = this._documents.get(key);
+		if (document) {
+			document.syncFromExternalBytes(bytes);
+		}
+		this.beginExternalReload(key);
+		const panel = this._panels.get(key);
+		if (!panel) {
+			return !!document;
+		}
+		panel.webview.postMessage({
+			type: 'loadDOCX',
+			data: bufferToBase64(bytes),
+			encoding: 'base64',
+			docxUri: key,
+		});
+		return true;
+	}
+
+	/** @internal Exported for unit tests of the save-skip contract. */
+	public isFreshFromExternalSync(uri: vscode.Uri): boolean {
+		return this._freshFromExternalSync.has(uri.toString());
+	}
+
+	private beginExternalReload(key: string): void {
+		this._freshFromExternalSync.add(key);
+		this._ignoreDirtyUntil.set(key, nextIgnoreDirtyUntil(Date.now()));
+		const existing = this._externalSyncSettleTimers.get(key);
+		if (existing) {
+			clearTimeout(existing);
+		}
+		// Settle timer clears dirty-ignore only. Authority flag stays until
+		// successful saveAs / saveCustomDocumentAs, or dispose.
+		this._externalSyncSettleTimers.set(key, setTimeout(() => {
+			this._externalSyncSettleTimers.delete(key);
+			this._ignoreDirtyUntil.delete(key);
+		}, EXTERNAL_RELOAD_SETTLE_MS + 100));
+	}
+
+	/** Clear host-byte authority after successful save, or on dispose. */
+	private clearExternalSyncAuthority(key: string): void {
+		this._freshFromExternalSync.delete(key);
+		const settleTimer = this._externalSyncSettleTimers.get(key);
+		if (settleTimer) {
+			clearTimeout(settleTimer);
+			this._externalSyncSettleTimers.delete(key);
+		}
+		this._ignoreDirtyUntil.delete(key);
+	}
+
+	private isSettlingLoad(key: string): boolean {
+		const until = this._ignoreDirtyUntil.get(key) ?? 0;
+		return isWithinLoadSettleWindow(until, Date.now());
+	}
+
+	private markReady(key: string): void {
+		this._readyUris.add(key);
+		const waiters = this._readyWaiters.get(key);
+		if (!waiters) {
+			return;
+		}
+		this._readyWaiters.delete(key);
+		for (const w of waiters) {
+			clearTimeout(w.timer);
+			w.resolve(true);
+		}
+	}
+
+	private clearReady(key: string): void {
+		this._readyUris.delete(key);
+		const waiters = this._readyWaiters.get(key);
+		if (!waiters) {
+			return;
+		}
+		this._readyWaiters.delete(key);
+		for (const w of waiters) {
+			clearTimeout(w.timer);
+			w.resolve(false);
+		}
 	}
 
 	/**
@@ -148,6 +299,9 @@ export class DocxEditorProvider implements vscode.CustomEditorProvider<DocxDocum
 		const panel = this._panels.get(key);
 		if (!panel) {
 			return { ok: false, error: 'DOCX editor is not open for this URI' };
+		}
+		if (!this.isReady(uri)) {
+			return { ok: false, error: 'DOCX editor is not ready yet' };
 		}
 		const requestId = randomUUID();
 		const timeoutMs = options?.timeoutMs ?? 30_000;
@@ -271,11 +425,16 @@ export class DocxEditorProvider implements vscode.CustomEditorProvider<DocxDocum
 		_token: vscode.CancellationToken,
 	): Promise<DocxDocument> {
 		const document = await DocxDocument.create(uri, openContext.backupId);
+		const key = document.uri.toString();
+		this._documents.set(key, document);
 
 		const changeSub = document.onDidChangeContent(() => {
 			this._onDidChangeCustomDocument.fire({ document });
 		});
-		document.onDidDispose(() => changeSub.dispose());
+		document.onDidDispose(() => {
+			this._documents.delete(key);
+			changeSub.dispose();
+		});
 
 		return document;
 	}
@@ -286,7 +445,9 @@ export class DocxEditorProvider implements vscode.CustomEditorProvider<DocxDocum
 		_token: vscode.CancellationToken,
 	): Promise<void> {
 		const key = document.uri.toString();
+		this._documents.set(key, document);
 		this._panels.set(key, webviewPanel);
+		this.clearReady(key);
 
 		const mediaRoot = vscode.Uri.joinPath(this.context.extensionUri, 'media', 'docx');
 
@@ -300,12 +461,10 @@ export class DocxEditorProvider implements vscode.CustomEditorProvider<DocxDocum
 		const disposables: vscode.Disposable[] = [];
 		let webviewReady = false;
 		let pendingLoad = true;
-		/** TipTap often fires onUpdate right after setContent — ignore briefly after load. */
-		let ignoreDirtyUntil = 0;
 
 		const loadDocx = async () => {
 			try {
-				ignoreDirtyUntil = Date.now() + 1500;
+				this._ignoreDirtyUntil.set(key, nextIgnoreDirtyUntil(Date.now()));
 				const base64 = bufferToBase64(document.documentData);
 				webviewPanel.webview.postMessage({
 					type: 'loadDOCX',
@@ -346,6 +505,7 @@ export class DocxEditorProvider implements vscode.CustomEditorProvider<DocxDocum
 				switch (data.type) {
 					case 'ready': {
 						webviewReady = true;
+						this.markReady(key);
 						if (pendingLoad) {
 							pendingLoad = false;
 							await loadDocx();
@@ -353,7 +513,13 @@ export class DocxEditorProvider implements vscode.CustomEditorProvider<DocxDocum
 						break;
 					}
 					case 'contentChanged': {
-						const settling = Date.now() < ignoreDirtyUntil;
+						// External/headless reload owns host bytes — never let stale TipTap poison them.
+						if (!shouldApplyWebviewDocumentBytes({
+							freshFromExternalSync: this._freshFromExternalSync.has(key),
+						})) {
+							break;
+						}
+						const settling = this.isSettlingLoad(key);
 						const docxData = (data.docxData ?? data.data) as string | undefined;
 						if (typeof docxData === 'string' && docxData.length > 0) {
 							try {
@@ -374,8 +540,30 @@ export class DocxEditorProvider implements vscode.CustomEditorProvider<DocxDocum
 					}
 					case 'saveRequested': {
 						// Response to host `saveRequest`, OR user Ctrl+S / ribbon Save in webview.
-						const docxData = data.docxData as string | undefined;
 						const waiter = this._saveWaiters.get(key);
+						if (!shouldApplyWebviewDocumentBytes({
+							freshFromExternalSync: this._freshFromExternalSync.has(key),
+						})) {
+							// Keep host bytes; skip-serialize save writes them.
+							if (waiter) {
+								clearTimeout(waiter.timer);
+								this._saveWaiters.delete(key);
+								waiter.resolve(true);
+							} else {
+								try {
+									await vscode.commands.executeCommand('workbench.action.files.save');
+								} catch (error) {
+									const message = error instanceof Error ? error.message : String(error);
+									webviewPanel.webview.postMessage({
+										type: 'saveComplete',
+										success: false,
+										error: message,
+									});
+								}
+							}
+							break;
+						}
+						const docxData = data.docxData as string | undefined;
 						try {
 							if (typeof docxData === 'string' && docxData.length > 0) {
 								const bytes = base64ToBuffer(docxData);
@@ -549,6 +737,8 @@ export class DocxEditorProvider implements vscode.CustomEditorProvider<DocxDocum
 		disposables.push(
 			webviewPanel.onDidDispose(() => {
 				this._panels.delete(key);
+				this.clearReady(key);
+				this.clearExternalSyncAuthority(key);
 				const waiter = this._saveWaiters.get(key);
 				if (waiter) {
 					clearTimeout(waiter.timer);
@@ -581,10 +771,11 @@ export class DocxEditorProvider implements vscode.CustomEditorProvider<DocxDocum
 		);
 
 		// Expose serialize helper on panel for saveCustomDocument when dirty cache is stale.
+		// Never report success from stale host cache when the webview is not ready.
 		(webviewPanel as unknown as { __docxRequestSave?: () => Promise<boolean> }).__docxRequestSave =
 			() => {
-				if (!webviewReady) {
-					return Promise.resolve(document.documentData.byteLength > 0);
+				if (!webviewReady || !this.isReady(document.uri)) {
+					return Promise.resolve(false);
 				}
 				return requestSerializeAndWait();
 			};
@@ -603,22 +794,32 @@ export class DocxEditorProvider implements vscode.CustomEditorProvider<DocxDocum
 	): Promise<void> {
 		const key = document.uri.toString();
 		const panel = this._panels.get(key);
-		const alreadyFresh = this._freshFromWebview.has(key);
+		const hadExternalSync = this._freshFromExternalSync.has(key);
+		const skipSerialize = shouldSkipWebviewSerialize({
+			freshFromWebview: this._freshFromWebview.has(key),
+			freshFromExternalSync: hadExternalSync,
+		});
 		this._freshFromWebview.delete(key);
+		// Keep _freshFromExternalSync until saveAs succeeds so webview cannot poison host mid-save.
 
-		if (!alreadyFresh) {
+		if (!skipSerialize) {
 			const requestSave = panel
 				? (panel as unknown as { __docxRequestSave?: () => Promise<boolean> }).__docxRequestSave
 				: undefined;
 			if (requestSave) {
 				const ok = await requestSave();
-				if (!ok && document.documentData.byteLength === 0) {
-					throw new Error('DOCX save failed: webview did not return document bytes');
+				if (!ok) {
+					throw new Error(
+						'DOCX save failed: webview is not ready or did not return document bytes',
+					);
 				}
 			}
 		}
 
 		await document.saveAs(document.uri, cancellation);
+		if (hadExternalSync) {
+			this.clearExternalSyncAuthority(key);
+		}
 		document.markClean();
 		panel?.webview.postMessage({ type: 'saveComplete', success: true });
 	}
@@ -628,14 +829,30 @@ export class DocxEditorProvider implements vscode.CustomEditorProvider<DocxDocum
 		destination: vscode.Uri,
 		cancellation: vscode.CancellationToken,
 	): Promise<void> {
-		const panel = this._panels.get(document.uri.toString());
-		const requestSave = panel
-			? (panel as unknown as { __docxRequestSave?: () => Promise<boolean> }).__docxRequestSave
-			: undefined;
-		if (requestSave) {
-			await requestSave();
+		const key = document.uri.toString();
+		const panel = this._panels.get(key);
+		const hadExternalSync = this._freshFromExternalSync.has(key);
+		const skipSerialize = shouldSkipWebviewSerialize({
+			freshFromWebview: this._freshFromWebview.has(key),
+			freshFromExternalSync: hadExternalSync,
+		});
+		if (!skipSerialize) {
+			const requestSave = panel
+				? (panel as unknown as { __docxRequestSave?: () => Promise<boolean> }).__docxRequestSave
+				: undefined;
+			if (requestSave) {
+				const ok = await requestSave();
+				if (!ok) {
+					throw new Error(
+						'DOCX save-as failed: webview is not ready or did not return document bytes',
+					);
+				}
+			}
 		}
 		await document.saveAs(destination, cancellation);
+		if (hadExternalSync) {
+			this.clearExternalSyncAuthority(key);
+		}
 	}
 
 	async revertCustomDocument(
@@ -643,14 +860,17 @@ export class DocxEditorProvider implements vscode.CustomEditorProvider<DocxDocum
 		cancellation: vscode.CancellationToken,
 	): Promise<void> {
 		await document.revert(cancellation);
-		const panel = this._panels.get(document.uri.toString());
+		const key = document.uri.toString();
+		const panel = this._panels.get(key);
 		if (panel) {
+			// Same mid-session load settle + save-skip contract as reloadFromBytes.
+			this.beginExternalReload(key);
 			const base64 = bufferToBase64(document.documentData);
 			panel.webview.postMessage({
 				type: 'loadDOCX',
 				data: base64,
 				encoding: 'base64',
-				docxUri: document.uri.toString(),
+				docxUri: key,
 			});
 		}
 	}
@@ -660,12 +880,26 @@ export class DocxEditorProvider implements vscode.CustomEditorProvider<DocxDocum
 		context: vscode.CustomDocumentBackupContext,
 		cancellation: vscode.CancellationToken,
 	): Promise<vscode.CustomDocumentBackup> {
-		const panel = this._panels.get(document.uri.toString());
+		const key = document.uri.toString();
+		const panel = this._panels.get(key);
+		// External sync already wrote authoritative host bytes — backup those.
+		if (this._freshFromExternalSync.has(key)) {
+			return document.backup(context.destination, cancellation);
+		}
 		const requestSave = panel
 			? (panel as unknown as { __docxRequestSave?: () => Promise<boolean> }).__docxRequestSave
 			: undefined;
 		if (requestSave) {
-			await requestSave();
+			const ok = await requestSave();
+			if (!ok) {
+				throw new Error(
+					'DOCX backup failed: webview is not ready or did not return document bytes',
+				);
+			}
+		} else if (panel && !this.isReady(document.uri)) {
+			throw new Error(
+				'DOCX backup failed: webview is not ready or did not return document bytes',
+			);
 		}
 		return document.backup(context.destination, cancellation);
 	}

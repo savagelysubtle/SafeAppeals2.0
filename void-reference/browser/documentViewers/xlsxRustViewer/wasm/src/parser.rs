@@ -33,9 +33,12 @@ pub struct CellStyle {
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct CellData {
     pub value: String,
-    pub data_type: String, // "s" (string), "n" (number), "b" (boolean), "e" (error), "d" (date), "null"
+    pub data_type: String, // "s" (string), "n" (number), "b" (boolean), "e" (error), "d" (date), "f" (formula), "null"
     #[serde(skip_serializing_if = "Option::is_none")]
     pub style: Option<CellStyle>,
+    /// Cached formula result written to OOXML `<v>` (formula text stays in `value`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub formula_result: Option<String>,
 }
 
 // --- Table Types ---
@@ -574,6 +577,7 @@ impl XlsxParser {
                                 value,
                                 data_type: dtype.to_string(),
                                 style: None,
+                                formula_result: None,
                             });
                         }
                     }

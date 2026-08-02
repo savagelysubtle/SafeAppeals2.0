@@ -125,13 +125,29 @@ export interface CreditPack {
 }
 
 /**
+ * Optional Brave filters for POST /web-search (no AI summarizer).
+ */
+export interface WebSearchRequestFilters {
+	readonly safesearch?: 'off' | 'moderate' | 'strict';
+	readonly freshness?: string;
+	readonly country?: string;
+	readonly search_lang?: string;
+	readonly ui_lang?: string;
+	readonly site?: string;
+}
+
+/**
  * Single Brave web search hit from POST /web-search.
+ * No AI summary — agent reads snippets / fetched page text.
  */
 export interface WebSearchResultItem {
 	readonly title: string;
 	readonly url: string;
 	readonly description: string;
 	readonly age?: string;
+	readonly thumbnail?: string;
+	readonly domain?: string;
+	readonly extra_snippets?: readonly string[];
 }
 
 /**
@@ -160,6 +176,23 @@ export interface MultiWebSearchResponse {
 	readonly searchResults: MultiWebSearchQueryResult[];
 	readonly totalCreditsUsed: number;
 	readonly creditsRemaining: number;
+}
+
+/**
+ * Request body for POST /web-search.
+ */
+export interface WebSearchRequestBody extends WebSearchRequestFilters {
+	readonly query: string;
+	readonly count?: number;
+	readonly offset?: number;
+}
+
+/**
+ * Request body for POST /web-search/multi.
+ */
+export interface MultiWebSearchRequestBody extends WebSearchRequestFilters {
+	readonly queries: string[];
+	readonly count?: number;
 }
 
 
@@ -340,8 +373,9 @@ export class CloudApiClient {
 	/**
 	 * Runs a single Brave web search via SafeAppeals Cloud (POST /web-search).
 	 * Credits are deducted server-side; the Brave API key never leaves the server.
+	 * Results are raw metadata/snippets for the agent to read — no AI summary.
 	 */
-	async webSearch(body: { query: string; count?: number; offset?: number }): Promise<WebSearchResponse> {
+	async webSearch(body: WebSearchRequestBody): Promise<WebSearchResponse> {
 		return this.request<WebSearchResponse>('/web-search', {
 			method: 'POST',
 			body: JSON.stringify(body),
@@ -354,8 +388,9 @@ export class CloudApiClient {
 	/**
 	 * Runs multiple Brave web searches via SafeAppeals Cloud (POST /web-search/multi).
 	 * Credits are deducted server-side; the Brave API key never leaves the server.
+	 * Results are raw metadata/snippets for the agent to read — no AI summary.
 	 */
-	async multiWebSearch(body: { queries: string[]; count?: number }): Promise<MultiWebSearchResponse> {
+	async multiWebSearch(body: MultiWebSearchRequestBody): Promise<MultiWebSearchResponse> {
 		return this.request<MultiWebSearchResponse>('/web-search/multi', {
 			method: 'POST',
 			body: JSON.stringify(body),

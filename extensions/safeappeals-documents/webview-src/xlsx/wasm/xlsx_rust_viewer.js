@@ -1,3 +1,5 @@
+/* @ts-self-types="./xlsx_rust_viewer.d.ts" */
+
 export class ContextMenuManager {
     __destroy_into_raw() {
         const ptr = this.__wbg_ptr;

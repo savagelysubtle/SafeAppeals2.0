@@ -6,6 +6,11 @@
 import * as path from 'path';
 import * as vscode from 'vscode';
 import { DocxApplyEditOp, DocxEditorProvider } from './docx/docxEditorProvider';
+import {
+	applyDocxOpsHeadless,
+	containsReplaceSelectionOps,
+	REPLACE_SELECTION_REQUIRES_EDITOR,
+} from './docx/docxXmlEdit';
 import { createDocxBuffer, DocxBlock, DocxCreateContent } from './docx/docxWriter';
 import { extractTextFromDocxBytes } from './docx/docxTextExtract';
 import { XlsxEditorProvider } from './xlsx/xlsxEditorProvider';
@@ -14,6 +19,8 @@ import {
 	findUnsupportedXlsxEditOpTypes,
 	normalizeXlsxEditOperations,
 } from './xlsx/xlsxEditOperations';
+import { applyXlsxOpsHeadless, readWorkbookHeadless } from './xlsx/xlsxHeadless';
+import { configureXlsxHostWasm } from './xlsx/xlsxHostWasm';
 import {
 	createXlsxBuffer,
 	XlsxCellValue,
@@ -24,6 +31,13 @@ import {
 	buildDocumentChatOpenOptions,
 	type DocumentChatPayload,
 } from './documentChatOpenOptions';
+import {
+	chooseDocumentEditPath,
+	DOCUMENT_NOT_READY_DIRTY_ERROR,
+	SELECTION_REQUIRES_OPEN_READY_ERROR,
+	type DocumentEditOpKind,
+	type DocumentEditPath,
+} from './documentEditPath';
 import { runDocumentInlineEdit } from './inlineEditRunner';
 import { isPathInsideWorkspaceRoot, normalizeUriPath } from './workspacePath';
 
@@ -33,6 +47,52 @@ export {
 	type DocumentChatOpenOptions,
 	type DocumentChatPayload,
 } from './documentChatOpenOptions';
+export {
+	chooseDocumentEditPath,
+	DOCUMENT_NOT_READY_DIRTY_ERROR,
+	SELECTION_REQUIRES_OPEN_READY_ERROR,
+	type DocumentEditOpKind,
+	type DocumentEditPath,
+} from './documentEditPath';
+
+const WEBVIEW_READY_TIMEOUT_MS = 8_000;
+
+interface DocumentEditorGate {
+	isOpen(uri: vscode.Uri): boolean;
+	isReady(uri: vscode.Uri): boolean;
+	isDirty(uri: vscode.Uri): boolean;
+	awaitReady(uri: vscode.Uri, timeoutMs?: number): Promise<boolean>;
+	reloadFromBytes(uri: vscode.Uri, bytes: Uint8Array): boolean;
+}
+
+/**
+ * Await webview readiness when open-but-not-ready, then choose open/headless/error.
+ */
+async function resolveDocumentEditPath(
+	provider: DocumentEditorGate | undefined,
+	uri: vscode.Uri,
+	opKind: DocumentEditOpKind,
+	readyTimeoutMs = WEBVIEW_READY_TIMEOUT_MS,
+): Promise<DocumentEditPath> {
+	if (!provider?.isOpen(uri)) {
+		return chooseDocumentEditPath({
+			isOpen: false,
+			isReady: false,
+			isDirty: false,
+			opKind,
+		});
+	}
+	let isReady = provider.isReady(uri);
+	if (!isReady) {
+		isReady = await provider.awaitReady(uri, readyTimeoutMs);
+	}
+	return chooseDocumentEditPath({
+		isOpen: true,
+		isReady,
+		isDirty: provider.isDirty(uri),
+		opKind,
+	});
+}
 
 export const SAFEAPPEALS_DOCX_READ_TOOL = 'safeappeals_docx_read';
 export const SAFEAPPEALS_DOCX_CREATE_TOOL = 'safeappeals_docx_create';
@@ -40,6 +100,7 @@ export const SAFEAPPEALS_DOCX_EDIT_TOOL = 'safeappeals_docx_edit';
 export const SAFEAPPEALS_XLSX_READ_TOOL = 'safeappeals_xlsx_read';
 export const SAFEAPPEALS_XLSX_CREATE_TOOL = 'safeappeals_xlsx_create';
 export const SAFEAPPEALS_XLSX_EDIT_TOOL = 'safeappeals_xlsx_edit';
+export const SAFEAPPEALS_OPEN_DOCUMENT_TOOL = 'safeappeals_openDocument';
 
 interface PathInput {
 	path: string;
@@ -62,6 +123,17 @@ interface DocxEditInput {
 	title?: string;
 	blocks?: DocxBlock[];
 	useLastSelection?: boolean;
+}
+
+/** DOCX title/blocks overwrite (no ops / selection); body-only uses replaceAll ops instead. */
+function isDocxOverwriteInput(input: DocxEditInput): boolean {
+	if (input.operations && input.operations.length > 0) {
+		return false;
+	}
+	if (input.editedText) {
+		return false;
+	}
+	return !!(input.title || input.blocks);
 }
 
 interface XlsxCreateInput {
@@ -173,11 +245,16 @@ class DocxReadTool implements vscode.LanguageModelTool<PathInput> {
 		}
 
 		const provider = DocxEditorProvider.instance;
-		if (provider?.isOpen(uri)) {
+		const pathDecision = await resolveDocumentEditPath(provider, uri, 'read');
+		if (pathDecision === 'error') {
+			return textResult(`Error: ${DOCUMENT_NOT_READY_DIRTY_ERROR}`);
+		}
+		if (pathDecision === 'open' && provider) {
 			const text = await provider.requestTextAndWait(uri);
 			if (typeof text === 'string') {
 				return textResult(capText(text));
 			}
+			return textResult('Error: open DOCX editor did not return text.');
 		}
 
 		try {
@@ -232,16 +309,7 @@ class DocxCreateTool implements vscode.LanguageModelTool<DocxCreateInput> {
 
 			const provider = DocxEditorProvider.instance;
 			if (provider?.isOpen(uri)) {
-				// Reload open editor from disk bytes via revert/load — open file if needed later.
-				const panel = provider.findPanel(uri);
-				if (panel) {
-					panel.webview.postMessage({
-						type: 'loadDOCX',
-						data: Buffer.from(bytes).toString('base64'),
-						encoding: 'base64',
-						docxUri: uri.toString(),
-					});
-				}
+				provider.reloadFromBytes(uri, bytes);
 			}
 
 			return textResult(`Created DOCX at ${vscode.workspace.asRelativePath(uri)}`);
@@ -281,10 +349,37 @@ class DocxEditTool implements vscode.LanguageModelTool<DocxEditInput> {
 
 		const provider = DocxEditorProvider.instance;
 		const input = options.input;
+		const wantsSelectionEdit = !!(
+			input.editedText
+			&& (input.useLastSelection || provider?.lastSelection?.uri === uri.toString())
+		);
+		const hasReplaceSelection = !!(
+			input.operations
+			&& input.operations.length > 0
+			&& containsReplaceSelectionOps(input.operations)
+		);
+		const wantsOverwrite = isDocxOverwriteInput(input);
 
-		// Prefer open-editor path so dirty TipTap state stays in sync.
-		if (provider?.isOpen(uri)) {
-			if (input.editedText && (input.useLastSelection || provider.lastSelection?.uri === uri.toString())) {
+		let opKind: DocumentEditOpKind;
+		if (wantsSelectionEdit || hasReplaceSelection) {
+			opKind = 'selection';
+		} else if (wantsOverwrite) {
+			opKind = 'overwrite';
+		} else {
+			opKind = 'structured';
+		}
+
+		const pathDecision = await resolveDocumentEditPath(provider, uri, opKind);
+		if (pathDecision === 'error') {
+			if (opKind === 'selection') {
+				return textResult(`Error: ${SELECTION_REQUIRES_OPEN_READY_ERROR}`);
+			}
+			return textResult(`Error: ${DOCUMENT_NOT_READY_DIRTY_ERROR}`);
+		}
+
+		// Open + ready path: TipTap apply (selection or structured ops).
+		if (pathDecision === 'open' && provider) {
+			if (wantsSelectionEdit && input.editedText) {
 				const applyResult = await provider.postApplyInlineEdit(uri, input.editedText);
 				if (!applyResult.ok) {
 					return textResult(`Error: ${applyResult.error ?? 'failed to apply inline edit to open DOCX editor.'}`);
@@ -302,11 +397,37 @@ class DocxEditTool implements vscode.LanguageModelTool<DocxEditInput> {
 				: `Error applying DOCX edits: ${result.error ?? 'unknown'}`);
 		}
 
-		// Headless: overwrite with provided structured content (parse-merge is v2).
+		// Headless path (closed, open-not-ready-clean, or clean title/blocks overwrite).
+		if (hasReplaceSelection || (input.editedText && input.useLastSelection)) {
+			return textResult(`Error: ${REPLACE_SELECTION_REQUIRES_EDITOR}`);
+		}
+
+		if (input.operations && input.operations.length > 0) {
+			try {
+				const existing = await vscode.workspace.fs.readFile(uri);
+				const applied = await applyDocxOpsHeadless(existing, input.operations);
+				await vscode.workspace.fs.writeFile(uri, applied.bytes);
+
+				const providerAfter = DocxEditorProvider.instance;
+				if (providerAfter?.isOpen(uri)) {
+					providerAfter.reloadFromBytes(uri, applied.bytes);
+				}
+
+				return textResult(
+					`Applied DOCX operation(s) headlessly at ${vscode.workspace.asRelativePath(uri)} and saved.` +
+					`\nResults: ${JSON.stringify(applied.results)}`,
+				);
+			} catch (error) {
+				const message = error instanceof Error ? error.message : String(error);
+				return textResult(`Error editing DOCX headlessly: ${message}`);
+			}
+		}
+
 		if (!input.body && !input.blocks && !input.title && !input.editedText) {
 			return textResult(
-				'DOCX is not open in the editor. Provide title/body/blocks to overwrite headlessly, ' +
-				'or open the file in the Safe Appeals DOCX editor and retry with operations.',
+				'Provide operations[] (replaceAll, appendParagraph, appendHeading, insertAtEnd), ' +
+				'or title/body/blocks to overwrite. Edits work with the editor open or closed; ' +
+				'replaceSelection / useLastSelection require an open editor with a selection.',
 			);
 		}
 
@@ -317,9 +438,14 @@ class DocxEditTool implements vscode.LanguageModelTool<DocxEditInput> {
 				blocks: input.blocks,
 			});
 			await vscode.workspace.fs.writeFile(uri, bytes);
+
+			const providerAfter = DocxEditorProvider.instance;
+			if (providerAfter?.isOpen(uri)) {
+				providerAfter.reloadFromBytes(uri, bytes);
+			}
+
 			return textResult(
-				`Overwrote DOCX headlessly at ${vscode.workspace.asRelativePath(uri)} ` +
-				'(open the editor for structured in-place edits).',
+				`Overwrote DOCX headlessly at ${vscode.workspace.asRelativePath(uri)}.`,
 			);
 		} catch (error) {
 			const message = error instanceof Error ? error.message : String(error);
@@ -341,6 +467,39 @@ function normalizeDocxOps(input: DocxEditInput): DocxApplyEditOp[] {
 	return [];
 }
 
+/**
+ * Open a workspace document in the Safe Appeals custom viewer when applicable.
+ */
+class OpenDocumentTool implements vscode.LanguageModelTool<PathInput> {
+	async invoke(
+		options: vscode.LanguageModelToolInvocationOptions<PathInput>,
+		_token: vscode.CancellationToken,
+	): Promise<vscode.LanguageModelToolResult> {
+		const folders = vscode.workspace.workspaceFolders ?? [];
+		const uri = resolveWorkspaceRelativePath(options.input?.path ?? '', folders);
+		if (!uri) {
+			return textResult('Error: path must be inside an open workspace folder.');
+		}
+
+		const lower = uri.path.toLowerCase();
+		try {
+			if (lower.endsWith('.docx')) {
+				await vscode.commands.executeCommand('vscode.openWith', uri, DocxEditorProvider.viewType);
+				return textResult(`Opened ${uri.fsPath} in Safe Appeals DOCX viewer.`);
+			}
+			if (lower.endsWith('.xlsx') || lower.endsWith('.xls')) {
+				await vscode.commands.executeCommand('vscode.openWith', uri, XlsxEditorProvider.viewType);
+				return textResult(`Opened ${uri.fsPath} in Safe Appeals XLSX viewer.`);
+			}
+			await vscode.commands.executeCommand('vscode.open', uri);
+			return textResult(`Opened ${uri.fsPath}.`);
+		} catch (error) {
+			const message = error instanceof Error ? error.message : String(error);
+			return textResult(`Error opening document: ${message}`);
+		}
+	}
+}
+
 class XlsxReadTool implements vscode.LanguageModelTool<PathInput> {
 	async invoke(
 		options: vscode.LanguageModelToolInvocationOptions<PathInput>,
@@ -353,7 +512,11 @@ class XlsxReadTool implements vscode.LanguageModelTool<PathInput> {
 		}
 
 		const provider = XlsxEditorProvider.instance;
-		if (provider?.isOpen(uri)) {
+		const pathDecision = await resolveDocumentEditPath(provider, uri, 'read');
+		if (pathDecision === 'error') {
+			return textResult(`Error: ${DOCUMENT_NOT_READY_DIRTY_ERROR}`);
+		}
+		if (pathDecision === 'open' && provider) {
 			const text = await provider.requestTextAndWait(uri);
 			if (typeof text === 'string') {
 				const selectionNote = provider.lastSelection?.uri === uri.toString() && provider.lastSelection.valuesTsv
@@ -364,10 +527,17 @@ class XlsxReadTool implements vscode.LanguageModelTool<PathInput> {
 			return textResult('Error: open XLSX editor did not return text.');
 		}
 
-		return textResult(
-			'XLSX headless parse is not available in this build (Node WASM not shipped). ' +
-			`Open ${vscode.workspace.asRelativePath(uri)} in the Safe Appeals XLSX editor and retry safeappeals_xlsx_read.`,
-		);
+		try {
+			const bytes = await vscode.workspace.fs.readFile(uri);
+			const text = await readWorkbookHeadless(bytes);
+			return textResult(capText(text));
+		} catch (error) {
+			const message = error instanceof Error ? error.message : String(error);
+			return textResult(
+				`Error reading XLSX headlessly: ${message}. ` +
+				'If WASM failed to load, open the file in the Safe Appeals XLSX editor and retry.',
+			);
+		}
 	}
 }
 
@@ -413,14 +583,7 @@ class XlsxCreateTool implements vscode.LanguageModelTool<XlsxCreateInput> {
 
 			const provider = XlsxEditorProvider.instance;
 			if (provider?.isOpen(uri)) {
-				const panel = provider.findPanel(uri);
-				if (panel) {
-					panel.webview.postMessage({
-						type: 'loadXLSX',
-						data: Buffer.from(bytes).toString('base64'),
-						xlsxUri: uri.toString(),
-					});
-				}
+				provider.reloadFromBytes(uri, bytes);
 			}
 
 			return textResult(`Created XLSX at ${vscode.workspace.asRelativePath(uri)}`);
@@ -474,24 +637,54 @@ class XlsxEditTool implements vscode.LanguageModelTool<XlsxEditInput> {
 		}
 
 		const provider = XlsxEditorProvider.instance;
-		if (!provider?.isOpen(uri)) {
+		const pathDecision = await resolveDocumentEditPath(provider, uri, 'structured');
+		if (pathDecision === 'error') {
+			return textResult(`Error: ${DOCUMENT_NOT_READY_DIRTY_ERROR}`);
+		}
+
+		if (pathDecision === 'open' && provider) {
+			const result = await provider.applyEditsAndWait(uri, operations, { save: true });
+			if (!result.ok) {
+				// Never fall through to headless — that would clobber dirty webview state.
+				return textResult(
+					`Error applying XLSX edits: ${result.error ?? 'unknown'}. ` +
+					`Supported types: ${describeXlsxEditOperations()}.`,
+				);
+			}
 			return textResult(
-				'XLSX headless edit is not available in this build (Node WASM not shipped). ' +
-				`Open ${vscode.workspace.asRelativePath(uri)} in the Safe Appeals XLSX editor and retry safeappeals_xlsx_edit.`,
+				`Applied ${operations.length} operation(s) to open XLSX and saved.` +
+				(result.results ? `\nResults: ${JSON.stringify(result.results)}` : ''),
 			);
 		}
 
-		const result = await provider.applyEditsAndWait(uri, operations, { save: true });
-		if (!result.ok) {
+		try {
+			const existing = await vscode.workspace.fs.readFile(uri);
+			const applied = await applyXlsxOpsHeadless(existing, operations);
+			const failed = applied.results.filter(r => !r.ok);
+			if (failed.length > 0 && failed.length === applied.results.length) {
+				return textResult(
+					`Error applying XLSX edits headlessly: ${failed[0]?.error ?? 'unknown'}. ` +
+					`Supported types: ${describeXlsxEditOperations()}.\nResults: ${JSON.stringify(applied.results)}`,
+				);
+			}
+			await vscode.workspace.fs.writeFile(uri, applied.bytes);
+
+			const providerAfter = XlsxEditorProvider.instance;
+			if (providerAfter?.isOpen(uri)) {
+				providerAfter.reloadFromBytes(uri, applied.bytes);
+			}
+
 			return textResult(
-				`Error applying XLSX edits: ${result.error ?? 'unknown'}. ` +
-				`Supported types: ${describeXlsxEditOperations()}.`,
+				`Applied ${operations.length} operation(s) headlessly to XLSX and saved.` +
+				`\nResults: ${JSON.stringify(applied.results)}`,
+			);
+		} catch (error) {
+			const message = error instanceof Error ? error.message : String(error);
+			return textResult(
+				`Error editing XLSX headlessly: ${message}. ` +
+				'If WASM failed to load, open the file in the Safe Appeals XLSX editor and retry.',
 			);
 		}
-		return textResult(
-			`Applied ${operations.length} operation(s) to open XLSX and saved.` +
-			(result.results ? `\nResults: ${JSON.stringify(result.results)}` : ''),
-		);
 	}
 }
 
@@ -586,6 +779,7 @@ async function showInlineEditPopupCommand(): Promise<void> {
  * Register LM tools and the inline-edit / add-to-chat bridge commands.
  */
 export function registerAgentTools(context: vscode.ExtensionContext): void {
+	configureXlsxHostWasm(context.extensionUri);
 	context.subscriptions.push(
 		vscode.lm.registerTool<PathInput>(SAFEAPPEALS_DOCX_READ_TOOL, new DocxReadTool()),
 		vscode.lm.registerTool<DocxCreateInput>(SAFEAPPEALS_DOCX_CREATE_TOOL, new DocxCreateTool()),
@@ -593,6 +787,7 @@ export function registerAgentTools(context: vscode.ExtensionContext): void {
 		vscode.lm.registerTool<PathInput>(SAFEAPPEALS_XLSX_READ_TOOL, new XlsxReadTool()),
 		vscode.lm.registerTool<XlsxCreateInput>(SAFEAPPEALS_XLSX_CREATE_TOOL, new XlsxCreateTool()),
 		vscode.lm.registerTool<XlsxEditInput>(SAFEAPPEALS_XLSX_EDIT_TOOL, new XlsxEditTool()),
+		vscode.lm.registerTool<PathInput>(SAFEAPPEALS_OPEN_DOCUMENT_TOOL, new OpenDocumentTool()),
 		vscode.commands.registerCommand(
 			'safeappeals.documents.showInlineEdit',
 			async () => showInlineEditPopupCommand(),

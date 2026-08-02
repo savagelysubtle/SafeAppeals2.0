@@ -1464,18 +1464,36 @@
 								break;
 							}
 							case 'replaceSelection': {
-								if (pendingInlineEditSelection) {
-									const { from, to } = pendingInlineEditSelection;
-									tiptapEditor.editor.chain()
-										.focus()
-										.setTextSelection({ from, to })
-										.deleteSelection()
-										.insertContent(text)
-										.run();
-									pendingInlineEditSelection = null;
+								// Fail closed: never insert/append when there is no non-empty selection.
+								// Prefer pending inline-edit capture; else live TipTap selection.
+								// Mirrors resolveReplaceSelectionRange in docxXmlEdit.ts.
+								const REPLACE_SELECTION_REQUIRES_EDITOR =
+									'replaceSelection requires an open editor with a selection';
+								let range = null;
+								if (
+									pendingInlineEditSelection &&
+									pendingInlineEditSelection.from !== pendingInlineEditSelection.to
+								) {
+									range = {
+										from: pendingInlineEditSelection.from,
+										to: pendingInlineEditSelection.to,
+									};
 								} else {
-									tiptapEditor.editor.chain().focus().insertContent(text).run();
+									const sel = tiptapEditor.editor.state.selection;
+									if (sel && sel.from !== sel.to) {
+										range = { from: sel.from, to: sel.to };
+									}
 								}
+								if (!range) {
+									throw new Error(REPLACE_SELECTION_REQUIRES_EDITOR);
+								}
+								tiptapEditor.editor.chain()
+									.focus()
+									.setTextSelection({ from: range.from, to: range.to })
+									.deleteSelection()
+									.insertContent(text)
+									.run();
+								pendingInlineEditSelection = null;
 								break;
 							}
 							case 'appendHeading': {

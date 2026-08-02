@@ -1,50 +1,49 @@
 ---
 name: SafeAppeals Agent Tools
 overview:
-  "[ACTIVE / in progress — Jul 31, 2026: unblocked; runs in-ladder alongside
-  Cloud Agent (safeappeals_cloud_agent), not deferred to end of ladder. Host
-  tool surface phases A–F land in safeappeals-authentication + documents +
-  timer + email; domain tools still added one extension at a time with live
-  agent testing. Scope will grow: RAG tools (~5), timeline tools (~6), case
-  organizer, PDF-email import. Pilot/gates still pending.] Add agent
-  (language model) tools so the SafeAppeals agent can write/edit DOCX and
-  XLSX documents, drive the time tracker, and read/draft (never send) emails
-  — enabling the 'discuss task → start timer → write pages → draft email →
-  stop timer' workflow."
+  "[ACTIVE — Aug 2, 2026: DOCX/XLSX hybrid open+closed paths, structure-aware
+  xlsx_read, Brave search credits/filters, workspace tools, timer start/stop,
+  email createDraft, and agent smoke QA are landed. Remaining: email read/
+  organize tools, email compose UX, pattern docs, timer updateEntry/listMatters,
+  unified edit/read wrapper (future).]"
 todos:
   - id: timer-args
     content:
       'Time tracker: optional-args, UI-skipping paths for start/stop commands'
-    status: pending
+    status: completed
   - id: timer-tools
     content:
-      'Time tracker: agentTools.ts + languageModelTools contributions
-      (start/stop/getState/updateEntry/listMatters)'
-    status: pending
+      'Time tracker: agentTools.ts + languageModelTools (start/stop/getState
+      shipped; updateEntry/listMatters still open)'
+    status: completed
   - id: xlsx-host
     content:
       'XLSX: host->webview applyEdits wiring + ack + deterministic save helper'
-    status: pending
+    status: completed
   - id: docx-host
     content: 'DOCX: applyDocxEdits webview protocol + host registry'
-    status: pending
+    status: completed
   - id: wasm-node
     content:
-      Build xlsx_rust_viewer for Node target; host-side headless XLSX
-      apply/serialize module
-    status: pending
+      'XLSX headless via existing --target web WASM in extension host
+      (eval import + initSync); formula overlay; no separate nodejs wasm-pack'
+    status: completed
   - id: docx-headless
-    content: Host-side DocxWriter (docx Packer) for headless create/overwrite
-    status: pending
+    content:
+      'Host-side docxXmlEdit (JSZip document.xml) for headless create/edit;
+      replaceSelection fail-closed without selection'
+    status: completed
   - id: doc-tools
     content:
-      'Documents: agentTools.ts + contributions (docx_create/edit/read,
-      xlsx_edit/read) with hybrid routing'
-    status: pending
+      'Documents: agentTools (docx_create/edit/read, xlsx_create/edit/read,
+      openDocument) with open+ready vs headless routing + external-sync save
+      safety; xlsx_read structure JSON + TSV'
+    status: completed
   - id: email-tools
     content:
       'Email: agentTools.ts + contributions (search/list/get read tools,
-      email_createDraft draft-only tool); no send tool exposed'
+      email_createDraft draft-only tool); no send tool exposed —
+      createDraft shipped; read tools still open'
     status: pending
   - id: email-compose-ux
     content:
@@ -64,15 +63,30 @@ todos:
     status: pending
   - id: tests
     content:
-      'Tests: timer tool flows, docx/xlsx round-trips; manual agent workflow
-      smoke'
+      'Tests: docx/xlsx round-trips + formula/overlay/external-sync unit tests;
+      agent smoke QA (replaceSelection, structure read, credits, open/closed)
+      passed Aug 1–2 2026'
+    status: completed
+  - id: workspace-web-tools
+    content:
+      'Auth extension: workspace file tools + Brave webSearch/multiWebSearch/
+      fetchWebPage (credits footer, filters, autoFetch raw pages)'
+    status: completed
+  - id: agent-loop-cap
+    content:
+      'Raise MAX_AGENT_ITERATIONS to 500; chat.agent.maxRequests default 500'
+    status: completed
+  - id: unified-edit-wrapper
+    content:
+      'Future: thin unified edit/read wrapper over text/DOCX/XLSX backends
+      (decision logged; not implementing yet)'
     status: pending
 isProject: false
 ---
 
 # Agent Tools for DOCX, XLSX, Time Tracker, and Email
 
-**Status (Jul 31, 2026):** ACTIVE / in progress alongside Cloud Agent — in-ladder, not deferred. Host surface phases A–F land in `safeappeals-authentication` + `safeappeals-documents` + `time-tracker` + `safeappeals-email`. Pilot/gates still pending.
+**Status (Aug 2, 2026):** ACTIVE — core document + workspace + search + timer start/stop + email draft tools shipped and agent-smoke verified. Remaining ladder items: email read/organize, compose UX, pattern docs, timer annotate/list matters, unified edit wrapper.
 
 ## How tools work in this fork (research summary)
 
@@ -92,47 +106,44 @@ isProject: false
   document this pattern for future extensions.
 - Decision (confirmed): hybrid write path for documents — drive open editors
   through webview protocols; fall back to headless writes when the file is not
-  open, using the `docx` npm package on the host for DOCX and a Node-target WASM
-  build of the existing `xlsx_rust_viewer` Rust crate for XLSX (no second
-  spreadsheet library; identical serialization to the UI).
+  open. XLSX uses the existing `--target web` WASM in the extension host
+  (dynamic `import` + `initSync`), not a separate nodejs wasm-pack build.
+- Decision (Aug 1 2026): open path only when custom editor is **open and ready**;
+  headless when closed/not-ready/clean; external-sync flag prevents save from
+  clobbering headless writes with stale TipTap/WASM bytes.
+- Decision (future): thin unified `edit`/`read` wrapper for the model; format
+  engines stay underneath (see vault Decision note).
+
+## Shipped tool surface (Aug 2 2026)
+
+**Documents (`safeappeals-documents`):**
+`docx_read` / `docx_create` / `docx_edit`, `xlsx_read` / `xlsx_create` / `xlsx_edit`,
+`openDocument`. Open+closed routing; structure JSON + TSV on xlsx_read; formula
+overlay on headless edit/read; replaceSelection fail-closed without selection.
+
+**Auth / workspace / web (`safeappeals-authentication`):**
+File/workspace tools (`readFile`, `editFile`, `createFile`, …),
+`webSearch` / `multiWebSearch` / `fetchWebPage` (credits footer, freshness/site/
+safesearch, autoFetch raw pages — no AI summarizer).
+
+**Time tracker:** `timer_getState` / `timer_start` / `timer_stop`.
+
+**Email:** `email_createDraft` only (no send). Read/organize tools still open.
 
 ## Current state of the extensions
 
-- `extensions/safeappeals-documents`: editable DOCX custom editor (docx-preview
-  → TipTap → `docx` Packer) and XLSX editor (Rust WASM
-  `XlsxParser`/`XlsxWriter` + canvas). The XLSX webview already implements an
-  `applyEdits` operation handler (`handleApplyEdits` in
-  [extensions/safeappeals-documents/webview-src/xlsx/main.ts](extensions/safeappeals-documents/webview-src/xlsx/main.ts)
-  — `set_cell_value`, formulas, formatting, insert/delete rows, tables, charts),
-  but the host never posts it. DOCX webview has partial
-  `inlineEditRequest`/`applyInlineEdit` hooks; host explicitly ignores them. No
-  LM tools registered. Host already has `requestSerializeAndWait` + `_panels`
-  map per URI in both providers — the building blocks for deterministic
-  agent-driven save.
-- `extensions/time-tracker`:
-  `TimeTrackerService.start(matterId, rateId, description, utbmsTask, utbmsActivity, isBillable)`,
-  `stop(): TimeEntry`, `updateTimerState(...)`, plus SQLite `StorageService`
-  (matters, rates, entries). All commands are interactive (QuickPick/InputBox,
-  zero args), `activate()` exports nothing, no LM tools. The service layer
-  already supports everything the agent needs; only a non-interactive surface is
-  missing.
+- `extensions/safeappeals-documents`: editable DOCX (TipTap) + XLSX (Rust WASM).
+  Host posts `applyEdits` / `applyDocxEdits`; headless DOCX via `docxXmlEdit`;
+  headless XLSX via `xlsxHeadless` + `xlsxFormulaOverlay`. External sync
+  (`documentExternalSync`, `reloadFromBytes`) keeps host cache authoritative
+  after agent headless writes while a tab is open.
+- `extensions/time-tracker`: LM tools for start/stop/getState. `updateEntry` /
+  `listMatters` tools not yet contributed.
 - Rust crate source:
   [void-reference/browser/documentViewers/xlsxRustViewer/wasm/Cargo.toml](void-reference/browser/documentViewers/xlsxRustViewer/wasm/Cargo.toml)
-  (wasm-bindgen, calamine reader, rust_xlsxwriter writer). Currently built only
-  for the browser target shipped as `media/xlsx/wasm/xlsx_rust_viewer_bg.wasm`.
-- `extensions/safeappeals-email`: IMAP sync (imapflow) + SMTP send (nodemailer)
-  + React sidebar (inbox) + dashboard `WebviewPanel` (reader/compose/drafts).
-  Local JSON index in `globalStorageUri`: `email-index.json`,
-  `email-drafts.json`, `email-case-links.json` (threadId → case folder),
-  `email-tags.json` (`knownTags`, `threadTags`, `hiddenThreads`). Headers
-  lazy-load bodies on read. Organize commands already exist as the agent seam:
-  `linkThreadToCase` / `unlinkThreadFromCase`, `tagThread` / `untagThread` /
-  `listTags` / `deleteTag`, `hideThread` / `unhideThread`. Hide sinks threads
-  to the bottom and greys them out (does not exclude). Read APIs:
-  `searchEmails`, `listThreads` (folder/offset/limit/sort/tag/caseFolderPath),
-  `getThread`, `getMessage`, `listFolders`. No LM tools registered yet; drafts
-  are local-only (no IMAP APPEND). Search is local substring match over the
-  synced index.
+  — browser WASM also loaded in extension host for headless.
+- `extensions/safeappeals-email`: `email_createDraft` contributed; organize/
+  search LM tools still to land on existing command/index seams.
 
 ## Target workflow
 
@@ -186,59 +197,19 @@ In `extensions/time-tracker`:
    confirmation messages (they create billable records); getState/listMatters do
    not.
 
-## Phase 2 — Document write tools
+**Done:** start / stop / getState. **Still open:** updateEntry / listMatters.
+
+## Phase 2 — Document write tools — DONE (Aug 1–2 2026)
 
 In `extensions/safeappeals-documents`:
 
-1. Host plumbing (both providers in
-   [extensions/safeappeals-documents/src/docx/docxEditorProvider.ts](extensions/safeappeals-documents/src/docx/docxEditorProvider.ts)
-   and
-   [extensions/safeappeals-documents/src/xlsx/xlsxEditorProvider.ts](extensions/safeappeals-documents/src/xlsx/xlsxEditorProvider.ts)):
-   - Expose a small host-side registry (`findPanel(uri)`,
-     `applyEditsAndWait(uri, ops)`, `saveAndWait(uri)`) built on the existing
-     `_panels` map and `requestSerializeAndWait`.
-   - XLSX: post `applyEdits` host→webview (handler already exists), add an
-     `applyEditsResult` ack message in the webview so the tool gets
-     success/failure per operation.
-   - DOCX: add a host→webview `applyDocxEdits` protocol in
-     `webview-src/docx/vendor/docxViewerTiptap.js` supporting structured ops
-     (append/replace section content, insert paragraphs/headings/tables at
-     anchor text or end-of-doc) executed against the TipTap document, plus ack.
-     Reuse the existing `applyInlineEdit` machinery where it fits.
-2. Headless fallback paths:
-   - DOCX: move `docx` from webview-only bundling to also be usable on the
-     extension host; a `DocxWriter` host module converts the tool's structured
-     content (markdown-ish blocks: headings, paragraphs, lists, tables) into a
-     `Document` + `Packer.toBuffer` and writes via `workspace.fs.writeFile`.
-     Used for creating new files and editing unopened files (parse-append is v2;
-     initially headless edit = create/overwrite with provided content).
-   - XLSX: build the existing Rust crate for Node —
-     `wasm-pack build --target nodejs` on
-     `void-reference/browser/documentViewers/xlsxRustViewer/wasm`, output
-     vendored into the extension (e.g.
-     `extensions/safeappeals-documents/node-wasm/`). Host module loads
-     `XlsxParser`/`XlsxWriter`, applies the same operation set as
-     `handleApplyEdits` against the model JSON, serializes back to bytes.
-     Identical engine to the UI, so no fidelity drift.
-   - Routing rule inside each tool: editor open for URI → webview path (keeps UI
-     model in sync, then deterministic save); not open → headless path; if the
-     file is open AND dirty, still use the webview path so no user edits are
-     lost.
-3. LM tools (new `src/agentTools.ts` + package.json contributions):
-   - `docx_create` — new .docx from structured content (title, headings,
-     paragraphs, lists, tables, page setup).
-   - `docx_edit` — apply structured edit ops to an existing .docx (open-editor
-     or headless per routing rule).
-   - `docx_read` — extract text/structure so the agent can read a document
-     before editing (docx-preview HTML→text in webview, or host-side unzip +
-     `quick-xml`-style plain text; simplest: JSZip + XML text extraction on
-     host).
-   - `xlsx_edit` — apply the operation array (same schema as
-     `handleApplyEdits`).
-   - `xlsx_read` — sheet names + cell range values as text/CSV for agent context
-     (headless parser).
-   - Edit/create tools return a `PreparedToolInvocation` confirmation with
-     target file + summary of ops; reads are unconfirmed.
+1. Host plumbing (both providers): `findPanel`, `applyEditsAndWait`,
+   `saveAndWait`, `isReady` / `awaitReady`, `reloadFromBytes` + external-sync
+   save protection.
+2. Headless: DOCX `docxXmlEdit`; XLSX host WASM + `overlayFormulasFromXlsx` on
+   read **and** edit paths (prevents formula flatten on subsequent edits).
+3. LM tools: `docx_*`, `xlsx_*`, `openDocument`. `xlsx_read` returns
+   `--- Workbook structure (JSON) ---` + TSV (tables, styles, formulas, charts).
 
 ## Phase 3 — Email read + draft-only tools
 
@@ -306,6 +277,8 @@ contributions):
    discovery, but local drafts fully satisfy "user reviews, edits, and sends
    themselves"; server-side drafts can be a later rung).
 
+**Done:** `email_createDraft`. **Still open:** read tools, compose UX, organize tools.
+
 ## Phase 4 — Pattern documentation + polish
 
 1. Write `docs/agent-tools-pattern.md` (repo docs folder) documenting the house
@@ -325,7 +298,8 @@ contributions):
 - Documents: round-trip tests — `docx_create` → bytes on disk readable by the
   DOCX editor; `xlsx_edit` headless → reopen via parser and assert cell values;
   webview-path tests where the harness allows (existing extension test infra
-  under `extensions/*/src/test` conventions).
+  under `extensions/*/src/test` conventions). **Done** for headless docs +
+  formula/overlay/external-sync; agent smoke Aug 1–2 PASS.
 - Email: tests that `email_createDraft` writes to `email-drafts.json` with
   status `draft` and that no code path from the tool layer reaches
   `smtpClient.sendMail`; read tools return expected summaries from a seeded
@@ -338,8 +312,9 @@ contributions):
 
 - No changes to `extensions/copilot` or core chat code (tools flow in
   automatically).
-- No Rust rewrite of tool glue; Rust stays confined to the XLSX engine (new Node
-  build target only).
+- No Rust rewrite of tool glue; Rust stays confined to the XLSX engine.
 - No pause semantics for the timer (start/stop only, matching existing model).
 - No agent-facing send capability for email — drafts only, sending stays a
   manual dashboard action. No IMAP APPEND/server drafts in this iteration.
+- No AI summarizer for Brave search — agent reads raw page text via fetch/
+  autoFetch.

@@ -59,7 +59,7 @@ suite('nextAgentLoopDecision', () => {
 		assert.deepStrictEqual(
 			nextAgentLoopDecision({
 				iteration: 3,
-				maxIterations: 25,
+				maxIterations: MAX_AGENT_ITERATIONS,
 				toolCallCount: 0,
 				cancelled: false,
 			}),
@@ -67,8 +67,8 @@ suite('nextAgentLoopDecision', () => {
 		);
 		assert.deepStrictEqual(
 			nextAgentLoopDecision({
-				iteration: 25,
-				maxIterations: 25,
+				iteration: MAX_AGENT_ITERATIONS,
+				maxIterations: MAX_AGENT_ITERATIONS,
 				toolCallCount: 1,
 				cancelled: false,
 			}),
@@ -77,7 +77,7 @@ suite('nextAgentLoopDecision', () => {
 		assert.deepStrictEqual(
 			nextAgentLoopDecision({
 				iteration: 1,
-				maxIterations: 25,
+				maxIterations: MAX_AGENT_ITERATIONS,
 				toolCallCount: 1,
 				cancelled: true,
 			}),

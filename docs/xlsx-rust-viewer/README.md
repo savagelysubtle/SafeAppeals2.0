@@ -22,7 +22,7 @@ Shipping home: `extensions/safeappeals-documents` (`safeappeals.xlsxViewer`). Pr
 - **Clipboard** — cut, copy, paste via Clipboard API with fallback
 - **Context menus** — cell, column header, row header, and table-aware context menus
 - **Dirty state & auto-save** — integrated with VS Code custom editor save flow
-- **AI LM tools** — `safeappeals_xlsx_read` / `_create` / `_edit` (create via JSZip host writer; edit/read require the file open in the XLSX editor — headless Node WASM is not shipped)
+- **AI LM tools** — `safeappeals_xlsx_read` / `_create` / `_edit` (create via JSZip; read/edit prefer open editor, else headless web WASM via `xlsxHostWasm` / `xlsxHeadless`)
 - **Ctrl+L / Ctrl+K** — Add to Chat attaches paste/file pills with an empty query; Inline Edit runs in-place via a language model (preferred id includes `gpt-5.6-terra`) and does not open chat
 
 ## Quick Start

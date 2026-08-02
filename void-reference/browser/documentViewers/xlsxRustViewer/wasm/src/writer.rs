@@ -12,7 +12,10 @@ use rust_xlsxwriter::{
     DataValidation, DataValidationRule, DataValidationErrorStyle, Formula,
     Url,
 };
-use crate::parser::{WorkbookModel, ConditionalFormatRule, DataValidationDef, HyperlinkDef, ChartDefinition, DefinedNameDef, PivotTableDef, PageSetupDef};
+use crate::parser::{
+    WorkbookModel, CellData, CellStyle, ConditionalFormatRule, DataValidationDef, HyperlinkDef,
+    ChartDefinition, DefinedNameDef, PivotTableDef, PageSetupDef, TableDefinition,
+};
 
 #[wasm_bindgen]
 extern "C" {
@@ -58,68 +61,8 @@ impl XlsxWriter {
                     }
                     let col_u16 = *col_idx as u16;
 
-                    // Build format if cell has styles
-                    let has_style = cell_data.style.is_some();
-                    let fmt = if has_style {
-                        let cs = cell_data.style.as_ref().unwrap();
-                        let mut f = Format::new();
-                        if cs.bold == Some(true) { f = f.set_bold(); }
-                        if cs.italic == Some(true) { f = f.set_italic(); }
-                        if cs.underline == Some(true) { f = f.set_underline(rust_xlsxwriter::FormatUnderline::Single); }
-                        if let Some(sz) = cs.font_size { f = f.set_font_size(sz); }
-                        if let Some(ref name) = cs.font_family { f = f.set_font_name(name); }
-                        if let Some(ref color) = cs.text_color {
-                            if let Some(c) = parse_hex_color(color) { f = f.set_font_color(c); }
-                        }
-                        if let Some(ref color) = cs.fill_color {
-                            if let Some(c) = parse_hex_color(color) {
-                                f = f.set_background_color(c);
-                                f = f.set_pattern(rust_xlsxwriter::FormatPattern::Solid);
-                            }
-                        }
-                        if let Some(ref align) = cs.alignment {
-                            f = match align.as_str() {
-                                "center" => f.set_align(rust_xlsxwriter::FormatAlign::Center),
-                                "right" => f.set_align(rust_xlsxwriter::FormatAlign::Right),
-                                _ => f.set_align(rust_xlsxwriter::FormatAlign::Left),
-                            };
-                        }
-                        if cs.wrap_text == Some(true) { f = f.set_text_wrap(); }
-                        Some(f)
-                    } else {
-                        None
-                    };
-
-                    match cell_data.data_type.as_str() {
-                        "n" => {
-                             if let Ok(num) = cell_data.value.parse::<f64>() {
-                                if let Some(ref f) = fmt {
-                                    worksheet.write_number_with_format(*row_idx, col_u16, num, f).map_err(|e| JsError::new(&e.to_string()))?;
-                                } else {
-                                    worksheet.write_number(*row_idx, col_u16, num).map_err(|e| JsError::new(&e.to_string()))?;
-                                }
-                             } else if let Some(ref f) = fmt {
-                                worksheet.write_string_with_format(*row_idx, col_u16, &cell_data.value, f).map_err(|e| JsError::new(&e.to_string()))?;
-                             } else {
-                                worksheet.write_string(*row_idx, col_u16, &cell_data.value).map_err(|e| JsError::new(&e.to_string()))?;
-                             }
-                        }
-                        "b" => {
-                            let bool_val = cell_data.value == "true";
-                            if let Some(ref f) = fmt {
-                                worksheet.write_boolean_with_format(*row_idx, col_u16, bool_val, f).map_err(|e| JsError::new(&e.to_string()))?;
-                            } else {
-                                worksheet.write_boolean(*row_idx, col_u16, bool_val).map_err(|e| JsError::new(&e.to_string()))?;
-                            }
-                        }
-                        _ => {
-                            if let Some(ref f) = fmt {
-                                worksheet.write_string_with_format(*row_idx, col_u16, &cell_data.value, f).map_err(|e| JsError::new(&e.to_string()))?;
-                            } else {
-                                worksheet.write_string(*row_idx, col_u16, &cell_data.value).map_err(|e| JsError::new(&e.to_string()))?;
-                            }
-                        }
-                    }
+                    write_cell_to_worksheet(worksheet, *row_idx, col_u16, cell_data)
+                        .map_err(|e| JsError::new(&e.to_string()))?;
                 }
             }
 
@@ -204,6 +147,26 @@ impl XlsxWriter {
                 let r = &table_def.range;
                 worksheet.add_table(r.start_row, r.start_col as u16, r.end_row, r.end_col as u16, &table)
                     .map_err(|e| JsError::new(&e.to_string()))?;
+            }
+
+            // rust_xlsxwriter `add_table` rewrites header/body cells without formats.
+            // Re-apply any cell that still carries an explicit style so bold/fill/numFmt survive.
+            if !sheet_data.tables.is_empty() {
+                for (row_idx, row_map) in &sheet_data.cells {
+                    for (col_idx, cell_data) in row_map {
+                        if cell_data.style.is_none() {
+                            continue;
+                        }
+                        if hyperlink_cells.contains(&(*row_idx, *col_idx)) {
+                            continue;
+                        }
+                        if !cell_in_any_table(*row_idx, *col_idx, &sheet_data.tables) {
+                            continue;
+                        }
+                        write_cell_to_worksheet(worksheet, *row_idx, *col_idx as u16, cell_data)
+                            .map_err(|e| JsError::new(&e.to_string()))?;
+                    }
+                }
             }
 
             // Write merged cells
@@ -418,6 +381,115 @@ fn parse_cf_cell_ref(cell_ref: &str) -> (u32, u32) {
         }
     }
     (row.saturating_sub(1), col.saturating_sub(1))
+}
+
+fn cell_in_any_table(row: u32, col: u32, tables: &[TableDefinition]) -> bool {
+    tables.iter().any(|t| {
+        row >= t.range.start_row
+            && row <= t.range.end_row
+            && col >= t.range.start_col
+            && col <= t.range.end_col
+    })
+}
+
+fn cell_style_to_format(cs: &CellStyle) -> Format {
+    let mut f = Format::new();
+    if cs.bold == Some(true) {
+        f = f.set_bold();
+    }
+    if cs.italic == Some(true) {
+        f = f.set_italic();
+    }
+    if cs.underline == Some(true) {
+        f = f.set_underline(rust_xlsxwriter::FormatUnderline::Single);
+    }
+    if let Some(sz) = cs.font_size {
+        f = f.set_font_size(sz);
+    }
+    if let Some(ref name) = cs.font_family {
+        f = f.set_font_name(name);
+    }
+    if let Some(ref color) = cs.text_color {
+        if let Some(c) = parse_hex_color(color) {
+            f = f.set_font_color(c);
+        }
+    }
+    if let Some(ref color) = cs.fill_color {
+        if let Some(c) = parse_hex_color(color) {
+            f = f.set_background_color(c);
+            f = f.set_pattern(rust_xlsxwriter::FormatPattern::Solid);
+        }
+    }
+    if let Some(ref align) = cs.alignment {
+        f = match align.as_str() {
+            "center" => f.set_align(rust_xlsxwriter::FormatAlign::Center),
+            "right" => f.set_align(rust_xlsxwriter::FormatAlign::Right),
+            _ => f.set_align(rust_xlsxwriter::FormatAlign::Left),
+        };
+    }
+    if cs.wrap_text == Some(true) {
+        f = f.set_text_wrap();
+    }
+    if let Some(ref nf) = cs.number_format {
+        f = f.set_num_format(nf);
+    }
+    f
+}
+
+fn write_cell_to_worksheet(
+    worksheet: &mut rust_xlsxwriter::Worksheet,
+    row_idx: u32,
+    col_u16: u16,
+    cell_data: &CellData,
+) -> Result<(), rust_xlsxwriter::XlsxError> {
+    let fmt = cell_data.style.as_ref().map(cell_style_to_format);
+    match cell_data.data_type.as_str() {
+        "f" => {
+            let formula = if cell_data.value.starts_with('=') {
+                cell_data.value.clone()
+            } else {
+                format!("={}", cell_data.value)
+            };
+            let mut fx = Formula::new(&formula);
+            if let Some(ref result) = cell_data.formula_result {
+                fx = fx.set_result(result);
+            }
+            if let Some(ref f) = fmt {
+                worksheet.write_formula_with_format(row_idx, col_u16, fx, f)?;
+            } else {
+                worksheet.write_formula(row_idx, col_u16, fx)?;
+            }
+        }
+        "n" => {
+            if let Ok(num) = cell_data.value.parse::<f64>() {
+                if let Some(ref f) = fmt {
+                    worksheet.write_number_with_format(row_idx, col_u16, num, f)?;
+                } else {
+                    worksheet.write_number(row_idx, col_u16, num)?;
+                }
+            } else if let Some(ref f) = fmt {
+                worksheet.write_string_with_format(row_idx, col_u16, &cell_data.value, f)?;
+            } else {
+                worksheet.write_string(row_idx, col_u16, &cell_data.value)?;
+            }
+        }
+        "b" => {
+            let bool_val = cell_data.value == "true";
+            if let Some(ref f) = fmt {
+                worksheet.write_boolean_with_format(row_idx, col_u16, bool_val, f)?;
+            } else {
+                worksheet.write_boolean(row_idx, col_u16, bool_val)?;
+            }
+        }
+        _ => {
+            if let Some(ref f) = fmt {
+                worksheet.write_string_with_format(row_idx, col_u16, &cell_data.value, f)?;
+            } else {
+                worksheet.write_string(row_idx, col_u16, &cell_data.value)?;
+            }
+        }
+    }
+    Ok(())
 }
 
 /// Write a single data validation rule to the worksheet.

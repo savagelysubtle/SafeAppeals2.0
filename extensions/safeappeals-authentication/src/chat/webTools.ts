@@ -18,6 +18,9 @@ export { isBlockedVscodeCommand, isSafeVscodeCommand } from './commandAllowlist'
 
 const FETCH_BYTE_CAP = 500_000;
 const FETCH_TIMEOUT_MS = 20_000;
+const DEFAULT_MAX_LENGTH = 100_000;
+const MIN_MAX_LENGTH = 1_000;
+const MAX_MAX_LENGTH = 200_000;
 
 interface RunVscodeCommandInput {
 	commandId: string;
@@ -28,6 +31,8 @@ interface RunVscodeCommandInput {
 interface FetchWebPageInput {
 	urls: string[];
 	query?: string;
+	/** Max characters of extracted text per page (clamped 1k–200k). */
+	maxLength?: number;
 }
 
 function textResult(message: string): vscode.LanguageModelToolResult {
@@ -42,6 +47,17 @@ function hostHasFetchTool(): boolean {
 	} catch {
 		return false;
 	}
+}
+
+/**
+ * Clamps optional maxLength for extracted page text (1k–200k).
+ */
+export function sanitizeFetchMaxLength(maxLength: unknown): number {
+	if (typeof maxLength !== 'number' || !Number.isFinite(maxLength)) {
+		return DEFAULT_MAX_LENGTH;
+	}
+	const n = Math.trunc(maxLength);
+	return Math.max(MIN_MAX_LENGTH, Math.min(MAX_MAX_LENGTH, n));
 }
 
 function fetchUrlHttps(urlString: string): Promise<string> {
@@ -118,6 +134,78 @@ function stripHtmlToText(html: string): string {
 		.trim();
 }
 
+function truncateText(text: string, maxLength: number): string {
+	if (text.length <= maxLength) {
+		return text;
+	}
+	return `${text.slice(0, maxLength)}\n…(truncated)`;
+}
+
+/**
+ * Fetches URLs as plain extracted text (prefer host fetch tool; HTTPS fallback).
+ * Returns raw page text only — no AI summary.
+ */
+export async function fetchUrlsAsPlainText(
+	urls: readonly string[],
+	options: {
+		readonly maxLength?: number;
+		readonly query?: string;
+		readonly toolInvocationToken?: vscode.ChatParticipantToolToken;
+		readonly cancellationToken?: vscode.CancellationToken;
+	} = {},
+): Promise<string> {
+	const maxLength = sanitizeFetchMaxLength(options.maxLength);
+	const query = typeof options.query === 'string' ? options.query.trim() : '';
+
+	if (hostHasFetchTool() && options.toolInvocationToken !== undefined) {
+		try {
+			const result = await vscode.lm.invokeTool(
+				VSCODE_FETCH_WEB_PAGE_TOOL,
+				{
+					input: { urls: [...urls] },
+					toolInvocationToken: options.toolInvocationToken,
+				},
+				options.cancellationToken,
+			);
+			const parts: string[] = [];
+			if (query) {
+				parts.push(`Query focus: ${query}`);
+			}
+			for (const part of result.content) {
+				if (part instanceof vscode.LanguageModelTextPart) {
+					parts.push(truncateText(part.value, maxLength));
+				}
+			}
+			if (parts.length > 0) {
+				return parts.join('\n\n');
+			}
+		} catch {
+			// Fall through to HTTPS fetch.
+		}
+	}
+
+	const parts: string[] = [];
+	if (query) {
+		parts.push(`Query focus: ${query}`);
+	}
+	for (const url of urls) {
+		if (typeof url !== 'string' || !url.trim()) {
+			parts.push('Error: empty URL.');
+			continue;
+		}
+		try {
+			const raw = await fetchUrlHttps(url.trim());
+			const text = stripHtmlToText(raw);
+			const capped = truncateText(text || '(empty content)', maxLength);
+			parts.push(`URL: ${url}\n${capped}`);
+		} catch (error) {
+			const message = error instanceof Error ? error.message : String(error);
+			parts.push(`URL: ${url}\nError: ${message}`);
+		}
+	}
+	return parts.join('\n\n');
+}
+
 class RunVscodeCommandTool implements vscode.LanguageModelTool<RunVscodeCommandInput> {
 	async prepareInvocation(
 		options: vscode.LanguageModelToolInvocationPrepareOptions<RunVscodeCommandInput>,
@@ -187,50 +275,13 @@ class FetchWebPageTool implements vscode.LanguageModelTool<FetchWebPageInput> {
 		if (!Array.isArray(urls) || urls.length === 0) {
 			return textResult('Error: urls must be a non-empty array.');
 		}
-		const query = typeof options.input?.query === 'string' ? options.input.query.trim() : '';
-
-		if (hostHasFetchTool()) {
-			try {
-				const result = await vscode.lm.invokeTool(
-					VSCODE_FETCH_WEB_PAGE_TOOL,
-					{
-						input: { urls },
-						toolInvocationToken: options.toolInvocationToken,
-					},
-					token,
-				);
-				if (query) {
-					return new vscode.LanguageModelToolResult([
-						new vscode.LanguageModelTextPart(`Query focus: ${query}`),
-						...result.content,
-					]);
-				}
-				return result;
-			} catch {
-				// Fall through to HTTPS fetch.
-			}
-		}
-
-		const parts: string[] = [];
-		if (query) {
-			parts.push(`Query focus: ${query}`);
-		}
-		for (const url of urls) {
-			if (typeof url !== 'string' || !url.trim()) {
-				parts.push('Error: empty URL.');
-				continue;
-			}
-			try {
-				const raw = await fetchUrlHttps(url.trim());
-				const text = stripHtmlToText(raw);
-				const capped = text.length > 100_000 ? `${text.slice(0, 100_000)}\n…(truncated)` : text;
-				parts.push(`URL: ${url}\n${capped || '(empty content)'}`);
-			} catch (error) {
-				const message = error instanceof Error ? error.message : String(error);
-				parts.push(`URL: ${url}\nError: ${message}`);
-			}
-		}
-		return textResult(parts.join('\n\n'));
+		const body = await fetchUrlsAsPlainText(urls, {
+			maxLength: options.input?.maxLength,
+			query: options.input?.query,
+			toolInvocationToken: options.toolInvocationToken,
+			cancellationToken: token,
+		});
+		return textResult(body);
 	}
 }
 

@@ -63,6 +63,8 @@ suite('buildDocumentChatOpenOptions', () => {
 			{
 				queryHasInstructions: opts.query.includes('Bold the header row'),
 				queryHasSelectionDump: opts.query.includes('A1\tB1'),
+				querySaysOpenOrClosed: opts.query.includes('open or closed'),
+				queryAvoidsMustStayOpen: !opts.query.includes('must stay open'),
 				attachFiles: opts.attachFiles,
 				pasteCode: opts.attachPaste?.[0]?.code,
 				pasteNameHasRange: opts.attachPaste?.[0]?.name.includes('Sheet1!A1:B1') === true,
@@ -70,9 +72,38 @@ suite('buildDocumentChatOpenOptions', () => {
 			{
 				queryHasInstructions: true,
 				queryHasSelectionDump: false,
+				querySaysOpenOrClosed: true,
+				queryAvoidsMustStayOpen: true,
 				attachFiles: ['file:///workspace/sheet.xlsx'],
 				pasteCode: 'A1\tB1',
 				pasteNameHasRange: true,
+			},
+		);
+	});
+
+	test('docx edit mode notes selection needs open editor; other edits open or closed', () => {
+		const opts = buildDocumentChatOpenOptions(
+			{
+				uri: 'file:///workspace/brief.docx',
+				text: 'Selected paragraph',
+				kind: 'docx',
+			},
+			'edit',
+			{ uriLabel: 'brief.docx', fileName: 'brief.docx' },
+		);
+
+		assert.deepStrictEqual(
+			{
+				hasUseLastSelection: opts.query.includes('useLastSelection=true'),
+				mentionsSelectionNeedsOpen: opts.query.includes('selection edits need the editor open'),
+				mentionsOpenOrClosed: opts.query.includes('open or closed'),
+				avoidsMustStayOpen: !opts.query.includes('must stay open'),
+			},
+			{
+				hasUseLastSelection: true,
+				mentionsSelectionNeedsOpen: true,
+				mentionsOpenOrClosed: true,
+				avoidsMustStayOpen: true,
 			},
 		);
 	});

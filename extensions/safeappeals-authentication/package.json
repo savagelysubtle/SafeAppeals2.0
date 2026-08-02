@@ -499,6 +499,10 @@
 						"query": {
 							"type": "string",
 							"description": "What content to look for on the page(s)."
+						},
+						"maxLength": {
+							"type": "number",
+							"description": "Max characters of extracted text per page after HTML stripping (clamped 1000–200000, default 100000). Raw text only — no AI summary."
 						}
 					},
 					"required": [
@@ -528,6 +532,39 @@
 						"offset": {
 							"type": "number",
 							"description": "Pagination offset (max 9, default 0). Optional."
+						},
+						"safesearch": {
+							"type": "string",
+							"enum": [
+								"off",
+								"moderate",
+								"strict"
+							],
+							"description": "Adult content filter (default moderate)."
+						},
+						"freshness": {
+							"type": "string",
+							"description": "Recency filter: pd|pw|pm|py, aliases past_day|past_week|past_month|past_year, or YYYY-MM-DDtoYYYY-MM-DD."
+						},
+						"country": {
+							"type": "string",
+							"description": "2-letter country code or ALL for result locale."
+						},
+						"search_lang": {
+							"type": "string",
+							"description": "Language code for search results (e.g. en)."
+						},
+						"ui_lang": {
+							"type": "string",
+							"description": "UI language for response metadata (e.g. en-US)."
+						},
+						"site": {
+							"type": "string",
+							"description": "Restrict to a domain; appended as site:{domain} when not already in the query."
+						},
+						"autoFetch": {
+							"type": "number",
+							"description": "After search, fetch raw page text for the top N result URLs (1–5). Returns full page text for you to read — not an AI summary."
 						}
 					},
 					"required": [
@@ -556,6 +593,35 @@
 						"count": {
 							"type": "number",
 							"description": "Number of results per query (1-20, default 10). Optional."
+						},
+						"safesearch": {
+							"type": "string",
+							"enum": [
+								"off",
+								"moderate",
+								"strict"
+							],
+							"description": "Adult content filter applied to every query (default moderate)."
+						},
+						"freshness": {
+							"type": "string",
+							"description": "Recency filter applied to every query: pd|pw|pm|py, aliases past_day|past_week|past_month|past_year, or YYYY-MM-DDtoYYYY-MM-DD."
+						},
+						"country": {
+							"type": "string",
+							"description": "2-letter country code or ALL for result locale."
+						},
+						"search_lang": {
+							"type": "string",
+							"description": "Language code for search results (e.g. en)."
+						},
+						"ui_lang": {
+							"type": "string",
+							"description": "UI language for response metadata (e.g. en-US)."
+						},
+						"site": {
+							"type": "string",
+							"description": "Restrict every query to a domain; appended as site:{domain} when not already present."
 						}
 					},
 					"required": [

@@ -3,8 +3,11 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-/** Soft cap on model → tool → model rounds for a single chat request. */
-export const MAX_AGENT_ITERATIONS = 25;
+/**
+ * Safety ceiling on model → tool → model rounds for a single chat request.
+ * Kept high so capable models can run long tool workflows; only stops runaway loops.
+ */
+export const MAX_AGENT_ITERATIONS = 500;
 
 export type AgentLoopStopReason = 'done' | 'maxIterations' | 'cancelled';
 

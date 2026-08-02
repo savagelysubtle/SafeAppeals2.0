@@ -88,14 +88,17 @@ export const ENSURED_AGENT_TOOL_NAMES: readonly string[] = [
 ];
 
 const WEB_SEARCH_MODEL_DESCRIPTION =
-	'Search the web via SafeAppeals Cloud (Brave Search). Ideal for general queries, news, articles, and recent events. ' +
-	'Searches go through SafeAppeals Cloud with your account JWT — credits apply (~250 per search). There is no local Brave API key. ' +
-	'Maximum 20 results per request; use offset for pagination.';
+	'Search the web via SafeAppeals Cloud (Brave Search). Returns ranked titles, URLs, snippets, and optional metadata ' +
+	'(Published/Domain/extra snippets) for YOU the agent to read — there is no AI summary. Ideal for general queries, news, articles, and recent events. ' +
+	'Optional filters: safesearch, freshness (pd|pw|pm|py or past_day|…), country, search_lang, ui_lang, site. ' +
+	'Optional autoFetch (1–5) fetches raw full page text for the top N result URLs. Credits apply (~250 per search). ' +
+	'Maximum 20 results; use offset for pagination.';
 
 const MULTI_WEB_SEARCH_MODEL_DESCRIPTION =
-	'Run multiple sequential web searches via SafeAppeals Cloud (Brave Search). Ideal for batch information gathering across topics. ' +
-	'Searches go through SafeAppeals Cloud with your account JWT — credits apply (~250 per query). There is no local Brave API key. ' +
-	'Maximum 10 queries, 20 results per query.';
+	'Run multiple sequential web searches via SafeAppeals Cloud (Brave Search). Returns ranked titles, URLs, and snippets ' +
+	'for YOU the agent to read — there is no AI summary. Ideal for batch information gathering. ' +
+	'Optional filters apply to every query: safesearch, freshness, country, search_lang, ui_lang, site. ' +
+	'Credits apply (~250 per query). Maximum 10 queries, 20 results per query.';
 
 const EDIT_FILE_MODEL_DESCRIPTION =
 	'Insert new code into an existing file in the workspace. Use this tool once per file that needs to be modified, even if there are multiple changes for a file. Generate the "explanation" property first.\n' +
@@ -411,7 +414,7 @@ export const ENSURED_AGENT_TOOL_DESCRIPTORS: Readonly<Record<string, AgentChatTo
 	[SAFEAPPEALS_FETCH_WEB_PAGE_TOOL]: {
 		name: SAFEAPPEALS_FETCH_WEB_PAGE_TOOL,
 		description:
-			'Fetch the main content from one or more web pages. Prefer this when summarizing or analyzing a specific URL.',
+			'Fetch the main content from one or more web pages as raw extracted text for you to read. Prefer this when you need the full page body for a specific URL. Optional maxLength clamps extracted text (1000–200000 chars). There is no AI summary — you must read the returned text yourself.',
 		inputSchema: {
 			type: 'object',
 			properties: {
@@ -423,6 +426,10 @@ export const ENSURED_AGENT_TOOL_DESCRIPTORS: Readonly<Record<string, AgentChatTo
 				query: {
 					type: 'string',
 					description: 'What content to look for on the page(s).',
+				},
+				maxLength: {
+					type: 'number',
+					description: 'Max characters of extracted text per page after HTML stripping (clamped 1000–200000, default 100000). Raw text only — no AI summary.',
 				},
 			},
 			required: ['urls'],
@@ -446,6 +453,35 @@ export const ENSURED_AGENT_TOOL_DESCRIPTORS: Readonly<Record<string, AgentChatTo
 					type: 'number',
 					description: 'Pagination offset (max 9, default 0). Optional.',
 				},
+				safesearch: {
+					type: 'string',
+					enum: ['off', 'moderate', 'strict'],
+					description: 'Adult content filter (default moderate).',
+				},
+				freshness: {
+					type: 'string',
+					description: 'Recency filter: pd|pw|pm|py, aliases past_day|past_week|past_month|past_year, or YYYY-MM-DDtoYYYY-MM-DD.',
+				},
+				country: {
+					type: 'string',
+					description: '2-letter country code or ALL for result locale.',
+				},
+				search_lang: {
+					type: 'string',
+					description: 'Language code for search results (e.g. en).',
+				},
+				ui_lang: {
+					type: 'string',
+					description: 'UI language for response metadata (e.g. en-US).',
+				},
+				site: {
+					type: 'string',
+					description: 'Restrict to a domain; appended as site:{domain} when not already in the query.',
+				},
+				autoFetch: {
+					type: 'number',
+					description: 'After search, fetch raw page text for the top N result URLs (1–5). Returns full page text for you to read — not an AI summary.',
+				},
 			},
 			required: ['query'],
 		},
@@ -464,6 +500,31 @@ export const ENSURED_AGENT_TOOL_DESCRIPTORS: Readonly<Record<string, AgentChatTo
 				count: {
 					type: 'number',
 					description: 'Number of results per query (1-20, default 10). Optional.',
+				},
+				safesearch: {
+					type: 'string',
+					enum: ['off', 'moderate', 'strict'],
+					description: 'Adult content filter applied to every query (default moderate).',
+				},
+				freshness: {
+					type: 'string',
+					description: 'Recency filter applied to every query: pd|pw|pm|py, aliases past_day|past_week|past_month|past_year, or YYYY-MM-DDtoYYYY-MM-DD.',
+				},
+				country: {
+					type: 'string',
+					description: '2-letter country code or ALL for result locale.',
+				},
+				search_lang: {
+					type: 'string',
+					description: 'Language code for search results (e.g. en).',
+				},
+				ui_lang: {
+					type: 'string',
+					description: 'UI language for response metadata (e.g. en-US).',
+				},
+				site: {
+					type: 'string',
+					description: 'Restrict every query to a domain; appended as site:{domain} when not already present.',
 				},
 			},
 			required: ['queries'],

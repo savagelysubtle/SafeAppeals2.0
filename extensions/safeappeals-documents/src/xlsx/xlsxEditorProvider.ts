@@ -5,6 +5,13 @@
 
 import { randomUUID } from 'crypto';
 import * as vscode from 'vscode';
+import {
+	EXTERNAL_RELOAD_SETTLE_MS,
+	isWithinLoadSettleWindow,
+	nextIgnoreDirtyUntil,
+	shouldApplyWebviewDocumentBytes,
+	shouldSkipWebviewSerialize,
+} from '../documentExternalSync';
 import { cancelDocumentInlineEdit } from '../inlineEditSession';
 import { XlsxDocument } from './xlsxDocument';
 
@@ -47,6 +54,14 @@ export class XlsxEditorProvider implements vscode.CustomEditorProvider<XlsxDocum
 	public readonly onDidChangeCustomDocument = this._onDidChangeCustomDocument.event;
 
 	private readonly _panels = new Map<string, vscode.WebviewPanel>();
+	/** Open CustomDocuments (for dirty checks + host-byte sync after headless writes). */
+	private readonly _documents = new Map<string, XlsxDocument>();
+	/** URIs whose webview has signaled WASM ready. */
+	private readonly _readyUris = new Set<string>();
+	private readonly _readyWaiters = new Map<string, Array<{
+		resolve: (ok: boolean) => void;
+		timer: ReturnType<typeof setTimeout>;
+	}>>();
 	private readonly _saveWaiters = new Map<string, {
 		resolve: (ok: boolean) => void;
 		timer: ReturnType<typeof setTimeout>;
@@ -61,6 +76,14 @@ export class XlsxEditorProvider implements vscode.CustomEditorProvider<XlsxDocum
 	}>();
 	/** Bytes already refreshed by a user-initiated webview save; skip re-serialize. */
 	private readonly _freshFromWebview = new Set<string>();
+	/**
+	 * Host bytes synced from headless/external write; next save must write these
+	 * and must not re-serialize the pre-reload WASM model.
+	 */
+	private readonly _freshFromExternalSync = new Set<string>();
+	/** Per-URI deadline for ignoring dirty signals after loadXLSX. */
+	private readonly _ignoreDirtyUntil = new Map<string, number>();
+	private readonly _externalSyncSettleTimers = new Map<string, ReturnType<typeof setTimeout>>();
 	/** Last selection reported by an XLSX webview (Phase E bridge). */
 	private _lastSelection: XlsxSelectionInfo | undefined;
 
@@ -97,8 +120,135 @@ export class XlsxEditorProvider implements vscode.CustomEditorProvider<XlsxDocum
 		return this._panels.has(uri.toString());
 	}
 
+	/** True when the webview has signaled WASM ready for this URI. */
+	public isReady(uri: vscode.Uri): boolean {
+		return this._readyUris.has(uri.toString());
+	}
+
+	public isDirty(uri: vscode.Uri): boolean {
+		return this._documents.get(uri.toString())?.isDirty ?? false;
+	}
+
+	/**
+	 * Wait until the webview signals ready, or `timeoutMs` elapses.
+	 * Returns true when ready; false when closed or timed out still not ready.
+	 */
+	public awaitReady(uri: vscode.Uri, timeoutMs = 8_000): Promise<boolean> {
+		const key = uri.toString();
+		if (this._readyUris.has(key)) {
+			return Promise.resolve(true);
+		}
+		if (!this._panels.has(key)) {
+			return Promise.resolve(false);
+		}
+		return new Promise(resolve => {
+			const timer = setTimeout(() => {
+				const list = this._readyWaiters.get(key);
+				if (list) {
+					const idx = list.findIndex(w => w.timer === timer);
+					if (idx >= 0) {
+						list.splice(idx, 1);
+					}
+					if (list.length === 0) {
+						this._readyWaiters.delete(key);
+					}
+				}
+				resolve(this._readyUris.has(key));
+			}, timeoutMs);
+			const list = this._readyWaiters.get(key) ?? [];
+			list.push({ resolve, timer });
+			this._readyWaiters.set(key, list);
+		});
+	}
+
 	public findPanel(uri: vscode.Uri): vscode.WebviewPanel | undefined {
 		return this._panels.get(uri.toString());
+	}
+
+	/**
+	 * Sync host CustomDocument bytes and reload the webview after a headless write.
+	 * Marks host bytes authoritative for the next save (skip stale WASM serialize)
+	 * and suppresses dirty until the mid-session load settles.
+	 */
+	public reloadFromBytes(uri: vscode.Uri, bytes: Uint8Array): boolean {
+		const key = uri.toString();
+		const document = this._documents.get(key);
+		if (document) {
+			document.syncFromExternalBytes(bytes);
+		}
+		this.beginExternalReload(key);
+		const panel = this._panels.get(key);
+		if (!panel) {
+			return !!document;
+		}
+		panel.webview.postMessage({
+			type: 'loadXLSX',
+			data: bufferToBase64(bytes),
+			xlsxUri: key,
+		});
+		return true;
+	}
+
+	/** @internal Exported for unit tests of the save-skip contract. */
+	public isFreshFromExternalSync(uri: vscode.Uri): boolean {
+		return this._freshFromExternalSync.has(uri.toString());
+	}
+
+	private beginExternalReload(key: string): void {
+		this._freshFromExternalSync.add(key);
+		this._ignoreDirtyUntil.set(key, nextIgnoreDirtyUntil(Date.now()));
+		const existing = this._externalSyncSettleTimers.get(key);
+		if (existing) {
+			clearTimeout(existing);
+		}
+		// Settle timer clears dirty-ignore only. Authority flag stays until
+		// successful saveAs / saveCustomDocumentAs, or dispose.
+		this._externalSyncSettleTimers.set(key, setTimeout(() => {
+			this._externalSyncSettleTimers.delete(key);
+			this._ignoreDirtyUntil.delete(key);
+		}, EXTERNAL_RELOAD_SETTLE_MS + 100));
+	}
+
+	/** Clear host-byte authority after successful save, or on dispose. */
+	private clearExternalSyncAuthority(key: string): void {
+		this._freshFromExternalSync.delete(key);
+		const settleTimer = this._externalSyncSettleTimers.get(key);
+		if (settleTimer) {
+			clearTimeout(settleTimer);
+			this._externalSyncSettleTimers.delete(key);
+		}
+		this._ignoreDirtyUntil.delete(key);
+	}
+
+	private isSettlingLoad(key: string): boolean {
+		const until = this._ignoreDirtyUntil.get(key) ?? 0;
+		return isWithinLoadSettleWindow(until, Date.now());
+	}
+
+	private markReady(key: string): void {
+		this._readyUris.add(key);
+		const waiters = this._readyWaiters.get(key);
+		if (!waiters) {
+			return;
+		}
+		this._readyWaiters.delete(key);
+		for (const w of waiters) {
+			clearTimeout(w.timer);
+			w.resolve(true);
+		}
+	}
+
+	private clearReady(key: string): void {
+		this._readyUris.delete(key);
+		const waiters = this._readyWaiters.get(key);
+		if (!waiters) {
+			return;
+		}
+		this._readyWaiters.delete(key);
+		for (const w of waiters) {
+			clearTimeout(w.timer);
+			w.resolve(false);
+		}
 	}
 
 	/**
@@ -139,6 +289,9 @@ export class XlsxEditorProvider implements vscode.CustomEditorProvider<XlsxDocum
 		const panel = this._panels.get(key);
 		if (!panel) {
 			return { ok: false, error: 'XLSX editor is not open for this URI' };
+		}
+		if (!this.isReady(uri)) {
+			return { ok: false, error: 'XLSX editor is not ready yet' };
 		}
 		const requestId = randomUUID();
 		const timeoutMs = options?.timeoutMs ?? 30_000;
@@ -212,11 +365,16 @@ export class XlsxEditorProvider implements vscode.CustomEditorProvider<XlsxDocum
 		_token: vscode.CancellationToken,
 	): Promise<XlsxDocument> {
 		const document = await XlsxDocument.create(uri, openContext.backupId);
+		const key = document.uri.toString();
+		this._documents.set(key, document);
 
 		const changeSub = document.onDidChangeContent(() => {
 			this._onDidChangeCustomDocument.fire({ document });
 		});
-		document.onDidDispose(() => changeSub.dispose());
+		document.onDidDispose(() => {
+			this._documents.delete(key);
+			changeSub.dispose();
+		});
 
 		return document;
 	}
@@ -227,7 +385,9 @@ export class XlsxEditorProvider implements vscode.CustomEditorProvider<XlsxDocum
 		_token: vscode.CancellationToken,
 	): Promise<void> {
 		const key = document.uri.toString();
+		this._documents.set(key, document);
 		this._panels.set(key, webviewPanel);
+		this.clearReady(key);
 
 		const mediaRoot = vscode.Uri.joinPath(this.context.extensionUri, 'media', 'xlsx');
 
@@ -244,6 +404,7 @@ export class XlsxEditorProvider implements vscode.CustomEditorProvider<XlsxDocum
 
 		const loadXlsx = async () => {
 			try {
+				this._ignoreDirtyUntil.set(key, nextIgnoreDirtyUntil(Date.now()));
 				const base64 = bufferToBase64(document.documentData);
 				webviewPanel.webview.postMessage({
 					type: 'loadXLSX',
@@ -300,6 +461,7 @@ export class XlsxEditorProvider implements vscode.CustomEditorProvider<XlsxDocum
 				switch (data.type) {
 					case 'ready': {
 						webviewReady = true;
+						this.markReady(key);
 						if (pendingLoad) {
 							pendingLoad = false;
 							await loadXlsx();
@@ -307,13 +469,42 @@ export class XlsxEditorProvider implements vscode.CustomEditorProvider<XlsxDocum
 						break;
 					}
 					case 'dirty': {
-						document.markDirty();
+						if (
+							shouldApplyWebviewDocumentBytes({
+								freshFromExternalSync: this._freshFromExternalSync.has(key),
+							})
+							&& !this.isSettlingLoad(key)
+						) {
+							document.markDirty();
+						}
 						break;
 					}
 					case 'saveData': {
 						// Response to host saveRequest, OR user Ctrl+S / ribbon Save.
-						const xlsxData = data.data as string | undefined;
 						const waiter = this._saveWaiters.get(key);
+						if (!shouldApplyWebviewDocumentBytes({
+							freshFromExternalSync: this._freshFromExternalSync.has(key),
+						})) {
+							// Keep host bytes; skip-serialize save writes them.
+							if (waiter) {
+								clearTimeout(waiter.timer);
+								this._saveWaiters.delete(key);
+								waiter.resolve(true);
+							} else {
+								try {
+									await vscode.commands.executeCommand('workbench.action.files.save');
+								} catch (error) {
+									const message = error instanceof Error ? error.message : String(error);
+									webviewPanel.webview.postMessage({
+										type: 'saveComplete',
+										success: false,
+										error: message,
+									});
+								}
+							}
+							break;
+						}
+						const xlsxData = data.data as string | undefined;
 						try {
 							if (typeof xlsxData === 'string' && xlsxData.length > 0) {
 								const bytes = base64ToBuffer(xlsxData);
@@ -486,6 +677,8 @@ export class XlsxEditorProvider implements vscode.CustomEditorProvider<XlsxDocum
 		disposables.push(
 			webviewPanel.onDidDispose(() => {
 				this._panels.delete(key);
+				this.clearReady(key);
+				this.clearExternalSyncAuthority(key);
 				const waiter = this._saveWaiters.get(key);
 				if (waiter) {
 					clearTimeout(waiter.timer);
@@ -511,10 +704,11 @@ export class XlsxEditorProvider implements vscode.CustomEditorProvider<XlsxDocum
 			}),
 		);
 
+		// Never report success from stale host cache when the webview is not ready.
 		(webviewPanel as unknown as { __xlsxRequestSave?: () => Promise<boolean> }).__xlsxRequestSave =
 			() => {
-				if (!webviewReady) {
-					return Promise.resolve(document.documentData.byteLength > 0);
+				if (!webviewReady || !this.isReady(document.uri)) {
+					return Promise.resolve(false);
 				}
 				return requestSerializeAndWait();
 			};
@@ -533,22 +727,32 @@ export class XlsxEditorProvider implements vscode.CustomEditorProvider<XlsxDocum
 	): Promise<void> {
 		const key = document.uri.toString();
 		const panel = this._panels.get(key);
-		const alreadyFresh = this._freshFromWebview.has(key);
+		const hadExternalSync = this._freshFromExternalSync.has(key);
+		const skipSerialize = shouldSkipWebviewSerialize({
+			freshFromWebview: this._freshFromWebview.has(key),
+			freshFromExternalSync: hadExternalSync,
+		});
 		this._freshFromWebview.delete(key);
+		// Keep _freshFromExternalSync until saveAs succeeds so webview cannot poison host mid-save.
 
-		if (!alreadyFresh) {
+		if (!skipSerialize) {
 			const requestSave = panel
 				? (panel as unknown as { __xlsxRequestSave?: () => Promise<boolean> }).__xlsxRequestSave
 				: undefined;
 			if (requestSave) {
 				const ok = await requestSave();
-				if (!ok && document.documentData.byteLength === 0) {
-					throw new Error('XLSX save failed: webview did not return document bytes');
+				if (!ok) {
+					throw new Error(
+						'XLSX save failed: webview is not ready or did not return document bytes',
+					);
 				}
 			}
 		}
 
 		await document.saveAs(document.uri, cancellation);
+		if (hadExternalSync) {
+			this.clearExternalSyncAuthority(key);
+		}
 		document.markClean();
 		panel?.webview.postMessage({ type: 'saveComplete', success: true });
 	}
@@ -558,14 +762,30 @@ export class XlsxEditorProvider implements vscode.CustomEditorProvider<XlsxDocum
 		destination: vscode.Uri,
 		cancellation: vscode.CancellationToken,
 	): Promise<void> {
-		const panel = this._panels.get(document.uri.toString());
-		const requestSave = panel
-			? (panel as unknown as { __xlsxRequestSave?: () => Promise<boolean> }).__xlsxRequestSave
-			: undefined;
-		if (requestSave) {
-			await requestSave();
+		const key = document.uri.toString();
+		const panel = this._panels.get(key);
+		const hadExternalSync = this._freshFromExternalSync.has(key);
+		const skipSerialize = shouldSkipWebviewSerialize({
+			freshFromWebview: this._freshFromWebview.has(key),
+			freshFromExternalSync: hadExternalSync,
+		});
+		if (!skipSerialize) {
+			const requestSave = panel
+				? (panel as unknown as { __xlsxRequestSave?: () => Promise<boolean> }).__xlsxRequestSave
+				: undefined;
+			if (requestSave) {
+				const ok = await requestSave();
+				if (!ok) {
+					throw new Error(
+						'XLSX save-as failed: webview is not ready or did not return document bytes',
+					);
+				}
+			}
 		}
 		await document.saveAs(destination, cancellation);
+		if (hadExternalSync) {
+			this.clearExternalSyncAuthority(key);
+		}
 	}
 
 	async revertCustomDocument(
@@ -573,13 +793,15 @@ export class XlsxEditorProvider implements vscode.CustomEditorProvider<XlsxDocum
 		cancellation: vscode.CancellationToken,
 	): Promise<void> {
 		await document.revert(cancellation);
-		const panel = this._panels.get(document.uri.toString());
+		const key = document.uri.toString();
+		const panel = this._panels.get(key);
 		if (panel) {
+			this.beginExternalReload(key);
 			const base64 = bufferToBase64(document.documentData);
 			panel.webview.postMessage({
 				type: 'loadXLSX',
 				data: base64,
-				xlsxUri: document.uri.toString(),
+				xlsxUri: key,
 			});
 		}
 	}
@@ -589,12 +811,25 @@ export class XlsxEditorProvider implements vscode.CustomEditorProvider<XlsxDocum
 		context: vscode.CustomDocumentBackupContext,
 		cancellation: vscode.CancellationToken,
 	): Promise<vscode.CustomDocumentBackup> {
-		const panel = this._panels.get(document.uri.toString());
+		const key = document.uri.toString();
+		const panel = this._panels.get(key);
+		if (this._freshFromExternalSync.has(key)) {
+			return document.backup(context.destination, cancellation);
+		}
 		const requestSave = panel
 			? (panel as unknown as { __xlsxRequestSave?: () => Promise<boolean> }).__xlsxRequestSave
 			: undefined;
 		if (requestSave) {
-			await requestSave();
+			const ok = await requestSave();
+			if (!ok) {
+				throw new Error(
+					'XLSX backup failed: webview is not ready or did not return document bytes',
+				);
+			}
+		} else if (panel && !this.isReady(document.uri)) {
+			throw new Error(
+				'XLSX backup failed: webview is not ready or did not return document bytes',
+			);
 		}
 		return document.backup(context.destination, cancellation);
 	}

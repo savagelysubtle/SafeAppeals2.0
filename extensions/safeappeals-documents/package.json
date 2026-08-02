@@ -184,7 +184,7 @@
         "name": "safeappeals_docx_edit",
         "toolReferenceName": "docxEdit",
         "displayName": "Edit DOCX",
-        "modelDescription": "Edit a .docx. If open in the Safe Appeals DOCX editor, apply operations (appendParagraph, appendHeading, replaceSelection, replaceAll, insertAtEnd) or editedText with useLastSelection. If not open, headless overwrite via title/body/blocks.",
+        "modelDescription": "Edit a .docx. Works with the Safe Appeals DOCX editor open or closed. When open and ready, prefers the live TipTap editor; when closed (or open but not ready and not dirty), applies headlessly. operations[] (replaceAll, appendParagraph, appendHeading, insertAtEnd) work both ways; replaceSelection / useLastSelection require an open editor with a selection. Explicit overwrite via title/body/blocks works open or closed (reloads the open editor).",
         "userDescription": "Edit a Word document",
         "canBeReferencedInPrompt": true,
         "icon": "$(pencil)",
@@ -197,7 +197,7 @@
             },
             "operations": {
               "type": "array",
-              "description": "Structured edit operations for the open editor.",
+              "description": "Structured edit operations. Works with open editor or headlessly (except replaceSelection, which needs an open editor).",
               "items": {
                 "type": "object",
                 "properties": {
@@ -265,8 +265,8 @@
         "name": "safeappeals_xlsx_read",
         "toolReferenceName": "xlsxRead",
         "displayName": "Read XLSX",
-        "modelDescription": "Read sheet values as TSV from an .xlsx open in the Safe Appeals XLSX editor. Headless parse is not available yet — open the file in the editor first.",
-        "userDescription": "Read spreadsheet values",
+        "modelDescription": "Read an .xlsx as workbook structure JSON (sheet names, used ranges, tables, charts, formulas with formula text + display values, sparse cell styles including bold/fill/number_format) plus cell values as TSV. Prefers the open Safe Appeals XLSX editor (includes current selection when available); otherwise parses headlessly via WASM. File need not be open.",
+        "userDescription": "Read spreadsheet structure and values",
         "canBeReferencedInPrompt": true,
         "icon": "$(table)",
         "inputSchema": {
@@ -286,7 +286,7 @@
         "name": "safeappeals_xlsx_create",
         "toolReferenceName": "xlsxCreate",
         "displayName": "Create XLSX",
-        "modelDescription": "Create a new .xlsx in the workspace from sheets/rows/tsv. Overwrites if exists. Prefer this when the file does not exist; use xlsx_edit only when the file is already open in the Safe Appeals XLSX editor.",
+        "modelDescription": "Create a new .xlsx in the workspace from sheets/rows/tsv. Overwrites if exists. Prefer this when the file does not exist; use safeappeals_xlsx_edit to modify an existing workbook (open editor preferred when available; headless WASM when closed).",
         "userDescription": "Create a spreadsheet",
         "canBeReferencedInPrompt": true,
         "icon": "$(new-file)",
@@ -355,7 +355,7 @@
         "name": "safeappeals_xlsx_edit",
         "toolReferenceName": "xlsxEdit",
         "displayName": "Edit XLSX",
-        "modelDescription": "Edit an already-open XLSX (headless WASM not shipped — open the file in the Safe Appeals XLSX editor first). To create a new workbook, use safeappeals_xlsx_create. Supported operation types: set_cell_value, set_cell_formula, format_cell, format_range, insert_row, insert_column, delete_row, delete_column, create_table, resize_table, rename_table, set_table_style, toggle_table_filter, set_totals_row, convert_table_to_range, create_chart (alias of insert_chart), insert_chart, delete_chart. Saves after apply.",
+        "modelDescription": "Edit an .xlsx. Works with the Safe Appeals XLSX editor open or closed. When open and ready, prefers the live editor; when closed (or open but not ready and not dirty), applies ops headlessly via WASM. To create a new workbook, use safeappeals_xlsx_create. Supported operation types: set_cell_value, set_cell_formula, format_cell, format_range, insert_row, insert_column, delete_row, delete_column, create_table, resize_table, rename_table, set_table_style, toggle_table_filter, set_totals_row, convert_table_to_range, create_chart (alias of insert_chart), insert_chart, delete_chart. Saves after apply.",
         "userDescription": "Edit a spreadsheet",
         "canBeReferencedInPrompt": true,
         "icon": "$(edit)",
@@ -452,6 +452,27 @@
           "required": [
             "path",
             "operations"
+          ]
+        }
+      },
+      {
+        "name": "safeappeals_openDocument",
+        "toolReferenceName": "openDocument",
+        "displayName": "Open Document",
+        "modelDescription": "Open a workspace file in the editor. .docx opens with the Safe Appeals DOCX viewer; .xlsx/.xls opens with the Safe Appeals XLSX viewer; other files open with the default editor.",
+        "userDescription": "Open a document in Safe Appeals viewer",
+        "canBeReferencedInPrompt": true,
+        "icon": "$(go-to-file)",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string",
+              "description": "Workspace-relative or absolute path to the file to open."
+            }
+          },
+          "required": [
+            "path"
           ]
         }
       }

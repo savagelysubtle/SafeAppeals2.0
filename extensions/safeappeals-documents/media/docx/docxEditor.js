@@ -78629,13 +78629,24 @@ ${err.toString()}`);
                   break;
                 }
                 case "replaceSelection": {
-                  if (pendingInlineEditSelection) {
-                    const { from: from3, to } = pendingInlineEditSelection;
-                    tiptapEditor.editor.chain().focus().setTextSelection({ from: from3, to }).deleteSelection().insertContent(text2).run();
-                    pendingInlineEditSelection = null;
+                  const REPLACE_SELECTION_REQUIRES_EDITOR = "replaceSelection requires an open editor with a selection";
+                  let range = null;
+                  if (pendingInlineEditSelection && pendingInlineEditSelection.from !== pendingInlineEditSelection.to) {
+                    range = {
+                      from: pendingInlineEditSelection.from,
+                      to: pendingInlineEditSelection.to
+                    };
                   } else {
-                    tiptapEditor.editor.chain().focus().insertContent(text2).run();
+                    const sel = tiptapEditor.editor.state.selection;
+                    if (sel && sel.from !== sel.to) {
+                      range = { from: sel.from, to: sel.to };
+                    }
                   }
+                  if (!range) {
+                    throw new Error(REPLACE_SELECTION_REQUIRES_EDITOR);
+                  }
+                  tiptapEditor.editor.chain().focus().setTextSelection({ from: range.from, to: range.to }).deleteSelection().insertContent(text2).run();
+                  pendingInlineEditSelection = null;
                   break;
                 }
                 case "appendHeading": {

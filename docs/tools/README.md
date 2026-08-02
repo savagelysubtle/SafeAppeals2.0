@@ -10,10 +10,10 @@ Registered from extensions (see each extension’s `package.json` `languageModel
 
 | Tool | Notes |
 |------|--------|
-| `safeappeals_docx_read` / `_create` / `_edit` | Create/overwrite via host writer; structured edit prefers open DOCX editor |
-| `safeappeals_xlsx_read` | Open editor required (no headless Node WASM) |
+| `safeappeals_docx_read` / `_create` / `_edit` | Create/overwrite via host writer; structured ops prefer open editor, else JSZip `document.xml` surgery (`replaceSelection` editor-only) |
+| `safeappeals_xlsx_read` | Open editor preferred; else headless WASM parse → structure JSON (tables/styles/formulas/charts) + TSV |
 | `safeappeals_xlsx_create` | JSZip host writer — no open editor required |
-| `safeappeals_xlsx_edit` | Open editor → `applyEditsAndWait` → webview `handleApplyEdits` |
+| `safeappeals_xlsx_edit` | Open editor preferred; else headless WASM parse → model ops → save |
 
 XLSX edit operation types (host-normalized): `set_cell_value`, `set_cell_formula`, `format_cell`, `format_range`, `insert_row`, `insert_column`, `delete_row`, `delete_column`, `create_table`, `resize_table`, `rename_table`, `set_table_style`, `toggle_table_filter`, `set_totals_row`, `convert_table_to_range`, `create_chart` (alias of `insert_chart`), `insert_chart`, `delete_chart`. Details: [xlsx-rust-viewer API](../xlsx-rust-viewer/api-reference.md#ai-edit-operations-applyedits).
 

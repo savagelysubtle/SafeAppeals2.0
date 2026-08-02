@@ -71,7 +71,7 @@ export function buildDocumentChatOpenOptions(
 			`File: ${uriLabel}`,
 			payload?.sheet ? `Sheet: ${payload.sheet}` : undefined,
 			payload?.range ? `Range: ${payload.range}` : undefined,
-			'When ready, call safeappeals_xlsx_edit (file must stay open).',
+			'When ready, call safeappeals_xlsx_edit (edits work with the editor open or closed).',
 			instructions ? `User instructions: ${instructions}` : undefined,
 		].filter((line): line is string => line !== undefined);
 		query = lines.join('\n');
@@ -79,7 +79,7 @@ export function buildDocumentChatOpenOptions(
 		const lines = [
 			'@safeappeals Edit the DOCX selection.',
 			`File: ${uriLabel}`,
-			'When ready, call safeappeals_docx_edit with editedText and useLastSelection=true (file must stay open).',
+			'When ready, call safeappeals_docx_edit with editedText and useLastSelection=true (selection edits need the editor open with a selection; other edits work open or closed).',
 			instructions ? `User instructions: ${instructions}` : undefined,
 		].filter((line): line is string => line !== undefined);
 		query = lines.join('\n');

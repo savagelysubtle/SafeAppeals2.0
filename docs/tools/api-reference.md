@@ -241,7 +241,7 @@ export const toolApprovalTypes = new Set<ToolApprovalType>([
 
 ## Document edit operations (current: `safeappeals_xlsx_edit` / `safeappeals_docx_edit`)
 
-Shipping path: VS Code LM tools on `extensions/safeappeals-documents` (not Void `edit_document`). XLSX ops are normalized in `src/xlsx/xlsxEditOperations.ts` and applied only when the file is open in `safeappeals.xlsxViewer`. Create a new workbook with `safeappeals_xlsx_create` (JSZip) without an open editor.
+Shipping path: VS Code LM tools on `extensions/safeappeals-documents` (not Void `edit_document`). XLSX ops are normalized in `src/xlsx/xlsxEditOperations.ts`. Prefer the open `safeappeals.xlsxViewer` when available; otherwise headless WASM (`xlsxHeadless.ts` / `initSync` of `media/xlsx/wasm`) parses and writes. `safeappeals_xlsx_read` returns workbook structure JSON (tables, styles, formulas, charts) plus TSV values. Create a new workbook with `safeappeals_xlsx_create` (JSZip) without an open editor. DOCX structured ops (`replaceAll`, `appendParagraph`, `appendHeading`, `insertAtEnd`) also work headlessly; `replaceSelection` still requires an open editor.
 
 Canonical XLSX op table: [xlsx-rust-viewer API — applyEdits](../xlsx-rust-viewer/api-reference.md#ai-edit-operations-applyedits).
 

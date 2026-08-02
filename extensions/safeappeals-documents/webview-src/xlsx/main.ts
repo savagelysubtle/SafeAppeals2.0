@@ -7,7 +7,7 @@
  *--------------------------------------------------------------------------------------*/
 
 import init, { XlsxParser, XlsxWriter, TableOps, FormulaEngine, init_panic_hook } from './wasm/xlsx_rust_viewer.js';
-import { CanvasRenderer, CellStyle, FormulaRange } from './renderer.js';
+import { CanvasRenderer, FormulaRange } from './renderer.js';
 import { Ribbon, RibbonEvent } from './ribbon.js';
 import { ContextMenu, ContextMenuEvent } from './contextMenu.js';
 import { FilterDropdown, FilterDropdownEvent } from './filterDropdown.js';
@@ -24,6 +24,20 @@ import { computePivotTable, PivotOutput } from './pivotTableEngine.js';
 import { PageSetupDialog, PageSetupDef, PageSetupEvent } from './pageSetupDialog.js';
 import { CsvImportDialog, CsvImportEvent } from './csvImportDialog.js';
 import { XlsxInlineEditPopup } from './inlineEditPopup.js';
+import {
+	buildChartDefinition,
+	formatOpToStyle,
+	formatWorkbookReadOutput,
+	getColName,
+	mergeFormulaResultsIntoSheet,
+	normalizeFormula,
+	parseCellRange,
+	parseCellRef,
+	resolveChartData,
+	resolveSheetIndex,
+	type FormulaEvalResult,
+} from '../../src/xlsx/xlsxModelOps';
+import { overlayFormulasFromXlsx } from '../../src/xlsx/xlsxFormulaOverlay';
 
 // VS Code API (available in webview context)
 declare function acquireVsCodeApi(): { postMessage(msg: unknown): void; getState(): unknown; setState(state: unknown): void };
@@ -345,6 +359,9 @@ async function handleLoad(base64Data: string) {
 		// Parse JSON and pass to renderer
 		const model = JSON.parse(modelJsonStr);
 
+		// Calamine drops `<f>` text; restore formulas before setData/eval (headless parity).
+		await overlayFormulasFromXlsx(bytes, model);
+
 		// Debug: log model structure to diagnose data display issues
 		const firstSheet = model.sheets?.[0];
 		console.log('[XLSX Rust Viewer] Parsed model:', {
@@ -402,23 +419,38 @@ async function handleLoad(base64Data: string) {
 
 // --- Formula Evaluation ---
 
+/**
+ * Evaluate formulas on every sheet (cross-sheet refs need the full workbook map).
+ * Merges computed values into `cell.formula_result` for save/TSV, and updates the
+ * active-sheet display cache for the canvas.
+ */
 function evaluateFormulas() {
-	if (!formulaEngine || !renderer) return;
+	if (!formulaEngine || !renderer) {
+		return;
+	}
 	const data = renderer.getData();
-	if (!data?.sheets) return;
+	if (!data?.sheets?.length) {
+		return;
+	}
 	const activeIdx = renderer.getActiveSheetIndex();
-	const activeSheet = data.sheets[activeIdx];
-	if (!activeSheet) return;
 
 	try {
-		// Build all-sheets cells map for cross-sheet formula support
 		const allSheets: Record<string, unknown> = {};
 		for (const sheet of data.sheets) {
 			allSheets[sheet.name] = sheet.cells ?? {};
 		}
-		const resultJson = formulaEngine.evaluate_all(JSON.stringify(allSheets), activeSheet.name);
-		const results = JSON.parse(resultJson);
-		renderer.setFormulaResults(results);
+		const allJson = JSON.stringify(allSheets);
+		let activeResults: Record<string, FormulaEvalResult> = {};
+		for (let i = 0; i < data.sheets.length; i++) {
+			const sheet = data.sheets[i];
+			const resultJson = formulaEngine.evaluate_all(allJson, sheet.name);
+			const results = JSON.parse(resultJson) as Record<string, FormulaEvalResult>;
+			mergeFormulaResultsIntoSheet(sheet, results);
+			if (i === activeIdx) {
+				activeResults = results;
+			}
+		}
+		renderer.setFormulaResults(activeResults);
 		updateStatusBar();
 	} catch (e) {
 		console.warn('[XLSX Rust Viewer] Formula evaluation error:', e);
@@ -633,6 +665,9 @@ async function handleSave(targetUri?: string) {
 	}
 
 	try {
+		// Merge computed values into cell.formula_result on every sheet before serialize
+		// so rust_xlsxwriter writes a real `<v>` cache instead of 0.
+		evaluateFormulas();
 		const model = renderer.getData();
 		if (!model) {
 			console.error('[XLSX Rust Viewer] No data to save');
@@ -681,33 +716,13 @@ function extractWorkbookText(): string {
 	if (!renderer) {
 		return '';
 	}
+	// Ensure formula_result is populated so structure/TSV show computed values, not `=SUM(...)`.
+	evaluateFormulas();
 	const model = renderer.getData();
-	if (!model?.sheets?.length) {
+	if (!model) {
 		return '';
 	}
-	const parts: string[] = [];
-	for (const sheet of model.sheets) {
-		parts.push(`# Sheet: ${sheet.name ?? '(unnamed)'}`);
-		const rowCount = Math.min(sheet.row_count ?? 0, 200);
-		const colCount = Math.min(sheet.col_count ?? 0, 50);
-		for (let r = 0; r < rowCount; r++) {
-			const cells: string[] = [];
-			let any = false;
-			for (let c = 0; c < colCount; c++) {
-				const cell = sheet.cells?.[r]?.[c];
-				const value = cell?.value ?? '';
-				if (value !== '' && value !== undefined && value !== null) {
-					any = true;
-				}
-				cells.push(String(value ?? ''));
-			}
-			if (any) {
-				parts.push(cells.join('\t'));
-			}
-		}
-		parts.push('');
-	}
-	return parts.join('\n').trim();
+	return formatWorkbookReadOutput(model);
 }
 
 function handleApplyEdits(operations: any[]): Array<{ type?: string; ok: boolean; error?: string }> {
@@ -752,7 +767,7 @@ function handleApplyEdits(operations: any[]): Array<{ type?: string; ok: boolean
 						results.push({ type: op.type, ok: false, error: `Invalid cell: ${op.cell}` });
 						break;
 					}
-					renderer.updateCell(ref.row, ref.col, op.formula, 's');
+					renderer.updateCell(ref.row, ref.col, normalizeFormula(String(op.formula ?? '')), 'f');
 					results.push({ type: op.type, ok: true });
 					break;
 				}
@@ -871,46 +886,13 @@ function handleApplyEdits(operations: any[]): Array<{ type?: string; ok: boolean
 						results.push({ type: op.type, ok: false, error: 'Sheet missing' });
 						break;
 					}
-
-					const chartType = op.chart_type ?? op.chartType;
-					const dataRange = op.data_range ?? op.dataRange;
-					if (chartType === undefined || chartType === null || chartType === ''
-						|| dataRange === undefined || dataRange === null || dataRange === '') {
-						results.push({
-							type: op.type,
-							ok: false,
-							error: `${op.type} requires chart_type (or chartType) and data_range (or dataRange)`,
-						});
+					const built = buildChartDefinition(op, sheet);
+					if ('error' in built) {
+						results.push({ type: op.type, ok: false, error: built.error });
 						break;
 					}
-
 					if (!sheet.charts) { sheet.charts = []; }
-
-					const anchorCol = op.position ? (parseCellRef(op.position)?.col ?? 0) : 0;
-					const anchorRow = op.position ? (parseCellRef(op.position)?.row ?? (sheet.charts.length > 0 ? 20 : 10)) : (sheet.charts.length > 0 ? 20 : 10);
-
-					const chartDef: ChartDefinition = {
-						chart_type: chartType,
-						title: op.title,
-						series: [{ values_ref: dataRange, categories_cache: [], values_cache: [] }],
-						axes: [
-							{ axis_type: 'category', position: 'bottom' },
-							{ axis_type: 'value', position: 'left' },
-						],
-						anchor: {
-							from_col: anchorCol,
-							from_row: anchorRow,
-							from_col_off: 0,
-							from_row_off: 0,
-							to_col: anchorCol + 8,
-							to_row: anchorRow + 15,
-							to_col_off: 0,
-							to_row_off: 0,
-						},
-					};
-
-					resolveChartData(chartDef, sheet);
-					sheet.charts.push(chartDef);
+					sheet.charts.push(built as ChartDefinition);
 					syncChartOverlays();
 					results.push({ type: op.type, ok: true });
 					break;
@@ -939,60 +921,9 @@ function handleApplyEdits(operations: any[]): Array<{ type?: string; ok: boolean
 
 	markDirty();
 	renderer.render();
+	// Match interactive edits: refresh formula display/cache after batch ops.
+	evaluateFormulas();
 	return results;
-}
-
-/**
- * Resolve a sheet selector to a 0-based index.
- * Undefined/null → 0. Unmatched string names and out-of-range numbers → -1.
- */
-function resolveSheetIndex(model: any, sheet: string | number | undefined | null): number {
-	if (sheet === undefined || sheet === null) {
-		return 0;
-	}
-	const sheetCount = Array.isArray(model?.sheets) ? model.sheets.length : 0;
-	if (typeof sheet === 'number') {
-		if (!Number.isInteger(sheet) || sheet < 0 || sheet >= sheetCount) {
-			return -1;
-		}
-		return sheet;
-	}
-	if (typeof sheet !== 'string') {
-		return -1;
-	}
-	return model.sheets.findIndex((s: any) => s.name === sheet);
-}
-
-/**
- * Map agent/format_cell / format_range payload keys onto CellStyle with explicit values
- * (not toggles). Accepts backgroundColor as an alias for fillColor.
- */
-function formatOpToStyle(format: Record<string, unknown>): CellStyle {
-	const style: CellStyle = {};
-	if (format.bold !== undefined) { style.bold = !!format.bold; }
-	if (format.italic !== undefined) { style.italic = !!format.italic; }
-	if (format.underline !== undefined) { style.underline = !!format.underline; }
-	if (format.strikethrough !== undefined) { style.strikethrough = !!format.strikethrough; }
-	if (format.wrapText !== undefined) { style.wrapText = !!format.wrapText; }
-	const fill = format.backgroundColor ?? format.fillColor;
-	if (fill !== undefined && fill !== null) { style.fillColor = String(fill); }
-	if (format.textColor !== undefined && format.textColor !== null) {
-		style.textColor = String(format.textColor);
-	}
-	if (format.fontSize !== undefined && format.fontSize !== null && format.fontSize !== '') {
-		const n = Number(format.fontSize);
-		if (!Number.isNaN(n)) { style.fontSize = n; }
-	}
-	if (format.fontFamily !== undefined && format.fontFamily !== null) {
-		style.fontFamily = String(format.fontFamily);
-	}
-	if (format.alignment === 'left' || format.alignment === 'center' || format.alignment === 'right') {
-		style.alignment = format.alignment;
-	}
-	if (format.numberFormat !== undefined && format.numberFormat !== null) {
-		style.numberFormat = String(format.numberFormat);
-	}
-	return style;
 }
 
 // --- Ribbon Action Handler ---
@@ -2154,7 +2085,11 @@ export function handleTableAction(action: string, params?: Record<string, unknow
 		return { ok: false, error: 'Renderer or table ops not ready' };
 	}
 
-	const modelJson = JSON.stringify(renderer.getData());
+	const preModel = renderer.getData();
+	const styleSnap = action === 'createTable' && preModel?.sheets
+		? snapshotCellStylesFromModel(preModel, renderer.getActiveSheetIndex())
+		: null;
+	const modelJson = JSON.stringify(preModel);
 	let result: string | undefined;
 
 	try {
@@ -2259,9 +2194,63 @@ export function handleTableAction(action: string, params?: Record<string, unknow
 		return { ok: false, error: `Table action ${action} returned no model` };
 	}
 	const newModel = JSON.parse(result);
+	if (styleSnap) {
+		mergeCellStylesOntoModel(newModel, renderer.getActiveSheetIndex(), styleSnap);
+	}
 	renderer.updateModel(newModel);
 	markDirty();
 	return { ok: true };
+}
+
+/** Snapshot snake_case cell styles before create_table (WASM round-trip can drop them). */
+function snapshotCellStylesFromModel(
+	model: { sheets?: Array<{ cells?: Record<string, Record<string, { style?: Record<string, unknown> | null }>> }> },
+	sheetIdx: number,
+): Map<string, Record<string, unknown>> {
+	const out = new Map<string, Record<string, unknown>>();
+	const sheet = model.sheets?.[sheetIdx];
+	if (!sheet?.cells) {
+		return out;
+	}
+	for (const [rowKey, row] of Object.entries(sheet.cells)) {
+		for (const [colKey, cell] of Object.entries(row)) {
+			if (cell?.style && typeof cell.style === 'object') {
+				out.set(`${rowKey}:${colKey}`, { ...cell.style });
+			}
+		}
+	}
+	return out;
+}
+
+/** Re-apply pre-table styles onto post-table cells (pre wins on key conflict). */
+function mergeCellStylesOntoModel(
+	model: { sheets?: Array<{ cells?: Record<string, Record<string, { style?: Record<string, unknown> | null; value?: string; data_type?: string }>> }> },
+	sheetIdx: number,
+	styles: Map<string, Record<string, unknown>>,
+): void {
+	const sheet = model.sheets?.[sheetIdx];
+	if (!sheet || styles.size === 0) {
+		return;
+	}
+	if (!sheet.cells) {
+		sheet.cells = {};
+	}
+	for (const [key, style] of styles) {
+		const sep = key.indexOf(':');
+		if (sep < 0) {
+			continue;
+		}
+		const rowKey = key.slice(0, sep);
+		const colKey = key.slice(sep + 1);
+		if (!sheet.cells[rowKey]) {
+			sheet.cells[rowKey] = {};
+		}
+		if (!sheet.cells[rowKey][colKey]) {
+			sheet.cells[rowKey][colKey] = { value: '', data_type: 'null', style: null };
+		}
+		const cell = sheet.cells[rowKey][colKey];
+		cell.style = { ...(cell.style ?? {}), ...style };
+	}
 }
 
 // --- Rename Dialog (webview can't use prompt()) ---
@@ -2751,96 +2740,6 @@ function handleChartWizardAction(event: ChartWizardEvent) {
 	}
 }
 
-/**
- * Resolve chart series data references against actual cell data.
- * Populates values_cache/categories_cache from the sheet cells,
- * and ensures values_ref includes the sheet name for saving.
- */
-function resolveChartData(chartDef: ChartDefinition, sheet: any) {
-	const sheetName = sheet.name || 'Sheet1';
-	const cells = sheet.cells || {};
-
-	for (const series of chartDef.series) {
-		if (series.values_ref) {
-			// Ensure the range includes sheet name for the writer
-			if (!series.values_ref.includes('!')) {
-				series.values_ref = `${sheetName}!${series.values_ref}`;
-			}
-
-			// Parse range and read cell values
-			const parsed = parseCellRange(series.values_ref);
-			if (parsed) {
-				const { startRow, startCol, endRow, endCol } = parsed;
-
-				const isVertical = startCol === endCol;
-
-				if (isVertical) {
-					// Single column: first row is header, rest are values
-					const cats: string[] = [];
-					const vals: number[] = [];
-					let dataStartRow = startRow;
-					for (let r = startRow; r <= endRow; r++) {
-						const cell = cells[r]?.[startCol];
-						const val = getCellValue(cell);
-						if (r === startRow && typeof val === 'string' && isNaN(Number(val))) {
-							series.name = val;
-							dataStartRow = startRow + 1;
-							continue;
-						}
-						cats.push(`Row ${r + 1}`);
-						vals.push(typeof val === 'number' ? val : (parseFloat(String(val)) || 0));
-					}
-					series.categories_cache = cats;
-					series.values_cache = vals;
-
-					// Build proper values_ref for the data rows only
-					const valCol = getColName(startCol);
-					series.values_ref = `${sheetName}!${valCol}${dataStartRow + 1}:${valCol}${endRow + 1}`;
-					// No separate categories column in vertical single-column layout
-					if (!series.categories_ref) {
-						series.categories_ref = undefined;
-					}
-				} else {
-					// Multi-column: first column = categories, remaining columns = values
-					const cats: string[] = [];
-					const vals: number[] = [];
-					let dataStartRow = startRow;
-
-					// Check if first row is a header row
-					const firstCell = cells[startRow]?.[startCol];
-					const firstVal = getCellValue(firstCell);
-					if (typeof firstVal === 'string' && isNaN(Number(firstVal))) {
-						dataStartRow = startRow + 1;
-					}
-
-					for (let r = dataStartRow; r <= endRow; r++) {
-						const catCell = cells[r]?.[startCol];
-						const catVal = getCellValue(catCell);
-						cats.push(String(catVal ?? `Row ${r + 1}`));
-						// Sum remaining columns for this row
-						let sum = 0;
-						for (let c = startCol + 1; c <= endCol; c++) {
-							const vCell = cells[r]?.[c];
-							const v = getCellValue(vCell);
-							sum += typeof v === 'number' ? v : (parseFloat(String(v)) || 0);
-						}
-						vals.push(sum);
-					}
-					series.categories_cache = cats;
-					series.values_cache = vals;
-
-					// Build proper separate references for categories and values
-					const catCol = getColName(startCol);
-					const valStartCol = getColName(startCol + 1);
-					const valEndCol = getColName(endCol);
-					series.categories_ref = `${sheetName}!${catCol}${dataStartRow + 1}:${catCol}${endRow + 1}`;
-					series.values_ref = `${sheetName}!${valStartCol}${dataStartRow + 1}:${valEndCol}${endRow + 1}`;
-				}
-			}
-		}
-	}
-}
-
 // ============================================================================
 // Pivot Table Wiring
 // ============================================================================
@@ -3320,36 +3219,6 @@ function drillDownPivot(row: number, col: number) {
 
 // ============================================================================
 
-function parseCellRange(ref: string): { startRow: number; startCol: number; endRow: number; endCol: number } | null {
-	// Strip sheet name if present
-	let range = ref;
-	const bangIdx = range.indexOf('!');
-	if (bangIdx >= 0) range = range.substring(bangIdx + 1);
-	// Strip $ signs
-	range = range.replace(/\$/g, '');
-
-	const parts = range.split(':');
-	if (parts.length < 2) return null;
-
-	const start = parseCellRef(parts[0]);
-	const end = parseCellRef(parts[1]);
-	if (!start || !end) return null;
-
-	return { startRow: start.row, startCol: start.col, endRow: end.row, endCol: end.col };
-}
-
-function parseCellRef(ref: string): { row: number; col: number } | null {
-	const match = ref.match(/^([A-Za-z]+)(\d+)$/);
-	if (!match) return null;
-	return { col: parseColName(match[1].toUpperCase()), row: parseInt(match[2], 10) - 1 };
-}
-
-function getCellValue(cell: any): string | number | null {
-	if (!cell) return null;
-	if (cell.data_type === 'n') return parseFloat(cell.value) || 0;
-	return cell.value ?? null;
-}
-
 function handleChartAction(action: string, chartIndex: number, chartDef?: ChartDefinition) {
 	if (!renderer) return;
 	const data = renderer.getData();
@@ -3737,25 +3606,6 @@ if (statusBarEl) {
 		e.preventDefault();
 		showStatusBarContextMenu(e.clientX, e.clientY);
 	});
-}
-
-function getColName(n: number): string {
-	let s = '';
-	let idx = n;
-	while (idx >= 0) {
-		s = String.fromCharCode((idx % 26) + 65) + s;
-		idx = Math.floor(idx / 26) - 1;
-	}
-	return s;
-}
-
-/** Convert a column name like "A", "Z", "AA" to a zero-based index */
-function parseColName(name: string): number {
-	let result = 0;
-	for (let i = 0; i < name.length; i++) {
-		result = result * 26 + (name.charCodeAt(i) - 64);
-	}
-	return result - 1;
 }
 
 // --- Formula Point-Mode (cell reference selection) ---

@@ -266,10 +266,10 @@ connect-src {wasmUri};
 | Tool | Behavior |
 |------|----------|
 | `safeappeals_xlsx_create` | Host `xlsxWriter.ts` (JSZip) writes a new `.xlsx` — **no open editor required** |
-| `safeappeals_xlsx_read` | Requires file open in XLSX editor (headless Node WASM not shipped) |
-| `safeappeals_xlsx_edit` | Open editor → `applyEditsAndWait` → webview `handleApplyEdits`; host normalizer in `xlsxEditOperations.ts` |
+| `safeappeals_xlsx_read` | Open editor preferred; else headless WASM parse (`xlsxHostWasm` + `formatWorkbookReadOutput` structure JSON + TSV) |
+| `safeappeals_xlsx_edit` | Open editor → `applyEditsAndWait` → webview `handleApplyEdits`; else headless `applyXlsxOpsHeadless`. Shared parsers/mappers in `xlsxModelOps.ts` |
 
-Edit ops include tables (`create_table`, `resize_table`, …), charts (`create_chart` alias of `insert_chart`, camelCase `chartType`/`dataRange` accepted), and `format_range` (A1:B10; use `format_cell` or `A1:A1` for a single cell). Charts/tables/edits still require the file open except create.
+Edit ops include tables (`create_table`, `resize_table`, …), charts (`create_chart` alias of `insert_chart`, camelCase `chartType`/`dataRange` accepted), and `format_range` (A1:B10; use `format_cell` or `A1:A1` for a single cell).
 
 ## Future Architecture (planned)
 
@@ -277,4 +277,3 @@ Edit ops include tables (`create_table`, `resize_table`, …), charts (`create_c
 - **Arrow IPC / Transferables** — zero-copy data transfer between Worker and main thread
 - **Streaming viewport** — request only visible cell data from Rust instead of the full model
 - **Shared WorkbookModel** — keep model in Rust memory, query it via viewport requests
-- **Headless XLSX read/edit** — Node WASM for agent tools without an open editor (not shipped today)

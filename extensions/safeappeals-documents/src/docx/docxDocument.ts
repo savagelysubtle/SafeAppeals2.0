@@ -112,6 +112,16 @@ export class DocxDocument implements vscode.CustomDocument {
 		this._isDirty = false;
 	}
 
+	/**
+	 * Replace in-memory bytes after an external/headless write so a later save
+	 * cannot overwrite disk with a stale host cache. Does not fire dirty events.
+	 */
+	syncFromExternalBytes(data: Uint8Array): void {
+		this._documentData = data;
+		this._jsonContent = undefined;
+		this._isDirty = false;
+	}
+
 	async saveAs(targetResource: vscode.Uri, cancellation: vscode.CancellationToken): Promise<void> {
 		if (cancellation.isCancellationRequested) {
 			return;
