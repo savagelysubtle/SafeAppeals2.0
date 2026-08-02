@@ -21,20 +21,17 @@ todos:
       case-setup agent skill via contributes.chatSkills"
     status: completed
   - id: slice1-verify
-    content: "Slice 1 verify: compile, load in dev build, walkthrough visible,
-      init + edit round-trip, agent picks up AGENTS.md. NOTE (Jul 29): two
-      defects found by audit before this ran — core _writeProfileRule() has no
-      mkdir (silent no-op for fresh users), and the two profile-rule writers
-      emit non-identical prose. Both now owned by the onboarding redesign plan
-      (T4 / T10); verify after those land."
-    status: pending
+    content: "Slice 1 verify: onboarding M1 (T4/T10/T12) shipped Jul 30 — profile
+      rule / walkthrough ownership moved there; case commands + AGENTS.md /
+      case.json path remains as built in 567beff7. Slice 1b supersession
+      complete; no further verify work on this plan's slice 1."
+    status: completed
   - id: slice2-timeline
     content: "Slice 2: timeline + deadlines (webview view or dashboard editor,
       reads case.json for jurisdiction/injury date; statute deadline calc from
       old jurisdictionConfig; deadline notifications; PDF export decision).
-      DEFERRED (user decision Jul 29) until the onboarding redesign ships —
-      that plan's T10/T12 rewrite this same extension's walkthrough and add a
-      sample case, so timeline waits rather than collide."
+      UNBLOCKED for scheduling (onboarding M1 shipped Jul 30) — still not
+      started; resolve jurisdiction slug-vs-display-name before port."
     status: pending
   - id: slice3-skills
     content: "Slice 3 (optional/later): case-type skills in .safeAppeals/skills/
@@ -45,23 +42,16 @@ isProject: false
 
 # safeappeals-case extension (Rung 7, extension-first)
 
-## Status (Jul 29, 2026) — PARTLY SUPERSEDED; remaining work paused
+## Status (Aug 2, 2026) — Slice 1 DONE; Slice 2 next
 
-Slices 1 + 1b are committed (`567beff7`). Slice 1 stands as built: four
-commands (`setupProfile`, `initCase`, `editCaseInfo`, plus an unplanned
-`openCaseBrief`), the "Set Up Safe Appeals" walkthrough, the `case-setup`
-chat skill, and build wiring in `gulpfile.extensions.ts` + `npm/dirs.ts`.
+Slices 1 + 1b committed (`567beff7`). Slice 1 verify closed after onboarding
+M1 (Jul 30) took over T4/T10/T12 — profile/walkthrough/sample-case ownership
+lives there; case commands + AGENTS.md + `.safeAppeals/case.json` stand.
 
-**Slice 1b is superseded.** The `onboarding_redesign_newcomer` plan (Jul 29)
-rebuilds the first-run wizard as a 4-step flow and takes ownership of the
-"Who You Are" step this slice created (its T4), of this extension's
-walkthrough (its T10, which becomes a post-wizard checklist), and adds a
-bundled sample case here (its T12). Do not extend slice 1b in this plan —
-that surface now belongs to the onboarding plan.
+**Slice 1b superseded (closed).** Do not extend it here.
 
-**Slice 2 (timeline) is deferred, not cancelled** (user decision Jul 29). It
-has no dependency on onboarding, but onboarding's T10/T12 edit this same
-extension, so it waits rather than collide. Source material is inventoried:
+**Slice 2 (timeline) is unblocked** (onboarding M1 shipped) but **not started**.
+Source material is inventoried:
 `void-reference/browser/timeline/jurisdictionConfig.ts` (312 lines,
 `DEFAULT_JURISDICTIONS` with real `statuteOfLimitationsDays` +
 `deadlineRules[]`), `common/timeline/timelineTypes.ts` (462),

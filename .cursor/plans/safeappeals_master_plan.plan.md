@@ -71,15 +71,13 @@ todos:
       onboarding_redesign_newcomer.plan.md §9 Phase B."
     status: completed
   - id: r7-timeline
-    content: "Rung 7 slice 2 (deps: M1 ships — same-extension collision with
-      T10/T12, deferred Jul 29): timeline + deadlines in safeappeals-case —
-      statute deadline calc from old jurisdictionConfig, notifications, PDF
-      export decision; doubles as the missing calendar UI (reads the
-      calendar extension's getEvents commands). Resolve jurisdiction-ID
-      slug-vs-display-name mismatch first. SCOPE QUESTION (Q5): calendar sync
-      is pull-only — if deadlines should push to the user's real calendar,
-      write-back must be built. Plan:
-      safeappeals_case_extension_rung7.plan.md."
+    content: "Rung 7 slice 2 (UNBLOCKED — M1 shipped Jul 30; not started):
+      timeline + deadlines in safeappeals-case — statute deadline calc from
+      old jurisdictionConfig, notifications, PDF export decision; doubles as
+      the missing calendar UI (reads calendar getEvents). Resolve
+      jurisdiction-ID slug-vs-display-name mismatch first. SCOPE QUESTION
+      (Q5): calendar sync is pull-only — write-back if deadlines should push.
+      Plan: safeappeals_case_extension_rung7.plan.md."
     status: pending
   - id: r8-organizer
     content: "Rung 8 (deps: r7 for case.json consumers): NEW
@@ -132,14 +130,14 @@ todos:
       merge plan rung 13 + C.1 server prerequisite."
     status: pending
   - id: tools-pass
-    content: "Agent tools pass — ACTIVE / in progress alongside Cloud Agent
-      (Jul 31: unblocked, in-ladder; not deferred). Host surface phases A–F
-      in safeappeals-authentication + documents + timer + email; LM tools for
-      time-tracker, documents, email one extension at a time with live agent
-      testing; will absorb RAG ×5 + timeline ×6. DOCX/XLSX webview seams
-      code-verified (Jul 29). Pilot/gates still pending. Plan:
-      safeappeals_agent_tools_da04f06e.plan.md (+ full_agent_tool_surface)."
-    status: in_progress
+    content: "Agent tools pass — CORE DONE Aug 2 (e1754228): workspace/file tools,
+      Brave search/fetch (credits+filters), DOCX/XLSX open+closed + structure
+      xlsx_read + formula overlay, openDocument, timer start/stop/getState,
+      email createDraft, MAX_AGENT_ITERATIONS=500; agent smoke QA passed.
+      Remainder (same plan): email read/organize, compose UX, pattern docs,
+      timer updateEntry/listMatters, unified edit wrapper, later RAG/timeline
+      tools. Plan: safeappeals_agent_tools_da04f06e.plan.md."
+    status: completed
   - id: r14-packaging
     content: "Rung 14: data migrations (merge plan section I; decide if old
       Void user data still needs migrating at all; known live case: PDF
@@ -184,9 +182,9 @@ A future agent can follow these blindly, with the caveats listed:
 | Plan file | Status | Caveat |
 | --------- | ------ | ------ |
 | `onboarding_redesign_newcomer.plan.md` | **Trustworthy, current, ACTIVE** | none — this is the live workstream |
-| `safeappeals_case_extension_rung7.plan.md` | Trustworthy, current (updated Jul 29) | slice 1b superseded by onboarding T4/T10; slice 2 deferred until M1 ships |
+| `safeappeals_case_extension_rung7.plan.md` | Trustworthy (updated Aug 2) | slice 1 verify closed; slice 2 unblocked (M1 shipped) but not started |
 | `unified_safeappeals_sign-in_225af75a.plan.md` | Trustworthy, current (updated Jul 29) | its front third (extension shell + cloud provider) moved to onboarding T1; its workstream-1 "endpoints are sound" assumption is void — T0 fixes them first |
-| `safeappeals_agent_tools_da04f06e.plan.md` | Trustworthy — its code assumptions are now **code-verified** (Jul 29 audit: the XLSX `applyEdits` webview handler exists and the host never posts to it, exactly as the plan assumed) | **ACTIVE / in progress** alongside Cloud Agent (Jul 31: unblocked, in-ladder — not deferred). Will grow to absorb RAG/timeline tools. Bonus it did not know: DOCX has an equivalent usable seam (`inlineEditRequest`/`applyInlineEdit` webview protocol, host side inert) — see "three inert AI seams" below |
+| `safeappeals_agent_tools_da04f06e.plan.md` | Trustworthy (updated Aug 2) | **Core tools DONE** (`e1754228`) — open+closed DOCX/XLSX, search, timer, draft. Remainder: email read/organize, pattern docs, unified wrapper. Cloud Agent plan phases 0–4 + tools pass marked complete. |
 | `upstream_vs_code_merge_spike_2245beba.plan.md` | Trustworthy for: rung ladder, dated status sections, Rust strategy, sections A/B/E/F/G/I/K | **Sections C.2/C.3, D, D.2's "stay in contrib" list, parts of H, and ladder J are pre-Jul-21 and superseded** — see "The contrib hub is dead" below. Read its Jul 29 → Jul 21 → Jul 20 status sections top-down before trusting any older inline text. |
 
 Two plans were **deleted Jul 29** (`rust_acceleration_plan_b2c6b37e`,
@@ -550,24 +548,18 @@ native tool_calls if not already landed with T13, and the final
 keep/slim/drop verdict on metrics + update services. → **Detail: merge plan
 rung 13 + C.1 "server prerequisite".**
 
-### Tools pass — Agent LM tools (ACTIVE / in progress alongside Cloud Agent)
+### Tools pass — Agent LM tools — CORE DONE (Aug 2, `e1754228`)
 
-**Jul 31 status:** unblocked and in-ladder with Cloud Agent — not deferred to
-the end of the migration. Host tool surface phases A–F land in
-`safeappeals-authentication` + `safeappeals-documents` + `time-tracker` +
-`safeappeals-email`. Pilot/gates still pending (do not mark done). One
-extension at a time for domain tools: time-tracker
-(start/stop/getState/updateEntry/listMatters), documents (docx/xlsx
-create/edit/read with hybrid open-editor/headless routing), email
-(read + draft-only — **no send tool ever** — + organize tools wrapping the
-6.6/6.7 commands), then the plan grows to absorb RAG ×5 and timeline ×6
-tools and the house-pattern doc. The webview seams this builds on are
-code-verified (Jul 29): the XLSX `applyEdits` handler is exactly as the
-plan assumed, and DOCX already has a four-message
-`inlineEditRequest`/`applyInlineEdit` protocol the plan did not know about —
-evaluate reusing it before building `applyDocxEdits` fresh. Prerequisite
-decision: the XLSX WASM node-target tension (§Q3). → **Plan:
-`safeappeals_agent_tools_da04f06e.plan.md` (+ `full_agent_tool_surface`).**
+**Aug 2 status:** Core host surface shipped and agent-smoke verified. Auth
+workspace/file + Brave search/fetch; documents DOCX/XLSX open+closed (ready
+gate, external-sync save safety, structure JSON `xlsx_read`, formula overlay
+on headless edit); `openDocument`; timer start/stop/getState; email
+`createDraft` only; agent loop cap 500. Cloud Agent participant + tool loop
+already live (phases 0–4). **Remainder** (same sub-plan, not blocking next
+rungs): email read/organize + compose UX, timer updateEntry/listMatters,
+pattern docs, future unified edit/read wrapper; later absorb RAG/timeline
+tools. Q3 resolved: reuse web WASM in extension host (no separate nodejs
+wasm-pack). → **Plan: `safeappeals_agent_tools_da04f06e.plan.md`.**
 
 ### Rung 14 — Migrations + packaging/CI
 
