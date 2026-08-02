@@ -191,6 +191,7 @@ suite('CloudApiClient.refreshProviderToken', () => {
 				provider: 'google',
 				accessToken: 'provider-access',
 				expiresAt: 1_700_000_3600,
+				scope: 'openid https://mail.google.com/',
 			}), { status: 200, headers: { 'Content-Type': 'application/json' } });
 		}) as typeof fetch;
 
@@ -209,6 +210,7 @@ suite('CloudApiClient.refreshProviderToken', () => {
 						provider: 'google',
 						accessToken: 'provider-access',
 						expiresAt: 1_700_000_3600,
+						scope: 'openid https://mail.google.com/',
 					},
 					calls: [{
 						url: `${DEFAULT_API_URL}/auth/provider-token`,
@@ -237,10 +239,13 @@ suite('CloudApiClient.refreshProviderToken', () => {
 
 		try {
 			const result = await client.refreshProviderToken('google');
+			// Legacy Cloud deployments omit `scope` — surfaced as undefined, never
+			// as an implied mail grant.
 			assert.deepStrictEqual(result, {
 				provider: 'google',
 				accessToken: 'provider-access',
 				expiresAt: 1_700_000_3600,
+				scope: undefined,
 			});
 		} finally {
 			globalThis.fetch = originalFetch;

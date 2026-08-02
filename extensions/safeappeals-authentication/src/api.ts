@@ -266,6 +266,12 @@ export interface ProviderTokenResponse {
 	readonly provider: AuthProviderId;
 	readonly accessToken: string;
 	readonly expiresAt: number;
+	/**
+	 * Space-delimited scopes the provider actually granted (e.g.
+	 * `'openid email https://mail.google.com/'`). Absent on older Cloud
+	 * deployments — consumers must not treat that as "mail granted".
+	 */
+	readonly scope?: string;
 }
 
 /**
@@ -372,6 +378,7 @@ export class CloudApiClient {
 			provider?: AuthProviderId;
 			accessToken: string;
 			expiresAt: number;
+			scope?: string | null;
 		}>('/auth/provider-token', {
 			method: 'POST',
 			body: JSON.stringify({ provider }),
@@ -381,6 +388,7 @@ export class CloudApiClient {
 			provider: response.provider ?? provider,
 			accessToken: response.accessToken,
 			expiresAt: response.expiresAt,
+			scope: response.scope ?? undefined,
 		};
 	}
 

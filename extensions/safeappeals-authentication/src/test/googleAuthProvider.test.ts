@@ -14,12 +14,20 @@ import type {
 } from 'vscode';
 import {
 	GoogleAuthProvider,
+	capabilitiesFromGrantedScope,
 	inferProviderCapabilities,
 	sessionSatisfiesCapabilities,
 	scopesForCapabilities,
 	isProviderTokenReauthError,
 	googleScopeOptionsFromCapabilities,
+	ProviderTokenScopeError,
 } from '../googleAuthProvider';
+
+/** Google's granted scope for a full mailbox consent. */
+const MAIL_GRANT = 'openid https://www.googleapis.com/auth/userinfo.email https://mail.google.com/';
+
+/** Google's granted scope for an identity-only (Cloud sign-in) consent. */
+const IDENTITY_ONLY_GRANT = 'openid https://www.googleapis.com/auth/userinfo.email';
 
 type Listener<T> = (e: T) => unknown;
 
@@ -109,15 +117,39 @@ suite('isProviderTokenReauthError', () => {
 				status: isProviderTokenReauthError(new Error('API request failed (404).')),
 				notFound: isProviderTokenReauthError(new Error('Provider token not found')),
 				other: isProviderTokenReauthError(new Error('network down')),
+				insufficientScope: isProviderTokenReauthError(new ProviderTokenScopeError(['mail'])),
 			},
-			{ status: true, notFound: true, other: false },
+			{ status: true, notFound: true, other: false, insufficientScope: true },
+		);
+	});
+});
+
+suite('capabilitiesFromGrantedScope', () => {
+	test('reads Google grants and reports unknown when scope is absent', () => {
+		assert.deepStrictEqual(
+			{
+				mail: [...capabilitiesFromGrantedScope(MAIL_GRANT)!].sort(),
+				identityOnly: [...capabilitiesFromGrantedScope(IDENTITY_ONLY_GRANT)!],
+				both: [...capabilitiesFromGrantedScope(
+					`${MAIL_GRANT} https://www.googleapis.com/auth/calendar.events`,
+				)!].sort(),
+				missing: capabilitiesFromGrantedScope(undefined),
+				blank: capabilitiesFromGrantedScope('   '),
+			},
+			{
+				mail: ['mail'],
+				identityOnly: [],
+				both: ['calendar', 'mail'],
+				missing: undefined,
+				blank: undefined,
+			},
 		);
 	});
 });
 
 suite('GoogleAuthProvider', () => {
 	function makeProvider(overrides: {
-		refresh?: () => Promise<{ provider: 'google'; accessToken: string; expiresAt: number }>;
+		refresh?: () => Promise<{ provider: 'google'; accessToken: string; expiresAt: number; scope?: string }>;
 		requestScopes?: (options: { mail?: boolean; calendar?: boolean }) => Promise<void>;
 		nowSeconds?: () => number;
 		cloudSignedIn?: boolean;
@@ -292,6 +324,120 @@ suite('GoogleAuthProvider', () => {
 		};
 		cloudSessionEmitter.fire({ added: [], removed: [cloudSession], changed: [] });
 		assert.deepStrictEqual(await provider.getSessions(['mail']), []);
+		await provider.dispose();
+	});
+
+	test('mint with the Gmail scope granted serves a mail session', async () => {
+		const { provider, reconsentCalls, refreshCalls } = makeProvider({
+			refresh: async () => ({
+				provider: 'google',
+				accessToken: 'google-access-mail',
+				expiresAt: 1_700_000_3600,
+				scope: MAIL_GRANT,
+			}),
+		});
+		const session = await provider.createSession(['mail']);
+		assert.deepStrictEqual(
+			{
+				accessToken: session.accessToken,
+				scopes: session.scopes,
+				reconsentCalls,
+				refreshCalls,
+				getSessionsMail: (await provider.getSessions(['mail'])).map(s => s.scopes),
+			},
+			{
+				accessToken: 'google-access-mail',
+				scopes: ['mail'],
+				reconsentCalls: [],
+				refreshCalls: ['google'],
+				getSessionsMail: [['mail']],
+			},
+		);
+		await provider.dispose();
+	});
+
+	test('identity-only grant reconsents instead of serving a mail-less token', async () => {
+		let mintAttempts = 0;
+		const { provider, reconsentCalls } = makeProvider({
+			refresh: async () => {
+				mintAttempts += 1;
+				return {
+					provider: 'google',
+					accessToken: `google-access-${mintAttempts}`,
+					expiresAt: 1_700_000_3600,
+					scope: mintAttempts === 1 ? IDENTITY_ONLY_GRANT : MAIL_GRANT,
+				};
+			},
+		});
+		const session = await provider.createSession(['mail']);
+		assert.deepStrictEqual(
+			{
+				accessToken: session.accessToken,
+				scopes: session.scopes,
+				reconsentCalls,
+				mintAttempts,
+			},
+			{
+				accessToken: 'google-access-2',
+				scopes: ['mail'],
+				reconsentCalls: [{ mail: true, calendar: undefined }],
+				mintAttempts: 2,
+			},
+		);
+		await provider.dispose();
+	});
+
+	test('createSession fails (no cached mail session) when reconsent still yields no Gmail scope', async () => {
+		const { provider, reconsentCalls } = makeProvider({
+			refresh: async () => ({
+				provider: 'google',
+				accessToken: 'google-access-identity',
+				expiresAt: 1_700_000_3600,
+				scope: IDENTITY_ONLY_GRANT,
+			}),
+		});
+		let createError: string | undefined;
+		try {
+			await provider.createSession(['mail']);
+		} catch (err) {
+			createError = err instanceof Error ? err.message : String(err);
+		}
+		assert.deepStrictEqual(
+			{
+				failed: createError !== undefined,
+				mentionsReconnect: /reconnect/i.test(createError ?? ''),
+				reconsentCalls,
+				sessions: await provider.getSessions(['mail']),
+			},
+			{
+				failed: true,
+				mentionsReconnect: true,
+				reconsentCalls: [{ mail: true, calendar: undefined }],
+				sessions: [],
+			},
+		);
+		await provider.dispose();
+	});
+
+	test('getSessions returns empty when the silent mint lacks the Gmail scope', async () => {
+		const { provider, reconsentCalls } = makeProvider({
+			refresh: async () => ({
+				provider: 'google',
+				accessToken: 'google-access-identity',
+				expiresAt: 1_700_000_3600,
+				scope: IDENTITY_ONLY_GRANT,
+			}),
+		});
+		assert.deepStrictEqual(
+			{
+				sessions: await provider.getSessions(['mail']),
+				reconsentCalls,
+			},
+			{
+				sessions: [],
+				reconsentCalls: [],
+			},
+		);
 		await provider.dispose();
 	});
 

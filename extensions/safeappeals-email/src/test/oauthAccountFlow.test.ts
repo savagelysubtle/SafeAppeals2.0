@@ -8,10 +8,13 @@ import * as assert from 'assert';
 import type { SecretStorage, SecretStorageChangeEvent, Event } from 'vscode';
 import { AccountStore, type AccountConfigPersistence } from '../accountStore';
 import {
+	boundMailboxEmail,
 	emailFromAuthAccountLabel,
 	gmailOAuthAccountDefaults,
+	isMailboxEmailBound,
 	isProviderScopeUserMismatch,
 	providerAuthIdForOAuth,
+	sessionGrantsMailScope,
 	shouldPersistOAuthAccount,
 } from '../oauthAccountFlow';
 import { handleCloudSignOutCascade } from '../syncEngine';
@@ -85,8 +88,8 @@ suite('email oauthAccountFlow', () => {
 				defaults: gmailOAuthAccountDefaults('me@gmail.com'),
 				googleId: providerAuthIdForOAuth('google'),
 				msId: providerAuthIdForOAuth('microsoft'),
-				persistWithToken: shouldPersistOAuthAccount({ accessToken: 'ya29.x' }),
-				persistEmpty: shouldPersistOAuthAccount({ accessToken: '' }),
+				persistWithToken: shouldPersistOAuthAccount({ accessToken: 'ya29.x', scopes: ['mail'] }),
+				persistEmpty: shouldPersistOAuthAccount({ accessToken: '', scopes: ['mail'] }),
 				persistMissing: shouldPersistOAuthAccount({}),
 				markedCount,
 				oauth1: store.getAccount('oauth-1')?.authStatus,
@@ -117,6 +120,60 @@ suite('email oauthAccountFlow', () => {
 				oauth1: 'needsReconnect',
 				pwd1: undefined,
 				oauthMs: 'needsReconnect',
+			},
+		);
+	});
+
+	test('persisting an OAuth mailbox requires a token whose grant includes Gmail', () => {
+		assert.deepStrictEqual(
+			{
+				mailSentinel: shouldPersistOAuthAccount({ accessToken: 'ya29.x', scopes: ['mail'] }),
+				gmailUri: shouldPersistOAuthAccount({
+					accessToken: 'ya29.x',
+					scopes: ['https://mail.google.com/'],
+				}),
+				calendarOnly: shouldPersistOAuthAccount({ accessToken: 'ya29.x', scopes: ['calendar'] }),
+				noScopes: shouldPersistOAuthAccount({ accessToken: 'ya29.x', scopes: [] }),
+				scopesUndefined: shouldPersistOAuthAccount({ accessToken: 'ya29.x' }),
+				grantsMail: sessionGrantsMailScope(['calendar', 'mail']),
+				grantsGmailModify: sessionGrantsMailScope([
+					'https://www.googleapis.com/auth/gmail.modify',
+				]),
+				grantsNothing: sessionGrantsMailScope(undefined),
+			},
+			{
+				mailSentinel: true,
+				gmailUri: true,
+				calendarOnly: false,
+				noScopes: false,
+				scopesUndefined: false,
+				grantsMail: true,
+				grantsGmailModify: true,
+				grantsNothing: false,
+			},
+		);
+	});
+
+	test('mailbox address is bound to the SafeAppeals Cloud Google account', () => {
+		const bound = boundMailboxEmail('Jane Doe (jane@gmail.com)', 'other@gmail.com');
+		assert.deepStrictEqual(
+			{
+				bound,
+				googleFallback: boundMailboxEmail(undefined, 'Jane Doe (jane@gmail.com)'),
+				unknown: boundMailboxEmail(undefined, undefined),
+				same: isMailboxEmailBound('jane@gmail.com', bound),
+				caseAndSpace: isMailboxEmailBound('  JANE@Gmail.com ', bound),
+				different: isMailboxEmailBound('work@gmail.com', bound),
+				unenforceable: isMailboxEmailBound('anything@gmail.com', undefined),
+			},
+			{
+				bound: 'jane@gmail.com',
+				googleFallback: 'jane@gmail.com',
+				unknown: undefined,
+				same: true,
+				caseAndSpace: true,
+				different: false,
+				unenforceable: true,
 			},
 		);
 	});

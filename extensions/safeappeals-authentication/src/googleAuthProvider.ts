@@ -96,6 +96,41 @@ export function inferProviderCapabilities(scopes: readonly string[] | undefined)
 }
 
 /**
+ * Capabilities a minted provider token actually carries, parsed from the
+ * provider's space-delimited `scope` grant.
+ *
+ * Returns `undefined` when the server reported no scope at all (older Cloud
+ * deployments) — callers then have no evidence either way and fall back to the
+ * requested capabilities.
+ */
+export function capabilitiesFromGrantedScope(
+	scope: string | undefined,
+): ReadonlySet<ProviderCapability> | undefined {
+	const granted = (scope ?? '').split(/\s+/).filter(entry => entry.length > 0);
+	if (granted.length === 0) {
+		return undefined;
+	}
+	return inferProviderCapabilities(granted);
+}
+
+/**
+ * A minted provider token lacks a capability the caller asked for — the Google
+ * grant is identity-only (or calendar-only), so Gmail/IMAP would fail later with
+ * `AUTHENTICATIONFAILED`.
+ *
+ * The message is intentionally un-localized: it is a control-flow signal matched
+ * by {@link isProviderTokenReauthError} to trigger incremental re-consent.
+ */
+export class ProviderTokenScopeError extends Error {
+	constructor(readonly missing: readonly ProviderCapability[]) {
+		super(
+			`Google provider token is missing ${missing.join(', ')} scope — reconnect to grant access.`,
+		);
+		this.name = 'ProviderTokenScopeError';
+	}
+}
+
+/**
  * Canonical session.scopes strings for the granted/requested capability set.
  */
 export function scopesForCapabilities(capabilities: ReadonlySet<ProviderCapability>): string[] {
@@ -364,12 +399,30 @@ export class GoogleAuthProvider implements vscode.AuthenticationProvider, vscode
 	): Promise<vscode.AuthenticationSession> {
 		try {
 			const token = await this.deps.refreshProviderToken();
+			// Stamp capabilities from what Google granted, never from what we asked
+			// for: an identity-only refresh mints fine but cannot talk to Gmail.
+			const grantedFromScope = capabilitiesFromGrantedScope(token.scope);
+			const granted = grantedFromScope ?? capabilities;
+			if (!sessionSatisfiesCapabilities(granted, capabilities)) {
+				const missing = [...missingCapabilities(granted, capabilities)];
+				this.deps.output.appendLine(
+					`[google-auth] minted token lacks ${missing.join(', ')} scope (granted: ${token.scope ?? 'unknown'})`,
+				);
+				// Never keep a cached session claiming a capability the token lacks.
+				this.clearCachedSessions();
+				throw new ProviderTokenScopeError(missing);
+			}
+			if (!grantedFromScope) {
+				this.deps.output.appendLine(
+					'[google-auth] provider-token response omitted scope; trusting requested capabilities',
+				);
+			}
 			const previous = this._cached ? [this.toAuthSession(this._cached, this._cached.capabilities)] : [];
 			this._cached = {
 				accessToken: token.accessToken,
 				expiresAt: token.expiresAt,
 				account,
-				capabilities,
+				capabilities: granted,
 			};
 			const session = this.toAuthSession(this._cached, capabilities);
 			if (previous.length) {

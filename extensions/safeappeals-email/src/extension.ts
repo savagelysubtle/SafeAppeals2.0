@@ -12,10 +12,11 @@ import { EmlEditorProvider } from './emlEditorProvider';
 import { parseEmlFile } from './emlParser';
 import { diagnoseConnection } from './imapClient';
 import {
+	boundMailboxEmail,
 	CLOUD_AUTH_PROVIDER_ID,
-	emailFromAuthAccountLabel,
 	gmailOAuthAccountDefaults,
 	GOOGLE_AUTH_PROVIDER_ID,
+	isMailboxEmailBound,
 	isProviderScopeUserMismatch,
 	providerAuthIdForOAuth,
 	shouldPersistOAuthAccount,
@@ -686,7 +687,9 @@ async function promptAddGoogleOAuthAccount(
 			createIfNone: true,
 		});
 		if (!session || !shouldPersistOAuthAccount(session)) {
-			log('Google mail session missing accessToken — aborting OAuth account create');
+			log(
+				`Google mail session unusable (token=${Boolean(session?.accessToken)}, scopes=${session?.scopes?.join(' ') ?? 'none'}) — aborting OAuth account create`,
+			);
 			void vscode.window.showErrorMessage(
 				vscode.l10n.t(
 					'Could not get a Gmail access token. Mailbox was not added. Try again or use Advanced: App Password / IMAP.',
@@ -710,23 +713,41 @@ async function promptAddGoogleOAuthAccount(
 		return undefined;
 	}
 
-	const derived =
-		emailFromAuthAccountLabel(googleSession.account.label)
-		|| emailFromAuthAccountLabel(cloudSession.account.label);
+	// The minted token only authenticates the Cloud Google account, so the mailbox
+	// address is bound to it — a different Gmail would fail IMAP later.
+	const boundEmail = boundMailboxEmail(
+		cloudSession.account.label,
+		googleSession.account.label,
+	);
+	const mismatchMessage = vscode.l10n.t(
+		'This mailbox must be {0} — the Google account you signed in to SafeAppeals with.',
+		boundEmail ?? '',
+	);
 	const email = await vscode.window.showInputBox({
-		prompt: vscode.l10n.t('Gmail address for this mailbox'),
+		prompt: boundEmail
+			? vscode.l10n.t('Gmail address for this mailbox (must be {0})', boundEmail)
+			: vscode.l10n.t('Gmail address for this mailbox'),
 		placeHolder: 'you@gmail.com',
-		value: derived || '',
+		value: boundEmail || '',
 		ignoreFocusOut: true,
 		validateInput: (value) => {
 			const trimmed = value.trim();
 			if (!trimmed || !trimmed.includes('@')) {
 				return vscode.l10n.t('Enter a valid email address');
 			}
+			if (!isMailboxEmailBound(trimmed, boundEmail)) {
+				return mismatchMessage;
+			}
 			return undefined;
 		},
 	});
 	if (!email?.trim()) {
+		return undefined;
+	}
+
+	if (!isMailboxEmailBound(email, boundEmail)) {
+		log(`Mailbox address ${email.trim()} does not match Cloud identity ${boundEmail}`);
+		void vscode.window.showErrorMessage(mismatchMessage);
 		return undefined;
 	}
 
@@ -929,7 +950,10 @@ async function promptReconnectMailbox(
 		const mailSession = await vscode.authentication.getSession(providerId, ['mail'], {
 			createIfNone: true,
 		});
-		if (!mailSession?.accessToken) {
+		if (!mailSession || !shouldPersistOAuthAccount(mailSession)) {
+			log(
+				`Reconnect for ${account.label} produced no mail-scoped token (scopes=${mailSession?.scopes?.join(' ') ?? 'none'})`,
+			);
 			void vscode.window.showErrorMessage(
 				vscode.l10n.t(
 					'Could not get a mail access token for {0}. Try again.',

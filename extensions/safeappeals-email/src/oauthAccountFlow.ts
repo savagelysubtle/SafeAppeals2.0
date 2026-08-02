@@ -71,9 +71,58 @@ export function isProviderScopeUserMismatch(error: unknown): boolean {
 }
 
 /**
- * Gate for persisting an OAuth mailbox row: only after a mail-scoped access token
- * was actually minted (binding amendment — do not store `{type:'oauth'}` on empty mint).
+ * Session scope strings that grant Gmail/IMAP access. `safeappeals-google` reports
+ * the `'mail'` sentinel; full Google scope URIs are accepted for robustness.
  */
-export function shouldPersistOAuthAccount({ accessToken }: { accessToken?: string }): boolean {
-	return Boolean(accessToken);
+const MAIL_SCOPE_MARKERS = /^(mail|https:\/\/mail\.google\.com\/?|https:\/\/www\.googleapis\.com\/auth\/gmail\.[a-z]+)$/i;
+
+/**
+ * True when an authentication session actually carries mailbox scope.
+ * Empty scopes count as "no mail" — a token minted from an identity-only Google
+ * grant cannot authenticate IMAP and must not look like a mailbox session.
+ */
+export function sessionGrantsMailScope(scopes: readonly string[] | undefined): boolean {
+	return (scopes ?? []).some(scope => MAIL_SCOPE_MARKERS.test(scope.trim()));
+}
+
+/**
+ * Gate for persisting an OAuth mailbox row: only after a mail-scoped access token
+ * was actually minted (binding amendment — do not store `{type:'oauth'}` on empty
+ * mint, and never on a token whose grant lacks Gmail access).
+ */
+export function shouldPersistOAuthAccount({
+	accessToken,
+	scopes,
+}: {
+	accessToken?: string;
+	scopes?: readonly string[];
+}): boolean {
+	return Boolean(accessToken) && sessionGrantsMailScope(scopes);
+}
+
+/**
+ * The single mailbox address a Google OAuth account may use: the SafeAppeals Cloud
+ * identity the provider token is minted for. Connecting a different Gmail is not
+ * supported — the minted token only ever authenticates the Cloud Google account.
+ */
+export function boundMailboxEmail(
+	cloudAccountLabel: string | undefined,
+	googleAccountLabel?: string | undefined,
+): string | undefined {
+	return emailFromAuthAccountLabel(cloudAccountLabel)
+		?? emailFromAuthAccountLabel(googleAccountLabel);
+}
+
+/**
+ * True when the entered mailbox address matches the bound Cloud identity.
+ * Unknown binding (no email in either label) cannot be enforced — allow it.
+ */
+export function isMailboxEmailBound(
+	candidate: string,
+	boundEmail: string | undefined,
+): boolean {
+	if (!boundEmail) {
+		return true;
+	}
+	return candidate.trim().toLowerCase() === boundEmail.toLowerCase();
 }

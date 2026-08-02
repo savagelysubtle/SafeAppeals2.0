@@ -54,4 +54,52 @@ suite('describeImapError Gmail app-password hint', () => {
 			},
 		);
 	});
+
+	test('oauth failure carrying a required scope points at a missing Gmail grant', () => {
+		const parsed = describeImapError(
+			{
+				message: 'Command failed',
+				responseText: 'Invalid credentials (Failure)',
+				serverResponseCode: 'AUTHENTICATIONFAILED',
+				authenticationFailed: true,
+				oauthError: { status: 'invalid_request', scope: 'https://mail.google.com/' },
+			},
+			'imap.gmail.com',
+			'oauth',
+		);
+		const raw = describeImapError(
+			{
+				message: 'Command failed',
+				responseText: 'Invalid credentials (Failure)',
+				authenticationFailed: true,
+				oauthError: '{"status":"invalid_request","scope":"https://mail.google.com/"}',
+			},
+			'imap.gmail.com',
+			'oauth',
+		);
+		const withoutScope = describeImapError(
+			{
+				message: 'Command failed',
+				responseText: 'Invalid credentials (Failure)',
+				authenticationFailed: true,
+				oauthError: { status: 'invalid_request' },
+			},
+			'imap.gmail.com',
+			'oauth',
+		);
+		assert.deepStrictEqual(
+			{
+				parsedMentionsScope: parsed.includes('missing Gmail access (https://mail.google.com/)'),
+				parsedSuggestsReconnect: parsed.includes('reconnect the mailbox'),
+				rawMentionsScope: raw.includes('missing Gmail access (https://mail.google.com/)'),
+				withoutScopeStaysQuiet: withoutScope.includes('missing Gmail access'),
+			},
+			{
+				parsedMentionsScope: true,
+				parsedSuggestsReconnect: true,
+				rawMentionsScope: true,
+				withoutScopeStaysQuiet: false,
+			},
+		);
+	});
 });

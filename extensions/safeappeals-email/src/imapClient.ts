@@ -44,6 +44,14 @@ export type ImapFlowAuth =
 const GMAIL_APP_PASSWORD_HINT =
 	'Gmail requires an App Password (myaccount.google.com/apppasswords) — regular passwords are rejected.';
 
+/**
+ * The access token was accepted as a token but carries no Gmail scope — the Google
+ * consent was identity-only, so reconnecting and granting mail access is the fix.
+ */
+function gmailMissingScopeHint(scope: string): string {
+	return `the access token is missing Gmail access (${scope}) — reconnect the mailbox and allow Gmail access when Google asks.`;
+}
+
 interface ImapErrorLike {
 	message?: string;
 	responseText?: string;
@@ -52,6 +60,22 @@ interface ImapErrorLike {
 	authenticationFailed?: boolean;
 	code?: string;
 	responseStatus?: string;
+	/** imapflow surfaces the SASL error payload from Gmail (status/scope/schemes). */
+	oauthError?: { status?: string; scope?: string; schemes?: string } | string;
+}
+
+/** Scope Gmail says the token needs, from imapflow's parsed `oauthError`. */
+function oauthMissingScope(err: ImapErrorLike): string | undefined {
+	const payload = err.oauthError;
+	if (!payload) {
+		return undefined;
+	}
+	if (typeof payload === 'string') {
+		const match = payload.match(/"scope"\s*:\s*"(?<scope>[^"]+)"/);
+		return match?.groups?.scope;
+	}
+	const scope = payload.scope?.trim();
+	return scope || undefined;
 }
 
 function isGmailHost(host: string): boolean {
@@ -121,6 +145,13 @@ export function describeImapError(
 		&& isAuthFailure(e, detail)
 	) {
 		detail = `${detail} — ${GMAIL_APP_PASSWORD_HINT}`;
+	}
+
+	if (authType === 'oauth') {
+		const missingScope = oauthMissingScope(e);
+		if (missingScope) {
+			detail = `${detail} — ${gmailMissingScopeHint(missingScope)}`;
+		}
 	}
 
 	return detail;
