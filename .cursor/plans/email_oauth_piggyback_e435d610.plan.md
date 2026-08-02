@@ -31,7 +31,7 @@ todos:
     status: completed
   - id: wp6b-deploy
     content: "Deploy WP6b: commit/push nested void-cloud OAuth files only + Railway; rebuild desktop auth/email"
-    status: pending
+    status: completed
   - id: wp7-calendar
     content: "WP7 calendar: getSession(); delete oauthLoopback/tokenStore"
     status: pending
