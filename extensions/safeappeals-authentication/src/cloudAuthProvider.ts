@@ -54,6 +54,136 @@ const SIGN_IN_TIMEOUT_MS = 5 * 60 * 1000;
 const AUTH_CALLBACK_PATH = '/auth/callback';
 
 /**
+ * Opt-in Google provider scopes for incremental consent while already signed in.
+ * Never pass these through identity {@link CloudAuthProvider.createSession}.
+ */
+export interface GoogleProviderScopeOptions {
+	readonly mail?: boolean;
+	readonly calendar?: boolean;
+}
+
+/**
+ * Thrown when incremental Google consent returns a different Cloud user than the
+ * session already signed in. Callers must abort without overwriting the envelope.
+ */
+export class ProviderScopeUserMismatchError extends Error {
+	constructor(
+		readonly currentUserId: string,
+		readonly returnedUserId: string,
+		readonly currentUserEmail?: string,
+		readonly returnedUserEmail?: string,
+	) {
+		// Cross-extension contract: `safeappeals-email`'s `isProviderScopeUserMismatch`
+		// matches on the phrase "did not match your SafeAppeals Cloud account" after the
+		// error crosses the extension-host boundary as a plain object. Keep this message
+		// un-localized — l10n would silently break mismatch detection for non-English
+		// users while the English-only tests still pass. User-facing copy is localized
+		// separately in `providerScopeMismatchMessage`.
+		super(
+			currentUserEmail && returnedUserEmail
+				? `The Google account (${returnedUserEmail}) did not match your SafeAppeals Cloud account (${currentUserEmail}).`
+				: 'The Google account did not match your SafeAppeals Cloud account.',
+		);
+		this.name = 'ProviderScopeUserMismatchError';
+	}
+}
+
+/**
+ * User-facing copy for a wrong-account reconsent, naming both accounts when known.
+ */
+function providerScopeMismatchMessage(error: ProviderScopeUserMismatchError): string {
+	if (error.currentUserEmail && error.returnedUserEmail) {
+		return vscode.l10n.t(
+			'SafeAppeals Cloud is signed in as {0}. Google returned {1}. Choose the Cloud account in the browser, then try again.',
+			error.currentUserEmail,
+			error.returnedUserEmail,
+		);
+	}
+	return vscode.l10n.t('The Google account did not match your SafeAppeals Cloud account. Provider scopes were not updated.');
+}
+
+/**
+ * Whether identity createSession should return the existing session without a new
+ * PKCE flow. Scopes are intentionally ignored — incremental consent uses
+ * {@link CloudAuthProvider.requestGoogleProviderScopes}.
+ */
+export function shouldReturnExistingCloudSession(
+	session: CloudSessionEnvelope | undefined,
+	_scopes?: readonly string[],
+): boolean {
+	return !!session;
+}
+
+/**
+ * Maps incremental-consent options to {@link buildGoogleAuthorizeUrl} flags.
+ * Only explicit `true` opts in; false/undefined omit mail/calendar scopes.
+ */
+export function googleProviderScopeAuthorizeFlags(options: GoogleProviderScopeOptions): {
+	readonly includeMailScopes: boolean;
+	readonly includeCalendarScopes: boolean;
+} {
+	return {
+		includeMailScopes: options.mail === true,
+		includeCalendarScopes: options.calendar === true,
+	};
+}
+
+/**
+ * The `login_hint` that binds incremental Google consent to the signed-in Cloud
+ * account, so the browser account chooser cannot silently pick another identity.
+ * Returns undefined when there is no session or no usable email.
+ */
+export function loginHintForCloudSession(
+	session: { readonly user: { readonly email?: string } } | undefined,
+): string | undefined {
+	return session?.user.email?.trim() || undefined;
+}
+
+/**
+ * Drops legacy Google provider tokens from a session envelope.
+ * Provider access is minted via `/auth/provider-token` and must not live in SecretStorage.
+ */
+export function withoutPersistedProviderTokens(session: CloudSessionEnvelope): CloudSessionEnvelope {
+	return {
+		...session,
+		googleProviderToken: null,
+		googleProviderRefreshToken: null,
+	};
+}
+
+/**
+ * True when a loaded envelope still carries legacy provider token fields to strip.
+ */
+export function sessionHasPersistedProviderTokens(session: CloudSessionEnvelope): boolean {
+	return !!(session.googleProviderToken || session.googleProviderRefreshToken);
+}
+
+/**
+ * Merges refreshed cloud tokens from a re-consent exchange into the existing envelope.
+ * Never persists Google provider tokens (minted via refreshProviderToken instead).
+ * Aborts when the returned user id does not match.
+ */
+export function mergeGoogleProviderScopeEnvelope(
+	current: CloudSessionEnvelope,
+	returned: CloudSessionEnvelope,
+): CloudSessionEnvelope {
+	if (returned.user.id !== current.user.id) {
+		throw new ProviderScopeUserMismatchError(
+			current.user.id,
+			returned.user.id,
+			current.user.email,
+			returned.user.email,
+		);
+	}
+	return withoutPersistedProviderTokens({
+		accessToken: returned.accessToken || current.accessToken,
+		refreshToken: returned.refreshToken || current.refreshToken,
+		expiresAt: returned.expiresAt || current.expiresAt,
+		user: returned.user,
+	});
+}
+
+/**
  * SafeAppeals Cloud authentication provider.
  * Persists the full session envelope in SecretStorage; credit balance stays in memory.
  */
@@ -70,6 +200,11 @@ export class CloudAuthProvider implements vscode.AuthenticationProvider, vscode.
 	private _secretStorageWarned = false;
 	private _creditBalance: number | undefined;
 	private _pending: PendingSignIn | undefined;
+	/**
+	 * True while {@link requestGoogleProviderScopes} is in flight so callbacks may
+	 * exchange while a cloud session already exists (identity createSession must not).
+	 */
+	private _providerScopeReconsent = false;
 	private _loopback: OAuthLoopbackServer | undefined;
 	private _refreshTimer: ReturnType<typeof setTimeout> | undefined;
 	/** Serializes pending writes so a late delete cannot erase a newer persist. */
@@ -182,8 +317,10 @@ export class CloudAuthProvider implements vscode.AuthenticationProvider, vscode.
 	 * - Web → asExternalUri when origin is allow-listed; otherwise paste immediately
 	 */
 	async createSession(_scopes: readonly string[]): Promise<vscode.AuthenticationSession> {
-		if (this._session) {
-			return this.toAuthSession(this._session);
+		// Identity reuse: ignore scopes. Incremental mail/calendar consent must call
+		// requestGoogleProviderScopes — never overload createSession for that.
+		if (shouldReturnExistingCloudSession(this._session, _scopes)) {
+			return this.toAuthSession(this._session!);
 		}
 
 		// Abandon any in-flight attempt so its promise settles and cannot toast later.
@@ -207,6 +344,7 @@ export class CloudAuthProvider implements vscode.AuthenticationProvider, vscode.
 		}
 
 		const flow = await this.resolveSignInFlow(pkce.state);
+		// Plain identity sign-in — never include mail/calendar scope flags here.
 		const authUrl = buildGoogleAuthorizeUrl({
 			codeChallenge: pkce.codeChallenge,
 			state: pkce.state,
@@ -234,6 +372,81 @@ export class CloudAuthProvider implements vscode.AuthenticationProvider, vscode.
 		}
 
 		return this.waitForSignIn();
+	}
+
+	/**
+	 * Runs a new PKCE Google consent while already signed in, requesting opt-in
+	 * provider scopes (mail and/or calendar). Merges returned provider tokens into
+	 * the existing envelope only when the Cloud user id matches.
+	 *
+	 * Requires an existing SafeAppeals Cloud session — does not start identity login.
+	 */
+	async requestGoogleProviderScopes(options: GoogleProviderScopeOptions): Promise<void> {
+		if (!this._session) {
+			const message = vscode.l10n.t('Sign in to SafeAppeals Cloud first, then connect Google mail or calendar.');
+			void vscode.window.showErrorMessage(message);
+			throw new Error(message);
+		}
+		if (options.mail !== true && options.calendar !== true) {
+			throw new Error(vscode.l10n.t('Request at least one of mail or calendar provider scopes.'));
+		}
+
+		if (this._pending || this._signInWaiters.length) {
+			await this.failPendingSignIn(new vscode.CancellationError());
+		}
+		await this.clearOrphanedAuthCode();
+
+		this._providerScopeReconsent = true;
+		const flags = googleProviderScopeAuthorizeFlags(options);
+
+		const pkce = generatePkceChallenge();
+		await this.persistPending({
+			codeVerifier: pkce.codeVerifier,
+			state: pkce.state,
+			startedAt: Date.now(),
+		});
+		await this.tryCompleteOrphanedAuthCode();
+		// Orphan completion may have finished reconsent already.
+		if (!this._providerScopeReconsent) {
+			return;
+		}
+
+		const flow = await this.resolveSignInFlow(pkce.state);
+		// Bind consent to the signed-in Cloud account so the browser cannot pick another.
+		const loginHint = loginHintForCloudSession(this._session);
+		const authUrl = buildGoogleAuthorizeUrl({
+			codeChallenge: pkce.codeChallenge,
+			state: pkce.state,
+			redirectUri: flow.redirectUri,
+			includeMailScopes: flags.includeMailScopes,
+			includeCalendarScopes: flags.includeCalendarScopes,
+			loginHint,
+		});
+
+		this.output.appendLine(
+			`[auth] opening browser for Google provider scopes (mail=${flags.includeMailScopes}, calendar=${flags.includeCalendarScopes}, redirect ${flow.redirectUri}, flow ${flow.kind})`,
+		);
+		this.output.appendLine(`[auth] provider-scope reconsent login_hint=${loginHint ?? '<none>'}`);
+		const opened = await vscode.env.openExternal(authUrl as unknown as vscode.Uri);
+		if (!opened) {
+			this.disposeLoopback();
+			await this.clearPending();
+			this._providerScopeReconsent = false;
+			const message = vscode.l10n.t('Could not open the system browser for Google consent.');
+			void vscode.window.showErrorMessage(message);
+			throw new Error(message);
+		}
+
+		if (flow.kind === 'paste') {
+			await this.waitForPastedCode();
+			return;
+		}
+
+		if (flow.kind === 'loopback') {
+			this.wireLoopback(flow.loopback);
+		}
+
+		await this.waitForSignIn();
 	}
 
 	/**
@@ -273,12 +486,19 @@ export class CloudAuthProvider implements vscode.AuthenticationProvider, vscode.
 			);
 		}
 
+		const wasReconsent = this._providerScopeReconsent;
 		try {
 			return await this.exchangeAndStore(parsed.code, pending.codeVerifier, pending.state);
 		} catch (error) {
-			const adopted = await this.tryAdoptSessionAfterExchangeFailure(error);
+			const adopted = wasReconsent ? undefined : await this.tryAdoptSessionAfterExchangeFailure(error);
 			if (adopted) {
 				return adopted;
+			}
+			// Wrong-account reconsent cannot succeed by retrying the same code — settle.
+			if (error instanceof ProviderScopeUserMismatchError) {
+				await this.failPendingSignIn(error);
+				void vscode.window.showErrorMessage(providerScopeMismatchMessage(error));
+				throw error;
 			}
 			if (!shouldSettlePendingOnExchangeFailure(stateMatched)) {
 				const message = error instanceof Error ? error.message : String(error);
@@ -440,13 +660,18 @@ export class CloudAuthProvider implements vscode.AuthenticationProvider, vscode.
 				if (!this._pending) {
 					return;
 				}
+				const wasReconsent = this._providerScopeReconsent;
 				if (error instanceof vscode.CancellationError) {
 					void this.failPendingSignIn(error);
 					return;
 				}
 				const message = error instanceof Error ? error.message : String(error);
 				void this.failPendingSignIn(error instanceof Error ? error : new Error(message));
-				void vscode.window.showErrorMessage(vscode.l10n.t('Sign in failed: {0}', message));
+				if (wasReconsent) {
+					void vscode.window.showErrorMessage(vscode.l10n.t('Google consent failed: {0}', message));
+				} else {
+					void vscode.window.showErrorMessage(vscode.l10n.t('Sign in failed: {0}', message));
+				}
 			},
 		);
 	}
@@ -460,8 +685,8 @@ export class CloudAuthProvider implements vscode.AuthenticationProvider, vscode.
 	 * Restores persisted pending when the workbench reloaded mid-flow.
 	 */
 	private async handleCallback(result: AuthCallbackResult): Promise<void> {
-		// Already signed in or another delivery is exchanging — do not start a second exchange.
-		if (this._session) {
+		// Already signed in without incremental consent — ignore late identity callbacks.
+		if (this._session && !this._providerScopeReconsent) {
 			return;
 		}
 		if (this._exchangeInFlight) {
@@ -499,13 +724,21 @@ export class CloudAuthProvider implements vscode.AuthenticationProvider, vscode.
 			);
 		}
 
+		const wasReconsent = this._providerScopeReconsent;
 		try {
 			const session = await this.exchangeAndStore(result.code, pending.codeVerifier, pending.state);
-			void vscode.window.showInformationMessage(
-				vscode.l10n.t('Signed in to SafeAppeals Cloud as {0}.', session.account.label),
-			);
+			if (wasReconsent) {
+				void vscode.window.showInformationMessage(
+					vscode.l10n.t('Google account connected for SafeAppeals.'),
+				);
+			} else {
+				void vscode.window.showInformationMessage(
+					vscode.l10n.t('Signed in to SafeAppeals Cloud as {0}.', session.account.label),
+				);
+			}
 		} catch (error) {
-			const adopted = await this.tryAdoptSessionAfterExchangeFailure(error);
+			// Never adopt an existing session as "success" after a failed reconsent exchange.
+			const adopted = wasReconsent ? undefined : await this.tryAdoptSessionAfterExchangeFailure(error);
 			if (adopted) {
 				await this.clearDurableOAuthCallback();
 				void vscode.window.showInformationMessage(
@@ -519,7 +752,13 @@ export class CloudAuthProvider implements vscode.AuthenticationProvider, vscode.
 				return;
 			}
 			void this.failPendingSignIn(error instanceof Error ? error : new Error(message));
-			void vscode.window.showErrorMessage(vscode.l10n.t('Sign in failed: {0}', message));
+			if (error instanceof ProviderScopeUserMismatchError) {
+				void vscode.window.showErrorMessage(providerScopeMismatchMessage(error));
+			} else if (wasReconsent) {
+				void vscode.window.showErrorMessage(vscode.l10n.t('Google consent failed: {0}', message));
+			} else {
+				void vscode.window.showErrorMessage(vscode.l10n.t('Sign in failed: {0}', message));
+			}
 		}
 	}
 
@@ -577,6 +816,40 @@ export class CloudAuthProvider implements vscode.AuthenticationProvider, vscode.
 
 	private async doExchangeAndStore(code: string, codeVerifier: string): Promise<vscode.AuthenticationSession> {
 		const envelope = await this._api.exchangeCode(code, codeVerifier);
+		const current = this._session;
+		const isReconsent = this._providerScopeReconsent;
+
+		if (isReconsent) {
+			if (!current) {
+				this._providerScopeReconsent = false;
+				throw new Error(vscode.l10n.t('Sign in to SafeAppeals Cloud first, then connect Google mail or calendar.'));
+			}
+			let merged: CloudSessionEnvelope;
+			try {
+				merged = mergeGoogleProviderScopeEnvelope(current, envelope);
+			} catch (error) {
+				if (error instanceof ProviderScopeUserMismatchError) {
+					this.output.appendLine(
+						`[auth] provider-scope mismatch current={${error.currentUserId},${error.currentUserEmail ?? '<no email>'}} returned={${error.returnedUserId},${error.returnedUserEmail ?? '<no email>'}}`,
+					);
+				}
+				throw error;
+			}
+			// Serialize envelope write with the same chain as pending PKCE mutations.
+			await this.runPendingWrite(async () => {
+				await this.persistSession(merged);
+			});
+			await this.clearDurableOAuthCallback();
+			await this.clearPending();
+			this.disposeLoopback();
+			this._providerScopeReconsent = false;
+			const authSession = this.toAuthSession(merged);
+			this._sessionChangeEmitter.fire({ added: [], removed: [], changed: [authSession] });
+			this.resolvePendingSignIn(authSession);
+			this.output.appendLine('[auth] merged Google provider scopes into session envelope');
+			return authSession;
+		}
+
 		await this.persistSession(envelope);
 		// Burn durable only after a successful exchange — peek/recover must leave it on failure.
 		await this.clearDurableOAuthCallback();
@@ -686,14 +959,13 @@ export class CloudAuthProvider implements vscode.AuthenticationProvider, vscode.
 		}
 		try {
 			const refreshed = await this._api.refreshSession(refreshToken);
-			const next: CloudSessionEnvelope = {
+			// Clear any legacy provider tokens still present in the stored envelope.
+			const next = withoutPersistedProviderTokens({
 				...this._session!,
 				accessToken: refreshed.accessToken,
 				refreshToken: refreshed.refreshToken,
 				expiresAt: refreshed.expiresAt,
-				googleProviderToken: refreshed.googleProviderToken ?? this._session!.googleProviderToken,
-				googleProviderRefreshToken: refreshed.googleProviderRefreshToken ?? this._session!.googleProviderRefreshToken,
-			};
+			});
 			await this.persistSession(next);
 			const authSession = this.toAuthSession(next);
 			this._sessionChangeEmitter.fire({ added: [], removed: [], changed: [authSession] });
@@ -707,12 +979,14 @@ export class CloudAuthProvider implements vscode.AuthenticationProvider, vscode.
 
 	/**
 	 * Writes the session envelope to SecretStorage, or memory-only if the keyring fails.
+	 * Always strips legacy Google provider tokens before persist.
 	 */
 	private async persistSession(session: CloudSessionEnvelope): Promise<void> {
-		this._session = session;
-		this.scheduleRefresh(session);
+		const sanitized = withoutPersistedProviderTokens(session);
+		this._session = sanitized;
+		this.scheduleRefresh(sanitized);
 		try {
-			await this.context.secrets.store(SESSION_SECRET_KEY, JSON.stringify(session));
+			await this.context.secrets.store(SESSION_SECRET_KEY, JSON.stringify(sanitized));
 			this._sessionMemoryOnly = false;
 		} catch (error) {
 			this._sessionMemoryOnly = true;
@@ -728,6 +1002,7 @@ export class CloudAuthProvider implements vscode.AuthenticationProvider, vscode.
 
 	/**
 	 * Reads the session envelope from SecretStorage (never globalState).
+	 * Drops legacy `googleProviderToken` / `googleProviderRefreshToken` on load.
 	 */
 	private async readSessionFromSecrets(): Promise<CloudSessionEnvelope | undefined> {
 		try {
@@ -735,7 +1010,18 @@ export class CloudAuthProvider implements vscode.AuthenticationProvider, vscode.
 			if (!raw) {
 				return undefined;
 			}
-			return JSON.parse(raw) as CloudSessionEnvelope;
+			const parsed = JSON.parse(raw) as CloudSessionEnvelope;
+			const cleaned = withoutPersistedProviderTokens(parsed);
+			// Rewrite SecretStorage when migrating away from persisted provider tokens.
+			if (sessionHasPersistedProviderTokens(parsed)) {
+				try {
+					await this.context.secrets.store(SESSION_SECRET_KEY, JSON.stringify(cleaned));
+					this.output.appendLine('[auth] cleared legacy Google provider tokens from SecretStorage envelope');
+				} catch (error) {
+					this.output.appendLine(`[auth] failed to rewrite envelope without provider tokens: ${error instanceof Error ? error.message : String(error)}`);
+				}
+			}
+			return cleaned;
 		} catch (error) {
 			this.output.appendLine(`[auth] SecretStorage read failed: ${error instanceof Error ? error.message : String(error)}`);
 			if (!this._secretStorageWarned) {
@@ -927,7 +1213,7 @@ export class CloudAuthProvider implements vscode.AuthenticationProvider, vscode.
 	 * Covers the race where the callback URI was delivered/consumed before pending existed.
 	 */
 	private async tryCompleteOrphanedAuthCode(): Promise<void> {
-		if (this._session || this._exchangeInFlight) {
+		if ((this._session && !this._providerScopeReconsent) || this._exchangeInFlight) {
 			return;
 		}
 
@@ -962,14 +1248,21 @@ export class CloudAuthProvider implements vscode.AuthenticationProvider, vscode.
 			return;
 		}
 
+		const wasReconsent = this._providerScopeReconsent;
 		try {
 			this.output.appendLine('[auth] completed orphaned auth code');
 			const session = await this.exchangeAndStore(orphan.code, pending.codeVerifier, pending.state);
-			void vscode.window.showInformationMessage(
-				vscode.l10n.t('Signed in to SafeAppeals Cloud as {0}.', session.account.label),
-			);
+			if (wasReconsent) {
+				void vscode.window.showInformationMessage(
+					vscode.l10n.t('Google account connected for SafeAppeals.'),
+				);
+			} else {
+				void vscode.window.showInformationMessage(
+					vscode.l10n.t('Signed in to SafeAppeals Cloud as {0}.', session.account.label),
+				);
+			}
 		} catch (error) {
-			const adopted = await this.tryAdoptSessionAfterExchangeFailure(error);
+			const adopted = wasReconsent ? undefined : await this.tryAdoptSessionAfterExchangeFailure(error);
 			if (adopted) {
 				await this.clearDurableOAuthCallback();
 				void vscode.window.showInformationMessage(
@@ -981,7 +1274,13 @@ export class CloudAuthProvider implements vscode.AuthenticationProvider, vscode.
 			this.output.appendLine(`[auth] orphaned auth code exchange failed: ${message}`);
 			const err = error instanceof Error ? error : new Error(message);
 			await this.failPendingSignIn(err);
-			void vscode.window.showErrorMessage(vscode.l10n.t('Sign in failed: {0}', message));
+			if (error instanceof ProviderScopeUserMismatchError) {
+				void vscode.window.showErrorMessage(providerScopeMismatchMessage(error));
+			} else if (wasReconsent) {
+				void vscode.window.showErrorMessage(vscode.l10n.t('Google consent failed: {0}', message));
+			} else {
+				void vscode.window.showErrorMessage(vscode.l10n.t('Sign in failed: {0}', message));
+			}
 			throw err;
 		}
 	}
@@ -1111,6 +1410,7 @@ export class CloudAuthProvider implements vscode.AuthenticationProvider, vscode.
 		await this.clearDurableOAuthCallback();
 		await this.clearPending();
 		this.disposeLoopback();
+		this._providerScopeReconsent = false;
 		const waiters = this._signInWaiters.splice(0);
 		for (const waiter of waiters) {
 			waiter.reject(error);

@@ -35,8 +35,13 @@
       },
       {
         "command": "safeappeals-email.addAccount",
-        "title": "Add Email Account",
-        "category": "Safe Appeals Email"
+        "title": "%command.addAccount.title%",
+        "category": "%command.category%"
+      },
+      {
+        "command": "safeappeals-email.reconnectMailbox",
+        "title": "%command.reconnectMailbox.title%",
+        "category": "%command.category%"
       },
       {
         "command": "safeappeals-email.removeAccount",
@@ -201,6 +206,9 @@
         },
         {
           "command": "safeappeals-email.addAccount"
+        },
+        {
+          "command": "safeappeals-email.reconnectMailbox"
         },
         {
           "command": "safeappeals-email.removeAccount"

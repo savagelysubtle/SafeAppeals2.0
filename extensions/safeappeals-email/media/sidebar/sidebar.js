@@ -7644,12 +7644,15 @@
       if (!accountId) {
         return;
       }
-      if (action === "updatePassword") {
+      if (action === "reconnect") {
+        vscode.postMessage({ type: "reconnectMailbox", accountId });
+      } else if (action === "updatePassword") {
         vscode.postMessage({ type: "updatePassword", accountId });
       } else if (action === "remove") {
         vscode.postMessage({ type: "removeAccount", accountId });
       }
     };
+    const selectedNeedsReconnect = !!accountId && accounts.some((a) => a.id === accountId && a.authStatus === "needsReconnect");
     return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "sidebar", children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("header", { className: "header", children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "header-row", children: [
@@ -7662,7 +7665,7 @@
               title: "Account",
               children: [
                 accounts.length === 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "", children: "No accounts" }),
-                accounts.map((a) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: a.id, children: a.label }, a.id))
+                accounts.map((a) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: a.id, children: a.authStatus === "needsReconnect" ? `${a.label} (reconnect)` : a.label }, a.id))
               ]
             }
           ),
@@ -7680,6 +7683,7 @@
               children: [
                 /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "", children: "Account\u2026" }),
                 /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "add", children: "Add account\u2026" }),
+                /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "reconnect", disabled: !selectedNeedsReconnect, children: "Reconnect mailbox" }),
                 /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "updatePassword", disabled: !accountId, children: "Update password" }),
                 /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "remove", disabled: !accountId, children: "Remove account" })
               ]

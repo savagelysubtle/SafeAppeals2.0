@@ -578,6 +578,13 @@ export class EmailSidebarProvider implements vscode.WebviewViewProvider {
 					await vscode.commands.executeCommand('safeappeals-email.addAccount');
 					await this.postBootstrap();
 					break;
+				case 'reconnectMailbox':
+					await vscode.commands.executeCommand(
+						'safeappeals-email.reconnectMailbox',
+						msg.accountId as string | undefined,
+					);
+					await this.postBootstrap();
+					break;
 				case 'updatePassword':
 					await vscode.commands.executeCommand(
 						'safeappeals-email.updatePassword',

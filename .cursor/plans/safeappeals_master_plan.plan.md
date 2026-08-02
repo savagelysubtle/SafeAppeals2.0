@@ -27,11 +27,11 @@ todos:
       'Status (Jul 20)' + commit trail."
     status: completed
   - id: done-rung7-slice1
-    content: "DONE (567beff7): rung 7 slices 1+1b — safeappeals-case commands
-      (setupProfile/initCase/editCaseInfo/openCaseBrief), walkthrough,
-      case-setup chat skill, AGENTS.md managed block + .safeAppeals/case.json.
-      Slice 1b since superseded by onboarding T4/T10. Detail:
-      safeappeals_case_extension_rung7.plan.md."
+    content: "DONE (567beff7) HISTORICAL: rung 7 slices 1+1b shipped case-info
+      (initCase/editCaseInfo + case.json + managed AGENTS.md). Aug 2 Steve
+      decision: retire that surface — onboarding owns profile; users author
+      AGENTS.md. Live plan: safeappeals_timeline_rung7_5ce1bf30.plan.md.
+      Old plan archived."
     status: completed
   - id: m0-tracker-and-hub
     content: "DONE (uncommitted, Jul 29): all four parts landed and reviewed —
@@ -71,16 +71,15 @@ todos:
       onboarding_redesign_newcomer.plan.md §9 Phase B."
     status: completed
   - id: r7-timeline
-    content: "Rung 7 slice 2 (UNBLOCKED — M1 shipped Jul 30; not started):
-      timeline + deadlines in safeappeals-case — statute deadline calc from
-      old jurisdictionConfig, notifications, PDF export decision; doubles as
-      the missing calendar UI (reads calendar getEvents). Resolve
-      jurisdiction-ID slug-vs-display-name mismatch first. SCOPE QUESTION
-      (Q5): calendar sync is pull-only — write-back if deadlines should push.
-      Plan: safeappeals_case_extension_rung7.plan.md."
+    content: "Rung 7 rewrite (Aug 2): rename safeappeals-case →
+      safeappeals-timeline; retire case.json/case-info; role project-setup
+      skill; timeline store/UI + six void timeline agent tools under
+      .safeAppeals/timeline.json. Statute calc; ICS first; calendar getEvents
+      pull (Q5 open). Plan: safeappeals_timeline_rung7_5ce1bf30.plan.md."
     status: pending
   - id: r8-organizer
-    content: "Rung 8 (deps: r7 for case.json consumers): NEW
+    content: "Rung 8 (no case.json dep — use folder heuristics / AGENTS.md /
+      optional timeline fields): NEW
       safeappeals-organizer extension — file organizer/docket (explorer
       context menus + FileDecorationProvider + webview wizard, NO core
       explorerViewer.ts hook) + file converter as Rust sidecar rust/converter
@@ -101,12 +100,13 @@ todos:
       strategy' + gap-audit item 5."
     status: pending
   - id: r65-auth-remainder
-    content: "Rung 6.5 remainder (deps: M1 T1 shipped the extension shell):
-      safeappeals-google/-microsoft provider-token providers, calendar
-      getSession() conversion (delete oauthLoopback/tokenStore), email
-      XOAUTH2 (app-password fallback stays), server scopes/Azure/
-      provider-token-refresh + Google restricted-scope verification. Plan:
-      unified_safeappeals_sign-in_225af75a.plan.md."
+    content: "Rung 6.5 remainder — PARTIAL Aug 2: safeappeals-google + email
+      XOAUTH2 + void-cloud include_mail_scopes + POST /auth/provider-token
+      coded (see email_oauth_piggyback WP1–WP6). STILL OPEN: calendar
+      getSession() (delete oauthLoopback/tokenStore), Microsoft/Azure
+      symmetry, Google restricted-scope verification, Electron E2E.
+      Plans: unified_safeappeals_sign-in_225af75a.plan.md +
+      email_oauth_piggyback_e435d610.plan.md."
     status: pending
   - id: r11-agent-remainder
     content: "Rung 11 remainder (T14 already did the product.json swap):
@@ -181,9 +181,10 @@ A future agent can follow these blindly, with the caveats listed:
 
 | Plan file | Status | Caveat |
 | --------- | ------ | ------ |
-| `onboarding_redesign_newcomer.plan.md` | **Trustworthy, current, ACTIVE** | none — this is the live workstream |
-| `safeappeals_case_extension_rung7.plan.md` | Trustworthy (updated Aug 2) | slice 1 verify closed; slice 2 unblocked (M1 shipped) but not started |
-| `unified_safeappeals_sign-in_225af75a.plan.md` | Trustworthy, current (updated Jul 29) | its front third (extension shell + cloud provider) moved to onboarding T1; its workstream-1 "endpoints are sound" assumption is void — T0 fixes them first |
+| `onboarding_redesign_newcomer.plan.md` | Archived (M1/M2 done) | see `archive/onboarding_redesign_newcomer.plan.md` |
+| `safeappeals_timeline_rung7_5ce1bf30.plan.md` | **ACTIVE** (Aug 2) | rename → `safeappeals-timeline`; retire case-info; role skill + timeline tools; supersedes archived case-extension plan |
+| `archive/safeappeals_case_extension_rung7.plan.md` | Superseded Aug 2 | historical slice 1; do not implement |
+| `unified_safeappeals_sign-in_225af75a.plan.md` | Trustworthy (updated Aug 2) | cloud identity done; google/microsoft + email/calendar consumers open; detail `email_oauth_piggyback_e435d610.plan.md` |
 | `safeappeals_agent_tools_da04f06e.plan.md` | Trustworthy (updated Aug 2) | **Core tools DONE** (`e1754228`) — open+closed DOCX/XLSX, search, timer, draft. Remainder: email read/organize, pattern docs, unified wrapper. Cloud Agent plan phases 0–4 + tools pass marked complete. |
 | `upstream_vs_code_merge_spike_2245beba.plan.md` | Trustworthy for: rung ladder, dated status sections, Rust strategy, sections A/B/E/F/G/I/K | **Sections C.2/C.3, D, D.2's "stay in contrib" list, parts of H, and ladder J are pre-Jul-21 and superseded** — see "The contrib hub is dead" below. Read its Jul 29 → Jul 21 → Jul 20 status sections top-down before trusting any older inline text. |
 
@@ -264,12 +265,10 @@ source tree. Trust this section over any other document on this branch.
   view as the calendar UI. **No event write-back to Google/Outlook**
   (`syncEngine.ts:1-3` header; no create/update calls) — display works, push
   does not exist; see Q5.
-- **`extensions/safeappeals-case`** (~663 src lines) — **PARTIAL.** Commands
-  `setupProfile`/`initCase`/`editCaseInfo`/`openCaseBrief`, "Set Up Safe
-  Appeals" walkthrough, `case-setup` chat skill, AGENTS.md managed block +
-  `.safeAppeals/case.json` + folder scaffold. Missing: timeline/deadlines
-  (rung 7 slice 2) and the old Case Info dashboard UI (D1 CONFIRMED Jul 29 —
-  recommend: don't rebuild).
+- **`extensions/safeappeals-case`** → **rename to `safeappeals-timeline`**
+  (Aug 2 plan). Case-info retiring; keep profile re-run / sample / role skill;
+  ship timeline store/UI/tools. Plan:
+  `safeappeals_timeline_rung7_5ce1bf30.plan.md`.
 - **`extensions/safeappeals-shared`** — source-only, NOT build-wired by
   design: canonical AES-256-GCM encrypted-store helpers distributed as
   committed per-extension copies in each consumer's `src/shared/`, synced by
@@ -388,9 +387,9 @@ case workspace files (`.safeAppeals/case.json`, AGENTS.md, documents) and
   email + 6.6 case links + 6.7 tags + 6.8 settings/CC/BCC + the product-wide
   `.safeAppeals` config-folder rename. → merge plan "Status (Jul 20)" +
   commit trail.
-- **Rung 7 slices 1 + 1b (`567beff7`):** case extension core. Slice 1b since
-  superseded by onboarding T4/T10; the slice-1-verify item waits on those. →
-  `safeappeals_case_extension_rung7.plan.md`.
+- **Rung 7 slices 1 + 1b (`567beff7`):** historical case-info surface; Aug 2
+  retires it. Live work → `safeappeals_timeline_rung7_5ce1bf30.plan.md`
+  (archive: `archive/safeappeals_case_extension_rung7.plan.md`).
 
 ### M0 — Feature tracker fix + contrib stub deletion + cheap correctness fixes (anytime; do soon)
 
@@ -450,26 +449,16 @@ unblocks rung 12 (classifier). The tools pass is now unblocked / in
 progress alongside Cloud Agent (see Tools pass below).
 → **Plan: `onboarding_redesign_newcomer.plan.md` §9 Phase B.**
 
-### Rung 7 slice 2 — Timeline + deadlines (deps: M1 shipped)
+### Rung 7 — Timeline + deadlines (rewrite Aug 2; deps: M1 shipped)
 
-Deferred Jul 29 only because onboarding T10/T12 edit the same extension —
-no logical dependency. Builds in `safeappeals-case`: statute-deadline
-calculation from the old `jurisdictionConfig` data (real
-`statuteOfLimitationsDays` + `deadlineRules[]`), deadline generation from
-decisions, notifications, PDF-export decision, and the visual
-timeline/calendar view — this **is** the missing calendar UI; it reads the
-calendar extension's `getEvents`/`status` commands rather than adding UI to
-that extension. **Scope question to settle when this rung starts (Q5):** the
-calendar sync engine is pull-only — reading events for display works, but if
-timeline deadlines are meant to *push* into the user's real Google/Outlook
-calendar, that write-back does not exist and must be built in the calendar
-extension (the merge plan carried "timeline→calendar push" as a deferred
-rung-4 item; it is still nobody's). Known porting snags recorded in the
-sub-plan (jurisdiction slug-vs-display-name mismatch; `.timeline.json` →
-`.safeAppeals/`). Slice 3 (case-type skills) remains optional/later.
-→ **Plan: `safeappeals_case_extension_rung7.plan.md`.**
+**Aug 2 decision:** rename extension to **`safeappeals-timeline`**; drop
+`case.json` / case-info UI; keep role-based project-setup skill; build
+timeline store/UI + six agent tools against `.safeAppeals/timeline.json`.
+Onboarding owns profile; AGENTS.md optional. **Q5** calendar write-back open.
+→ **Plan: `safeappeals_timeline_rung7_5ce1bf30.plan.md`.**
+(Old: `archive/safeappeals_case_extension_rung7.plan.md`.)
 
-### Rung 8 — Organizer + converter extension (deps: rung 7 slice 2 soft — case.json fields)
+### Rung 8 — Organizer + converter extension (no case.json; folder / AGENTS.md heuristics)
 
 NEW `extensions/safeappeals-organizer`: file organizer/docket (explorer
 context menus + `FileDecorationProvider` + webview wizard; **no**
@@ -612,12 +601,10 @@ rebuild scope entirely (case-info dashboard 780 + settings pane ~3,900 +
 extension transfer 329). The "not built anywhere" totals shrink accordingly.
 
 - **D1 — Case-info dashboard UI (780 reference lines): do NOT rebuild.
-  CONFIRMED Jul 29.**
-  The commands + `case-setup` chat skill + AGENTS.md brief + `case.json`
-  already cover create/read/edit, and the Jul 21 "agent-native, not a port"
-  decision points this way. If a visual surface proves wanted, rung 7 slice
-  2's timeline view is the natural place to grow a small case-header panel —
-  not a separate dashboard.
+  CONFIRMED Jul 29. SUPERSEDED IN PART Aug 2:** also retire the
+  commands + `case-setup` skill + `case.json` twin. Case surface is now
+  onboarding profile + optional user `AGENTS.md` + (upcoming) timeline UI.
+  See `safeappeals_timeline_rung7_5ce1bf30.plan.md`.
 - **D2 — Unified settings pane (~3,900 reference lines): DROP. CONFIRMED
   Jul 29.** VS Code
   Settings covers general config; the email settings pane covers per-case
@@ -721,10 +708,10 @@ Record dated deviations and decision confirmations here, per house convention.
 ("dont rebuild case info"); D2, D3, and D4 were accepted as recommended. All
 four move from "needs confirmation" to settled:
 
-- D1 — case-info dashboard UI: **not rebuilt**. The commands, `case-setup`
-  chat skill, `AGENTS.md` brief, and `case.json` are the case surface. If a
-  visual surface is ever wanted, it grows as a small case-header panel inside
-  rung 7 slice 2's timeline view — never as a separate dashboard.
+- D1 — case-info dashboard UI: **not rebuilt**. **Aug 2 addendum:** also
+  retire commands + `case-setup` + `case.json`. Case surface = onboarding
+  profile + optional `AGENTS.md` + timeline UI
+  (`safeappeals_timeline_rung7_5ce1bf30.plan.md`).
 - D2 — unified settings pane: **dropped**. Any future settings need becomes a
   page contribution in the owning extension.
 - D3 — extension transfer service: **dropped**.

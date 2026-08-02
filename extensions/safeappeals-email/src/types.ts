@@ -1,3 +1,8 @@
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Safe Appeals. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
+
 /*--------------------------------------------------------------------------------------
  *  Safe Appeals Email — shared types (ported from void-reference/common/emailService)
  *--------------------------------------------------------------------------------------*/
@@ -103,6 +108,15 @@ export interface EmailDraft {
 	updatedAt: string;
 }
 
+/** OAuth identity provider for mailbox XOAUTH2 (tokens live in auth extension, not here). */
+export type EmailOAuthProvider = 'google' | 'microsoft';
+
+/**
+ * Visible reconnect state for OAuth (and optionally password) accounts.
+ * Stored on account config — never inside SecretStorage credentials.
+ */
+export type EmailAccountAuthStatus = 'ok' | 'needsReconnect';
+
 /** Non-secret account config (also mirrored in settings for discoverability). */
 export interface EmailAccountConfig {
 	id: string;
@@ -115,10 +129,75 @@ export interface EmailAccountConfig {
 	smtpPort: number;
 	smtpSecure: boolean;
 	username: string;
+	/**
+	 * Mailbox auth health. OAuth accounts set `needsReconnect` when getSession /
+	 * provider-token mint fails; cleared after a successful reconnect.
+	 */
+	authStatus?: EmailAccountAuthStatus;
 }
 
-export interface EmailAccountCredentials {
-	password: string;
+/**
+ * Discriminated credential union for email SecretStorage.
+ * OAuth rows store only `{ type, provider }` — never access/refresh tokens.
+ * Legacy SecretStorage blobs `{ password }` (no `type`) are accepted at the
+ * store boundary via {@link EmailAccountCredentialsInput} / {@link normalizeCredentials}.
+ */
+export type EmailAccountCredentials =
+	| { type: 'password'; password: string }
+	| { type: 'oauth'; provider: EmailOAuthProvider };
+
+/** Legacy SecretStorage / callers that omit `type` (pre-OAuth shape). */
+export type LegacyPasswordCredentials = { password: string };
+
+/** Accepted by addAccount / updateCredentials before normalize. */
+export type EmailAccountCredentialsInput = EmailAccountCredentials | LegacyPasswordCredentials;
+
+export function isOAuthCredentials(
+	creds: EmailAccountCredentials,
+): creds is Extract<EmailAccountCredentials, { type: 'oauth' }> {
+	return creds.type === 'oauth';
+}
+
+export function isPasswordCredentials(
+	creds: EmailAccountCredentials,
+): creds is Extract<EmailAccountCredentials, { type: 'password' }> {
+	return creds.type === 'password';
+}
+
+/**
+ * Normalize raw SecretStorage / caller payloads into the discriminated union.
+ * Legacy `{ password }` (no `type`) → `{ type: 'password', password }`.
+ * Returns undefined when the payload is missing or malformed.
+ */
+export function normalizeCredentials(raw: unknown): EmailAccountCredentials | undefined {
+	if (!raw || typeof raw !== 'object') {
+		return undefined;
+	}
+	const obj = raw as Record<string, unknown>;
+	if (obj.type === 'oauth') {
+		if (obj.provider === 'google' || obj.provider === 'microsoft') {
+			return { type: 'oauth', provider: obj.provider };
+		}
+		return undefined;
+	}
+	if (obj.type === 'password' || obj.type === undefined) {
+		if (typeof obj.password === 'string') {
+			return { type: 'password', password: obj.password };
+		}
+		return undefined;
+	}
+	return undefined;
+}
+
+/**
+ * JSON-safe shape persisted to SecretStorage.
+ * Password: `{ type, password }`. OAuth: `{ type, provider }` only (strips tokens).
+ */
+export function credentialsForStorage(creds: EmailAccountCredentials): EmailAccountCredentials {
+	if (creds.type === 'oauth') {
+		return { type: 'oauth', provider: creds.provider };
+	}
+	return { type: 'password', password: creds.password };
 }
 
 export interface SendMailRequest {

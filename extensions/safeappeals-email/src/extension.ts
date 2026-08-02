@@ -11,15 +11,25 @@ import { EmailIndex } from './emailIndex';
 import { EmlEditorProvider } from './emlEditorProvider';
 import { parseEmlFile } from './emlParser';
 import { diagnoseConnection } from './imapClient';
-import { SyncEngine } from './syncEngine';
-import type {
-	DraftStatus,
-	EmailAccountConfig,
-	EmailAccountCredentials,
-	EmailClassification,
-	ListThreadsQuery,
-	SendMailRequest,
-	ThreadStatus,
+import {
+	CLOUD_AUTH_PROVIDER_ID,
+	emailFromAuthAccountLabel,
+	gmailOAuthAccountDefaults,
+	GOOGLE_AUTH_PROVIDER_ID,
+	isProviderScopeUserMismatch,
+	providerAuthIdForOAuth,
+	shouldPersistOAuthAccount,
+} from './oauthAccountFlow';
+import { handleCloudSignOutCascade, SyncEngine } from './syncEngine';
+import {
+	isOAuthCredentials,
+	type DraftStatus,
+	type EmailAccountConfig,
+	type EmailAccountCredentials,
+	type EmailClassification,
+	type ListThreadsQuery,
+	type SendMailRequest,
+	type ThreadStatus,
 } from './types';
 
 let output: vscode.OutputChannel;
@@ -136,6 +146,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 	);
 
 	registerCommands(context, log, openDashboard, refreshUi);
+	registerCloudSignOutCascade(context, log, refreshUi);
 	registerAgentTools(context, () => index, () => accounts);
 	await refreshStatusBar();
 	engine.startBackgroundSync();
@@ -160,7 +171,9 @@ function registerCommands(
 		vscode.commands.registerCommand('safeappeals-email.addAccount', async () => {
 			if (isWebClient()) {
 				void vscode.window.showWarningMessage(
-					'Adding accounts is not available in the browser because credentials cannot be stored securely. Use the desktop app.',
+					vscode.l10n.t(
+						'Adding accounts is not available in the browser because credentials cannot be stored securely. Use the desktop app.',
+					),
 				);
 				return undefined;
 			}
@@ -173,6 +186,23 @@ function registerCommands(
 			await engine.syncAll(account.id);
 			return account;
 		}),
+
+		vscode.commands.registerCommand(
+			'safeappeals-email.reconnectMailbox',
+			async (accountIdArg?: string) => {
+				if (isWebClient()) {
+					void vscode.window.showWarningMessage(
+						vscode.l10n.t('Reconnect Mailbox is only available in the desktop app.'),
+					);
+					return { success: false };
+				}
+				const ok = await promptReconnectMailbox(accountIdArg, log);
+				if (ok) {
+					refreshUi();
+				}
+				return { success: ok };
+			},
+		),
 
 		vscode.commands.registerCommand('safeappeals-email.removeAccount', async (accountIdArg?: string) => {
 			const accountId = accountIdArg || (await pickAccountId('Remove which account?'));
@@ -550,11 +580,181 @@ async function pickAccountId(placeHolder: string): Promise<string | undefined> {
 	return pick?.id;
 }
 
+type AddAccountMethod = 'google' | 'password';
+
+function registerCloudSignOutCascade(
+	context: vscode.ExtensionContext,
+	log: (msg: string) => void,
+	refreshUi: () => void,
+): void {
+	context.subscriptions.push(
+		vscode.authentication.onDidChangeSessions(async (e) => {
+			if (e.provider.id !== CLOUD_AUTH_PROVIDER_ID) {
+				return;
+			}
+			// Global event only exposes provider id — confirm Cloud session is gone.
+			const remaining = await vscode.authentication.getSession(CLOUD_AUTH_PROVIDER_ID, [], {
+				silent: true,
+			});
+			if (remaining) {
+				return;
+			}
+			try {
+				const marked = await handleCloudSignOutCascade(accounts);
+				if (marked === 0) {
+					return;
+				}
+				log(`Cloud sign-out: marked ${marked} OAuth mailbox account(s) needsReconnect`);
+				refreshUi();
+				const reconnect = vscode.l10n.t('Reconnect Mailbox');
+				const choice = await vscode.window.showWarningMessage(
+					vscode.l10n.t(
+						'Signed out of SafeAppeals Cloud. Reconnect your mailbox to resume email sync.',
+					),
+					reconnect,
+				);
+				if (choice === reconnect) {
+					await vscode.commands.executeCommand('safeappeals-email.reconnectMailbox');
+				}
+			} catch (err) {
+				const message = err instanceof Error ? err.message : String(err);
+				log(`Cloud sign-out cascade failed: ${message}`);
+			}
+		}),
+	);
+}
+
 async function promptAddAccount(
 	log: (msg: string) => void,
 ): Promise<EmailAccountConfig | undefined> {
+	const googleLabel = vscode.l10n.t('Sign in with Safe Appeals (Google)');
+	const passwordLabel = vscode.l10n.t('Advanced: App Password / IMAP');
+	const method = await vscode.window.showQuickPick(
+		[
+			{
+				label: googleLabel,
+				description: vscode.l10n.t('Connect Gmail with Safe Appeals'),
+				id: 'google' as AddAccountMethod,
+			},
+			{
+				label: passwordLabel,
+				description: vscode.l10n.t('Manual IMAP/SMTP with an app password'),
+				id: 'password' as AddAccountMethod,
+			},
+		],
+		{
+			placeHolder: vscode.l10n.t('How do you want to add a mailbox?'),
+			ignoreFocusOut: true,
+		},
+	);
+	if (!method) {
+		return undefined;
+	}
+	if (method.id === 'google') {
+		return promptAddGoogleOAuthAccount(log);
+	}
+	return promptAddPasswordAccount(log);
+}
+
+async function promptAddGoogleOAuthAccount(
+	log: (msg: string) => void,
+): Promise<EmailAccountConfig | undefined> {
+	let cloudSession: vscode.AuthenticationSession;
+	try {
+		const session = await vscode.authentication.getSession(CLOUD_AUTH_PROVIDER_ID, [], {
+			createIfNone: true,
+		});
+		if (!session) {
+			void vscode.window.showErrorMessage(
+				vscode.l10n.t('Sign in to SafeAppeals Cloud was cancelled.'),
+			);
+			return undefined;
+		}
+		cloudSession = session;
+	} catch (err) {
+		const message = err instanceof Error ? err.message : String(err);
+		log(`Cloud session for mailbox connect failed: ${message}`);
+		void vscode.window.showErrorMessage(
+			vscode.l10n.t('Could not sign in to SafeAppeals Cloud: {0}', message),
+		);
+		return undefined;
+	}
+
+	let googleSession: vscode.AuthenticationSession;
+	try {
+		const session = await vscode.authentication.getSession(GOOGLE_AUTH_PROVIDER_ID, ['mail'], {
+			createIfNone: true,
+		});
+		if (!session || !shouldPersistOAuthAccount(session)) {
+			log('Google mail session missing accessToken — aborting OAuth account create');
+			void vscode.window.showErrorMessage(
+				vscode.l10n.t(
+					'Could not get a Gmail access token. Mailbox was not added. Try again or use Advanced: App Password / IMAP.',
+				),
+			);
+			return undefined;
+		}
+		googleSession = session;
+	} catch (err) {
+		const message = err instanceof Error ? err.message : String(err);
+		log(`Google mail session mint failed: ${message}`);
+		// Wrong-account reconsent is already surfaced by safeappeals-authentication.
+		if (!isProviderScopeUserMismatch(err)) {
+			void vscode.window.showErrorMessage(
+				vscode.l10n.t(
+					'Could not connect Gmail ({0}). Mailbox was not added.',
+					message,
+				),
+			);
+		}
+		return undefined;
+	}
+
+	const derived =
+		emailFromAuthAccountLabel(googleSession.account.label)
+		|| emailFromAuthAccountLabel(cloudSession.account.label);
 	const email = await vscode.window.showInputBox({
-		prompt: 'Email address',
+		prompt: vscode.l10n.t('Gmail address for this mailbox'),
+		placeHolder: 'you@gmail.com',
+		value: derived || '',
+		ignoreFocusOut: true,
+		validateInput: (value) => {
+			const trimmed = value.trim();
+			if (!trimmed || !trimmed.includes('@')) {
+				return vscode.l10n.t('Enter a valid email address');
+			}
+			return undefined;
+		},
+	});
+	if (!email?.trim()) {
+		return undefined;
+	}
+
+	const normalizedEmail = email.trim().toLowerCase();
+	const config = gmailOAuthAccountDefaults(normalizedEmail);
+	try {
+		const account = await accounts.addAccount(config, { type: 'oauth', provider: 'google' });
+		await accounts.clearNeedsReconnect(account.id);
+		log(`OAuth Gmail account added: ${account.label}`);
+		void vscode.window.showInformationMessage(
+			vscode.l10n.t('Mailbox connected: {0}', account.label),
+		);
+		return account;
+	} catch (err) {
+		const message = err instanceof Error ? err.message : String(err);
+		log(`OAuth account persist failed: ${message}`);
+		void vscode.window.showErrorMessage(
+			vscode.l10n.t('Could not save mailbox account: {0}', message),
+		);
+		return undefined;
+	}
+}
+
+async function promptAddPasswordAccount(
+	log: (msg: string) => void,
+): Promise<EmailAccountConfig | undefined> {
+	const email = await vscode.window.showInputBox({
+		prompt: vscode.l10n.t('Email address'),
 		placeHolder: 'you@example.com',
 		ignoreFocusOut: true,
 	});
@@ -563,7 +763,7 @@ async function promptAddAccount(
 	}
 
 	const imapHost = await vscode.window.showInputBox({
-		prompt: 'IMAP host',
+		prompt: vscode.l10n.t('IMAP host'),
 		placeHolder: 'imap.example.com',
 		value: guessImapHost(email),
 		ignoreFocusOut: true,
@@ -573,7 +773,7 @@ async function promptAddAccount(
 	}
 
 	const imapPortStr = await vscode.window.showInputBox({
-		prompt: 'IMAP port',
+		prompt: vscode.l10n.t('IMAP port'),
 		value: '993',
 		ignoreFocusOut: true,
 	});
@@ -582,7 +782,7 @@ async function promptAddAccount(
 	}
 
 	const smtpHost = await vscode.window.showInputBox({
-		prompt: 'SMTP host',
+		prompt: vscode.l10n.t('SMTP host'),
 		placeHolder: 'smtp.example.com',
 		value: guessSmtpHost(email),
 		ignoreFocusOut: true,
@@ -592,7 +792,7 @@ async function promptAddAccount(
 	}
 
 	const smtpPortStr = await vscode.window.showInputBox({
-		prompt: 'SMTP port (465 SSL / 587 STARTTLS)',
+		prompt: vscode.l10n.t('SMTP port (465 SSL / 587 STARTTLS)'),
 		value: '465',
 		ignoreFocusOut: true,
 	});
@@ -601,7 +801,7 @@ async function promptAddAccount(
 	}
 
 	const username = await vscode.window.showInputBox({
-		prompt: 'Username (usually full email)',
+		prompt: vscode.l10n.t('Username (usually full email)'),
 		value: email,
 		ignoreFocusOut: true,
 	});
@@ -610,7 +810,7 @@ async function promptAddAccount(
 	}
 
 	let password = await vscode.window.showInputBox({
-		prompt: 'Password / app password (stored in SecretStorage, not settings)',
+		prompt: vscode.l10n.t('Password / app password (stored in SecretStorage, not settings)'),
 		password: true,
 		ignoreFocusOut: true,
 	});
@@ -633,13 +833,15 @@ async function promptAddAccount(
 	};
 	const candidate: EmailAccountConfig = { id: 'pending', ...config };
 	const folder = getDefaultFolder();
+	const retryPassword = vscode.l10n.t('Retry Password');
+	const saveAnyway = vscode.l10n.t('Save Anyway');
 
 	for (;;) {
-		const creds: EmailAccountCredentials = { password };
+		const creds: EmailAccountCredentials = { type: 'password', password };
 		const result = await vscode.window.withProgress(
 			{
 				location: vscode.ProgressLocation.Notification,
-				title: 'Verifying IMAP connection…',
+				title: vscode.l10n.t('Verifying IMAP connection…'),
 				cancellable: false,
 			},
 			async () => diagnoseConnection(candidate, creds, folder, log),
@@ -648,19 +850,23 @@ async function promptAddAccount(
 		if (result.ok) {
 			const account = await accounts.addAccount(config, creds);
 			void vscode.window.showInformationMessage(
-				`Connected — ${result.exists} messages in ${result.folder || folder}`,
+				vscode.l10n.t(
+					'Connected — {0} messages in {1}',
+					String(result.exists),
+					result.folder || folder,
+				),
 			);
 			return account;
 		}
 
 		const choice = await vscode.window.showErrorMessage(
-			`IMAP connection failed: ${result.error || 'unknown error'}`,
-			'Retry password',
-			'Save anyway',
+			vscode.l10n.t('IMAP connection failed: {0}', result.error || vscode.l10n.t('unknown error')),
+			retryPassword,
+			saveAnyway,
 		);
-		if (choice === 'Retry password') {
+		if (choice === retryPassword) {
 			const retry = await vscode.window.showInputBox({
-				prompt: 'Password / app password',
+				prompt: vscode.l10n.t('Password / app password'),
 				password: true,
 				ignoreFocusOut: true,
 			});
@@ -670,10 +876,13 @@ async function promptAddAccount(
 			password = retry;
 			continue;
 		}
-		if (choice === 'Save anyway') {
+		if (choice === saveAnyway) {
 			const account = await accounts.addAccount(config, creds);
 			void vscode.window.showWarningMessage(
-				`Account saved without a successful IMAP check: ${account.label}`,
+				vscode.l10n.t(
+					'Account saved without a successful IMAP check: {0}',
+					account.label,
+				),
 			);
 			return account;
 		}
@@ -681,13 +890,113 @@ async function promptAddAccount(
 	}
 }
 
+async function promptReconnectMailbox(
+	accountIdArg: string | undefined,
+	log: (msg: string) => void,
+): Promise<boolean> {
+	const accountId =
+		accountIdArg
+		|| (await pickReconnectAccountId());
+	if (!accountId) {
+		return false;
+	}
+	const account = accounts.getAccount(accountId);
+	if (!account) {
+		void vscode.window.showErrorMessage(vscode.l10n.t('Account not found.'));
+		return false;
+	}
+	const creds = await accounts.getCredentials(accountId);
+	if (!creds || !isOAuthCredentials(creds)) {
+		void vscode.window.showWarningMessage(
+			vscode.l10n.t(
+				'This mailbox uses an app password. Use Update Account Password instead.',
+			),
+		);
+		return false;
+	}
+
+	const providerId = providerAuthIdForOAuth(creds.provider);
+	try {
+		const cloudSession = await vscode.authentication.getSession(CLOUD_AUTH_PROVIDER_ID, [], {
+			createIfNone: true,
+		});
+		if (!cloudSession) {
+			void vscode.window.showErrorMessage(
+				vscode.l10n.t('Sign in to SafeAppeals Cloud was cancelled.'),
+			);
+			return false;
+		}
+		const mailSession = await vscode.authentication.getSession(providerId, ['mail'], {
+			createIfNone: true,
+		});
+		if (!mailSession?.accessToken) {
+			void vscode.window.showErrorMessage(
+				vscode.l10n.t(
+					'Could not get a mail access token for {0}. Try again.',
+					account.label,
+				),
+			);
+			return false;
+		}
+		await accounts.clearNeedsReconnect(account.id);
+		log(`Mailbox reconnected: ${account.label}`);
+		void vscode.window.showInformationMessage(
+			vscode.l10n.t('Mailbox reconnected: {0}', account.label),
+		);
+		await engine.syncAll(account.id);
+		return true;
+	} catch (err) {
+		const message = err instanceof Error ? err.message : String(err);
+		log(`Reconnect mailbox failed for ${account.label}: ${message}`);
+		// Wrong-account reconsent is already surfaced by safeappeals-authentication.
+		if (!isProviderScopeUserMismatch(err)) {
+			void vscode.window.showErrorMessage(
+				vscode.l10n.t('Could not reconnect mailbox: {0}', message),
+			);
+		}
+		return false;
+	}
+}
+
+async function pickReconnectAccountId(): Promise<string | undefined> {
+	const oauthAccounts = await accounts.listOAuthAccounts();
+	const needsReconnect = oauthAccounts.filter((a) => a.authStatus === 'needsReconnect');
+	const candidates = needsReconnect.length > 0 ? needsReconnect : oauthAccounts;
+	if (candidates.length === 0) {
+		void vscode.window.showInformationMessage(
+			vscode.l10n.t('No OAuth mailboxes need reconnect.'),
+		);
+		return undefined;
+	}
+	if (candidates.length === 1) {
+		return candidates[0]!.id;
+	}
+	const pick = await vscode.window.showQuickPick(
+		candidates.map((a) => ({
+			label: a.label,
+			description:
+				a.authStatus === 'needsReconnect'
+					? vscode.l10n.t('Needs reconnect')
+					: a.email,
+			id: a.id,
+		})),
+		{ placeHolder: vscode.l10n.t('Reconnect which mailbox?') },
+	);
+	return pick?.id;
+}
+
 async function promptUpdatePassword(
 	account: EmailAccountConfig,
 	log: (msg: string) => void,
 ): Promise<boolean> {
+	const oauthCreds = await accounts.getCredentials(account.id);
+	if (oauthCreds && isOAuthCredentials(oauthCreds)) {
+		return promptReconnectMailbox(account.id, log);
+	}
+
 	const folder = getDefaultFolder();
 	let password = await vscode.window.showInputBox({
-		prompt: `New password for ${account.label}`,
+		prompt: vscode.l10n.t('New password for {0}', account.label),
 		password: true,
 		ignoreFocusOut: true,
 	});
@@ -695,12 +1004,13 @@ async function promptUpdatePassword(
 		return false;
 	}
 
+	const retryPassword = vscode.l10n.t('Retry Password');
 	for (;;) {
-		const creds: EmailAccountCredentials = { password };
+		const creds: EmailAccountCredentials = { type: 'password', password };
 		const result = await vscode.window.withProgress(
 			{
 				location: vscode.ProgressLocation.Notification,
-				title: 'Verifying IMAP connection…',
+				title: vscode.l10n.t('Verifying IMAP connection…'),
 				cancellable: false,
 			},
 			async () => diagnoseConnection(account, creds, folder, log),
@@ -709,21 +1019,25 @@ async function promptUpdatePassword(
 		if (result.ok) {
 			await accounts.updateCredentials(account.id, creds);
 			void vscode.window.showInformationMessage(
-				`Password updated — ${result.exists} messages in ${result.folder || folder}`,
+				vscode.l10n.t(
+					'Password updated — {0} messages in {1}',
+					String(result.exists),
+					result.folder || folder,
+				),
 			);
 			log(`Password updated for ${account.label}`);
 			return true;
 		}
 
 		const choice = await vscode.window.showErrorMessage(
-			`IMAP connection failed: ${result.error || 'unknown error'}`,
-			'Retry password',
+			vscode.l10n.t('IMAP connection failed: {0}', result.error || vscode.l10n.t('unknown error')),
+			retryPassword,
 		);
-		if (choice !== 'Retry password') {
+		if (choice !== retryPassword) {
 			return false;
 		}
 		const retry = await vscode.window.showInputBox({
-			prompt: `New password for ${account.label}`,
+			prompt: vscode.l10n.t('New password for {0}', account.label),
 			password: true,
 			ignoreFocusOut: true,
 		});

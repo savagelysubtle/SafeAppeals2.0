@@ -206,6 +206,16 @@ BRAVE_SEARCH_URL=http://localhost:3001
 SUPABASE_URL=https://xxxx.supabase.co
 SUPABASE_SERVICE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 
+# Google OAuth (provider-token mint — same client as Supabase Google provider)
+# Required for POST /auth/provider-token and for persisting provider refresh on PKCE.
+GOOGLE_CLIENT_ID=your-google-oauth-client-id.apps.googleusercontent.com
+GOOGLE_CLIENT_SECRET=your-google-oauth-client-secret
+
+# AES-256 key for encrypting provider refresh tokens at rest (outside the DB).
+# Generate: node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+# Fail closed if missing — plaintext refresh is never stored.
+PROVIDER_TOKEN_ENCRYPTION_KEY=
+
 # Stripe
 STRIPE_SECRET_KEY=sk_live_...
 STRIPE_WEBHOOK_SECRET=whsec_...

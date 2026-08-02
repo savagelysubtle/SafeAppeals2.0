@@ -1,28 +1,73 @@
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Safe Appeals. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
+
 /*--------------------------------------------------------------------------------------
  *  Account credentials in SecretStorage; metadata in settings / globalStorage
  *--------------------------------------------------------------------------------------*/
 
 import { randomUUID } from 'crypto';
-import * as vscode from 'vscode';
-import { getConfiguredAccounts, setConfiguredAccounts } from './config';
-import type { EmailAccountConfig, EmailAccountCredentials } from './types';
+import type { SecretStorage } from 'vscode';
+import {
+	credentialsForStorage,
+	isOAuthCredentials,
+	normalizeCredentials,
+	type EmailAccountAuthStatus,
+	type EmailAccountConfig,
+	type EmailAccountCredentials,
+	type EmailAccountCredentialsInput,
+	type EmailOAuthProvider,
+} from './types';
 
 function secretKey(accountId: string): string {
 	return `safeappeals-email.account.${accountId}`;
 }
 
+/** Injectable account-metadata persistence (defaults to settings via config.ts). */
+export interface AccountConfigPersistence {
+	list(): EmailAccountConfig[];
+	save(accounts: EmailAccountConfig[]): Promise<void>;
+}
+
+function defaultPersistence(): AccountConfigPersistence {
+	// Lazy require keeps unit tests that inject persistence off the vscode/config path.
+	const config = require('./config') as typeof import('./config');
+	return {
+		list: () => config.getConfiguredAccounts(),
+		save: (accounts) => config.setConfiguredAccounts(accounts),
+	};
+}
+
+function defaultShowError(message: string): void {
+	try {
+		const vscode = require('vscode') as typeof import('vscode');
+		void vscode.window.showErrorMessage(message);
+	} catch {
+		// Tests / environments without vscode — ignore.
+	}
+}
+
 export class AccountStore {
+	private readonly persistence: AccountConfigPersistence;
+	private readonly showError: (message: string) => void;
+
 	constructor(
-		private readonly secrets: vscode.SecretStorage,
+		private readonly secrets: SecretStorage,
 		private readonly log?: (msg: string) => void,
-	) {}
+		persistence?: AccountConfigPersistence,
+		showError?: (message: string) => void,
+	) {
+		this.persistence = persistence ?? defaultPersistence();
+		this.showError = showError ?? defaultShowError;
+	}
 
 	listAccounts(): EmailAccountConfig[] {
-		return getConfiguredAccounts();
+		return this.persistence.list();
 	}
 
 	getAccount(accountId: string): EmailAccountConfig | undefined {
-		return getConfiguredAccounts().find((a) => a.id === accountId);
+		return this.persistence.list().find((a) => a.id === accountId);
 	}
 
 	async getCredentials(accountId: string): Promise<EmailAccountCredentials | undefined> {
@@ -31,7 +76,8 @@ export class AccountStore {
 			return undefined;
 		}
 		try {
-			return JSON.parse(raw) as EmailAccountCredentials;
+			const parsed: unknown = JSON.parse(raw);
+			return normalizeCredentials(parsed);
 		} catch (err) {
 			const message = err instanceof Error ? err.message : String(err);
 			this.log?.(
@@ -41,10 +87,23 @@ export class AccountStore {
 		}
 	}
 
+	/**
+	 * Persist account metadata + credentials.
+	 *
+	 * Binding rule (E4 enforces at UX): do **not** call this with `{ type: 'oauth' }`
+	 * until a mail-scoped access token has been minted **and** server refresh
+	 * persistence is ACK'd. The store itself accepts oauth credentials when given.
+	 */
 	async addAccount(
 		config: Omit<EmailAccountConfig, 'id'> & { id?: string },
-		credentials: EmailAccountCredentials,
+		credentials: EmailAccountCredentialsInput,
 	): Promise<EmailAccountConfig> {
+		const normalized = normalizeCredentials(credentials);
+		if (!normalized) {
+			throw new Error('Invalid email account credentials');
+		}
+		const toStore = credentialsForStorage(normalized);
+
 		const id = config.id || randomUUID();
 		const account: EmailAccountConfig = {
 			id,
@@ -57,15 +116,16 @@ export class AccountStore {
 			smtpPort: config.smtpPort,
 			smtpSecure: config.smtpSecure,
 			username: config.username,
+			...(config.authStatus ? { authStatus: config.authStatus } : {}),
 		};
 
 		// Store secret FIRST so a failed SecretStorage write never leaves a ghost
 		// account in settings (and concurrent sync cannot observe metadata-without-creds).
 		try {
-			await this.secrets.store(secretKey(id), JSON.stringify(credentials));
-			const accounts = getConfiguredAccounts().filter((a) => a.id !== id);
+			await this.secrets.store(secretKey(id), JSON.stringify(toStore));
+			const accounts = this.persistence.list().filter((a) => a.id !== id);
 			accounts.push(account);
-			await setConfiguredAccounts(accounts);
+			await this.persistence.save(accounts);
 			return account;
 		} catch (err) {
 			try {
@@ -75,27 +135,84 @@ export class AccountStore {
 			}
 			const message = err instanceof Error ? err.message : String(err);
 			this.log?.(`addAccount failed for ${account.label}: ${message}`);
-			void vscode.window.showErrorMessage(
-				`Failed to save email account credentials: ${message}`,
-			);
+			this.showError(`Failed to save email account credentials: ${message}`);
 			throw err;
 		}
 	}
 
 	async removeAccount(accountId: string): Promise<boolean> {
-		const accounts = getConfiguredAccounts().filter((a) => a.id !== accountId);
-		if (accounts.length === getConfiguredAccounts().length) {
+		const before = this.persistence.list();
+		const accounts = before.filter((a) => a.id !== accountId);
+		if (accounts.length === before.length) {
 			return false;
 		}
-		await setConfiguredAccounts(accounts);
+		await this.persistence.save(accounts);
 		await this.secrets.delete(secretKey(accountId));
 		return true;
 	}
 
-	async updateCredentials(accountId: string, credentials: EmailAccountCredentials): Promise<void> {
+	async updateCredentials(
+		accountId: string,
+		credentials: EmailAccountCredentialsInput,
+	): Promise<void> {
 		if (!this.getAccount(accountId)) {
 			throw new Error(`Unknown account: ${accountId}`);
 		}
-		await this.secrets.store(secretKey(accountId), JSON.stringify(credentials));
+		const normalized = normalizeCredentials(credentials);
+		if (!normalized) {
+			throw new Error('Invalid email account credentials');
+		}
+		await this.secrets.store(
+			secretKey(accountId),
+			JSON.stringify(credentialsForStorage(normalized)),
+		);
+	}
+
+	/** Mark an account as needing mailbox reconnect (sidebar / toast). */
+	async markAccountNeedsReconnect(accountId: string): Promise<void> {
+		await this.setAuthStatus(accountId, 'needsReconnect');
+	}
+
+	/** Clear reconnect flag after a successful mint / reconnect. */
+	async clearNeedsReconnect(accountId: string): Promise<void> {
+		await this.setAuthStatus(accountId, 'ok');
+	}
+
+	/**
+	 * OAuth mailbox accounts for cloud sign-out cascade (E3/E4).
+	 * Optionally filter by provider.
+	 */
+	async listOAuthAccounts(provider?: EmailOAuthProvider): Promise<EmailAccountConfig[]> {
+		const accounts = this.persistence.list();
+		const matched: EmailAccountConfig[] = [];
+		for (const account of accounts) {
+			const creds = await this.getCredentials(account.id);
+			if (!creds || !isOAuthCredentials(creds)) {
+				continue;
+			}
+			if (provider && creds.provider !== provider) {
+				continue;
+			}
+			matched.push(account);
+		}
+		return matched;
+	}
+
+	private async setAuthStatus(
+		accountId: string,
+		authStatus: EmailAccountAuthStatus,
+	): Promise<void> {
+		const accounts = this.persistence.list();
+		const index = accounts.findIndex((a) => a.id === accountId);
+		if (index < 0) {
+			throw new Error(`Unknown account: ${accountId}`);
+		}
+		const current = accounts[index]!;
+		if (current.authStatus === authStatus) {
+			return;
+		}
+		const next = [...accounts];
+		next[index] = { ...current, authStatus };
+		await this.persistence.save(next);
 	}
 }

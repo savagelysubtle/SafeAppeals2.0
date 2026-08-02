@@ -16,6 +16,12 @@ This document covers security best practices and implemented security measures f
 app.addHook('preHandler', verifySupabaseToken);
 ```
 
+**Provider tokens (mailbox / calendar OAuth):**
+- Identity login (`GET /auth/google` without flags) never requests mail scopes — mailbox consent is opt-in via `include_mail_scopes` / `include_calendar_scopes`
+- Provider refresh tokens are encrypted at rest (`PROVIDER_TOKEN_ENCRYPTION_KEY`, AES-256-GCM) in `provider_tokens` and never returned from `/auth/callback`, `/auth/exchange`, or `/auth/refresh`
+- Clients mint short-lived provider access tokens with `POST /auth/provider-token` (Bearer cloud JWT; body `user_id` ignored)
+- Fail closed if encryption or Google client env vars are missing — plaintext provider refresh is never stored
+
 ### Row Level Security (RLS)
 
 All database tables have RLS enabled:
@@ -26,6 +32,7 @@ All database tables have RLS enabled:
 | `credit_transactions` | Users can only read own transactions |
 | `usage_logs` | Users can only read own usage |
 | `model_pricing` | Authenticated users can read (write restricted) |
+| `provider_tokens` | RLS on, zero client policies; `service_role` only (API) |
 
 ### Function Security
 

@@ -6,6 +6,8 @@
 import * as vscode from 'vscode';
 import { CloudAuthProvider, AUTH_PROVIDER_ID } from './cloudAuthProvider';
 import type { CreditPack } from './api';
+import { GoogleAuthProvider } from './googleAuthProvider';
+import { MicrosoftAuthProvider } from './microsoftAuthProvider';
 import { registerSafeAppealsAgentParticipant } from './chat/agentParticipant';
 import { registerSafeAppealsAgentTools } from './chat/tools';
 import { CloudChatProvider } from './llm/cloudChatProvider';
@@ -30,6 +32,29 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
 	provider = new CloudAuthProvider(context, output);
 	context.subscriptions.push(provider);
+
+	// Provider-token providers: session.accessToken is Google/Microsoft, not Cloud JWT.
+	// Clear in-memory tokens when Cloud signs out (email oauth cascade is E3/E4).
+	context.subscriptions.push(
+		new GoogleAuthProvider({
+			ensureCloudSession: async () => {
+				const session = await vscode.authentication.getSession(AUTH_PROVIDER_ID, [], { createIfNone: true });
+				return { id: session.account.id, label: session.account.label };
+			},
+			tryGetCloudAccount: async () => {
+				const session = await vscode.authentication.getSession(AUTH_PROVIDER_ID, [], { silent: true });
+				return session ? { id: session.account.id, label: session.account.label } : undefined;
+			},
+			requestGoogleProviderScopes: options => provider.requestGoogleProviderScopes(options),
+			refreshProviderToken: () => provider.getApiClient().refreshProviderToken('google'),
+			onDidChangeCloudSessions: provider.onDidChangeSessions,
+			output,
+		}),
+		new MicrosoftAuthProvider({
+			onDidChangeCloudSessions: provider.onDidChangeSessions,
+			output,
+		}),
+	);
 
 	// Register chat provider before initialize so restored-session onDidChangeSessions
 	// is observed (models resolve only when that event fires after reload).

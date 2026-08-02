@@ -9,6 +9,7 @@ SafeAppeals Cloud uses Supabase (PostgreSQL) for:
 - Credit/token balances
 - Usage logging and analytics
 - Model pricing data
+- Encrypted OAuth provider refresh tokens (mailbox / calendar)
 
 ## Tables
 
@@ -156,6 +157,31 @@ ALTER TABLE model_pricing ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Authenticated users can read pricing" ON model_pricing
     FOR SELECT TO authenticated
     USING (true);
+```
+
+### provider_tokens
+
+Server-side encrypted OAuth provider refresh tokens (Google today; Microsoft reserved). Used by `POST /auth/provider-token` to mint short-lived provider access tokens. The encryption key (`PROVIDER_TOKEN_ENCRYPTION_KEY`) lives outside the database.
+
+```sql
+CREATE TABLE provider_tokens (
+    user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+    provider TEXT NOT NULL CHECK (provider IN ('google', 'microsoft')),
+    encrypted_refresh TEXT NOT NULL,
+    scopes TEXT,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (user_id, provider)
+);
+
+CREATE INDEX idx_provider_tokens_updated_at
+    ON provider_tokens(updated_at DESC);
+
+-- Fail closed for clients: RLS on, zero policies for anon/authenticated.
+ALTER TABLE provider_tokens ENABLE ROW LEVEL SECURITY;
+
+REVOKE ALL ON TABLE provider_tokens FROM anon, authenticated;
+GRANT ALL ON TABLE provider_tokens TO service_role;
 ```
 
 ## Functions
@@ -393,6 +419,7 @@ Migrations are stored in `void-cloud/supabase/migrations/`:
 | `004_cost_tracking.sql` | Cost columns and functions |
 | `005_update_model_pricing.sql` | Initial model pricing |
 | `006_sync_model_pricing_dec2024.sql` | Sync with LiteLLM config |
+| `009_provider_tokens.sql` | Encrypted OAuth provider refresh tokens (`provider_tokens`) |
 
 ### Running Migrations
 

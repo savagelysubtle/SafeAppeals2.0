@@ -84,12 +84,14 @@ void-cloud/
 ├── api/                      # Main API Gateway
 │   ├── src/
 │   │   ├── routes/
+│   │   │   ├── auth.ts       # OAuth PKCE, /auth/provider-token
 │   │   │   ├── credits.ts    # Credit balance & checkout
 │   │   │   ├── web-search.ts # Web search with credit deduction
 │   │   │   ├── llm.ts        # LLM proxy routes
 │   │   │   └── webhooks.ts   # Stripe webhooks
 │   │   └── services/
 │   │       ├── supabase.ts   # Database client
+│   │       ├── providerToken.ts # Mint Google provider access tokens
 │   │       └── stripe.ts     # Payment client
 │   └── package.json
 ├── brave-search-service/     # Brave Search wrapper
@@ -109,6 +111,11 @@ void-cloud/
 # Supabase
 SUPABASE_URL=https://xxx.supabase.co
 SUPABASE_SERVICE_KEY=eyJ...
+
+# Google OAuth + provider-token mint (mailbox/calendar scopes are opt-in)
+GOOGLE_CLIENT_ID=your-google-oauth-client-id.apps.googleusercontent.com
+GOOGLE_CLIENT_SECRET=your-google-oauth-client-secret
+PROVIDER_TOKEN_ENCRYPTION_KEY=   # 32-byte key (hex or base64); fail closed if unset
 
 # Stripe
 STRIPE_SECRET_KEY=sk_live_...
@@ -149,5 +156,5 @@ BRAVE_SEARCH_API_KEY=BSA...
 
 ---
 
-**Last Updated**: December 2024
+**Last Updated**: August 2026
 **Maintained by**: SafeAppeals Development Team

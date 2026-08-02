@@ -171,7 +171,15 @@
 			"GitHub.copilot-chat"
 		],
 		"safeappeals-cloud": [
-			"safeappeals.safeappeals-case",
+			"safeappeals.safeappeals-timeline",
+			"safeappeals.safeappeals-email",
+			"safeappeals.safeappeals-calendar"
+		],
+		"safeappeals-google": [
+			"safeappeals.safeappeals-email",
+			"safeappeals.safeappeals-calendar"
+		],
+		"safeappeals-microsoft": [
 			"safeappeals.safeappeals-email",
 			"safeappeals.safeappeals-calendar"
 		]

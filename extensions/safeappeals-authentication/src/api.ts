@@ -93,6 +93,10 @@ export interface CloudUser {
 
 /**
  * Full session envelope persisted in SecretStorage (never globalState/settings).
+ *
+ * `googleProviderToken` / `googleProviderRefreshToken` are legacy optional fields.
+ * Provider tokens are minted via {@link CloudApiClient.refreshProviderToken} and must
+ * not be persisted in the desktop envelope (always null / omitted when writing).
  */
 export interface CloudSessionEnvelope {
 	readonly accessToken: string;
@@ -249,13 +253,36 @@ export function getWebCallbackOrigins(): readonly string[] {
 }
 
 /**
+ * Identity provider for short-lived provider access tokens from
+ * {@link CloudApiClient.refreshProviderToken}.
+ */
+export type AuthProviderId = 'google' | 'microsoft';
+
+/**
+ * Short-lived provider access token from POST /auth/provider-token.
+ * Refresh tokens stay server-side and are never returned.
+ */
+export interface ProviderTokenResponse {
+	readonly provider: AuthProviderId;
+	readonly accessToken: string;
+	readonly expiresAt: number;
+}
+
+/**
  * Builds the Google authorize URL with required PKCE + state query params.
- * Does not request calendar scopes for plain sign-in.
+ * Plain Cloud sign-in omits mail/calendar flags — never request mail at identity login.
+ * Opt-in scope flags are read by void-cloud (`include_mail_scopes` / `include_calendar_scopes`).
+ *
+ * `loginHint` binds incremental consent to the Cloud account already signed in so the
+ * browser cannot silently pick a different Google account.
  */
 export function buildGoogleAuthorizeUrl(params: {
 	readonly codeChallenge: string;
 	readonly state: string;
 	readonly redirectUri: string;
+	readonly includeMailScopes?: boolean;
+	readonly includeCalendarScopes?: boolean;
+	readonly loginHint?: string;
 }): string {
 	const apiUrl = getApiUrl();
 	const query = new URLSearchParams({
@@ -264,6 +291,16 @@ export function buildGoogleAuthorizeUrl(params: {
 		code_challenge_method: 'S256',
 		state: params.state,
 	});
+	if (params.includeMailScopes) {
+		query.set('include_mail_scopes', 'true');
+	}
+	if (params.includeCalendarScopes) {
+		query.set('include_calendar_scopes', 'true');
+	}
+	const loginHint = params.loginHint?.trim();
+	if (loginHint) {
+		query.set('login_hint', loginHint);
+	}
 	return `${apiUrl}/auth/google?${query.toString()}`;
 }
 
@@ -286,8 +323,6 @@ export class CloudApiClient {
 			refreshToken: string;
 			expiresAt?: number;
 			user: CloudUser;
-			googleProviderToken?: string | null;
-			googleProviderRefreshToken?: string | null;
 		}>('/auth/callback', {
 			method: 'POST',
 			body: JSON.stringify({ code, code_verifier: codeVerifier }),
@@ -295,26 +330,25 @@ export class CloudApiClient {
 			skipRefreshRetry: true,
 		});
 
+		// Provider tokens stay server-side; never persist them in the desktop envelope.
 		return {
 			accessToken: response.accessToken,
 			refreshToken: response.refreshToken,
 			expiresAt: response.expiresAt ?? Math.floor(Date.now() / 1000) + 3600,
 			user: response.user,
-			googleProviderToken: response.googleProviderToken,
-			googleProviderRefreshToken: response.googleProviderRefreshToken,
+			googleProviderToken: null,
+			googleProviderRefreshToken: null,
 		};
 	}
 
 	/**
 	 * Refreshes the session using the refresh token.
 	 */
-	async refreshSession(refreshToken: string): Promise<Pick<CloudSessionEnvelope, 'accessToken' | 'refreshToken' | 'expiresAt' | 'googleProviderToken' | 'googleProviderRefreshToken'>> {
+	async refreshSession(refreshToken: string): Promise<Pick<CloudSessionEnvelope, 'accessToken' | 'refreshToken' | 'expiresAt'>> {
 		const response = await this.request<{
 			accessToken: string;
 			refreshToken: string;
 			expiresAt?: number;
-			googleProviderToken?: string | null;
-			googleProviderRefreshToken?: string | null;
 		}>('/auth/refresh', {
 			method: 'POST',
 			body: JSON.stringify({ refreshToken }),
@@ -326,8 +360,27 @@ export class CloudApiClient {
 			accessToken: response.accessToken,
 			refreshToken: response.refreshToken,
 			expiresAt: response.expiresAt ?? Math.floor(Date.now() / 1000) + 3600,
-			googleProviderToken: response.googleProviderToken,
-			googleProviderRefreshToken: response.googleProviderRefreshToken,
+		};
+	}
+
+	/**
+	 * Mints a short-lived identity-provider access token via the Cloud session.
+	 * Provider refresh tokens remain on the server and are never returned.
+	 */
+	async refreshProviderToken(provider: AuthProviderId): Promise<ProviderTokenResponse> {
+		const response = await this.request<{
+			provider?: AuthProviderId;
+			accessToken: string;
+			expiresAt: number;
+		}>('/auth/provider-token', {
+			method: 'POST',
+			body: JSON.stringify({ provider }),
+		});
+		// S2 may omit `provider`; fall back to the requested id.
+		return {
+			provider: response.provider ?? provider,
+			accessToken: response.accessToken,
+			expiresAt: response.expiresAt,
 		};
 	}
 

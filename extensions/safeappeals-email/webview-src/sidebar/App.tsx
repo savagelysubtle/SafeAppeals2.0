@@ -411,12 +411,17 @@ export const App: React.FC = () => {
 		if (!accountId) {
 			return;
 		}
-		if (action === 'updatePassword') {
+		if (action === 'reconnect') {
+			vscode.postMessage({ type: 'reconnectMailbox', accountId });
+		} else if (action === 'updatePassword') {
 			vscode.postMessage({ type: 'updatePassword', accountId });
 		} else if (action === 'remove') {
 			vscode.postMessage({ type: 'removeAccount', accountId });
 		}
 	};
+
+	const selectedNeedsReconnect =
+		!!accountId && accounts.some((a) => a.id === accountId && a.authStatus === 'needsReconnect');
 
 	return (
 		<div className="sidebar">
@@ -431,7 +436,7 @@ export const App: React.FC = () => {
 						{accounts.length === 0 && <option value="">No accounts</option>}
 						{accounts.map((a) => (
 							<option key={a.id} value={a.id}>
-								{a.label}
+								{a.authStatus === 'needsReconnect' ? `${a.label} (reconnect)` : a.label}
 							</option>
 						))}
 					</select>
@@ -447,6 +452,9 @@ export const App: React.FC = () => {
 					>
 						<option value="">Account…</option>
 						<option value="add">Add account…</option>
+						<option value="reconnect" disabled={!selectedNeedsReconnect}>
+							Reconnect mailbox
+						</option>
 						<option value="updatePassword" disabled={!accountId}>
 							Update password
 						</option>

@@ -2,6 +2,8 @@
 	"displayName": "SafeAppeals Cloud Authentication",
 	"description": "Sign in to SafeAppeals Cloud for profile sync and AI credits",
 	"auth.safeappealsCloud.label": "SafeAppeals Cloud",
+	"auth.safeappealsGoogle.label": "SafeAppeals Google",
+	"auth.safeappealsMicrosoft.label": "SafeAppeals Microsoft",
 	"llm.provider.displayName": "SafeAppeals Cloud",
 	"chat.agent.description": "SafeAppeals Agent for multi-step coding tasks with workspace tools",
 	"tool.readFile.displayName": "Read File",

@@ -1,8 +1,13 @@
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Safe Appeals. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
+
 /*--------------------------------------------------------------------------------------
  *  Background IMAP sync — calendar-style interval + manual sync
  *--------------------------------------------------------------------------------------*/
 
-import * as vscode from 'vscode';
+import type { Disposable } from 'vscode';
 import { AccountStore } from './accountStore';
 import { runClassifierOnNewMessages, type ClassifierHook, noopClassifierHook } from './classifierSeam';
 import { getDefaultFolder, getMaxMessagesPerSync, getSyncIntervalMinutes } from './config';
@@ -15,19 +20,158 @@ import {
 	listFolders,
 	logImapErrorDetails,
 	type DiagnoseConnectionResult,
+	type MailboxAuth,
 } from './imapClient';
 import { sendMail } from './smtpClient';
-import type {
-	EmailAccountConfig,
-	ListThreadsQuery,
-	SendMailRequest,
-	SyncStatus,
+import {
+	isOAuthCredentials,
+	isPasswordCredentials,
+	type EmailAccountConfig,
+	type EmailAccountCredentials,
+	type EmailOAuthProvider,
+	type ListThreadsQuery,
+	type SendMailRequest,
+	type SyncStatus,
 } from './types';
 
-export class SyncEngine implements vscode.Disposable {
+/** Auth provider ids from safeappeals-authentication (A3 contract). */
+export const GOOGLE_MAIL_AUTH_PROVIDER_ID = 'safeappeals-google';
+export const MICROSOFT_MAIL_AUTH_PROVIDER_ID = 'safeappeals-microsoft';
+
+/** Mail capability scope convention shared with A3 providers. */
+export const MAIL_AUTH_SCOPES = ['mail'] as const;
+
+/**
+ * Credentials ready for IMAP/SMTP transport (= E2 {@link MailboxAuth}).
+ * Password: app password. OAuth: short-lived accessToken from getSession (never persisted).
+ */
+export type ResolvedTransportCredentials = MailboxAuth;
+
+export type MailAuthSessionGetter = (
+	providerId: string,
+	scopes: readonly string[],
+	options: { createIfNone: boolean },
+) => Promise<{ accessToken: string } | undefined>;
+
+export interface ResolveTransportCredentialsDeps {
+	getSession: MailAuthSessionGetter;
+	markNeedsReconnect: (accountId: string) => Promise<void>;
+	clearNeedsReconnect: (accountId: string) => Promise<void>;
+	/** Visible toast — must not be log-only. */
+	showReconnectWarning: (message: string) => void;
+	log?: (msg: string) => void;
+}
+
+export interface SyncEngineAuthDeps {
+	getSession?: MailAuthSessionGetter;
+	showReconnectWarning?: (message: string) => void;
+}
+
+const RECONNECT_MAILBOX_MESSAGE =
+	'Reconnect mailbox — Sign in with Safe Appeals again for this account (Email → Account…).';
+
+export function authProviderIdFor(provider: EmailOAuthProvider): string {
+	return provider === 'google' ? GOOGLE_MAIL_AUTH_PROVIDER_ID : MICROSOFT_MAIL_AUTH_PROVIDER_ID;
+}
+
+const defaultGetSession: MailAuthSessionGetter = async (providerId, scopes, options) => {
+	const vscode = require('vscode') as typeof import('vscode');
+	const session = await vscode.authentication.getSession(providerId, [...scopes], {
+		createIfNone: options.createIfNone,
+	});
+	return session ? { accessToken: session.accessToken } : undefined;
+};
+
+function defaultShowReconnectWarning(message: string): void {
+	try {
+		const vscode = require('vscode') as typeof import('vscode');
+		const reconnect = vscode.l10n.t('Reconnect Mailbox');
+		void vscode.window.showWarningMessage(message, reconnect).then((choice) => {
+			if (choice === reconnect) {
+				void vscode.commands.executeCommand('safeappeals-email.reconnectMailbox');
+			}
+		});
+	} catch {
+		// Tests / environments without vscode — ignore.
+	}
+}
+
+/**
+ * Resolve SecretStorage credentials into transport-ready creds.
+ * OAuth: mint via getSession (createIfNone: false) — never stores the token.
+ * On mint failure: marks needsReconnect + visible warning; returns undefined.
+ * On success: clears needsReconnect.
+ */
+export async function resolveTransportCredentials(
+	account: EmailAccountConfig,
+	creds: EmailAccountCredentials,
+	deps: ResolveTransportCredentialsDeps,
+): Promise<ResolvedTransportCredentials | undefined> {
+	if (isPasswordCredentials(creds)) {
+		return { type: 'password', password: creds.password };
+	}
+	if (!isOAuthCredentials(creds)) {
+		return undefined;
+	}
+
+	const providerId = authProviderIdFor(creds.provider);
+	try {
+		const session = await deps.getSession(providerId, MAIL_AUTH_SCOPES, { createIfNone: false });
+		if (!session?.accessToken) {
+			await failReconnect(
+				account,
+				deps,
+				`No ${creds.provider} mail session — ${RECONNECT_MAILBOX_MESSAGE}`,
+			);
+			return undefined;
+		}
+		await deps.clearNeedsReconnect(account.id);
+		return {
+			type: 'oauth',
+			accessToken: session.accessToken,
+		};
+	} catch (err) {
+		const detail = err instanceof Error ? err.message : String(err);
+		deps.log?.(
+			`OAuth getSession failed for ${account.label} (${creds.provider}): ${detail}`,
+		);
+		await failReconnect(account, deps, RECONNECT_MAILBOX_MESSAGE);
+		return undefined;
+	}
+}
+
+async function failReconnect(
+	account: EmailAccountConfig,
+	deps: ResolveTransportCredentialsDeps,
+	message: string,
+): Promise<void> {
+	const alreadyNeeds = account.authStatus === 'needsReconnect';
+	await deps.markNeedsReconnect(account.id);
+	deps.log?.(`Mailbox needs reconnect: ${account.label} — ${message}`);
+	// Avoid toast spam on background sync when already flagged.
+	if (!alreadyNeeds) {
+		deps.showReconnectWarning(message);
+	}
+}
+
+/**
+ * Cloud sign-out cascade (E4 wires session-removal → this).
+ * Marks every oauth mailbox account needsReconnect; does not delete accounts or secrets.
+ */
+export async function handleCloudSignOutCascade(accounts: AccountStore): Promise<number> {
+	const oauthAccounts = await accounts.listOAuthAccounts();
+	for (const account of oauthAccounts) {
+		await accounts.markAccountNeedsReconnect(account.id);
+	}
+	return oauthAccounts.length;
+}
+
+export class SyncEngine implements Disposable {
 	private timer: ReturnType<typeof setInterval> | undefined;
 	private syncing = false;
 	private readonly classifier: ClassifierHook;
+	private readonly getSession: MailAuthSessionGetter;
+	private readonly showReconnectWarning: (message: string) => void;
 
 	constructor(
 		private readonly accounts: AccountStore,
@@ -35,8 +179,11 @@ export class SyncEngine implements vscode.Disposable {
 		private readonly log: (msg: string) => void,
 		private readonly onStatusChange: () => void,
 		classifier: ClassifierHook = noopClassifierHook,
+		authDeps: SyncEngineAuthDeps = {},
 	) {
 		this.classifier = classifier;
+		this.getSession = authDeps.getSession ?? defaultGetSession;
+		this.showReconnectWarning = authDeps.showReconnectWarning ?? defaultShowReconnectWarning;
 	}
 
 	startBackgroundSync(): void {
@@ -116,20 +263,53 @@ export class SyncEngine implements vscode.Disposable {
 		}
 	}
 
-	private async syncAccount(account: EmailAccountConfig, folder: string, max: number): Promise<void> {
+	private resolveDeps(): ResolveTransportCredentialsDeps {
+		return {
+			getSession: this.getSession,
+			markNeedsReconnect: (id) => this.accounts.markAccountNeedsReconnect(id),
+			clearNeedsReconnect: (id) => this.accounts.clearNeedsReconnect(id),
+			showReconnectWarning: this.showReconnectWarning,
+			log: this.log,
+		};
+	}
+
+	/**
+	 * Load SecretStorage creds and resolve oauth → accessToken for transport.
+	 * Returns undefined when missing or mint failed (caller surfaces error).
+	 */
+	private async resolveForAccount(
+		account: EmailAccountConfig,
+	): Promise<ResolvedTransportCredentials | undefined> {
 		const creds = await this.accounts.getCredentials(account.id);
 		if (!creds) {
+			return undefined;
+		}
+		// Refresh authStatus from store (may have changed since list snapshot).
+		const fresh = this.accounts.getAccount(account.id) ?? account;
+		return resolveTransportCredentials(fresh, creds, this.resolveDeps());
+	}
+
+	private async syncAccount(account: EmailAccountConfig, folder: string, max: number): Promise<void> {
+		const stored = await this.accounts.getCredentials(account.id);
+		if (!stored) {
 			const missingMsg =
 				'Credentials missing — use Account… → Update password to re-enter it.';
 			this.log(`Skip ${account.label}: no credentials in SecretStorage`);
 			await this.index.markAccountSynced(account.id, missingMsg);
 			return;
 		}
+		const fresh = this.accounts.getAccount(account.id) ?? account;
+		const transport = await resolveTransportCredentials(fresh, stored, this.resolveDeps());
+		if (!transport) {
+			this.log(`Skip ${account.label}: ${RECONNECT_MAILBOX_MESSAGE}`);
+			await this.index.markAccountSynced(account.id, RECONNECT_MAILBOX_MESSAGE);
+			return;
+		}
 		try {
 			this.log(
-				`Syncing ${account.label} (${account.email}) folder=${folder} max=${max} host=${account.imapHost}:${account.imapPort}`,
+				`Syncing ${account.label} (${account.email}) folder=${folder} max=${max} host=${account.imapHost}:${account.imapPort} auth=${transport.type}`,
 			);
-			const headers = await fetchHeaders(account, creds, folder, max, this.log);
+			const headers = await fetchHeaders(account, transport, folder, max, this.log);
 			await this.index.upsertSummaries(headers);
 			await this.index.markAccountSynced(account.id);
 			const totalForAccount = this.index.countForAccount(account.id);
@@ -140,7 +320,7 @@ export class SyncEngine implements vscode.Disposable {
 			// TODO(rung12): classifier will process unclassified here
 			await runClassifierOnNewMessages(headers.map(toSummary), this.classifier);
 		} catch (err) {
-			const message = describeImapError(err, account.imapHost);
+			const message = describeImapError(err, account.imapHost, transport.type);
 			const stack = err instanceof Error ? err.stack : undefined;
 			this.log(`Sync failed for ${account.label}: ${message}`);
 			logImapErrorDetails(err, this.log);
@@ -158,13 +338,17 @@ export class SyncEngine implements vscode.Disposable {
 		if (!account) {
 			throw new Error('No email account configured');
 		}
-		const creds = await this.accounts.getCredentials(account.id);
-		if (!creds) {
-			throw new Error(`Missing credentials for ${account.label}`);
+		const transport = await this.resolveForAccount(account);
+		if (!transport) {
+			throw new Error(
+				(await this.accounts.getCredentials(account.id))?.type === 'oauth'
+					? RECONNECT_MAILBOX_MESSAGE
+					: `Missing credentials for ${account.label}`,
+			);
 		}
 		const targetFolder = folder || getDefaultFolder();
 		this.log(`--- diagnoseConnection start: ${account.label} / ${targetFolder} ---`);
-		const result = await diagnoseConnection(account, creds, targetFolder, this.log);
+		const result = await diagnoseConnection(account, transport, targetFolder, this.log);
 		this.log(`--- diagnoseConnection end: ok=${result.ok} exists=${result.exists} fetched=${result.fetched} ---`);
 		return result;
 	}
@@ -174,11 +358,15 @@ export class SyncEngine implements vscode.Disposable {
 		if (!account) {
 			throw new Error(`Unknown account: ${accountId}`);
 		}
-		const creds = await this.accounts.getCredentials(accountId);
-		if (!creds) {
-			throw new Error('Missing credentials');
+		const transport = await this.resolveForAccount(account);
+		if (!transport) {
+			throw new Error(
+				(await this.accounts.getCredentials(accountId))?.type === 'oauth'
+					? RECONNECT_MAILBOX_MESSAGE
+					: 'Missing credentials',
+			);
 		}
-		return listFolders(account, creds);
+		return listFolders(account, transport);
 	}
 
 	listThreads(query: ListThreadsQuery) {
@@ -212,12 +400,25 @@ export class SyncEngine implements vscode.Disposable {
 			return existing;
 		}
 		const account = this.accounts.getAccount(existing.accountId);
-		const creds = await this.accounts.getCredentials(existing.accountId);
-		if (!account || !creds) {
+		if (!account) {
 			throw new Error('Account credentials unavailable');
 		}
+		const transport = await this.resolveForAccount(account);
+		if (!transport) {
+			throw new Error(
+				(await this.accounts.getCredentials(account.id))?.type === 'oauth'
+					? RECONNECT_MAILBOX_MESSAGE
+					: 'Account credentials unavailable',
+			);
+		}
 		this.log(`Lazy-loading body for ${messageId} uid=${existing.uid}`);
-		const full = await fetchMessageBody(account, creds, existing.folder, existing.uid, existing.id);
+		const full = await fetchMessageBody(
+			account,
+			transport,
+			existing.folder,
+			existing.uid,
+			existing.id,
+		);
 		await this.index.setMessageBody(existing.id, {
 			bodyText: full.bodyText,
 			bodyHtml: full.bodyHtml,
@@ -244,11 +445,30 @@ export class SyncEngine implements vscode.Disposable {
 		if (!account) {
 			throw new Error(`Unknown account: ${request.accountId}`);
 		}
-		const creds = await this.accounts.getCredentials(request.accountId);
-		if (!creds) {
-			throw new Error('Missing credentials');
+		const transport = await this.resolveForAccount(account);
+		if (!transport) {
+			throw new Error(
+				(await this.accounts.getCredentials(request.accountId))?.type === 'oauth'
+					? RECONNECT_MAILBOX_MESSAGE
+					: 'Missing credentials',
+			);
 		}
-		this.log(`Sending via ${account.label} → ${request.to}`);
-		return sendMail(account, creds, request);
+		this.log(`Sending via ${account.label} → ${request.to} auth=${transport.type}`);
+		return sendMail(account, transport, request);
+	}
+
+	/** Convenience wrapper for E4 / extension wiring. */
+	async handleCloudSignOutCascade(): Promise<number> {
+		const count = await handleCloudSignOutCascade(this.accounts);
+		if (count > 0) {
+			this.log(`Cloud sign-out cascade: marked ${count} oauth mailbox account(s) needsReconnect`);
+			this.showReconnectWarning(
+				count === 1
+					? RECONNECT_MAILBOX_MESSAGE
+					: `Reconnect mailbox — ${count} Safe Appeals mail accounts need sign-in again.`,
+			);
+			this.onStatusChange();
+		}
+		return count;
 	}
 }

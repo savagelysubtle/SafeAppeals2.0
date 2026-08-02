@@ -5,7 +5,7 @@
 import { ImapFlow } from 'imapflow';
 import { computeThreadId } from './emailIndex';
 import { parseRawSource } from './emlParser';
-import type { EmailAccountConfig, EmailAccountCredentials, EmailMessage } from './types';
+import type { EmailAccountConfig, EmailMessage } from './types';
 
 export interface FolderInfo {
 	path: string;
@@ -25,6 +25,20 @@ export interface DiagnoseConnectionResult {
 	error?: string;
 	stack?: string;
 }
+
+/**
+ * Resolved mailbox auth for IMAP connect.
+ * Password: app-password / IMAP password. OAuth: access token from caller (E3 getSession) —
+ * this module never calls getSession.
+ */
+export type MailboxAuth =
+	| { type: 'password'; password: string }
+	| { type: 'oauth'; accessToken: string };
+
+/** imapflow auth object (password or XOAUTH2 via accessToken). */
+export type ImapFlowAuth =
+	| { user: string; pass: string }
+	| { user: string; accessToken: string };
 
 /** Gmail rejects normal passwords for IMAP; surface a clear next step. */
 const GMAIL_APP_PASSWORD_HINT =
@@ -66,8 +80,16 @@ function isAuthFailure(err: ImapErrorLike, text: string): boolean {
  * - serverResponseCode: e.g. AUTHENTICATIONFAILED
  * - authenticationFailed: true on login/auth failures
  * - code: e.g. ETHROTTLE
+ *
+ * @param authType When `'oauth'`, skip the Gmail app-password hint (XOAUTH2 failures
+ * are reconnect/token issues, not app-password issues). Defaults to `'password'` so
+ * legacy callers keep the hint.
  */
-export function describeImapError(err: unknown, imapHost?: string): string {
+export function describeImapError(
+	err: unknown,
+	imapHost?: string,
+	authType: MailboxAuth['type'] = 'password',
+): string {
 	const e = (err && typeof err === 'object' ? err : {}) as ImapErrorLike;
 	const responseText = typeof e.responseText === 'string' ? e.responseText.trim() : '';
 	const responseStr = typeof e.response === 'string' ? e.response.trim() : '';
@@ -92,7 +114,12 @@ export function describeImapError(err: unknown, imapHost?: string): string {
 		detail = `[${e.code}] ${detail}`;
 	}
 
-	if (imapHost && isGmailHost(imapHost) && isAuthFailure(e, detail)) {
+	if (
+		authType === 'password'
+		&& imapHost
+		&& isGmailHost(imapHost)
+		&& isAuthFailure(e, detail)
+	) {
 		detail = `${detail} — ${GMAIL_APP_PASSWORD_HINT}`;
 	}
 
@@ -128,15 +155,23 @@ export function logImapErrorDetails(err: unknown, log: ImapLog, maxLen = 2000): 
 	}
 }
 
-function createClient(account: EmailAccountConfig, creds: EmailAccountCredentials): ImapFlow {
+/**
+ * Map resolved {@link MailboxAuth} to imapflow `auth`.
+ * Password → `{ user, pass }`. OAuth → `{ user, accessToken }` (XOAUTH2).
+ */
+export function toImapFlowAuth(user: string, auth: MailboxAuth): ImapFlowAuth {
+	if (auth.type === 'oauth') {
+		return { user, accessToken: auth.accessToken };
+	}
+	return { user, pass: auth.password };
+}
+
+function createClient(account: EmailAccountConfig, auth: MailboxAuth): ImapFlow {
 	return new ImapFlow({
 		host: account.imapHost,
 		port: account.imapPort,
 		secure: account.imapSecure,
-		auth: {
-			user: account.username,
-			pass: creds.password,
-		},
+		auth: toImapFlowAuth(account.username, auth),
 		logger: false,
 	});
 }
@@ -151,9 +186,9 @@ function mailboxExists(client: ImapFlow): number {
 
 export async function listFolders(
 	account: EmailAccountConfig,
-	creds: EmailAccountCredentials,
+	auth: MailboxAuth,
 ): Promise<FolderInfo[]> {
-	const client = createClient(account, creds);
+	const client = createClient(account, auth);
 	await client.connect();
 	try {
 		const boxes = await client.list();
@@ -177,12 +212,12 @@ export async function listFolders(
  */
 export async function fetchHeaders(
 	account: EmailAccountConfig,
-	creds: EmailAccountCredentials,
+	auth: MailboxAuth,
 	folder: string,
 	maxMessages: number,
 	log?: ImapLog,
 ): Promise<EmailMessage[]> {
-	const client = createClient(account, creds);
+	const client = createClient(account, auth);
 	await client.connect();
 	try {
 		const lock = await client.getMailboxLock(folder);
@@ -275,11 +310,11 @@ export async function fetchHeaders(
  */
 export async function diagnoseConnection(
 	account: EmailAccountConfig,
-	creds: EmailAccountCredentials,
+	auth: MailboxAuth,
 	folder: string,
 	log?: ImapLog,
 ): Promise<DiagnoseConnectionResult> {
-	const client = createClient(account, creds);
+	const client = createClient(account, auth);
 	log?.(
 		`diagnoseConnection: connecting ${account.label} ${account.username}@${account.imapHost}:${account.imapPort} secure=${account.imapSecure} folder=${folder}`,
 	);
@@ -340,7 +375,7 @@ export async function diagnoseConnection(
 			lock.release();
 		}
 	} catch (err) {
-		const message = describeImapError(err, account.imapHost);
+		const message = describeImapError(err, account.imapHost, auth.type);
 		const stack = err instanceof Error ? err.stack : undefined;
 		log?.(`diagnoseConnection: FAILED — ${message}`);
 		if (log) {
@@ -367,12 +402,12 @@ export async function diagnoseConnection(
  */
 export async function fetchMessageBody(
 	account: EmailAccountConfig,
-	creds: EmailAccountCredentials,
+	auth: MailboxAuth,
 	folder: string,
 	uid: number,
 	messageIdHint: string,
 ): Promise<EmailMessage> {
-	const client = createClient(account, creds);
+	const client = createClient(account, auth);
 	await client.connect();
 	try {
 		const lock = await client.getMailboxLock(folder);

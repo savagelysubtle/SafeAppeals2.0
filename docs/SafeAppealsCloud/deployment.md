@@ -85,6 +85,11 @@ restartPolicyType = "always"
 SUPABASE_URL=https://xxxx.supabase.co
 SUPABASE_SERVICE_KEY=eyJ...
 
+# Google OAuth (provider-token mint — same client as Supabase Google provider)
+GOOGLE_CLIENT_ID=your-google-oauth-client-id.apps.googleusercontent.com
+GOOGLE_CLIENT_SECRET=your-google-oauth-client-secret
+PROVIDER_TOKEN_ENCRYPTION_KEY=   # required; API fails closed without it
+
 # Stripe
 STRIPE_SECRET_KEY=sk_live_...
 STRIPE_WEBHOOK_SECRET=whsec_...

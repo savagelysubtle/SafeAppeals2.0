@@ -2,6 +2,8 @@ export interface Account {
 	id: string;
 	label: string;
 	email: string;
+	/** Present when mailbox auth needs user action (OAuth reconnect). */
+	authStatus?: 'ok' | 'needsReconnect';
 }
 
 export type ThreadSort = 'newest' | 'oldest' | 'sender' | 'subject';

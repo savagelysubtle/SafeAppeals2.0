@@ -1,16 +1,11 @@
 ---
 name: Unified SafeAppeals sign-in
 overview:
-  "[DEFERRED — user decision Jul 21, 2026: built in ONE shot right before
-  rung 13, after every auth consumer exists (email, calendar, cloud link,
-  agent backend) so the provider surface is designed against real usage
-  across the whole app instead of retrofitted per extension. App-passwords
-  remain the email auth until then.] Build a GitHub-style unified sign-in
-  using VS Code's native AuthenticationProvider framework: one free
-  SafeAppeals Cloud account (Google/Microsoft OAuth brokered through the
-  Supabase-backed API) powers email, calendar, and later AI credits —
-  replacing the calendar's hand-rolled OAuth and the email extension's
-  password-only model."
+  "Identity + email OAuth path coded Aug 2, 2026: safeappeals-cloud,
+  safeappeals-google (MS stub), void-cloud mail scopes + POST /auth/provider-token,
+  email XOAUTH2. Open: calendar getSession (WP7), Microsoft symmetry (WP8),
+  Google restricted-scope verification (WP0), Electron E2E verify. Detail:
+  email_oauth_piggyback_e435d610.plan.md."
 todos:
   - id: rung65-server-brief
     content:
@@ -19,12 +14,17 @@ todos:
     status: completed
   - id: rung65-auth-ext
     content:
-      'Build safeappeals-authentication extension: port cloud auth from
-      void-reference, register 3 providers, SecretStorage, build wiring.
-      SPLIT Jul 29 — the extension shell + safeappeals-cloud provider moved
-      to the onboarding redesign (its T1); only the safeappeals-google and
-      safeappeals-microsoft provider-token providers remain here.'
-    status: pending
+      'COMPLETED Aug 2 via onboarding T0/T1: safeappeals-authentication
+      extension shell, safeappeals-cloud provider, PKCE client, SecretStorage
+      session envelope, build wiring, trustedExtensionAuthAccess. Cloud LM
+      (Ask) also consumes this session.'
+    status: completed
+  - id: rung65-provider-tokens
+    content:
+      'COMPLETED Aug 2: safeappeals-google working (mint-first + reconsent);
+      safeappeals-microsoft stub until WP8; POST /auth/provider-token + product.json
+      trust. See email_oauth_piggyback WP5.'
+    status: completed
   - id: rung65-calendar
     content:
       Convert safeappeals-calendar to getSession(); delete
@@ -32,9 +32,10 @@ todos:
     status: pending
   - id: rung65-email
     content:
-      Add OAuth (XOAUTH2) account type to safeappeals-email with Sign in with
-      Safe Appeals flow; keep app-password fallback
-    status: pending
+      'COMPLETED Aug 2: OAuth XOAUTH2 + Sign in with Safe Appeals (Google);
+      app-password fallback; reconnect + cloud sign-out cascade; getSessions
+      silent-mint after reload (DoD #4). See email_oauth_piggyback WP6.'
+    status: completed
   - id: rung65-verify
     content:
       Verify sign-in + email/calendar sync on Electron and web; update plan
@@ -45,40 +46,34 @@ isProject: false
 
 # Unified SafeAppeals Sign-In (new Rung 6.5)
 
-## Status (Jul 29, 2026) — SPLIT: the front third is being built early
+## Status (Aug 2, 2026) — identity + email OAuth coded; calendar/MS/verify open
 
-The onboarding redesign (`onboarding_redesign_newcomer.plan.md`) un-defers a
-slice of this plan. Its **T1** builds `extensions/safeappeals-authentication`
-now — the extension shell, the `safeappeals-cloud` provider, the PKCE client,
-the SecretStorage session envelope, build wiring, and
-`trustedExtensionAuthAccess` — because the new first-run wizard's step 1 signs
-in with a SafeAppeals Cloud account and cannot wait for this rung.
+| Slice | Status |
+| --- | --- |
+| Server work brief | **Done** (`rung65-server-brief`) |
+| Onboarding T0 (PKCE / redirect allow-list / no fragment tokens) | **Done** (prerequisite; onboarding plan) |
+| Auth extension shell + `safeappeals-cloud` + SecretStorage | **Done** (`rung65-auth-ext` via onboarding T1) |
+| Cloud LM / Ask on that session | **Done** (onboarding T13/T14) |
+| `safeappeals-google` / `safeappeals-microsoft` | **Done** google; MS stub (`rung65-provider-tokens`) |
+| Calendar → `getSession()` | **Open** (`rung65-calendar` / piggyback WP7) |
+| Email XOAUTH2 | **Done** (`rung65-email` / piggyback WP6; DoD #4 silent-mint fixed) |
+| Server: mail scopes + provider-token refresh | **Done** in void-cloud (WP1–WP2); deploy env + migration 009 |
+| Google verification / Azure / Microsoft mint | **Open** (WP0 / WP8) |
+| End-to-end verify | **Open** (`rung65-verify`) |
 
-**Still owned by this plan:** the `safeappeals-google` / `safeappeals-microsoft`
-provider-token providers (workstream 2's remainder), the entire consumer
-conversion (workstream 3 — email XOAUTH2, calendar `getSession()`), and most
-of workstream 1 (Gmail/Calendar Supabase scopes, the Azure provider, the
-provider-token refresh endpoint, Google restricted-scope verification).
+The onboarding redesign un-deferred the identity slice early so first-run can
+sign in. **Still owned by this plan:** calendar `getSession()` (WP7), Microsoft
+symmetry (WP8), Google restricted-scope verification (WP0), Electron E2E.
+Ordered build detail: `email_oauth_piggyback_e435d610.plan.md`.
 
-**Why this does not break the Jul 21 deferral rationale.** The deferral existed
-so the provider surface would be shaped by real consumers rather than
-retrofitted per extension. That risk is concentrated in the provider-token
-providers, which stay here and still get designed against email and calendar.
-The `safeappeals-cloud` provider is account identity with a well-understood
-shape, and T1 designs the SecretStorage envelope to already carry
-`googleProviderToken`, so this rung adds providers to an existing extension
-instead of reshaping its storage. Accepted cost: two passes over the extension.
+**Why the Jul 21 deferral still applies to the remainder.** Risk is in the
+provider-token providers — design those against real email/calendar consumers.
+Cloud identity was a well-understood shape; SecretStorage already carries
+`googleProviderToken` so this rung adds providers without reshaping storage.
 
-**Correction to workstream 1 — the existing endpoints are NOT sound.** This
-plan assumed `/auth/google`, `/auth/callback`, and `/auth/refresh` stayed
-compatible and only needed new scopes. Verification on Jul 29 found no PKCE
-anywhere in the chain (`void-cloud/api/src/routes/auth.ts:39`, `:61`), an
-implicit flow that returns bearer tokens in the **URI fragment** through the
-OS URI handler (`void-reference/browser/voidCloudUrlHandler.ts:111–137`), and
-no redirect-URI allow-listing in the API itself. The reference client also
-persists the whole session in plain `IStorageService`
-(`voidCloudService.ts:29–30`, `:353`) — do not port that. Fixing all of this
-is the onboarding plan's **T0** and is a prerequisite for anything here.
+**Historical note (Jul 29):** void-reference auth was unsound (no PKCE, fragment
+tokens, plaintext session). Onboarding **T0** fixed the server/client chain
+before T1 shipped `safeappeals-cloud`.
 
 ## Decisions (Jul 20, user-confirmed)
 
