@@ -4,15 +4,17 @@
 
 import * as vscode from 'vscode';
 import {
-	getSyncIntervalMinutes,
-	isGoogleConfigured,
-	isOutlookConfigured,
-	isProviderConfigured,
-	isWebClient,
-} from './config';
+	clearLegacyCalendarTokens,
+	ensureCloudSession,
+	hasLegacyCalendarTokens,
+} from './calendarAuth';
+import { getSyncIntervalMinutes, isWebClient } from './config';
+import {
+	connectionAccountLabel,
+	createCalendarConnectionsBridge,
+} from './connectionsBridge';
 import { EventCache } from './eventCache';
 import { SyncEngine } from './syncEngine';
-import { TokenStore } from './tokenStore';
 import type { CalendarProvider, GetEventsQuery } from './types';
 
 let output: vscode.OutputChannel;
@@ -30,7 +32,6 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
 	log('Activating…');
 
-	const tokens = new TokenStore(context.secrets);
 	cache = new EventCache(context.globalStorageUri, context.secrets, context.globalState, log);
 	await cache.initialize();
 
@@ -57,7 +58,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 		}
 	};
 
-	engine = new SyncEngine(tokens, cache, log, () => {
+	engine = new SyncEngine(createCalendarConnectionsBridge(), cache, log, () => {
 		void refreshStatusBar();
 	});
 
@@ -66,6 +67,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 	});
 	await refreshStatusBar();
 	engine.startBackgroundSync();
+	void handleLegacyTokens(context.secrets, log);
 
 	context.subscriptions.push(
 		output,
@@ -95,52 +97,69 @@ function registerCommands(
 		vscode.commands.registerCommand('safeappeals-calendar.connect', async (providerArg?: CalendarProvider) => {
 			if (isWebClient()) {
 				void vscode.window.showWarningMessage(
-					'Connecting a calendar is not available in the browser because credentials cannot be stored securely. Use the desktop app.',
+					vscode.l10n.t(
+						'Connecting a calendar is not available in the browser because events cannot be cached securely. Use the desktop app.',
+					),
 				);
 				return { success: false, error: 'web_unsupported' };
 			}
-			const provider = providerArg || await pickProvider('Connect which calendar provider?', true);
+			const provider = providerArg
+				|| await pickProvider(vscode.l10n.t('Connect which calendar?'));
 			if (!provider) {
 				return;
 			}
-			if (!isProviderConfigured(provider)) {
-				const hint = provider === 'google'
-					? 'Set safeappealsCalendar.google.clientId (or GOOGLE_CALENDAR_CLIENT_ID). Desktop clients use PKCE — no client secret required.'
-					: 'Set safeappealsCalendar.outlook.clientId (or OUTLOOK_CLIENT_ID).';
-				vscode.window.showWarningMessage(`Safe Appeals Calendar: ${provider} is not configured. ${hint}`);
-				log(`Connect aborted — ${provider} not configured`);
-				return { success: false, error: 'not_configured', provider };
+			if (!(await ensureCloudSession(log))) {
+				log(`Connect aborted — no SafeAppeals Cloud session for ${provider}`);
+				return { success: false, error: 'cloud_sign_in_required', provider };
 			}
 
 			try {
-				await vscode.window.withProgress(
+				const connection = await vscode.window.withProgress(
 					{
 						location: vscode.ProgressLocation.Notification,
-						title: `Connecting ${provider}…`,
+						title: vscode.l10n.t('Connecting {0}…', providerLabel(provider)),
 						cancellable: false,
 					},
-					async () => {
-						await engine.connect(provider);
-					}
+					async () => engine.connect(provider)
 				);
-				vscode.window.showInformationMessage(`Safe Appeals Calendar: connected to ${provider}`);
-				return { success: true, provider };
+				await clearLegacyCalendarTokens(context.secrets, log);
+				refreshUi();
+				vscode.window.showInformationMessage(
+					vscode.l10n.t('Calendar connected: {0}', connectionAccountLabel(connection)),
+				);
+				return { success: true, provider, connectionId: connection.id };
 			} catch (err) {
 				const message = err instanceof Error ? err.message : String(err);
 				log(`Connect failed: ${message}`);
-				vscode.window.showErrorMessage(`Safe Appeals Calendar: connect failed — ${message}`);
+				vscode.window.showErrorMessage(
+					vscode.l10n.t('Safe Appeals Calendar: connect failed — {0}', message),
+				);
 				return { success: false, error: message, provider };
 			}
 		}),
 
 		vscode.commands.registerCommand('safeappeals-calendar.disconnect', async (providerArg?: CalendarProvider) => {
-			const provider = providerArg || await pickProvider('Disconnect which calendar provider?', false);
+			const provider = providerArg
+				|| await pickProvider(vscode.l10n.t('Disconnect which calendar?'));
 			if (!provider) {
 				return;
 			}
-			await engine.disconnect(provider);
-			vscode.window.showInformationMessage(`Safe Appeals Calendar: disconnected ${provider}`);
-			return { success: true, provider };
+			const result = await engine.disconnect(provider);
+			refreshUi();
+			if (result.error) {
+				vscode.window.showWarningMessage(
+					vscode.l10n.t(
+						'Safe Appeals Calendar: {0} was removed from this machine, but Safe Appeals could not revoke the account — {1}',
+						providerLabel(provider),
+						result.error,
+					),
+				);
+			} else {
+				vscode.window.showInformationMessage(
+					vscode.l10n.t('Safe Appeals Calendar: disconnected {0}', providerLabel(provider)),
+				);
+			}
+			return { success: true, provider, revoked: result.revoked };
 		}),
 
 		vscode.commands.registerCommand('safeappeals-calendar.syncNow', async (providers?: CalendarProvider[]) => {
@@ -190,10 +209,10 @@ function registerCommands(
 		vscode.commands.registerCommand('safeappeals-calendar.status', async () => {
 			const status = await engine.getStatus();
 			const lines = [
-				`Google: ${status.google.configured ? 'configured' : 'NOT configured'}, ` +
+				`Google: ${status.google.enabled ? 'enabled' : 'DISABLED'}, ` +
 				`${status.google.connected ? 'connected' : 'disconnected'}, ` +
 				`${status.google.cachedEventCount} cached, lastSync=${status.google.lastSync ?? 'never'}`,
-				`Outlook: ${status.outlook.configured ? 'configured' : 'NOT configured'}, ` +
+				`Outlook: ${status.outlook.enabled ? 'enabled' : 'DISABLED'}, ` +
 				`${status.outlook.connected ? 'connected' : 'disconnected'}, ` +
 				`${status.outlook.cachedEventCount} cached, lastSync=${status.outlook.lastSync ?? 'never'}`,
 				`Interval: ${status.syncIntervalMinutes} min; last background: ${status.lastBackgroundSync ?? 'never'}`,
@@ -223,26 +242,54 @@ function registerCommands(
 	);
 }
 
-async function pickProvider(
-	placeHolder: string,
-	_requireConfigured: boolean
-): Promise<CalendarProvider | undefined> {
+/** Title-cased provider name for user-facing messages. */
+function providerLabel(provider: CalendarProvider): string {
+	return provider === 'google' ? 'Google Calendar' : 'Outlook Calendar';
+}
+
+async function pickProvider(placeHolder: string): Promise<CalendarProvider | undefined> {
 	type ProviderItem = vscode.QuickPickItem & { provider: CalendarProvider };
-	const items: ProviderItem[] = [
-		{
-			label: 'Google Calendar',
-			description: isGoogleConfigured() ? 'configured' : 'not configured',
-			provider: 'google',
-		},
-		{
-			label: 'Outlook',
-			description: isOutlookConfigured() ? 'configured' : 'not configured',
-			provider: 'outlook',
-		},
-	];
+	const describe = (provider: CalendarProvider) =>
+		engine.isConnected(provider) ? vscode.l10n.t('connected') : vscode.l10n.t('not connected');
+	const items: ProviderItem[] = (['google', 'outlook'] as const).map((provider) => ({
+		label: providerLabel(provider),
+		description: describe(provider),
+		provider,
+	}));
 
 	const picked = await vscode.window.showQuickPick<ProviderItem>(items, { placeHolder });
 	return picked?.provider;
+}
+
+/**
+ * Tokens from the retired loopback flow cannot be migrated — the grants behind
+ * them are unknown to Safe Appeals — so an affected machine has to reconnect.
+ * Once a calendar is connected they are only stale secrets, and get deleted.
+ */
+async function handleLegacyTokens(
+	secrets: vscode.SecretStorage,
+	log: (msg: string) => void,
+): Promise<void> {
+	if (!(await hasLegacyCalendarTokens(secrets))) {
+		return;
+	}
+	if (engine.isConnected('google') || engine.isConnected('outlook')) {
+		await clearLegacyCalendarTokens(secrets, log);
+		log('Removed calendar tokens left over from the retired loopback sign-in');
+		return;
+	}
+
+	log('Calendar tokens from the retired loopback sign-in found — reconnect required');
+	const connect = vscode.l10n.t('Connect Calendar');
+	const choice = await vscode.window.showWarningMessage(
+		vscode.l10n.t(
+			'Safe Appeals Calendar now signs in through Safe Appeals. Reconnect your calendar to resume sync.',
+		),
+		connect,
+	);
+	if (choice === connect) {
+		await vscode.commands.executeCommand('safeappeals-calendar.connect');
+	}
 }
 
 async function promptRangeQuery(): Promise<GetEventsQuery | undefined> {

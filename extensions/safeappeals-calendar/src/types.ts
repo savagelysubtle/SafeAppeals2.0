@@ -4,14 +4,6 @@
 
 export type CalendarProvider = 'google' | 'outlook';
 
-export interface OAuthTokens {
-	accessToken: string;
-	refreshToken: string;
-	expiresAt: string; // ISO 8601
-	/** MSAL/home account id when available (Outlook) */
-	accountId?: string;
-}
-
 export interface SyncedEventState {
 	calendarEventId: string;
 	lastSyncedAt: string;
@@ -35,11 +27,14 @@ export const DEFAULT_SYNC_SETTINGS: CalendarSyncSettings = {
 };
 
 /**
- * Per-provider connection/sync metadata (tokens live in SecretStorage, not here).
+ * Per-provider connection/sync metadata (access tokens are minted on demand by
+ * safeappeals-authentication and never stored).
  */
 export interface ProviderSyncMeta {
 	provider: CalendarProvider;
 	connected: boolean;
+	/** Service connection this provider syncs against (A1 contract). */
+	connectionId?: string;
 	lastSync: string | null;
 	/** Google incremental sync token when available */
 	syncToken?: string;
@@ -101,21 +96,19 @@ export interface GetEventsQuery {
 	provider?: CalendarProvider | 'all';
 }
 
+export interface ProviderStatus {
+	/** Provider is listed in `safeappealsCalendar.enabledProviders`. */
+	enabled: boolean;
+	/** A service connection is stored for this provider. */
+	connected: boolean;
+	lastSync: string | null;
+	calendarId: string;
+	cachedEventCount: number;
+}
+
 export interface CalendarStatus {
-	google: {
-		configured: boolean;
-		connected: boolean;
-		lastSync: string | null;
-		calendarId: string;
-		cachedEventCount: number;
-	};
-	outlook: {
-		configured: boolean;
-		connected: boolean;
-		lastSync: string | null;
-		calendarId: string;
-		cachedEventCount: number;
-	};
+	google: ProviderStatus;
+	outlook: ProviderStatus;
 	syncIntervalMinutes: number;
 	lastBackgroundSync: string | null;
 }

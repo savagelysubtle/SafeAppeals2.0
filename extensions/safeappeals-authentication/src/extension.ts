@@ -6,6 +6,12 @@
 import * as vscode from 'vscode';
 import { CloudAuthProvider, AUTH_PROVIDER_ID } from './cloudAuthProvider';
 import type { CreditPack } from './api';
+import { ConnectionManager } from './connectionManager';
+import {
+	createConnectionsFacade,
+	registerConnectionCommands,
+	type SafeAppealsAuthenticationApi,
+} from './connectionsFacade';
 import { GoogleAuthProvider } from './googleAuthProvider';
 import { MicrosoftAuthProvider } from './microsoftAuthProvider';
 import { registerSafeAppealsAgentParticipant } from './chat/agentParticipant';
@@ -26,35 +32,43 @@ let provider: CloudAuthProvider;
 /**
  * Activates the SafeAppeals Cloud authentication extension.
  */
-export async function activate(context: vscode.ExtensionContext): Promise<void> {
+export async function activate(context: vscode.ExtensionContext): Promise<SafeAppealsAuthenticationApi> {
 	output = vscode.window.createOutputChannel('SafeAppeals Cloud Auth', { log: true });
 	context.subscriptions.push(output);
 
 	provider = new CloudAuthProvider(context, output);
 	context.subscriptions.push(provider);
 
+	// Mail/calendar grants are service connections: the code exchange and the
+	// refresh token stay on void-cloud, so this process only sees metadata plus
+	// short-lived access tokens.
+	const connections = new ConnectionManager({
+		api: provider.getApiClient(),
+		ensureCloudSession: async () => {
+			await vscode.authentication.getSession(AUTH_PROVIDER_ID, [], { createIfNone: true });
+		},
+		onConnectCallback: provider.onDidReceiveConnectCallback,
+		output,
+	});
+	context.subscriptions.push(connections);
+
 	// Provider-token providers: session.accessToken is Google/Microsoft, not Cloud JWT.
-	// Clear in-memory tokens when Cloud signs out (email oauth cascade is E3/E4).
+	// Clear in-memory tokens when Cloud signs out; connections remain server-side.
 	context.subscriptions.push(
 		new GoogleAuthProvider({
-			ensureCloudSession: async () => {
-				const session = await vscode.authentication.getSession(AUTH_PROVIDER_ID, [], { createIfNone: true });
-				return { id: session.account.id, label: session.account.label };
-			},
-			tryGetCloudAccount: async () => {
-				const session = await vscode.authentication.getSession(AUTH_PROVIDER_ID, [], { silent: true });
-				return session ? { id: session.account.id, label: session.account.label } : undefined;
-			},
-			requestGoogleProviderScopes: options => provider.requestGoogleProviderScopes(options),
-			refreshProviderToken: () => provider.getApiClient().refreshProviderToken('google'),
+			connections,
 			onDidChangeCloudSessions: provider.onDidChangeSessions,
 			output,
 		}),
 		new MicrosoftAuthProvider({
+			connections,
 			onDidChangeCloudSessions: provider.onDidChangeSessions,
 			output,
 		}),
 	);
+
+	const connectionsFacade = createConnectionsFacade(connections);
+	context.subscriptions.push(registerConnectionCommands(connectionsFacade));
 
 	// Register chat provider before initialize so restored-session onDidChangeSessions
 	// is observed (models resolve only when that event fires after reload).
@@ -162,6 +176,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 	);
 
 	output.appendLine('[extension] SafeAppeals Cloud authentication ready');
+
+	return { connections: connectionsFacade };
 }
 
 /**

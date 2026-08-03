@@ -11,15 +11,16 @@ import { EmailIndex } from './emailIndex';
 import { EmlEditorProvider } from './emlEditorProvider';
 import { parseEmlFile } from './emlParser';
 import { diagnoseConnection } from './imapClient';
+import { createMailConnectionsBridge } from './connectionsBridge';
 import {
-	boundMailboxEmail,
+	adoptConnectionIdsForLegacyAccounts,
 	CLOUD_AUTH_PROVIDER_ID,
-	gmailOAuthAccountDefaults,
-	GOOGLE_AUTH_PROVIDER_ID,
-	isMailboxEmailBound,
-	isProviderScopeUserMismatch,
+	connectionIdFromSession,
+	connectionMailboxEmail,
+	oauthAccountDefaults,
 	providerAuthIdForOAuth,
 	shouldPersistOAuthAccount,
+	type MailConnectionInfo,
 } from './oauthAccountFlow';
 import { handleCloudSignOutCascade, SyncEngine } from './syncEngine';
 import {
@@ -28,6 +29,7 @@ import {
 	type EmailAccountConfig,
 	type EmailAccountCredentials,
 	type EmailClassification,
+	type EmailOAuthProvider,
 	type ListThreadsQuery,
 	type SendMailRequest,
 	type ThreadStatus,
@@ -38,6 +40,8 @@ let statusBar: vscode.StatusBarItem;
 let engine: SyncEngine;
 let index: EmailIndex;
 let accounts: AccountStore;
+
+const connections = createMailConnectionsBridge();
 
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
 	output = vscode.window.createOutputChannel('Safe Appeals Email');
@@ -149,6 +153,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 	registerCommands(context, log, openDashboard, refreshUi);
 	registerCloudSignOutCascade(context, log, refreshUi);
 	registerAgentTools(context, () => index, () => accounts);
+	await migrateLegacyOAuthConnections(log);
 	await refreshStatusBar();
 	engine.startBackgroundSync();
 	log('Activated');
@@ -581,7 +586,7 @@ async function pickAccountId(placeHolder: string): Promise<string | undefined> {
 	return pick?.id;
 }
 
-type AddAccountMethod = 'google' | 'password';
+type AddAccountMethod = EmailOAuthProvider | 'password';
 
 function registerCloudSignOutCascade(
 	context: vscode.ExtensionContext,
@@ -629,6 +634,7 @@ async function promptAddAccount(
 	log: (msg: string) => void,
 ): Promise<EmailAccountConfig | undefined> {
 	const googleLabel = vscode.l10n.t('Sign in with Safe Appeals (Google)');
+	const microsoftLabel = vscode.l10n.t('Sign in with Safe Appeals (Microsoft)');
 	const passwordLabel = vscode.l10n.t('Advanced: App Password / IMAP');
 	const method = await vscode.window.showQuickPick(
 		[
@@ -636,6 +642,11 @@ async function promptAddAccount(
 				label: googleLabel,
 				description: vscode.l10n.t('Connect Gmail with Safe Appeals'),
 				id: 'google' as AddAccountMethod,
+			},
+			{
+				label: microsoftLabel,
+				description: vscode.l10n.t('Connect Outlook mail with Safe Appeals'),
+				id: 'microsoft' as AddAccountMethod,
 			},
 			{
 				label: passwordLabel,
@@ -651,112 +662,77 @@ async function promptAddAccount(
 	if (!method) {
 		return undefined;
 	}
-	if (method.id === 'google') {
-		return promptAddGoogleOAuthAccount(log);
+	if (method.id === 'password') {
+		return promptAddPasswordAccount(log);
 	}
-	return promptAddPasswordAccount(log);
+	return promptAddConnectedAccount(method.id, log);
 }
 
-async function promptAddGoogleOAuthAccount(
+/**
+ * Connects a mailbox through SafeAppeals service connections and stores the
+ * resulting connection id. Any mailbox of the provider may be connected — the
+ * grant is per connection, not per Cloud identity.
+ */
+async function promptAddConnectedAccount(
+	provider: EmailOAuthProvider,
 	log: (msg: string) => void,
 ): Promise<EmailAccountConfig | undefined> {
-	let cloudSession: vscode.AuthenticationSession;
+	if (!(await ensureCloudSession(log))) {
+		return undefined;
+	}
+
+	let connection: MailConnectionInfo;
 	try {
-		const session = await vscode.authentication.getSession(CLOUD_AUTH_PROVIDER_ID, [], {
-			createIfNone: true,
-		});
-		if (!session) {
-			void vscode.window.showErrorMessage(
-				vscode.l10n.t('Sign in to SafeAppeals Cloud was cancelled.'),
-			);
-			return undefined;
-		}
-		cloudSession = session;
+		connection = await connections.connect(provider);
 	} catch (err) {
 		const message = err instanceof Error ? err.message : String(err);
-		log(`Cloud session for mailbox connect failed: ${message}`);
+		log(`Connecting a ${provider} mailbox failed: ${message}`);
 		void vscode.window.showErrorMessage(
-			vscode.l10n.t('Could not sign in to SafeAppeals Cloud: {0}', message),
+			vscode.l10n.t('Could not connect the mailbox: {0}', message),
 		);
 		return undefined;
 	}
 
-	let googleSession: vscode.AuthenticationSession;
+	const session = await mintMailSession(provider, authAccountForConnection(connection), log);
+	if (!session) {
+		return undefined;
+	}
+	const connectionId = connectionIdFromSession(session) ?? connection.id;
+	if (!shouldPersistOAuthAccount({ ...session, connectionId })) {
+		log(
+			`${provider} mail session unusable (token=${Boolean(session.accessToken)}, scopes=${session.scopes.join(' ') || 'none'}, connection=${connectionId}) — aborting account create`,
+		);
+		void vscode.window.showErrorMessage(
+			vscode.l10n.t(
+				'Could not get a mail access token. Mailbox was not added. Try again or use Advanced: App Password / IMAP.',
+			),
+		);
+		return undefined;
+	}
+	if (connectionId !== connection.id) {
+		log(
+			`Mail token came from connection ${connectionId} but ${connection.id} was connected — aborting account create`,
+		);
+		void vscode.window.showErrorMessage(
+			vscode.l10n.t('The mail token did not match the account you connected. Please try again.'),
+		);
+		return undefined;
+	}
+
+	const email = await resolveConnectedMailboxEmail(provider, connection);
+	if (!email) {
+		return undefined;
+	}
+
+	const config = oauthAccountDefaults(provider, email);
 	try {
-		const session = await vscode.authentication.getSession(GOOGLE_AUTH_PROVIDER_ID, ['mail'], {
-			createIfNone: true,
+		const account = await accounts.addAccount(config, {
+			type: 'oauth',
+			provider,
+			connectionId,
 		});
-		if (!session || !shouldPersistOAuthAccount(session)) {
-			log(
-				`Google mail session unusable (token=${Boolean(session?.accessToken)}, scopes=${session?.scopes?.join(' ') ?? 'none'}) — aborting OAuth account create`,
-			);
-			void vscode.window.showErrorMessage(
-				vscode.l10n.t(
-					'Could not get a Gmail access token. Mailbox was not added. Try again or use Advanced: App Password / IMAP.',
-				),
-			);
-			return undefined;
-		}
-		googleSession = session;
-	} catch (err) {
-		const message = err instanceof Error ? err.message : String(err);
-		log(`Google mail session mint failed: ${message}`);
-		// Wrong-account reconsent is already surfaced by safeappeals-authentication.
-		if (!isProviderScopeUserMismatch(err)) {
-			void vscode.window.showErrorMessage(
-				vscode.l10n.t(
-					'Could not connect Gmail ({0}). Mailbox was not added.',
-					message,
-				),
-			);
-		}
-		return undefined;
-	}
-
-	// The minted token only authenticates the Cloud Google account, so the mailbox
-	// address is bound to it — a different Gmail would fail IMAP later.
-	const boundEmail = boundMailboxEmail(
-		cloudSession.account.label,
-		googleSession.account.label,
-	);
-	const mismatchMessage = vscode.l10n.t(
-		'This mailbox must be {0} — the Google account you signed in to SafeAppeals with.',
-		boundEmail ?? '',
-	);
-	const email = await vscode.window.showInputBox({
-		prompt: boundEmail
-			? vscode.l10n.t('Gmail address for this mailbox (must be {0})', boundEmail)
-			: vscode.l10n.t('Gmail address for this mailbox'),
-		placeHolder: 'you@gmail.com',
-		value: boundEmail || '',
-		ignoreFocusOut: true,
-		validateInput: (value) => {
-			const trimmed = value.trim();
-			if (!trimmed || !trimmed.includes('@')) {
-				return vscode.l10n.t('Enter a valid email address');
-			}
-			if (!isMailboxEmailBound(trimmed, boundEmail)) {
-				return mismatchMessage;
-			}
-			return undefined;
-		},
-	});
-	if (!email?.trim()) {
-		return undefined;
-	}
-
-	if (!isMailboxEmailBound(email, boundEmail)) {
-		log(`Mailbox address ${email.trim()} does not match Cloud identity ${boundEmail}`);
-		void vscode.window.showErrorMessage(mismatchMessage);
-		return undefined;
-	}
-
-	const normalizedEmail = email.trim().toLowerCase();
-	const config = gmailOAuthAccountDefaults(normalizedEmail);
-	try {
-		const account = await accounts.addAccount(config, { type: 'oauth', provider: 'google' });
 		await accounts.clearNeedsReconnect(account.id);
-		log(`OAuth Gmail account added: ${account.label}`);
+		log(`Connected mailbox added: ${account.label} (${provider} connection ${connectionId})`);
 		void vscode.window.showInformationMessage(
 			vscode.l10n.t('Mailbox connected: {0}', account.label),
 		);
@@ -767,6 +743,94 @@ async function promptAddGoogleOAuthAccount(
 		void vscode.window.showErrorMessage(
 			vscode.l10n.t('Could not save mailbox account: {0}', message),
 		);
+		return undefined;
+	}
+}
+
+/**
+ * Mailbox address for a connected account: the connected address when the server
+ * reports one, otherwise asked for (a mailbox the connection cannot name).
+ */
+async function resolveConnectedMailboxEmail(
+	provider: EmailOAuthProvider,
+	connection: MailConnectionInfo,
+): Promise<string | undefined> {
+	const connected = connectionMailboxEmail(connection);
+	if (connected) {
+		return connected;
+	}
+	const entered = await vscode.window.showInputBox({
+		prompt: provider === 'microsoft'
+			? vscode.l10n.t('Outlook address for this mailbox')
+			: vscode.l10n.t('Gmail address for this mailbox'),
+		placeHolder: provider === 'microsoft' ? 'you@outlook.com' : 'you@gmail.com',
+		ignoreFocusOut: true,
+		validateInput: (value) =>
+			value.trim().includes('@') ? undefined : vscode.l10n.t('Enter a valid email address'),
+	});
+	return entered?.trim().toLowerCase() || undefined;
+}
+
+/**
+ * Authentication account naming one connected mailbox, so the provider mints for
+ * that connection instead of an arbitrary one.
+ */
+function authAccountForConnection(connection: MailConnectionInfo): { id: string; label: string } {
+	return {
+		id: connection.providerAccountId || connection.id,
+		label: connection.accountEmail || connection.accountLabel || connection.id,
+	};
+}
+
+/**
+ * Signs in to SafeAppeals Cloud, which owns the service connections.
+ */
+async function ensureCloudSession(log: (msg: string) => void): Promise<boolean> {
+	try {
+		const session = await vscode.authentication.getSession(CLOUD_AUTH_PROVIDER_ID, [], {
+			createIfNone: true,
+		});
+		if (!session) {
+			void vscode.window.showErrorMessage(
+				vscode.l10n.t('Sign in to SafeAppeals Cloud was cancelled.'),
+			);
+			return false;
+		}
+		return true;
+	} catch (err) {
+		const message = err instanceof Error ? err.message : String(err);
+		log(`Cloud session for mailbox connect failed: ${message}`);
+		void vscode.window.showErrorMessage(
+			vscode.l10n.t('Could not sign in to SafeAppeals Cloud: {0}', message),
+		);
+		return false;
+	}
+}
+
+/**
+ * Mints a mail-scoped token for one connected account. Returns undefined when
+ * the mint failed; the error is surfaced unless the auth extension already did,
+ * or the caller has a fallback (`notifyOnError: false`).
+ */
+async function mintMailSession(
+	provider: EmailOAuthProvider,
+	account: { id: string; label: string },
+	log: (msg: string) => void,
+	notifyOnError = true,
+): Promise<vscode.AuthenticationSession | undefined> {
+	try {
+		return await vscode.authentication.getSession(providerAuthIdForOAuth(provider), ['mail'], {
+			account,
+			createIfNone: true,
+		});
+	} catch (err) {
+		const message = err instanceof Error ? err.message : String(err);
+		log(`${provider} mail session mint failed for ${account.label}: ${message}`);
+		if (notifyOnError) {
+			void vscode.window.showErrorMessage(
+				vscode.l10n.t('Could not connect the mailbox ({0}).', message),
+			);
+		}
 		return undefined;
 	}
 }
@@ -936,49 +1000,104 @@ async function promptReconnectMailbox(
 		return false;
 	}
 
-	const providerId = providerAuthIdForOAuth(creds.provider);
-	try {
-		const cloudSession = await vscode.authentication.getSession(CLOUD_AUTH_PROVIDER_ID, [], {
-			createIfNone: true,
-		});
-		if (!cloudSession) {
-			void vscode.window.showErrorMessage(
-				vscode.l10n.t('Sign in to SafeAppeals Cloud was cancelled.'),
-			);
-			return false;
-		}
-		const mailSession = await vscode.authentication.getSession(providerId, ['mail'], {
-			createIfNone: true,
-		});
-		if (!mailSession || !shouldPersistOAuthAccount(mailSession)) {
-			log(
-				`Reconnect for ${account.label} produced no mail-scoped token (scopes=${mailSession?.scopes?.join(' ') ?? 'none'})`,
-			);
-			void vscode.window.showErrorMessage(
-				vscode.l10n.t(
-					'Could not get a mail access token for {0}. Try again.',
-					account.label,
-				),
-			);
-			return false;
-		}
-		await accounts.clearNeedsReconnect(account.id);
-		log(`Mailbox reconnected: ${account.label}`);
-		void vscode.window.showInformationMessage(
-			vscode.l10n.t('Mailbox reconnected: {0}', account.label),
+	if (!(await ensureCloudSession(log))) {
+		return false;
+	}
+
+	const provider = creds.provider;
+	// An existing connection usually just needs a fresh token; a legacy row (or a
+	// revoked grant) has to go through the browser connect flow again.
+	if (creds.connectionId) {
+		const session = await mintMailSession(
+			provider,
+			{ id: creds.connectionId, label: account.email },
+			log,
+			false,
 		);
-		await engine.syncAll(account.id);
-		return true;
+		if (session && shouldPersistOAuthAccount({ ...session, connectionId: creds.connectionId })) {
+			return finishReconnect(account, log);
+		}
+		log(`Reconnect for ${account.label} could not mint from connection ${creds.connectionId}`);
+	}
+
+	let connection: MailConnectionInfo;
+	try {
+		connection = await connections.connect(provider, account.email);
 	} catch (err) {
 		const message = err instanceof Error ? err.message : String(err);
 		log(`Reconnect mailbox failed for ${account.label}: ${message}`);
-		// Wrong-account reconsent is already surfaced by safeappeals-authentication.
-		if (!isProviderScopeUserMismatch(err)) {
-			void vscode.window.showErrorMessage(
-				vscode.l10n.t('Could not reconnect mailbox: {0}', message),
+		void vscode.window.showErrorMessage(
+			vscode.l10n.t('Could not reconnect mailbox: {0}', message),
+		);
+		return false;
+	}
+
+	const connectedEmail = connectionMailboxEmail(connection);
+	if (connectedEmail && connectedEmail !== account.email.trim().toLowerCase()) {
+		log(`Reconnect for ${account.label} connected ${connectedEmail} instead — not adopted`);
+		void vscode.window.showErrorMessage(
+			vscode.l10n.t(
+				'You connected {0}, but this mailbox is {1}. Reconnect the same account, or add {0} as a new mailbox.',
+				connectedEmail,
+				account.email,
+			),
+		);
+		return false;
+	}
+
+	const session = await mintMailSession(provider, authAccountForConnection(connection), log);
+	const connectionId = connectionIdFromSession(session) ?? connection.id;
+	if (!session || !shouldPersistOAuthAccount({ ...session, connectionId })) {
+		log(
+			`Reconnect for ${account.label} produced no mail-scoped token (scopes=${session?.scopes.join(' ') || 'none'})`,
+		);
+		void vscode.window.showErrorMessage(
+			vscode.l10n.t('Could not get a mail access token for {0}. Try again.', account.label),
+		);
+		return false;
+	}
+
+	try {
+		await accounts.updateCredentials(account.id, { type: 'oauth', provider, connectionId });
+	} catch (err) {
+		const message = err instanceof Error ? err.message : String(err);
+		log(`Could not store the reconnected connection for ${account.label}: ${message}`);
+		void vscode.window.showErrorMessage(
+			vscode.l10n.t('Could not save the reconnected mailbox: {0}', message),
+		);
+		return false;
+	}
+	return finishReconnect(account, log);
+}
+
+async function finishReconnect(
+	account: EmailAccountConfig,
+	log: (msg: string) => void,
+): Promise<boolean> {
+	await accounts.clearNeedsReconnect(account.id);
+	log(`Mailbox reconnected: ${account.label}`);
+	void vscode.window.showInformationMessage(
+		vscode.l10n.t('Mailbox reconnected: {0}', account.label),
+	);
+	await engine.syncAll(account.id);
+	return true;
+}
+
+/**
+ * Links mailboxes stored before service connections to their connection, so a
+ * window that starts with legacy rows can still mint tokens.
+ */
+async function migrateLegacyOAuthConnections(log: (msg: string) => void): Promise<void> {
+	try {
+		const result = await adoptConnectionIdsForLegacyAccounts(accounts, connections, log);
+		if (result.adopted > 0 || result.needsReconnect > 0) {
+			log(
+				`Service-connection migration: adopted ${result.adopted}, needs reconnect ${result.needsReconnect}`,
 			);
 		}
-		return false;
+	} catch (err) {
+		const message = err instanceof Error ? err.message : String(err);
+		log(`Could not migrate mailboxes to service connections: ${message}`);
 	}
 }
 

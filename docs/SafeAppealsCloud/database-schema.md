@@ -159,30 +159,11 @@ CREATE POLICY "Authenticated users can read pricing" ON model_pricing
     USING (true);
 ```
 
-### provider_tokens
+### service_connections
 
-Server-side encrypted OAuth provider refresh tokens (Google today; Microsoft reserved). Used by `POST /auth/provider-token` to mint short-lived provider access tokens. The encryption key (`PROVIDER_TOKEN_ENCRYPTION_KEY`) lives outside the database.
+N mail/calendar OAuth grants per Cloud user. Replaces the retired single-row `provider_tokens` table. Clients mint short-lived provider access tokens with `POST /connections/:id/token`. The encryption key (`PROVIDER_TOKEN_ENCRYPTION_KEY`) lives outside the database.
 
-```sql
-CREATE TABLE provider_tokens (
-    user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
-    provider TEXT NOT NULL CHECK (provider IN ('google', 'microsoft')),
-    encrypted_refresh TEXT NOT NULL,
-    scopes TEXT,
-    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
-    PRIMARY KEY (user_id, provider)
-);
-
-CREATE INDEX idx_provider_tokens_updated_at
-    ON provider_tokens(updated_at DESC);
-
--- Fail closed for clients: RLS on, zero policies for anon/authenticated.
-ALTER TABLE provider_tokens ENABLE ROW LEVEL SECURITY;
-
-REVOKE ALL ON TABLE provider_tokens FROM anon, authenticated;
-GRANT ALL ON TABLE provider_tokens TO service_role;
-```
+See `void-cloud/supabase/migrations/010_service_connections.sql` for the full DDL (`service_connections` + `connection_requests`). Migration `011_drop_provider_tokens.sql` drops the legacy table after the 010 backfill is verified.
 
 ## Functions
 
@@ -419,7 +400,9 @@ Migrations are stored in `void-cloud/supabase/migrations/`:
 | `004_cost_tracking.sql` | Cost columns and functions |
 | `005_update_model_pricing.sql` | Initial model pricing |
 | `006_sync_model_pricing_dec2024.sql` | Sync with LiteLLM config |
-| `009_provider_tokens.sql` | Encrypted OAuth provider refresh tokens (`provider_tokens`) |
+| `009_provider_tokens.sql` | Legacy single-row encrypted provider refresh (`provider_tokens`; superseded) |
+| `010_service_connections.sql` | N service connections + connection_requests; backfill from 009 |
+| `011_drop_provider_tokens.sql` | Drop `provider_tokens` after 010 backfill is verified |
 
 ### Running Migrations
 

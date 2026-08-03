@@ -107,7 +107,7 @@ suite('authProviderIdFor / MAIL_AUTH_SCOPES', () => {
 });
 
 suite('resolveTransportCredentials', () => {
-	test('password passthrough; oauth mint success clears reconnect and never touches secrets', async () => {
+	test('password passthrough; oauth mint targets the connection, clears reconnect, never touches secrets', async () => {
 		const secrets = new FakeSecretStorage();
 		const persistence = memoryPersistence();
 		const store = new AccountStore(secrets, undefined, persistence, () => { /* no-op */ });
@@ -118,15 +118,25 @@ suite('resolveTransportCredentials', () => {
 		);
 		await store.addAccount(
 			{ ...baseConfig, id: 'oauth-1', authStatus: 'needsReconnect' },
-			{ type: 'oauth', provider: 'google' },
+			{ type: 'oauth', provider: 'google', connectionId: 'conn-1' },
 		);
 		await store.markAccountNeedsReconnect('oauth-1');
 
-		const sessionCalls: Array<{ providerId: string; scopes: readonly string[]; createIfNone: boolean }> = [];
+		const sessionCalls: Array<{
+			providerId: string;
+			scopes: readonly string[];
+			createIfNone: boolean;
+			account?: { id: string; label: string };
+		}> = [];
 		const deps = makeDeps({
 			getSession: async (providerId, scopes, options) => {
-				sessionCalls.push({ providerId, scopes, createIfNone: options.createIfNone });
-				return { accessToken: 'ya29.minted-token' };
+				sessionCalls.push({
+					providerId,
+					scopes,
+					createIfNone: options.createIfNone,
+					account: options.account,
+				});
+				return { id: 'conn-1', accessToken: 'ya29.minted-token' };
 			},
 			markNeedsReconnect: async (id) => { await store.markAccountNeedsReconnect(id); },
 			clearNeedsReconnect: async (id) => { await store.clearNeedsReconnect(id); },
@@ -139,7 +149,7 @@ suite('resolveTransportCredentials', () => {
 		);
 		const oauthResolved = await resolveTransportCredentials(
 			store.getAccount('oauth-1')!,
-			{ type: 'oauth', provider: 'google' },
+			{ type: 'oauth', provider: 'google', connectionId: 'conn-1' },
 			deps,
 		);
 
@@ -163,10 +173,15 @@ suite('resolveTransportCredentials', () => {
 						providerId: 'safeappeals-google',
 						scopes: ['mail'],
 						createIfNone: false,
+						account: { id: 'conn-1', label: 'lawyer@gmail.com' },
 					},
 				],
 				oauthAuthStatus: 'ok',
-				secretOauth: JSON.stringify({ type: 'oauth', provider: 'google' }),
+				secretOauth: JSON.stringify({
+					type: 'oauth',
+					provider: 'google',
+					connectionId: 'conn-1',
+				}),
 				warnings: [],
 			},
 		);
@@ -194,17 +209,17 @@ suite('resolveTransportCredentials', () => {
 
 		const miss = await resolveTransportCredentials(
 			accountOk,
-			{ type: 'oauth', provider: 'google' },
+			{ type: 'oauth', provider: 'google', connectionId: 'conn-1' },
 			missDeps,
 		);
 		const thrown = await resolveTransportCredentials(
 			{ ...accountOk, id: 'ms-1' },
-			{ type: 'oauth', provider: 'microsoft' },
+			{ type: 'oauth', provider: 'microsoft', connectionId: 'conn-ms' },
 			throwDeps,
 		);
 		const already = await resolveTransportCredentials(
 			accountFlagged,
-			{ type: 'oauth', provider: 'google' },
+			{ type: 'oauth', provider: 'google', connectionId: 'conn-1' },
 			alreadyDeps,
 		);
 
@@ -237,6 +252,53 @@ suite('resolveTransportCredentials', () => {
 			},
 		);
 	});
+
+	test('a legacy row and a token from another connection both need reconnect', async () => {
+		const account: EmailAccountConfig = { ...baseConfig, id: 'o1' };
+
+		const legacyDeps = makeDeps({
+			getSession: async () => ({ id: 'conn-1', accessToken: 'ya29.token' }),
+		});
+		const wrongConnectionDeps = makeDeps({
+			getSession: async () => ({ id: 'conn-other', accessToken: 'ya29.token' }),
+		});
+
+		const legacy = await resolveTransportCredentials(
+			account,
+			{ type: 'oauth', provider: 'google' },
+			legacyDeps,
+		);
+		const wrongConnection = await resolveTransportCredentials(
+			account,
+			{ type: 'oauth', provider: 'google', connectionId: 'conn-1' },
+			wrongConnectionDeps,
+		);
+
+		assert.deepStrictEqual(
+			{
+				legacy,
+				wrongConnection,
+				legacyMarks: legacyDeps.marks,
+				wrongConnectionMarks: wrongConnectionDeps.marks,
+				legacyClears: legacyDeps.clears,
+				wrongConnectionClears: wrongConnectionDeps.clears,
+				legacyWarning: legacyDeps.warnings.some((w) => w.includes('not linked to a Safe Appeals connection')),
+				wrongConnectionWarning: wrongConnectionDeps.warnings.some((w) =>
+					w.includes('different connected account'),
+				),
+			},
+			{
+				legacy: undefined,
+				wrongConnection: undefined,
+				legacyMarks: ['o1'],
+				wrongConnectionMarks: ['o1'],
+				legacyClears: [],
+				wrongConnectionClears: [],
+				legacyWarning: true,
+				wrongConnectionWarning: true,
+			},
+		);
+	});
 });
 
 suite('handleCloudSignOutCascade', () => {
@@ -251,11 +313,11 @@ suite('handleCloudSignOutCascade', () => {
 		);
 		await store.addAccount(
 			{ ...baseConfig, id: 'oauth-g', email: 'g@example.com', username: 'g@example.com' },
-			{ type: 'oauth', provider: 'google' },
+			{ type: 'oauth', provider: 'google', connectionId: 'conn-g' },
 		);
 		await store.addAccount(
 			{ ...baseConfig, id: 'oauth-ms', email: 'ms@example.com', username: 'ms@example.com' },
-			{ type: 'oauth', provider: 'microsoft' },
+			{ type: 'oauth', provider: 'microsoft', connectionId: 'conn-ms' },
 		);
 
 		const count = await handleCloudSignOutCascade(store);
@@ -273,7 +335,11 @@ suite('handleCloudSignOutCascade', () => {
 				pwd: undefined,
 				google: 'needsReconnect',
 				microsoft: 'needsReconnect',
-				secretOauth: JSON.stringify({ type: 'oauth', provider: 'google' }),
+				secretOauth: JSON.stringify({
+					type: 'oauth',
+					provider: 'google',
+					connectionId: 'conn-g',
+				}),
 			},
 		);
 	});

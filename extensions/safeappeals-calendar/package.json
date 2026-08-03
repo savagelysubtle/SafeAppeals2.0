@@ -1,7 +1,7 @@
 {
   "name": "safeappeals-calendar",
   "displayName": "Safe Appeals Calendar",
-  "description": "Google Calendar and Outlook sync for Safe Appeals (extension-host OAuth + background sync)",
+  "description": "Google Calendar and Outlook sync for Safe Appeals (service connections + background sync)",
   "version": "1.0.0",
   "publisher": "safeappeals",
   "license": "MIT",
@@ -81,33 +81,10 @@
           "minimum": 1,
           "description": "Background sync interval in minutes"
         },
-        "safeappealsCalendar.google.clientId": {
-          "type": "string",
-          "default": "22322032344-hv8og33fig8n5gjjj2o1mu2tpu0bvm1t.apps.googleusercontent.com",
-          "scope": "machine",
-          "description": "Google OAuth Desktop client ID for SafeAppeals Calendar (falls back to GOOGLE_CALENDAR_CLIENT_ID env). Public; PKCE is used for auth."
-        },
-        "safeappealsCalendar.google.clientSecret": {
-          "type": "string",
-          "default": "",
-          "scope": "machine",
-          "description": "Optional Google OAuth client secret for legacy Web clients. Desktop clients use PKCE and do not require a secret (falls back to GOOGLE_CALENDAR_CLIENT_SECRET env)."
-        },
         "safeappealsCalendar.google.calendarId": {
           "type": "string",
           "default": "primary",
           "description": "Google Calendar ID to sync"
-        },
-        "safeappealsCalendar.outlook.clientId": {
-          "type": "string",
-          "default": "",
-          "scope": "machine",
-          "description": "Microsoft/Outlook OAuth client ID (falls back to OUTLOOK_CLIENT_ID env)"
-        },
-        "safeappealsCalendar.outlook.tenantId": {
-          "type": "string",
-          "default": "common",
-          "description": "Azure AD tenant ID (falls back to OUTLOOK_TENANT_ID env; default common)"
         },
         "safeappealsCalendar.outlook.calendarId": {
           "type": "string",

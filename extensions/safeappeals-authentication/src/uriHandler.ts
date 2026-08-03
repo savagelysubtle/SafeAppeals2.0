@@ -27,17 +27,37 @@ export type AuthCallbackError =
 	| { readonly cancelled: false; readonly message: string; readonly state: string };
 
 /**
+ * Service-connection deep link from the void-cloud `/connections/callback` page.
+ *
+ * The code exchange already happened server-side, so this carries no secret —
+ * only which pending request finished and whether it succeeded.
+ */
+export interface ConnectCallbackResult {
+	readonly requestId: string;
+	readonly ok: boolean;
+	readonly message?: string;
+}
+
+/** Deep-link path for a finished service connection. */
+const CONNECT_PATH = '/connect';
+
+/** Deep-link path for the identity authorization-code callback. */
+const AUTH_CALLBACK_PATH = '/auth/callback';
+
+/**
  * Parses SafeAppeals Cloud OAuth callbacks delivered via the private-use URI scheme
  * or the web `asExternalUri` reconstruction path.
  *
- * Path must be `/auth/callback`. Authority is the extension id (enforced by
- * ExtensionUrlHandler before this runs). Garbage (fragment tokens, missing state,
- * missing code) is logged and ignored — never settles a pending sign-in.
+ * Path must be `/auth/callback` (identity) or `/connect` (service connection).
+ * Authority is the extension id (enforced by ExtensionUrlHandler before this
+ * runs). Garbage (fragment tokens, missing state, missing code) is logged and
+ * ignored — never settles a pending sign-in.
  */
 export class CloudUriHandler implements vscode.UriHandler, vscode.Disposable {
 	private readonly _emitter = new vscode.EventEmitter<AuthCallbackResult>();
 	private readonly _errorEmitter = new vscode.EventEmitter<AuthCallbackError>();
-	private readonly _disposable: vscode.Disposable;
+	private readonly _connectEmitter = new vscode.EventEmitter<ConnectCallbackResult>();
+	private readonly _disposable: vscode.Disposable | undefined;
 
 	/** Fires when a verified authorization code arrives. */
 	readonly onCallback = this._emitter.event;
@@ -45,17 +65,29 @@ export class CloudUriHandler implements vscode.UriHandler, vscode.Disposable {
 	/** Fires when the callback carries an OAuth error that includes state. */
 	readonly onError = this._errorEmitter.event;
 
-	constructor(private readonly output: vscode.OutputChannel) {
-		this._disposable = vscode.window.registerUriHandler(this);
+	/** Fires when a service connection finished in the browser. */
+	readonly onConnectCallback = this._connectEmitter.event;
+
+	/**
+	 * @param register When false, skips `registerUriHandler` (unit tests — VS Code
+	 * allows one handler per extension).
+	 */
+	constructor(private readonly output: vscode.OutputChannel, register = true) {
+		this._disposable = register ? vscode.window.registerUriHandler(this) : undefined;
 	}
 
 	/**
-	 * Handles `safe-appeals-navigator://safeappeals.safeappeals-authentication/auth/callback?...` URIs.
+	 * Handles `safe-appeals-navigator://safeappeals.safeappeals-authentication/...` URIs.
 	 */
 	handleUri(uri: vscode.Uri): vscode.ProviderResult<void> {
 		this.output.appendLine(`[uri] received ${uri.scheme}://${uri.authority}${uri.path}`);
 
-		if (uri.path !== '/auth/callback') {
+		if (uri.path === CONNECT_PATH) {
+			this.handleConnectUri(uri);
+			return;
+		}
+
+		if (uri.path !== AUTH_CALLBACK_PATH) {
 			this.output.appendLine(`[uri] ignored unexpected path ${uri.path}`);
 			return;
 		}
@@ -104,10 +136,37 @@ export class CloudUriHandler implements vscode.UriHandler, vscode.Disposable {
 		this._emitter.fire({ code, state });
 	}
 
+	/**
+	 * Handles `/connect?requestId=…&status=ok|error`.
+	 * A connect deep link never carries a code or token; anything that looks like
+	 * one is dropped rather than forwarded.
+	 */
+	private handleConnectUri(uri: vscode.Uri): void {
+		const params = new URLSearchParams(uri.query);
+		const requestId = params.get('requestId') ?? params.get('request_id');
+		if (!requestId) {
+			this.output.appendLine('[uri] ignored connect callback: missing requestId');
+			return;
+		}
+
+		const error = params.get('error');
+		const status = params.get('status');
+		if (error || (status && status !== 'ok')) {
+			const message = params.get('error_description') || error || status || 'connect_failed';
+			this.output.appendLine(`[uri] connect callback failed: ${message}`);
+			this._connectEmitter.fire({ requestId, ok: false, message });
+			return;
+		}
+
+		this.output.appendLine('[uri] connect callback ok');
+		this._connectEmitter.fire({ requestId, ok: true });
+	}
+
 	dispose(): void {
-		this._disposable.dispose();
+		this._disposable?.dispose();
 		this._emitter.dispose();
 		this._errorEmitter.dispose();
+		this._connectEmitter.dispose();
 	}
 }
 

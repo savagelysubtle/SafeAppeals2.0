@@ -9,6 +9,7 @@ import type { SecretStorage, SecretStorageChangeEvent, Event } from 'vscode';
 import { AccountStore, type AccountConfigPersistence } from '../accountStore';
 import {
 	credentialsForStorage,
+	isLegacyOAuthCredentials,
 	isOAuthCredentials,
 	isPasswordCredentials,
 	normalizeCredentials,
@@ -72,28 +73,55 @@ suite('normalizeCredentials / credentialsForStorage', () => {
 				oauthGoogle: normalizeCredentials({
 					type: 'oauth',
 					provider: 'google',
+					connectionId: ' conn-1 ',
 					accessToken: 'leak',
 					refreshToken: 'leak2',
 				}),
-				oauthMicrosoft: normalizeCredentials({ type: 'oauth', provider: 'microsoft' }),
+				oauthLegacy: normalizeCredentials({ type: 'oauth', provider: 'google' }),
+				oauthBlankConnection: normalizeCredentials({
+					type: 'oauth',
+					provider: 'google',
+					connectionId: '   ',
+				}),
+				oauthMicrosoft: normalizeCredentials({
+					type: 'oauth',
+					provider: 'microsoft',
+					connectionId: 'conn-ms',
+				}),
 				badProvider: normalizeCredentials({ type: 'oauth', provider: 'yahoo' }),
 				empty: normalizeCredentials(null),
 				storedPassword: credentialsForStorage({ type: 'password', password: 'secret' }),
-				storedOauth: credentialsForStorage({ type: 'oauth', provider: 'google' }),
-				isOauth: isOAuthCredentials({ type: 'oauth', provider: 'google' }),
+				storedOauth: credentialsForStorage({
+					type: 'oauth',
+					provider: 'google',
+					connectionId: 'conn-1',
+				}),
+				storedLegacyOauth: credentialsForStorage({ type: 'oauth', provider: 'google' }),
+				isOauth: isOAuthCredentials({ type: 'oauth', provider: 'google', connectionId: 'conn-1' }),
 				isPassword: isPasswordCredentials({ type: 'password', password: 'x' }),
+				isLegacy: isLegacyOAuthCredentials({ type: 'oauth', provider: 'google' }),
+				isNotLegacy: isLegacyOAuthCredentials({
+					type: 'oauth',
+					provider: 'google',
+					connectionId: 'conn-1',
+				}),
 			},
 			{
 				legacy: { type: 'password', password: 'secret' },
 				typedPassword: { type: 'password', password: 'secret' },
-				oauthGoogle: { type: 'oauth', provider: 'google' },
-				oauthMicrosoft: { type: 'oauth', provider: 'microsoft' },
+				oauthGoogle: { type: 'oauth', provider: 'google', connectionId: 'conn-1' },
+				oauthLegacy: { type: 'oauth', provider: 'google' },
+				oauthBlankConnection: { type: 'oauth', provider: 'google' },
+				oauthMicrosoft: { type: 'oauth', provider: 'microsoft', connectionId: 'conn-ms' },
 				badProvider: undefined,
 				empty: undefined,
 				storedPassword: { type: 'password', password: 'secret' },
-				storedOauth: { type: 'oauth', provider: 'google' },
+				storedOauth: { type: 'oauth', provider: 'google', connectionId: 'conn-1' },
+				storedLegacyOauth: { type: 'oauth', provider: 'google' },
 				isOauth: true,
 				isPassword: true,
+				isLegacy: true,
+				isNotLegacy: false,
 			},
 		);
 	});
@@ -119,11 +147,11 @@ suite('AccountStore credentials + reconnect', () => {
 		);
 		const oauthAccount = await store.addAccount(
 			{ ...baseConfig, id: 'oauth-1', email: 'oauth@example.com', username: 'oauth@example.com' },
-			{ type: 'oauth', provider: 'google' },
+			{ type: 'oauth', provider: 'google', connectionId: 'conn-1' },
 		);
 		await store.addAccount(
 			{ ...baseConfig, id: 'oauth-ms', email: 'ms@example.com', username: 'ms@example.com' },
-			{ type: 'oauth', provider: 'microsoft' },
+			{ type: 'oauth', provider: 'microsoft', connectionId: 'conn-ms' },
 		);
 
 		await store.markAccountNeedsReconnect('oauth-1');
@@ -149,10 +177,10 @@ suite('AccountStore credentials + reconnect', () => {
 			{
 				legacyCreds: { type: 'password', password: 'app-password' },
 				passwordCreds: { type: 'password', password: 'legacy-input' },
-				oauthCreds: { type: 'oauth', provider: 'google' },
+				oauthCreds: { type: 'oauth', provider: 'google', connectionId: 'conn-1' },
 				rawSecrets: {
 					pwd: JSON.stringify({ type: 'password', password: 'legacy-input' }),
-					oauth: JSON.stringify({ type: 'oauth', provider: 'google' }),
+					oauth: JSON.stringify({ type: 'oauth', provider: 'google', connectionId: 'conn-1' }),
 				},
 				oauthAuthStatus: 'needsReconnect',
 				oauthIds: ['oauth-1', 'oauth-ms'],

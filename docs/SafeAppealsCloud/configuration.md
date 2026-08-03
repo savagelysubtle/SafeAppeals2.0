@@ -206,8 +206,8 @@ BRAVE_SEARCH_URL=http://localhost:3001
 SUPABASE_URL=https://xxxx.supabase.co
 SUPABASE_SERVICE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 
-# Google OAuth (provider-token mint — same client as Supabase Google provider)
-# Required for POST /auth/provider-token and for persisting provider refresh on PKCE.
+# Google OAuth (service connections — mail/calendar via /connections/*)
+# Required for connection authorize/exchange and POST /connections/:id/token.
 GOOGLE_CLIENT_ID=your-google-oauth-client-id.apps.googleusercontent.com
 GOOGLE_CLIENT_SECRET=your-google-oauth-client-secret
 

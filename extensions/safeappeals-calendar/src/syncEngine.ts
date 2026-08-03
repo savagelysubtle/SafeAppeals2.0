@@ -4,17 +4,21 @@
 
 import * as vscode from 'vscode';
 import {
+	CalendarTokenSource,
+	connectCalendarAccount,
+	defaultCalendarSessionGetter,
+	type CalendarSessionGetter,
+} from './calendarAuth';
+import {
 	getEnabledProviders,
 	getGoogleCalendarId,
 	getOutlookCalendarId,
 	getSyncIntervalMinutes,
-	isGoogleConfigured,
-	isOutlookConfigured,
 } from './config';
+import type { CalendarConnectionInfo, CalendarConnectionsBridge } from './connectionsBridge';
 import { EventCache } from './eventCache';
 import { GoogleCalendarClient, SyncTokenInvalidError } from './googleCalendarClient';
 import { OutlookCalendarClient } from './outlookCalendarClient';
-import { TokenStore } from './tokenStore';
 import type {
 	CalendarProvider,
 	CalendarStatus,
@@ -26,20 +30,34 @@ import type {
 const LOOKBACK_MS = 90 * 24 * 60 * 60 * 1000;
 const LOOKAHEAD_MS = 365 * 24 * 60 * 60 * 1000;
 
+/** Outcome of disconnecting: the grant is only gone when the server revoked it. */
+export interface DisconnectResult {
+	revoked: boolean;
+	error?: string;
+}
+
 export class SyncEngine implements vscode.Disposable {
 	private readonly google: GoogleCalendarClient;
 	private readonly outlook: OutlookCalendarClient;
+	private readonly getSession: CalendarSessionGetter;
 	private timer: NodeJS.Timeout | undefined;
 	private syncing = false;
 
 	constructor(
-		private readonly tokens: TokenStore,
+		private readonly connections: CalendarConnectionsBridge,
 		private readonly cache: EventCache,
 		private readonly log: (msg: string) => void,
-		private readonly onStatusChange: () => void
+		private readonly onStatusChange: () => void,
+		getSession: CalendarSessionGetter = defaultCalendarSessionGetter,
 	) {
-		this.google = new GoogleCalendarClient(tokens, log);
-		this.outlook = new OutlookCalendarClient(tokens, log);
+		this.getSession = getSession;
+		const tokens = new CalendarTokenSource({
+			connectionIdFor: (provider) => this.cache.getConnectionId(provider),
+			getSession,
+			log,
+		});
+		this.google = new GoogleCalendarClient(tokens);
+		this.outlook = new OutlookCalendarClient(tokens);
 	}
 
 	startBackgroundSync(): void {
@@ -71,27 +89,49 @@ export class SyncEngine implements vscode.Disposable {
 		this.stopBackgroundSync();
 	}
 
-	async connect(provider: CalendarProvider): Promise<void> {
-		if (provider === 'google') {
-			await this.google.connect();
-			await this.cache.setConnected('google', true, getGoogleCalendarId());
-		} else {
-			await this.outlook.connect();
-			await this.cache.setConnected('outlook', true, getOutlookCalendarId());
-		}
+	/** True when a service connection is stored for the provider. */
+	isConnected(provider: CalendarProvider): boolean {
+		return !!this.cache.getConnectionId(provider);
+	}
+
+	/**
+	 * Connects a calendar through SafeAppeals service connections, stores the
+	 * connection it syncs against, and pulls a first batch of events.
+	 */
+	async connect(provider: CalendarProvider): Promise<CalendarConnectionInfo> {
+		const connection = await connectCalendarAccount(provider, {
+			connect: (target, loginHint) => this.connections.connect(target, loginHint),
+			getSession: this.getSession,
+			log: this.log,
+		});
+		await this.cache.setConnection(provider, connection.id, calendarIdFor(provider));
+		this.log(`${provider} calendar connected (connection ${connection.id})`);
 		this.onStatusChange();
 		await this.syncProvider(provider);
 		this.onStatusChange();
+		return connection;
 	}
 
-	async disconnect(provider: CalendarProvider): Promise<void> {
-		if (provider === 'google') {
-			await this.google.disconnect();
-		} else {
-			await this.outlook.disconnect();
+	/**
+	 * Revokes the provider's connection and drops its cached events. Local state
+	 * is cleared even when the server call fails, so a revoked or unknown grant
+	 * cannot strand the provider — the caller reports what actually happened.
+	 */
+	async disconnect(provider: CalendarProvider): Promise<DisconnectResult> {
+		const connectionId = this.cache.getConnectionId(provider);
+		let result: DisconnectResult = { revoked: !!connectionId };
+		if (connectionId) {
+			try {
+				await this.connections.disconnect(connectionId);
+			} catch (err) {
+				const message = err instanceof Error ? err.message : String(err);
+				this.log(`Revoking ${provider} connection ${connectionId} failed: ${message}`);
+				result = { revoked: false, error: message };
+			}
 		}
 		await this.cache.clearProvider(provider);
 		this.onStatusChange();
+		return result;
 	}
 
 	async syncNow(providers?: CalendarProvider[]): Promise<SyncNowResult> {
@@ -106,9 +146,7 @@ export class SyncEngine implements vscode.Disposable {
 		}
 
 		this.syncing = true;
-		const targets = providers?.length
-			? providers
-			: await this.connectedEnabledProviders();
+		const targets = providers?.length ? providers : this.connectedEnabledProviders();
 
 		const errors: { provider: CalendarProvider; error: string }[] = [];
 		let fetched = 0;
@@ -149,9 +187,7 @@ export class SyncEngine implements vscode.Disposable {
 		}
 
 		const toSync: CalendarProvider[] =
-			provider === 'all'
-				? await this.connectedEnabledProviders()
-				: [provider];
+			provider === 'all' ? this.connectedEnabledProviders() : [provider];
 
 		if (toSync.length > 0) {
 			await this.syncNow(toSync);
@@ -161,22 +197,21 @@ export class SyncEngine implements vscode.Disposable {
 	}
 
 	async getStatus(): Promise<CalendarStatus> {
-		const googleConnected = await this.tokens.isConnected('google');
-		const outlookConnected = await this.tokens.isConnected('outlook');
+		const enabled = getEnabledProviders();
 		const googleMeta = this.cache.getProviderMeta('google');
 		const outlookMeta = this.cache.getProviderMeta('outlook');
 
 		return {
 			google: {
-				configured: isGoogleConfigured(),
-				connected: googleConnected,
+				enabled: enabled.includes('google'),
+				connected: this.isConnected('google'),
 				lastSync: googleMeta?.lastSync ?? null,
 				calendarId: getGoogleCalendarId(),
 				cachedEventCount: this.cache.countForProvider('google'),
 			},
 			outlook: {
-				configured: isOutlookConfigured(),
-				connected: outlookConnected,
+				enabled: enabled.includes('outlook'),
+				connected: this.isConnected('outlook'),
 				lastSync: outlookMeta?.lastSync ?? null,
 				calendarId: getOutlookCalendarId(),
 				cachedEventCount: this.cache.countForProvider('outlook'),
@@ -186,19 +221,12 @@ export class SyncEngine implements vscode.Disposable {
 		};
 	}
 
-	private async connectedEnabledProviders(): Promise<CalendarProvider[]> {
-		const enabled = getEnabledProviders();
-		const result: CalendarProvider[] = [];
-		for (const p of enabled) {
-			if (await this.tokens.isConnected(p)) {
-				result.push(p);
-			}
-		}
-		return result;
+	private connectedEnabledProviders(): CalendarProvider[] {
+		return getEnabledProviders().filter((provider) => this.isConnected(provider));
 	}
 
 	private async syncProvider(provider: CalendarProvider): Promise<number> {
-		if (!(await this.tokens.isConnected(provider))) {
+		if (!this.isConnected(provider)) {
 			this.log(`Skip sync — ${provider} not connected`);
 			return 0;
 		}
@@ -270,4 +298,8 @@ export class SyncEngine implements vscode.Disposable {
 		this.log(`Outlook sync: ${events.length} event(s)`);
 		return events.length;
 	}
+}
+
+function calendarIdFor(provider: CalendarProvider): string {
+	return provider === 'google' ? getGoogleCalendarId() : getOutlookCalendarId();
 }

@@ -8,17 +8,21 @@ import * as assert from 'assert';
 import type { SecretStorage, SecretStorageChangeEvent, Event } from 'vscode';
 import { AccountStore, type AccountConfigPersistence } from '../accountStore';
 import {
-	boundMailboxEmail,
+	adoptConnectionIdsForLegacyAccounts,
+	connectionIdFromSession,
+	connectionMailboxEmail,
 	emailFromAuthAccountLabel,
 	gmailOAuthAccountDefaults,
-	isMailboxEmailBound,
-	isProviderScopeUserMismatch,
+	matchConnectionForLegacyAccount,
+	oauthAccountDefaults,
 	providerAuthIdForOAuth,
 	sessionGrantsMailScope,
 	shouldPersistOAuthAccount,
+	toMailConnectionInfo,
+	type MailConnectionInfo,
 } from '../oauthAccountFlow';
 import { handleCloudSignOutCascade } from '../syncEngine';
-import type { EmailAccountConfig } from '../types';
+import type { EmailAccountConfig, EmailOAuthProvider } from '../types';
 
 class FakeSecretStorage implements SecretStorage {
 	private readonly map = new Map<string, string>();
@@ -52,6 +56,18 @@ function memoryPersistence(seed: EmailAccountConfig[] = []): AccountConfigPersis
 	};
 }
 
+function connection(id: string, accountEmail: string): MailConnectionInfo {
+	return {
+		id,
+		provider: 'google',
+		accountEmail,
+		accountLabel: accountEmail,
+		providerAccountId: `${id}-account`,
+		capabilities: ['mail'],
+		status: 'active',
+	};
+}
+
 suite('email oauthAccountFlow', () => {
 	test('label parse, gmail defaults, provider ids, cloud sign-out cascade', async () => {
 		const store = new AccountStore(new FakeSecretStorage(), undefined, memoryPersistence(), () => { /* no-op */ });
@@ -69,6 +85,7 @@ suite('email oauthAccountFlow', () => {
 		await store.addAccount({ ...base, id: 'oauth-1', email: 'a@gmail.com', username: 'a@gmail.com' }, {
 			type: 'oauth',
 			provider: 'google',
+			connectionId: 'conn-a',
 		});
 		await store.addAccount({ ...base, id: 'pwd-1', email: 'b@example.com', username: 'b@example.com' }, {
 			type: 'password',
@@ -77,6 +94,7 @@ suite('email oauthAccountFlow', () => {
 		await store.addAccount({ ...base, id: 'oauth-ms', email: 'c@outlook.com', username: 'c@outlook.com' }, {
 			type: 'oauth',
 			provider: 'microsoft',
+			connectionId: 'conn-c',
 		});
 
 		const markedCount = await handleCloudSignOutCascade(store);
@@ -86,10 +104,19 @@ suite('email oauthAccountFlow', () => {
 				wrapped: emailFromAuthAccountLabel('Jane Doe (jane@gmail.com)'),
 				empty: emailFromAuthAccountLabel('  '),
 				defaults: gmailOAuthAccountDefaults('me@gmail.com'),
+				outlookDefaults: oauthAccountDefaults('microsoft', 'me@outlook.com'),
 				googleId: providerAuthIdForOAuth('google'),
 				msId: providerAuthIdForOAuth('microsoft'),
-				persistWithToken: shouldPersistOAuthAccount({ accessToken: 'ya29.x', scopes: ['mail'] }),
-				persistEmpty: shouldPersistOAuthAccount({ accessToken: '', scopes: ['mail'] }),
+				persistWithToken: shouldPersistOAuthAccount({
+					accessToken: 'ya29.x',
+					scopes: ['mail'],
+					connectionId: 'conn-1',
+				}),
+				persistEmpty: shouldPersistOAuthAccount({
+					accessToken: '',
+					scopes: ['mail'],
+					connectionId: 'conn-1',
+				}),
 				persistMissing: shouldPersistOAuthAccount({}),
 				markedCount,
 				oauth1: store.getAccount('oauth-1')?.authStatus,
@@ -111,6 +138,17 @@ suite('email oauthAccountFlow', () => {
 					smtpSecure: true,
 					username: 'me@gmail.com',
 				},
+				outlookDefaults: {
+					label: 'me@outlook.com',
+					email: 'me@outlook.com',
+					imapHost: 'outlook.office365.com',
+					imapPort: 993,
+					imapSecure: true,
+					smtpHost: 'smtp.office365.com',
+					smtpPort: 587,
+					smtpSecure: false,
+					username: 'me@outlook.com',
+				},
 				googleId: 'safeappeals-google',
 				msId: 'safeappeals-microsoft',
 				persistWithToken: true,
@@ -124,17 +162,33 @@ suite('email oauthAccountFlow', () => {
 		);
 	});
 
-	test('persisting an OAuth mailbox requires a token whose grant includes Gmail', () => {
+	test('persisting an OAuth mailbox requires a mail-scoped token and a connection', () => {
+		const connectionId = 'conn-1';
 		assert.deepStrictEqual(
 			{
-				mailSentinel: shouldPersistOAuthAccount({ accessToken: 'ya29.x', scopes: ['mail'] }),
+				mailSentinel: shouldPersistOAuthAccount({
+					accessToken: 'ya29.x',
+					scopes: ['mail'],
+					connectionId,
+				}),
 				gmailUri: shouldPersistOAuthAccount({
 					accessToken: 'ya29.x',
 					scopes: ['https://mail.google.com/'],
+					connectionId,
 				}),
-				calendarOnly: shouldPersistOAuthAccount({ accessToken: 'ya29.x', scopes: ['calendar'] }),
-				noScopes: shouldPersistOAuthAccount({ accessToken: 'ya29.x', scopes: [] }),
-				scopesUndefined: shouldPersistOAuthAccount({ accessToken: 'ya29.x' }),
+				calendarOnly: shouldPersistOAuthAccount({
+					accessToken: 'ya29.x',
+					scopes: ['calendar'],
+					connectionId,
+				}),
+				noScopes: shouldPersistOAuthAccount({ accessToken: 'ya29.x', scopes: [], connectionId }),
+				scopesUndefined: shouldPersistOAuthAccount({ accessToken: 'ya29.x', connectionId }),
+				noConnection: shouldPersistOAuthAccount({ accessToken: 'ya29.x', scopes: ['mail'] }),
+				blankConnection: shouldPersistOAuthAccount({
+					accessToken: 'ya29.x',
+					scopes: ['mail'],
+					connectionId: '  ',
+				}),
 				grantsMail: sessionGrantsMailScope(['calendar', 'mail']),
 				grantsGmailModify: sessionGrantsMailScope([
 					'https://www.googleapis.com/auth/gmail.modify',
@@ -147,6 +201,8 @@ suite('email oauthAccountFlow', () => {
 				calendarOnly: false,
 				noScopes: false,
 				scopesUndefined: false,
+				noConnection: false,
+				blankConnection: false,
 				grantsMail: true,
 				grantsGmailModify: true,
 				grantsNothing: false,
@@ -154,51 +210,211 @@ suite('email oauthAccountFlow', () => {
 		);
 	});
 
-	test('mailbox address is bound to the SafeAppeals Cloud Google account', () => {
-		const bound = boundMailboxEmail('Jane Doe (jane@gmail.com)', 'other@gmail.com');
+	test('connection metadata parses and yields the session connection id', () => {
 		assert.deepStrictEqual(
 			{
-				bound,
-				googleFallback: boundMailboxEmail(undefined, 'Jane Doe (jane@gmail.com)'),
-				unknown: boundMailboxEmail(undefined, undefined),
-				same: isMailboxEmailBound('jane@gmail.com', bound),
-				caseAndSpace: isMailboxEmailBound('  JANE@Gmail.com ', bound),
-				different: isMailboxEmailBound('work@gmail.com', bound),
-				unenforceable: isMailboxEmailBound('anything@gmail.com', undefined),
+				parsed: toMailConnectionInfo({
+					id: ' conn-1 ',
+					provider: 'google',
+					accountEmail: 'Jane@Gmail.com',
+					accountLabel: 'Jane Doe (jane@gmail.com)',
+					providerAccountId: 'google-123',
+					capabilities: ['mail', 'calendar', 42],
+					status: 'active',
+				}),
+				badProvider: toMailConnectionInfo({ id: 'conn-2', provider: 'yahoo' }),
+				missingId: toMailConnectionInfo({ provider: 'google' }),
+				notAnObject: toMailConnectionInfo('conn-3'),
+				mailboxFromEmail: connectionMailboxEmail(connection('conn-1', 'jane@gmail.com')),
+				mailboxFromLabel: connectionMailboxEmail({
+					id: 'conn-4',
+					provider: 'google',
+					accountLabel: 'Jane Doe (jane@gmail.com)',
+					capabilities: ['mail'],
+				}),
+				sessionId: connectionIdFromSession({ id: 'conn-5' }),
+				blankSessionId: connectionIdFromSession({ id: '  ' }),
+				noSession: connectionIdFromSession(undefined),
 			},
 			{
-				bound: 'jane@gmail.com',
-				googleFallback: 'jane@gmail.com',
-				unknown: undefined,
-				same: true,
-				caseAndSpace: true,
-				different: false,
-				unenforceable: true,
+				parsed: {
+					id: 'conn-1',
+					provider: 'google',
+					accountEmail: 'Jane@Gmail.com',
+					accountLabel: 'Jane Doe (jane@gmail.com)',
+					providerAccountId: 'google-123',
+					capabilities: ['mail', 'calendar'],
+					status: 'active',
+				},
+				badProvider: undefined,
+				missingId: undefined,
+				notAnObject: undefined,
+				mailboxFromEmail: 'jane@gmail.com',
+				mailboxFromLabel: 'jane@gmail.com',
+				sessionId: 'conn-5',
+				blankSessionId: undefined,
+				noSession: undefined,
 			},
 		);
 	});
 
-	test('mismatch detection suppresses the duplicate toast only for wrong-account errors', () => {
+	test('a legacy mailbox adopts only an unambiguous connection', () => {
+		const jane = connection('conn-jane', 'jane@gmail.com');
+		const work = connection('conn-work', 'work@gmail.com');
+		const revoked = { ...connection('conn-old', 'jane@gmail.com'), status: 'revoked' };
+		const calendarOnly = {
+			...connection('conn-cal', 'jane@gmail.com'),
+			capabilities: ['calendar'],
+		};
+		const unnamed: MailConnectionInfo = { id: 'conn-x', provider: 'google', capabilities: ['mail'] };
 		assert.deepStrictEqual(
 			{
-				generic: isProviderScopeUserMismatch(
-					new Error('The Google account did not match your SafeAppeals Cloud account.'),
-				),
-				withEmails: isProviderScopeUserMismatch(
-					new Error('The Google account (other@gmail.com) did not match your SafeAppeals Cloud account (cloud@example.com).'),
-				),
-				serializedAcrossExtHost: isProviderScopeUserMismatch(
-					'The Google account did not match your SafeAppeals Cloud account.',
-				),
-				unrelated: isProviderScopeUserMismatch(new Error('Sign in timed out. Please try again.')),
-				missing: isProviderScopeUserMismatch(undefined),
+				byEmail: matchConnectionForLegacyAccount('JANE@gmail.com ', [work, jane])?.id,
+				ignoresRevoked: matchConnectionForLegacyAccount('jane@gmail.com', [jane, revoked])?.id,
+				ignoresCalendarOnly: matchConnectionForLegacyAccount('jane@gmail.com', [
+					jane,
+					calendarOnly,
+				])?.id,
+				soleUnnamed: matchConnectionForLegacyAccount('jane@gmail.com', [unnamed])?.id,
+				ambiguousUnnamed: matchConnectionForLegacyAccount('jane@gmail.com', [unnamed, work]),
+				noMatch: matchConnectionForLegacyAccount('other@gmail.com', [jane, work]),
+				empty: matchConnectionForLegacyAccount('jane@gmail.com', []),
 			},
 			{
-				generic: true,
-				withEmails: true,
-				serializedAcrossExtHost: true,
-				unrelated: false,
-				missing: false,
+				byEmail: 'conn-jane',
+				ignoresRevoked: 'conn-jane',
+				ignoresCalendarOnly: 'conn-jane',
+				soleUnnamed: 'conn-x',
+				ambiguousUnnamed: undefined,
+				noMatch: undefined,
+				empty: undefined,
+			},
+		);
+	});
+
+	test('V1 consumer: persist connectionId B, mint ok, disconnect marks needsReconnect, sign-out keeps creds', async () => {
+		/**
+		 * Manual smoke (email half of Service Connections V1):
+		 * Cloud A ≠ Gmail B; connect mail; sync; disconnect → needs reconnect;
+		 * Cloud sign-out must not wipe the oauth connectionId secret.
+		 */
+		const secrets = new FakeSecretStorage();
+		const store = new AccountStore(secrets, undefined, memoryPersistence(), () => { /* no-op */ });
+		const connectionB = connection('conn-mail-b', 'gmail-b@gmail.com');
+
+		assert.strictEqual(
+			shouldPersistOAuthAccount({
+				accessToken: 'ya29.mail',
+				scopes: ['mail'],
+				connectionId: connectionB.id,
+			}),
+			true,
+		);
+
+		await store.addAccount(
+			{
+				label: 'gmail-b@gmail.com',
+				email: 'gmail-b@gmail.com',
+				imapHost: 'imap.gmail.com',
+				imapPort: 993,
+				imapSecure: true,
+				smtpHost: 'smtp.gmail.com',
+				smtpPort: 465,
+				smtpSecure: true,
+				username: 'gmail-b@gmail.com',
+				id: 'mailbox-1',
+			},
+			{ type: 'oauth', provider: 'google', connectionId: connectionB.id },
+		);
+
+		const listed = [connectionB];
+		const stillLinked = matchConnectionForLegacyAccount('gmail-b@gmail.com', listed);
+		assert.strictEqual(stillLinked?.id, 'conn-mail-b');
+
+		// Disconnect: connection disappears from the auth list → mint path marks needsReconnect.
+		const afterDisconnect = matchConnectionForLegacyAccount('gmail-b@gmail.com', []);
+		await store.markAccountNeedsReconnect('mailbox-1');
+		const cascadeCount = await handleCloudSignOutCascade(store);
+
+		assert.deepStrictEqual(
+			{
+				persisted: await store.getCredentials('mailbox-1'),
+				afterDisconnect,
+				authStatus: store.getAccount('mailbox-1')?.authStatus,
+				cascadeCount,
+				// Sign-out cascade must not delete the connectionId credential row.
+				credsAfterCascade: await store.getCredentials('mailbox-1'),
+			},
+			{
+				persisted: { type: 'oauth', provider: 'google', connectionId: 'conn-mail-b' },
+				afterDisconnect: undefined,
+				authStatus: 'needsReconnect',
+				cascadeCount: 1,
+				credsAfterCascade: { type: 'oauth', provider: 'google', connectionId: 'conn-mail-b' },
+			},
+		);
+	});
+
+	test('migration adopts matching connections and flags ambiguous mailboxes', async () => {
+		const persistence = memoryPersistence();
+		const store = new AccountStore(new FakeSecretStorage(), undefined, persistence, () => { /* no-op */ });
+		const base: Omit<EmailAccountConfig, 'id'> = {
+			label: 'mailbox',
+			email: 'jane@gmail.com',
+			imapHost: 'imap.gmail.com',
+			imapPort: 993,
+			imapSecure: true,
+			smtpHost: 'smtp.gmail.com',
+			smtpPort: 465,
+			smtpSecure: true,
+			username: 'jane@gmail.com',
+		};
+		await store.addAccount({ ...base, id: 'legacy-match' }, { type: 'oauth', provider: 'google' });
+		await store.addAccount(
+			{ ...base, id: 'legacy-unknown', email: 'nobody@gmail.com', username: 'nobody@gmail.com' },
+			{ type: 'oauth', provider: 'google' },
+		);
+		await store.addAccount(
+			{ ...base, id: 'already-linked', email: 'work@gmail.com', username: 'work@gmail.com' },
+			{ type: 'oauth', provider: 'google', connectionId: 'conn-work' },
+		);
+		await store.addAccount(
+			{ ...base, id: 'pwd', email: 'pwd@example.com', username: 'pwd@example.com' },
+			{ type: 'password', password: 'app-pass' },
+		);
+
+		const listedProviders: EmailOAuthProvider[] = [];
+		const result = await adoptConnectionIdsForLegacyAccounts(
+			store,
+			{
+				list: async (provider) => {
+					listedProviders.push(provider);
+					return [connection('conn-jane', 'jane@gmail.com'), connection('conn-work', 'work@gmail.com')];
+				},
+			},
+			() => { /* no-op */ },
+		);
+
+		assert.deepStrictEqual(
+			{
+				result,
+				listedProviders,
+				matched: await store.getCredentials('legacy-match'),
+				unknown: await store.getCredentials('legacy-unknown'),
+				unknownStatus: store.getAccount('legacy-unknown')?.authStatus,
+				matchedStatus: store.getAccount('legacy-match')?.authStatus,
+				alreadyLinked: await store.getCredentials('already-linked'),
+				password: await store.getCredentials('pwd'),
+			},
+			{
+				result: { adopted: 1, needsReconnect: 1 },
+				listedProviders: ['google'],
+				matched: { type: 'oauth', provider: 'google', connectionId: 'conn-jane' },
+				unknown: { type: 'oauth', provider: 'google' },
+				unknownStatus: 'needsReconnect',
+				matchedStatus: undefined,
+				alreadyLinked: { type: 'oauth', provider: 'google', connectionId: 'conn-work' },
+				password: { type: 'password', password: 'app-pass' },
 			},
 		);
 	});

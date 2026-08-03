@@ -47,11 +47,27 @@ export const MAIL_AUTH_SCOPES = ['mail'] as const;
  */
 export type ResolvedTransportCredentials = MailboxAuth;
 
+/**
+ * Session as this extension consumes it. `id` is the service-connection id the
+ * token was minted from (A3 contract), used to prove the token belongs to this
+ * mailbox rather than another connected account.
+ */
+export interface MailAuthSession {
+	readonly id?: string;
+	readonly accessToken: string;
+}
+
+/** Narrows a session request to one connected account. */
+export interface MailAuthAccountFilter {
+	readonly id: string;
+	readonly label: string;
+}
+
 export type MailAuthSessionGetter = (
 	providerId: string,
 	scopes: readonly string[],
-	options: { createIfNone: boolean },
-) => Promise<{ accessToken: string } | undefined>;
+	options: { createIfNone: boolean; account?: MailAuthAccountFilter },
+) => Promise<MailAuthSession | undefined>;
 
 export interface ResolveTransportCredentialsDeps {
 	getSession: MailAuthSessionGetter;
@@ -78,8 +94,9 @@ const defaultGetSession: MailAuthSessionGetter = async (providerId, scopes, opti
 	const vscode = require('vscode') as typeof import('vscode');
 	const session = await vscode.authentication.getSession(providerId, [...scopes], {
 		createIfNone: options.createIfNone,
+		...(options.account ? { account: options.account } : {}),
 	});
-	return session ? { accessToken: session.accessToken } : undefined;
+	return session ? { id: session.id, accessToken: session.accessToken } : undefined;
 };
 
 function defaultShowReconnectWarning(message: string): void {
@@ -98,7 +115,8 @@ function defaultShowReconnectWarning(message: string): void {
 
 /**
  * Resolve SecretStorage credentials into transport-ready creds.
- * OAuth: mint via getSession (createIfNone: false) — never stores the token.
+ * OAuth: mints a token for the mailbox's service connection via getSession
+ * (createIfNone: false) — never stores the token.
  * On mint failure: marks needsReconnect + visible warning; returns undefined.
  * On success: clears needsReconnect.
  */
@@ -115,13 +133,38 @@ export async function resolveTransportCredentials(
 	}
 
 	const providerId = authProviderIdFor(creds.provider);
+	const connectionId = creds.connectionId;
+	if (!connectionId) {
+		await failReconnect(
+			account,
+			deps,
+			`${account.email} is not linked to a Safe Appeals connection — ${RECONNECT_MAILBOX_MESSAGE}`,
+		);
+		return undefined;
+	}
 	try {
-		const session = await deps.getSession(providerId, MAIL_AUTH_SCOPES, { createIfNone: false });
+		const session = await deps.getSession(providerId, MAIL_AUTH_SCOPES, {
+			createIfNone: false,
+			account: { id: connectionId, label: account.email },
+		});
 		if (!session?.accessToken) {
 			await failReconnect(
 				account,
 				deps,
 				`No ${creds.provider} mail session — ${RECONNECT_MAILBOX_MESSAGE}`,
+			);
+			return undefined;
+		}
+		// A token minted for another connected account would authenticate the
+		// wrong mailbox, so refuse it instead of failing later at IMAP.
+		if (session.id && session.id !== connectionId) {
+			deps.log?.(
+				`Mail session for ${account.label} came from connection ${session.id}, expected ${connectionId}`,
+			);
+			await failReconnect(
+				account,
+				deps,
+				`Mail token belongs to a different connected account — ${RECONNECT_MAILBOX_MESSAGE}`,
 			);
 			return undefined;
 		}

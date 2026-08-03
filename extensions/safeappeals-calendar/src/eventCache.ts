@@ -66,9 +66,18 @@ export class EventCache {
 
 	/**
 	 * Delete on-disk cache files, reset in-memory state, and mint a fresh DEK.
-	 * Connected accounts / OAuth tokens are not touched.
+	 * Connected accounts are not touched: their service connections are restored
+	 * so the next sync refills the cache instead of asking the user to reconnect.
 	 */
 	async clearLocalCache(): Promise<void> {
+		const connections = Object.values(this.meta.providers)
+			.filter((meta): meta is ProviderSyncMeta => !!meta?.connectionId)
+			.map((meta) => ({
+				provider: meta.provider,
+				connectionId: meta.connectionId!,
+				calendarId: meta.settings.calendarId,
+			}));
+
 		await this.deleteCacheFiles();
 		this.events = [];
 		this.meta = { ...DEFAULT_SYNC_STATE, providers: {} };
@@ -89,6 +98,9 @@ export class EventCache {
 			);
 		}
 		await this.acquireEncryptionKey();
+		for (const connection of connections) {
+			await this.setConnection(connection.provider, connection.connectionId, connection.calendarId);
+		}
 	}
 
 	getLastBackgroundSync(): string | null {
@@ -124,15 +136,29 @@ export class EventCache {
 		return created;
 	}
 
-	async setConnected(provider: CalendarProvider, connected: boolean, calendarId: string): Promise<void> {
+	/** Service connection a provider syncs against, when it is connected. */
+	getConnectionId(provider: CalendarProvider): string | undefined {
+		return this.meta.providers[provider]?.connectionId;
+	}
+
+	/**
+	 * Binds a provider to a service connection. A different connection replaces
+	 * the previous one, so its sync token and synced-event map are dropped.
+	 */
+	async setConnection(
+		provider: CalendarProvider,
+		connectionId: string,
+		calendarId: string,
+	): Promise<void> {
 		const meta = await this.ensureProviderMeta(provider, calendarId);
-		meta.connected = connected;
-		meta.settings.calendarId = calendarId;
-		if (!connected) {
+		if (meta.connectionId && meta.connectionId !== connectionId) {
 			meta.lastSync = null;
 			meta.syncToken = undefined;
 			meta.syncedEvents = {};
 		}
+		meta.connectionId = connectionId;
+		meta.connected = true;
+		meta.settings.calendarId = calendarId;
 		await this.saveMeta();
 	}
 

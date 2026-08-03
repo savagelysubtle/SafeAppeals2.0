@@ -97,7 +97,7 @@ const extensions = [
 		mocha: { timeout: 60_000 }
 	},
 	{
-		label: 'safeappeals-case',
+		label: 'safeappeals-timeline',
 		mocha: { timeout: 60_000 }
 	},
 	{

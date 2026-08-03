@@ -12,18 +12,18 @@
 | Theme packs (43 × `theme-safeappeals-*`) | Shipped | `extensions/theme-safeappeals-*` | Yes (runtime scan) | master plan foundation / rung 2 |
 | Branding / product overlay | Shipped | product / branding core edits | Yes | merge plan rung 3 |
 | Calendar sync (pull-only backend) | Partial — backend only, no UI, no write-back | `extensions/safeappeals-calendar` | Yes (commands / status bar) | master plan rung 4; Q5 write-back |
-| Timeline + deadlines + calendar UI | Not built | target: `extensions/safeappeals-case`; ref: `void-reference/browser/react/src/timeline-tsx/` | No | `safeappeals_case_extension_rung7.plan.md` slice 2 |
+| Timeline + deadlines + calendar UI | Not built | target: `extensions/safeappeals-timeline`; ref: `void-reference/browser/react/src/timeline-tsx/` | No | `safeappeals_timeline_rung7_5ce1bf30.plan.md` |
 | PDF viewer (read-only + annotations) | Shipped | `extensions/safeappeals-documents` | Yes | master plan rung 5a |
 | DOCX editor | Shipped | `extensions/safeappeals-documents` | Yes | master plan rung 5b |
 | XLSX editor | Shipped (WASM crate source still in void-reference) | `extensions/safeappeals-documents` | Yes | master plan rung 5c |
 | Image viewer | Dropped (use upstream `media-preview`) | dropped | N/A | master plan “Explicitly dropped” |
-| Email (IMAP/SMTP, sidebar, dashboard, tags, case links) | Shipped except AI classifier | `extensions/safeappeals-email` | Yes | master plan rung 6 / 6.6 / 6.7 / 6.8 |
+| Email (IMAP/SMTP, sidebar, dashboard, tags, case links; Google XOAUTH2 + app-password) | Shipped except AI classifier | `extensions/safeappeals-email` | Yes | master plan rung 6 / 6.5 / 6.6 / 6.7 / 6.8; `email_oauth_piggyback_e435d610.plan.md` |
 | Email AI classifier | Not built (noop seam) | seam in `extensions/safeappeals-email`; ref: `void-reference/browser/emailClassifier.ts` | Seam only | master plan rung 12 |
-| Case core (profile / init / brief / walkthrough / case.json) | Partial | `extensions/safeappeals-case` | Yes | `safeappeals_case_extension_rung7.plan.md` slice 1 |
+| Timeline extension (profile / sample / walkthrough / project-setup skill; case.json retired) | Partial | `extensions/safeappeals-timeline` | Yes | `safeappeals_timeline_rung7_5ce1bf30.plan.md` |
 | Case-info dashboard | Dropped (D1) | `void-reference/` only | No | master plan D1–D3 |
 | Encrypted-store helpers (`safeappeals-shared`) | Shipped (source-only; synced copies) | `extensions/safeappeals-shared` + per-ext `src/shared/` | Yes (hygiene check) | master plan ground truth |
 | Welcome onboarding wizard | In progress (M1 rewrite) | `src/vs/workbench/contrib/welcomeOnboarding/` | Yes | `onboarding_redesign_newcomer.plan.md` |
-| Unified SafeAppeals sign-in / cloud auth | Not built | target: `extensions/safeappeals-authentication` | No | `unified_safeappeals_sign-in_225af75a.plan.md`; onboarding T0/T1 |
+| Unified SafeAppeals sign-in / cloud auth | Partial — `safeappeals-cloud` identity + service connections (`safeappeals-google` / `safeappeals-microsoft`); mail/calendar via `/connections/*` only (never at cloud onboarding) | `extensions/safeappeals-authentication` | Yes | `unified_safeappeals_sign-in_225af75a.plan.md`; service connections plan; onboarding T0/T1 |
 | File organizer / docket | Not built | target: `extensions/safeappeals-organizer`; ref: `void-reference/` | No | master plan rung 8 |
 | File converter | Not built | target: Rust sidecar `rust/converter`; ref: `void-reference/` + `python/` | No | master plan rung 8 |
 | Audio recorder + transcription | Not built | target: `extensions/safeappeals-audio`; ref: `void-reference/` | No | master plan rung 9 |

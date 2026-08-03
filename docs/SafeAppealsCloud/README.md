@@ -84,14 +84,15 @@ void-cloud/
 ├── api/                      # Main API Gateway
 │   ├── src/
 │   │   ├── routes/
-│   │   │   ├── auth.ts       # OAuth PKCE, /auth/provider-token
+│   │   │   ├── auth.ts       # OAuth PKCE (identity only)
+│   │   │   ├── connections.ts # Service connections + token mint
 │   │   │   ├── credits.ts    # Credit balance & checkout
 │   │   │   ├── web-search.ts # Web search with credit deduction
 │   │   │   ├── llm.ts        # LLM proxy routes
 │   │   │   └── webhooks.ts   # Stripe webhooks
 │   │   └── services/
 │   │       ├── supabase.ts   # Database client
-│   │       ├── providerToken.ts # Mint Google provider access tokens
+│   │       ├── connections.ts # Mail/calendar grants + mint
 │   │       └── stripe.ts     # Payment client
 │   └── package.json
 ├── brave-search-service/     # Brave Search wrapper
@@ -112,7 +113,7 @@ void-cloud/
 SUPABASE_URL=https://xxx.supabase.co
 SUPABASE_SERVICE_KEY=eyJ...
 
-# Google OAuth + provider-token mint (mailbox/calendar scopes are opt-in)
+# Google OAuth + service-connection mint (mailbox/calendar via /connections/*)
 GOOGLE_CLIENT_ID=your-google-oauth-client-id.apps.googleusercontent.com
 GOOGLE_CLIENT_SECRET=your-google-oauth-client-secret
 PROVIDER_TOKEN_ENCRYPTION_KEY=   # 32-byte key (hex or base64); fail closed if unset

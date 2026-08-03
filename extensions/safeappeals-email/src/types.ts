@@ -131,20 +131,36 @@ export interface EmailAccountConfig {
 	username: string;
 	/**
 	 * Mailbox auth health. OAuth accounts set `needsReconnect` when getSession /
-	 * provider-token mint fails; cleared after a successful reconnect.
+	 * connection token mint fails; cleared after a successful reconnect.
 	 */
 	authStatus?: EmailAccountAuthStatus;
 }
 
 /**
+ * Mailbox credentials backed by a SafeAppeals service connection.
+ *
+ * Stores only the connection id — the provider refresh token lives in void-cloud
+ * and short-lived access tokens are minted through the authentication extension
+ * (`session.id` === {@link connectionId}).
+ *
+ * `connectionId` is absent on rows written before service connections; those are
+ * legacy and get adopted or flagged for reconnect on activate.
+ */
+export interface EmailOAuthCredentials {
+	type: 'oauth';
+	provider: EmailOAuthProvider;
+	connectionId?: string;
+}
+
+/**
  * Discriminated credential union for email SecretStorage.
- * OAuth rows store only `{ type, provider }` — never access/refresh tokens.
+ * OAuth rows store only `{ type, provider, connectionId }` — never access/refresh tokens.
  * Legacy SecretStorage blobs `{ password }` (no `type`) are accepted at the
  * store boundary via {@link EmailAccountCredentialsInput} / {@link normalizeCredentials}.
  */
 export type EmailAccountCredentials =
 	| { type: 'password'; password: string }
-	| { type: 'oauth'; provider: EmailOAuthProvider };
+	| EmailOAuthCredentials;
 
 /** Legacy SecretStorage / callers that omit `type` (pre-OAuth shape). */
 export type LegacyPasswordCredentials = { password: string };
@@ -154,8 +170,16 @@ export type EmailAccountCredentialsInput = EmailAccountCredentials | LegacyPassw
 
 export function isOAuthCredentials(
 	creds: EmailAccountCredentials,
-): creds is Extract<EmailAccountCredentials, { type: 'oauth' }> {
+): creds is EmailOAuthCredentials {
 	return creds.type === 'oauth';
+}
+
+/**
+ * True for an OAuth row written before service connections: it names a provider
+ * but no connection, so no token can be minted for it until it is migrated.
+ */
+export function isLegacyOAuthCredentials(creds: EmailAccountCredentials): boolean {
+	return isOAuthCredentials(creds) && !creds.connectionId;
 }
 
 export function isPasswordCredentials(
@@ -176,7 +200,10 @@ export function normalizeCredentials(raw: unknown): EmailAccountCredentials | un
 	const obj = raw as Record<string, unknown>;
 	if (obj.type === 'oauth') {
 		if (obj.provider === 'google' || obj.provider === 'microsoft') {
-			return { type: 'oauth', provider: obj.provider };
+			const connectionId = typeof obj.connectionId === 'string' ? obj.connectionId.trim() : '';
+			return connectionId
+				? { type: 'oauth', provider: obj.provider, connectionId }
+				: { type: 'oauth', provider: obj.provider };
 		}
 		return undefined;
 	}
@@ -191,11 +218,13 @@ export function normalizeCredentials(raw: unknown): EmailAccountCredentials | un
 
 /**
  * JSON-safe shape persisted to SecretStorage.
- * Password: `{ type, password }`. OAuth: `{ type, provider }` only (strips tokens).
+ * Password: `{ type, password }`. OAuth: `{ type, provider, connectionId }` only (strips tokens).
  */
 export function credentialsForStorage(creds: EmailAccountCredentials): EmailAccountCredentials {
 	if (creds.type === 'oauth') {
-		return { type: 'oauth', provider: creds.provider };
+		return creds.connectionId
+			? { type: 'oauth', provider: creds.provider, connectionId: creds.connectionId }
+			: { type: 'oauth', provider: creds.provider };
 	}
 	return { type: 'password', password: creds.password };
 }

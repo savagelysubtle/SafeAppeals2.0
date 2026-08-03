@@ -12,8 +12,33 @@ import {
 } from './llm/insufficientCredits';
 import { extractJsonChatResult, OpenAiSseParser, type SseParseStep } from './llm/sse';
 import type { CloudChatMessage, CloudChatTool } from './llm/messageMapping';
+import {
+	buildConnectionListQuery,
+	CONNECTION_NOT_READY_CODE,
+	parseConnectionInfo,
+	parseConnectionList,
+	type ConnectionCapability,
+	type ConnectionFilter,
+	type ConnectionInfo,
+	type ConnectionsApi,
+	type ConnectionTokenResult,
+	type StartConnectionRequest,
+	type StartConnectionResult,
+} from './connectionsApi';
 
 export { DEFAULT_API_URL } from './apiUrl';
+
+export type {
+	ConnectionCapability,
+	ConnectionFilter,
+	ConnectionInfo,
+	ConnectionsApi,
+	ConnectionStatus,
+	ConnectionTokenResult,
+	ProviderKind,
+	StartConnectionRequest,
+	StartConnectionResult,
+} from './connectionsApi';
 
 /** Default production dashboard origin (finish page + paste fallback). */
 export const DEFAULT_DASHBOARD_URL = 'https://safeappeals.com';
@@ -31,6 +56,24 @@ export class CloudAuthError extends Error {
 	constructor(message?: string) {
 		super(message ?? 'Session expired. Please sign in again.');
 		this.name = 'CloudAuthError';
+	}
+}
+
+/**
+ * Non-2xx JSON response from the cloud API that carries the server's error code.
+ *
+ * Extends {@link Error} so existing message-based handling keeps working, while
+ * callers that need to branch (e.g. `CONNECTION_NOT_READY` while polling a
+ * claim) can read {@link status} / {@link code} instead of matching text.
+ */
+export class CloudApiRequestError extends Error {
+	constructor(
+		readonly status: number,
+		readonly code: string | undefined,
+		message: string,
+	) {
+		super(message);
+		this.name = 'CloudApiRequestError';
 	}
 }
 
@@ -95,8 +138,9 @@ export interface CloudUser {
  * Full session envelope persisted in SecretStorage (never globalState/settings).
  *
  * `googleProviderToken` / `googleProviderRefreshToken` are legacy optional fields.
- * Provider tokens are minted via {@link CloudApiClient.refreshProviderToken} and must
- * not be persisted in the desktop envelope (always null / omitted when writing).
+ * Provider tokens are minted per connection via
+ * {@link CloudApiClient.mintConnectionToken} and must not be persisted in the
+ * desktop envelope (always null / omitted when writing).
  */
 export interface CloudSessionEnvelope {
 	readonly accessToken: string;
@@ -253,42 +297,16 @@ export function getWebCallbackOrigins(): readonly string[] {
 }
 
 /**
- * Identity provider for short-lived provider access tokens from
- * {@link CloudApiClient.refreshProviderToken}.
- */
-export type AuthProviderId = 'google' | 'microsoft';
-
-/**
- * Short-lived provider access token from POST /auth/provider-token.
- * Refresh tokens stay server-side and are never returned.
- */
-export interface ProviderTokenResponse {
-	readonly provider: AuthProviderId;
-	readonly accessToken: string;
-	readonly expiresAt: number;
-	/**
-	 * Space-delimited scopes the provider actually granted (e.g.
-	 * `'openid email https://mail.google.com/'`). Absent on older Cloud
-	 * deployments — consumers must not treat that as "mail granted".
-	 */
-	readonly scope?: string;
-}
-
-/**
  * Builds the Google authorize URL with required PKCE + state query params.
- * Plain Cloud sign-in omits mail/calendar flags — never request mail at identity login.
- * Opt-in scope flags are read by void-cloud (`include_mail_scopes` / `include_calendar_scopes`).
  *
- * `loginHint` binds incremental consent to the Cloud account already signed in so the
- * browser cannot silently pick a different Google account.
+ * Identity only: Cloud sign-in never requests mail/calendar scopes. Capability
+ * grants go through service connections (`/connections/*`), which keep the
+ * provider grant separate from the Cloud identity.
  */
 export function buildGoogleAuthorizeUrl(params: {
 	readonly codeChallenge: string;
 	readonly state: string;
 	readonly redirectUri: string;
-	readonly includeMailScopes?: boolean;
-	readonly includeCalendarScopes?: boolean;
-	readonly loginHint?: string;
 }): string {
 	const apiUrl = getApiUrl();
 	const query = new URLSearchParams({
@@ -297,23 +315,13 @@ export function buildGoogleAuthorizeUrl(params: {
 		code_challenge_method: 'S256',
 		state: params.state,
 	});
-	if (params.includeMailScopes) {
-		query.set('include_mail_scopes', 'true');
-	}
-	if (params.includeCalendarScopes) {
-		query.set('include_calendar_scopes', 'true');
-	}
-	const loginHint = params.loginHint?.trim();
-	if (loginHint) {
-		query.set('login_hint', loginHint);
-	}
 	return `${apiUrl}/auth/google?${query.toString()}`;
 }
 
 /**
- * HTTP client for SafeAppeals Cloud auth and credits endpoints.
+ * HTTP client for SafeAppeals Cloud auth, credits, and service-connection endpoints.
  */
-export class CloudApiClient {
+export class CloudApiClient implements ConnectionsApi {
 	constructor(
 		private readonly output: vscode.OutputChannel,
 		private readonly getAccessToken: () => string | undefined,
@@ -370,26 +378,106 @@ export class CloudApiClient {
 	}
 
 	/**
-	 * Mints a short-lived identity-provider access token via the Cloud session.
-	 * Provider refresh tokens remain on the server and are never returned.
+	 * Starts a mail/calendar connection (POST /connections/start).
+	 * The returned `authorizeUrl` must be opened in the system browser; the code
+	 * exchange happens on the server callback, never here.
 	 */
-	async refreshProviderToken(provider: AuthProviderId): Promise<ProviderTokenResponse> {
+	async startConnection(request: StartConnectionRequest): Promise<StartConnectionResult> {
+		const response = await this.request<{ requestId?: string; authorizeUrl?: string }>('/connections/start', {
+			method: 'POST',
+			body: JSON.stringify({
+				provider: request.provider,
+				capabilities: [...request.capabilities],
+				...(request.loginHint ? { login_hint: request.loginHint } : {}),
+			}),
+			skipTransientRetry: true,
+		});
+		if (!response.requestId || !response.authorizeUrl) {
+			throw new Error(vscode.l10n.t('The server did not return a connection authorization URL.'));
+		}
+		return { requestId: response.requestId, authorizeUrl: response.authorizeUrl };
+	}
+
+	/**
+	 * Claims a finished connection (POST /connections/claim).
+	 * Throws while the browser leg is still open — see {@link tryClaimConnection}.
+	 */
+	async claimConnection(requestId: string): Promise<ConnectionInfo> {
+		const response = await this.request<{ connection?: unknown }>('/connections/claim', {
+			method: 'POST',
+			body: JSON.stringify({ requestId }),
+			skipTransientRetry: true,
+		});
+		const connection = parseConnectionInfo(response.connection);
+		if (!connection) {
+			throw new Error(vscode.l10n.t('The server returned an unreadable connection.'));
+		}
+		return connection;
+	}
+
+	/**
+	 * Poll-friendly claim: resolves to undefined while the connection is not
+	 * ready yet, and throws for every other failure.
+	 */
+	async tryClaimConnection(requestId: string): Promise<ConnectionInfo | undefined> {
+		try {
+			return await this.claimConnection(requestId);
+		} catch (error) {
+			if (error instanceof CloudApiRequestError && error.code === CONNECTION_NOT_READY_CODE) {
+				return undefined;
+			}
+			throw error;
+		}
+	}
+
+	/**
+	 * Lists the signed-in user's connections (GET /connections).
+	 */
+	async listConnections(filter?: ConnectionFilter): Promise<ConnectionInfo[]> {
+		const response = await this.request<{ connections?: unknown }>(
+			`/connections${buildConnectionListQuery(filter)}`,
+		);
+		return parseConnectionList(response);
+	}
+
+	/**
+	 * Mints a short-lived provider access token for one capability
+	 * (POST /connections/:id/token). Refresh tokens stay on the server.
+	 */
+	async mintConnectionToken(
+		connectionId: string,
+		capability: ConnectionCapability,
+	): Promise<ConnectionTokenResult> {
 		const response = await this.request<{
-			provider?: AuthProviderId;
+			connectionId?: string;
+			capability?: ConnectionCapability;
 			accessToken: string;
 			expiresAt: number;
 			scope?: string | null;
-		}>('/auth/provider-token', {
+			accountEmail?: string | null;
+		}>(`/connections/${encodeURIComponent(connectionId)}/token`, {
 			method: 'POST',
-			body: JSON.stringify({ provider }),
+			body: JSON.stringify({ capability }),
+			skipTransientRetry: true,
 		});
-		// S2 may omit `provider`; fall back to the requested id.
 		return {
-			provider: response.provider ?? provider,
+			connectionId: response.connectionId ?? connectionId,
+			capability: response.capability ?? capability,
 			accessToken: response.accessToken,
 			expiresAt: response.expiresAt,
 			scope: response.scope ?? undefined,
+			accountEmail: response.accountEmail ?? undefined,
 		};
+	}
+
+	/**
+	 * Revokes and deletes a connection (DELETE /connections/:id).
+	 */
+	async deleteConnection(connectionId: string): Promise<void> {
+		await this.request<{ deleted?: boolean }>(`/connections/${encodeURIComponent(connectionId)}`, {
+			method: 'DELETE',
+			skipTransientRetry: true,
+		});
 	}
 
 	/**
@@ -691,11 +779,11 @@ export class CloudApiClient {
 				}
 
 				const record = errorData && typeof errorData === 'object'
-					? (errorData as { error?: { message?: string } })
+					? (errorData as { error?: { message?: string; code?: string } })
 					: undefined;
 				const message = record?.error?.message || vscode.l10n.t('API request failed ({0}).', String(response.status));
 				this.output.appendLine(`[api] error ${response.status} on ${endpoint}: ${message}`);
-				throw new Error(message);
+				throw new CloudApiRequestError(response.status, record?.error?.code, message);
 			}
 
 			return await response.json() as T;

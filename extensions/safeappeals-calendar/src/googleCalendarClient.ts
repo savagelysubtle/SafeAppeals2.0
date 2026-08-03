@@ -1,179 +1,18 @@
 /*--------------------------------------------------------------------------------------
- *  Google Calendar — OAuth2 auth-code + PKCE + raw REST (no googleapis SDK)
+ *  Google Calendar — raw REST (no googleapis SDK) on service-connection tokens
  *--------------------------------------------------------------------------------------*/
 
-import * as vscode from 'vscode';
-import {
-	getGoogleCalendarId,
-	getGoogleClientId,
-	getGoogleClientSecret,
-	isGoogleConfigured,
-} from './config';
-import { createOAuthState, createPkcePair, startOAuthLoopback } from './oauthLoopback';
-import { TokenStore } from './tokenStore';
-import type { CalendarEvent, CalendarEventData, CalendarSyncResult, OAuthTokens } from './types';
+import { CalendarTokenSource } from './calendarAuth';
+import { getGoogleCalendarId } from './config';
+import type { CalendarEvent, CalendarEventData, CalendarSyncResult } from './types';
 
-const SCOPES = [
-	'https://www.googleapis.com/auth/calendar.events',
-	'https://www.googleapis.com/auth/calendar.readonly',
-].join(' ');
-
-const AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
-const TOKEN_URL = 'https://oauth2.googleapis.com/token';
 const CALENDAR_API = 'https://www.googleapis.com/calendar/v3';
 
-/** Append client_secret only when set (legacy Web clients); Desktop + PKCE omits it. */
-function appendOptionalClientSecret(body: URLSearchParams): void {
-	const secret = getGoogleClientSecret();
-	if (secret) {
-		body.set('client_secret', secret);
-	}
-}
-
 export class GoogleCalendarClient {
-	constructor(
-		private readonly tokens: TokenStore,
-		private readonly log: (msg: string) => void
-	) {}
+	constructor(private readonly tokens: CalendarTokenSource) {}
 
-	isConfigured(): boolean {
-		return isGoogleConfigured();
-	}
-
-	async connect(): Promise<OAuthTokens> {
-		if (!this.isConfigured()) {
-			throw new Error(
-				'Google Calendar not configured. Set safeappealsCalendar.google.clientId ' +
-				'or GOOGLE_CALENDAR_CLIENT_ID.'
-			);
-		}
-
-		const clientId = getGoogleClientId();
-		const state = createOAuthState();
-		const pkce = createPkcePair();
-
-		// Start listener first so redirect_uri uses the OS-assigned ephemeral port.
-		const loopback = await startOAuthLoopback({ expectedState: state, hostname: '127.0.0.1' });
-		try {
-			const redirectUri = loopback.redirectUri;
-
-			const params = new URLSearchParams({
-				client_id: clientId,
-				redirect_uri: redirectUri,
-				response_type: 'code',
-				scope: SCOPES,
-				access_type: 'offline',
-				prompt: 'consent',
-				state,
-				code_challenge: pkce.challenge,
-				code_challenge_method: 'S256',
-			});
-
-			const authUrl = `${AUTH_URL}?${params.toString()}`;
-			this.log('Starting Google OAuth (ephemeral loopback + PKCE)');
-
-			await vscode.env.openExternal(vscode.Uri.parse(authUrl));
-			const callback = await loopback.waitForCode;
-
-			if (!callback.code) {
-				throw new Error(callback.error || 'No authorization code received');
-			}
-
-			const body = new URLSearchParams({
-				code: callback.code,
-				client_id: clientId,
-				redirect_uri: redirectUri,
-				grant_type: 'authorization_code',
-				code_verifier: pkce.verifier,
-			});
-			appendOptionalClientSecret(body);
-
-			const res = await fetch(TOKEN_URL, {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-				body: body.toString(),
-			});
-			const json = await res.json() as {
-				access_token?: string;
-				refresh_token?: string;
-				expires_in?: number;
-				error?: string;
-				error_description?: string;
-			};
-
-			if (!res.ok || !json.access_token) {
-				throw new Error(json.error_description || json.error || 'Token exchange failed');
-			}
-
-			const tokens: OAuthTokens = {
-				accessToken: json.access_token,
-				refreshToken: json.refresh_token || '',
-				expiresAt: new Date(Date.now() + (json.expires_in || 3600) * 1000).toISOString(),
-			};
-
-			if (!tokens.refreshToken) {
-				this.log('Warning: no refresh_token returned — re-consent may be required later');
-			}
-
-			await this.tokens.set('google', tokens);
-			this.log('Google OAuth completed');
-			return tokens;
-		} finally {
-			loopback.close();
-		}
-	}
-
-	async disconnect(): Promise<void> {
-		await this.tokens.clear('google');
-		this.log('Google disconnected');
-	}
-
-	async ensureAccessToken(): Promise<string> {
-		let tokens = await this.tokens.get('google');
-		if (!tokens?.accessToken) {
-			throw new Error('Google Calendar not connected');
-		}
-
-		const expiresAt = Date.parse(tokens.expiresAt);
-		if (!Number.isNaN(expiresAt) && Date.now() < expiresAt - 60_000) {
-			return tokens.accessToken;
-		}
-
-		if (!tokens.refreshToken) {
-			throw new Error('Google access token expired and no refresh token is stored — reconnect');
-		}
-
-		this.log('Refreshing Google access token');
-		const body = new URLSearchParams({
-			client_id: getGoogleClientId(),
-			refresh_token: tokens.refreshToken,
-			grant_type: 'refresh_token',
-		});
-		appendOptionalClientSecret(body);
-
-		const res = await fetch(TOKEN_URL, {
-			method: 'POST',
-			headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-			body: body.toString(),
-		});
-		const json = await res.json() as {
-			access_token?: string;
-			expires_in?: number;
-			refresh_token?: string;
-			error?: string;
-		};
-
-		if (!res.ok || !json.access_token) {
-			throw new Error(json.error || 'Google token refresh failed');
-		}
-
-		tokens = {
-			accessToken: json.access_token,
-			refreshToken: json.refresh_token || tokens.refreshToken,
-			expiresAt: new Date(Date.now() + (json.expires_in || 3600) * 1000).toISOString(),
-		};
-		await this.tokens.set('google', tokens);
-		return tokens.accessToken;
+	private async ensureAccessToken(): Promise<string> {
+		return this.tokens.getAccessToken('google');
 	}
 
 	async listEvents(options: {
