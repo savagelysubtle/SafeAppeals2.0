@@ -60,6 +60,13 @@ export const CORE_AGENT_TOOL_NAMES: readonly string[] = [
 	'type_in_page',
 	'handle_dialog',
 	'run_playwright_code',
+	// SafeAppeals Timeline (void-compatible names; not safeappeals_*-prefixed)
+	'timeline_add_event',
+	'timeline_update_event',
+	'timeline_delete_event',
+	'timeline_get_events',
+	'timeline_link_document',
+	'timeline_get_deadlines',
 ];
 
 /**

@@ -1,4 +1,0 @@
-src/**
-tsconfig.json
-out/**/*.map
-node_modules/**

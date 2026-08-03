@@ -51,7 +51,7 @@ export const dirs = [
 	'extensions/time-tracker',
 	'extensions/safeappeals-authentication',
 	'extensions/safeappeals-calendar',
-	'extensions/safeappeals-case',
+	'extensions/safeappeals-timeline',
 	'extensions/safeappeals-documents',
 	'extensions/safeappeals-email',
 

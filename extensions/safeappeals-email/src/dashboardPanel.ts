@@ -260,8 +260,29 @@ export class DashboardPanel {
 					break;
 				}
 				case 'saveDraft': {
-					const draft = await this.index.saveDraft(msg.draft as Parameters<EmailIndex['saveDraft']>[0]);
-					this.panel.webview.postMessage({ type: 'draftSaved', draft, drafts: this.index.listDrafts() });
+					const result = await this.engine.saveDraft(
+						msg.draft as Parameters<SyncEngine['saveDraft']>[0],
+					);
+					this.panel.webview.postMessage({
+						type: 'draftSaved',
+						draft: result.draft,
+						drafts: this.index.listDrafts(),
+						stats: this.index.getStats(),
+						remoteError: result.remoteError,
+					});
+					if (result.remoteError) {
+						void vscode.window.showWarningMessage(
+							`Draft saved locally, but server Drafts failed: ${result.remoteError}`,
+						);
+					} else if (result.remote) {
+						void vscode.window.showInformationMessage('Draft saved to Drafts');
+					} else {
+						void vscode.window.showInformationMessage(
+							result.draft.subject
+								? `Draft saved: ${result.draft.subject}`
+								: 'Draft saved',
+						);
+					}
 					break;
 				}
 				case 'updateSettings': {

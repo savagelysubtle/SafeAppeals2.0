@@ -152,7 +152,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
 	registerCommands(context, log, openDashboard, refreshUi);
 	registerCloudSignOutCascade(context, log, refreshUi);
-	registerAgentTools(context, () => index, () => accounts);
+	registerAgentTools(context, () => engine, () => accounts);
 	await migrateLegacyOAuthConnections(log);
 	await refreshStatusBar();
 	engine.startBackgroundSync();
@@ -369,11 +369,19 @@ function registerCommands(
 
 		vscode.commands.registerCommand(
 			'safeappeals-email.saveDraft',
-			async (draft?: Parameters<EmailIndex['saveDraft']>[0]) => {
+			async (draft?: Parameters<SyncEngine['saveDraft']>[0]) => {
 				if (!draft) {
 					throw new Error('draft payload required');
 				}
-				return index.saveDraft(draft);
+				const result = await engine.saveDraft(draft);
+				if (result.remoteError) {
+					void vscode.window.showWarningMessage(
+						`Draft saved locally, but server Drafts failed: ${result.remoteError}`,
+					);
+				} else if (result.remote) {
+					void vscode.window.showInformationMessage('Draft saved to Drafts');
+				}
+				return result;
 			},
 		),
 

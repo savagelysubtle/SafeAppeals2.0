@@ -598,6 +598,8 @@ export class EmailIndex {
 		subject: string;
 		content: string;
 		draftId?: string;
+		remoteFolder?: string;
+		remoteUid?: number;
 	}): Promise<EmailDraft> {
 		if (this.mode === 'memory' && !this.warnedMemoryDraft) {
 			this.warnedMemoryDraft = true;
@@ -617,16 +619,24 @@ export class EmailIndex {
 				existing.content = input.content;
 				existing.updatedAt = now;
 				existing.version += 1;
+				if (input.remoteFolder !== undefined) {
+					existing.remoteFolder = input.remoteFolder;
+				}
+				if (input.remoteUid !== undefined) {
+					existing.remoteUid = input.remoteUid;
+				}
 				await this.saveDrafts();
 				return existing;
 			}
 		}
 
-		const versions = this.getDraftVersions(input.emailId || '__compose__');
+		// Keep compose drafts under a stable key so versioning and reopen match.
+		const emailId = (input.emailId || '').trim() || '__compose__';
+		const versions = this.getDraftVersions(emailId);
 		const draft: EmailDraft = {
 			id: randomUUID(),
 			accountId: input.accountId,
-			emailId: input.emailId || '',
+			emailId,
 			to: input.to,
 			cc: input.cc,
 			bcc: input.bcc,
@@ -636,8 +646,32 @@ export class EmailIndex {
 			status: 'draft',
 			createdAt: now,
 			updatedAt: now,
+			remoteFolder: input.remoteFolder,
+			remoteUid: input.remoteUid,
 		};
 		this.drafts.push(draft);
+		await this.saveDrafts();
+		return draft;
+	}
+
+	/**
+	 * Persist IMAP Drafts location after a successful APPEND (does not bump version).
+	 */
+	async updateDraftRemote(
+		draftId: string,
+		remote: { remoteFolder: string; remoteUid?: number },
+	): Promise<EmailDraft | undefined> {
+		const draft = this.getDraft(draftId);
+		if (!draft) {
+			return undefined;
+		}
+		draft.remoteFolder = remote.remoteFolder;
+		if (remote.remoteUid !== undefined) {
+			draft.remoteUid = remote.remoteUid;
+		} else {
+			delete draft.remoteUid;
+		}
+		draft.updatedAt = new Date().toISOString();
 		await this.saveDrafts();
 		return draft;
 	}

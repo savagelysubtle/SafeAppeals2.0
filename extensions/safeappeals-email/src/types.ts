@@ -106,6 +106,10 @@ export interface EmailDraft {
 	status: DraftStatus;
 	createdAt: string;
 	updatedAt: string;
+	/** IMAP Drafts mailbox path when last synced remotely */
+	remoteFolder?: string;
+	/** IMAP UID of the remote draft copy (for replace-on-update) */
+	remoteUid?: number;
 }
 
 /** OAuth identity provider for mailbox XOAUTH2 (tokens live in auth extension, not here). */

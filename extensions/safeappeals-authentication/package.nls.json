@@ -1,6 +1,6 @@
 {
 	"displayName": "SafeAppeals Cloud Authentication",
-	"description": "Sign in to SafeAppeals Cloud for profile sync and AI credits",
+	"description": "A free SafeAppeals Cloud account unlocks email, calendar, and documents; you only pay for AI credits.",
 	"auth.safeappealsCloud.label": "SafeAppeals Cloud",
 	"auth.safeappealsGoogle.label": "SafeAppeals Google",
 	"auth.safeappealsMicrosoft.label": "SafeAppeals Microsoft",

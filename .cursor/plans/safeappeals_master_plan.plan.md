@@ -100,13 +100,21 @@ todos:
       strategy' + gap-audit item 5."
     status: pending
   - id: r65-auth-remainder
-    content: "Rung 6.5 remainder — PARTIAL Aug 2: safeappeals-google + email
-      XOAUTH2 + void-cloud include_mail_scopes + POST /auth/provider-token
-      coded (see email_oauth_piggyback WP1–WP6). STILL OPEN: calendar
-      getSession() (delete oauthLoopback/tokenStore), Microsoft/Azure
-      symmetry, Google restricted-scope verification, Electron E2E.
-      Plans: unified_safeappeals_sign-in_225af75a.plan.md +
-      email_oauth_piggyback_e435d610.plan.md."
+    content: "DONE Aug 3 (engineering): Service Connections + unified sign-in limb
+      closed. Cloud identity; /connections/* multi-account google/microsoft;
+      calendar loopback deleted; piggyback/provider_tokens removed; prod
+      GET /connections → 401; onboarding free-vs-AI copy. Plans:
+      unified_safeappeals_sign-in_225af75a.plan.md (all todos completed) +
+      ~/.cursor/plans/service_connections_auth_3fbdccee.plan.md. Business
+      leftovers: r65-business-ops."
+    status: completed
+  - id: r65-business-ops
+    content: "Rung 6.5 business/ops (parallel, not blocking rung 7): (1) WP0 Google
+      restricted-scope verification / CASA for mail.google.com; (2)
+      interactive Electron smoke Cloud A ≠ Gmail B ≠ Calendar C + disconnect
+      + sign-out/in; (3) Deploy void-cloud dashboard copy (local strip updated
+      Aug 3 — free account unlocks email/calendar/docs; pay for AI / $30
+      credits). In-app onboarding + auth nls already shipped."
     status: pending
   - id: r11-agent-remainder
     content: "Rung 11 remainder (T14 already did the product.json swap):
@@ -184,7 +192,8 @@ A future agent can follow these blindly, with the caveats listed:
 | `onboarding_redesign_newcomer.plan.md` | Archived (M1/M2 done) | see `archive/onboarding_redesign_newcomer.plan.md` |
 | `safeappeals_timeline_rung7_5ce1bf30.plan.md` | **ACTIVE** (Aug 2) | rename → `safeappeals-timeline`; retire case-info; role skill + timeline tools; supersedes archived case-extension plan |
 | `archive/safeappeals_case_extension_rung7.plan.md` | Superseded Aug 2 | historical slice 1; do not implement |
-| `unified_safeappeals_sign-in_225af75a.plan.md` | Trustworthy (updated Aug 2) | cloud identity done; google/microsoft + email/calendar consumers open; detail `email_oauth_piggyback_e435d610.plan.md` |
+| `unified_safeappeals_sign-in_225af75a.plan.md` | **DONE** Aug 3 | All todos completed. Canonical detail: `~/.cursor/plans/service_connections_auth_3fbdccee.plan.md`. Business leftovers: `r65-business-ops`. |
+| `archive/email_oauth_piggyback_e435d610.plan.md` | Archived / superseded | WP0 moved to master `r65-business-ops` |
 | `safeappeals_agent_tools_da04f06e.plan.md` | Trustworthy (updated Aug 2) | **Core tools DONE** (`e1754228`) — open+closed DOCX/XLSX, search, timer, draft. Remainder: email read/organize, pattern docs, unified wrapper. Cloud Agent plan phases 0–4 + tools pass marked complete. |
 | `upstream_vs_code_merge_spike_2245beba.plan.md` | Trustworthy for: rung ladder, dated status sections, Rust strategy, sections A/B/E/F/G/I/K | **Sections C.2/C.3, D, D.2's "stay in contrib" list, parts of H, and ladder J are pre-Jul-21 and superseded** — see "The contrib hub is dead" below. Read its Jul 29 → Jul 21 → Jul 20 status sections top-down before trusting any older inline text. |
 
@@ -226,17 +235,16 @@ source tree. Trust this section over any other document on this branch.
   only manual classification works. Reference:
   `void-reference/browser/emailClassifier.ts` (432 lines). Owner: rung 12.
   Known limitations (recorded so nobody rediscovers them): drafts are
-  **local-only** — encrypted `email-drafts.json`, no IMAP APPEND / server
-  Drafts folder, and the send path neither links the draft ID nor marks it
-  sent (`syncEngine.ts:242-253`, `dashboardPanel.ts:256-260`); search is
-  local case-insensitive **substring** over the cached index
+  **local + IMAP APPEND** (Aug 3) — encrypted `email-drafts.json` first, then
+  fail-soft APPEND with `\Draft`/`\Seen` to `\Drafts` / `[Gmail]/Drafts`
+  when an IMAP session is available (`draftImapSync.ts` / `SyncEngine.saveDraft`);
+  send-path draft cleanup may still be incomplete. Search is local
+  case-insensitive **substring** over the cached index
   (`emailIndex.ts:221-239`) — no FTS, no IMAP SEARCH; sync-error surfacing
   is uneven — dashboard has a real red banner, sidebar only a dot+tooltip,
   status bar never shows errors (`extension.ts:51-64`), and the initial
-  background sync swallows failures via `.catch(() => undefined)`
-  (`syncEngine.ts:54`); and `safeappeals-email.updateThreadStatus` is
-  implemented (`extension.ts:411-415`) but **absent from `package.json`** —
-  unreachable, a small real bug (fix: M0).
+  background sync swallows failures via `.catch(() => undefined)`.
+  Auth: OAuth via Service Connections (`connectionId`); app-password fallback.
 - **`extensions/safeappeals-documents`** — COMPLETE. `safeappeals.pdfViewer`
   (**read-only by design** — genuinely `CustomReadonlyEditorProvider`,
   code-verified; annotations/signatures in an encrypted sidecar),
@@ -256,14 +264,16 @@ source tree. Trust this section over any other document on this branch.
   TypeScript-maintained — a maintenance risk for whoever touches DOCX next
   (tools pass).
 - **`extensions/safeappeals-calendar`** (~2,314 src lines) — **PARTIAL:
-  backend only, and PULL-ONLY.** Google/Outlook OAuth + sync engine +
-  encrypted event cache + commands + status bar. **No calendar/timeline UI
-  exists anywhere** (code-confirmed: no `webview-src/`, no
-  `WebviewViewProvider`, no `createWebviewPanel`, no view contributions) —
-  the old visual UX (`void-reference/browser/react/src/timeline-tsx/`,
+  backend only, and PULL-ONLY.** Auth (Aug 3): Service Connections via
+  `getSession('safeappeals-google'|'safeappeals-microsoft', ['calendar'])`;
+  loopback OAuth / `tokenStore` / client-secret settings **deleted**. Sync
+  engine + encrypted event cache + commands + status bar remain. **No
+  calendar/timeline UI exists anywhere** (code-confirmed: no `webview-src/`,
+  no `WebviewViewProvider`, no `createWebviewPanel`, no view contributions)
+  — the old visual UX (`void-reference/browser/react/src/timeline-tsx/`,
   ~4,910 lines) is unbuilt; owner: rung 7 slice 2, which treats the timeline
   view as the calendar UI. **No event write-back to Google/Outlook**
-  (`syncEngine.ts:1-3` header; no create/update calls) — display works, push
+  (`syncEngine.ts` header; no create/update calls) — display works, push
   does not exist; see Q5.
 - **`extensions/safeappeals-case`** → **rename to `safeappeals-timeline`**
   (Aug 2 plan). Case-info retiring; keep profile re-run / sample / role skill;
@@ -492,17 +502,17 @@ start (user, Jul 29): no TS-first-then-port. RAG's ~5 agent tools land in
 the tools pass, not here. → **Detail: merge plan "Rust strategy" (rung 10
 subsection) + gap-audit item 5.**
 
-### Rung 6.5 remainder — Provider-token auth (deps: M1 T1; before rung 13 remainder)
+### Rung 6.5 remainder — Service Connections auth (deps: M1 T1; before rung 13 remainder)
 
-The `safeappeals-google`/`-microsoft` provider-token providers into the
-existing auth extension, calendar conversion to `getSession()` (delete
-`oauthLoopback`/`tokenStore`/client-secret settings), email XOAUTH2
-("Sign in with Safe Appeals", app-password fallback stays), and the server
-workstream (Gmail/Calendar Supabase scopes, Azure provider, provider-token
-refresh endpoint, Google restricted-scope verification — weeks of business
-lead time, start the verification checklist early). Kept late deliberately
-(Jul 21 rationale): the provider-token surface gets designed against its
-real consumers. → **Plan: `unified_safeappeals_sign-in_225af75a.plan.md`.**
+**Status Aug 3: engineering DONE.** Identity = `safeappeals-cloud`. Mail/calendar
+= Service Connections (`/connections/*`; multi-account
+`safeappeals-google`/`-microsoft`, `session.id = connectionId`). Calendar
+loopback deleted; piggyback + `POST /auth/provider-token` removed (prod 404).
+Prod `GET /connections` → 401 (route live). Limb plan todos all completed.
+**Business/ops (parallel, `r65-business-ops`):** WP0 Google verification, interactive
+Electron smoke, site marketing. → **Plans:
+`unified_safeappeals_sign-in_225af75a.plan.md` (done) +
+`~/.cursor/plans/service_connections_auth_3fbdccee.plan.md` (done).**
 
 ### Rung 11 remainder — Agent rebrand + BYOK (deps: M2 did the product swap)
 
@@ -696,8 +706,9 @@ extension transfer 329). The "not built anywhere" totals shrink accordingly.
   extension is pull-only — no event write-back to Google/Outlook exists
   (`syncEngine.ts:1-3`). If statute deadlines should appear in the user's
   real calendar, write-back must be built (in the calendar extension, likely
-  after the rung 6.5 `getSession()` conversion). Decide in-or-out when slice
-  2 starts; the merge plan's deferred "timeline→calendar push" note is
+  after the rung 6.5 connections/`getSession()` conversion — **already done
+  Aug 3**). Decide in-or-out when slice 2 starts; the merge plan's deferred
+  "timeline→calendar push" note is
   currently owned by nobody.
 
 ## Implementation deviations from this plan

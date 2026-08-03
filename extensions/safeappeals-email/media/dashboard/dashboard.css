@@ -98,7 +98,26 @@ button.linkish {
 	min-width: 0;
 	min-height: 0;
 	padding: 12px 16px;
-	overflow: auto;
+	overflow: hidden;
+	display: flex;
+	flex-direction: column;
+}
+
+.reader > .thread-messages,
+.reader > .muted {
+	flex: 0 0 auto;
+}
+
+.message {
+	display: flex;
+	flex-direction: column;
+	flex: 1 1 auto;
+	min-height: 0;
+}
+
+.message > .msg-title-row,
+.message > .msg-headers {
+	flex: 0 0 auto;
 }
 
 .empty-state {
@@ -210,6 +229,8 @@ button.linkish {
 }
 
 .body-text {
+	flex: 1 1 auto;
+	min-height: 0;
 	white-space: pre-wrap;
 	font-family: var(--vscode-editor-font-family, monospace);
 	background: var(--vscode-textCodeBlock-background, rgba(127, 127, 127, 0.1));
@@ -219,8 +240,12 @@ button.linkish {
 }
 
 .body-html {
+	display: block;
 	width: 100%;
-	min-height: 280px;
+	/* flex-basis 0 + height 0 lets the iframe consume remaining reader space */
+	flex: 1 1 0;
+	min-height: 0;
+	height: 0;
 	border: 1px solid var(--vscode-panel-border, #444);
 	border-radius: 4px;
 	background: #fff;

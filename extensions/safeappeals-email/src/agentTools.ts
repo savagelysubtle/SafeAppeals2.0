@@ -6,7 +6,7 @@
 import * as vscode from 'vscode';
 import type { AccountStore } from './accountStore';
 import { resolveDraftAccountId } from './draftAccount';
-import type { EmailIndex } from './emailIndex';
+import type { SyncEngine } from './syncEngine';
 
 export const SAFEAPPEALS_EMAIL_CREATE_DRAFT_TOOL = 'safeappeals_email_createDraft';
 export { resolveDraftAccountId } from './draftAccount';
@@ -30,7 +30,7 @@ function textResult(message: string): vscode.LanguageModelToolResult {
 
 class EmailCreateDraftTool implements vscode.LanguageModelTool<CreateDraftInput> {
 	constructor(
-		private readonly getIndex: () => EmailIndex | undefined,
+		private readonly getEngine: () => SyncEngine | undefined,
 		private readonly getAccounts: () => AccountStore | undefined,
 	) { }
 
@@ -44,7 +44,7 @@ class EmailCreateDraftTool implements vscode.LanguageModelTool<CreateDraftInput>
 			invocationMessage: `Saving email draft to ${to}`,
 			confirmationMessages: {
 				title: 'Create Email Draft',
-				message: `Save a local draft (does not send):\nTo: ${to}\nSubject: ${subject}`,
+				message: `Save a draft (does not send):\nTo: ${to}\nSubject: ${subject}`,
 			},
 		};
 	}
@@ -53,9 +53,9 @@ class EmailCreateDraftTool implements vscode.LanguageModelTool<CreateDraftInput>
 		options: vscode.LanguageModelToolInvocationOptions<CreateDraftInput>,
 		_token: vscode.CancellationToken,
 	): Promise<vscode.LanguageModelToolResult> {
-		const index = this.getIndex();
+		const engine = this.getEngine();
 		const accounts = this.getAccounts();
-		if (!index || !accounts) {
+		if (!engine || !accounts) {
 			return textResult('Error: Safe Appeals Email is not initialized.');
 		}
 
@@ -78,7 +78,7 @@ class EmailCreateDraftTool implements vscode.LanguageModelTool<CreateDraftInput>
 		const accountId = resolved.accountId;
 
 		try {
-			const draft = await index.saveDraft({
+			const result = await engine.saveDraft({
 				accountId,
 				emailId: input.emailId?.trim() || '',
 				to,
@@ -88,8 +88,15 @@ class EmailCreateDraftTool implements vscode.LanguageModelTool<CreateDraftInput>
 				content,
 				draftId: input.draftId?.trim() || undefined,
 			});
+			const draft = result.draft;
+			const remoteLine = result.remoteError
+				? `\nremoteError: ${result.remoteError} (local draft kept)`
+				: result.remote
+					? `\nremoteFolder: ${result.remote.folder}`
+						+ (result.remote.uid !== undefined ? `\nremoteUid: ${result.remote.uid}` : '')
+					: '';
 			return textResult(
-				`Draft saved (not sent).\nid: ${draft.id}\naccountId: ${draft.accountId}\nto: ${draft.to}\nsubject: ${draft.subject}\nstatus: ${draft.status}\nversion: ${draft.version}`,
+				`Draft saved (not sent).\nid: ${draft.id}\naccountId: ${draft.accountId}\nto: ${draft.to}\nsubject: ${draft.subject}\nstatus: ${draft.status}\nversion: ${draft.version}${remoteLine}`,
 			);
 		} catch (error) {
 			const message = error instanceof Error ? error.message : String(error);
@@ -103,13 +110,13 @@ class EmailCreateDraftTool implements vscode.LanguageModelTool<CreateDraftInput>
  */
 export function registerAgentTools(
 	context: vscode.ExtensionContext,
-	getIndex: () => EmailIndex | undefined,
+	getEngine: () => SyncEngine | undefined,
 	getAccounts: () => AccountStore | undefined,
 ): void {
 	context.subscriptions.push(
 		vscode.lm.registerTool(
 			SAFEAPPEALS_EMAIL_CREATE_DRAFT_TOOL,
-			new EmailCreateDraftTool(getIndex, getAccounts),
+			new EmailCreateDraftTool(getEngine, getAccounts),
 		),
 	);
 }

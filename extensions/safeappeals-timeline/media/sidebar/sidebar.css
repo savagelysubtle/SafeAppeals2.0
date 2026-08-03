@@ -1,0 +1,248 @@
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Safe Appeals. All rights reserved.
+ *--------------------------------------------------------------------------------------------*/
+
+:root {
+	color-scheme: light dark;
+}
+
+* {
+	box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+	margin: 0;
+	height: 100%;
+	font-family: var(--vscode-font-family);
+	font-size: var(--vscode-font-size);
+	color: var(--vscode-foreground);
+	background: var(--vscode-sideBar-background);
+}
+
+.sidebar {
+	display: flex;
+	flex-direction: column;
+	height: 100%;
+	min-height: 0;
+}
+
+.sidebar.loading {
+	padding: 16px;
+	color: var(--vscode-descriptionForeground);
+}
+
+.sidebar-header {
+	padding: 12px;
+	border-bottom: 1px solid var(--vscode-sideBarSectionHeader-border, var(--vscode-panel-border));
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	flex-shrink: 0;
+}
+
+.sidebar-title {
+	font-size: 13px;
+	font-weight: 600;
+}
+
+.sidebar-meta {
+	font-size: 11px;
+	color: var(--vscode-descriptionForeground);
+	line-height: 1.35;
+}
+
+.sidebar-body {
+	flex: 1;
+	min-height: 0;
+	overflow: auto;
+	padding: 12px;
+	display: flex;
+	flex-direction: column;
+	gap: 14px;
+}
+
+.section {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+}
+
+.section-grow {
+	flex: 1;
+	min-height: 0;
+}
+
+.section-label,
+.section-label-row {
+	font-size: 11px;
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.03em;
+	color: var(--vscode-descriptionForeground);
+}
+
+.section-label-row {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+}
+
+.count {
+	font-variant-numeric: tabular-nums;
+	opacity: 0.85;
+}
+
+.field {
+	width: 100%;
+	background: var(--vscode-input-background);
+	color: var(--vscode-input-foreground);
+	border: 1px solid var(--vscode-input-border, var(--vscode-panel-border));
+	border-radius: 4px;
+	padding: 5px 8px;
+	font: inherit;
+	font-size: 12px;
+}
+
+.hint {
+	font-size: 11px;
+	color: var(--vscode-descriptionForeground);
+	line-height: 1.35;
+}
+
+.check-row {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	font-size: 12px;
+}
+
+.btn {
+	font: inherit;
+	font-size: 12px;
+	border-radius: 4px;
+	padding: 6px 10px;
+	cursor: pointer;
+	border: none;
+}
+
+.btn-block {
+	width: 100%;
+}
+
+.btn-sm {
+	padding: 3px 8px;
+	font-size: 11px;
+}
+
+.btn-primary {
+	background: var(--vscode-button-background);
+	color: var(--vscode-button-foreground);
+}
+
+.btn-primary:hover {
+	background: var(--vscode-button-hoverBackground);
+}
+
+.btn-secondary {
+	background: var(--vscode-button-secondaryBackground);
+	color: var(--vscode-button-secondaryForeground);
+	border: 1px solid var(--vscode-panel-border);
+}
+
+.error-banner {
+	padding: 8px 12px;
+	font-size: 12px;
+	color: var(--vscode-errorForeground);
+	border-bottom: 1px solid var(--vscode-panel-border);
+}
+
+.compact-list {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+}
+
+.compact-item,
+.compact-static {
+	display: grid;
+	grid-template-columns: auto 1fr auto;
+	align-items: center;
+	gap: 6px;
+	width: 100%;
+	text-align: left;
+	padding: 6px 8px;
+	border-radius: 4px;
+	border: 1px solid transparent;
+	background: transparent;
+	color: inherit;
+	font: inherit;
+	font-size: 12px;
+	cursor: pointer;
+}
+
+.compact-static {
+	cursor: default;
+	grid-template-columns: auto 1fr;
+}
+
+.compact-item:hover {
+	background: var(--vscode-list-hoverBackground);
+	border-color: var(--vscode-panel-border);
+}
+
+.compact-item.overdue {
+	border-color: color-mix(in srgb, var(--vscode-inputValidation-errorBorder) 55%, transparent);
+	background: color-mix(in srgb, var(--vscode-inputValidation-errorBackground, var(--vscode-inputValidation-errorBorder)) 12%, transparent);
+}
+
+.compact-item.upcoming {
+	border-color: color-mix(in srgb, var(--vscode-inputValidation-warningBorder) 55%, transparent);
+	background: color-mix(in srgb, var(--vscode-inputValidation-warningBackground, var(--vscode-inputValidation-warningBorder)) 12%, transparent);
+}
+
+.compact-date {
+	font-size: 10px;
+	color: var(--vscode-descriptionForeground);
+	white-space: nowrap;
+}
+
+.compact-title {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	min-width: 0;
+}
+
+.dot {
+	width: 8px;
+	height: 8px;
+	border-radius: 50%;
+	flex-shrink: 0;
+}
+
+.badge {
+	font-size: 10px;
+	padding: 1px 5px;
+	border-radius: 999px;
+	white-space: nowrap;
+}
+
+.badge-overdue {
+	background: var(--vscode-inputValidation-errorBackground, #5a1d1d);
+	color: var(--vscode-errorForeground, #f48771);
+}
+
+.badge-upcoming {
+	background: var(--vscode-inputValidation-warningBackground, #5a4b1d);
+	color: var(--vscode-editorWarning-foreground, #cca700);
+}
+
+.muted .compact-title {
+	color: var(--vscode-descriptionForeground);
+}

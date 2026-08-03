@@ -10,7 +10,8 @@
 import type { Disposable } from 'vscode';
 import { AccountStore } from './accountStore';
 import { runClassifierOnNewMessages, type ClassifierHook, noopClassifierHook } from './classifierSeam';
-import { getDefaultFolder, getMaxMessagesPerSync, getSyncIntervalMinutes } from './config';
+import { getDefaultFolder, getMaxMessagesPerSync, getSyncIntervalMinutes, isWebClient } from './config';
+import { syncDraftToImap, type SyncDraftToImapResult } from './draftImapSync';
 import { EmailIndex, toSummary } from './emailIndex';
 import {
 	describeImapError,
@@ -28,11 +29,15 @@ import {
 	isPasswordCredentials,
 	type EmailAccountConfig,
 	type EmailAccountCredentials,
+	type EmailDraft,
 	type EmailOAuthProvider,
 	type ListThreadsQuery,
 	type SendMailRequest,
 	type SyncStatus,
 } from './types';
+
+export type { SyncDraftToImapResult } from './draftImapSync';
+export { syncDraftToImap } from './draftImapSync';
 
 /** Auth provider ids from safeappeals-authentication (A3 contract). */
 export const GOOGLE_MAIL_AUTH_PROVIDER_ID = 'safeappeals-google';
@@ -498,6 +503,40 @@ export class SyncEngine implements Disposable {
 		}
 		this.log(`Sending via ${account.label} → ${request.to} auth=${transport.type}`);
 		return sendMail(account, transport, request);
+	}
+
+	/**
+	 * Save a draft locally first, then best-effort APPEND to the account's IMAP Drafts.
+	 * IMAP failure never rolls back the local draft — see {@link SyncDraftToImapResult.remoteError}.
+	 */
+	async saveDraft(input: {
+		accountId: string;
+		emailId: string;
+		to: string;
+		cc?: string;
+		bcc?: string;
+		subject: string;
+		content: string;
+		draftId?: string;
+	}): Promise<SyncDraftToImapResult> {
+		const account = this.accounts.getAccount(input.accountId);
+		if (!account) {
+			throw new Error(`Unknown account: ${input.accountId}`);
+		}
+
+		const draft: EmailDraft = await this.index.saveDraft(input);
+		const skipRemote = isWebClient();
+		if (skipRemote) {
+			this.log(`Draft ${draft.id} saved locally (skip IMAP on web client)`);
+			return { draft };
+		}
+
+		const transport = await this.resolveForAccount(account);
+		return syncDraftToImap(draft, account, transport, {
+			skipRemote: false,
+			updateDraftRemote: (draftId, remote) => this.index.updateDraftRemote(draftId, remote),
+			log: this.log,
+		});
 	}
 
 	/** Convenience wrapper for E4 / extension wiring. */

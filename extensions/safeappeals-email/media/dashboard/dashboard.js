@@ -7293,7 +7293,9 @@
     cc: "",
     bcc: "",
     subject: "",
-    content: ""
+    content: "",
+    draftId: void 0,
+    emailId: void 0
   });
   function applyDefaults(body, settings) {
     const compose = settings?.compose;
@@ -7336,6 +7338,8 @@
     const [settings, setSettings] = (0, import_react.useState)(null);
     const [settingsDraft, setSettingsDraft] = (0, import_react.useState)(null);
     const [settingsSaved, setSettingsSaved] = (0, import_react.useState)(false);
+    const [draftSavedHint, setDraftSavedHint] = (0, import_react.useState)(false);
+    const [draftRemoteError, setDraftRemoteError] = (0, import_react.useState)(null);
     const pendingSelectRef = (0, import_react.useRef)(null);
     const settingsRef = (0, import_react.useRef)(null);
     settingsRef.current = settings;
@@ -7353,11 +7357,15 @@
           cc: partial.cc ?? defaults.cc,
           bcc: partial.bcc ?? defaults.bcc,
           subject: partial.subject ?? "",
-          content: partial.content ?? defaults.content
+          content: partial.content ?? defaults.content,
+          draftId: partial.draftId,
+          emailId: partial.emailId
         };
         setCompose(next);
         setShowCc(!!next.cc);
         setShowBcc(!!next.bcc);
+        setDraftSavedHint(false);
+        setDraftRemoteError(null);
         setPane("compose");
       },
       []
@@ -7425,6 +7433,7 @@
             break;
           case "openDrafts":
             setPane("drafts");
+            vscode.postMessage({ type: "listDrafts", accountId: void 0 });
             break;
           case "openSettings":
             setPane("settings");
@@ -7441,9 +7450,24 @@
             setMessage(msg.message);
             setLoadingBody(false);
             break;
-          case "draftSaved":
+          case "draftSaved": {
+            const list = Array.isArray(msg.drafts) ? msg.drafts : msg.draft ? [msg.draft] : [];
+            setDrafts(list);
+            if (msg.stats) {
+              setStats(msg.stats);
+            }
+            if (msg.draft?.id) {
+              setCompose((prev) => ({ ...prev, draftId: msg.draft.id }));
+            }
+            setDraftSavedHint(true);
+            setDraftRemoteError(
+              typeof msg.remoteError === "string" && msg.remoteError ? msg.remoteError : null
+            );
+            setError(null);
+            break;
+          }
           case "drafts":
-            setDrafts(msg.drafts || (msg.draft ? [msg.draft] : []));
+            setDrafts(Array.isArray(msg.drafts) ? msg.drafts : []);
             break;
           case "error":
             setError(msg.message || "Unknown error");
@@ -7507,16 +7531,19 @@
         setError("Add an account first");
         return;
       }
+      setDraftSavedHint(false);
+      setDraftRemoteError(null);
       vscode.postMessage({
         type: "saveDraft",
         draft: {
           accountId,
-          emailId: selectedMessageId || "",
+          emailId: compose.emailId || selectedMessageId || "",
           to: compose.to,
           cc: compose.cc || void 0,
           bcc: compose.bcc || void 0,
           subject: compose.subject,
-          content: compose.content
+          content: compose.content,
+          draftId: compose.draftId
         }
       });
     };
@@ -7528,7 +7555,8 @@
         to: message.from,
         cc: message.cc || void 0,
         subject: message.subject.startsWith("Re:") ? message.subject : `Re: ${message.subject}`,
-        body: ""
+        body: "",
+        emailId: message.id
       });
     };
     const onLinkCase = () => {
@@ -7556,7 +7584,7 @@ Subject: ${message.subject}
 To: ${message.to}
 
 ${body}`;
-      startCompose({ to: "", subject, body: forwarded });
+      startCompose({ to: "", subject, body: forwarded, emailId: message.id });
     };
     const onSaveSettings = () => {
       if (!settingsDraft) {
@@ -7655,7 +7683,9 @@ ${body}`;
         /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "compose-actions", children: [
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { type: "button", onClick: onSend, children: "Send" }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { type: "button", onClick: onSaveDraft, children: "Save draft" }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { type: "button", className: "secondary", onClick: () => setPane("read"), children: "Cancel" })
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { type: "button", className: "secondary", onClick: () => setPane("read"), children: "Cancel" }),
+          draftSavedHint && !draftRemoteError && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "muted", children: "Draft saved" }),
+          draftRemoteError && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "error", title: draftRemoteError, children: "Saved locally; server Drafts failed" })
         ] })
       ] }),
       pane === "drafts" && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", { className: "drafts", children: [
@@ -7667,16 +7697,15 @@ ${body}`;
             type: "button",
             className: "linkish",
             onClick: () => {
-              setCompose({
+              startCompose({
                 to: d.to,
                 cc: d.cc || "",
                 bcc: d.bcc || "",
                 subject: d.subject,
-                content: d.content
+                content: d.content,
+                draftId: d.id,
+                emailId: d.emailId
               });
-              setShowCc(!!d.cc);
-              setShowBcc(!!d.bcc);
-              setPane("compose");
             },
             children: [
               d.subject || "(no subject)",

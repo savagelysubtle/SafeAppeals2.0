@@ -19,6 +19,10 @@ interface ComposeState {
 	bcc: string;
 	subject: string;
 	content: string;
+	/** Set after the first successful save so later saves update the same draft. */
+	draftId?: string;
+	/** Parent message id when replying/forwarding; empty for a new compose. */
+	emailId?: string;
 }
 
 const emptyCompose = (): ComposeState => ({
@@ -27,6 +31,8 @@ const emptyCompose = (): ComposeState => ({
 	bcc: '',
 	subject: '',
 	content: '',
+	draftId: undefined,
+	emailId: undefined,
 });
 
 function applyDefaults(
@@ -74,6 +80,8 @@ export const App: React.FC = () => {
 	const [settings, setSettings] = useState<EmailSettings | null>(null);
 	const [settingsDraft, setSettingsDraft] = useState<EmailSettings | null>(null);
 	const [settingsSaved, setSettingsSaved] = useState(false);
+	const [draftSavedHint, setDraftSavedHint] = useState(false);
+	const [draftRemoteError, setDraftRemoteError] = useState<string | null>(null);
 
 	const pendingSelectRef = useRef<string | null>(null);
 	// Ref mirror so the once-mounted message listener always sees current settings
@@ -96,10 +104,14 @@ export const App: React.FC = () => {
 				bcc: partial.bcc ?? defaults.bcc,
 				subject: partial.subject ?? '',
 				content: partial.content ?? defaults.content,
+				draftId: partial.draftId,
+				emailId: partial.emailId,
 			};
 			setCompose(next);
 			setShowCc(!!next.cc);
 			setShowBcc(!!next.bcc);
+			setDraftSavedHint(false);
+			setDraftRemoteError(null);
 			setPane('compose');
 		},
 		[],
@@ -169,6 +181,7 @@ export const App: React.FC = () => {
 					break;
 				case 'openDrafts':
 					setPane('drafts');
+					vscode.postMessage({ type: 'listDrafts', accountId: undefined });
 					break;
 				case 'openSettings':
 					setPane('settings');
@@ -185,9 +198,30 @@ export const App: React.FC = () => {
 					setMessage(msg.message);
 					setLoadingBody(false);
 					break;
-				case 'draftSaved':
+				case 'draftSaved': {
+					const list: Draft[] = Array.isArray(msg.drafts)
+						? msg.drafts
+						: msg.draft
+							? [msg.draft]
+							: [];
+					setDrafts(list);
+					if (msg.stats) {
+						setStats(msg.stats);
+					}
+					if (msg.draft?.id) {
+						setCompose((prev) => ({ ...prev, draftId: msg.draft.id }));
+					}
+					setDraftSavedHint(true);
+					setDraftRemoteError(
+						typeof msg.remoteError === 'string' && msg.remoteError
+							? msg.remoteError
+							: null,
+					);
+					setError(null);
+					break;
+				}
 				case 'drafts':
-					setDrafts(msg.drafts || (msg.draft ? [msg.draft] : []));
+					setDrafts(Array.isArray(msg.drafts) ? msg.drafts : []);
 					break;
 				case 'error':
 					setError(msg.message || 'Unknown error');
@@ -261,16 +295,19 @@ export const App: React.FC = () => {
 			setError('Add an account first');
 			return;
 		}
+		setDraftSavedHint(false);
+		setDraftRemoteError(null);
 		vscode.postMessage({
 			type: 'saveDraft',
 			draft: {
 				accountId,
-				emailId: selectedMessageId || '',
+				emailId: compose.emailId || selectedMessageId || '',
 				to: compose.to,
 				cc: compose.cc || undefined,
 				bcc: compose.bcc || undefined,
 				subject: compose.subject,
 				content: compose.content,
+				draftId: compose.draftId,
 			},
 		});
 	};
@@ -286,6 +323,7 @@ export const App: React.FC = () => {
 				? message.subject
 				: `Re: ${message.subject}`,
 			body: '',
+			emailId: message.id,
 		});
 	};
 
@@ -318,7 +356,7 @@ export const App: React.FC = () => {
 			`Subject: ${message.subject}\n` +
 			`To: ${message.to}\n` +
 			`\n${body}`;
-		startCompose({ to: '', subject, body: forwarded });
+		startCompose({ to: '', subject, body: forwarded, emailId: message.id });
 	};
 
 	const onSaveSettings = () => {
@@ -427,6 +465,14 @@ export const App: React.FC = () => {
 						<button type="button" className="secondary" onClick={() => setPane('read')}>
 							Cancel
 						</button>
+						{draftSavedHint && !draftRemoteError && (
+							<span className="muted">Draft saved</span>
+						)}
+						{draftRemoteError && (
+							<span className="error" title={draftRemoteError}>
+								Saved locally; server Drafts failed
+							</span>
+						)}
 					</div>
 				</section>
 			)}
@@ -442,16 +488,15 @@ export const App: React.FC = () => {
 									type="button"
 									className="linkish"
 									onClick={() => {
-										setCompose({
+										startCompose({
 											to: d.to,
 											cc: d.cc || '',
 											bcc: d.bcc || '',
 											subject: d.subject,
 											content: d.content,
+											draftId: d.id,
+											emailId: d.emailId,
 										});
-										setShowCc(!!d.cc);
-										setShowBcc(!!d.bcc);
-										setPane('compose');
 									}}
 								>
 									{d.subject || '(no subject)'} → {d.to} · {d.status}

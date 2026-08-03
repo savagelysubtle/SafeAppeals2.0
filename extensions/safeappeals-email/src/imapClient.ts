@@ -234,6 +234,107 @@ export async function listFolders(
 }
 
 /**
+ * Locate the Drafts mailbox: SPECIAL-USE `\Drafts` first, then common path names.
+ */
+export function resolveDraftsFolderPath(folders: FolderInfo[]): string | undefined {
+	const bySpecial = folders.find((f) => f.specialUse === '\\Drafts');
+	if (bySpecial) {
+		return bySpecial.path;
+	}
+
+	const preferred = ['[gmail]/drafts', 'drafts', 'inbox.drafts'];
+	for (const key of preferred) {
+		const match = folders.find((f) => {
+			const path = f.path.toLowerCase();
+			const name = f.name.toLowerCase();
+			return path === key || name === key;
+		});
+		if (match) {
+			return match.path;
+		}
+	}
+
+	const loose = folders.find((f) => {
+		const path = f.path.toLowerCase();
+		const name = f.name.toLowerCase();
+		return (
+			name === 'drafts'
+			|| path === 'drafts'
+			|| path.endsWith('/drafts')
+			|| path.endsWith('.drafts')
+		);
+	});
+	return loose?.path;
+}
+
+export interface AppendDraftOptions {
+	/** Previous remote draft UID to delete after a successful APPEND (best-effort). */
+	replaceUid?: number;
+	/** Mailbox path of the previous remote draft. */
+	replaceFolder?: string;
+}
+
+export interface AppendDraftResult {
+	folder: string;
+	uid?: number;
+}
+
+/**
+ * APPEND an RFC822 draft into the account's Drafts folder (`\Draft` + `\Seen`).
+ * Optionally deletes a prior remote UID so updates do not accumulate duplicates.
+ */
+export async function appendDraftMessage(
+	account: EmailAccountConfig,
+	auth: MailboxAuth,
+	raw: Buffer | string,
+	options?: AppendDraftOptions,
+): Promise<AppendDraftResult> {
+	const client = createClient(account, auth);
+	await client.connect();
+	try {
+		const boxes = await client.list();
+		const folders: FolderInfo[] = boxes.map((b) => ({
+			path: b.path,
+			name: b.name,
+			specialUse: b.specialUse || undefined,
+		}));
+		const folder = resolveDraftsFolderPath(folders);
+		if (!folder) {
+			throw new Error('Drafts folder not found on this account');
+		}
+
+		const appended = await client.append(folder, raw, ['\\Draft', '\\Seen']);
+		if (!appended) {
+			throw new Error('IMAP APPEND to Drafts returned no result');
+		}
+		const uid = typeof appended.uid === 'number' ? appended.uid : undefined;
+
+		const replaceUid = options?.replaceUid;
+		const replaceFolder = options?.replaceFolder;
+		if (
+			replaceUid !== undefined
+			&& replaceFolder
+			&& !(replaceFolder === folder && replaceUid === uid)
+		) {
+			try {
+				const lock = await client.getMailboxLock(replaceFolder);
+				try {
+					await client.messageDelete(replaceUid, { uid: true });
+				} finally {
+					lock.release();
+				}
+			} catch {
+				// Best-effort cleanup — new draft already appended.
+			}
+		}
+
+		return { folder, uid };
+	} finally {
+		await client.logout().catch(() => undefined);
+	}
+}
+
+/**
  * Fetch recent message headers (no bodies) for a folder.
  *
  * Range semantics (imapflow): string ranges like "start:end" are SEQUENCE numbers

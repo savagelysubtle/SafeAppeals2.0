@@ -55,7 +55,7 @@ export function getOnboardingStepSubtitle(stepId: OnboardingStepId, productServi
 			return localize('onboarding.step.agentIntro.subtitle', "It works like a junior colleague — it drafts, you review, you decide.");
 		case OnboardingStepId.CreditsHandoff:
 			// SafeAppeals
-			return localize('onboarding.step.creditsHandoff.subtitle', "{0} is free to download and use. Organizing cases, editing documents, tracking time, email, and calendar never cost anything.", productService.nameLong);
+			return localize('onboarding.step.creditsHandoff.subtitle', "{0} is free to download and use — your account is free too. Email, calendar, and documents never cost anything; you only pay for AI credits.", productService.nameLong);
 	}
 }
 

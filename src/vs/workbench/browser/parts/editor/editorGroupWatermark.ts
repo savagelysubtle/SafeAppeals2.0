@@ -29,19 +29,20 @@ interface WatermarkEntry {
 }
 
 const showChatContextKey = ContextKeyExpr.and(ContextKeyExpr.equals('chatSetupHidden', false), ContextKeyExpr.equals('chatSetupDisabledInWorkspace', false));
-// SafeAppeals: initCase needs an open folder (matches T10 checklist `workspaceFolderCount > 0`).
+// SafeAppeals: drafting a case brief makes most sense with an open folder.
 const hasWorkspaceFolder = ContextKeyExpr.greater(WorkspaceFolderCountContext.key, 0);
+const draftCaseBriefWhen = ContextKeyExpr.and(showChatContextKey, hasWorkspaceFolder);
 
 // SafeAppeals: case-language watermark tips (replaces upstream developer shortcuts).
 const showChat: WatermarkEntry = { text: localize('watermark.showChat', "Show Chat"), id: 'workbench.action.chat.open', when: { native: showChatContextKey, web: showChatContextKey } };
-const newCase: WatermarkEntry = { text: localize('watermark.newCase', "New Case"), id: 'safeappeals-case.initCase', when: { native: hasWorkspaceFolder, web: hasWorkspaceFolder } };
+const draftCaseBrief: WatermarkEntry = { text: localize('watermark.draftCaseBrief', "Draft Case Brief"), id: 'workbench.action.chat.open', when: { native: draftCaseBriefWhen, web: draftCaseBriefWhen } };
 const openCaseFolder: WatermarkEntry = { text: localize('watermark.openCaseFolder', "Open Case Folder"), id: 'workbench.action.files.openFolder' };
-const takeTour: WatermarkEntry = { text: localize('watermark.takeTour', "Take the Tour"), id: 'safeappeals-case.takeTour' };
+const takeTour: WatermarkEntry = { text: localize('watermark.takeTour', "Take the Tour"), id: 'safeappeals-timeline.takeTour' };
 
-// SafeAppeals: one tip list for empty window and workspace (New Case is gated by when, not by list).
+// SafeAppeals: one tip list for empty window and workspace (Draft Case Brief is gated by when, not by list).
 const caseEntries: WatermarkEntry[] = [
 	showChat,
-	newCase,
+	draftCaseBrief,
 	openCaseFolder,
 	takeTour,
 ];
@@ -110,7 +111,7 @@ export class EditorGroupWatermark extends Disposable {
 			}
 		}));
 
-		// SafeAppeals: New Case tip is gated on workspaceFolderCount.
+		// SafeAppeals: Draft Case Brief tip is gated on workspaceFolderCount.
 		this._register(this.contextService.onDidChangeWorkspaceFolders(() => this.refreshEntriesIfChanged()));
 		this._register(this.contextService.onDidChangeWorkbenchState(() => this.refreshEntriesIfChanged()));
 
@@ -199,7 +200,7 @@ export class EditorGroupWatermark extends Disposable {
 				if (!contextKey) {
 					return true;
 				}
-				// SafeAppeals: live when only (no prior-session cache) so New Case
+				// SafeAppeals: live when only (no prior-session cache) so Draft Case Brief
 				// disappears immediately in an empty window.
 				return this.contextKeyService.contextMatchesRules(contextKey);
 			})

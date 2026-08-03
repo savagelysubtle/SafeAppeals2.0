@@ -18,7 +18,7 @@ export const SAMPLE_CASE_TOUR_ID = 'safeappeals.sampleCaseTour';
 
 /**
  * Core command that starts {@link SAMPLE_CASE_TOUR_ID}. The extension command
- * `safeappeals-case.takeTour` delegates here so the checklist completion event
+ * `safeappeals-timeline.takeTour` delegates here so the checklist completion event
  * stays on the extension id while the spotlight engine stays in workbench.
  */
 export const SAMPLE_CASE_TOUR_COMMAND_ID = 'workbench.action.safeappeals.sampleCaseTour';

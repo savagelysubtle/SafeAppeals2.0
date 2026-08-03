@@ -24,7 +24,7 @@ registerSingleton(IOnboardingService, OnboardingVariationA, InstantiationType.De
 
 /**
  * SafeAppeals: the onboarding profile step persists to these settings. They are
- * registered here (not in the safeappeals-case extension) because the first-run
+ * registered here (not in the safeappeals-timeline extension) because the first-run
  * onboarding writes them before the extension host has registered extension
  * contributions, which made the writes fail as unregistered configurations.
  */
@@ -140,7 +140,7 @@ registerAction2(class extends Action2 {
 
 /**
  * Opens the AI-use disclosure page. Command ID is load-bearing for the
- * safeappeals-case walkthrough checklist (`howUsesAI` step).
+ * safeappeals-timeline walkthrough checklist (`howUsesAI` step).
  */
 registerAction2(class extends Action2 {
 	constructor() {

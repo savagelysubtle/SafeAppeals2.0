@@ -87,56 +87,175 @@ const SAFEAPPEALS_CLOUD_AUTH_PROVIDER_ID = 'safeappeals-cloud';
 const AUTH_PROVIDER_REGISTRATION_TIMEOUT_MS = 15_000;
 
 /**
- * Compensation boards mirrored from `extensions/safeappeals-case/src/types.ts`
- * (`JURISDICTIONS`). Kept here because workbench cannot import the extension.
+ * Canonical jurisdiction slugs mirrored from
+ * `extensions/safeappeals-timeline/src/types.ts` (`JURISDICTIONS`).
+ * Kept here because workbench cannot import the extension.
  */
 const PROFILE_JURISDICTIONS = [
-	'BC WCB',
-	'Ontario WSIB',
-	'Alberta WCB',
-	'Quebec CNESST',
-	'Manitoba WCB',
-	'Saskatchewan WCB',
-	'Nova Scotia WCB',
-	'California DWC',
-	'Texas DWC',
-	'New York WCB',
-	'Florida DWC',
-	'Washington L&I',
+	'bc-wcb',
+	'ontario-wsib',
+	'alberta-wcb',
+	'quebec-cnesst',
+	'manitoba-wcb',
+	'saskatchewan-wcb',
+	'nova-scotia-wcb',
+	'california-dwc',
+	'texas-dwc',
+	'new-york-wcb',
+	'florida-dwc',
+	'washington-lni',
 	// Verified against official sources July 2026. Deliberately omitted superseded
 	// names Q-COMP, the AAT (now ART), and Victoria Accident Compensation
 	// Conciliation Service (now WIC); Scotland Employment Injury Assistance is
 	// absent because it has not commenced.
-	'UK DWP IIDB',
-	'UK FTT SSCS',
-	'NI DfC IIDB',
-	'NI Appeal Tribunal',
-	'IE DSP OIB',
-	'IE SWAO',
-	'NSW icare',
-	'NSW PIC',
-	'VIC WorkSafe',
-	'VIC WIC',
-	'QLD WorkCover',
-	'QLD WC Regulator',
-	'QLD QIRC',
-	'WA WorkCover',
-	'WA WC Arbitration',
-	'SA ReturnToWorkSA',
-	'SA SAET',
-	'TAS WorkSafe',
-	'TASCAT Workers',
-	'ACT WorkSafe',
-	'ACT WC Arbitration',
-	'NT WorkSafe',
-	'NT Work Health Ct',
-	'AU Comcare',
-	'AU ART',
-	'NZ ACC',
-	'NZ ACC Appeals',
-	'ZA Comp Fund',
-	'ZA COIDA Tribunal',
+	'uk-dwp-iidb',
+	'uk-ftt-sscs',
+	'ni-dfc-iidb',
+	'ni-appeal-tribunal',
+	'ie-dsp-oib',
+	'ie-swao',
+	'nsw-icare',
+	'nsw-pic',
+	'vic-worksafe',
+	'vic-wic',
+	'qld-workcover',
+	'qld-wc-regulator',
+	'qld-qirc',
+	'wa-workcover',
+	'wa-wc-arbitration',
+	'sa-returntoworksa',
+	'sa-saet',
+	'tas-worksafe',
+	'tascat-workers',
+	'act-worksafe',
+	'act-wc-arbitration',
+	'nt-worksafe',
+	'nt-work-health-ct',
+	'au-comcare',
+	'au-art',
+	'nz-acc',
+	'nz-acc-appeals',
+	'za-comp-fund',
+	'za-coida-tribunal',
 ] as const;
+
+/** Display labels for PROFILE_JURISDICTIONS (mirrored from extension JURISDICTION_LABELS). */
+const PROFILE_JURISDICTION_LABELS: Readonly<Record<string, string>> = {
+	'bc-wcb': 'BC WCB',
+	'ontario-wsib': 'Ontario WSIB',
+	'alberta-wcb': 'Alberta WCB',
+	'quebec-cnesst': 'Quebec CNESST',
+	'manitoba-wcb': 'Manitoba WCB',
+	'saskatchewan-wcb': 'Saskatchewan WCB',
+	'nova-scotia-wcb': 'Nova Scotia WCB',
+	'california-dwc': 'California DWC',
+	'texas-dwc': 'Texas DWC',
+	'new-york-wcb': 'New York WCB',
+	'florida-dwc': 'Florida DWC',
+	'washington-lni': 'Washington L&I',
+	'uk-dwp-iidb': 'UK DWP IIDB',
+	'uk-ftt-sscs': 'UK FTT SSCS',
+	'ni-dfc-iidb': 'NI DfC IIDB',
+	'ni-appeal-tribunal': 'NI Appeal Tribunal',
+	'ie-dsp-oib': 'IE DSP OIB',
+	'ie-swao': 'IE SWAO',
+	'nsw-icare': 'NSW icare',
+	'nsw-pic': 'NSW PIC',
+	'vic-worksafe': 'VIC WorkSafe',
+	'vic-wic': 'VIC WIC',
+	'qld-workcover': 'QLD WorkCover',
+	'qld-wc-regulator': 'QLD WC Regulator',
+	'qld-qirc': 'QLD QIRC',
+	'wa-workcover': 'WA WorkCover',
+	'wa-wc-arbitration': 'WA WC Arbitration',
+	'sa-returntoworksa': 'SA ReturnToWorkSA',
+	'sa-saet': 'SA SAET',
+	'tas-worksafe': 'TAS WorkSafe',
+	'tascat-workers': 'TASCAT Workers',
+	'act-worksafe': 'ACT WorkSafe',
+	'act-wc-arbitration': 'ACT WC Arbitration',
+	'nt-worksafe': 'NT WorkSafe',
+	'nt-work-health-ct': 'NT Work Health Ct',
+	'au-comcare': 'AU Comcare',
+	'au-art': 'AU ART',
+	'nz-acc': 'NZ ACC',
+	'nz-acc-appeals': 'NZ ACC Appeals',
+	'za-comp-fund': 'ZA Comp Fund',
+	'za-coida-tribunal': 'ZA COIDA Tribunal',
+};
+
+/** Legacy display-name → slug aliases (mirrored from extension). */
+const PROFILE_JURISDICTION_ALIASES: Readonly<Record<string, string>> = {
+	'BC WCB': 'bc-wcb',
+	'Ontario WSIB': 'ontario-wsib',
+	'Alberta WCB': 'alberta-wcb',
+	'Quebec CNESST': 'quebec-cnesst',
+	'Manitoba WCB': 'manitoba-wcb',
+	'Saskatchewan WCB': 'saskatchewan-wcb',
+	'Nova Scotia WCB': 'nova-scotia-wcb',
+	'California DWC': 'california-dwc',
+	'Texas DWC': 'texas-dwc',
+	'New York WCB': 'new-york-wcb',
+	'Florida DWC': 'florida-dwc',
+	'Washington L&I': 'washington-lni',
+	'UK DWP IIDB': 'uk-dwp-iidb',
+	'UK FTT SSCS': 'uk-ftt-sscs',
+	'NI DfC IIDB': 'ni-dfc-iidb',
+	'NI Appeal Tribunal': 'ni-appeal-tribunal',
+	'IE DSP OIB': 'ie-dsp-oib',
+	'IE SWAO': 'ie-swao',
+	'NSW icare': 'nsw-icare',
+	'NSW PIC': 'nsw-pic',
+	'VIC WorkSafe': 'vic-worksafe',
+	'VIC WIC': 'vic-wic',
+	'QLD WorkCover': 'qld-workcover',
+	'QLD WC Regulator': 'qld-wc-regulator',
+	'QLD QIRC': 'qld-qirc',
+	'WA WorkCover': 'wa-workcover',
+	'WA WC Arbitration': 'wa-wc-arbitration',
+	'SA ReturnToWorkSA': 'sa-returntoworksa',
+	'SA SAET': 'sa-saet',
+	'TAS WorkSafe': 'tas-worksafe',
+	'TASCAT Workers': 'tascat-workers',
+	'ACT WorkSafe': 'act-worksafe',
+	'ACT WC Arbitration': 'act-wc-arbitration',
+	'NT WorkSafe': 'nt-worksafe',
+	'NT Work Health Ct': 'nt-work-health-ct',
+	'AU Comcare': 'au-comcare',
+	'AU ART': 'au-art',
+	'NZ ACC': 'nz-acc',
+	'NZ ACC Appeals': 'nz-acc-appeals',
+	'ZA Comp Fund': 'za-comp-fund',
+	'ZA COIDA Tribunal': 'za-coida-tribunal',
+};
+
+function profileNormalizeJurisdictionId(value: string): string {
+	const trimmed = value.trim();
+	if (!trimmed) {
+		return '';
+	}
+	if ((PROFILE_JURISDICTIONS as readonly string[]).includes(trimmed)) {
+		return trimmed;
+	}
+	const fromAlias = PROFILE_JURISDICTION_ALIASES[trimmed];
+	if (fromAlias) {
+		return fromAlias;
+	}
+	for (const [id, label] of Object.entries(PROFILE_JURISDICTION_LABELS)) {
+		if (label === trimmed) {
+			return id;
+		}
+	}
+	return trimmed;
+}
+
+function profileJurisdictionLabel(value: string): string {
+	const normalized = profileNormalizeJurisdictionId(value);
+	if (!normalized) {
+		return '';
+	}
+	return PROFILE_JURISDICTION_LABELS[normalized] ?? normalized;
+}
 
 const PROFILE_COUNTRY_CANADA = 'Canada';
 const PROFILE_COUNTRY_US = 'United States';
@@ -253,88 +372,88 @@ const PROFILE_UK_NATIONS = [
  * flat repetition is preferred over a second indirection layer.
  */
 const PROFILE_BOARDS_BY_STATE_PROVINCE: Readonly<Record<string, readonly string[]>> = {
-	'British Columbia': ['BC WCB'],
-	'Ontario': ['Ontario WSIB'],
-	'Alberta': ['Alberta WCB'],
-	'Quebec': ['Quebec CNESST'],
-	'Manitoba': ['Manitoba WCB'],
-	'Saskatchewan': ['Saskatchewan WCB'],
-	'Nova Scotia': ['Nova Scotia WCB'],
-	'California': ['California DWC'],
-	'Texas': ['Texas DWC'],
-	'New York': ['New York WCB'],
-	'Florida': ['Florida DWC'],
-	'Washington': ['Washington L&I'],
-	'England': ['UK DWP IIDB', 'UK FTT SSCS'],
-	'Scotland': ['UK DWP IIDB', 'UK FTT SSCS'],
-	'Wales': ['UK DWP IIDB', 'UK FTT SSCS'],
-	'Northern Ireland': ['NI DfC IIDB', 'NI Appeal Tribunal'],
-	'New South Wales': ['NSW icare', 'NSW PIC', 'AU Comcare', 'AU ART'],
-	'Victoria': ['VIC WorkSafe', 'VIC WIC', 'AU Comcare', 'AU ART'],
-	'Queensland': ['QLD WorkCover', 'QLD WC Regulator', 'QLD QIRC', 'AU Comcare', 'AU ART'],
-	'Western Australia': ['WA WorkCover', 'WA WC Arbitration', 'AU Comcare', 'AU ART'],
-	'South Australia': ['SA ReturnToWorkSA', 'SA SAET', 'AU Comcare', 'AU ART'],
-	'Tasmania': ['TAS WorkSafe', 'TASCAT Workers', 'AU Comcare', 'AU ART'],
-	'Australian Capital Territory': ['ACT WorkSafe', 'ACT WC Arbitration', 'AU Comcare', 'AU ART'],
-	'Northern Territory': ['NT WorkSafe', 'NT Work Health Ct', 'AU Comcare', 'AU ART'],
+	'British Columbia': ['bc-wcb'],
+	'Ontario': ['ontario-wsib'],
+	'Alberta': ['alberta-wcb'],
+	'Quebec': ['quebec-cnesst'],
+	'Manitoba': ['manitoba-wcb'],
+	'Saskatchewan': ['saskatchewan-wcb'],
+	'Nova Scotia': ['nova-scotia-wcb'],
+	'California': ['california-dwc'],
+	'Texas': ['texas-dwc'],
+	'New York': ['new-york-wcb'],
+	'Florida': ['florida-dwc'],
+	'Washington': ['washington-lni'],
+	'England': ['uk-dwp-iidb', 'uk-ftt-sscs'],
+	'Scotland': ['uk-dwp-iidb', 'uk-ftt-sscs'],
+	'Wales': ['uk-dwp-iidb', 'uk-ftt-sscs'],
+	'Northern Ireland': ['ni-dfc-iidb', 'ni-appeal-tribunal'],
+	'New South Wales': ['nsw-icare', 'nsw-pic', 'au-comcare', 'au-art'],
+	'Victoria': ['vic-worksafe', 'vic-wic', 'au-comcare', 'au-art'],
+	'Queensland': ['qld-workcover', 'qld-wc-regulator', 'qld-qirc', 'au-comcare', 'au-art'],
+	'Western Australia': ['wa-workcover', 'wa-wc-arbitration', 'au-comcare', 'au-art'],
+	'South Australia': ['sa-returntoworksa', 'sa-saet', 'au-comcare', 'au-art'],
+	'Tasmania': ['tas-worksafe', 'tascat-workers', 'au-comcare', 'au-art'],
+	'Australian Capital Territory': ['act-worksafe', 'act-wc-arbitration', 'au-comcare', 'au-art'],
+	'Northern Territory': ['nt-worksafe', 'nt-work-health-ct', 'au-comcare', 'au-art'],
 };
 
 /** Mirrored from extension `BOARDS_BY_COUNTRY`. */
 const PROFILE_BOARDS_BY_COUNTRY: Readonly<Record<string, readonly string[]>> = {
 	'Canada': [
-		'BC WCB',
-		'Ontario WSIB',
-		'Alberta WCB',
-		'Quebec CNESST',
-		'Manitoba WCB',
-		'Saskatchewan WCB',
-		'Nova Scotia WCB',
+		'bc-wcb',
+		'ontario-wsib',
+		'alberta-wcb',
+		'quebec-cnesst',
+		'manitoba-wcb',
+		'saskatchewan-wcb',
+		'nova-scotia-wcb',
 	],
 	'United States': [
-		'California DWC',
-		'Texas DWC',
-		'New York WCB',
-		'Florida DWC',
-		'Washington L&I',
+		'california-dwc',
+		'texas-dwc',
+		'new-york-wcb',
+		'florida-dwc',
+		'washington-lni',
 	],
 	'United Kingdom': [
-		'UK DWP IIDB',
-		'UK FTT SSCS',
-		'NI DfC IIDB',
-		'NI Appeal Tribunal',
+		'uk-dwp-iidb',
+		'uk-ftt-sscs',
+		'ni-dfc-iidb',
+		'ni-appeal-tribunal',
 	],
 	'Ireland': [
-		'IE DSP OIB',
-		'IE SWAO',
+		'ie-dsp-oib',
+		'ie-swao',
 	],
 	'Australia': [
-		'NSW icare',
-		'NSW PIC',
-		'VIC WorkSafe',
-		'VIC WIC',
-		'QLD WorkCover',
-		'QLD WC Regulator',
-		'QLD QIRC',
-		'WA WorkCover',
-		'WA WC Arbitration',
-		'SA ReturnToWorkSA',
-		'SA SAET',
-		'TAS WorkSafe',
-		'TASCAT Workers',
-		'ACT WorkSafe',
-		'ACT WC Arbitration',
-		'NT WorkSafe',
-		'NT Work Health Ct',
-		'AU Comcare',
-		'AU ART',
+		'nsw-icare',
+		'nsw-pic',
+		'vic-worksafe',
+		'vic-wic',
+		'qld-workcover',
+		'qld-wc-regulator',
+		'qld-qirc',
+		'wa-workcover',
+		'wa-wc-arbitration',
+		'sa-returntoworksa',
+		'sa-saet',
+		'tas-worksafe',
+		'tascat-workers',
+		'act-worksafe',
+		'act-wc-arbitration',
+		'nt-worksafe',
+		'nt-work-health-ct',
+		'au-comcare',
+		'au-art',
 	],
 	'New Zealand': [
-		'NZ ACC',
-		'NZ ACC Appeals',
+		'nz-acc',
+		'nz-acc-appeals',
 	],
 	'South Africa': [
-		'ZA Comp Fund',
-		'ZA COIDA Tribunal',
+		'za-comp-fund',
+		'za-coida-tribunal',
 	],
 };
 
@@ -998,7 +1117,7 @@ export class OnboardingVariationA extends Disposable implements IOnboardingServi
 		const explainer = append(contentMain, $('p.onboarding-a-signin-explainer'));
 		explainer.textContent = localize(
 			'onboarding.signIn.accountExplainer',
-			"A free account keeps your settings and profile in sync. Creating cases and editing documents never requires an account."
+			"A free SafeAppeals Cloud account unlocks email, calendar, and documents. You only pay for AI credits."
 		);
 
 		const footer = append(wrapper, $('.onboarding-a-signin-footer'));
@@ -1199,7 +1318,9 @@ export class OnboardingVariationA extends Disposable implements IOnboardingServi
 			for (const key of OnboardingVariationA.PROFILE_KEYS) {
 				const value = this.configurationService.getValue<string>(`safeappeals.profile.${key}`);
 				if (typeof value === 'string' && value) {
-					this.profileValues[key] = value;
+					this.profileValues[key] = key === 'jurisdiction'
+						? profileNormalizeJurisdictionId(value)
+						: value;
 				}
 			}
 			this.profileCountryOtherMode = !!this.profileValues.country && !isKnownProfileCountry(this.profileValues.country);
@@ -1785,14 +1906,15 @@ export class OnboardingVariationA extends Disposable implements IOnboardingServi
 		const notSpecified = localize('onboarding.profile.notSpecified', "Not specified");
 		const options: ISelectOptionItem[] = [
 			{ text: notSpecified },
-			...boards.map(b => ({ text: b })),
+			...boards.map(b => ({ text: profileJurisdictionLabel(b) })),
 			{ text: otherLabel },
 		];
 		let selected = 0;
 		if (this.profileBoardOtherMode) {
 			selected = options.length - 1;
 		} else if (this.profileValues.jurisdiction) {
-			const idx = options.findIndex(o => o.text === this.profileValues.jurisdiction);
+			const label = profileJurisdictionLabel(this.profileValues.jurisdiction);
+			const idx = options.findIndex(o => o.text === label);
 			selected = idx < 0 ? 0 : idx;
 		}
 
@@ -1822,7 +1944,8 @@ export class OnboardingVariationA extends Disposable implements IOnboardingServi
 				}
 			} else {
 				this.profileBoardOtherMode = false;
-				this.profileValues.jurisdiction = e.selected;
+				const boardIndex = e.index - 1;
+				this.profileValues.jurisdiction = boards[boardIndex] ?? profileNormalizeJurisdictionId(e.selected);
 			}
 			this._syncProfileBoardOtherInput();
 		}));
@@ -1858,10 +1981,10 @@ export class OnboardingVariationA extends Disposable implements IOnboardingServi
 			inputBoxStyles: defaultInputBoxStyles,
 		}));
 		inputBox.inputElement.id = inputId;
-		inputBox.value = this.profileValues.jurisdiction;
+		inputBox.value = profileJurisdictionLabel(this.profileValues.jurisdiction) || this.profileValues.jurisdiction;
 		this._registerStepFocusable(inputBox.inputElement);
 		store.add(inputBox.onDidChange(value => {
-			this.profileValues.jurisdiction = value;
+			this.profileValues.jurisdiction = profileNormalizeJurisdictionId(value) || value.trim();
 		}));
 	}
 
@@ -1875,6 +1998,8 @@ export class OnboardingVariationA extends Disposable implements IOnboardingServi
 	 * stale settings and the instructions file on disk.
 	 */
 	private _saveProfile(): void {
+		this.profileValues.jurisdiction = profileNormalizeJurisdictionId(this.profileValues.jurisdiction)
+			|| this.profileValues.jurisdiction.trim();
 		const entries = Object.entries(this.profileValues) as [ProfileFieldKey, string][];
 		for (const [key, value] of entries) {
 			this.configurationService.updateValue(`safeappeals.profile.${key}`, value.trim(), ConfigurationTarget.USER)
@@ -1886,7 +2011,7 @@ export class OnboardingVariationA extends Disposable implements IOnboardingServi
 				severity: Severity.Warning,
 				message: localize(
 					'onboarding.profile.ruleWriteFailed',
-					"Your profile was saved, but {0} could not update the assistant's copy of it. Run \"Safe Appeals Case: Set Up Profile\" from the Command Palette to try again.",
+					"Your profile was saved, but {0} could not update the assistant's copy of it. Run \"Safe Appeals Timeline: Set Up Profile\" from the Command Palette to try again.",
 					this.productService.nameLong
 				),
 			});
@@ -1901,7 +2026,12 @@ export class OnboardingVariationA extends Disposable implements IOnboardingServi
 	private async _writeProfileRule(): Promise<void> {
 		const home = await this.pathService.userHome();
 		const target = joinPath(home, '.copilot', 'instructions', 'safeappeals-profile.instructions.md');
-		const content = renderProfileRule(this.profileValues);
+		// Settings store slugs; the human-readable rule uses display labels.
+		const content = renderProfileRule({
+			...this.profileValues,
+			jurisdiction: profileJurisdictionLabel(this.profileValues.jurisdiction)
+				|| this.profileValues.jurisdiction,
+		});
 
 		await this.fileService.createFolder(dirname(target));
 		await this.fileService.writeFile(target, VSBuffer.fromString(content));
@@ -2184,14 +2314,15 @@ export class OnboardingVariationA extends Disposable implements IOnboardingServi
 		sampleBtn.type = 'button';
 		sampleBtn.textContent = localize('onboarding.credits.openSampleCase', "Open the Sample Case");
 		this.stepDisposables.add(addDisposableListener(sampleBtn, EventType.CLICK, () => {
-			void this._runCreditsFirstAction('safeappeals-case.openSampleCase', 'openSampleCase');
+			void this._runCreditsFirstAction('safeappeals-timeline.openSampleCase', 'openSampleCase');
 		}));
 
 		const ownCaseBtn = this._registerStepFocusable(append(actions, $<HTMLButtonElement>('button.onboarding-a-btn.onboarding-a-btn-secondary')));
 		ownCaseBtn.type = 'button';
 		ownCaseBtn.textContent = localize('onboarding.credits.startOwnCase', "Start with My Own Case");
 		this.stepDisposables.add(addDisposableListener(ownCaseBtn, EventType.CLICK, () => {
-			void this._runCreditsFirstAction('safeappeals-case.initCase', 'startOwnCase');
+			// Case brief is agent-authored AGENTS.md — open Chat instead of the retired initCase flow.
+			void this._runCreditsFirstAction('workbench.action.chat.open', 'startOwnCase');
 		}));
 	}
 

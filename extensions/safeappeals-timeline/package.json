@@ -1,0 +1,375 @@
+{
+  "name": "safeappeals-timeline",
+  "displayName": "%displayName%",
+  "description": "%description%",
+  "version": "1.0.0",
+  "publisher": "safeappeals",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.70.0"
+  },
+  "main": "./out/extension.js",
+  "categories": [
+    "Other"
+  ],
+  "extensionKind": [
+    "workspace"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "capabilities": {
+    "virtualWorkspaces": false,
+    "untrustedWorkspaces": {
+      "supported": false
+    }
+  },
+  "contributes": {
+    "commands": [
+      {
+        "command": "safeappeals-timeline.setupProfile",
+        "title": "%command.setupProfile%",
+        "category": "%command.category%"
+      },
+      {
+        "command": "safeappeals-timeline.openSampleCase",
+        "title": "%command.openSampleCase%",
+        "category": "%command.category%"
+      },
+      {
+        "command": "safeappeals-timeline.takeTour",
+        "title": "%command.takeTour%",
+        "category": "%command.category%"
+      },
+      {
+        "command": "safeappeals-timeline.openTimeline",
+        "title": "%command.openTimeline%",
+        "category": "%command.category%",
+        "icon": "$(calendar)"
+      }
+    ],
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "safeappeals-timeline.openTimeline"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "safeappeals-timeline.openTimeline",
+          "when": "view == safeappeals-timeline.sidebar",
+          "group": "navigation"
+        }
+      ]
+    },
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "safeappeals-timeline",
+          "title": "%view.container.title%",
+          "icon": "$(calendar)"
+        }
+      ]
+    },
+    "views": {
+      "safeappeals-timeline": [
+        {
+          "type": "webview",
+          "id": "safeappeals-timeline.sidebar",
+          "name": "%view.timeline.name%"
+        }
+      ]
+    },
+    "chatSkills": [
+      {
+        "path": "./skills/project-setup/SKILL.md"
+      }
+    ],
+    "languageModelTools": [
+      {
+        "name": "timeline_add_event",
+        "toolReferenceName": "timelineAddEvent",
+        "displayName": "Add Timeline Event",
+        "modelDescription": "Add a new event to the case timeline (.safeAppeals/timeline.json). Use when the user mentions dates, appointments, deadlines, or events that should be tracked. Categories: injury, medical, hearing, decision, deadline, filing, correspondence, custom. Set is_deadline true for deadline tracking. Optionally link document URIs.",
+        "userDescription": "Add an event to the case timeline",
+        "canBeReferencedInPrompt": true,
+        "icon": "$(calendar)",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "date": {
+              "type": "string",
+              "description": "ISO 8601 date string (YYYY-MM-DD or full ISO datetime). Required."
+            },
+            "title": {
+              "type": "string",
+              "description": "Short descriptive title for the event. Required."
+            },
+            "description": {
+              "type": "string",
+              "description": "Optional detailed description or notes."
+            },
+            "category": {
+              "type": "string",
+              "description": "Event category: injury, medical, hearing, decision, deadline, filing, correspondence, or custom. Required."
+            },
+            "is_deadline": {
+              "type": "boolean",
+              "description": "Set to true if this is a deadline that needs tracking."
+            },
+            "linked_documents": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Optional array of document URIs or workspace-relative paths."
+            }
+          },
+          "required": [
+            "date",
+            "title",
+            "category"
+          ]
+        }
+      },
+      {
+        "name": "timeline_update_event",
+        "toolReferenceName": "timelineUpdateEvent",
+        "displayName": "Update Timeline Event",
+        "modelDescription": "Update an existing timeline event by event_id. Use to change date/title/description/category, or mark deadlines complete (is_complete).",
+        "userDescription": "Update a timeline event",
+        "canBeReferencedInPrompt": true,
+        "icon": "$(edit)",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "event_id": {
+              "type": "string",
+              "description": "The unique ID of the event to update. Required."
+            },
+            "date": {
+              "type": "string",
+              "description": "Optional new ISO 8601 date string."
+            },
+            "title": {
+              "type": "string",
+              "description": "Optional new title."
+            },
+            "description": {
+              "type": "string",
+              "description": "Optional new description."
+            },
+            "category": {
+              "type": "string",
+              "description": "Optional new category."
+            },
+            "is_deadline": {
+              "type": "boolean",
+              "description": "Optional. Change deadline status."
+            },
+            "is_complete": {
+              "type": "boolean",
+              "description": "Optional. Mark deadline complete."
+            }
+          },
+          "required": [
+            "event_id"
+          ]
+        }
+      },
+      {
+        "name": "timeline_delete_event",
+        "toolReferenceName": "timelineDeleteEvent",
+        "displayName": "Delete Timeline Event",
+        "modelDescription": "Delete an event from the timeline by event_id. Use when an event was added in error or is no longer relevant.",
+        "userDescription": "Delete a timeline event",
+        "canBeReferencedInPrompt": true,
+        "icon": "$(trash)",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "event_id": {
+              "type": "string",
+              "description": "The unique ID of the event to delete. Required."
+            }
+          },
+          "required": [
+            "event_id"
+          ]
+        }
+      },
+      {
+        "name": "timeline_get_events",
+        "toolReferenceName": "timelineGetEvents",
+        "displayName": "Get Timeline Events",
+        "modelDescription": "Query timeline events with optional filters (category, start_date, end_date, is_deadline, limit default 50). Use to view chronology, find event IDs, or review medical history.",
+        "userDescription": "List timeline events",
+        "canBeReferencedInPrompt": true,
+        "icon": "$(list-unordered)",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "category": {
+              "type": "string",
+              "description": "Optional category filter."
+            },
+            "start_date": {
+              "type": "string",
+              "description": "Optional ISO 8601 start date (inclusive)."
+            },
+            "end_date": {
+              "type": "string",
+              "description": "Optional ISO 8601 end date (inclusive)."
+            },
+            "is_deadline": {
+              "type": "boolean",
+              "description": "Optional. true = deadlines only; false = exclude deadlines."
+            },
+            "limit": {
+              "type": "number",
+              "description": "Maximum events to return. Default 50."
+            }
+          }
+        }
+      },
+      {
+        "name": "timeline_link_document",
+        "toolReferenceName": "timelineLinkDocument",
+        "displayName": "Link Document to Timeline",
+        "modelDescription": "Link a document URI or workspace path to an existing timeline event (event_id + document_uri).",
+        "userDescription": "Link a document to a timeline event",
+        "canBeReferencedInPrompt": true,
+        "icon": "$(link)",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "event_id": {
+              "type": "string",
+              "description": "The unique ID of the event. Required."
+            },
+            "document_uri": {
+              "type": "string",
+              "description": "Full path or workspace-relative path to the document. Required."
+            }
+          },
+          "required": [
+            "event_id",
+            "document_uri"
+          ]
+        }
+      },
+      {
+        "name": "timeline_get_deadlines",
+        "toolReferenceName": "timelineGetDeadlines",
+        "displayName": "Get Timeline Deadlines",
+        "modelDescription": "Get overdue and upcoming deadlines. days_ahead defaults to 30. Use for case review and drafting time awareness.",
+        "userDescription": "List upcoming and overdue deadlines",
+        "canBeReferencedInPrompt": true,
+        "icon": "$(warning)",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "days_ahead": {
+              "type": "number",
+              "description": "Days to look ahead for upcoming deadlines. Default 30."
+            }
+          }
+        }
+      }
+    ],
+    "walkthroughs": [
+      {
+        "id": "safeappealsTimelineSetup",
+        "title": "%walkthrough.title%",
+        "description": "%walkthrough.description%",
+        "steps": [
+          {
+            "id": "reviewProfile",
+            "title": "%walkthrough.reviewProfile.title%",
+            "description": "%walkthrough.reviewProfile.description%",
+            "media": {
+              "markdown": "media/walkthrough/profile.md"
+            },
+            "completionEvents": [
+              "onSettingChanged:safeappeals.profile.name",
+              "onCommand:safeappeals-timeline.setupProfile"
+            ]
+          },
+          {
+            "id": "openSampleCase",
+            "title": "%walkthrough.openSampleCase.title%",
+            "description": "%walkthrough.openSampleCase.description%",
+            "media": {
+              "markdown": "media/walkthrough/sampleCase.md"
+            },
+            "completionEvents": [
+              "onCommand:safeappeals-timeline.openSampleCase"
+            ]
+          },
+          {
+            "id": "takeTour",
+            "title": "%walkthrough.takeTour.title%",
+            "description": "%walkthrough.takeTour.description%",
+            "media": {
+              "markdown": "media/walkthrough/tour.md"
+            },
+            "completionEvents": [
+              "onCommand:safeappeals-timeline.takeTour"
+            ]
+          },
+          {
+            "id": "howUsesAI",
+            "title": "%walkthrough.howUsesAI.title%",
+            "description": "%walkthrough.howUsesAI.description%",
+            "media": {
+              "markdown": "media/walkthrough/howUsesAI.md"
+            },
+            "completionEvents": [
+              "onCommand:safeappeals.help.howUsesAI"
+            ]
+          },
+          {
+            "id": "addCredits",
+            "title": "%walkthrough.addCredits.title%",
+            "description": "%walkthrough.addCredits.description%",
+            "media": {
+              "markdown": "media/walkthrough/credits.md"
+            },
+            "completionEvents": [
+              "onCommand:safeappeals.cloud.openCheckout"
+            ]
+          },
+          {
+            "id": "connectEmailCalendar",
+            "title": "%walkthrough.connect.title%",
+            "description": "%walkthrough.connect.description%",
+            "media": {
+              "markdown": "media/walkthrough/connect.md"
+            },
+            "completionEvents": [
+              "onCommand:safeappeals-email.addAccount",
+              "onCommand:safeappeals-calendar.connect"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "scripts": {
+    "compile": "node ./esbuild.mjs && gulp compile-extension:safeappeals-timeline",
+    "watch": "node ./esbuild.mjs --watch",
+    "build-webview": "node ./esbuild.mjs",
+    "watch-webview": "node ./esbuild.mjs --watch"
+  },
+  "devDependencies": {
+    "@types/node": "24.x",
+    "@types/react": "^18.3.31",
+    "@types/react-dom": "^18.3.7",
+    "esbuild": "^0.25.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "allowScripts": {
+    "esbuild@0.25.0": true
+  }
+}
