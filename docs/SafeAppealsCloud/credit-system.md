@@ -86,6 +86,7 @@ CREATE TABLE credit_transactions (
     balance_after BIGINT,
 
     -- Purchase details
+    purchase_source TEXT NOT NULL DEFAULT 'checkout',  -- 'checkout' | 'auto_reload'
     stripe_session_id TEXT,
     stripe_payment_intent TEXT,
     pack_type TEXT,               -- 'starter', 'pro', 'power'
@@ -194,6 +195,48 @@ RETURNING credits_balance;
 SELECT check_credits('user-id', 1000);
 -- Returns TRUE if user has >= 1000 credits
 ```
+
+## Auto-Reload (Prepaid Top-Up)
+
+Individual accounts can enable **auto-reload** on the dashboard **Billing** page. This is a prepaid auto top-up (OpenAI/Anthropic-style)—**not a subscription**. Each reload is a one-time credit-pack charge when your balance drops after usage settles.
+
+| Setting | Description |
+|---------|-------------|
+| **Balance threshold** | Reload when balance falls at or below this level (minimum 10,000 tokens; default 100,000) |
+| **Reload pack** | Starter ($30), Pro ($65), or Power ($130)—same packs as manual checkout |
+| **Monthly cap** | Optional limit on auto-reload spend per calendar month (defaults to **$390** when first enabled; server maximum $390) |
+
+**Card on file:** Users add a card via Stripe Checkout `mode: setup` (`POST /credits/auto-reload/setup-card`). The SetupIntent uses off-session usage so saved cards can be charged without the user present.
+
+**When it fires:** After credits are settled (AI or web-search usage), the API checks whether auto-reload is enabled and balance ≤ threshold. If so, it acquires a reload slot and creates an off-session `PaymentIntent` for the selected pack. Fulfillment uses the same `fulfill_credit_purchase` RPC as manual checkout, with `purchase_source: 'auto_reload'`.
+
+**Consent:** Enabling auto-reload or changing the reload pack while enabled requires explicit consent (`consent: true` on `PUT /credits/auto-reload`). Team and Enterprise office plans remain **Contact Sales**—they are not self-serve subscriptions and do not use this individual auto-reload flow.
+
+**Safeguards:** 15-minute cooldown between attempts, max 3 reloads per day, monthly cap enforcement, consecutive failure disable, and in-flight PaymentIntent reconciliation via webhooks.
+
+### API Endpoints
+
+```
+GET  /credits/auto-reload              — current settings (sanitized; no Stripe PM id)
+PUT  /credits/auto-reload              — update threshold, pack, cap, enabled; consent when required
+POST /credits/auto-reload/setup-card   — Stripe Checkout URL to save/update card
+```
+
+### Configuration Constants
+
+Defined in `void-cloud/api/src/lib/creditPacks.ts`:
+
+```typescript
+AUTO_RELOAD_MIN_THRESHOLD = 10_000
+AUTO_RELOAD_DEFAULT_THRESHOLD = 100_000
+AUTO_RELOAD_DEFAULT_MONTHLY_CAP_CENTS = 39_000   // $390
+AUTO_RELOAD_SERVER_MONTHLY_MAX_CENTS = 39_000
+AUTO_RELOAD_MAX_RELOADS_PER_DAY = 3
+AUTO_RELOAD_COOLDOWN_MS = 15 * 60 * 1000
+AUTO_RELOAD_CONSENT_VERSION = "auto_reload_v1"
+```
+
+Database migrations: `014_auto_reload.sql`, `015_auto_reload_harden.sql`, `016_auto_reload_cap_period.sql`.
 
 ## Purchase Flow
 

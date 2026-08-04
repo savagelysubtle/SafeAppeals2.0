@@ -165,6 +165,22 @@ N mail/calendar OAuth grants per Cloud user. Replaces the retired single-row `pr
 
 See `void-cloud/supabase/migrations/010_service_connections.sql` for the full DDL (`service_connections` + `connection_requests`). Migration `011_drop_provider_tokens.sql` drops the legacy table after the 010 backfill is verified.
 
+### auto_reload_settings
+
+Per-user prepaid auto-reload configuration (1:1 with `profiles`). Written by the API (`service_role`); authenticated clients may read their own row only.
+
+Key columns: `enabled`, `threshold_tokens` (min 10,000), `pack_id` (`starter` | `pro` | `power`), `monthly_cap_cents`, `consent_at` / `consent_version`, saved card display fields (`pm_brand`, `pm_last4`, …), in-flight reload state, failure counters, and monthly/daily spend tracking.
+
+See `void-cloud/supabase/migrations/014_auto_reload.sql`.
+
+### auto_reload_attempts
+
+Audit log of auto-reload tries (started, succeeded, failed, skipped). Service-managed only; no client RLS policies.
+
+### credit_transactions.purchase_source
+
+Added in migration 014. Values: `checkout` (manual Stripe Checkout) or `auto_reload` (off-session PaymentIntent). `stripe_payment_intent` is required and idempotent for auto-reload purchases.
+
 ## Functions
 
 ### calculate_request_cost
@@ -403,6 +419,19 @@ Migrations are stored in `void-cloud/supabase/migrations/`:
 | `009_provider_tokens.sql` | Legacy single-row encrypted provider refresh (`provider_tokens`; superseded) |
 | `010_service_connections.sql` | N service connections + connection_requests; backfill from 009 |
 | `011_drop_provider_tokens.sql` | Drop `provider_tokens` after 010 backfill is verified |
+| `014_auto_reload.sql` | Auto-reload settings, attempts audit, `purchase_source`, slot RPCs |
+| `015_auto_reload_harden.sql` | RLS hardening, consent checks, `clear_auto_reload_in_flight` |
+| `016_auto_reload_cap_period.sql` | Monthly cap period rollover fix in `acquire_auto_reload_slot` |
+
+### Auto-Reload RPCs (service_role)
+
+| Function | Purpose |
+|----------|---------|
+| `acquire_auto_reload_slot` | Atomic gate: threshold, consent, caps, cooldown, daily limit |
+| `release_auto_reload_slot` | Clear in-flight state after payment failure |
+| `clear_auto_reload_in_flight` | Reconcile stale in-flight PaymentIntents |
+| `upsert_auto_reload_payment_method` | Persist card metadata after Checkout setup |
+| `fulfill_credit_purchase` | Extended for `purchase_source = 'auto_reload'` |
 
 ### Running Migrations
 
