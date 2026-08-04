@@ -23,6 +23,7 @@ export const SAFEAPPEALS_RUN_VSCODE_COMMAND_TOOL = 'safeappeals_runVscodeCommand
 export const SAFEAPPEALS_FETCH_WEB_PAGE_TOOL = 'safeappeals_fetchWebPage';
 export const SAFEAPPEALS_WEB_SEARCH_TOOL = 'safeappeals_webSearch';
 export const SAFEAPPEALS_MULTI_WEB_SEARCH_TOOL = 'safeappeals_multiWebSearch';
+export const SAFEAPPEALS_SWITCH_MODE_TOOL = 'safeappeals_switchMode';
 
 /** Registered core edit tool id (extension API may also surface the legacy alias). */
 export const VSCODE_EDIT_FILE_TOOL = 'vscode_editFile_internal';
@@ -92,7 +93,23 @@ export const ENSURED_AGENT_TOOL_NAMES: readonly string[] = [
 	SAFEAPPEALS_FETCH_WEB_PAGE_TOOL,
 	SAFEAPPEALS_WEB_SEARCH_TOOL,
 	SAFEAPPEALS_MULTI_WEB_SEARCH_TOOL,
+	SAFEAPPEALS_SWITCH_MODE_TOOL,
 ];
+
+const SWITCH_MODE_MODEL_DESCRIPTION =
+	'Switch the current chat between Plan and Agent modes. Call this tool yourself — NEVER ask the user which mode to use.\n\n' +
+	'Your current mode is stated in the mode reminder earlier in this turn. Use that; do not ask.\n\n' +
+	'In Ask mode (or any mode without tools for the work), call this tool to leave Ask for Agent or Plan — never ask the user.\n\n' +
+	'SWITCH TO PLAN when ANY of these apply:\n' +
+	'1. Adding new functionality - where should it go? What patterns to follow?\n' +
+	'2. Multiple valid approaches exist - choosing between technologies, patterns, or strategies\n' +
+	'3. Modifying existing behavior - unclear what should change or what side effects exist\n' +
+	'4. Architectural decisions required - choosing between design patterns or integration approaches\n' +
+	'5. Changes span multiple files - refactoring, migrations, or cross-cutting concerns\n' +
+	'6. Requirements are underspecified - need to explore before understanding scope\n\n' +
+	'SWITCH TO AGENT when planning is done and you should implement, edit files, or execute the agreed plan.\n\n' +
+	'Do NOT switch to Plan when the user already attached a detailed spec, you already started editing, ' +
+	'the change is a single obvious fix, or the user gave explicit step-by-step instructions.';
 
 const WEB_SEARCH_MODEL_DESCRIPTION =
 	'Search the web via SafeAppeals Cloud (Brave Search). Returns ranked titles, URLs, snippets, and optional metadata ' +
@@ -537,6 +554,21 @@ export const ENSURED_AGENT_TOOL_DESCRIPTORS: Readonly<Record<string, AgentChatTo
 			required: ['queries'],
 		},
 	},
+	[SAFEAPPEALS_SWITCH_MODE_TOOL]: {
+		name: SAFEAPPEALS_SWITCH_MODE_TOOL,
+		description: SWITCH_MODE_MODEL_DESCRIPTION,
+		inputSchema: {
+			type: 'object',
+			properties: {
+				mode: {
+					type: 'string',
+					enum: ['Plan', 'Agent'],
+					description: 'Target chat mode. Use "Plan" to research and plan; use "Agent" to implement.',
+				},
+			},
+			required: ['mode'],
+		},
+	},
 };
 
 /**
@@ -562,6 +594,7 @@ export const MVP_AGENT_TOOL_NAMES: readonly string[] = [
 	SAFEAPPEALS_FETCH_WEB_PAGE_TOOL,
 	SAFEAPPEALS_WEB_SEARCH_TOOL,
 	SAFEAPPEALS_MULTI_WEB_SEARCH_TOOL,
+	SAFEAPPEALS_SWITCH_MODE_TOOL,
 	'run_in_terminal',
 	'manage_todo_list',
 	VSCODE_EDIT_FILE_TOOL,
@@ -589,6 +622,7 @@ export const AGENT_TOOL_NAME_SUBSTITUTIONS: Readonly<Record<string, string>> = {
 	copilot_applyPatch: SAFEAPPEALS_APPLY_PATCH_TOOL,
 	copilot_runVscodeCommand: SAFEAPPEALS_RUN_VSCODE_COMMAND_TOOL,
 	copilot_fetchWebPage: SAFEAPPEALS_FETCH_WEB_PAGE_TOOL,
+	copilot_switchAgent: SAFEAPPEALS_SWITCH_MODE_TOOL,
 	web_search: SAFEAPPEALS_WEB_SEARCH_TOOL,
 	multi_link_search: SAFEAPPEALS_MULTI_WEB_SEARCH_TOOL,
 	[VSCODE_EDIT_FILE_TOOL_ALIAS]: VSCODE_EDIT_FILE_TOOL,

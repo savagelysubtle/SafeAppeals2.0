@@ -15,6 +15,7 @@ import {
 import { GoogleAuthProvider } from './googleAuthProvider';
 import { MicrosoftAuthProvider } from './microsoftAuthProvider';
 import { registerSafeAppealsAgentParticipant } from './chat/agentParticipant';
+import { registerPlanAgentProvider } from './chat/planAgentProvider';
 import { registerSafeAppealsAgentTools } from './chat/tools';
 import { CloudChatProvider } from './llm/cloudChatProvider';
 import { isAllowedExternalHttpsUrl } from './llm/externalUrl';
@@ -83,6 +84,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<SafeAp
 	context.subscriptions.push(
 		registerSafeAppealsAgentTools(provider.getApiClient()),
 		registerSafeAppealsAgentParticipant(),
+		registerPlanAgentProvider(context),
 	);
 
 	await provider.initialize();

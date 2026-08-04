@@ -310,22 +310,32 @@ class ToggleChatModeAction extends Action2 {
 		}
 
 		if (!widget) {
-			return;
+			return { ok: false as const, reason: 'noWidget' as const };
 		}
 
 		const chatSession = widget.viewModel?.model;
 		const requestCount = chatSession?.getRequests().length ?? 0;
 		const modes = widget.input.currentChatModesObs.get();
-		const switchToMode = (arg && (modes.findModeById(arg.modeId) || modes.findModeByName(arg.modeId))) ?? this.getNextMode(widget, requestCount, modes);
+		// When a caller passes an explicit modeId (e.g. agent switchMode tool), never
+		// fall through to getNextMode — cycling Agent→Ask looks like a successful
+		// switch to the wrong mode when Plan/custom agents are unavailable.
+		const requestedModeId = arg?.modeId;
+		const resolvedMode = requestedModeId
+			? (modes.findModeById(requestedModeId) || modes.findModeByName(requestedModeId))
+			: undefined;
+		if (requestedModeId && !resolvedMode) {
+			return { ok: false as const, reason: 'modeNotFound' as const, modeId: requestedModeId };
+		}
+		const switchToMode = resolvedMode ?? this.getNextMode(widget, requestCount, modes);
 
 		const currentMode = widget.input.currentModeObs.get();
 		if (switchToMode.id === currentMode.id) {
-			return;
+			return { ok: true as const, modeId: switchToMode.id };
 		}
 
 		const chatModeCheck = await instaService.invokeFunction(handleModeSwitch, widget.input.currentModeKind, switchToMode.kind, requestCount, widget.viewModel?.model);
 		if (!chatModeCheck) {
-			return;
+			return { ok: false as const, reason: 'cancelled' as const, modeId: switchToMode.id };
 		}
 
 		// Send telemetry for mode change
@@ -353,6 +363,8 @@ class ToggleChatModeAction extends Action2 {
 		if (chatModeCheck.needToClearSession) {
 			await commandService.executeCommand(ACTION_ID_NEW_CHAT);
 		}
+
+		return { ok: true as const, modeId: switchToMode.id };
 	}
 
 	private getNextMode(chatWidget: IChatWidget, requestCount: number, modes: IChatModes): IChatMode {

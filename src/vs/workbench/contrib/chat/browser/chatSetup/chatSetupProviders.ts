@@ -38,11 +38,11 @@ import { ChatEntitlementContext, chatRequiresSetup, IChatEntitlementService } fr
 import { ChatModel, ChatRequestModel, IChatRequestModel, IChatRequestVariableData } from '../../common/model/chatModel.js';
 import { ChatMode } from '../../common/chatModes.js';
 import { ChatRequestAgentPart, ChatRequestToolPart } from '../../common/requestParser/chatParserTypes.js';
-import { IChatProgress, IChatService } from '../../common/chatService/chatService.js';
+import { IChatProgress, IChatService, ToolConfirmKind } from '../../common/chatService/chatService.js';
 import { IChatRequestToolEntry } from '../../common/attachments/chatVariableEntries.js';
 import { ChatAgentLocation, ChatConfiguration, ChatModeKind } from '../../common/constants.js';
-import { ILanguageModelsService, SAFEAPPEALS_CLOUD_VENDOR_ID } from '../../common/languageModels.js';
-import { buildSafeAppealsCloudChatMessages, hasLiveSafeAppealsCloudModel, hasUsableNonCoreDefaultAgent, isSafeAppealsCloudAgentActivated, pickSafeAppealsCloudModelId, resolveChatSetupTimeoutWarning, resolveCloudAgentModeUnavailableMessage, SAFEAPPEALS_AGENT_PARTICIPANT_ID, SAFEAPPEALS_AUTH_EXTENSION_ID, shouldFailFastCloudAgentMode, shouldSkipAuthExtensionEnableForCloudAgent, shouldSkipToolsModelWaitForCloudAgent, shouldTreatLiveCloudModelAsLanguageModelReady, shouldUseCloudAgentReadinessPath } from '../../common/chatSetupCloudHelpers.js';
+import { ChatMessageRole, IChatMessage, IChatResponseToolUsePart, ILanguageModelChatRequestOptions, ILanguageModelsService, SAFEAPPEALS_CLOUD_VENDOR_ID } from '../../common/languageModels.js';
+import { buildSafeAppealsAskCloudSystemPrompt, buildSafeAppealsAskCloudSystemPromptWithoutSwitchTool, buildSafeAppealsCloudChatMessages, buildSafeAppealsSwitchModeLmTool, hasLiveSafeAppealsCloudModel, hasUsableNonCoreDefaultAgent, isSafeAppealsCloudAgentActivated, isSuccessfulSwitchModeResultText, pickSafeAppealsCloudModelId, resolveChatSetupTimeoutWarning, resolveCloudAgentModeUnavailableMessage, SAFEAPPEALS_AGENT_PARTICIPANT_ID, SAFEAPPEALS_ASK_CLOUD_SWITCH_MODE_MAX_ROUNDS, SAFEAPPEALS_AUTH_EXTENSION_ID, SAFEAPPEALS_SWITCH_MODE_TOOL_ID, shouldFailFastCloudAgentMode, shouldSkipAuthExtensionEnableForCloudAgent, shouldSkipToolsModelWaitForCloudAgent, shouldTreatLiveCloudModelAsLanguageModelReady, shouldUseCloudAgentReadinessPath, toolResultContentToText } from '../../common/chatSetupCloudHelpers.js';
 import { CHAT_OPEN_ACTION_ID, CHAT_SETUP_ACTION_ID } from '../actions/chatActions.js';
 import { ChatViewId, IChatWidgetService } from '../chat.js';
 import { IViewsService } from '../../../../services/views/common/viewsService.js';
@@ -195,6 +195,9 @@ export class SetupAgent extends Disposable implements IChatAgentImplementation {
 	private static readonly CHAT_RETRY_COMMAND_ID = 'workbench.action.chat.retrySetup';
 	private static readonly CHAT_SHOW_OUTPUT_COMMAND_ID = 'workbench.action.chat.showOutput';
 
+	/** SafeAppeals: warn once when Ask/Edit Cloud cannot find switchMode. */
+	private static _warnedMissingSwitchModeTool = false;
+
 	private readonly _onUnresolvableError = this._register(new Emitter<void>());
 	readonly onUnresolvableError = this._onUnresolvableError.event;
 
@@ -288,7 +291,7 @@ export class SetupAgent extends Disposable implements IChatAgentImplementation {
 			if (await this.hasSafeAppealsCloudSession()) {
 				// SafeAppeals: Ask/Edit answer via Cloud LM — do not wait for GitHub.copilot-chat
 				if (this.usesCloudLanguageModelPath()) {
-					return this.doInvokeWithCloudLanguageModel(request, progress, languageModelsService, chatWidgetService, history, token);
+					return this.doInvokeWithCloudLanguageModel(request, progress, languageModelsService, chatWidgetService, languageModelToolsService, history, token);
 				}
 				// SafeAppeals: Agent + Cloud without a tools agent hangs on activateDefaultAgent — fail fast
 				if (this.isCloudAgentModeUnavailable(chatAgentService, true)) {
@@ -315,9 +318,9 @@ export class SetupAgent extends Disposable implements IChatAgentImplementation {
 
 	/**
 	 * SafeAppeals: answer Ask/Edit directly via the Cloud LM vendor.
-	 * Cloud registers models only (toolCalling:false) — never wait for Copilot chat agent.
+	 * Cloud models advertise toolCalling:true — Ask/Edit may call safeappeals_switchMode; never wait for Copilot chat agent.
 	 */
-	private async doInvokeWithCloudLanguageModel(request: IChatAgentRequest, progress: (part: IChatProgress) => void, languageModelsService: ILanguageModelsService, chatWidgetService: IChatWidgetService, history: IChatAgentHistoryEntry[], token: CancellationToken): Promise<IChatAgentResult> {
+	private async doInvokeWithCloudLanguageModel(request: IChatAgentRequest, progress: (part: IChatProgress) => void, languageModelsService: ILanguageModelsService, chatWidgetService: IChatWidgetService, languageModelToolsService: ILanguageModelToolsService, history: IChatAgentHistoryEntry[], token: CancellationToken): Promise<IChatAgentResult> {
 		const userText = request.message.trim();
 		if (!userText) {
 			return {};
@@ -343,8 +346,18 @@ export class SetupAgent extends Disposable implements IChatAgentImplementation {
 				return {};
 			}
 
-			const messages = buildSafeAppealsCloudChatMessages({
-				systemPrompt: 'You are SafeAppeals Cloud assistant. Be concise and helpful.',
+			const modeLabel = this.mode === ChatModeKind.Edit ? 'Edit' : 'Ask';
+			const switchModeTool = languageModelToolsService.getTool(SAFEAPPEALS_SWITCH_MODE_TOOL_ID);
+			if (!switchModeTool && !SetupAgent._warnedMissingSwitchModeTool) {
+				SetupAgent._warnedMissingSwitchModeTool = true;
+				this.logService.warn('[chat setup] SafeAppeals switchMode tool not registered; Ask/Edit Cloud will run text-only');
+			}
+
+			const systemPrompt = switchModeTool
+				? buildSafeAppealsAskCloudSystemPrompt(modeLabel)
+				: buildSafeAppealsAskCloudSystemPromptWithoutSwitchTool(modeLabel);
+			const messages: IChatMessage[] = buildSafeAppealsCloudChatMessages({
+				systemPrompt,
 				history: history.map(entry => ({
 					userText: entry.request.message,
 					assistantText: this.cloudHistoryResponseToText(entry),
@@ -352,24 +365,99 @@ export class SetupAgent extends Disposable implements IChatAgentImplementation {
 				userText,
 			});
 
-			const response = await languageModelsService.sendChatRequest(modelId, undefined, messages, {}, token);
+			const requestOptions: ILanguageModelChatRequestOptions = switchModeTool
+				? {
+					tools: [buildSafeAppealsSwitchModeLmTool(switchModeTool)],
+					toolMode: 1, // Auto
+				}
+				: {};
 
-			for await (const part of response.stream) {
+			for (let round = 0; round < SAFEAPPEALS_ASK_CLOUD_SWITCH_MODE_MAX_ROUNDS; round++) {
 				if (token.isCancellationRequested) {
 					return {};
 				}
-				const textParts = Array.isArray(part) ? part : [part];
-				for (const p of textParts) {
-					if (p.type === 'text' && p.value) {
-						progress({
-							kind: 'markdownContent',
-							content: new MarkdownString(p.value, { supportThemeIcons: true })
-						});
+
+				const response = await languageModelsService.sendChatRequest(modelId, undefined, messages, requestOptions, token);
+				const toolUseParts: IChatResponseToolUsePart[] = [];
+				const assistantContent: IChatMessage['content'] = [];
+
+				for await (const part of response.stream) {
+					if (token.isCancellationRequested) {
+						return {};
+					}
+					const streamParts = Array.isArray(part) ? part : [part];
+					for (const p of streamParts) {
+						if (p.type === 'text' && p.value) {
+							assistantContent.push({ type: 'text', value: p.value });
+							progress({
+								kind: 'markdownContent',
+								content: new MarkdownString(p.value, { supportThemeIcons: true })
+							});
+						} else if (p.type === 'tool_use') {
+							toolUseParts.push(p);
+							assistantContent.push(p);
+						}
 					}
 				}
-			}
 
-			await response.result;
+				await response.result;
+
+				if (!switchModeTool || toolUseParts.length === 0) {
+					return {};
+				}
+
+				const toolResultParts: IChatMessage['content'] = [];
+				let switched = false;
+				for (const toolUse of toolUseParts) {
+					if (toolUse.name !== SAFEAPPEALS_SWITCH_MODE_TOOL_ID) {
+						const skipped = `Error: tool "${toolUse.name}" is not allowed in Ask/Edit Cloud.`;
+						toolResultParts.push({
+							type: 'tool_result',
+							toolCallId: toolUse.toolCallId,
+							value: [{ type: 'text', value: skipped }],
+							isError: true,
+						});
+						continue;
+					}
+
+					const toolResult = await languageModelToolsService.invokeTool(
+						{
+							callId: toolUse.toolCallId,
+							toolId: SAFEAPPEALS_SWITCH_MODE_TOOL_ID,
+							parameters: toolUse.parameters ?? {},
+							context: { sessionResource: request.sessionResource, workingDirectory: request.workingDirectory },
+							chatRequestId: request.requestId,
+							chatStreamToolCallId: toolUse.toolCallId,
+							preApproved: { type: ToolConfirmKind.ConfirmationNotNeeded, reason: 'SafeAppeals Ask mode switch' },
+						},
+						async () => 0,
+						token,
+					);
+					const resultText = toolResultContentToText(toolResult.content);
+					if (resultText) {
+						progress({
+							kind: 'markdownContent',
+							content: new MarkdownString(resultText, { supportThemeIcons: true })
+						});
+					}
+					toolResultParts.push({
+						type: 'tool_result',
+						toolCallId: toolUse.toolCallId,
+						value: [{ type: 'text', value: resultText }],
+						isError: resultText.startsWith('Error'),
+					});
+					if (isSuccessfulSwitchModeResultText(resultText)) {
+						switched = true;
+					}
+				}
+
+				if (switched) {
+					return {};
+				}
+
+				messages.push({ role: ChatMessageRole.Assistant, content: assistantContent });
+				messages.push({ role: ChatMessageRole.User, content: toolResultParts });
+			}
 		} catch (error) {
 			if (isCancellationError(error) || token.isCancellationRequested) {
 				return {};
@@ -1032,7 +1120,7 @@ export class SetupAgent extends Disposable implements IChatAgentImplementation {
 				void languageModelsService.selectLanguageModels({ vendor: SAFEAPPEALS_CLOUD_VENDOR_ID });
 				// SafeAppeals: Ask/Edit go straight to Cloud LM; Agent still forwards when a tools agent is present
 				if (this.usesCloudLanguageModelPath()) {
-					return this.doInvokeWithCloudLanguageModel(request, progress, languageModelsService, chatWidgetService, history, token);
+					return this.doInvokeWithCloudLanguageModel(request, progress, languageModelsService, chatWidgetService, languageModelToolsService, history, token);
 				}
 				if (this.isCloudAgentModeUnavailable(chatAgentService, true)) {
 					return this.replyCloudAgentModeUnavailable(progress);

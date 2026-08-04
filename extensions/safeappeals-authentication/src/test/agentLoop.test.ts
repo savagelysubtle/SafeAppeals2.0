@@ -35,12 +35,14 @@ import {
 	SAFEAPPEALS_RUN_VSCODE_COMMAND_TOOL,
 	SAFEAPPEALS_SEARCH_CODEBASE_TOOL,
 	SAFEAPPEALS_SEARCH_WORKSPACE_SYMBOLS_TOOL,
+	SAFEAPPEALS_SWITCH_MODE_TOOL,
 	SAFEAPPEALS_WEB_SEARCH_TOOL,
 	selectAgentTools,
 	VSCODE_EDIT_FILE_TOOL,
 	VSCODE_EDIT_FILE_TOOL_ALIAS,
 	VSCODE_FETCH_WEB_PAGE_TOOL,
 } from '../chat/toolAllowlist';
+import { buildModeReminderMessage, resolveModeId } from '../chat/switchModeHelpers';
 
 suite('nextAgentLoopDecision', () => {
 	test('continues when tools remain under the cap', () => {
@@ -142,6 +144,7 @@ suite('agent tool allowlist', () => {
 				applyPatch: resolveAgentToolName('copilot_applyPatch'),
 				runCommand: resolveAgentToolName('copilot_runVscodeCommand'),
 				fetch: resolveAgentToolName('copilot_fetchWebPage'),
+				switchMode: resolveAgentToolName('copilot_switchAgent'),
 				webSearch: resolveAgentToolName('web_search'),
 				multiWebSearch: resolveAgentToolName('multi_link_search'),
 				legacyEdit: resolveAgentToolName(VSCODE_EDIT_FILE_TOOL_ALIAS),
@@ -167,6 +170,7 @@ suite('agent tool allowlist', () => {
 				applyPatch: SAFEAPPEALS_APPLY_PATCH_TOOL,
 				runCommand: SAFEAPPEALS_RUN_VSCODE_COMMAND_TOOL,
 				fetch: SAFEAPPEALS_FETCH_WEB_PAGE_TOOL,
+				switchMode: SAFEAPPEALS_SWITCH_MODE_TOOL,
 				webSearch: SAFEAPPEALS_WEB_SEARCH_TOOL,
 				multiWebSearch: SAFEAPPEALS_MULTI_WEB_SEARCH_TOOL,
 				legacyEdit: VSCODE_EDIT_FILE_TOOL,
@@ -340,6 +344,7 @@ suite('selectAgentTools', () => {
 			{ name: 'copilot_applyPatch', description: 'ap' },
 			{ name: 'copilot_runVscodeCommand', description: 'rvc' },
 			{ name: 'copilot_fetchWebPage', description: 'fwp' },
+			{ name: 'copilot_switchAgent', description: 'sa' },
 			{ name: 'web_search', description: 'ws' },
 			{ name: 'multi_link_search', description: 'mls' },
 			{ name: VSCODE_EDIT_FILE_TOOL, description: 'Edit' },
@@ -370,27 +375,69 @@ suite('selectAgentTools', () => {
 		);
 	});
 
-	test('ensured descriptors include replace, fetch, and web search tools', () => {
+	test('ensured descriptors include replace, fetch, web search, and switch mode tools', () => {
 		assert.deepStrictEqual(
 			{
 				hasReplace: ENSURED_AGENT_TOOL_NAMES.includes(SAFEAPPEALS_REPLACE_STRING_TOOL),
 				hasFetch: ENSURED_AGENT_TOOL_NAMES.includes(SAFEAPPEALS_FETCH_WEB_PAGE_TOOL),
 				hasWebSearch: ENSURED_AGENT_TOOL_NAMES.includes(SAFEAPPEALS_WEB_SEARCH_TOOL),
 				hasMultiWebSearch: ENSURED_AGENT_TOOL_NAMES.includes(SAFEAPPEALS_MULTI_WEB_SEARCH_TOOL),
+				hasSwitchMode: ENSURED_AGENT_TOOL_NAMES.includes(SAFEAPPEALS_SWITCH_MODE_TOOL),
 				replaceDesc: ENSURED_AGENT_TOOL_DESCRIPTORS[SAFEAPPEALS_REPLACE_STRING_TOOL]?.name,
 				fetchDesc: ENSURED_AGENT_TOOL_DESCRIPTORS[SAFEAPPEALS_FETCH_WEB_PAGE_TOOL]?.name,
 				webSearchDesc: ENSURED_AGENT_TOOL_DESCRIPTORS[SAFEAPPEALS_WEB_SEARCH_TOOL]?.name,
 				multiWebSearchDesc: ENSURED_AGENT_TOOL_DESCRIPTORS[SAFEAPPEALS_MULTI_WEB_SEARCH_TOOL]?.name,
+				switchModeDesc: ENSURED_AGENT_TOOL_DESCRIPTORS[SAFEAPPEALS_SWITCH_MODE_TOOL]?.name,
 			},
 			{
 				hasReplace: true,
 				hasFetch: true,
 				hasWebSearch: true,
 				hasMultiWebSearch: true,
+				hasSwitchMode: true,
 				replaceDesc: SAFEAPPEALS_REPLACE_STRING_TOOL,
 				fetchDesc: SAFEAPPEALS_FETCH_WEB_PAGE_TOOL,
 				webSearchDesc: SAFEAPPEALS_WEB_SEARCH_TOOL,
 				multiWebSearchDesc: SAFEAPPEALS_MULTI_WEB_SEARCH_TOOL,
+				switchModeDesc: SAFEAPPEALS_SWITCH_MODE_TOOL,
+			},
+		);
+	});
+
+	test('switchMode maps Plan and Agent to toggleAgentMode ids', () => {
+		assert.deepStrictEqual(
+			{
+				plan: resolveModeId('Plan'),
+				agent: resolveModeId('Agent'),
+				invalid: resolveModeId('Ask'),
+			},
+			{
+				plan: 'Plan',
+				agent: 'agent',
+				invalid: undefined,
+			},
+		);
+	});
+
+	test('mode reminder states current mode and forbids asking the user', () => {
+		const reminder = buildModeReminderMessage({
+			modeName: 'Agent',
+			modeContent: 'Do the work carefully.',
+		});
+		assert.deepStrictEqual(
+			{
+				hasMode: reminder.includes('currently running in "Agent" mode'),
+				neverAsk: reminder.includes('NEVER ask the user which mode'),
+				askLeave: reminder.includes('while you are in Ask'),
+				hasContent: reminder.includes('Do the work carefully.'),
+				defaultName: buildModeReminderMessage({}).includes('currently running in "Agent" mode'),
+			},
+			{
+				hasMode: true,
+				neverAsk: true,
+				askLeave: true,
+				hasContent: true,
+				defaultName: true,
 			},
 		);
 	});

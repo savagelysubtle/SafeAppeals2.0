@@ -191,7 +191,8 @@
 		"safeappeals.safeappeals-authentication": [
 			"defaultChatParticipant",
 			"chatParticipantAdditions",
-			"chatParticipantPrivate"
+			"chatParticipantPrivate",
+			"chatPromptFiles"
 		]
 	},
 	"onboardingSkipSignInStep": false,

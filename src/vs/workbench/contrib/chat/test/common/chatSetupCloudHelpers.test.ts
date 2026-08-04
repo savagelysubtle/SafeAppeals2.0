@@ -5,7 +5,7 @@
 
 import assert from 'assert';
 import { ensureNoDisposablesAreLeakedInTestSuite } from '../../../../../base/test/common/utils.js';
-import { buildSafeAppealsCloudChatMessages, hasLiveSafeAppealsCloudModel, hasUsableNonCoreDefaultAgent, isSafeAppealsCloudAgentActivated, pickSafeAppealsCloudModelId, resolveChatSetupTimeoutWarning, resolveCloudAgentModeUnavailableMessage, SAFEAPPEALS_AGENT_PARTICIPANT_ID, SAFEAPPEALS_CLOUD_LM_HISTORY_TURN_CAP, shouldFailFastCloudAgentMode, shouldSkipAuthExtensionEnableForCloudAgent, shouldSkipToolsModelWaitForCloudAgent, shouldTreatLiveCloudModelAsLanguageModelReady, shouldUseCloudAgentReadinessPath } from '../../common/chatSetupCloudHelpers.js';
+import { buildSafeAppealsAskCloudSystemPrompt, buildSafeAppealsCloudChatMessages, buildSafeAppealsSwitchModeLmTool, hasLiveSafeAppealsCloudModel, hasUsableNonCoreDefaultAgent, isSafeAppealsCloudAgentActivated, isSuccessfulSwitchModeResultText, pickSafeAppealsCloudModelId, resolveChatSetupTimeoutWarning, resolveCloudAgentModeUnavailableMessage, SAFEAPPEALS_AGENT_PARTICIPANT_ID, SAFEAPPEALS_CLOUD_LM_HISTORY_TURN_CAP, SAFEAPPEALS_SWITCH_MODE_TOOL_ID, shouldFailFastCloudAgentMode, shouldSkipAuthExtensionEnableForCloudAgent, shouldSkipToolsModelWaitForCloudAgent, shouldTreatLiveCloudModelAsLanguageModelReady, shouldUseCloudAgentReadinessPath } from '../../common/chatSetupCloudHelpers.js';
 import { ChatModeKind } from '../../common/constants.js';
 import { ChatMessageRole, SAFEAPPEALS_CLOUD_VENDOR_ID } from '../../common/languageModels.js';
 
@@ -211,6 +211,49 @@ suite('SafeAppeals Cloud SetupAgent helpers', () => {
 			});
 			assert.match(message, /GitHub/);
 			assert.match(message, /GitHub\.copilot-chat/);
+		});
+	});
+
+	suite('Ask/Edit Cloud switchMode helpers', () => {
+
+		test('buildSafeAppealsAskCloudSystemPrompt mentions switchMode Agent Plan NEVER ask', () => {
+			const prompt = buildSafeAppealsAskCloudSystemPrompt('Ask');
+			assert.deepStrictEqual({
+				switchMode: prompt.includes(SAFEAPPEALS_SWITCH_MODE_TOOL_ID) || prompt.includes('safeappeals_switchMode'),
+				agent: prompt.includes('Agent'),
+				plan: prompt.includes('Plan'),
+				neverAsk: /NEVER ask/i.test(prompt),
+				mode: prompt.includes('Ask'),
+			}, {
+				switchMode: true,
+				agent: true,
+				plan: true,
+				neverAsk: true,
+				mode: true,
+			});
+		});
+
+		test('isSuccessfulSwitchModeResultText matches success and rejects errors', () => {
+			assert.deepStrictEqual([
+				isSuccessfulSwitchModeResultText('Switched to Agent mode.'),
+				isSuccessfulSwitchModeResultText('Error: mode must be "Plan" or "Agent".'),
+			], [true, false]);
+		});
+
+		test('buildSafeAppealsSwitchModeLmTool shapes name description inputSchema', () => {
+			const schema = { type: 'object', properties: { mode: { type: 'string' } } };
+			assert.deepStrictEqual(
+				buildSafeAppealsSwitchModeLmTool({
+					id: SAFEAPPEALS_SWITCH_MODE_TOOL_ID,
+					modelDescription: 'Switch modes',
+					inputSchema: schema,
+				}),
+				{
+					name: SAFEAPPEALS_SWITCH_MODE_TOOL_ID,
+					description: 'Switch modes',
+					inputSchema: schema,
+				},
+			);
 		});
 	});
 

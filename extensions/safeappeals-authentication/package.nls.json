@@ -60,6 +60,9 @@
 	"tool.multiWebSearch.displayName": "Multi Web Search",
 	"tool.multiWebSearch.modelDescription": "Run multiple sequential web searches via SafeAppeals Cloud (Brave Search). Returns ranked titles, URLs, and snippets for YOU the agent to read — there is no AI summary. Ideal for batch information gathering. Optional filters apply to every query: safesearch, freshness, country, search_lang, ui_lang, site. Credits apply (~250 per query). Maximum 10 queries, 20 results per query.",
 	"tool.multiWebSearch.userDescription": "Run multiple web searches through SafeAppeals Cloud (credits apply)",
+	"tool.switchMode.displayName": "Switch Mode",
+	"tool.switchMode.modelDescription": "Switch the current chat between Plan and Agent modes. Call this tool yourself — NEVER ask the user which mode to use.\n\nYour current mode is stated in the mode reminder earlier in this turn. Use that; do not ask.\n\nSWITCH TO PLAN when ANY of these apply:\n1. Adding new functionality - where should it go? What patterns to follow?\n2. Multiple valid approaches exist - choosing between technologies, patterns, or strategies\n3. Modifying existing behavior - unclear what should change or what side effects exist\n4. Architectural decisions required - choosing between design patterns or integration approaches\n5. Changes span multiple files - refactoring, migrations, or cross-cutting concerns\n6. Requirements are underspecified - need to explore before understanding scope\n\nSWITCH TO AGENT when planning is done and you should implement, edit files, or execute the agreed plan.\n\nDo NOT switch to Plan when the user already attached a detailed spec, you already started editing, the change is a single obvious fix, or the user gave explicit step-by-step instructions.",
+	"tool.switchMode.userDescription": "Switch between Plan and Agent chat modes",
 	"toolSet.edit.description": "Tools for creating and editing files in the workspace",
 	"toolSet.read.description": "Tools for reading files, listing directories, and viewing problems in the workspace",
 	"toolSet.search.description": "Tools for searching files, text, symbols, codebase matches, and git changes",
@@ -74,5 +77,6 @@
 	"config.title": "SafeAppeals Cloud",
 	"config.debug.apiUrl.description": "Dev-only override for the SafeAppeals Cloud API base URL. Honored only when running a development build (`VSCODE_DEV`); production always uses `https://api.safeappeals.com`. Machine-scoped so Settings Sync never uploads it. Prefer the `SAFEAPPEALS_CLOUD_API_URL` environment variable when both are set.",
 	"config.dashboardUrl.description": "Base URL for the SafeAppeals dashboard (finish page and paste fallback).",
-	"config.webCallbackOrigins.description": "Allowed origins for automatic web OAuth callbacks via asExternalUri. Origins not in this list fall back to the finish-page paste flow."
+	"config.webCallbackOrigins.description": "Allowed origins for automatic web OAuth callbacks via asExternalUri. Origins not in this list fall back to the finish-page paste flow.",
+	"config.chat.switchMode.enabled.description": "Allow the SafeAppeals agent to switch between Plan and Agent chat modes via the switchMode tool. Machine-scoped so Settings Sync never uploads it."
 }

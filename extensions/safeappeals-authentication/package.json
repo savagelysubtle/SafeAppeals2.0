@@ -20,6 +20,7 @@
 		"defaultChatParticipant",
 		"chatParticipantAdditions",
 		"chatParticipantPrivate",
+		"chatPromptFiles",
 		"contribLanguageModelToolSets",
 		"findTextInFiles",
 		"textSearchProvider"
@@ -30,7 +31,8 @@
 		"onAuthenticationRequest:safeappeals-cloud",
 		"onAuthenticationRequest:safeappeals-google",
 		"onAuthenticationRequest:safeappeals-microsoft",
-		"onChatParticipant:safeappeals.agent"
+		"onChatParticipant:safeappeals.agent",
+		"onCustomAgentProvider"
 	],
 	"capabilities": {
 		"virtualWorkspaces": true,
@@ -638,6 +640,32 @@
 						"queries"
 					]
 				}
+			},
+			{
+				"name": "safeappeals_switchMode",
+				"toolReferenceName": "switchMode",
+				"displayName": "%tool.switchMode.displayName%",
+				"modelDescription": "%tool.switchMode.modelDescription%",
+				"userDescription": "%tool.switchMode.userDescription%",
+				"canBeReferencedInPrompt": true,
+				"icon": "$(arrow-swap)",
+				"when": "config.safeappeals.chat.switchMode.enabled",
+				"inputSchema": {
+					"type": "object",
+					"properties": {
+						"mode": {
+							"type": "string",
+							"description": "Target chat mode. Use \"Plan\" to research and plan; use \"Agent\" to implement.",
+							"enum": [
+								"Plan",
+								"Agent"
+							]
+						}
+					},
+					"required": [
+						"mode"
+					]
+				}
 			}
 		],
 		"languageModelToolSets": [
@@ -697,7 +725,8 @@
 				"tools": [
 					"runCommand",
 					"problems",
-					"changes"
+					"changes",
+					"switchMode"
 				]
 			},
 			{
@@ -763,8 +792,17 @@
 					],
 					"scope": "machine",
 					"markdownDescription": "%config.webCallbackOrigins.description%"
+				},
+				"safeappeals.chat.switchMode.enabled": {
+					"type": "boolean",
+					"default": true,
+					"scope": "machine",
+					"markdownDescription": "%config.chat.switchMode.enabled.description%"
 				}
 			}
+		},
+		"configurationDefaults": {
+			"github.copilot.chat.switchAgent.enabled": false
 		}
 	},
 	"scripts": {

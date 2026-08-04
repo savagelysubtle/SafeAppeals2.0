@@ -5,6 +5,7 @@
 
 import * as vscode from 'vscode';
 import { MAX_AGENT_ITERATIONS, nextAgentLoopDecision } from './agentLoopHelpers';
+import { buildModeReminderMessage } from './switchModeHelpers';
 import { resolveAllowedInvokeToolName, selectAgentTools } from './toolAllowlist';
 import { toLanguageModelChatTools } from './tools';
 
@@ -113,6 +114,11 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<vscode.Ch
 	const selectedToolNames = new Set(selectedTools.map(tool => tool.name));
 	const tools = toLanguageModelChatTools(selectedTools);
 	const messages = messagesFromHistory(context.history);
+	const modeInstructions = request.modeInstructions2;
+	messages.push(vscode.LanguageModelChatMessage.User(buildModeReminderMessage({
+		modeName: modeInstructions?.name,
+		modeContent: modeInstructions?.content,
+	})));
 	messages.push(vscode.LanguageModelChatMessage.User(request.prompt));
 
 	for (let iteration = 0; ; iteration++) {

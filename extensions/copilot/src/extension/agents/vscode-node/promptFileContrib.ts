@@ -14,7 +14,7 @@ import { AskAgentProvider } from './askAgentProvider';
 import { ExploreAgentProvider } from './exploreAgentProvider';
 import { GitHubOrgCustomAgentProvider } from './githubOrgCustomAgentProvider';
 import { GitHubOrgInstructionsProvider } from './githubOrgInstructionsProvider';
-import { PlanAgentProvider } from './planAgentProvider';
+// PlanAgentProvider intentionally not imported — SafeAppeals owns Plan registration.
 
 export class PromptFileContribution extends Disposable implements IExtensionContribution {
 	readonly id = 'PromptFiles';
@@ -34,9 +34,8 @@ export class PromptFileContribution extends Disposable implements IExtensionCont
 				this._register(vscode.chat.registerCustomAgentProvider(githubOrgAgentProvider));
 			}
 
-			// Register Plan agent provider for dynamic settings-based customization
-			const planProvider = instantiationService.createInstance(PlanAgentProvider);
-			this._register(vscode.chat.registerCustomAgentProvider(planProvider));
+			// SafeAppeals owns Plan — do not register Copilot's PlanAgentProvider.
+			// (planAgentProvider.ts is kept for reference; SA registers Plan in safeappeals-authentication.)
 
 			// Register Ask agent provider for read-only Q&A mode
 			const askProvider = instantiationService.createInstance(AskAgentProvider);

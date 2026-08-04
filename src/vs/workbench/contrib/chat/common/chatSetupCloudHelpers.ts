@@ -170,3 +170,68 @@ export function buildSafeAppealsCloudChatMessages(options: {
 	messages.push({ role: ChatMessageRole.User, content: [{ type: 'text', value: options.userText }] });
 	return messages;
 }
+
+/** SafeAppeals: language-model tool id for Ask/Edit → Agent/Plan mode switches. */
+export const SAFEAPPEALS_SWITCH_MODE_TOOL_ID = 'safeappeals_switchMode';
+
+/** SafeAppeals: max tool rounds for Ask/Edit Cloud switchMode before giving up. */
+export const SAFEAPPEALS_ASK_CLOUD_SWITCH_MODE_MAX_ROUNDS = 3;
+
+/**
+ * SafeAppeals: system prompt for Ask/Edit Cloud when `safeappeals_switchMode` is available.
+ */
+export function buildSafeAppealsAskCloudSystemPrompt(modeLabel: string): string {
+	return [
+		`You are SafeAppeals Cloud assistant in ${modeLabel} mode.`,
+		'Be concise and helpful for Q&A.',
+		`When the user needs implementation, multi-file edits, research, architecture, or planning, call ${SAFEAPPEALS_SWITCH_MODE_TOOL_ID} yourself with mode "Agent" or "Plan" — NEVER ask which mode.`,
+		'Do not narrate mode switches.',
+	].join(' ');
+}
+
+/**
+ * SafeAppeals: Ask/Edit Cloud system prompt when switchMode tool is not registered.
+ */
+export function buildSafeAppealsAskCloudSystemPromptWithoutSwitchTool(modeLabel: string): string {
+	return [
+		`You are SafeAppeals Cloud assistant in ${modeLabel} mode.`,
+		'Be concise and helpful for Q&A.',
+		'For implementation or planning work, ask the user to switch to Agent or Plan via the mode picker.',
+	].join(' ');
+}
+
+/**
+ * SafeAppeals: true when switchMode tool result indicates a successful mode change.
+ */
+export function isSuccessfulSwitchModeResultText(text: string): boolean {
+	return text.includes('Switched to');
+}
+
+/**
+ * SafeAppeals: flatten tool result content parts to plain text.
+ * Accepts IToolResult content (text / promptTsx / data); only text parts contribute.
+ */
+export function toolResultContentToText(content: readonly { kind: string; value?: unknown }[]): string {
+	const texts: string[] = [];
+	for (const part of content) {
+		if (part.kind === 'text' && typeof part.value === 'string') {
+			texts.push(part.value);
+		}
+	}
+	return texts.join('');
+}
+
+/**
+ * SafeAppeals: map registered tool metadata to LM `sendChatRequest` tool options.
+ */
+export function buildSafeAppealsSwitchModeLmTool(tool: {
+	id: string;
+	modelDescription: string;
+	inputSchema?: object;
+}): { name: string; description: string; inputSchema?: object } {
+	return {
+		name: tool.id,
+		description: tool.modelDescription,
+		...(tool.inputSchema ? { inputSchema: tool.inputSchema } : {}),
+	};
+}
