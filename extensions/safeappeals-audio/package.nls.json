@@ -8,6 +8,7 @@
 	"command.importAudio": "Import Audio File",
 	"command.clearCache": "Clear Audio Cache",
 	"command.transcribe": "Transcribe Recording",
+	"command.transcribePcm": "Transcribe PCM (Dictation)",
 	"command.exportTranscript": "Export Transcript",
 	"command.exportAudio": "Export Audio…",
 	"command.openFolder": "Open Folder",

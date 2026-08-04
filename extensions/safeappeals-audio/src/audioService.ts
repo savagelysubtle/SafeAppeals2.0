@@ -52,6 +52,7 @@ import {
 	executeRefinePass,
 	shouldRunAutoRefine,
 } from './transcriptRefine';
+import { pcm16Base64ToPcmf32 } from './pcm16';
 import { prepareWhisperInput } from './whisperAudioPrep';
 import { WhisperHost } from './whisperHost';
 
@@ -337,6 +338,42 @@ export class AudioService implements vscode.Disposable {
 				void this.maybeAutoDiarizeAfterTranscribe(completed);
 			}
 		}
+	}
+
+	/**
+	 * Ephemeral dictation ASR: base64 Int16LE PCM → 16 kHz pcmf32 → Whisper.
+	 * Does **not** touch {@link RecordingStore} (no plaintext audio persist).
+	 * Propagates {@link MlBusyError} when the whisper lane is busy (`rejectIfBusy: true`).
+	 */
+	async transcribePcm(args: { pcm16Base64: string; sampleRate: number }): Promise<string> {
+		if (!this.whisperHost || !this.mlEngine) {
+			throw new Error('Audio service is not ready.');
+		}
+		const gate = this.whisperHost.canTranscribe();
+		if (!gate.ok) {
+			throw new Error(gate.reason);
+		}
+		if (typeof args?.pcm16Base64 !== 'string' || typeof args?.sampleRate !== 'number') {
+			throw new Error('Invalid PCM args: expected { pcm16Base64: string; sampleRate: number }.');
+		}
+
+		const pcmf32 = pcm16Base64ToPcmf32(args.pcm16Base64, args.sampleRate);
+		const jobId = `dictation:whisper:${randomUUID()}`;
+		const result = await this.mlEngine.withLease('whisper', { jobId, rejectIfBusy: true }, async () =>
+			this.whisperHost!.transcribe(jobId, { kind: 'pcmf32', pcmf32 }),
+		);
+		return result.text.trim();
+	}
+
+	/**
+	 * @internal Unit-test seam: swap whisper host + ML engine after {@link initialize}.
+	 */
+	async replaceWhisperPipelineForTest(whisperHost: WhisperHost, mlEngine: MlResourceEngine): Promise<void> {
+		if (this.mlEngine && this.mlEngine !== mlEngine) {
+			await this.mlEngine.dispose();
+		}
+		this.whisperHost = whisperHost;
+		this.mlEngine = mlEngine;
 	}
 
 	/**

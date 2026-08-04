@@ -155,6 +155,11 @@
 				"category": "%command.category%"
 			},
 			{
+				"command": "safeappeals-audio.transcribePcm",
+				"title": "%command.transcribePcm%",
+				"category": "%command.category%"
+			},
+			{
 				"command": "safeappeals-audio.exportTranscript",
 				"title": "%command.exportTranscript%",
 				"category": "%command.category%"
@@ -212,6 +217,10 @@
 				},
 				{
 					"command": "safeappeals-audio.transcribe"
+				},
+				{
+					"command": "safeappeals-audio.transcribePcm",
+					"when": "false"
 				},
 				{
 					"command": "safeappeals-audio.exportTranscript"

@@ -268,6 +268,15 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 		vscode.commands.registerCommand('safeappeals-audio.openFolder', () => openFolder()),
 		vscode.commands.registerCommand('safeappeals-audio.chooseWhisperModel', () => chooseWhisperModel()),
 		vscode.commands.registerCommand('safeappeals-audio.downloadWhisperModel', () => downloadWhisperModel()),
+		vscode.commands.registerCommand(
+			'safeappeals-audio.transcribePcm',
+			async (args: { pcm16Base64: string; sampleRate: number }): Promise<string> => {
+				if (!audioService) {
+					throw new Error('Audio service is not ready.');
+				}
+				return audioService.transcribePcm(args);
+			},
+		),
 		vscode.commands.registerCommand('safeappeals-audio.transcribe', async () => {
 			const id = await pickRecording(false);
 			if (!id || !audioService) {

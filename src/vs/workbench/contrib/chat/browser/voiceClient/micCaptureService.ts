@@ -106,6 +106,13 @@ export interface IMicCaptureService {
 	/** The AnalyserNode for visualisation, available while capturing. */
 	readonly analyserNode: AnalyserNode | undefined;
 
+	/**
+	 * Actual {@link AudioContext.sampleRate} while the mic context exists.
+	 * May differ from the requested 16 kHz on some devices — callers must
+	 * read this rather than hardcoding.
+	 */
+	readonly sampleRate: number | undefined;
+
 	// --- PTT ---
 	/**
 	 * Begin a PTT segment. Lazily acquires the microphone if not already
@@ -227,6 +234,7 @@ export class MicCaptureService extends Disposable implements IMicCaptureService 
 
 	get isCapturing(): boolean { return this._isCapturing; }
 	get analyserNode(): AnalyserNode | undefined { return this._analyserNode; }
+	get sampleRate(): number | undefined { return this._micCtx?.sampleRate; }
 
 	get isMuted(): boolean { return this._isMuted; }
 	set isMuted(value: boolean) { this._isMuted = value; }
