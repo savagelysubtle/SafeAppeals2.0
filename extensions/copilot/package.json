@@ -3681,6 +3681,7 @@
             "type": "boolean",
             "default": false,
             "markdownDescription": "%github.copilot.config.switchAgent.enabled%",
+            "markdownDeprecationMessage": "%github.copilot.config.switchAgent.enabled.deprecated%",
             "tags": [
               "experimental",
               "onExp"
@@ -4318,6 +4319,7 @@
             "default": [],
             "scope": "resource",
             "markdownDescription": "%github.copilot.config.planAgent.additionalTools%",
+            "markdownDeprecationMessage": "%github.copilot.config.planAgent.additionalTools.deprecated%",
             "tags": [
               "experimental"
             ]
