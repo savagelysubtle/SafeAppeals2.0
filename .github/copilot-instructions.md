@@ -83,12 +83,30 @@ MANDATORY: Always check for compilation errors before running any tests or valid
 - NEVER run tests if there are compilation errors
 - NEVER use `npm run compile` to compile TypeScript files
 
+### SafeAppeals coder requirement — restore `out/` (MANDATORY)
+
+Coders (and any agent that edits client sources) **must** leave a launchable tree before declaring done:
+
+1. After any change under `src/` (or webview host assets under `src/vs/workbench/contrib/webview/`), run from repo root:
+	```bash
+	bun run transpile-client
+	```
+	Then confirm `out/main.js` exists. `./scripts/code.sh` fails without it.
+2. After changes under `extensions/<name>/`, also compile that extension, e.g.:
+	```bash
+	bun run gulp compile-extension:<name>
+	```
+	(or the extension's own `bun run compile` / `build-webview` when it has a webview).
+3. Prefer `bun run …` over `npm run …` for these scripts.
+
+**Gotcha:** `bun run transpile-client` starts with `[clean] out`. Incremental `watch-transpile` only patches changed files and will **not** rebuild the whole tree after a clean. If Steve's watch is running and `out/main.js` disappears, run a full `bun run transpile-client` again (or restart the watch after a full transpile). Do not leave `out/` half-empty.
+
 ### TypeScript compilation steps
 
 - If the `#runTasks/getTaskOutput` tool is available, check the `VS Code - Build` watch task output for compilation errors. This task runs `Core - Build` and `Ext - Build` to incrementally compile VS Code TypeScript sources and built-in extensions. Start the task if it's not already running in the background.
-- If the tool is not available (e.g. in CLI environments) and you only changed code under `src/`, run `npm run typecheck-client` after making changes to type-check the main VS Code sources (it validates `./src/tsconfig.json`).
-- If you changed built-in extensions under `extensions/` and the tool is not available, run the corresponding gulp task `npm run gulp compile-extensions` instead so that TypeScript errors in extensions are also reported.
-- For TypeScript changes in the `build` folder, you can simply run `npm run typecheck` in the `build` folder.
+- If the tool is not available (e.g. in CLI environments) and you only changed code under `src/`, run `bun run transpile-client` (required for launch) and `bun run typecheck-client` when you need a typecheck-only gate (`./src/tsconfig.json`).
+- If you changed built-in extensions under `extensions/` and the tool is not available, run the corresponding gulp task `bun run gulp compile-extensions` (or `compile-extension:<name>`) so that TypeScript errors in extensions are also reported.
+- For TypeScript changes in the `build` folder, you can simply run typecheck in the `build` folder (`bun run` / project scripts as available).
 
 ### TypeScript validation steps
 

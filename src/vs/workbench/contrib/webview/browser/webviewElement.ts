@@ -412,7 +412,7 @@ export class WebviewElement extends Disposable implements IWebviewElement, Webvi
 		}
 	}
 
-	private _createElement(options: WebviewOptions, _contentOptions: WebviewContentOptions) {
+	private _createElement(options: WebviewOptions, contentOptions: WebviewContentOptions) {
 		// Do not start loading the webview yet.
 		// Wait the end of the ctor when all listeners have been hooked up.
 		const element = document.createElement('iframe');
@@ -420,11 +420,7 @@ export class WebviewElement extends Disposable implements IWebviewElement, Webvi
 		element.className = `webview ${options.customClasses || ''}`;
 		element.sandbox.add('allow-scripts', 'allow-same-origin', 'allow-forms', 'allow-pointer-lock', 'allow-downloads');
 
-		const allowRules = ['cross-origin-isolated', 'autoplay', 'local-network-access'];
-		if (!isFirefox) {
-			allowRules.push('clipboard-read', 'clipboard-write');
-		}
-		element.setAttribute('allow', allowRules.join('; '));
+		element.setAttribute('allow', this._iframeAllowAttribute(contentOptions));
 
 		element.style.border = 'none';
 		element.style.width = '100%';
@@ -435,6 +431,21 @@ export class WebviewElement extends Disposable implements IWebviewElement, Webvi
 		};
 
 		return element;
+	}
+
+	/**
+	 * Builds the iframe `allow` attribute. Microphone is opt-in via {@link WebviewContentOptions.allowMicrophone}
+	 * so arbitrary extension webviews cannot capture audio by default.
+	 */
+	private _iframeAllowAttribute(contentOptions: WebviewContentOptions): string {
+		const allowRules = ['cross-origin-isolated', 'autoplay', 'local-network-access'];
+		if (!isFirefox) {
+			allowRules.push('clipboard-read', 'clipboard-write');
+		}
+		if (contentOptions.allowMicrophone) {
+			allowRules.push('microphone');
+		}
+		return allowRules.join('; ');
 	}
 
 	private _initElement(encodedWebviewOrigin: string, extension: WebviewExtensionDescription | undefined, options: WebviewOptions, targetWindow: CodeWindow) {
@@ -675,6 +686,9 @@ export class WebviewElement extends Disposable implements IWebviewElement, Webvi
 
 		this._content = newContent;
 
+		// Content options can arrive after the iframe is created (extension webviews).
+		this.element?.setAttribute('allow', this._iframeAllowAttribute(this._content.options));
+
 		const allowScripts = !!this._content.options.allowScripts;
 		this.perfMark('set-content');
 		this._send('content', {
@@ -684,6 +698,7 @@ export class WebviewElement extends Disposable implements IWebviewElement, Webvi
 				allowMultipleAPIAcquire: !!this._content.options.allowMultipleAPIAcquire,
 				allowScripts: allowScripts,
 				allowForms: this._content.options.allowForms ?? allowScripts, // For back compat, we allow forms by default when scripts are enabled
+				allowMicrophone: !!this._content.options.allowMicrophone,
 			},
 			state: this._content.state,
 			cspSource: webviewGenericCspSource,

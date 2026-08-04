@@ -52,6 +52,7 @@ interface UpdateContentEvent {
 		allowMultipleAPIAcquire: boolean;
 		allowScripts: boolean;
 		allowForms: boolean;
+		allowMicrophone: boolean;
 	};
 	state: any;
 	cspSource: string;

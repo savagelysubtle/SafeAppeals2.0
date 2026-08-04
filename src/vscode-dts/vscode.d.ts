@@ -9911,6 +9911,15 @@ declare module 'vscode' {
 		readonly enableForms?: boolean;
 
 		/**
+		 * Controls whether the webview may use the microphone via `navigator.mediaDevices.getUserMedia`.
+		 *
+		 * Defaults to false. When true, the host opts the webview into the Permissions Policy `microphone`
+		 * feature and allows Electron media permission checks for that document. The OS may still prompt
+		 * or deny access.
+		 */
+		readonly enableMicrophone?: boolean;
+
+		/**
 		 * Controls whether command uris are enabled in webview content or not.
 		 *
 		 * Defaults to `false` (command uris are disabled).

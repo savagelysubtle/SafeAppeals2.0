@@ -124,6 +124,12 @@ export interface WebviewContentOptions {
 	readonly allowForms?: boolean;
 
 	/**
+	 * Should the webview be allowed to use the microphone (`getUserMedia({ audio: true })`)?
+	 * Defaults to false. Requires a matching iframe Permissions Policy `allow` entry.
+	 */
+	readonly allowMicrophone?: boolean;
+
+	/**
 	 * Should untrusted key events from the webview be forwarded to the workbench? Defaults to false.
 	 *
 	 * This blocks keypress events that are triggered by scripts. Webviews should not allow untrusted scripts
@@ -161,6 +167,7 @@ export function areWebviewContentOptionsEqual(a: WebviewContentOptions, b: Webvi
 		a.allowMultipleAPIAcquire === b.allowMultipleAPIAcquire
 		&& a.allowScripts === b.allowScripts
 		&& a.allowForms === b.allowForms
+		&& a.allowMicrophone === b.allowMicrophone
 		&& a.forwardUntrustedKeypressEvents === b.forwardUntrustedKeypressEvents
 		&& equals(a.localResourceRoots, b.localResourceRoots, isEqual)
 		&& equals(a.portMapping, b.portMapping, (a, b) => a.extensionHostPort === b.extensionHostPort && a.webviewPort === b.webviewPort)

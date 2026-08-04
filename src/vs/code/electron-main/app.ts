@@ -197,6 +197,9 @@ export class CodeApplication extends Disposable {
 			...alwaysAllowedPermissions,
 			'clipboard-read',
 			'clipboard-sanitized-write',
+			// SafeAppeals: allow media checks for webviews that opt into microphone via
+			// WebviewOptions.enableMicrophone (iframe Permissions Policy still gates capture).
+			'media',
 			// TODO(deepak1556): Should be removed once migration is complete
 			// https://github.com/microsoft/vscode/issues/239228
 			'deprecated-sync-clipboard-read',

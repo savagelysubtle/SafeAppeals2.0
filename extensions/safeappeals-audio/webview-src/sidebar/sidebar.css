@@ -1,0 +1,238 @@
+:root {
+	color-scheme: light dark;
+	--bg: var(--vscode-sideBar-background, #1e1e1e);
+	--fg: var(--vscode-sideBar-foreground, #cccccc);
+	--muted: var(--vscode-descriptionForeground, #9d9d9d);
+	--border: var(--vscode-panel-border, #3c3c3c);
+	--btn: var(--vscode-button-background, #0e639c);
+	--btn-fg: var(--vscode-button-foreground, #ffffff);
+	--btn-hover: var(--vscode-button-hoverBackground, #1177bb);
+	--danger: var(--vscode-errorForeground, #f48771);
+	--success: var(--vscode-charts-green, #89d185);
+	--warn: var(--vscode-charts-yellow, #e2c08d);
+	--recording: var(--vscode-charts-red, #f14c4c);
+}
+
+* {
+	box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+	height: 100%;
+	margin: 0;
+}
+
+body {
+	font-family: var(--vscode-font-family);
+	font-size: var(--vscode-font-size);
+	background: var(--bg);
+	color: var(--fg);
+}
+
+.app {
+	display: flex;
+	flex-direction: column;
+	height: 100%;
+	padding: 12px;
+	gap: 12px;
+}
+
+.header h1 {
+	margin: 0 0 4px;
+	font-size: 1.1rem;
+	font-weight: 600;
+}
+
+.header p {
+	margin: 0;
+	color: var(--muted);
+	font-size: 0.85rem;
+}
+
+.banner {
+	border-radius: 4px;
+	padding: 8px 10px;
+	font-size: 0.85rem;
+	line-height: 1.35;
+}
+
+.banner.warn {
+	border: 1px solid var(--warn);
+	background: color-mix(in srgb, var(--warn) 12%, transparent);
+	color: var(--warn);
+}
+
+.banner.error {
+	border: 1px solid var(--danger);
+	background: color-mix(in srgb, var(--danger) 12%, transparent);
+	color: var(--danger);
+}
+
+.banner.ok {
+	border: 1px solid var(--success);
+	background: color-mix(in srgb, var(--success) 12%, transparent);
+	color: var(--success);
+}
+
+.banner.tip {
+	border: 1px solid var(--border);
+	background: color-mix(in srgb, var(--muted) 10%, transparent);
+	color: var(--muted);
+}
+
+.banner-actions {
+	margin-top: 8px;
+}
+
+.controls {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	padding: 12px;
+	border: 1px solid var(--border);
+	border-radius: 6px;
+}
+
+.timer {
+	font-variant-numeric: tabular-nums;
+	font-size: 1.4rem;
+	font-weight: 600;
+	text-align: center;
+}
+
+.timer.recording {
+	color: var(--recording);
+}
+
+.timer.paused {
+	color: var(--warn);
+}
+
+.row {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+}
+
+button {
+	appearance: none;
+	border: none;
+	border-radius: 4px;
+	background: var(--btn);
+	color: var(--btn-fg);
+	padding: 6px 12px;
+	cursor: pointer;
+	font: inherit;
+}
+
+button:hover:not(:disabled) {
+	background: var(--btn-hover);
+}
+
+button:disabled {
+	opacity: 0.5;
+	cursor: not-allowed;
+}
+
+button.secondary {
+	background: transparent;
+	border: 1px solid var(--border);
+	color: var(--fg);
+}
+
+button.danger {
+	background: transparent;
+	border: 1px solid var(--danger);
+	color: var(--danger);
+}
+
+.list {
+	flex: 1;
+	min-height: 0;
+	overflow: auto;
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+}
+
+.card {
+	border: 1px solid var(--border);
+	border-radius: 6px;
+	padding: 10px;
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+}
+
+.card-title {
+	font-weight: 600;
+	word-break: break-word;
+}
+
+.meta {
+	color: var(--muted);
+	font-size: 0.8rem;
+}
+
+.status {
+	display: inline-block;
+	font-size: 0.75rem;
+	text-transform: uppercase;
+	letter-spacing: 0.03em;
+}
+
+.status.pending {
+	color: var(--warn);
+}
+
+.status.completed {
+	color: var(--success);
+}
+
+.status.failed,
+.status.transcribing {
+	color: var(--vscode-charts-blue, #75beff);
+}
+
+.playback audio {
+	width: 100%;
+	margin-top: 4px;
+}
+
+.empty {
+	color: var(--muted);
+	font-size: 0.9rem;
+	padding: 8px 0;
+}
+
+.progress-panel {
+	border: 1px solid var(--border);
+	border-radius: 6px;
+	padding: 10px;
+}
+
+.progress-label {
+	font-size: 0.85rem;
+	margin-bottom: 6px;
+}
+
+.progress-bar {
+	height: 6px;
+	border-radius: 999px;
+	background: color-mix(in srgb, var(--border) 80%, transparent);
+	overflow: hidden;
+}
+
+.progress-fill {
+	height: 100%;
+	background: var(--vscode-charts-blue, #75beff);
+	transition: width 120ms linear;
+}
+
+.transcript-preview {
+	font-size: 0.8rem;
+	color: var(--muted);
+	line-height: 1.35;
+}

@@ -288,6 +288,7 @@ export function serializeWebviewOptions(
 		enableCommandUris: options.enableCommandUris,
 		enableScripts: options.enableScripts,
 		enableForms: options.enableForms,
+		enableMicrophone: options.enableMicrophone,
 		portMapping: options.portMapping,
 		localResourceRoots: options.localResourceRoots || getDefaultLocalResourceRoots(extension, workspace)
 	};
@@ -298,6 +299,7 @@ function reviveOptions(options: extHostProtocol.IWebviewContentOptions): vscode.
 		enableCommandUris: options.enableCommandUris,
 		enableScripts: options.enableScripts,
 		enableForms: options.enableForms,
+		enableMicrophone: options.enableMicrophone,
 		portMapping: options.portMapping,
 		localResourceRoots: options.localResourceRoots?.map(components => URI.from(components)),
 	};

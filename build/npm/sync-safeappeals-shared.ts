@@ -13,6 +13,7 @@ const TARGETS = [
 	'safeappeals-email',
 	'safeappeals-calendar',
 	'safeappeals-documents',
+	'safeappeals-audio',
 	'time-tracker',
 ];
 

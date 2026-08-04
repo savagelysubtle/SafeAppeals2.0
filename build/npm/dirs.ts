@@ -42,6 +42,8 @@ export const dirs = [
 	'extensions/microsoft-authentication',
 	'extensions/notebook-renderers',
 	'extensions/npm',
+	'extensions/open-remote-ssh',
+	'extensions/open-remote-wsl',
 	'extensions/php-language-features',
 	'extensions/references-view',
 	'extensions/search-result',
@@ -54,6 +56,8 @@ export const dirs = [
 	'extensions/safeappeals-timeline',
 	'extensions/safeappeals-documents',
 	'extensions/safeappeals-email',
+	'extensions/safeappeals-converter',
+	'extensions/safeappeals-audio',
 
 	'extensions/typescript-language-features',
 	'extensions/vscode-api-tests',

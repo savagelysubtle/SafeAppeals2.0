@@ -1,0 +1,289 @@
+{
+	"name": "safeappeals-audio",
+	"displayName": "%displayName%",
+	"description": "%description%",
+	"version": "1.0.0",
+	"publisher": "safeappeals",
+	"license": "MIT",
+	"engines": {
+		"vscode": "^1.70.0"
+	},
+	"main": "./out/extension.js",
+	"categories": [
+		"Other"
+	],
+	"extensionKind": [
+		"workspace"
+	],
+	"activationEvents": [
+		"onStartupFinished"
+	],
+	"capabilities": {
+		"virtualWorkspaces": false,
+		"untrustedWorkspaces": {
+			"supported": false
+		}
+	},
+	"contributes": {
+		"configuration": {
+			"title": "%config.title%",
+			"properties": {
+				"safeappeals.audio.ffmpegPath": {
+					"type": "string",
+					"default": "",
+					"scope": "machine",
+					"description": "%config.ffmpegPath%"
+				},
+				"safeappeals.audio.ffprobePath": {
+					"type": "string",
+					"default": "",
+					"scope": "machine",
+					"description": "%config.ffprobePath%"
+				},
+				"safeappeals.audio.whisperModelPath": {
+					"type": "string",
+					"default": "",
+					"scope": "machine",
+					"description": "%config.whisperModelPath%"
+				},
+				"safeappeals.audio.defaultAudioExportFormat": {
+					"type": "string",
+					"enum": [
+						"wav",
+						"flac",
+						"mp3",
+						"m4a"
+					],
+					"default": "wav",
+					"scope": "machine",
+					"description": "%config.defaultAudioExportFormat%"
+				},
+				"safeappeals.audio.defaultTranscriptExportFormat": {
+					"type": "string",
+					"enum": [
+						"txt",
+						"srt",
+						"json",
+						"docx"
+					],
+					"default": "txt",
+					"scope": "machine",
+					"description": "%config.defaultTranscriptExportFormat%"
+				},
+				"safeappeals.audio.autoTranscribeOnSave": {
+					"type": "boolean",
+					"default": false,
+					"scope": "machine",
+					"description": "%config.autoTranscribeOnSave%"
+				},
+				"safeappeals.audio.diarization.enabled": {
+					"type": "boolean",
+					"default": true,
+					"scope": "machine",
+					"description": "%config.diarization.enabled%"
+				},
+				"safeappeals.audio.refine.enabled": {
+					"type": "boolean",
+					"default": true,
+					"scope": "machine",
+					"description": "%config.refine.enabled%"
+				},
+				"safeappeals.audio.diarization.maxSpeakers": {
+					"type": "number",
+					"default": 2,
+					"minimum": 1,
+					"maximum": 4,
+					"scope": "machine",
+					"description": "%config.diarization.maxSpeakers%"
+				},
+				"safeappeals.audio.diarization.binaryPath": {
+					"type": "string",
+					"default": "",
+					"scope": "machine",
+					"description": "%config.diarization.binaryPath%"
+				},
+				"safeappeals.audio.diarization.segmentationModelPath": {
+					"type": "string",
+					"default": "",
+					"scope": "machine",
+					"description": "%config.diarization.segmentationModelPath%"
+				},
+				"safeappeals.audio.diarization.embeddingModelPath": {
+					"type": "string",
+					"default": "",
+					"scope": "machine",
+					"description": "%config.diarization.embeddingModelPath%"
+				}
+			}
+		},
+		"commands": [
+			{
+				"command": "safeappeals-audio.openRecorder",
+				"title": "%command.openRecorder%",
+				"category": "%command.category%",
+				"icon": "$(mic)"
+			},
+			{
+				"command": "safeappeals-audio.openSettings",
+				"title": "%command.openSettings%",
+				"category": "%command.category%",
+				"icon": "$(gear)"
+			},
+			{
+				"command": "safeappeals-audio.startRecording",
+				"title": "%command.startRecording%",
+				"category": "%command.category%"
+			},
+			{
+				"command": "safeappeals-audio.stopRecording",
+				"title": "%command.stopRecording%",
+				"category": "%command.category%"
+			},
+			{
+				"command": "safeappeals-audio.importAudio",
+				"title": "%command.importAudio%",
+				"category": "%command.category%"
+			},
+			{
+				"command": "safeappeals-audio.clearCache",
+				"title": "%command.clearCache%",
+				"category": "%command.category%"
+			},
+			{
+				"command": "safeappeals-audio.transcribe",
+				"title": "%command.transcribe%",
+				"category": "%command.category%"
+			},
+			{
+				"command": "safeappeals-audio.exportTranscript",
+				"title": "%command.exportTranscript%",
+				"category": "%command.category%"
+			},
+			{
+				"command": "safeappeals-audio.exportAudio",
+				"title": "%command.exportAudio%",
+				"category": "%command.category%"
+			},
+			{
+				"command": "safeappeals-audio.openFolder",
+				"title": "%command.openFolder%",
+				"category": "%command.category%"
+			},
+			{
+				"command": "safeappeals-audio.chooseWhisperModel",
+				"title": "%command.chooseWhisperModel%",
+				"category": "%command.category%"
+			},
+			{
+				"command": "safeappeals-audio.downloadWhisperModel",
+				"title": "%command.downloadWhisperModel%",
+				"category": "%command.category%"
+			},
+			{
+				"command": "safeappeals-audio.identifySpeakers",
+				"title": "%command.identifySpeakers%",
+				"category": "%command.category%"
+			},
+			{
+				"command": "safeappeals-audio.refineTranscript",
+				"title": "%command.refineTranscript%",
+				"category": "%command.category%"
+			}
+		],
+		"menus": {
+			"commandPalette": [
+				{
+					"command": "safeappeals-audio.openRecorder"
+				},
+				{
+					"command": "safeappeals-audio.openSettings"
+				},
+				{
+					"command": "safeappeals-audio.startRecording"
+				},
+				{
+					"command": "safeappeals-audio.stopRecording"
+				},
+				{
+					"command": "safeappeals-audio.importAudio"
+				},
+				{
+					"command": "safeappeals-audio.clearCache"
+				},
+				{
+					"command": "safeappeals-audio.transcribe"
+				},
+				{
+					"command": "safeappeals-audio.exportTranscript"
+				},
+				{
+					"command": "safeappeals-audio.exportAudio"
+				},
+				{
+					"command": "safeappeals-audio.openFolder"
+				},
+				{
+					"command": "safeappeals-audio.chooseWhisperModel"
+				},
+				{
+					"command": "safeappeals-audio.downloadWhisperModel"
+				},
+				{
+					"command": "safeappeals-audio.identifySpeakers"
+				},
+				{
+					"command": "safeappeals-audio.refineTranscript"
+				}
+			],
+			"view/title": [
+				{
+					"command": "safeappeals-audio.openSettings",
+					"when": "view == safeappeals-audio.sidebar",
+					"group": "navigation"
+				}
+			]
+		},
+		"viewsContainers": {
+			"activitybar": [
+				{
+					"id": "safeappeals-audio",
+					"title": "%view.container.title%",
+					"icon": "$(mic)"
+				}
+			]
+		},
+		"views": {
+			"safeappeals-audio": [
+				{
+					"type": "webview",
+					"id": "safeappeals-audio.sidebar",
+					"name": "%view.sidebar.name%"
+				}
+			]
+		}
+	},
+	"scripts": {
+		"compile": "node ./esbuild.mjs && gulp compile-extension:safeappeals-audio",
+		"watch": "node ./esbuild.mjs --watch",
+		"build-webview": "node ./esbuild.mjs",
+		"watch-webview": "node ./esbuild.mjs --watch",
+		"test": "mocha --require ./test/vscode-mock-preload.cjs --ui tdd out/test/*.test.js"
+	},
+	"dependencies": {
+		"@kutalia/whisper-node-addon": "^1.1.0",
+		"docx": "^9.7.1"
+	},
+	"devDependencies": {
+		"@types/mocha": "^10.0.10",
+		"@types/node": "24.x",
+		"@types/react": "^18.3.31",
+		"@types/react-dom": "^18.3.7",
+		"esbuild": "^0.25.0",
+		"mocha": "^11.1.0",
+		"react": "^18.3.1",
+		"react-dom": "^18.3.1"
+	},
+	"allowScripts": {
+		"esbuild@0.25.0": true
+	}
+}
