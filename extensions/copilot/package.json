@@ -184,7 +184,7 @@
         "icon": "$(play)",
         "userDescription": "%copilot.tools.executionSubagent.description%",
         "modelDescription": "Launch an iterative execution-focused subagent that performs an execution-based task.\nUSE THIS INSTEAD OF RUNNING INDIVIDUAL COMMANDS WITH run_in_terminal EXCEPT IN THE RARE CASES THAT YOU NEED THE FULL OUTPUT OF A COMMAND.\nHere are some examples of how it can be used:\n- Run tests and filter the output to summarize which tests failed and why.\n- Install all dependencies of a project.\nReturns: A list of commands that were run, along with relevant excerpts of each command's output.\nInput fields:\n- query: What to execute, and what to look for in the output. Can include exact commands to run, or a description of an execution task.\n- description: Short user-visible invocation message.\nNOTE: In the subagent query, make sure to specify any restrictions or guidelines on running commands provided by the user earlier in the conversation.\nFor example, if the user instructs the agent to not edit files in a particular directory, make sure to include that instruction in the subagent query when relevant.",
-        "when": "config.github.copilot.chat.executionSubagent.enabled",
+        "when": "false",
         "inputSchema": {
           "type": "object",
           "properties": {
@@ -210,7 +210,7 @@
         "icon": "$(search)",
         "userDescription": "%copilot.tools.searchSubagent.description%",
         "modelDescription": "Launch a fast agent specialized for exploring codebases. Use this when you need to quickly find files by patterns (eg. \"src/components/**/*.tsx\"), search code for keywords (eg. \"API endpoints\"), or answer questions about the codebase (eg. \"how do API endpoints work?\").\nReturns: A list of relevant files/snippet locations in the workspace.\n\nInput fields:\n- query: Natural language description of what to search for.\n- description: Short user-visible invocation message. \n- details: 2-3 sentences detailing the objective of the search agent.",
-        "when": "config.github.copilot.chat.searchSubagent.enabled && config.github.copilot.chat.exploreAgent.enabled",
+        "when": "false",
         "tags": [
           "vscode_codesearch"
         ],
@@ -244,7 +244,7 @@
         "icon": "$(search)",
         "userDescription": "%copilot.tools.searchSubagent.description%",
         "modelDescription": "Launch a fast agent specialized for exploring codebases. Use this when you need to quickly find files by patterns (eg. \"src/components/**/*.tsx\"), search code for keywords (eg. \"API endpoints\"), or answer questions about the codebase (eg. \"how do API endpoints work?\").\nReturns: A list of relevant files/snippet locations in the workspace.\n\nInput fields:\n- query: Natural language description of what to search for.\n- description: Short user-visible invocation message. \n- details: 2-3 sentences detailing the objective of the search agent.",
-        "when": "config.github.copilot.chat.searchSubagent.enabled && !config.github.copilot.chat.exploreAgent.enabled",
+        "when": "false",
         "tags": [
           "vscode_codesearch"
         ],
@@ -278,7 +278,7 @@
         "icon": "$(book)",
         "userDescription": "%copilot.tools.skill.description%",
         "modelDescription": "Invoke a skill to handle a user's request with specialized instructions and workflows.\n\nSkills are domain-specific capabilities discovered from SKILL.md files. When a user's task matches an available skill, call this tool to load and apply it. If the user types a slash command (e.g. \"/deploy\", \"/test\"), treat it as a skill invocation.\n\nUsage:\n- Pass the skill name only (no arguments).\n- Examples: skill: \"docx\", skill: \"deploy\", skill: \"fix-ci-failures\"\n\nRules:\n- Available skills appear in system-reminder messages earlier in the conversation.\n- BLOCKING: When a matching skill exists, you MUST call this tool before producing any other output about the task.\n- Never reference a skill without calling this tool.\n- Do not call this tool for a skill that is already active in the current turn (indicated by a <command-name> tag).\n- Do not use this tool for built-in commands such as /help or /clear.",
-        "when": "config.github.copilot.chat.skillTool.enabled",
+        "when": "false",
         "inputSchema": {
           "type": "object",
           "properties": {
@@ -1136,6 +1136,7 @@
         "toolReferenceName": "memory",
         "userDescription": "Manage persistent memory across conversations",
         "modelDescription": "Manage a persistent memory system with three scopes for storing notes and information across conversations.\n\nMemory is organized under /memories/ with three tiers:\n- `/memories/` — User memory: persistent notes that survive across all workspaces and conversations. Store preferences, patterns, and general insights here.\n- `/memories/session/` — Session memory: notes scoped to the current conversation. Store task-specific context and in-progress notes here. Cleared after the conversation ends.\n- `/memories/repo/` — Repository memory: repository-scoped notes stored locally in the workspace. Store codebase conventions, build commands, project structure facts, and verified practices here.\n\nIMPORTANT: Before creating new memory files, first view the /memories/ directory to understand what already exists. This helps avoid duplicates and maintain organized notes.\n\nCommands:\n- `view`: View contents of a file or list directory contents. Can be used on files or directories (e.g., \"/memories/\" to see all top-level items).\n- `create`: Create a new file at the specified path with the given content. Fails if the file already exists.\n- `str_replace`: Replace an exact string in a file with a new string. The old_str must appear exactly once in the file.\n- `insert`: Insert text at a specific line number in a file. Line 0 inserts at the beginning.\n- `delete`: Delete a file or directory (and all its contents).\n- `rename`: Rename or move a file or directory from path to new_path. Cannot rename across scopes.",
+        "when": "false",
         "inputSchema": {
           "type": "object",
           "properties": {
@@ -1204,6 +1205,7 @@
         "toolReferenceName": "resolveMemoryFileUri",
         "userDescription": "Resolve a memory file path to its actual URI",
         "modelDescription": "Resolve a memory file path (like /memories/session/plan.md or /memories/repo/notes.md) to its fully qualified URI. Use this when you need the actual URI for a memory file, for example to pass it to setArtifacts. The path must start with /memories/.",
+        "when": "false",
         "tags": [],
         "inputSchema": {
           "type": "object",
@@ -1298,8 +1300,7 @@
         "name": "execute",
         "description": "",
         "tools": [
-          "runNotebookCell",
-          "executionSubagent"
+          "runNotebookCell"
         ]
       },
       {
@@ -1311,8 +1312,7 @@
           "problems",
           "readFile",
           "viewImage",
-          "readNotebookCellOutput",
-          "skill"
+          "readNotebookCellOutput"
         ]
       },
       {
@@ -1325,7 +1325,6 @@
           "fileSearch",
           "listDirectory",
           "textSearch",
-          "searchSubagent",
           "usages"
         ]
       },
@@ -1334,9 +1333,7 @@
         "description": "",
         "tools": [
           "installExtension",
-          "memory",
           "newWorkspace",
-          "resolveMemoryFileUri",
           "runCommand",
           "toolSearch",
           "vscodeAPI"

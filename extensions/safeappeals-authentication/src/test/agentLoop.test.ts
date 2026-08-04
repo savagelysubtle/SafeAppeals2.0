@@ -97,6 +97,11 @@ suite('agent tool allowlist', () => {
 				editAlias: isAgentToolAllowed(VSCODE_EDIT_FILE_TOOL_ALIAS),
 				ensured: ENSURED_AGENT_TOOL_NAMES.every(isAgentToolAllowed),
 				copilot: isAgentToolAllowed('copilot_readFile'),
+				memory: isAgentToolAllowed('copilot_memory'),
+				exploreSubagent: isAgentToolAllowed('explore_subagent'),
+				skill: isAgentToolAllowed('skill'),
+				executionSubagent: isAgentToolAllowed('execution_subagent'),
+				searchSubagent: isAgentToolAllowed('search_subagent'),
 				random: isAgentToolAllowed('random_tool'),
 			},
 			{
@@ -105,6 +110,11 @@ suite('agent tool allowlist', () => {
 				editAlias: false,
 				ensured: true,
 				copilot: false,
+				memory: false,
+				exploreSubagent: false,
+				skill: false,
+				executionSubagent: false,
+				searchSubagent: false,
 				random: false,
 			},
 		);
