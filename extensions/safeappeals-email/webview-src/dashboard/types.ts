@@ -42,6 +42,13 @@ export interface FullMessage extends MessageSummary {
 	attachments: Array<{ filename: string; contentType: string; size?: number }>;
 }
 
+export interface DraftAttachment {
+	id: string;
+	filename: string;
+	contentType: string;
+	size: number;
+}
+
 export interface Draft {
 	id: string;
 	accountId: string;
@@ -53,6 +60,8 @@ export interface Draft {
 	content: string;
 	status: string;
 	updatedAt: string;
+	/** Metadata only — never bytes or source paths */
+	attachments?: DraftAttachment[];
 }
 
 export interface ComposeSettings {

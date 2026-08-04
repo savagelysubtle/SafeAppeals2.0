@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type {
 	Account,
 	Draft,
+	DraftAttachment,
 	EmailSettings,
 	FullMessage,
 	Stats,
@@ -23,6 +24,8 @@ interface ComposeState {
 	draftId?: string;
 	/** Parent message id when replying/forwarding; empty for a new compose. */
 	emailId?: string;
+	/** Metadata only — never attachment bytes */
+	attachments: DraftAttachment[];
 }
 
 const emptyCompose = (): ComposeState => ({
@@ -33,7 +36,18 @@ const emptyCompose = (): ComposeState => ({
 	content: '',
 	draftId: undefined,
 	emailId: undefined,
+	attachments: [],
 });
+
+function formatAttachmentSize(size: number): string {
+	if (size < 1024) {
+		return `${size} B`;
+	}
+	if (size < 1024 * 1024) {
+		return `${(size / 1024).toFixed(1)} KB`;
+	}
+	return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+}
 
 function applyDefaults(
 	body: string,
@@ -106,6 +120,7 @@ export const App: React.FC = () => {
 				content: partial.content ?? defaults.content,
 				draftId: partial.draftId,
 				emailId: partial.emailId,
+				attachments: partial.attachments ? [...partial.attachments] : [],
 			};
 			setCompose(next);
 			setShowCc(!!next.cc);
@@ -179,6 +194,32 @@ export const App: React.FC = () => {
 				case 'openCompose':
 					startCompose({});
 					break;
+				case 'loadDraft': {
+					const draft = msg.draft;
+					if (!draft || typeof draft !== 'object') {
+						startCompose({});
+						break;
+					}
+					const attachments = Array.isArray(draft.attachments)
+						? draft.attachments.filter(
+							(a: DraftAttachment) => a && typeof a.id === 'string' && typeof a.filename === 'string',
+						)
+						: [];
+					startCompose({
+						to: typeof draft.to === 'string' ? draft.to : '',
+						cc: typeof draft.cc === 'string' ? draft.cc : '',
+						bcc: typeof draft.bcc === 'string' ? draft.bcc : '',
+						subject: typeof draft.subject === 'string' ? draft.subject : '',
+						content: typeof draft.content === 'string' ? draft.content : '',
+						draftId: typeof draft.id === 'string' ? draft.id : undefined,
+						emailId: typeof draft.emailId === 'string' ? draft.emailId : undefined,
+						attachments,
+					});
+					if (typeof draft.accountId === 'string' && draft.accountId) {
+						setAccountId(draft.accountId);
+					}
+					break;
+				}
 				case 'openDrafts':
 					setPane('drafts');
 					vscode.postMessage({ type: 'listDrafts', accountId: undefined });
@@ -209,7 +250,13 @@ export const App: React.FC = () => {
 						setStats(msg.stats);
 					}
 					if (msg.draft?.id) {
-						setCompose((prev) => ({ ...prev, draftId: msg.draft.id }));
+						setCompose((prev) => ({
+							...prev,
+							draftId: msg.draft.id,
+							attachments: Array.isArray(msg.draft.attachments)
+								? msg.draft.attachments
+								: prev.attachments,
+						}));
 					}
 					setDraftSavedHint(true);
 					setDraftRemoteError(
@@ -218,6 +265,29 @@ export const App: React.FC = () => {
 							: null,
 					);
 					setError(null);
+					break;
+				}
+				case 'attachmentsUpdated': {
+					const draftId = typeof msg.draftId === 'string' ? msg.draftId : undefined;
+					const attachments = Array.isArray(msg.attachments) ? msg.attachments : [];
+					setCompose((prev) => ({
+						...prev,
+						draftId: draftId || prev.draftId,
+						attachments,
+					}));
+					if (Array.isArray(msg.drafts)) {
+						setDrafts(msg.drafts);
+					}
+					setError(null);
+					break;
+				}
+				case 'sent': {
+					if (Array.isArray(msg.drafts)) {
+						setDrafts(msg.drafts);
+					}
+					if (msg.stats) {
+						setStats(msg.stats);
+					}
 					break;
 				}
 				case 'drafts':
@@ -282,6 +352,7 @@ export const App: React.FC = () => {
 				subject: compose.subject,
 				text: compose.content,
 				html: `<pre>${escapeHtml(compose.content)}</pre>`,
+				draftId: compose.draftId,
 			},
 		});
 		setCompose(emptyCompose());
@@ -309,6 +380,39 @@ export const App: React.FC = () => {
 				content: compose.content,
 				draftId: compose.draftId,
 			},
+		});
+	};
+
+	const onPickAttachments = () => {
+		if (!accountId) {
+			setError('Add an account first');
+			return;
+		}
+		vscode.postMessage({
+			type: 'pickAttachments',
+			accountId,
+			draftId: compose.draftId,
+			emailId: compose.emailId || selectedMessageId || '',
+			to: compose.to,
+			cc: compose.cc || undefined,
+			bcc: compose.bcc || undefined,
+			subject: compose.subject,
+			content: compose.content,
+		});
+	};
+
+	const onRemoveAttachment = (attachmentId: string) => {
+		if (!compose.draftId) {
+			setCompose((prev) => ({
+				...prev,
+				attachments: prev.attachments.filter((a) => a.id !== attachmentId),
+			}));
+			return;
+		}
+		vscode.postMessage({
+			type: 'removeAttachment',
+			draftId: compose.draftId,
+			attachmentId,
 		});
 	};
 
@@ -455,12 +559,37 @@ export const App: React.FC = () => {
 						value={compose.content}
 						onChange={(e) => setCompose({ ...compose, content: e.target.value })}
 					/>
+					{compose.attachments.length > 0 && (
+						<ul className="compose-attachments">
+							{compose.attachments.map((att) => (
+								<li key={att.id} className="compose-attachment-item">
+									<span className="compose-attachment-name" title={att.filename}>
+										{att.filename}
+									</span>
+									<span className="muted compose-attachment-size">
+										{formatAttachmentSize(att.size)}
+									</span>
+									<button
+										type="button"
+										className="linkish"
+										aria-label={`Remove ${att.filename}`}
+										onClick={() => onRemoveAttachment(att.id)}
+									>
+										Remove
+									</button>
+								</li>
+							))}
+						</ul>
+					)}
 					<div className="compose-actions">
 						<button type="button" onClick={onSend}>
 							Send
 						</button>
 						<button type="button" onClick={onSaveDraft}>
 							Save draft
+						</button>
+						<button type="button" className="secondary" onClick={onPickAttachments}>
+							Attach
 						</button>
 						<button type="button" className="secondary" onClick={() => setPane('read')}>
 							Cancel
@@ -496,6 +625,7 @@ export const App: React.FC = () => {
 											content: d.content,
 											draftId: d.id,
 											emailId: d.emailId,
+											attachments: d.attachments || [],
 										});
 									}}
 								>

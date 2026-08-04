@@ -64,6 +64,11 @@ export async function sendMail(
 			html: request.html,
 			inReplyTo: request.inReplyTo,
 			references: request.references,
+			attachments: (request.attachments || []).map(a => ({
+				filename: a.filename,
+				contentType: a.contentType,
+				content: a.content,
+			})),
 		});
 		return { messageId: info.messageId || '' };
 	} finally {

@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import MailComposer = require('nodemailer/lib/mail-composer');
-import type { EmailAccountConfig } from './types';
+import type { EmailAccountConfig, OutboundAttachment } from './types';
 
 export interface Rfc822MessageInput {
 	to: string;
@@ -13,6 +13,7 @@ export interface Rfc822MessageInput {
 	subject: string;
 	text: string;
 	html?: string;
+	attachments?: OutboundAttachment[];
 }
 
 /**
@@ -31,6 +32,11 @@ export async function buildRfc822Message(
 		subject: input.subject,
 		text: input.text,
 		html: input.html,
+		attachments: (input.attachments || []).map(a => ({
+			filename: a.filename,
+			contentType: a.contentType,
+			content: a.content,
+		})),
 	});
 	const message = composer.compile();
 	const built = await message.build();

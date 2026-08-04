@@ -17,7 +17,21 @@
   ],
   "activationEvents": [
     "onStartupFinished",
-    "onCustomEditor:safeappeals.emlViewer"
+    "onCustomEditor:safeappeals.emlViewer",
+    "onLanguageModelTool:safeappeals_email_search",
+    "onLanguageModelTool:safeappeals_email_listThreads",
+    "onLanguageModelTool:safeappeals_email_getMessage",
+    "onLanguageModelTool:safeappeals_email_listAccounts",
+    "onLanguageModelTool:safeappeals_email_listFolders",
+    "onLanguageModelTool:safeappeals_email_listTags",
+    "onLanguageModelTool:safeappeals_email_tagThread",
+    "onLanguageModelTool:safeappeals_email_untagThread",
+    "onLanguageModelTool:safeappeals_email_deleteTag",
+    "onLanguageModelTool:safeappeals_email_hideThread",
+    "onLanguageModelTool:safeappeals_email_unhideThread",
+    "onLanguageModelTool:safeappeals_email_linkThreadToCase",
+    "onLanguageModelTool:safeappeals_email_unlinkThreadFromCase",
+    "onLanguageModelTool:safeappeals_email_createDraft"
   ],
   "capabilities": {
     "virtualWorkspaces": false,
@@ -259,10 +273,305 @@
     ],
     "languageModelTools": [
       {
+        "name": "safeappeals_email_search",
+        "toolReferenceName": "emailSearch",
+        "displayName": "Search Email",
+        "modelDescription": "Search the locally synced email index (default IMAP folder cache) by subject, from, to, snippet, or body text. Does not query the remote server live. Returns summaries with from, subject, date, snippet, and message id.",
+        "userDescription": "Search locally synced email",
+        "canBeReferencedInPrompt": true,
+        "icon": "$(search)",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "query": {
+              "type": "string",
+              "description": "Search text."
+            },
+            "accountId": {
+              "type": "string",
+              "description": "Optional account id to scope the search."
+            },
+            "limit": {
+              "type": "number",
+              "description": "Max results (default 25, max 100)."
+            }
+          },
+          "required": [
+            "query"
+          ]
+        }
+      },
+      {
+        "name": "safeappeals_email_listThreads",
+        "toolReferenceName": "emailListThreads",
+        "displayName": "List Email Threads",
+        "modelDescription": "List email threads from the local index with folder/offset/limit/sort/tag/caseFolderPath filters. Returned threads include tags, hidden, and caseFolderPath. Hidden threads are included but sorted to the bottom.",
+        "userDescription": "List email threads",
+        "canBeReferencedInPrompt": true,
+        "icon": "$(mail)",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "accountId": {
+              "type": "string"
+            },
+            "folder": {
+              "type": "string",
+              "description": "IMAP folder (default INBOX / configured default)."
+            },
+            "offset": {
+              "type": "number"
+            },
+            "limit": {
+              "type": "number",
+              "description": "Page size (default 20, max 50)."
+            },
+            "sort": {
+              "type": "string",
+              "enum": [
+                "newest",
+                "oldest",
+                "sender",
+                "subject"
+              ]
+            },
+            "tag": {
+              "type": "string",
+              "description": "Only threads carrying this tag."
+            },
+            "caseFolderPath": {
+              "type": "string",
+              "description": "Only threads linked to this case folder path."
+            }
+          }
+        }
+      },
+      {
+        "name": "safeappeals_email_getMessage",
+        "toolReferenceName": "emailGetMessage",
+        "displayName": "Get Email Message",
+        "modelDescription": "Load a message by id from the local index, lazy-loading the body over IMAP on first read when needed. Returns bodyText (preferred) and attachment metadata only (filename, contentType, size) — never attachment bytes.",
+        "userDescription": "Read an email message",
+        "canBeReferencedInPrompt": true,
+        "icon": "$(mail-read)",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "messageId": {
+              "type": "string",
+              "description": "Local message id."
+            },
+            "forceReload": {
+              "type": "boolean",
+              "description": "When true, reload the body even if already cached."
+            }
+          },
+          "required": [
+            "messageId"
+          ]
+        }
+      },
+      {
+        "name": "safeappeals_email_listAccounts",
+        "toolReferenceName": "emailListAccounts",
+        "displayName": "List Email Accounts",
+        "modelDescription": "List configured email accounts as id, email, label, authStatus, and provider only. Never returns passwords or tokens.",
+        "userDescription": "List email accounts",
+        "canBeReferencedInPrompt": true,
+        "icon": "$(account)",
+        "inputSchema": {
+          "type": "object",
+          "properties": {}
+        }
+      },
+      {
+        "name": "safeappeals_email_listFolders",
+        "toolReferenceName": "emailListFolders",
+        "displayName": "List Email Folders",
+        "modelDescription": "List IMAP folders for an account. accountId optional when exactly one account is configured.",
+        "userDescription": "List mailbox folders",
+        "canBeReferencedInPrompt": true,
+        "icon": "$(folder)",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "accountId": {
+              "type": "string",
+              "description": "Email account id. Required when multiple accounts exist."
+            }
+          }
+        }
+      },
+      {
+        "name": "safeappeals_email_listTags",
+        "toolReferenceName": "emailListTags",
+        "displayName": "List Email Tags",
+        "modelDescription": "List known email tags with usage counts so you reuse existing vocabulary before inventing new tags.",
+        "userDescription": "List email tags",
+        "canBeReferencedInPrompt": true,
+        "icon": "$(tag)",
+        "inputSchema": {
+          "type": "object",
+          "properties": {}
+        }
+      },
+      {
+        "name": "safeappeals_email_tagThread",
+        "toolReferenceName": "emailTagThread",
+        "displayName": "Tag Email Thread",
+        "modelDescription": "Apply a tag to an email thread. Does not send mail or delete messages.",
+        "userDescription": "Tag an email thread",
+        "canBeReferencedInPrompt": true,
+        "icon": "$(tag)",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "threadId": {
+              "type": "string"
+            },
+            "tag": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "threadId",
+            "tag"
+          ]
+        }
+      },
+      {
+        "name": "safeappeals_email_untagThread",
+        "toolReferenceName": "emailUntagThread",
+        "displayName": "Untag Email Thread",
+        "modelDescription": "Remove a tag from an email thread. Does not delete the tag vocabulary or any emails.",
+        "userDescription": "Remove a tag from a thread",
+        "canBeReferencedInPrompt": true,
+        "icon": "$(tag)",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "threadId": {
+              "type": "string"
+            },
+            "tag": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "threadId",
+            "tag"
+          ]
+        }
+      },
+      {
+        "name": "safeappeals_email_deleteTag",
+        "toolReferenceName": "emailDeleteTag",
+        "displayName": "Delete Email Tag",
+        "modelDescription": "Delete a tag from the vocabulary and strip it from every thread that has it. Never deletes emails — only the tag label and associations.",
+        "userDescription": "Delete an email tag (not emails)",
+        "canBeReferencedInPrompt": true,
+        "icon": "$(trash)",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "tag": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "tag"
+          ]
+        }
+      },
+      {
+        "name": "safeappeals_email_hideThread",
+        "toolReferenceName": "emailHideThread",
+        "displayName": "Hide Email Thread",
+        "modelDescription": "Hide a thread so it sorts to the bottom of listings. Does not delete mail or exclude it from listings.",
+        "userDescription": "Hide an email thread",
+        "canBeReferencedInPrompt": true,
+        "icon": "$(eye-closed)",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "threadId": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "threadId"
+          ]
+        }
+      },
+      {
+        "name": "safeappeals_email_unhideThread",
+        "toolReferenceName": "emailUnhideThread",
+        "displayName": "Unhide Email Thread",
+        "modelDescription": "Unhide a previously hidden thread and restore its natural sort position.",
+        "userDescription": "Unhide an email thread",
+        "canBeReferencedInPrompt": true,
+        "icon": "$(eye)",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "threadId": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "threadId"
+          ]
+        }
+      },
+      {
+        "name": "safeappeals_email_linkThreadToCase",
+        "toolReferenceName": "emailLinkThreadToCase",
+        "displayName": "Link Thread to Case",
+        "modelDescription": "Link an email thread to a case folder. caseFolderPath defaults to the currently open case when omitted.",
+        "userDescription": "Link an email thread to a case",
+        "canBeReferencedInPrompt": true,
+        "icon": "$(link)",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "threadId": {
+              "type": "string"
+            },
+            "caseFolderPath": {
+              "type": "string",
+              "description": "Absolute case folder path. Defaults to the open case."
+            }
+          },
+          "required": [
+            "threadId"
+          ]
+        }
+      },
+      {
+        "name": "safeappeals_email_unlinkThreadFromCase",
+        "toolReferenceName": "emailUnlinkThreadFromCase",
+        "displayName": "Unlink Thread from Case",
+        "modelDescription": "Remove the case link from an email thread. Does not delete the thread or emails.",
+        "userDescription": "Unlink an email thread from a case",
+        "canBeReferencedInPrompt": true,
+        "icon": "$(link)",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "threadId": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "threadId"
+          ]
+        }
+      },
+      {
         "name": "safeappeals_email_createDraft",
         "toolReferenceName": "emailCreateDraft",
         "displayName": "Create Email Draft",
-        "modelDescription": "Save a local email draft (does NOT send). Requires to, subject, and content. accountId optional when exactly one account is configured. Never use this to send mail.",
+        "modelDescription": "Save a local email draft (does NOT send). Requires to, subject, and content. Optional attachments: [{ path }] with workspace-bounded paths (encrypted sidecar; metadata only in the result). accountId optional when exactly one account is configured. Opens the draft in the compose pane by default (openInCompose=false to skip). Never use this to send mail.",
         "userDescription": "Create a local email draft without sending",
         "canBeReferencedInPrompt": true,
         "icon": "$(mail)",
@@ -298,6 +607,26 @@
             "draftId": {
               "type": "string",
               "description": "Optional existing draft id to update."
+            },
+            "openInCompose": {
+              "type": "boolean",
+              "description": "When true (default), open the draft in the compose pane after save."
+            },
+            "attachments": {
+              "type": "array",
+              "description": "Optional files to attach. Each path must be inside an open workspace folder. Limits: 10 files, 20 MiB each, 20 MiB total.",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "path": {
+                    "type": "string",
+                    "description": "Workspace-relative or absolute path inside the workspace."
+                  }
+                },
+                "required": [
+                  "path"
+                ]
+              }
             }
           },
           "required": [

@@ -11,6 +11,7 @@ import type { Disposable } from 'vscode';
 import { AccountStore } from './accountStore';
 import { runClassifierOnNewMessages, type ClassifierHook, noopClassifierHook } from './classifierSeam';
 import { getDefaultFolder, getMaxMessagesPerSync, getSyncIntervalMinutes, isWebClient } from './config';
+import type { DraftAttachmentStore } from './draftAttachmentStore';
 import { syncDraftToImap, type SyncDraftToImapResult } from './draftImapSync';
 import { EmailIndex, toSummary } from './emailIndex';
 import {
@@ -23,6 +24,7 @@ import {
 	type DiagnoseConnectionResult,
 	type MailboxAuth,
 } from './imapClient';
+import { chooseSendAttachments } from './sendAttachments';
 import { sendMail } from './smtpClient';
 import {
 	isOAuthCredentials,
@@ -32,12 +34,14 @@ import {
 	type EmailDraft,
 	type EmailOAuthProvider,
 	type ListThreadsQuery,
+	type OutboundAttachment,
 	type SendMailRequest,
 	type SyncStatus,
 } from './types';
 
 export type { SyncDraftToImapResult } from './draftImapSync';
 export { syncDraftToImap } from './draftImapSync';
+export { chooseSendAttachments } from './sendAttachments';
 
 /** Auth provider ids from safeappeals-authentication (A3 contract). */
 export const GOOGLE_MAIL_AUTH_PROVIDER_ID = 'safeappeals-google';
@@ -220,6 +224,7 @@ export class SyncEngine implements Disposable {
 	private readonly classifier: ClassifierHook;
 	private readonly getSession: MailAuthSessionGetter;
 	private readonly showReconnectWarning: (message: string) => void;
+	private attachmentStore: DraftAttachmentStore | undefined;
 
 	constructor(
 		private readonly accounts: AccountStore,
@@ -232,6 +237,10 @@ export class SyncEngine implements Disposable {
 		this.classifier = classifier;
 		this.getSession = authDeps.getSession ?? defaultGetSession;
 		this.showReconnectWarning = authDeps.showReconnectWarning ?? defaultShowReconnectWarning;
+	}
+
+	setAttachmentStore(store: DraftAttachmentStore): void {
+		this.attachmentStore = store;
 	}
 
 	startBackgroundSync(): void {
@@ -501,8 +510,35 @@ export class SyncEngine implements Disposable {
 					: 'Missing credentials',
 			);
 		}
-		this.log(`Sending via ${account.label} → ${request.to} auth=${transport.type}`);
-		return sendMail(account, transport, request);
+		const draftId = request.draftId?.trim() || undefined;
+		let loadedFromStore: OutboundAttachment[] | undefined;
+		if (draftId) {
+			const draft = this.index.getDraft(draftId);
+			if (!draft) {
+				throw new Error(`Draft not found: ${draftId}`);
+			}
+			// Always load from the sidecar store — never trust webview-supplied bytes.
+			loadedFromStore = await this.loadOutboundAttachments(draft);
+		}
+		const attachments = chooseSendAttachments(draftId, request.attachments, loadedFromStore);
+		this.log(
+			`Sending via ${account.label} → ${request.to} auth=${transport.type}`
+			+ (attachments?.length ? ` attachments=${attachments.length}` : ''),
+		);
+		const result = await sendMail(account, transport, {
+			...request,
+			attachments,
+		});
+		if (draftId) {
+			try {
+				await this.index.updateDraftStatus(draftId, 'sent');
+			} catch (error) {
+				this.log(
+					`Post-send draft purge failed for ${draftId}: ${error instanceof Error ? error.message : String(error)}`,
+				);
+			}
+		}
+		return result;
 	}
 
 	/**
@@ -518,13 +554,19 @@ export class SyncEngine implements Disposable {
 		subject: string;
 		content: string;
 		draftId?: string;
+		/** Workspace/local file paths to attach after the draft row is saved */
+		attachmentPaths?: string[];
 	}): Promise<SyncDraftToImapResult> {
 		const account = this.accounts.getAccount(input.accountId);
 		if (!account) {
 			throw new Error(`Unknown account: ${input.accountId}`);
 		}
 
-		const draft: EmailDraft = await this.index.saveDraft(input);
+		let draft: EmailDraft = await this.index.saveDraft(input);
+		const paths = input.attachmentPaths || [];
+		if (paths.length > 0) {
+			draft = await this.attachFilesToDraft(draft.id, paths);
+		}
 		const skipRemote = isWebClient();
 		if (skipRemote) {
 			this.log(`Draft ${draft.id} saved locally (skip IMAP on web client)`);
@@ -535,8 +577,81 @@ export class SyncEngine implements Disposable {
 		return syncDraftToImap(draft, account, transport, {
 			skipRemote: false,
 			updateDraftRemote: (draftId, remote) => this.index.updateDraftRemote(draftId, remote),
+			loadAttachments: (d) => this.loadOutboundAttachments(d),
 			log: this.log,
 		});
+	}
+
+	/** Attach one file to an existing draft (creates sidecar + metadata). */
+	async attachFileToDraft(draftId: string, filePath: string): Promise<EmailDraft> {
+		return this.attachFilesToDraft(draftId, [filePath]);
+	}
+
+	async attachFilesToDraft(draftId: string, filePaths: readonly string[]): Promise<EmailDraft> {
+		const store = this.attachmentStore ?? this.index.getAttachmentStore();
+		if (!store) {
+			throw new Error('Draft attachment store is not initialized');
+		}
+		const draft = this.index.getDraft(draftId);
+		if (!draft) {
+			throw new Error(`Draft not found: ${draftId}`);
+		}
+		let attachments = [...(draft.attachments || [])];
+		for (const filePath of filePaths) {
+			const meta = await store.addFromFile(draftId, attachments, filePath);
+			attachments = [...attachments, meta];
+		}
+		const updated = await this.index.setDraftAttachments(draftId, attachments);
+		if (!updated) {
+			throw new Error(`Draft not found: ${draftId}`);
+		}
+		return updated;
+	}
+
+	async removeAttachmentFromDraft(draftId: string, attachmentId: string): Promise<EmailDraft> {
+		const store = this.attachmentStore ?? this.index.getAttachmentStore();
+		if (!store) {
+			throw new Error('Draft attachment store is not initialized');
+		}
+		const draft = this.index.getDraft(draftId);
+		if (!draft) {
+			throw new Error(`Draft not found: ${draftId}`);
+		}
+		const existing = draft.attachments || [];
+		if (!existing.some(a => a.id === attachmentId)) {
+			throw new Error(`Attachment not found on draft: ${attachmentId}`);
+		}
+		await store.remove(draftId, attachmentId);
+		const next = existing.filter(a => a.id !== attachmentId);
+		const updated = await this.index.setDraftAttachments(draftId, next);
+		if (!updated) {
+			throw new Error(`Draft not found: ${draftId}`);
+		}
+		return updated;
+	}
+
+	private async loadOutboundAttachments(draft: EmailDraft): Promise<OutboundAttachment[]> {
+		const metas = draft.attachments || [];
+		if (metas.length === 0) {
+			return [];
+		}
+		const store = this.attachmentStore ?? this.index.getAttachmentStore();
+		if (!store) {
+			return [];
+		}
+		const out: OutboundAttachment[] = [];
+		for (const meta of metas) {
+			const content = await store.readBytes(draft.id, meta.id);
+			if (!content) {
+				throw new Error(`Missing attachment bytes for ${meta.filename}`);
+			}
+			out.push({
+				filename: meta.filename,
+				contentType: meta.contentType,
+				content,
+			});
+		}
+		return out;
 	}
 
 	/** Convenience wrapper for E4 / extension wiring. */

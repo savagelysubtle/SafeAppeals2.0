@@ -8,7 +8,34 @@ import type { AccountStore } from './accountStore';
 import type { EmailIndex } from './emailIndex';
 import type { SyncEngine } from './syncEngine';
 import { getCurrentCase, getDefaultFolder, getEmailSettings, updateEmailSettings } from './config';
-import type { ThreadSort } from './types';
+import type { DraftAttachment, EmailDraft, ThreadSort } from './types';
+
+/** Draft fields posted to the webview compose pane (no secrets / no bytes). */
+export interface ComposeDraftPayload {
+	id: string;
+	accountId: string;
+	emailId: string;
+	to: string;
+	cc?: string;
+	bcc?: string;
+	subject: string;
+	content: string;
+	attachments?: DraftAttachment[];
+}
+
+function toComposeDraftPayload(draft: EmailDraft): ComposeDraftPayload {
+	return {
+		id: draft.id,
+		accountId: draft.accountId,
+		emailId: draft.emailId,
+		to: draft.to,
+		cc: draft.cc,
+		bcc: draft.bcc,
+		subject: draft.subject,
+		content: draft.content,
+		attachments: draft.attachments,
+	};
+}
 
 export class DashboardPanel {
 	public static current: DashboardPanel | undefined;
@@ -19,6 +46,7 @@ export class DashboardPanel {
 	private onAccountsChanged?: () => void;
 	private pendingSelectThreadId: string | undefined;
 	private pendingOpenCompose = false;
+	private pendingLoadDraft: ComposeDraftPayload | undefined;
 	private pendingOpenDrafts = false;
 	private pendingOpenSettings = false;
 
@@ -112,6 +140,21 @@ export class DashboardPanel {
 		return panel;
 	}
 
+	/** Reveal the dashboard and open compose prefilled with a saved draft. */
+	static showComposeWithDraft(
+		extensionUri: vscode.Uri,
+		engine: SyncEngine,
+		accounts: AccountStore,
+		index: EmailIndex,
+		log: (msg: string) => void,
+		draft: EmailDraft,
+		onAccountsChanged?: () => void,
+	): DashboardPanel {
+		const panel = DashboardPanel.show(extensionUri, engine, accounts, index, log, onAccountsChanged);
+		panel.openComposeWithDraft(draft);
+		return panel;
+	}
+
 	/** Reveal the dashboard and show the drafts pane. */
 	static showDrafts(
 		extensionUri: vscode.Uri,
@@ -155,8 +198,18 @@ export class DashboardPanel {
 
 	openCompose(): void {
 		this.pendingOpenCompose = true;
+		this.pendingLoadDraft = undefined;
 		this.panel.reveal(this.panel.viewColumn ?? vscode.ViewColumn.One);
 		this.panel.webview.postMessage({ type: 'openCompose' });
+	}
+
+	/** Open compose with a saved draft (host → webview `loadDraft`). */
+	openComposeWithDraft(draft: EmailDraft): void {
+		const payload = toComposeDraftPayload(draft);
+		this.pendingOpenCompose = false;
+		this.pendingLoadDraft = payload;
+		this.panel.reveal(this.panel.viewColumn ?? vscode.ViewColumn.One);
+		this.panel.webview.postMessage({ type: 'loadDraft', draft: payload });
 	}
 
 	openDrafts(): void {
@@ -176,6 +229,97 @@ export class DashboardPanel {
 		this.panel.dispose();
 		while (this.disposables.length) {
 			this.disposables.pop()?.dispose();
+		}
+	}
+
+	/**
+	 * Host-side file picker (timeline pickDocuments pattern). Never posts bytes — metadata only.
+	 * Allocates a draft id via saveDraft when compose has not saved yet.
+	 */
+	private async pickAttachments(msg: { type: string; [key: string]: unknown }): Promise<void> {
+		const accountId = typeof msg.accountId === 'string' ? msg.accountId.trim() : '';
+		if (!accountId) {
+			this.panel.webview.postMessage({ type: 'error', message: 'Add an account before attaching files.' });
+			return;
+		}
+		let draftId = typeof msg.draftId === 'string' ? msg.draftId.trim() : '';
+		if (!draftId) {
+			const saved = await this.engine.saveDraft({
+				accountId,
+				emailId: typeof msg.emailId === 'string' ? msg.emailId : '',
+				to: typeof msg.to === 'string' ? msg.to : '',
+				cc: typeof msg.cc === 'string' && msg.cc ? msg.cc : undefined,
+				bcc: typeof msg.bcc === 'string' && msg.bcc ? msg.bcc : undefined,
+				subject: typeof msg.subject === 'string' ? msg.subject : '',
+				content: typeof msg.content === 'string' ? msg.content : '',
+			});
+			draftId = saved.draft.id;
+			this.panel.webview.postMessage({
+				type: 'draftSaved',
+				draft: saved.draft,
+				drafts: this.index.listDrafts(),
+				stats: this.index.getStats(),
+				remoteError: saved.remoteError,
+			});
+		}
+
+		const folder = vscode.workspace.workspaceFolders?.[0];
+		const uris = await vscode.window.showOpenDialog({
+			canSelectMany: true,
+			canSelectFiles: true,
+			canSelectFolders: false,
+			defaultUri: folder?.uri,
+			openLabel: 'Attach',
+		});
+		if (!uris?.length) {
+			const draft = this.index.getDraft(draftId);
+			this.panel.webview.postMessage({
+				type: 'attachmentsUpdated',
+				draftId,
+				attachments: draft?.attachments || [],
+			});
+			return;
+		}
+
+		try {
+			const updated = await this.engine.attachFilesToDraft(
+				draftId,
+				uris.map(u => u.fsPath),
+			);
+			this.panel.webview.postMessage({
+				type: 'attachmentsUpdated',
+				draftId: updated.id,
+				attachments: updated.attachments || [],
+				drafts: this.index.listDrafts(),
+			});
+		} catch (error) {
+			const message = error instanceof Error ? error.message : String(error);
+			this.panel.webview.postMessage({ type: 'error', message });
+			void vscode.window.showErrorMessage(`Could not attach file: ${message}`);
+		}
+	}
+
+	private async removeAttachment(msg: { type: string; [key: string]: unknown }): Promise<void> {
+		const draftId = typeof msg.draftId === 'string' ? msg.draftId.trim() : '';
+		const attachmentId = typeof msg.attachmentId === 'string' ? msg.attachmentId.trim() : '';
+		if (!draftId || !attachmentId) {
+			this.panel.webview.postMessage({
+				type: 'error',
+				message: 'draftId and attachmentId are required to remove an attachment.',
+			});
+			return;
+		}
+		try {
+			const updated = await this.engine.removeAttachmentFromDraft(draftId, attachmentId);
+			this.panel.webview.postMessage({
+				type: 'attachmentsUpdated',
+				draftId: updated.id,
+				attachments: updated.attachments || [],
+				drafts: this.index.listDrafts(),
+			});
+		} catch (error) {
+			const message = error instanceof Error ? error.message : String(error);
+			this.panel.webview.postMessage({ type: 'error', message });
 		}
 	}
 
@@ -214,7 +358,12 @@ export class DashboardPanel {
 						this.pendingSelectThreadId = undefined;
 						this.panel.webview.postMessage({ type: 'selectThread', threadId });
 					}
-					if (this.pendingOpenCompose) {
+					if (this.pendingLoadDraft) {
+						const draft = this.pendingLoadDraft;
+						this.pendingLoadDraft = undefined;
+						this.pendingOpenCompose = false;
+						this.panel.webview.postMessage({ type: 'loadDraft', draft });
+					} else if (this.pendingOpenCompose) {
 						this.pendingOpenCompose = false;
 						this.panel.webview.postMessage({ type: 'openCompose' });
 					}
@@ -255,7 +404,12 @@ export class DashboardPanel {
 				}
 				case 'send': {
 					const result = await this.engine.send(msg.request as Parameters<SyncEngine['send']>[0]);
-					this.panel.webview.postMessage({ type: 'sent', result });
+					this.panel.webview.postMessage({
+						type: 'sent',
+						result,
+						drafts: this.index.listDrafts(),
+						stats: this.index.getStats(),
+					});
 					void vscode.window.showInformationMessage('Email sent');
 					break;
 				}
@@ -283,6 +437,14 @@ export class DashboardPanel {
 								: 'Draft saved',
 						);
 					}
+					break;
+				}
+				case 'pickAttachments': {
+					await this.pickAttachments(msg);
+					break;
+				}
+				case 'removeAttachment': {
+					await this.removeAttachment(msg);
 					break;
 				}
 				case 'updateSettings': {

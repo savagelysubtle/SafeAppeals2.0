@@ -7,6 +7,7 @@ import { registerAgentTools } from './agentTools';
 import { AccountStore } from './accountStore';
 import { getCurrentCase, getDefaultFolder, getSyncIntervalMinutes, isWebClient } from './config';
 import { DashboardPanel, EmailSidebarProvider } from './dashboardPanel';
+import { DraftAttachmentStore } from './draftAttachmentStore';
 import { EmailIndex } from './emailIndex';
 import { EmlEditorProvider } from './emlEditorProvider';
 import { parseEmlFile } from './emlParser';
@@ -40,6 +41,7 @@ let statusBar: vscode.StatusBarItem;
 let engine: SyncEngine;
 let index: EmailIndex;
 let accounts: AccountStore;
+let draftAttachments: DraftAttachmentStore;
 
 const connections = createMailConnectionsBridge();
 
@@ -56,6 +58,17 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 	accounts = new AccountStore(context.secrets, log);
 	index = new EmailIndex(context.globalStorageUri, context.secrets, context.globalState, log);
 	await index.initialize();
+	draftAttachments = new DraftAttachmentStore(
+		context.globalStorageUri,
+		context.secrets,
+		context.globalState,
+		log,
+		(message) => {
+			void vscode.window.showWarningMessage(message);
+		},
+	);
+	await draftAttachments.initialize();
+	index.setAttachmentStore(draftAttachments);
 
 	statusBar = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 49);
 	statusBar.command = 'safeappeals-email.syncStatus';
@@ -89,6 +102,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 	engine = new SyncEngine(accounts, index, log, () => {
 		refreshUi();
 	});
+	engine.setAttachmentStore(draftAttachments);
 
 	const openDashboard = () => {
 		DashboardPanel.show(context.extensionUri, engine, accounts, index, log, refreshUi);
@@ -152,7 +166,26 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
 	registerCommands(context, log, openDashboard, refreshUi);
 	registerCloudSignOutCascade(context, log, refreshUi);
-	registerAgentTools(context, () => engine, () => accounts);
+	registerAgentTools(
+		context,
+		() => engine,
+		() => accounts,
+		() => index,
+		{
+			refreshEmailUi: refreshUi,
+			openComposeWithDraft: (draft) => {
+				DashboardPanel.showComposeWithDraft(
+					context.extensionUri,
+					engine,
+					accounts,
+					index,
+					log,
+					draft,
+					refreshUi,
+				);
+			},
+		},
+	);
 	await migrateLegacyOAuthConnections(log);
 	await refreshStatusBar();
 	engine.startBackgroundSync();

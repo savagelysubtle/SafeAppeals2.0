@@ -10,7 +10,7 @@ import {
 	type MailboxAuth,
 } from './imapClient';
 import { buildRfc822Message } from './mimeBuilder';
-import type { EmailAccountConfig, EmailDraft } from './types';
+import type { EmailAccountConfig, EmailDraft, OutboundAttachment } from './types';
 
 export interface SyncDraftToImapResult {
 	draft: EmailDraft;
@@ -25,6 +25,8 @@ export interface SyncDraftToImapDeps {
 		draftId: string,
 		remote: { remoteFolder: string; remoteUid?: number },
 	) => Promise<EmailDraft | undefined>;
+	/** Load attachment bytes for IMAP APPEND (metadata is on the draft). */
+	loadAttachments?: (draft: EmailDraft) => Promise<OutboundAttachment[]>;
 	log?: (msg: string) => void;
 }
 
@@ -54,12 +56,16 @@ export async function syncDraftToImap(
 	const appendDraft = options.appendDraft ?? appendDraftMessage;
 
 	try {
+		const attachments = options.loadAttachments
+			? await options.loadAttachments(draft)
+			: [];
 		const raw = await buildMime(account, {
 			to: draft.to,
 			cc: draft.cc,
 			bcc: draft.bcc,
 			subject: draft.subject,
 			text: draft.content,
+			attachments,
 		});
 		const remote: AppendDraftResult = await appendDraft(account, auth, raw, {
 			replaceUid: draft.remoteUid,

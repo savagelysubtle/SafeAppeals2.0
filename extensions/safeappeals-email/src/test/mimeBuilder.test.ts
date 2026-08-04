@@ -43,4 +43,42 @@ suite('buildRfc822Message', () => {
 			},
 		);
 	});
+
+	test('includes multipart attachments by filename', async () => {
+		const account: EmailAccountConfig = {
+			id: 'a1',
+			label: 'Test',
+			email: 'from@example.com',
+			imapHost: 'imap.example.com',
+			imapPort: 993,
+			imapSecure: true,
+			smtpHost: 'smtp.example.com',
+			smtpPort: 465,
+			smtpSecure: true,
+			username: 'from@example.com',
+		};
+		const raw = await buildRfc822Message(account, {
+			to: 'to@example.com',
+			subject: 'With attach',
+			text: 'See attached',
+			attachments: [{
+				filename: 'brief.pdf',
+				contentType: 'application/pdf',
+				content: Buffer.from('%PDF-1.4 fake'),
+			}],
+		});
+		const text = raw.toString('utf8');
+		assert.deepStrictEqual(
+			{
+				multipart: /multipart\/mixed/i.test(text),
+				filename: /filename="?brief\.pdf"?/i.test(text),
+				contentType: /application\/pdf/i.test(text),
+			},
+			{
+				multipart: true,
+				filename: true,
+				contentType: true,
+			},
+		);
+	});
 });

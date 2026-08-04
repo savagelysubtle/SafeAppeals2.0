@@ -327,4 +327,33 @@ button.linkish {
 	display: flex;
 	gap: 8px;
 	align-items: center;
+	flex-wrap: wrap;
+}
+
+.compose-attachments {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+}
+
+.compose-attachment-item {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	font-size: 12px;
+}
+
+.compose-attachment-name {
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.compose-attachment-size {
+	flex: 0 0 auto;
 }

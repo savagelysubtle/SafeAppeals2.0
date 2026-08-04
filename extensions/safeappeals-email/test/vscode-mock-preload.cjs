@@ -57,7 +57,62 @@ const vscodeMock = {
 		openExternal: async () => true,
 	},
 	Uri: {
-		parse: (value) => ({ toString: () => value }),
+		file: (fsPath) => ({
+			scheme: 'file',
+			fsPath,
+			path: fsPath,
+			toString: () => `file://${fsPath}`,
+			with: (change) => ({
+				scheme: change.scheme || 'file',
+				fsPath: change.path || fsPath,
+				path: change.path || fsPath,
+				toString: () => `file://${change.path || fsPath}`,
+				with() { return this; },
+			}),
+		}),
+		parse: (value) => {
+			if (value.startsWith('file://')) {
+				const fsPath = value.slice('file://'.length);
+				return {
+					scheme: 'file',
+					fsPath,
+					path: fsPath,
+					toString: () => value,
+					with(change) {
+						return {
+							scheme: change.scheme || 'file',
+							fsPath: change.path || fsPath,
+							path: change.path || fsPath,
+							toString: () => `file://${change.path || fsPath}`,
+							with() { return this; },
+						};
+					},
+				};
+			}
+			return { scheme: 'unknown', path: value, fsPath: value, toString: () => value, with() { return this; } };
+		},
+		joinPath: (base, ...segments) => {
+			const path = require('path');
+			const fsPath = path.join(base.fsPath || base.path || '', ...segments);
+			return {
+				scheme: 'file',
+				fsPath,
+				path: fsPath,
+				toString: () => `file://${fsPath}`,
+				with(change) {
+					return {
+						scheme: change.scheme || 'file',
+						fsPath: change.path || fsPath,
+						path: change.path || fsPath,
+						toString: () => `file://${change.path || fsPath}`,
+						with() { return this; },
+					};
+				},
+			};
+		},
+	},
+	workspace: {
+		workspaceFolders: undefined,
 	},
 	UIKind: { Desktop: 1, Web: 2 },
 	CancellationError: class CancellationError extends Error {

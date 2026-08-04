@@ -7295,8 +7295,18 @@
     subject: "",
     content: "",
     draftId: void 0,
-    emailId: void 0
+    emailId: void 0,
+    attachments: []
   });
+  function formatAttachmentSize(size) {
+    if (size < 1024) {
+      return `${size} B`;
+    }
+    if (size < 1024 * 1024) {
+      return `${(size / 1024).toFixed(1)} KB`;
+    }
+    return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+  }
   function applyDefaults(body, settings) {
     const compose = settings?.compose;
     const parts = [];
@@ -7359,7 +7369,8 @@
           subject: partial.subject ?? "",
           content: partial.content ?? defaults.content,
           draftId: partial.draftId,
-          emailId: partial.emailId
+          emailId: partial.emailId,
+          attachments: partial.attachments ? [...partial.attachments] : []
         };
         setCompose(next);
         setShowCc(!!next.cc);
@@ -7431,6 +7442,30 @@
           case "openCompose":
             startCompose({});
             break;
+          case "loadDraft": {
+            const draft = msg.draft;
+            if (!draft || typeof draft !== "object") {
+              startCompose({});
+              break;
+            }
+            const attachments = Array.isArray(draft.attachments) ? draft.attachments.filter(
+              (a) => a && typeof a.id === "string" && typeof a.filename === "string"
+            ) : [];
+            startCompose({
+              to: typeof draft.to === "string" ? draft.to : "",
+              cc: typeof draft.cc === "string" ? draft.cc : "",
+              bcc: typeof draft.bcc === "string" ? draft.bcc : "",
+              subject: typeof draft.subject === "string" ? draft.subject : "",
+              content: typeof draft.content === "string" ? draft.content : "",
+              draftId: typeof draft.id === "string" ? draft.id : void 0,
+              emailId: typeof draft.emailId === "string" ? draft.emailId : void 0,
+              attachments
+            });
+            if (typeof draft.accountId === "string" && draft.accountId) {
+              setAccountId(draft.accountId);
+            }
+            break;
+          }
           case "openDrafts":
             setPane("drafts");
             vscode.postMessage({ type: "listDrafts", accountId: void 0 });
@@ -7457,13 +7492,40 @@
               setStats(msg.stats);
             }
             if (msg.draft?.id) {
-              setCompose((prev) => ({ ...prev, draftId: msg.draft.id }));
+              setCompose((prev) => ({
+                ...prev,
+                draftId: msg.draft.id,
+                attachments: Array.isArray(msg.draft.attachments) ? msg.draft.attachments : prev.attachments
+              }));
             }
             setDraftSavedHint(true);
             setDraftRemoteError(
               typeof msg.remoteError === "string" && msg.remoteError ? msg.remoteError : null
             );
             setError(null);
+            break;
+          }
+          case "attachmentsUpdated": {
+            const draftId = typeof msg.draftId === "string" ? msg.draftId : void 0;
+            const attachments = Array.isArray(msg.attachments) ? msg.attachments : [];
+            setCompose((prev) => ({
+              ...prev,
+              draftId: draftId || prev.draftId,
+              attachments
+            }));
+            if (Array.isArray(msg.drafts)) {
+              setDrafts(msg.drafts);
+            }
+            setError(null);
+            break;
+          }
+          case "sent": {
+            if (Array.isArray(msg.drafts)) {
+              setDrafts(msg.drafts);
+            }
+            if (msg.stats) {
+              setStats(msg.stats);
+            }
             break;
           }
           case "drafts":
@@ -7518,7 +7580,8 @@
           bcc: compose.bcc || void 0,
           subject: compose.subject,
           text: compose.content,
-          html: `<pre>${escapeHtml(compose.content)}</pre>`
+          html: `<pre>${escapeHtml(compose.content)}</pre>`,
+          draftId: compose.draftId
         }
       });
       setCompose(emptyCompose());
@@ -7545,6 +7608,37 @@
           content: compose.content,
           draftId: compose.draftId
         }
+      });
+    };
+    const onPickAttachments = () => {
+      if (!accountId) {
+        setError("Add an account first");
+        return;
+      }
+      vscode.postMessage({
+        type: "pickAttachments",
+        accountId,
+        draftId: compose.draftId,
+        emailId: compose.emailId || selectedMessageId || "",
+        to: compose.to,
+        cc: compose.cc || void 0,
+        bcc: compose.bcc || void 0,
+        subject: compose.subject,
+        content: compose.content
+      });
+    };
+    const onRemoveAttachment = (attachmentId) => {
+      if (!compose.draftId) {
+        setCompose((prev) => ({
+          ...prev,
+          attachments: prev.attachments.filter((a) => a.id !== attachmentId)
+        }));
+        return;
+      }
+      vscode.postMessage({
+        type: "removeAttachment",
+        draftId: compose.draftId,
+        attachmentId
       });
     };
     const onReply = () => {
@@ -7680,9 +7774,24 @@ ${body}`;
             onChange: (e) => setCompose({ ...compose, content: e.target.value })
           }
         ),
+        compose.attachments.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", { className: "compose-attachments", children: compose.attachments.map((att) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("li", { className: "compose-attachment-item", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "compose-attachment-name", title: att.filename, children: att.filename }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "muted compose-attachment-size", children: formatAttachmentSize(att.size) }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+            "button",
+            {
+              type: "button",
+              className: "linkish",
+              "aria-label": `Remove ${att.filename}`,
+              onClick: () => onRemoveAttachment(att.id),
+              children: "Remove"
+            }
+          )
+        ] }, att.id)) }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "compose-actions", children: [
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { type: "button", onClick: onSend, children: "Send" }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { type: "button", onClick: onSaveDraft, children: "Save draft" }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { type: "button", className: "secondary", onClick: onPickAttachments, children: "Attach" }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { type: "button", className: "secondary", onClick: () => setPane("read"), children: "Cancel" }),
           draftSavedHint && !draftRemoteError && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "muted", children: "Draft saved" }),
           draftRemoteError && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "error", title: draftRemoteError, children: "Saved locally; server Drafts failed" })
@@ -7704,7 +7813,8 @@ ${body}`;
                 subject: d.subject,
                 content: d.content,
                 draftId: d.id,
-                emailId: d.emailId
+                emailId: d.emailId,
+                attachments: d.attachments || []
               });
             },
             children: [

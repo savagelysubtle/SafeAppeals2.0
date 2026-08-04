@@ -92,6 +92,14 @@ export interface EmailThread {
 	messages: EmailMessageSummary[];
 }
 
+/** Metadata for a draft attachment (bytes live in the encrypted sidecar store). */
+export interface DraftAttachment {
+	id: string;
+	filename: string;
+	contentType: string;
+	size: number;
+}
+
 export interface EmailDraft {
 	id: string;
 	accountId: string;
@@ -110,6 +118,8 @@ export interface EmailDraft {
 	remoteFolder?: string;
 	/** IMAP UID of the remote draft copy (for replace-on-update) */
 	remoteUid?: number;
+	/** Attachment metadata only — never bytes or source paths */
+	attachments?: DraftAttachment[];
 }
 
 /** OAuth identity provider for mailbox XOAUTH2 (tokens live in auth extension, not here). */
@@ -233,6 +243,13 @@ export function credentialsForStorage(creds: EmailAccountCredentials): EmailAcco
 	return { type: 'password', password: creds.password };
 }
 
+/** In-memory attachment payload for SMTP / MIME (never persisted). */
+export interface OutboundAttachment {
+	filename: string;
+	contentType: string;
+	content: Buffer;
+}
+
 export interface SendMailRequest {
 	accountId: string;
 	to: string;
@@ -243,6 +260,10 @@ export interface SendMailRequest {
 	html?: string;
 	inReplyTo?: string;
 	references?: string[];
+	/** When set, SyncEngine loads sidecar bytes and purges after a successful send */
+	draftId?: string;
+	/** Preloaded attachment payloads (usually filled by SyncEngine from draftId) */
+	attachments?: OutboundAttachment[];
 }
 
 export type ThreadSort = 'newest' | 'oldest' | 'sender' | 'subject';

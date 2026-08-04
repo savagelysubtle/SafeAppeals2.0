@@ -13,8 +13,10 @@ import {
 	loadJson,
 	writeEncryptedJson,
 } from './shared/encryptedStore';
+import type { DraftAttachmentStore } from './draftAttachmentStore';
 import { deleteFileIfExists, ensureDir } from './shared/secureFs';
 import type {
+	DraftAttachment,
 	DraftStatus,
 	EmailDraft,
 	EmailMessage,
@@ -114,6 +116,7 @@ export class EmailIndex {
 	private warnedUnavailable = false;
 	private warnedMemoryDraft = false;
 	private readonly marker: DekDurabilityMarker;
+	private attachmentStore: DraftAttachmentStore | undefined;
 
 	constructor(
 		private readonly storageUri: vscode.Uri,
@@ -122,6 +125,15 @@ export class EmailIndex {
 		private readonly log?: (msg: string) => void,
 	) {
 		this.marker = createMementoDekDurabilityMarker(globalState, DEK_KEY_ID);
+	}
+
+	/** Wire the encrypted draft-attachment sidecar store (called from activate). */
+	setAttachmentStore(store: DraftAttachmentStore): void {
+		this.attachmentStore = store;
+	}
+
+	getAttachmentStore(): DraftAttachmentStore | undefined {
+		return this.attachmentStore;
 	}
 
 	/**
@@ -165,6 +177,8 @@ export class EmailIndex {
 				`clearLocalCache readdir failed: ${error instanceof Error ? error.message : String(error)}`,
 			);
 		}
+
+		await this.attachmentStore?.purgeAll();
 
 		this.messages = [];
 		this.threadStatus = {};
@@ -560,8 +574,14 @@ export class EmailIndex {
 
 	async clearAccount(accountId: string): Promise<void> {
 		this.messages = this.messages.filter((m) => m.accountId !== accountId);
+		const accountDrafts = this.drafts.filter((d) => d.accountId === accountId);
+		for (const draft of accountDrafts) {
+			await this.attachmentStore?.purgeDraft(draft.id);
+		}
+		this.drafts = this.drafts.filter((d) => d.accountId !== accountId);
 		delete this.meta.perAccount[accountId];
 		await this.saveIndex();
+		await this.saveDrafts();
 		await this.saveMeta();
 	}
 
@@ -625,6 +645,7 @@ export class EmailIndex {
 				if (input.remoteUid !== undefined) {
 					existing.remoteUid = input.remoteUid;
 				}
+				// Preserve existing.attachments — sidecar metadata is updated via setDraftAttachments
 				await this.saveDrafts();
 				return existing;
 			}
@@ -652,6 +673,32 @@ export class EmailIndex {
 		this.drafts.push(draft);
 		await this.saveDrafts();
 		return draft;
+	}
+
+	/** Replace attachment metadata on a draft (bytes live in the sidecar store). */
+	async setDraftAttachments(
+		draftId: string,
+		attachments: DraftAttachment[],
+	): Promise<EmailDraft | undefined> {
+		const draft = this.getDraft(draftId);
+		if (!draft) {
+			return undefined;
+		}
+		draft.attachments = attachments.length > 0 ? [...attachments] : undefined;
+		draft.updatedAt = new Date().toISOString();
+		await this.saveDrafts();
+		return draft;
+	}
+
+	async deleteDraft(draftId: string): Promise<boolean> {
+		const idx = this.drafts.findIndex((d) => d.id === draftId);
+		if (idx < 0) {
+			return false;
+		}
+		await this.attachmentStore?.purgeDraft(draftId);
+		this.drafts.splice(idx, 1);
+		await this.saveDrafts();
+		return true;
 	}
 
 	/**
@@ -683,6 +730,10 @@ export class EmailIndex {
 		}
 		draft.status = status;
 		draft.updatedAt = new Date().toISOString();
+		if (status === 'sent') {
+			await this.attachmentStore?.purgeDraft(draftId);
+			draft.attachments = undefined;
+		}
 		await this.saveDrafts();
 	}
 
