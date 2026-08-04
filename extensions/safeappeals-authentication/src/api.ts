@@ -163,7 +163,7 @@ export interface CreditBalance {
  * Credit pack from /credits/packs.
  */
 export interface CreditPack {
-	readonly id: 'starter' | 'pro' | 'power';
+	readonly id: 'starter' | 'pro' | 'power' | 'firm';
 	readonly name: string;
 	readonly credits: number;
 	readonly price: number;
@@ -500,7 +500,7 @@ export class CloudApiClient implements ConnectionsApi {
 	/**
 	 * Creates a Stripe checkout session and returns the checkout URL.
 	 */
-	async createCheckoutSession(packId: 'starter' | 'pro' | 'power'): Promise<string> {
+	async createCheckoutSession(packId: 'starter' | 'pro' | 'power' | 'firm'): Promise<string> {
 		const response = await this.request<{ checkoutUrl: string }>('/credits/checkout', {
 			method: 'POST',
 			body: JSON.stringify({ pack: packId }),

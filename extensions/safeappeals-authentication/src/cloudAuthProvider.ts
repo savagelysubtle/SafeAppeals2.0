@@ -360,7 +360,7 @@ export class CloudAuthProvider implements vscode.AuthenticationProvider, vscode.
 	/**
 	 * Creates a checkout session for the given pack.
 	 */
-	async createCheckoutSession(packId: 'starter' | 'pro' | 'power'): Promise<string> {
+	async createCheckoutSession(packId: 'starter' | 'pro' | 'power' | 'firm'): Promise<string> {
 		if (!this._session) {
 			throw new Error(vscode.l10n.t('Sign in to SafeAppeals Cloud to purchase credits.'));
 		}

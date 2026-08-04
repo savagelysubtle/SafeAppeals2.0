@@ -20,7 +20,7 @@ import { CloudChatProvider } from './llm/cloudChatProvider';
 import { isAllowedExternalHttpsUrl } from './llm/externalUrl';
 
 /** Known credit pack ids validated against a caller-supplied packId before skipping the quick pick. */
-const KNOWN_CREDIT_PACK_IDS: readonly CreditPack['id'][] = ['starter', 'pro', 'power'];
+const KNOWN_CREDIT_PACK_IDS: readonly CreditPack['id'][] = ['starter', 'pro', 'power', 'firm'];
 
 function isKnownCreditPackId(value: unknown): value is CreditPack['id'] {
 	return typeof value === 'string' && (KNOWN_CREDIT_PACK_IDS as readonly string[]).includes(value);
