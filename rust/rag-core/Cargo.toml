@@ -1,0 +1,62 @@
+[package]
+name = "rag-core"
+version = "0.1.0"
+edition = "2021"
+authors = ["Safe Appeals"]
+license = "Proprietary"
+description = "SafeAppeals Advanced RAG native core (N-API)"
+publish = false
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[features]
+default = ["sqlcipher"]
+# Prefer system OpenSSL (libssl-dev). Use sqlcipher-vendored when pkg-config/OpenSSL
+# headers are unavailable (see PREBUILDS.md).
+sqlcipher = ["dep:rusqlite", "rusqlite/bundled-sqlcipher"]
+sqlcipher-vendored = ["dep:rusqlite", "rusqlite/bundled-sqlcipher-vendored-openssl"]
+# Real ONNX embeddings via fastembed (BGE-small). Off by default — CI uses FakeEmbedder.
+# Enable: cargo test -p rag-core --features fastembed
+# Requires BYO model dir (SA_RAG_EMBED_MODEL_DIR); does not download weights in tests.
+fastembed = ["dep:fastembed", "dep:ort"]
+# Real ms-marco MiniLM cross-encoder via ort. Off by default — CI uses FakeReranker.
+# Enable: cargo test -p rag-core --features cross-encoder
+# Requires BYO model dir (SA_RAG_CE_MODEL_DIR); does not download weights in tests.
+cross-encoder = ["dep:ort", "dep:tokenizers"]
+
+[dependencies]
+napi = { version = "3", default-features = false, features = ["napi4"] }
+napi-derive = "3"
+# SQLCipher-backed SQLite — only via features above. Never enable plain `bundled`
+# SQLite for the chunk DB (fail-closed: no plaintext store).
+rusqlite = { version = "0.32", optional = true, default-features = false }
+zeroize = { version = "1", features = ["derive"] }
+thiserror = "2"
+hex = "0.4"
+usearch = "2"
+regex = "1"
+
+# Pin matches fastembed 5.17.x (do not float). Shared by embed + M5 CE.
+ort = { version = "=2.0.0-rc.13", optional = true, default-features = false, features = [
+	"ndarray",
+	"std",
+	"api-24",
+	"download-binaries",
+	"tls-native",
+] }
+# hf-hub disabled: no silent model downloads. Load via SA_RAG_EMBED_MODEL_DIR (BYO).
+fastembed = { version = "5.17", optional = true, default-features = false, features = [
+	"ort-download-binaries-native-tls",
+] }
+# HuggingFace tokenizers for ms-marco CE pair encoding (feature `cross-encoder`).
+tokenizers = { version = "0.21", optional = true, default-features = false, features = [
+	"onig",
+] }
+tantivy = "0.22"
+
+[build-dependencies]
+napi-build = "2"
+
+[dev-dependencies]
+tempfile = "3"

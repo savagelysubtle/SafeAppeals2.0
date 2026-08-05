@@ -1,0 +1,227 @@
+{
+	"name": "safeappeals-rag",
+	"displayName": "%displayName%",
+	"description": "%description%",
+	"version": "1.0.0",
+	"publisher": "safeappeals",
+	"license": "MIT",
+	"engines": {
+		"vscode": "^1.70.0"
+	},
+	"main": "./out/extension.js",
+	"categories": [
+		"Other"
+	],
+	"extensionKind": [
+		"workspace"
+	],
+	"extensionDependencies": [
+		"safeappeals.safeappeals-ml"
+	],
+	"activationEvents": [
+		"onStartupFinished",
+		"onCommand:safeappeals-rag.setupLocalSearch",
+		"onCommand:safeappeals-rag.scaffoldCoreReferences",
+		"onCommand:safeappeals-rag.search",
+		"onCommand:safeappeals-rag.showStatus"
+	],
+	"capabilities": {
+		"virtualWorkspaces": false,
+		"untrustedWorkspaces": {
+			"supported": false
+		}
+	},
+	"contributes": {
+		"configuration": {
+			"title": "%config.title%",
+			"properties": {
+				"safeappeals.rag.docParseSidecarUrl": {
+					"type": "string",
+					"default": "http://127.0.0.1:8742",
+					"scope": "machine",
+					"description": "%config.docParseSidecarUrl%"
+				},
+				"safeappeals.rag.localAiSetup.completed": {
+					"type": "boolean",
+					"default": false,
+					"scope": "machine",
+					"description": "%config.localAiSetupCompleted%"
+				}
+			}
+		},
+		"commands": [
+			{
+				"command": "safeappeals-rag.showStatus",
+				"title": "%command.showStatus%",
+				"category": "%command.category%"
+			},
+			{
+				"command": "safeappeals-rag.setupLocalSearch",
+				"title": "%command.setupLocalSearch%",
+				"category": "%command.category%"
+			},
+			{
+				"command": "safeappeals-rag.scaffoldCoreReferences",
+				"title": "%command.scaffoldCoreReferences%",
+				"category": "%command.category%",
+				"icon": "$(folder-library)"
+			},
+			{
+				"command": "safeappeals-rag.search",
+				"title": "%command.search%",
+				"category": "%command.category%"
+			}
+		],
+		"menus": {
+			"commandPalette": [
+				{
+					"command": "safeappeals-rag.showStatus"
+				},
+				{
+					"command": "safeappeals-rag.setupLocalSearch"
+				},
+				{
+					"command": "safeappeals-rag.scaffoldCoreReferences"
+				},
+				{
+					"command": "safeappeals-rag.search"
+				}
+			],
+			"view/title": [
+				{
+					"command": "safeappeals-rag.scaffoldCoreReferences",
+					"when": "view == workbench.explorer.fileView && workspaceFolderCount != 0",
+					"group": "navigation@25"
+				}
+			]
+		},
+		"languageModelTools": [
+			{
+				"name": "safeappeals_rag_index_document",
+				"toolReferenceName": "ragIndexDocument",
+				"displayName": "%tool.indexDocument.displayName%",
+				"modelDescription": "%tool.indexDocument.modelDescription%",
+				"userDescription": "%tool.indexDocument.userDescription%",
+				"canBeReferencedInPrompt": true,
+				"icon": "$(database)",
+				"inputSchema": {
+					"type": "object",
+					"properties": {
+						"uri": {
+							"type": "string",
+							"description": "Workspace-relative path, absolute path, or file URI of the document to index. Required."
+						},
+						"isCoreReference": {
+							"type": "boolean",
+							"description": "When true, index as core_reference. When omitted, paths under core_references/ still map to core_reference; otherwise case_index."
+						}
+					},
+					"required": [
+						"uri"
+					]
+				}
+			},
+			{
+				"name": "safeappeals_rag_search_reference",
+				"toolReferenceName": "ragSearchReference",
+				"displayName": "%tool.searchReference.displayName%",
+				"modelDescription": "%tool.searchReference.modelDescription%",
+				"userDescription": "%tool.searchReference.userDescription%",
+				"canBeReferencedInPrompt": true,
+				"icon": "$(book)",
+				"inputSchema": {
+					"type": "object",
+					"properties": {
+						"query": {
+							"type": "string",
+							"description": "Search query over core_reference (workspace core_references/). Required."
+						},
+						"limit": {
+							"type": "number",
+							"description": "Max hits after hybrid retrieve + optional cross-encoder (maps to host finalK). Default 8, clamped 1–32."
+						}
+					},
+					"required": [
+						"query"
+					]
+				}
+			},
+			{
+				"name": "safeappeals_rag_search_workspace",
+				"toolReferenceName": "ragSearchWorkspace",
+				"displayName": "%tool.searchWorkspace.displayName%",
+				"modelDescription": "%tool.searchWorkspace.modelDescription%",
+				"userDescription": "%tool.searchWorkspace.userDescription%",
+				"canBeReferencedInPrompt": true,
+				"icon": "$(search)",
+				"inputSchema": {
+					"type": "object",
+					"properties": {
+						"query": {
+							"type": "string",
+							"description": "Search query over case_index (case files). Required."
+						},
+						"limit": {
+							"type": "number",
+							"description": "Max hits after hybrid retrieve + optional cross-encoder (maps to host finalK). Default 8, clamped 1–32."
+						}
+					},
+					"required": [
+						"query"
+					]
+				}
+			},
+			{
+				"name": "safeappeals_rag_search_all",
+				"toolReferenceName": "ragSearchAll",
+				"displayName": "%tool.searchAll.displayName%",
+				"modelDescription": "%tool.searchAll.modelDescription%",
+				"userDescription": "%tool.searchAll.userDescription%",
+				"canBeReferencedInPrompt": true,
+				"icon": "$(search-fuzzy)",
+				"inputSchema": {
+					"type": "object",
+					"properties": {
+						"query": {
+							"type": "string",
+							"description": "Search query across all scopes (core_reference + case_index). Required."
+						},
+						"limit": {
+							"type": "number",
+							"description": "Max hits after hybrid retrieve + optional cross-encoder (maps to host finalK). Default 8, clamped 1–32."
+						}
+					},
+					"required": [
+						"query"
+					]
+				}
+			},
+			{
+				"name": "safeappeals_rag_get_stats",
+				"toolReferenceName": "ragGetStats",
+				"displayName": "%tool.getStats.displayName%",
+				"modelDescription": "%tool.getStats.modelDescription%",
+				"userDescription": "%tool.getStats.userDescription%",
+				"canBeReferencedInPrompt": true,
+				"icon": "$(graph)",
+				"inputSchema": {
+					"type": "object",
+					"properties": {}
+				}
+			}
+		]
+	},
+	"scripts": {
+		"compile": "gulp compile-extension:safeappeals-rag",
+		"watch": "gulp watch-extension:safeappeals-rag",
+		"test": "mocha --require ./test/vscode-mock-preload.cjs --ui tdd out/test/*.test.js"
+	},
+	"dependencies": {
+		"@safeappeals/rag-core": "file:../../rust/rag-core"
+	},
+	"devDependencies": {
+		"@types/mocha": "^10.0.10",
+		"@types/node": "24.x",
+		"mocha": "^11.1.0"
+	}
+}

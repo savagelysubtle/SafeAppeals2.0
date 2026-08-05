@@ -1,0 +1,15 @@
+src/**
+tsconfig.json
+tsconfig.tsbuildinfo
+out/**/*.map
+test/**
+bun.lock
+package-lock.json
+*.md
+!PACKAGING.md
+node_modules/**
+!node_modules/@safeappeals/
+!node_modules/@safeappeals/rag-core/
+!node_modules/@safeappeals/rag-core/**
+!node_modules/@safeappeals/rag-core/prebuilds/**
+!node_modules/@safeappeals/rag-core/prebuilds/**/*.node

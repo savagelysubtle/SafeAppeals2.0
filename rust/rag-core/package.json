@@ -1,0 +1,45 @@
+{
+	"name": "@safeappeals/rag-core",
+	"version": "0.1.0",
+	"description": "SafeAppeals Advanced RAG native core (N-API / dual-ABI prebuilds)",
+	"license": "UNLICENSED",
+	"private": true,
+	"main": "index.js",
+	"types": "index.d.ts",
+	"files": [
+		"index.js",
+		"index.d.ts",
+		"nativeLoader.js",
+		"nativeLoader.d.ts",
+		"prebuilds/**/*.node",
+		"README.md",
+		"PREBUILDS.md"
+	],
+	"napi": {
+		"binaryName": "rag_core",
+		"targets": [
+			"x86_64-unknown-linux-gnu",
+			"x86_64-pc-windows-msvc",
+			"aarch64-apple-darwin",
+			"x86_64-apple-darwin"
+		]
+	},
+	"engines": {
+		"node": ">= 20"
+	},
+	"scripts": {
+		"build": "napi build --platform --release --no-js",
+		"build:debug": "napi build --platform --no-js",
+		"artifacts": "napi artifacts",
+		"install-prebuild": "node ./scripts/install-prebuild.js",
+		"build:prebuild": "bun run build && bun run install-prebuild",
+		"test:native": "node ./scripts/smoke-native.js",
+		"test:loader": "node ./scripts/test-loader.js",
+		"cargo-test": "cargo test -p rag-core"
+	},
+	"devDependencies": {
+		"@napi-rs/cli": "^3.2.0",
+		"@types/node": "^24.0.0",
+		"typescript": "^5.8.0"
+	}
+}

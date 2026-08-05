@@ -1,0 +1,13 @@
+# Build / deps
+/target/
+/node_modules/
+*.node
+!prebuilds/**/*.node
+
+# napi-rs CLI output at package root (platform-triple named)
+/rag_core.node
+/rag_core.*.node
+/napi-artifacts/
+
+# Local TypeScript emit (we commit hand-maintained .js + .d.ts for the loader)
+*.tsbuildinfo
