@@ -70,7 +70,7 @@ import { IWorkingCopyService } from '../../../../../services/workingCopy/common/
 import { ChatMode } from '../../../common/chatModes.js';
 import { ChatAgentLocation, ChatConfiguration, ChatModeKind } from '../../../common/constants.js';
 import { IChatEditingService } from '../../../common/editing/chatEditingService.js';
-import { ILanguageModelChatMetadata, ILanguageModelsService } from '../../../common/languageModels.js';
+import { ILanguageModelChatMetadata, ILanguageModelsService, SAFEAPPEALS_CLOUD_VENDOR_ID } from '../../../common/languageModels.js';
 import { type IChatModel, type IChatModelInputState, type IChatRequestVariableData, type ISerializableChatModelInputState } from '../../../common/model/chatModel.js';
 import { ChatElicitationRequestPart } from '../../../common/model/chatProgressTypes/chatElicitationRequestPart.js';
 import { ChatPlanReviewData } from '../../../common/model/chatProgressTypes/chatPlanReviewData.js';
@@ -3895,7 +3895,8 @@ export class AgentHostSessionHandler extends Disposable implements IChatSessionC
 	 * Extracts the raw model id from a language-model service identifier.
 	 * E.g. "agent-host-copilot:claude-sonnet-4-20250514" → "claude-sonnet-4-20250514".
 	 * Foreign extension-host identifiers (`${vendor}/${id}`) are dropped so
-	 * the agent host falls back to its default model.
+	 * the agent host falls back to its default model, except SafeAppeals Cloud
+	 * models which route through the BYOK bridge as `safeappeals-cloud/<id>`.
 	 */
 	private _extractRawModelId(languageModelIdentifier: string | undefined): string | undefined {
 		if (!languageModelIdentifier) {
@@ -3904,6 +3905,10 @@ export class AgentHostSessionHandler extends Disposable implements IChatSessionC
 		const prefix = this._config.sessionType + ':';
 		if (languageModelIdentifier.startsWith(prefix)) {
 			return languageModelIdentifier.substring(prefix.length);
+		}
+		const cloudPrefix = `${SAFEAPPEALS_CLOUD_VENDOR_ID}/`;
+		if (languageModelIdentifier.startsWith(cloudPrefix)) {
+			return languageModelIdentifier;
 		}
 		if (languageModelIdentifier.includes('/')) {
 			this._logService.warn(`[AgentHost] Dropping foreign model identifier '${languageModelIdentifier}' for session type '${this._config.sessionType}'; falling back to default model.`);

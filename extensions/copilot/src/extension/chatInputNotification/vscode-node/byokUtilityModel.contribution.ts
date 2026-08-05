@@ -14,6 +14,8 @@ const UTILITY_MODEL_SETTING = 'chat.utilityModel';
 const UTILITY_SMALL_MODEL_SETTING = 'chat.utilitySmallModel';
 const BYOK_UTILITY_MODEL_DEFAULT_SETTING = 'chat.byokUtilityModelDefault';
 const MAIN_AGENT_BYOK_UTILITY_MODEL_DEFAULT = 'mainAgent';
+/** SafeAppeals: cloud vendor is not air-gapped third-party BYOK. */
+const SAFEAPPEALS_CLOUD_VENDOR_ID = 'safeappeals-cloud';
 
 /**
  * Shows a chat input notification in air-gapped BYOK scenarios (no GitHub
@@ -38,6 +40,11 @@ export class ByokUtilityModelNotificationContribution extends Disposable {
 		super();
 
 		this._register(this._authService.onDidAuthenticationChange(() => this._update()));
+		this._register(vscode.authentication.onDidChangeSessions(e => {
+			if (e.provider.id === SAFEAPPEALS_CLOUD_VENDOR_ID) {
+				this._update();
+			}
+		}));
 		this._register(vscode.lm.onDidChangeChatModels(() => this._update()));
 		this._register(this._configService.onDidChangeConfiguration(e => {
 			if (
@@ -59,7 +66,7 @@ export class ByokUtilityModelNotificationContribution extends Disposable {
 		this._refreshing = true;
 		try {
 			const models = await vscode.lm.selectChatModels({});
-			this._hasByokModels = models.some(m => m.vendor !== 'copilot');
+			this._hasByokModels = models.some(m => m.vendor !== 'copilot' && m.vendor !== SAFEAPPEALS_CLOUD_VENDOR_ID);
 		} catch (err) {
 			this._logService.warn(`[ByokUtilityModelNotification] Failed to query language models: ${err}`);
 		} finally {
@@ -67,15 +74,31 @@ export class ByokUtilityModelNotificationContribution extends Disposable {
 		}
 	}
 
+	/**
+	 * True when the SafeAppeals Cloud auth provider is registered (signed in or not).
+	 * getSession resolves without throwing once the vendor is contributed; it throws
+	 * when the provider is absent (e.g. upstream VS Code without SafeAppeals Cloud).
+	 */
+	private async _isSafeAppealsCloudPathActive(): Promise<boolean> {
+		try {
+			await vscode.authentication.getSession(SAFEAPPEALS_CLOUD_VENDOR_ID, [], { silent: true });
+			return true;
+		} catch (err) {
+			this._logService.warn(`[ByokUtilityModelNotification] Failed to query SafeAppeals Cloud auth provider: ${err}`);
+			return false;
+		}
+	}
+
 	private async _update(): Promise<void> {
 		await this._refreshHasByokModels();
 
 		const signedOut = !this._authService.anyGitHubSession;
+		const cloudPathActive = await this._isSafeAppealsCloudPathActive();
 		const utilityUnset = !this._isUtilityOverrideSet(UTILITY_MODEL_SETTING);
 		const utilitySmallUnset = !this._isUtilityOverrideSet(UTILITY_SMALL_MODEL_SETTING);
 		const byokUtilityModelDefault = this._configService.getNonExtensionConfig<unknown>(BYOK_UTILITY_MODEL_DEFAULT_SETTING);
 
-		if (!signedOut || !this._hasByokModels || byokUtilityModelDefault === MAIN_AGENT_BYOK_UTILITY_MODEL_DEFAULT || (!utilityUnset && !utilitySmallUnset)) {
+		if (!signedOut || cloudPathActive || !this._hasByokModels || byokUtilityModelDefault === MAIN_AGENT_BYOK_UTILITY_MODEL_DEFAULT || (!utilityUnset && !utilitySmallUnset)) {
 			this._hideNotification();
 			return;
 		}

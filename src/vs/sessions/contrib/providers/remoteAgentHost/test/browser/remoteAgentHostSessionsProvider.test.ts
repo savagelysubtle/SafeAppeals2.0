@@ -318,7 +318,7 @@ suite('RemoteAgentHostSessionsProvider', () => {
 		assert.strictEqual(provider.label, 'My Host');
 		assert.strictEqual(provider.sessionTypes.length, 1);
 		assert.strictEqual(provider.sessionTypes[0].id, CopilotCLISessionType.id);
-		assert.strictEqual(provider.sessionTypes[0].label, 'Copilot [My Host]');
+		assert.strictEqual(provider.sessionTypes[0].label, 'SafeAppeals Agent [My Host]');
 	});
 
 	test('session types update when the host advertises additional agents', () => {
@@ -337,7 +337,7 @@ suite('RemoteAgentHostSessionsProvider', () => {
 
 		assert.strictEqual(changes, 1);
 		assert.deepStrictEqual(provider.sessionTypes.map(t => ({ id: t.id, label: t.label })), [
-			{ id: CopilotCLISessionType.id, label: 'Copilot [My Host]' },
+			{ id: CopilotCLISessionType.id, label: 'SafeAppeals Agent [My Host]' },
 			{ id: 'openai', label: 'OpenAI [My Host]' },
 		]);
 	});
@@ -351,7 +351,7 @@ suite('RemoteAgentHostSessionsProvider', () => {
 		]);
 
 		assert.deepStrictEqual(provider.sessionTypes.map(t => ({ id: t.id, label: t.label })), [
-			{ id: CopilotCLISessionType.id, label: 'Copilot' },
+			{ id: CopilotCLISessionType.id, label: 'SafeAppeals Agent' },
 			{ id: 'openai', label: 'OpenAI' },
 		]);
 	});

@@ -5,6 +5,7 @@
 
 import { type ILanguageModelChatMetadataAndIdentifier, ILanguageModelsService } from '../../../../../workbench/contrib/chat/common/languageModels.js';
 import { type ISession } from '../../../../services/sessions/common/session.js';
+import { mergeSessionModelsWithSafeAppealsCloud } from '../../../chat/common/safeAppealsCloudSessionModels.js';
 
 // -- Agent Host Model Helpers --
 //
@@ -20,7 +21,7 @@ import { type ISession } from '../../../../services/sessions/common/session.js';
 export function getAgentHostModels(
 	languageModelsService: ILanguageModelsService,
 	session: ISession | undefined,
-): ILanguageModelChatMetadataAndIdentifier[] {
+): readonly ILanguageModelChatMetadataAndIdentifier[] {
 	if (!session) {
 		return [];
 	}
@@ -29,12 +30,13 @@ export function getAgentHostModels(
 	// type. Both are used as the targetChatSessionType when registering
 	// models via AgentHostLanguageModelProvider.
 	const resourceScheme = session.resource.scheme;
-	return languageModelsService.getLanguageModelIds()
+	const sessionModels = languageModelsService.getLanguageModelIds()
 		.map(id => {
 			const metadata = languageModelsService.lookupLanguageModel(id);
 			return metadata ? { metadata, identifier: id } : undefined;
 		})
 		.filter((m): m is ILanguageModelChatMetadataAndIdentifier => !!m && m.metadata.targetChatSessionType === resourceScheme);
+	return mergeSessionModelsWithSafeAppealsCloud(sessionModels, languageModelsService, session.sessionType);
 }
 
 export function agentHostModelPickerStorageKey(resourceScheme: string): string {

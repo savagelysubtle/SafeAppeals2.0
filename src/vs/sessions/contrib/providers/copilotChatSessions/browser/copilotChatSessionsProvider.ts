@@ -51,6 +51,7 @@ import { computeLivePullRequestIcon } from '../../../github/browser/pullRequestI
 import { structuralEquals } from '../../../../../base/common/equals.js';
 import { CopilotCLISessionType } from '../../agentHost/browser/baseAgentHostSessionsProvider.js';
 import { createChangesets } from './copilotChatSessionsChangesets.js';
+import { mergeSessionModelsWithSafeAppealsCloud } from '../../../chat/common/safeAppealsCloudSessionModels.js';
 import { IUriIdentityService } from '../../../../../platform/uriIdentity/common/uriIdentity.js';
 import { IAgentHostEnablementService } from '../../../../../platform/agentHost/common/agentHostEnablementService.js';
 
@@ -1680,6 +1681,7 @@ export class CopilotChatSessionsProvider extends Disposable implements ISessions
 		// the extension host updates a cloud session's `models` option group.
 		return Event.signal(Event.any(
 			this.languageModelsService.onDidChangeLanguageModels,
+			this.languageModelsService.onDidChangeLanguageModelVendors,
 			this.chatSessionsService.onDidChangeOptionGroups
 		));
 	}
@@ -1701,12 +1703,13 @@ export class CopilotChatSessionsProvider extends Disposable implements ISessions
 		if (!sessionType) {
 			return [];
 		}
-		return this.languageModelsService.getLanguageModelIds()
+		const sessionModels = this.languageModelsService.getLanguageModelIds()
 			.map((id): ILanguageModelChatMetadataAndIdentifier | undefined => {
 				const metadata = this.languageModelsService.lookupLanguageModel(id);
 				return metadata && metadata.targetChatSessionType === sessionType ? { identifier: id, metadata } : undefined;
 			})
 			.filter((m): m is ILanguageModelChatMetadataAndIdentifier => !!m);
+		return mergeSessionModelsWithSafeAppealsCloud(sessionModels, this.languageModelsService, sessionType);
 	}
 
 	getModelPickerOptions(sessionId: string): ISessionModelPickerOptions {

@@ -24,12 +24,18 @@ const mockNotification = {
 };
 
 const onDidChangeChatModelsEmitter = new Emitter<void>();
+const onDidChangeSessionsEmitter = new Emitter<{ provider: { id: string } }>();
 const selectChatModelsMock = vi.fn();
+const getSessionMock = vi.fn();
 
 vi.mock('vscode', () => ({
 	ChatInputNotificationSeverity: { Info: 1 },
 	chat: {
 		createInputNotification: vi.fn(() => mockNotification),
+	},
+	authentication: {
+		get onDidChangeSessions() { return onDidChangeSessionsEmitter.event; },
+		getSession: (...args: unknown[]) => getSessionMock(...args),
 	},
 	lm: {
 		get onDidChangeChatModels() { return onDidChangeChatModelsEmitter.event; },
@@ -98,6 +104,7 @@ describe('ByokUtilityModelNotificationContribution', () => {
 		mockNotification.description = '';
 		mockNotification.actions = [];
 		selectChatModelsMock.mockResolvedValue([{ vendor: 'ollama', id: 'llama3' }]);
+		getSessionMock.mockRejectedValue(new Error('Unknown authentication provider'));
 	});
 
 	afterEach(() => {
@@ -144,6 +151,39 @@ describe('ByokUtilityModelNotificationContribution', () => {
 
 	test('does not show notification when no BYOK models are registered', async () => {
 		selectChatModelsMock.mockResolvedValue([{ vendor: 'copilot', id: 'gpt-4' }]);
+		const { authService } = createAuthService({ anyGitHubSession: undefined });
+		const { configService } = createConfigService();
+		contribution = new ByokUtilityModelNotificationContribution(authService, configService, noopLog);
+
+		await flushAsync();
+
+		expect(mockNotification.show).not.toHaveBeenCalled();
+	});
+
+	test('does not show notification when only SafeAppeals Cloud models are registered', async () => {
+		selectChatModelsMock.mockResolvedValue([{ vendor: 'safeappeals-cloud', id: 'gpt-5.6-sol' }]);
+		const { authService } = createAuthService({ anyGitHubSession: undefined });
+		const { configService } = createConfigService();
+		contribution = new ByokUtilityModelNotificationContribution(authService, configService, noopLog);
+
+		await flushAsync();
+
+		expect(mockNotification.show).not.toHaveBeenCalled();
+	});
+
+	test('does not show notification when signed out of GitHub but signed in to SafeAppeals Cloud', async () => {
+		getSessionMock.mockResolvedValue({ accessToken: 'cloud-tok' });
+		const { authService } = createAuthService({ anyGitHubSession: undefined });
+		const { configService } = createConfigService();
+		contribution = new ByokUtilityModelNotificationContribution(authService, configService, noopLog);
+
+		await flushAsync();
+
+		expect(mockNotification.show).not.toHaveBeenCalled();
+	});
+
+	test('does not show notification when SafeAppeals Cloud vendor is registered without a session', async () => {
+		getSessionMock.mockResolvedValue(undefined);
 		const { authService } = createAuthService({ anyGitHubSession: undefined });
 		const { configService } = createConfigService();
 		contribution = new ByokUtilityModelNotificationContribution(authService, configService, noopLog);

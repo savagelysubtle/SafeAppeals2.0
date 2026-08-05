@@ -55,6 +55,7 @@ import { IPullRequestIconCache } from '../../../github/browser/pullRequestIconCa
 import { mapProtocolStatus } from './agentHostDiffs.js';
 import { createChangesets } from './agentHostSessionChangesets.js';
 import { createSessionOutputObs, ISessionOutputObs } from './agentHostSessionFiles.js';
+import { mergeSessionModelsWithSafeAppealsCloud } from '../../../chat/common/safeAppealsCloudSessionModels.js';
 
 const STORAGE_KEY_REMEMBERED_SESSION_CONFIG_VALUES = 'sessions.agentHost.sessionConfigPicker.selectedValues';
 const UNSAFE_SESSION_CONFIG_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
@@ -166,7 +167,7 @@ function isGitHubInfoEqual(a: IGitHubInfo | undefined, b: IGitHubInfo | undefine
 /** Copilot CLI session type */
 export const CopilotCLISessionType: ISessionType = {
 	id: 'copilotcli',
-	label: localize('copilotCLI', "Copilot"),
+	label: localize('safeAppealsAgent', "SafeAppeals Agent"),
 	icon: Codicon.copilot,
 };
 
@@ -2067,7 +2068,9 @@ export abstract class BaseAgentHostSessionsProvider extends Disposable implement
 				// agent are registered under its resource scheme (`agent-host-<provider>`),
 				// not the bare provider id, so carry it for availability lookups.
 				chatSessionType: this.resourceSchemeForProvider(agent.provider),
-				label: this._formatSessionTypeLabel(agent.displayName?.trim() || agent.provider),
+				label: agent.provider === CopilotCLISessionType.id
+					? this._formatSessionTypeLabel(CopilotCLISessionType.label)
+					: this._formatSessionTypeLabel(agent.displayName?.trim() || agent.provider),
 				icon: this.iconForAgentProvider(agent.provider) ?? this.icon,
 			}));
 
@@ -2709,7 +2712,10 @@ export abstract class BaseAgentHostSessionsProvider extends Disposable implement
 	// -- Model selection ------------------------------------------------------
 
 	get onDidChangeModels(): Event<void> {
-		return Event.signal(this._languageModelsService.onDidChangeLanguageModels);
+		return Event.signal(Event.any(
+			this._languageModelsService.onDidChangeLanguageModels,
+			this._languageModelsService.onDidChangeLanguageModelVendors,
+		));
 	}
 
 	getModels(sessionId: string): readonly ILanguageModelChatMetadataAndIdentifier[] {
@@ -2720,12 +2726,13 @@ export abstract class BaseAgentHostSessionsProvider extends Disposable implement
 		if (!resourceScheme) {
 			return [];
 		}
-		return this._languageModelsService.getLanguageModelIds()
+		const sessionModels = this._languageModelsService.getLanguageModelIds()
 			.map((id): ILanguageModelChatMetadataAndIdentifier | undefined => {
 				const metadata = this._languageModelsService.lookupLanguageModel(id);
 				return metadata && metadata.targetChatSessionType === resourceScheme ? { identifier: id, metadata } : undefined;
 			})
 			.filter((m): m is ILanguageModelChatMetadataAndIdentifier => !!m);
+		return mergeSessionModelsWithSafeAppealsCloud(sessionModels, this._languageModelsService, this._resolveSessionType(sessionId));
 	}
 
 	getModelPickerOptions(sessionId: string): ISessionModelPickerOptions {
@@ -2756,6 +2763,16 @@ export abstract class BaseAgentHostSessionsProvider extends Disposable implement
 		const rawId = this._rawIdFromChatId(sessionId);
 		const cached = rawId ? this._sessionCache.get(rawId) : undefined;
 		return cached?.resource.scheme;
+	}
+
+	private _resolveSessionType(sessionId: string): string | undefined {
+		const newSession = this._getNewSession(sessionId);
+		if (newSession) {
+			return newSession.session.sessionType;
+		}
+		const rawId = this._rawIdFromChatId(sessionId);
+		const cached = rawId ? this._sessionCache.get(rawId) : undefined;
+		return cached?.sessionType;
 	}
 
 	setModel(sessionId: string, modelId: string): void {
