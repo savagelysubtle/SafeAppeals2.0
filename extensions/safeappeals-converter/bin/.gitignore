@@ -1,0 +1,3 @@
+# Local/dev sa-converter binary (build via cargo; do not commit)
+sa-converter
+sa-converter.exe

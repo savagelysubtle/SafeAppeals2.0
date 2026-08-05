@@ -1,0 +1,169 @@
+/* Copyright (c) Safe Appeals. All rights reserved. */
+
+:root {
+	--bg: var(--vscode-editor-background);
+	--fg: var(--vscode-foreground);
+	--border: var(--vscode-panel-border, rgba(128, 128, 128, 0.35));
+	--accent: var(--vscode-button-background);
+	--accent-fg: var(--vscode-button-foreground);
+	--muted: var(--vscode-descriptionForeground);
+	--success: var(--vscode-testing-iconPassed, #73c991);
+	--warning: var(--vscode-editorWarning-foreground, #cca700);
+	--error: var(--vscode-errorForeground, #f48771);
+}
+
+* {
+	box-sizing: border-box;
+}
+
+body {
+	margin: 0;
+	padding: 0;
+	background: var(--bg);
+	color: var(--fg);
+	font-family: var(--vscode-font-family);
+	font-size: var(--vscode-font-size);
+}
+
+.container {
+	max-width: 960px;
+	margin: 0 auto;
+	padding: 16px 20px 32px;
+}
+
+header h1 {
+	margin: 0 0 4px;
+	font-size: 1.4rem;
+	font-weight: 600;
+}
+
+.subtitle {
+	margin: 0 0 16px;
+	color: var(--muted);
+}
+
+.panel {
+	border: 1px solid var(--border);
+	border-radius: 6px;
+	padding: 14px 16px;
+	margin-bottom: 14px;
+}
+
+.panel h2 {
+	margin: 0 0 12px;
+	font-size: 1rem;
+	font-weight: 600;
+}
+
+label {
+	display: block;
+	margin-bottom: 4px;
+	font-size: 0.85rem;
+	color: var(--muted);
+}
+
+select,
+input[type="text"] {
+	width: 100%;
+	padding: 6px 8px;
+	margin-bottom: 10px;
+	background: var(--vscode-input-background);
+	color: var(--vscode-input-foreground);
+	border: 1px solid var(--border);
+	border-radius: 4px;
+}
+
+.path-row {
+	display: grid;
+	grid-template-columns: 1fr auto;
+	gap: 8px;
+	align-items: end;
+	margin-bottom: 8px;
+}
+
+.path-row label {
+	grid-column: 1 / -1;
+}
+
+.path-row input {
+	margin-bottom: 0;
+}
+
+button {
+	padding: 6px 12px;
+	border: 1px solid var(--border);
+	border-radius: 4px;
+	background: var(--vscode-button-secondaryBackground, transparent);
+	color: var(--vscode-button-secondaryForeground, var(--fg));
+	cursor: pointer;
+}
+
+button.primary {
+	background: var(--accent);
+	color: var(--accent-fg);
+	border-color: transparent;
+}
+
+button:disabled {
+	opacity: 0.45;
+	cursor: not-allowed;
+}
+
+.badge {
+	display: inline-block;
+	padding: 2px 8px;
+	border-radius: 999px;
+	font-size: 0.75rem;
+	margin-bottom: 8px;
+	border: 1px solid var(--border);
+}
+
+.badge.office-fidelity { border-color: var(--success); color: var(--success); }
+.badge.browser-print { border-color: #3794ff; color: #3794ff; }
+.badge.semantic { border-color: var(--muted); }
+.badge.preview-fast { border-color: var(--warning); color: var(--warning); }
+.badge.pdf-ops { border-color: #b180d7; color: #b180d7; }
+.badge.ocr { border-color: #d18616; color: #d18616; }
+
+.guidance {
+	padding: 10px 12px;
+	border-left: 3px solid var(--warning);
+	background: rgba(204, 167, 0, 0.08);
+	margin-bottom: 10px;
+	font-size: 0.9rem;
+}
+
+.status-banner {
+	padding: 10px 12px;
+	border-radius: 4px;
+	margin-bottom: 12px;
+	font-size: 0.9rem;
+}
+
+.status-banner.error {
+	background: rgba(244, 135, 113, 0.12);
+	border: 1px solid var(--error);
+	color: var(--error);
+}
+
+.progress-bar {
+	height: 8px;
+	background: rgba(128, 128, 128, 0.2);
+	border-radius: 4px;
+	overflow: hidden;
+	margin-bottom: 8px;
+}
+
+#progress-fill {
+	height: 100%;
+	width: 0%;
+	background: var(--accent);
+	transition: width 0.2s ease;
+}
+
+.hidden {
+	display: none !important;
+}
+
+#result-message.success { color: var(--success); }
+#result-message.error { color: var(--error); }

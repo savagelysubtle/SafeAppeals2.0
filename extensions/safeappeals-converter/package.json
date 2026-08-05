@@ -1,0 +1,233 @@
+{
+  "name": "safeappeals-converter",
+  "displayName": "%displayName%",
+  "description": "%description%",
+  "version": "1.0.0",
+  "publisher": "safeappeals",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.70.0"
+  },
+  "main": "./out/extension.js",
+  "categories": [
+    "Other"
+  ],
+  "extensionKind": [
+    "workspace"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "capabilities": {
+    "virtualWorkspaces": false,
+    "untrustedWorkspaces": {
+      "supported": false
+    }
+  },
+  "contributes": {
+    "commands": [
+      {
+        "command": "safeappeals-converter.openDashboard",
+        "title": "%command.openDashboard%",
+        "category": "%command.category%",
+        "icon": "$(file-symlink-file)"
+      },
+      {
+        "command": "safeappeals-converter.convertFile",
+        "title": "%command.convertFile%",
+        "category": "%command.category%"
+      },
+      {
+        "command": "safeappeals-converter.mergePdfs",
+        "title": "%command.mergePdfs%",
+        "category": "%command.category%"
+      }
+    ],
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "safeappeals-converter.openDashboard"
+        },
+        {
+          "command": "safeappeals-converter.convertFile",
+          "when": "workspaceFolderCount != 0"
+        },
+        {
+          "command": "safeappeals-converter.mergePdfs",
+          "when": "workspaceFolderCount != 0"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "safeappeals-converter.openDashboard",
+          "when": "view == safeappeals-converter.sidebar",
+          "group": "navigation"
+        }
+      ],
+      "explorer/context": [
+        {
+          "command": "safeappeals-converter.convertFile",
+          "when": "workspaceFolderCount != 0 && explorerResourceIsFolder == false",
+          "group": "7_modification@10"
+        }
+      ]
+    },
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "safeappeals-converter",
+          "title": "%view.container.title%",
+          "icon": "$(file-symlink-file)"
+        }
+      ]
+    },
+    "views": {
+      "safeappeals-converter": [
+        {
+          "type": "webview",
+          "id": "safeappeals-converter.sidebar",
+          "name": "%view.sidebar.name%"
+        }
+      ]
+    },
+    "languageModelTools": [
+      {
+        "name": "safeappeals_converter_listConversions",
+        "toolReferenceName": "converterListConversions",
+        "displayName": "List Conversions",
+        "modelDescription": "List conversion types advertised by the sa-converter sidecar with fidelity, engine, and availability. Use before convert or batchConvert to pick a supported key. Set available_only true to hide unavailable conversions.",
+        "userDescription": "List available file conversions",
+        "canBeReferencedInPrompt": true,
+        "icon": "$(list-flat)",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "available_only": {
+              "type": "boolean",
+              "description": "When true, only return conversions with available: true."
+            }
+          }
+        }
+      },
+      {
+        "name": "safeappeals_converter_convert",
+        "toolReferenceName": "converterConvert",
+        "displayName": "Convert File",
+        "modelDescription": "Convert a single workspace file via sa-converter. Result always includes fidelity and engine. Filing-target exports (docx2pdf, xlsx2pdf, pptx2pdf, html2pdf, md2pdf) require confirm_filing: true when available; refused when available: false — never silently downgrades to preview-fast.",
+        "userDescription": "Convert a case document",
+        "canBeReferencedInPrompt": true,
+        "icon": "$(file-symlink-file)",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "input": {
+              "type": "string",
+              "description": "Source file path (workspace-relative or absolute). Required."
+            },
+            "output": {
+              "type": "string",
+              "description": "Destination file path inside the workspace. Required."
+            },
+            "type": {
+              "type": "string",
+              "description": "Conversion key (e.g. md2html, docx2pdf). Required."
+            },
+            "confirm_filing": {
+              "type": "boolean",
+              "description": "Required true for filing-target PDF exports (docx2pdf, xlsx2pdf, pptx2pdf, html2pdf, md2pdf)."
+            },
+            "options": {
+              "type": "object",
+              "description": "Optional sidecar conversion options. Do not set engine to preview-fast for filing-target types."
+            }
+          },
+          "required": [
+            "input",
+            "output",
+            "type"
+          ]
+        }
+      },
+      {
+        "name": "safeappeals_converter_batchConvert",
+        "toolReferenceName": "converterBatchConvert",
+        "displayName": "Batch Convert Files",
+        "modelDescription": "Batch-convert multiple workspace files with the same conversion type. Result includes fidelity and engine. Filing-target types require confirm_filing: true; refused when unavailable.",
+        "userDescription": "Batch convert documents",
+        "canBeReferencedInPrompt": true,
+        "icon": "$(files)",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "inputs": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Source file paths. Required."
+            },
+            "type": {
+              "type": "string",
+              "description": "Conversion key applied to every input. Required."
+            },
+            "output_dir": {
+              "type": "string",
+              "description": "Optional output directory inside the workspace."
+            },
+            "confirm_filing": {
+              "type": "boolean",
+              "description": "Required true for filing-target PDF batch exports."
+            },
+            "options": {
+              "type": "object",
+              "description": "Optional sidecar conversion options."
+            }
+          },
+          "required": [
+            "inputs",
+            "type"
+          ]
+        }
+      },
+      {
+        "name": "safeappeals_converter_mergePdfs",
+        "toolReferenceName": "converterMergePdfs",
+        "displayName": "Merge PDFs",
+        "modelDescription": "Merge multiple PDF files in order into one output PDF inside the workspace. Result includes fidelity (pdf-ops) and engine.",
+        "userDescription": "Merge PDF documents",
+        "canBeReferencedInPrompt": true,
+        "icon": "$(combine)",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "inputs": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "PDF paths to merge in order. Required."
+            },
+            "output": {
+              "type": "string",
+              "description": "Merged PDF output path inside the workspace. Required."
+            }
+          },
+          "required": [
+            "inputs",
+            "output"
+          ]
+        }
+      }
+    ]
+  },
+  "scripts": {
+    "compile": "gulp compile-extension:safeappeals-converter",
+    "watch": "gulp watch-extension:safeappeals-converter",
+    "test": "mocha --require ./test/vscode-mock-preload.cjs --ui tdd out/test/*.test.js"
+  },
+  "devDependencies": {
+    "@types/mocha": "^10.0.10",
+    "@types/node": "24.x",
+    "mocha": "^11.1.0"
+  }
+}
