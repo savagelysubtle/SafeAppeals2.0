@@ -14,7 +14,7 @@ import { IUserDataProfilesService } from '../../platform/userDataProfile/common/
 import { ServiceCollection } from '../../platform/instantiation/common/serviceCollection.js';
 import { ChatEntitlementContext, IChatEntitlementService } from '../../workbench/services/chat/common/chatEntitlementService.js';
 import { isWeb } from '../../base/common/platform.js';
-import { GitHubPaths, IDefaultAccountService } from '../../platform/defaultAccount/common/defaultAccount.js';
+import { IDefaultAccountService } from '../../platform/defaultAccount/common/defaultAccount.js';
 import { IProductService } from '../../platform/product/common/productService.js';
 import { IContextKeyService } from '../../platform/contextkey/common/contextkey.js';
 import { IWorkbenchEnvironmentService } from '../../workbench/services/environment/common/environmentService.js';
@@ -410,16 +410,14 @@ class SessionsSetUpWidget extends Disposable {
 	private _createWelcomeFooter(disposables: DisposableStore): HTMLElement {
 		const element = $('.chat-setup-dialog-footer');
 		const defaultChatAgent = this.productService.defaultChatAgent;
-		const providerName = defaultChatAgent?.provider?.default?.name ?? 'GitHub';
 		const termsUrl = defaultChatAgent?.termsStatementUrl ?? '';
 		const privacyUrl = defaultChatAgent?.privacyStatementUrl ?? '';
-		const publicCodeUrl = defaultChatAgent?.publicCodeMatchesUrl ?? '';
-		const settingsUrl = this.defaultAccountService.resolveGitHubUrl(GitHubPaths.copilotSettings);
 
+		// SafeAppeals: match chat setup footer — Terms/Privacy from product.json (safeappeals.com), no Copilot/public-code blurb.
 		const footer = localize(
-			{ key: 'welcomeFooter', comment: ['{Locked="["}', '{Locked="]({1})"}', '{Locked="]({2})"}', '{Locked="]({4})"}', '{Locked="]({5})"}'] },
-			"By continuing, you agree to {0}'s [Terms]({1}) and [Privacy Statement]({2}). {3} Copilot may show [public code]({4}) suggestions and use your data to improve the product. You can change these [settings]({5}) anytime.",
-			providerName, termsUrl, privacyUrl, providerName, publicCodeUrl, settingsUrl
+			{ key: 'safeAppealsWelcomeFooter', comment: ['{Locked="]({0})"}', '{Locked="]({1})"}'] },
+			"By continuing with SafeAppeals, you agree to [Terms]({0}) and [Privacy Statement]({1}).",
+			termsUrl, privacyUrl
 		);
 		element.appendChild($('p', undefined, disposables.add(this.markdownRendererService.render(new MarkdownString(footer, { isTrusted: true }))).element));
 
