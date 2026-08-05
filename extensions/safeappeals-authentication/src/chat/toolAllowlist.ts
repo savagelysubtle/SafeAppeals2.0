@@ -626,6 +626,12 @@ export const AGENT_TOOL_NAME_SUBSTITUTIONS: Readonly<Record<string, string>> = {
 	web_search: SAFEAPPEALS_WEB_SEARCH_TOOL,
 	multi_link_search: SAFEAPPEALS_MULTI_WEB_SEARCH_TOOL,
 	[VSCODE_EDIT_FILE_TOOL_ALIAS]: VSCODE_EDIT_FILE_TOOL,
+	// Void Private Search short names → frozen safeappeals_rag_* tools
+	rag_index_document: 'safeappeals_rag_index_document',
+	rag_search_reference: 'safeappeals_rag_search_reference',
+	rag_search_workspace: 'safeappeals_rag_search_workspace',
+	rag_search_all: 'safeappeals_rag_search_all',
+	rag_get_stats: 'safeappeals_rag_get_stats',
 };
 
 const CORE_AGENT_TOOL_NAME_SET = new Set(CORE_AGENT_TOOL_NAMES);

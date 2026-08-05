@@ -162,6 +162,12 @@ suite('agent tool allowlist', () => {
 				passThrough: resolveAgentToolName(SAFEAPPEALS_READ_FILE_TOOL),
 				fetchCore: isAgentToolAllowed(VSCODE_FETCH_WEB_PAGE_TOOL),
 				browser: isAgentToolAllowed('open_browser_page'),
+				ragIndex: resolveAgentToolName('rag_index_document'),
+				ragSearchRef: resolveAgentToolName('rag_search_reference'),
+				ragSearchWs: resolveAgentToolName('rag_search_workspace'),
+				ragSearchAll: resolveAgentToolName('rag_search_all'),
+				ragStats: resolveAgentToolName('rag_get_stats'),
+				ragPassThrough: isAgentToolAllowed('safeappeals_rag_search_all'),
 			},
 			{
 				read: SAFEAPPEALS_READ_FILE_TOOL,
@@ -188,6 +194,12 @@ suite('agent tool allowlist', () => {
 				passThrough: SAFEAPPEALS_READ_FILE_TOOL,
 				fetchCore: true,
 				browser: true,
+				ragIndex: 'safeappeals_rag_index_document',
+				ragSearchRef: 'safeappeals_rag_search_reference',
+				ragSearchWs: 'safeappeals_rag_search_workspace',
+				ragSearchAll: 'safeappeals_rag_search_all',
+				ragStats: 'safeappeals_rag_get_stats',
+				ragPassThrough: true,
 			},
 		);
 	});
