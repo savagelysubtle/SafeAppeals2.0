@@ -78,18 +78,25 @@ todos:
       pull (Q5 open). Plan: safeappeals_timeline_rung7_5ce1bf30.plan.md."
     status: pending
   - id: r8-organizer
-    content: "Rung 8 (no case.json dep — use folder heuristics / AGENTS.md /
-      optional timeline fields): NEW
-      safeappeals-organizer extension — file organizer/docket (explorer
-      context menus + FileDecorationProvider + webview wizard, NO core
-      explorerViewer.ts hook) + file converter as Rust sidecar rust/converter
-      (bin sa-converter), retiring python/. Detail: merge plan rung 8 +
-      'Rust strategy' section."
-    status: pending
+    content: "Rung 8 organizer (shipped Aug 3): organize-files chat skill on
+      safeappeals-timeline (contributes.chatSkills) — dry-run/undo, flat
+      STANDARD_FOLDERS, no case.json / no docket UI. Docket UI /
+      safeappeals-organizer extension dropped. Converter deferred → r8-converter."
+    status: completed
+  - id: r8-converter
+    content: "Rung 8 converter (shipped Aug 3): NEW extensions/safeappeals-converter
+      + Rust sidecar rust/converter (bin sa-converter), long-lived NDJSON.
+      Warm LO when present; v1 BYO LO/Chromium/OCR with hard-disable until
+      detected; dashboard + agent tools. Bundling LO/OCR = rung 14/P6.
+      Retire python/ after checklist (delete at rung 15). Plan:
+      safeappeals_converter_r8_production.plan.md."
+    status: completed
   - id: r9-audio
-    content: "Rung 9: NEW safeappeals-audio extension — recorder + whisper
-      transcription + ffmpeg assets. Detail: merge plan rung 9; evaluate vs
-      upstream speech AFTER it works."
+    content: "Rung 9: NEW safeappeals-audio extension — recorder + Whisper
+      (kutalia GGML in EH) + BYO ffmpeg; encryptedStore under globalStorageUri;
+      hard-disable when model/ffmpeg missing. Asset bundling → rung 14.
+      Evaluate upstream speech AFTER it works. Plan:
+      safeappeals_audio_r9_production.plan.md."
     status: pending
   - id: r10-rag
     content: "Rung 10: NEW safeappeals-rag extension, WRITTEN IN RUST
@@ -327,8 +334,9 @@ phase to reuse the existing four-message protocol rather than inventing
 With `void-reference/` line counts for scale: RAG ~7,890 (rung 10, Rust);
 timeline + deadlines + notifications + calendar UI ~7,800+ (rung 7 slice 2 —
 includes `jurisdictionConfig.ts` with real per-jurisdiction
-`statuteOfLimitationsDays` + `deadlineRules[]`); file organizer/docket
-~8,600+ (rung 8); file converter ~2,100+ (rung 8, Rust sidecar retiring
+`statuteOfLimitationsDays` + `deadlineRules[]`); file organizer **shipped**
+as `organize-files` chat skill on `safeappeals-timeline` (docket UI dropped
+Aug 3); file converter ~2,100+ (rung 8, Rust sidecar retiring
 `python/`); audio recorder + transcription ~2,500+ (rung 9); email classifier
 432 (rung 12); document LM tools (tools pass); cloud auth + credits ~1,500
 (M1 T1 + M2 T13 + rung 13 remainder — `extensions/safeappeals-authentication`
@@ -359,12 +367,14 @@ merge plan still carries pre-Jul-21 text saying organizer/timeline/RAG/
 settings/case "stay in contrib" (its sections C.2/C.3, D, D.2's "stay in
 contrib" list, ladder J rungs 7–13). **That text is superseded, not this
 plan:** per the extension-first decision (user, Jul 21 2026) everything on
-that list is now an extension — organizer/converter (rung 8), audio (rung
-9), RAG (rung 10), timeline (rung 7 slice 2 in `safeappeals-case`), cloud
-auth (T1 extension), agent integration (vendored `extensions/copilot` +
-`vscode.lm`, rung 11). The old contrib rungs 7 (settings service) and 12
-(AI integration layer) are deleted/folded, as the merge plan's Jul 21 status
-section already records.
+that list ships via extensions (or extension-contributed skills) — organizer
+is the `organize-files` skill on `safeappeals-timeline` (rung 8; docket UI
+dropped Aug 3), converter deferred (`r8-converter`), audio (rung 9), RAG
+(rung 10), timeline (rung 7, `safeappeals-timeline`), cloud auth (T1
+extension), agent integration (vendored `extensions/copilot` + `vscode.lm`,
+rung 11). The old contrib rungs 7 (settings service) and 12 (AI integration
+layer) are deleted/folded, as the merge plan's Jul 21 status section already
+records.
 
 **Verdict: delete the stub** (task M0). Nothing justifies a
 `contrib/safeappeals` hub anymore. The frozen core-edit set is: branding +
@@ -468,25 +478,37 @@ Onboarding owns profile; AGENTS.md optional. **Q5** calendar write-back open.
 → **Plan: `safeappeals_timeline_rung7_5ce1bf30.plan.md`.**
 (Old: `archive/safeappeals_case_extension_rung7.plan.md`.)
 
-### Rung 8 — Organizer + converter extension (no case.json; folder / AGENTS.md heuristics)
+### Rung 8 — Organizer skill + converter (no case.json; folder / AGENTS.md heuristics)
 
-NEW `extensions/safeappeals-organizer`: file organizer/docket (explorer
-context menus + `FileDecorationProvider` + webview wizard; **no**
-`explorerViewer.ts` core hook — extension-first) + the file converter as a
-Rust sidecar `rust/converter` (bin `sa-converter`, newline-delimited JSON
-protocol matching the old `electron_bridge.py`), written in Rust the first
-time, retiring `python/` when pair parity is reached. LibreOffice-dependent
-pairs stay listed unsupported (or shell out for those pairs only). The old
-"Case Organizer agent workflow" (`void.organizer.init`, dry-run/undo)
-becomes a chat skill/prompt + upstream file tools, not custom plumbing.
-→ **Detail: merge plan rung 8 + "Rust strategy" section (crate layout,
-library choices, risks).**
+**Organizer (shipped Aug 3):** `organize-files` chat skill on
+`extensions/safeappeals-timeline` (`contributes.chatSkills` →
+`skills/organize-files/SKILL.md`). Agent classifies and moves files from
+`tosort` (or user-chosen intake) into flat `STANDARD_FOLDERS` with mandatory
+dry-run JSON, user confirmation, conflict suffixes, and logs under
+`.safeAppeals/organization_log.json` + `.safeAppeals/undo_plan.json`. Uses
+upstream/agent file tools — no custom organizer plumbing. **Docket UI /
+`safeappeals-organizer` extension dropped Aug 3** (void-reference
+`file-organizer-tsx` stays reference-only).
+
+**Converter (`r8-converter`):** NEW `extensions/safeappeals-converter` + Rust
+sidecar `rust/converter` (bin `sa-converter`, long-lived NDJSON). Warm
+LibreOffice worker mandatory for court Office→PDF; v1 **BYO** system
+LO/Chromium/OCR — court paths hard-disabled until detected (no soft-available
+lossy fallback). Pure-Rust utilities always on. Retire `python/` after parity
+checklist; delete at rung 15.
+→ **Detail: `safeappeals_converter_r8_production.plan.md`** (supersedes merge-plan
+“LO unsupported / shell out” for this rung).
 
 ### Rung 9 — Audio extension
 
-NEW `extensions/safeappeals-audio`: recorder + whisper transcription + ffmpeg
-assets (`resources/ffmpeg|models` packaging lands with rung 14). Evaluate
-against upstream `speech` only after it works. → **Detail: merge plan rung 9.**
+NEW `extensions/safeappeals-audio`: legal case recorder (MediaRecorder webview)
++ local Whisper GGML via `@kutalia/whisper-node-addon` in the extension host
++ BYO ffmpeg/ffprobe; encrypted catalog + sealed audio under
+`context.globalStorageUri`. Hard-disable transcription/import-convert when
+model or ffmpeg missing. Bundled `resources/ffmpeg|models` packaging lands
+with rung 14. Evaluate upstream `speech` / `agentsVoice` only after it works.
+→ **Detail: `safeappeals_audio_r9_production.plan.md`** (supersedes merge-plan
+contrib/channel wording for this rung).
 
 ### Rung 10 — RAG extension, in Rust (deps: none hard; late for native-ABI risk)
 
@@ -579,7 +601,7 @@ audit, `open-remote-*` verdict.
 
 Final placement review; move the XLSX Rust crate source out of
 `void-reference/` into `rust/` (it still lives there); delete
-`void-reference/` and `python/` (if rung 8 finished retiring it); last
+`void-reference/` and `python/` (if `r8-converter` finished retiring it); last
 tracker refresh; close this plan. Cleanup candidates flagged by the Jul 29
 code audit (here, or fold into M0 if someone is already in the files):
 
@@ -668,8 +690,9 @@ extension transfer 329). The "not built anywhere" totals shrink accordingly.
 - **calamine formula destruction:** any premature switch of XLSX save paths
   to Rust silently destroys formulas in client workbooks — gated on
   round-trip tests (merge plan "Rust strategy").
-- **LibreOffice conversion pairs:** no good Rust equivalent for docx→pdf;
-  rung 8 ships them as unsupported or shells out for those pairs only.
+- **LibreOffice / browser court paths:** warm LO + BYO Chromium required for
+  filing exports; hard-disabled until detected. Bundling = rung 14/P6 design.
+  → `safeappeals_converter_r8_production.plan.md`.
 - **Web/code-server parity:** every rung verifies both targets (rungs 1–6
   precedent); webview hosting on web has known sharp edges (service-worker
   cache, Cursor embedded-browser limitation — test in a real browser).
@@ -738,3 +761,18 @@ figures in "Not built anywhere" above, not the older merge-plan inventory.
 and the welcome/onboarding wizard are working. Frontmatter `m1-onboarding-phase-a`
 flipped `in_progress` → `completed`. The earlier "sign-in never exercised"
 blocker is obsolete. **Next workstream: M2** (onboarding T13 → T14).
+
+**Aug 3 2026 — Rung 8 organizer → chat skill.** File organizer is the
+`organize-files` skill on `extensions/safeappeals-timeline`, not a new
+`safeappeals-organizer` extension. Supersedes the planned docket UI /
+explorer webview wizard (~8,600 lines in `void-reference/` remain
+reference-only). Extension-first still holds — the skill ships via the
+timeline extension's `contributes.chatSkills`. File converter deferred to
+new frontmatter todo `r8-converter`.
+
+**Aug 3 2026 — Rung 8 converter CTO decisions.** Full converter app+UI (not MVP).
+Warm LO mandatory for Office→PDF; v1 BYO runtime deps (system LO, Chrome/
+Chromium/Electron, OCR); court paths HARD-DISABLED until deps healthy.
+Bundling deferred to rung 14/P6. Source of truth:
+`safeappeals_converter_r8_production.plan.md` (supersedes merge-plan LO
+“unsupported / shell out” wording).

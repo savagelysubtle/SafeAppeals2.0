@@ -1,11 +1,10 @@
 ---
 name: SafeAppeals Agent Tools
 overview:
-  "[ACTIVE — Aug 2, 2026: DOCX/XLSX hybrid open+closed paths, structure-aware
-  xlsx_read, Brave search credits/filters, workspace tools, timer start/stop,
-  email createDraft, and agent smoke QA are landed. Remaining: email read/
-  organize tools, email compose UX, pattern docs, timer updateEntry/listMatters,
-  unified edit/read wrapper (future).]"
+  "[DONE — Aug 3, 2026: Document/XLSX/workspace/web/timer/email agent tools
+  shipped (bab332f6). Email read/organize/compose + draft attachments landed.
+  Timer start/stop/getState accepted as complete. Pattern docs + unified
+  edit/read wrapper cancelled/deferred outside this plan.]"
 todos:
   - id: timer-args
     content:
@@ -14,7 +13,7 @@ todos:
   - id: timer-tools
     content:
       'Time tracker: agentTools.ts + languageModelTools (start/stop/getState
-      shipped; updateEntry/listMatters still open)'
+      shipped; updateEntry/listMatters not required for plan close)'
     status: completed
   - id: xlsx-host
     content:
@@ -43,13 +42,13 @@ todos:
     content:
       'Email: agentTools.ts + contributions (search/list/get read tools,
       email_createDraft draft-only tool); no send tool exposed —
-      createDraft shipped; read tools still open'
-    status: pending
+      read + createDraft shipped bab332f6'
+    status: completed
   - id: email-compose-ux
     content:
       'Email: dashboard refresh + openCompose/loadDraft host->webview message so
       new agent drafts surface for review'
-    status: pending
+    status: completed
   - id: email-organize-tools
     content:
       'Email: organize tools wrapping rung 6.6/6.7 commands —
@@ -57,10 +56,12 @@ todos:
       email_hideThread, email_unhideThread, email_linkThreadToCase,
       email_unlinkThreadFromCase; email_listThreads gains tag +
       caseFolderPath + sort filters (AI auto-tagging/auto-linking seam)'
-    status: pending
+    status: completed
   - id: pattern-docs
-    content: docs/agent-tools-pattern.md house pattern for future extensions
-    status: pending
+    content:
+      'docs/agent-tools-pattern.md house pattern for future extensions
+      (cancelled at plan close; follow house pattern from shipped satellites)'
+    status: cancelled
   - id: tests
     content:
       'Tests: docx/xlsx round-trips + formula/overlay/external-sync unit tests;
@@ -79,14 +80,14 @@ todos:
   - id: unified-edit-wrapper
     content:
       'Future: thin unified edit/read wrapper over text/DOCX/XLSX backends
-      (decision logged; not implementing yet)'
-    status: pending
+      (decision logged; deferred outside this plan)'
+    status: cancelled
 isProject: false
 ---
 
 # Agent Tools for DOCX, XLSX, Time Tracker, and Email
 
-**Status (Aug 2, 2026):** ACTIVE — core document + workspace + search + timer start/stop + email draft tools shipped and agent-smoke verified. Remaining ladder items: email read/organize, compose UX, pattern docs, timer annotate/list matters, unified edit wrapper.
+**Status (Aug 3, 2026):** DONE — document + workspace + search + timer start/stop/getState + email read/organize/createDraft/compose + draft attachments shipped (`bab332f6`). Unified edit/read wrapper deferred outside this plan.
 
 ## How tools work in this fork (research summary)
 
@@ -197,7 +198,7 @@ In `extensions/time-tracker`:
    confirmation messages (they create billable records); getState/listMatters do
    not.
 
-**Done:** start / stop / getState. **Still open:** updateEntry / listMatters.
+**Done:** start / stop / getState. updateEntry / listMatters not required for plan close.
 
 ## Phase 2 — Document write tools — DONE (Aug 1–2 2026)
 
@@ -277,7 +278,7 @@ contributions):
    discovery, but local drafts fully satisfy "user reviews, edits, and sends
    themselves"; server-side drafts can be a later rung).
 
-**Done:** `email_createDraft`. **Still open:** read tools, compose UX, organize tools.
+**Done:** read tools, organize tools, compose UX, `createDraft` (+ draft attachments in `bab332f6`).
 
 ## Phase 4 — Pattern documentation + polish
 
