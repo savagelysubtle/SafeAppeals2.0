@@ -84,6 +84,8 @@ const compilations = [
 	'extensions/safeappeals-email/tsconfig.json',
 	'extensions/safeappeals-converter/tsconfig.json',
 	'extensions/safeappeals-audio/tsconfig.json',
+	'extensions/safeappeals-ml/tsconfig.json',
+	'extensions/safeappeals-rag/tsconfig.json',
 
 	'extensions/microsoft-authentication/tsconfig.json',
 	'extensions/notebook-renderers/tsconfig.json',

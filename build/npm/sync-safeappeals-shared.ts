@@ -14,6 +14,7 @@ const TARGETS = [
 	'safeappeals-calendar',
 	'safeappeals-documents',
 	'safeappeals-audio',
+	'safeappeals-rag',
 	'time-tracker',
 ];
 

@@ -58,6 +58,8 @@ export const dirs = [
 	'extensions/safeappeals-email',
 	'extensions/safeappeals-converter',
 	'extensions/safeappeals-audio',
+	'extensions/safeappeals-ml',
+	'extensions/safeappeals-rag',
 
 	'extensions/typescript-language-features',
 	'extensions/vscode-api-tests',
