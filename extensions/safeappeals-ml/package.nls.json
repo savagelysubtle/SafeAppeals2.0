@@ -1,0 +1,8 @@
+{
+	"displayName": "Safe Appeals ML",
+	"description": "Shared hardware probe and model catalog for on-device AI (search, OCR, and future audio models).",
+	"command.showHardwareSnapshot": "Show Hardware Snapshot",
+	"command.installUnlimitedOcr": "Install Unlimited-OCR (Consent)",
+	"command.purgeModelArtifacts": "Purge Model Artifacts",
+	"command.category": "Safe Appeals ML"
+}

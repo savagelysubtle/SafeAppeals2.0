@@ -1,0 +1,69 @@
+{
+	"name": "safeappeals-ml",
+	"displayName": "%displayName%",
+	"description": "%description%",
+	"version": "1.0.0",
+	"publisher": "safeappeals",
+	"license": "MIT",
+	"engines": {
+		"vscode": "^1.70.0"
+	},
+	"main": "./out/extension.js",
+	"categories": [
+		"Other"
+	],
+	"extensionKind": [
+		"workspace"
+	],
+	"activationEvents": [
+		"onStartupFinished"
+	],
+	"capabilities": {
+		"virtualWorkspaces": false,
+		"untrustedWorkspaces": {
+			"supported": false
+		}
+	},
+	"contributes": {
+		"commands": [
+			{
+				"command": "safeappeals-ml.showHardwareSnapshot",
+				"title": "%command.showHardwareSnapshot%",
+				"category": "%command.category%"
+			},
+			{
+				"command": "safeappeals-ml.installUnlimitedOcr",
+				"title": "%command.installUnlimitedOcr%",
+				"category": "%command.category%"
+			},
+			{
+				"command": "safeappeals-ml.purgeModelArtifacts",
+				"title": "%command.purgeModelArtifacts%",
+				"category": "%command.category%"
+			}
+		],
+		"menus": {
+			"commandPalette": [
+				{
+					"command": "safeappeals-ml.showHardwareSnapshot"
+				},
+				{
+					"command": "safeappeals-ml.installUnlimitedOcr"
+				},
+				{
+					"command": "safeappeals-ml.purgeModelArtifacts"
+				}
+			]
+		}
+	},
+	"scripts": {
+		"compile": "gulp compile-extension:safeappeals-ml",
+		"watch": "gulp watch-extension:safeappeals-ml",
+		"test": "mocha --require ./test/vscode-mock-preload.cjs --ui tdd out/test/*.test.js"
+	},
+	"devDependencies": {
+		"@types/mocha": "^10.0.10",
+		"@types/node": "24.x",
+		"mocha": "^11.1.0"
+	}
+}
