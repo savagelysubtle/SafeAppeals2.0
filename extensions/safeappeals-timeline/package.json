@@ -83,6 +83,9 @@
     "chatSkills": [
       {
         "path": "./skills/project-setup/SKILL.md"
+      },
+      {
+        "path": "./skills/organize-files/SKILL.md"
       }
     ],
     "languageModelTools": [
@@ -326,6 +329,17 @@
             },
             "completionEvents": [
               "onCommand:safeappeals.help.howUsesAI"
+            ]
+          },
+          {
+            "id": "privateSearch",
+            "title": "%walkthrough.privateSearch.title%",
+            "description": "%walkthrough.privateSearch.description%",
+            "media": {
+              "markdown": "media/walkthrough/privateSearch.md"
+            },
+            "completionEvents": [
+              "onCommand:safeappeals-rag.setupLocalSearch"
             ]
           },
           {
