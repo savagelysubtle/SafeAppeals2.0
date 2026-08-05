@@ -3,8 +3,57 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { URI } from '../../../../base/common/uri.js';
 import { localize } from '../../../../nls.js';
+import { CommandsRegistry } from '../../../../platform/commands/common/commands.js';
 import { ChatMessageRole, IChatMessage, SAFEAPPEALS_CLOUD_VENDOR_ID } from './languageModels.js';
+
+/** SafeAppeals: extension command to open the credits checkout flow. */
+export const SAFEAPPEALS_OPEN_CHECKOUT_COMMAND = 'safeappeals.cloud.openCheckout';
+
+export interface IUsesSafeAppealsCloudSetupOptions {
+	getVendors: () => readonly { vendor: string }[];
+	hasByokModels: boolean;
+	isAuthenticationProviderRegistered: (providerId: string) => boolean;
+}
+
+/**
+ * SafeAppeals: true when Cloud LM vendor is registered, or hasByokModels + cloud auth provider
+ * (align with SetupAgent / chatSetupRunner).
+ */
+export function usesSafeAppealsCloudSetup(options: IUsesSafeAppealsCloudSetupOptions): boolean {
+	if (options.getVendors().some(v => v.vendor === SAFEAPPEALS_CLOUD_VENDOR_ID)) {
+		return true;
+	}
+	return options.hasByokModels
+		&& options.isAuthenticationProviderRegistered(SAFEAPPEALS_CLOUD_VENDOR_ID);
+}
+
+/**
+ * SafeAppeals: open credits checkout via extension command, falling back to product URL.
+ */
+export async function openSafeAppealsCreditsCheckout(
+	commandService: { executeCommand(commandId: string, ...args: unknown[]): Promise<unknown> },
+	openerService: { open(uri: URI): Promise<boolean> },
+	upgradePlanUrl: string | undefined,
+): Promise<void> {
+	const openUpgradePlanUrl = async (): Promise<void> => {
+		if (upgradePlanUrl) {
+			await openerService.open(URI.parse(upgradePlanUrl));
+		}
+	};
+
+	if (!CommandsRegistry.getCommand(SAFEAPPEALS_OPEN_CHECKOUT_COMMAND)) {
+		await openUpgradePlanUrl();
+		return;
+	}
+
+	try {
+		await commandService.executeCommand(SAFEAPPEALS_OPEN_CHECKOUT_COMMAND);
+	} catch {
+		await openUpgradePlanUrl();
+	}
+}
 
 /** SafeAppeals: max prior user/assistant turns included in Cloud Ask LM requests. */
 export const SAFEAPPEALS_CLOUD_LM_HISTORY_TURN_CAP = 20;

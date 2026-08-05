@@ -174,6 +174,9 @@ export namespace ChatContextKeys {
 	export const contextUsageHasBeenOpened = new RawContextKey<boolean>('chatContextUsageHasBeenOpened', false, { type: 'boolean', description: localize('chatContextUsageHasBeenOpened', "True when the user has opened the context window usage details.") });
 
 	export const newChatButtonExperimentIcon = new RawContextKey<string>('chatNewChatButtonExperimentIcon', '', { type: 'string', description: localize('chatNewChatButtonExperimentIcon', "The icon variant for the new chat button, controlled by experiment. Values: 'copilot', 'new-session', 'comment', or empty for default.") });
+
+	/** SafeAppeals: true when Chat setup should use SafeAppeals Cloud (not GitHub Copilot). */
+	export const usesSafeAppealsCloudSetup = new RawContextKey<boolean>('safeappeals.cloud.setup', false, { type: 'boolean', description: localize('safeAppealsCloudSetup', "True when SafeAppeals Cloud is the active chat setup path.") });
 }
 
 export namespace ChatContextKeyExprs {

@@ -38,6 +38,7 @@ import { defaultButtonStyles, defaultCheckboxStyles, defaultSelectBoxStyles } fr
 import { DomWidget } from '../../../../../platform/domWidget/browser/domWidget.js';
 import { EditorResourceAccessor, SideBySideEditor } from '../../../../common/editor.js';
 import { IChatEntitlementService, ChatEntitlementService, ChatEntitlement, IQuotaSnapshot, getChatPlanName } from '../../../../services/chat/common/chatEntitlementService.js';
+import { IAuthenticationService } from '../../../../services/authentication/common/authentication.js';
 import { IEditorService } from '../../../../services/editor/common/editorService.js';
 import { IContextViewService } from '../../../../../platform/contextview/browser/contextView.js';
 import { isNewUser } from './chatStatus.js';
@@ -45,6 +46,8 @@ import { IChatStatusItemService, ChatStatusEntry } from './chatStatusItemService
 import { GitHubPaths, IDefaultAccountService } from '../../../../../platform/defaultAccount/common/defaultAccount.js';
 import product from '../../../../../platform/product/common/product.js';
 import { isCompletionsEnabled } from '../../../../../editor/common/services/completionsEnablement.js';
+import { usesSafeAppealsCloudSetup } from '../../common/chatSetupCloudHelpers.js';
+import { ILanguageModelsService } from '../../common/languageModels.js';
 
 const defaultChat = product.defaultChatAgent;
 
@@ -128,6 +131,8 @@ export class ChatStatusDashboard extends DomWidget {
 		@IContextViewService private readonly contextViewService: IContextViewService,
 		@IStorageService private readonly storageService: IStorageService,
 		@IDefaultAccountService private readonly defaultAccountService: IDefaultAccountService,
+		@ILanguageModelsService private readonly languageModelsService: ILanguageModelsService,
+		@IAuthenticationService private readonly authenticationService: IAuthenticationService,
 	) {
 		super();
 
@@ -138,15 +143,16 @@ export class ChatStatusDashboard extends DomWidget {
 		const token = cancelOnDispose(this._store);
 
 		const { chat, premiumChat, completions } = this.chatEntitlementService.quotas;
+		const usesCloudSetup = this.usesSafeAppealsCloudSetup();
 		const hasQuotas = !!(chat || premiumChat);
 		const isAnonymousWithSentiment = this.chatEntitlementService.anonymous && this.chatEntitlementService.sentiment.completed;
 		const isPooledQuotaDepleted = premiumChat?.unlimited && premiumChat.hasQuota === false;
-		const hasUsageSection = hasQuotas || isAnonymousWithSentiment;
-		const hasVisibleUsageContent = chat?.unlimited === false ||
+		const hasUsageSection = !usesCloudSetup && (hasQuotas || isAnonymousWithSentiment);
+		const hasVisibleUsageContent = !usesCloudSetup && (chat?.unlimited === false ||
 			premiumChat?.unlimited === false ||
 			(!this.options?.compactQuotaLayout && completions?.unlimited === false) ||
 			isAnonymousWithSentiment ||
-			isPooledQuotaDepleted;
+			isPooledQuotaDepleted);
 		const contributedEntries = [...this.chatStatusItemService.getEntries()];
 		const hasQuickSettingsContent =
 			!this.options?.disableInlineSuggestionsSettings ||
@@ -234,7 +240,7 @@ export class ChatStatusDashboard extends DomWidget {
 		}
 
 		// Premium chat included indicator (shown when premium chat is unlimited)
-		const hasPremiumUnlimited = !!premiumChat?.unlimited;
+		const hasPremiumUnlimited = !usesCloudSetup && !!premiumChat?.unlimited;
 		if (hasPremiumUnlimited) {
 			const includedTitle = this.chatEntitlementService.quotas.usageBasedBilling
 				? localize('includedTitleTBB', "Credits")
@@ -717,6 +723,15 @@ export class ChatStatusDashboard extends DomWidget {
 		}
 
 		return true;
+	}
+
+	/** SafeAppeals: hide Copilot quota chrome when Cloud is the product path. */
+	private usesSafeAppealsCloudSetup(): boolean {
+		return usesSafeAppealsCloudSetup({
+			getVendors: () => this.languageModelsService.getVendors(),
+			hasByokModels: this.chatEntitlementService.hasByokModels,
+			isAuthenticationProviderRegistered: (id) => this.authenticationService.isAuthenticationProviderRegistered(id),
+		});
 	}
 
 	private renderHeader(container: HTMLElement, disposables: DisposableStore, label: string, action?: IAction): HTMLElement {

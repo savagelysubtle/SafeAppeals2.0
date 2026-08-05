@@ -35,6 +35,7 @@ import { ITelemetryService } from '../../../../../../platform/telemetry/common/t
 import { IStorageService, StorageScope, StorageTarget } from '../../../../../../platform/storage/common/storage.js';
 import { TelemetryTrustedValue } from '../../../../../../platform/telemetry/common/telemetryUtils.js';
 import { MANAGE_CHAT_COMMAND_ID } from '../../../common/constants.js';
+import { usesSafeAppealsCloudSetup } from '../../../common/chatSetupCloudHelpers.js';
 import { IModelControlEntry, ILanguageModelChatMetadata, ILanguageModelChatMetadataAndIdentifier, ILanguageModelsService, IModelsControlManifest, SAFEAPPEALS_CLOUD_VENDOR_ID } from '../../../common/languageModels.js';
 import { ChatEntitlement, chatRequiresSetup, IChatEntitlementService, isProUser } from '../../../../../services/chat/common/chatEntitlementService.js';
 import { IAuthenticationService } from '../../../../../services/authentication/common/authentication.js';
@@ -577,7 +578,7 @@ export function buildModelPickerItems(
 			// users, attach an inline upgrade link on the right (matching the
 			// unavailable-model upgrade affordance elsewhere in the picker).
 			const entitlement = chatEntitlementService.entitlement;
-			const canUpgrade = entitlement === ChatEntitlement.Free || entitlement === ChatEntitlement.EDU;
+			const canUpgrade = !useSafeAppealsCloudSetup && (entitlement === ChatEntitlement.Free || entitlement === ChatEntitlement.EDU);
 			const description = canUpgrade
 				? new MarkdownString(localize('chat.modelPicker.upgradeLink', "[Upgrade](command:workbench.action.chat.upgradePlan \" \")"), { isTrusted: true })
 				: undefined;
@@ -827,7 +828,7 @@ export function buildModelPickerItems(
 						const { action: promotedAction, ariaDescription: promotedAriaDesc } = createModelAction(item.model, selectedModelId, onSelect, undefined, showGroupLabel);
 						items.push(createModelItem(promotedAction, item.model, openerService, groupLabel, isUBB, promotedAriaDesc, makePinAction(item.model), onConfigure));
 					} else {
-						items.push(createUnavailableModelItem(item.id, item.entry, item.reason, manageSettingsUrl, updateStateType, chatEntitlementService));
+						items.push(createUnavailableModelItem(item.id, item.entry, item.reason, manageSettingsUrl, updateStateType, chatEntitlementService, undefined, useSafeAppealsCloudSetup));
 					}
 				}
 			}
@@ -1002,21 +1003,22 @@ function createUnavailableModelItem(
 	updateStateType: StateType,
 	chatEntitlementService: IChatEntitlementService,
 	section?: string,
+	useSafeAppealsCloudSetup: boolean = false,
 ): IActionListItem<IActionWidgetDropdownAction> {
 	let description: string | MarkdownString | undefined;
 
-	if (reason === 'upgrade') {
+	if (reason === 'upgrade' && !useSafeAppealsCloudSetup) {
 		description = new MarkdownString(localize('chat.modelPicker.upgradeLink', "[Upgrade](command:workbench.action.chat.upgradePlan \" \")"), { isTrusted: true });
 	} else if (reason === 'update') {
 		description = localize('chat.modelPicker.updateDescription', "Update VS Code");
-	} else {
+	} else if (reason === 'admin') {
 		description = manageSettingsUrl
 			? new MarkdownString(localize('chat.modelPicker.adminLink', "[Contact your admin]({0})", manageSettingsUrl), { isTrusted: true })
 			: localize('chat.modelPicker.adminDescription', "Contact your admin");
 	}
 
-	let hoverContent: MarkdownString;
-	if (reason === 'upgrade') {
+	let hoverContent: MarkdownString | undefined;
+	if (reason === 'upgrade' && !useSafeAppealsCloudSetup) {
 		hoverContent = new MarkdownString('', { isTrusted: true, supportThemeIcons: true });
 		if (chatEntitlementService.entitlement === ChatEntitlement.Pro) {
 			hoverContent.appendMarkdown(localize('chat.modelPicker.upgradeHoverProPlus', "[Upgrade to GitHub Copilot Pro+](command:workbench.action.chat.upgradePlan \" \") to use the best models."));
@@ -1025,7 +1027,7 @@ function createUnavailableModelItem(
 		}
 	} else if (reason === 'update') {
 		hoverContent = getUpdateHoverContent(updateStateType);
-	} else {
+	} else if (reason === 'admin') {
 		hoverContent = new MarkdownString('', { isTrusted: true, supportThemeIcons: true });
 		hoverContent.appendMarkdown(localize('chat.modelPicker.adminHover', "This model is not available. Contact your administrator to enable it."));
 	}
@@ -1049,7 +1051,7 @@ function createUnavailableModelItem(
 		hideIcon: false,
 		className: 'chat-model-picker-unavailable',
 		section,
-		hover: { content: hoverContent },
+		hover: hoverContent ? { content: hoverContent } : undefined,
 	};
 }
 
@@ -1288,7 +1290,11 @@ export class ModelPickerWidget extends Disposable {
 	 * SafeAppeals: use SafeAppeals Cloud branding + createSession for setup-required UI.
 	 */
 	usesSafeAppealsCloudSetup(): boolean {
-		return this._hasSafeAppealsCloudVendor();
+		return usesSafeAppealsCloudSetup({
+			getVendors: () => this._languageModelsService.getVendors(),
+			hasByokModels: this._entitlementService.hasByokModels,
+			isAuthenticationProviderRegistered: (id) => this._authenticationService.isAuthenticationProviderRegistered(id),
+		});
 	}
 
 	private async _refreshSafeAppealsCloudSession(): Promise<void> {

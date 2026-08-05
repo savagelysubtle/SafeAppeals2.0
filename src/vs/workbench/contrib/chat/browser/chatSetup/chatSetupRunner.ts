@@ -29,6 +29,7 @@ import { IWorkspaceTrustManagementService, IWorkspaceTrustRequestService } from 
 import { IAuthenticationService } from '../../../../services/authentication/common/authentication.js';
 import { IWorkbenchLayoutService } from '../../../../services/layout/browser/layoutService.js';
 import { ChatEntitlement, ChatEntitlementContext, ChatEntitlementService, IChatEntitlementService, isProUser } from '../../../../services/chat/common/chatEntitlementService.js';
+import { usesSafeAppealsCloudSetup } from '../../common/chatSetupCloudHelpers.js';
 import { ILanguageModelsService, SAFEAPPEALS_CLOUD_VENDOR_ID } from '../../common/languageModels.js';
 import { IChatWidgetService } from '../chat.js';
 import { ChatSetupController } from './chatSetupController.js';
@@ -85,11 +86,11 @@ export class ChatSetup {
 
 	/** SafeAppeals: vendor registered, or hasByokModels + cloud auth provider (align with SetupAgent). */
 	private usesSafeAppealsCloudSetup(): boolean {
-		if (this.languageModelsService.getVendors().some(v => v.vendor === SAFEAPPEALS_CLOUD_VENDOR_ID)) {
-			return true;
-		}
-		return this.chatEntitlementService.hasByokModels
-			&& this.authenticationService.isAuthenticationProviderRegistered(SAFEAPPEALS_CLOUD_VENDOR_ID);
+		return usesSafeAppealsCloudSetup({
+			getVendors: () => this.languageModelsService.getVendors(),
+			hasByokModels: this.chatEntitlementService.hasByokModels,
+			isAuthenticationProviderRegistered: (id) => this.authenticationService.isAuthenticationProviderRegistered(id),
+		});
 	}
 
 	skipDialog(): void {

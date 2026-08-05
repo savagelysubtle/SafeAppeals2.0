@@ -40,6 +40,7 @@ import { ITelemetryService } from '../../../../../platform/telemetry/common/tele
 import { ActiveEditorContext } from '../../../../common/contextkeys.js';
 import { IViewDescriptorService, ViewContainerLocation } from '../../../../common/views.js';
 import { ChatEntitlement, IChatEntitlementService } from '../../../../services/chat/common/chatEntitlementService.js';
+import { IAuthenticationService } from '../../../../services/authentication/common/authentication.js';
 import { ACTIVE_GROUP, AUX_WINDOW_GROUP, SIDE_GROUP } from '../../../../services/editor/common/editorService.js';
 import { IHostService } from '../../../../services/host/browser/host.js';
 import { IWorkbenchLayoutService, Parts } from '../../../../services/layout/browser/layoutService.js';
@@ -50,6 +51,7 @@ import { SCMHistoryItemChangeRangeContentProvider, ScmHistoryItemChangeRangeUriF
 import { ISCMService } from '../../../scm/common/scm.js';
 import { IChatAgentResult, IChatAgentService } from '../../common/participants/chatAgents.js';
 import { ChatContextKeys } from '../../common/actions/chatContextKeys.js';
+import { openSafeAppealsCreditsCheckout, SAFEAPPEALS_OPEN_CHECKOUT_COMMAND, usesSafeAppealsCloudSetup } from '../../common/chatSetupCloudHelpers.js';
 import { ModifiedFileEntryState } from '../../common/editing/chatEditingService.js';
 import { IChatModel, IChatResponseModel } from '../../common/model/chatModel.js';
 import { ChatMode, IChatMode } from '../../common/chatModes.js';
@@ -97,6 +99,7 @@ const defaultChat = {
 	provider: product.defaultChatAgent?.provider ?? { enterprise: { id: '' } },
 	completionsAdvancedSetting: product.defaultChatAgent?.completionsAdvancedSetting ?? '',
 	completionsMenuCommand: product.defaultChatAgent?.completionsMenuCommand ?? '',
+	upgradePlanUrl: product.defaultChatAgent?.upgradePlanUrl ?? '',
 };
 
 export interface IChatViewOpenOptions {
@@ -1183,20 +1186,21 @@ export function registerChatActions() {
 						ChatContextKeys.Entitlement.planProPlus,
 						ChatContextKeys.Entitlement.planMax
 					),
-					nonEnterpriseCopilotUsers
+					nonEnterpriseCopilotUsers,
+					ChatContextKeys.usesSafeAppealsCloudSetup.negate()
 				),
 				menu: {
 					id: MenuId.ChatTitleBarMenu,
 					group: 'y_manage',
 					order: 1,
-					when: nonEnterpriseCopilotUsers
+					when: ContextKeyExpr.and(nonEnterpriseCopilotUsers, ChatContextKeys.usesSafeAppealsCloudSetup.negate())
 				}
 			});
 		}
 
 		override async run(accessor: ServicesAccessor): Promise<void> {
-			const openerService = accessor.get(IOpenerService);
 			const defaultAccountService = accessor.get(IDefaultAccountService);
+			const openerService = accessor.get(IOpenerService);
 			openerService.open(URI.parse(defaultAccountService.resolveGitHubUrl(GitHubPaths.copilotSettings)));
 		}
 	});
@@ -1258,6 +1262,47 @@ export function registerChatActions() {
 			const commandService = accessor.get(ICommandService);
 			const dialogService = accessor.get(IDialogService);
 			const telemetryService = accessor.get(ITelemetryService);
+			const languageModelsService = accessor.get(ILanguageModelsService);
+			const authenticationService = accessor.get(IAuthenticationService);
+			const openerService = accessor.get(IOpenerService);
+
+			const usesCloudSetup = usesSafeAppealsCloudSetup({
+				getVendors: () => languageModelsService.getVendors(),
+				hasByokModels: chatEntitlementService.hasByokModels,
+				isAuthenticationProviderRegistered: (id) => authenticationService.isAuthenticationProviderRegistered(id),
+			});
+
+			if (usesCloudSetup) {
+				let message = localize('safeAppealsCreditsQuotaExceeded', "You've reached your SafeAppeals Cloud credits limit for this period.");
+				if (chatEntitlementService.quotas.resetDate) {
+					const dateFormatter = chatEntitlementService.quotas.resetDateHasTime ? safeIntl.DateTimeFormat(language, { year: 'numeric', month: 'long', day: 'numeric', hour: 'numeric', minute: 'numeric' }) : safeIntl.DateTimeFormat(language, { year: 'numeric', month: 'long', day: 'numeric' });
+					const quotaResetDate = new Date(chatEntitlementService.quotas.resetDate);
+					message = [message, localize('quotaResetDate', "The allowance will reset on {0}.", dateFormatter.value.format(quotaResetDate))].join(' ');
+				}
+
+				await dialogService.prompt({
+					type: 'none',
+					message: localize('safeAppealsCreditsNeeded', "SafeAppeals Credits Needed"),
+					cancelButton: {
+						label: localize('dismiss', "Dismiss"),
+						run: () => { /* noop */ }
+					},
+					buttons: [
+						{
+							label: localize('addCredits', "Add Credits"),
+							run: () => {
+								telemetryService.publicLog2<WorkbenchActionExecutedEvent, WorkbenchActionExecutedClassification>('workbenchActionExecuted', { id: SAFEAPPEALS_OPEN_CHECKOUT_COMMAND, from: 'chat-dialog' });
+								void openSafeAppealsCreditsCheckout(commandService, openerService, defaultChat.upgradePlanUrl);
+							}
+						},
+					],
+					custom: {
+						icon: Codicon.warning,
+						markdownDetails: [{ markdown: new MarkdownString(message, true) }]
+					}
+				});
+				return;
+			}
 
 			let message: string;
 			const chatQuotaExceeded = chatEntitlementService.quotas.chat?.percentRemaining === 0;

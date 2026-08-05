@@ -4,14 +4,103 @@
  *--------------------------------------------------------------------------------------------*/
 
 import assert from 'assert';
+import { URI } from '../../../../../base/common/uri.js';
 import { ensureNoDisposablesAreLeakedInTestSuite } from '../../../../../base/test/common/utils.js';
-import { buildSafeAppealsAskCloudSystemPrompt, buildSafeAppealsCloudChatMessages, buildSafeAppealsSwitchModeLmTool, hasLiveSafeAppealsCloudModel, hasUsableNonCoreDefaultAgent, isSafeAppealsCloudAgentActivated, isSuccessfulSwitchModeResultText, pickSafeAppealsCloudModelId, resolveChatSetupTimeoutWarning, resolveCloudAgentModeUnavailableMessage, SAFEAPPEALS_AGENT_PARTICIPANT_ID, SAFEAPPEALS_CLOUD_LM_HISTORY_TURN_CAP, SAFEAPPEALS_SWITCH_MODE_TOOL_ID, shouldFailFastCloudAgentMode, shouldSkipAuthExtensionEnableForCloudAgent, shouldSkipToolsModelWaitForCloudAgent, shouldTreatLiveCloudModelAsLanguageModelReady, shouldUseCloudAgentReadinessPath } from '../../common/chatSetupCloudHelpers.js';
+import { CommandsRegistry } from '../../../../../platform/commands/common/commands.js';
+import { buildSafeAppealsAskCloudSystemPrompt, buildSafeAppealsCloudChatMessages, buildSafeAppealsSwitchModeLmTool, hasLiveSafeAppealsCloudModel, hasUsableNonCoreDefaultAgent, isSafeAppealsCloudAgentActivated, isSuccessfulSwitchModeResultText, openSafeAppealsCreditsCheckout, pickSafeAppealsCloudModelId, resolveChatSetupTimeoutWarning, resolveCloudAgentModeUnavailableMessage, SAFEAPPEALS_AGENT_PARTICIPANT_ID, SAFEAPPEALS_CLOUD_LM_HISTORY_TURN_CAP, SAFEAPPEALS_OPEN_CHECKOUT_COMMAND, SAFEAPPEALS_SWITCH_MODE_TOOL_ID, shouldFailFastCloudAgentMode, shouldSkipAuthExtensionEnableForCloudAgent, shouldSkipToolsModelWaitForCloudAgent, shouldTreatLiveCloudModelAsLanguageModelReady, shouldUseCloudAgentReadinessPath, usesSafeAppealsCloudSetup } from '../../common/chatSetupCloudHelpers.js';
 import { ChatModeKind } from '../../common/constants.js';
 import { ChatMessageRole, SAFEAPPEALS_CLOUD_VENDOR_ID } from '../../common/languageModels.js';
 
 suite('SafeAppeals Cloud SetupAgent helpers', () => {
 
 	ensureNoDisposablesAreLeakedInTestSuite();
+
+	suite('usesSafeAppealsCloudSetup', () => {
+
+		test('true when cloud vendor is registered', () => {
+			assert.strictEqual(usesSafeAppealsCloudSetup({
+				getVendors: () => [{ vendor: SAFEAPPEALS_CLOUD_VENDOR_ID }],
+				hasByokModels: false,
+				isAuthenticationProviderRegistered: () => false,
+			}), true);
+		});
+
+		test('true when hasByokModels and cloud auth provider are registered', () => {
+			assert.strictEqual(usesSafeAppealsCloudSetup({
+				getVendors: () => [{ vendor: 'other-vendor' }],
+				hasByokModels: true,
+				isAuthenticationProviderRegistered: (id) => id === SAFEAPPEALS_CLOUD_VENDOR_ID,
+			}), true);
+		});
+
+		test('false when hasByokModels without cloud auth provider', () => {
+			assert.strictEqual(usesSafeAppealsCloudSetup({
+				getVendors: () => [{ vendor: 'other-vendor' }],
+				hasByokModels: true,
+				isAuthenticationProviderRegistered: () => false,
+			}), false);
+		});
+
+		test('false when no cloud vendor and no BYOK path', () => {
+			assert.strictEqual(usesSafeAppealsCloudSetup({
+				getVendors: () => [],
+				hasByokModels: false,
+				isAuthenticationProviderRegistered: () => true,
+			}), false);
+		});
+	});
+
+	suite('openSafeAppealsCreditsCheckout', () => {
+
+		const upgradePlanUrl = 'https://example.com/upgrade';
+
+		test('falls back to upgradePlanUrl when checkout command is not registered', async () => {
+			const openedUris: URI[] = [];
+			await openSafeAppealsCreditsCheckout(
+				{ executeCommand: () => Promise.resolve() },
+				{ open: (uri: URI) => { openedUris.push(uri); return Promise.resolve(true); } },
+				upgradePlanUrl,
+			);
+			assert.deepStrictEqual(openedUris, [URI.parse(upgradePlanUrl)]);
+		});
+
+		test('executes checkout command when registered and does not open fallback URL', async () => {
+			const reg = CommandsRegistry.registerCommand(SAFEAPPEALS_OPEN_CHECKOUT_COMMAND, () => { });
+			try {
+				const openedUris: URI[] = [];
+				let executed = false;
+				await openSafeAppealsCreditsCheckout(
+					{
+						executeCommand: (id: string) => {
+							executed = id === SAFEAPPEALS_OPEN_CHECKOUT_COMMAND;
+							return Promise.resolve();
+						},
+					},
+					{ open: (uri: URI) => { openedUris.push(uri); return Promise.resolve(true); } },
+					upgradePlanUrl,
+				);
+				assert.strictEqual(executed, true);
+				assert.deepStrictEqual(openedUris, []);
+			} finally {
+				reg.dispose();
+			}
+		});
+
+		test('opens fallback URL when registered command execution fails', async () => {
+			const reg = CommandsRegistry.registerCommand(SAFEAPPEALS_OPEN_CHECKOUT_COMMAND, () => { });
+			try {
+				const openedUris: URI[] = [];
+				await openSafeAppealsCreditsCheckout(
+					{ executeCommand: () => Promise.reject(new Error('checkout failed')) },
+					{ open: (uri: URI) => { openedUris.push(uri); return Promise.resolve(true); } },
+					upgradePlanUrl,
+				);
+				assert.deepStrictEqual(openedUris, [URI.parse(upgradePlanUrl)]);
+			} finally {
+				reg.dispose();
+			}
+		});
+	});
 
 	suite('hasUsableNonCoreDefaultAgent', () => {
 

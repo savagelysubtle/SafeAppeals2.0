@@ -12,8 +12,12 @@ import { URI } from '../../../../../base/common/uri.js';
 import { ensureNoDisposablesAreLeakedInTestSuite } from '../../../../../base/test/common/utils.js';
 import { ICommandService } from '../../../../../platform/commands/common/commands.js';
 import { IMarkdownRenderer } from '../../../../../platform/markdown/browser/markdownRenderer.js';
+import { IOpenerService } from '../../../../../platform/opener/common/opener.js';
 import { ITelemetryService } from '../../../../../platform/telemetry/common/telemetry.js';
+import { IAuthenticationService } from '../../../../services/authentication/common/authentication.js';
 import { ChatEntitlement, IChatEntitlementService, IChatSentiment } from '../../../../services/chat/common/chatEntitlementService.js';
+import { ILanguageModelsService, SAFEAPPEALS_CLOUD_VENDOR_ID } from '../../common/languageModels.js';
+import { SAFEAPPEALS_OPEN_CHECKOUT_COMMAND } from '../../common/chatSetupCloudHelpers.js';
 import { IChatResponseErrorDetails } from '../../common/chatService/chatService.js';
 import { IChatErrorDetailsPart, IChatResponseViewModel } from '../../common/model/chatViewModel.js';
 import { ChatQuotaExceededPart } from '../../browser/widget/chatContentParts/chatQuotaExceededPart.js';
@@ -81,7 +85,7 @@ suite('ChatQuotaExceededPart', () => {
 
 	let executedCommands: string[];
 
-	function createWidget(entitlement: ChatEntitlement, errorDetails: IChatResponseErrorDetails): ChatQuotaExceededPart {
+	function createWidget(entitlement: ChatEntitlement, errorDetails: IChatResponseErrorDetails, cloudSetup = false): ChatQuotaExceededPart {
 		executedCommands = [];
 
 		const commandService = {
@@ -94,6 +98,15 @@ suite('ChatQuotaExceededPart', () => {
 			publicLog2() { },
 		} as unknown as ITelemetryService;
 		const entitlementService = createMockEntitlementService(entitlement);
+		const languageModelsService = {
+			getVendors: () => cloudSetup ? [{ vendor: SAFEAPPEALS_CLOUD_VENDOR_ID }] : [],
+		} as unknown as ILanguageModelsService;
+		const authenticationService = {
+			isAuthenticationProviderRegistered: () => cloudSetup,
+		} as unknown as IAuthenticationService;
+		const openerService = {
+			open: () => Promise.resolve(true),
+		} as unknown as IOpenerService;
 		const renderer = createMockRenderer();
 
 		const element = createMockElement(errorDetails);
@@ -106,6 +119,9 @@ suite('ChatQuotaExceededPart', () => {
 			commandService,
 			telemetryService,
 			entitlementService,
+			languageModelsService,
+			authenticationService,
+			openerService,
 		);
 		store.add(widget);
 		mainWindow.document.body.appendChild(widget.domNode);
@@ -223,6 +239,37 @@ suite('ChatQuotaExceededPart', () => {
 			await new Promise(r => setTimeout(r, 0));
 
 			assert.strictEqual(executedCommands[0], 'workbench.action.chat.manageAdditionalSpend');
+		});
+	});
+
+	suite('SafeAppeals Cloud path', () => {
+
+		test('shows Add Credits for Cloud setup', () => {
+			const widget = createWidget(ChatEntitlement.Free, {
+				message: 'Quota exceeded',
+				isQuotaExceeded: true,
+			}, true);
+
+			const button = getPrimaryButton(widget);
+			assert.ok(button);
+			assert.strictEqual(button.textContent, 'Add Credits');
+			const message = widget.domNode.querySelector('.chat-quota-error-message');
+			assert.ok(message);
+			assert.match(message.textContent ?? '', /SafeAppeals credits/i);
+		});
+
+		test('Cloud path clicks Add Credits -> openCheckout', async () => {
+			const widget = createWidget(ChatEntitlement.Pro, {
+				message: 'Quota exceeded',
+				isQuotaExceeded: true,
+			}, true);
+
+			const button = getPrimaryButton(widget);
+			assert.ok(button);
+			button.click();
+			await new Promise(r => setTimeout(r, 0));
+
+			assert.strictEqual(executedCommands[0], SAFEAPPEALS_OPEN_CHECKOUT_COMMAND);
 		});
 	});
 });

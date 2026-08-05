@@ -42,7 +42,7 @@ import { IChatProgress, IChatService, ToolConfirmKind } from '../../common/chatS
 import { IChatRequestToolEntry } from '../../common/attachments/chatVariableEntries.js';
 import { ChatAgentLocation, ChatConfiguration, ChatModeKind } from '../../common/constants.js';
 import { ChatMessageRole, IChatMessage, IChatResponseToolUsePart, ILanguageModelChatRequestOptions, ILanguageModelsService, SAFEAPPEALS_CLOUD_VENDOR_ID } from '../../common/languageModels.js';
-import { buildSafeAppealsAskCloudSystemPrompt, buildSafeAppealsAskCloudSystemPromptWithoutSwitchTool, buildSafeAppealsCloudChatMessages, buildSafeAppealsSwitchModeLmTool, hasLiveSafeAppealsCloudModel, hasUsableNonCoreDefaultAgent, isSafeAppealsCloudAgentActivated, isSuccessfulSwitchModeResultText, pickSafeAppealsCloudModelId, resolveChatSetupTimeoutWarning, resolveCloudAgentModeUnavailableMessage, SAFEAPPEALS_AGENT_PARTICIPANT_ID, SAFEAPPEALS_ASK_CLOUD_SWITCH_MODE_MAX_ROUNDS, SAFEAPPEALS_AUTH_EXTENSION_ID, SAFEAPPEALS_SWITCH_MODE_TOOL_ID, shouldFailFastCloudAgentMode, shouldSkipAuthExtensionEnableForCloudAgent, shouldSkipToolsModelWaitForCloudAgent, shouldTreatLiveCloudModelAsLanguageModelReady, shouldUseCloudAgentReadinessPath, toolResultContentToText } from '../../common/chatSetupCloudHelpers.js';
+import { buildSafeAppealsAskCloudSystemPrompt, buildSafeAppealsAskCloudSystemPromptWithoutSwitchTool, buildSafeAppealsCloudChatMessages, buildSafeAppealsSwitchModeLmTool, hasLiveSafeAppealsCloudModel, hasUsableNonCoreDefaultAgent, isSafeAppealsCloudAgentActivated, isSuccessfulSwitchModeResultText, pickSafeAppealsCloudModelId, resolveChatSetupTimeoutWarning, resolveCloudAgentModeUnavailableMessage, SAFEAPPEALS_AGENT_PARTICIPANT_ID, SAFEAPPEALS_ASK_CLOUD_SWITCH_MODE_MAX_ROUNDS, SAFEAPPEALS_AUTH_EXTENSION_ID, SAFEAPPEALS_SWITCH_MODE_TOOL_ID, shouldFailFastCloudAgentMode, shouldSkipAuthExtensionEnableForCloudAgent, shouldSkipToolsModelWaitForCloudAgent, shouldTreatLiveCloudModelAsLanguageModelReady, shouldUseCloudAgentReadinessPath, toolResultContentToText, usesSafeAppealsCloudSetup } from '../../common/chatSetupCloudHelpers.js';
 import { CHAT_OPEN_ACTION_ID, CHAT_SETUP_ACTION_ID } from '../actions/chatActions.js';
 import { ChatViewId, IChatWidgetService } from '../chat.js';
 import { IViewsService } from '../../../../services/views/common/viewsService.js';
@@ -516,12 +516,11 @@ export class SetupAgent extends Disposable implements IChatAgentImplementation {
 
 	/** SafeAppeals: true when Cloud LM vendor is registered (or hasByokModels + cloud auth ready). */
 	private usesSafeAppealsCloudSetup(languageModelsService: ILanguageModelsService): boolean {
-		if (languageModelsService.getVendors().some(v => v.vendor === SAFEAPPEALS_CLOUD_VENDOR_ID)) {
-			return true;
-		}
-		// SafeAppeals: hasByokModels alone can mean other BYOK vendors — require cloud auth provider
-		return this.chatEntitlementService.hasByokModels
-			&& this.authenticationService.isAuthenticationProviderRegistered(SAFEAPPEALS_CLOUD_VENDOR_ID);
+		return usesSafeAppealsCloudSetup({
+			getVendors: () => languageModelsService.getVendors(),
+			hasByokModels: this.chatEntitlementService.hasByokModels,
+			isAuthenticationProviderRegistered: (id) => this.authenticationService.isAuthenticationProviderRegistered(id),
+		});
 	}
 
 	/** SafeAppeals: whether a SafeAppeals Cloud auth session already exists. */

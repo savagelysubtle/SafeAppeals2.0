@@ -7,11 +7,13 @@ import { Event } from '../../../../base/common/event.js';
 import { Disposable } from '../../../../base/common/lifecycle.js';
 import { IConfigurationService } from '../../../../platform/configuration/common/configuration.js';
 import { IContextKey, IContextKeyService } from '../../../../platform/contextkey/common/contextkey.js';
+import { IAuthenticationService } from '../../../services/authentication/common/authentication.js';
 import { IStorageService, StorageScope, StorageTarget } from '../../../../platform/storage/common/storage.js';
 import { IWorkbenchContribution } from '../../../common/contributions.js';
 import { ChatEntitlementContextKeys } from '../../../services/chat/common/chatEntitlementService.js';
 import { IExtensionService } from '../../../services/extensions/common/extensions.js';
 import { ChatContextKeys } from '../common/actions/chatContextKeys.js';
+import { usesSafeAppealsCloudSetup } from '../common/chatSetupCloudHelpers.js';
 import { ChatConfiguration } from '../common/constants.js';
 import { COPILOT_VENDOR_ID, ILanguageModelsService, SAFEAPPEALS_CLOUD_VENDOR_ID } from '../common/languageModels.js';
 import { ILanguageModelsConfigurationService } from '../common/languageModelsConfiguration.js';
@@ -47,6 +49,7 @@ export class HasByokModelsContribution extends Disposable implements IWorkbenchC
 	]);
 
 	private readonly _hasByokModels: IContextKey<boolean>;
+	private readonly _usesSafeAppealsCloudSetup: IContextKey<boolean>;
 	private _extensionsRegistered = false;
 	private _configurationLoaded = false;
 
@@ -56,11 +59,13 @@ export class HasByokModelsContribution extends Disposable implements IWorkbenchC
 		@IContextKeyService private readonly _contextKeyService: IContextKeyService,
 		@IConfigurationService private readonly _configurationService: IConfigurationService,
 		@IStorageService private readonly _storageService: IStorageService,
+		@IAuthenticationService private readonly _authenticationService: IAuthenticationService,
 		@IExtensionService extensionService: IExtensionService,
 	) {
 		super();
 
 		this._hasByokModels = ChatEntitlementContextKeys.hasByokModels.bindTo(this._contextKeyService);
+		this._usesSafeAppealsCloudSetup = ChatContextKeys.usesSafeAppealsCloudSetup.bindTo(this._contextKeyService);
 
 		this._restore();
 		this._update();
@@ -85,7 +90,21 @@ export class HasByokModelsContribution extends Disposable implements IWorkbenchC
 			this._languageModelsConfigurationService.onDidChangeLanguageModelGroups,
 			// SafeAppeals: re-evaluate when cloud LM vendor is contributed or removed
 			this._languageModelsService.onDidChangeLanguageModelVendors,
+			this._authenticationService.onDidRegisterAuthenticationProvider,
+			this._authenticationService.onDidUnregisterAuthenticationProvider,
 		)(() => this._update()));
+	}
+
+	private _updateSafeAppealsCloudSetupContext(hasByokModels: boolean): void {
+		if (this._isAiDisabled()) {
+			this._usesSafeAppealsCloudSetup.set(false);
+			return;
+		}
+		this._usesSafeAppealsCloudSetup.set(usesSafeAppealsCloudSetup({
+			getVendors: () => this._languageModelsService.getVendors(),
+			hasByokModels,
+			isAuthenticationProviderRegistered: (id) => this._authenticationService.isAuthenticationProviderRegistered(id),
+		}));
 	}
 
 	private _isAiDisabled(): boolean {
@@ -104,20 +123,25 @@ export class HasByokModelsContribution extends Disposable implements IWorkbenchC
 	private _restore(): void {
 		if (this._isAiDisabled()) {
 			this._hasByokModels.set(false);
+			this._updateSafeAppealsCloudSetupContext(false);
 			return;
 		}
 		// SafeAppeals: cloud vendor bypasses clientByokEnabled before the Copilot BYOK gate
 		if (this._hasSafeAppealsCloudVendor()) {
 			this._hasByokModels.set(true);
+			this._updateSafeAppealsCloudSetupContext(true);
 			return;
 		}
 		// SafeAppeals: do not hard-false on restore when clientByokEnabled is off — vendors
 		// are empty before extensions parse; keep lastKnown to avoid cold-start flicker.
-		this._hasByokModels.set(this._storageService.getBoolean(HasByokModelsContribution.STORAGE_KEY_LAST_KNOWN, StorageScope.APPLICATION, false));
+		const lastKnown = this._storageService.getBoolean(HasByokModelsContribution.STORAGE_KEY_LAST_KNOWN, StorageScope.APPLICATION, false);
+		this._hasByokModels.set(lastKnown);
+		this._updateSafeAppealsCloudSetupContext(lastKnown);
 	}
 
 	private _setResult(value: boolean): void {
 		this._hasByokModels.set(value);
+		this._updateSafeAppealsCloudSetupContext(value);
 		this._storageService.store(HasByokModelsContribution.STORAGE_KEY_LAST_KNOWN, value, StorageScope.APPLICATION, StorageTarget.MACHINE);
 	}
 

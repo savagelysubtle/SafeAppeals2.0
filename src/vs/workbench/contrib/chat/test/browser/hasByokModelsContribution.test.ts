@@ -125,6 +125,7 @@ suite('HasByokModelsContribution', () => {
 		readonly configService: FakeLanguageModelsConfigurationService;
 		readonly languageModelsService: FakeLanguageModelsService;
 		readonly hasByokModels: IContextKey<boolean>;
+		readonly usesSafeAppealsCloudSetup: IContextKey<boolean>;
 		readonly nonCopilotUserSelectable: IContextKey<boolean>;
 		readonly clientByokEnabled: IContextKey<boolean>;
 	}
@@ -163,9 +164,10 @@ suite('HasByokModelsContribution', () => {
 		instantiation.stub(ILanguageModelsService, languageModelsService as unknown as ILanguageModelsService);
 
 		const hasByokModels = ChatEntitlementContextKeys.hasByokModels.bindTo(contextKeyService);
+		const usesSafeAppealsCloudSetup = ChatContextKeys.usesSafeAppealsCloudSetup.bindTo(contextKeyService);
 		store.add(instantiation.createInstance(HasByokModelsContribution));
 
-		return { storage, configService, languageModelsService, hasByokModels, nonCopilotUserSelectable, clientByokEnabled };
+		return { storage, configService, languageModelsService, hasByokModels, usesSafeAppealsCloudSetup, nonCopilotUserSelectable, clientByokEnabled };
 	}
 
 	/** Allow the `whenInstalledExtensionsRegistered()` continuation to run. */
@@ -394,6 +396,7 @@ suite('HasByokModelsContribution', () => {
 		await flush();
 
 		assert.deepStrictEqual(snapshot(scenario, true), { hasByokModels: false, persistedLastKnown: false });
+		assert.strictEqual(scenario.usesSafeAppealsCloudSetup.get(), false);
 	});
 
 	test('SafeAppeals cloud vendor appearing at runtime flips hasByokModels true', async () => {
