@@ -24,7 +24,7 @@ import { IKeybindingService } from '../../../../../platform/keybinding/common/ke
 import { ILayoutService } from '../../../../../platform/layout/browser/layoutService.js';
 import { ILogService } from '../../../../../platform/log/common/log.js';
 import product from '../../../../../platform/product/common/product.js';
-import { ITelemetryService, TelemetryLevel } from '../../../../../platform/telemetry/common/telemetry.js';
+import { ITelemetryService } from '../../../../../platform/telemetry/common/telemetry.js';
 import { IWorkspaceTrustManagementService, IWorkspaceTrustRequestService } from '../../../../../platform/workspace/common/workspaceTrust.js';
 import { IAuthenticationService } from '../../../../services/authentication/common/authentication.js';
 import { IWorkbenchLayoutService } from '../../../../services/layout/browser/layoutService.js';
@@ -33,7 +33,7 @@ import { ILanguageModelsService, SAFEAPPEALS_CLOUD_VENDOR_ID } from '../../commo
 import { IChatWidgetService } from '../chat.js';
 import { ChatSetupController } from './chatSetupController.js';
 import { IChatSetupResult, ChatSetupAnonymous, InstallChatEvent, InstallChatClassification, ChatSetupStrategy, ChatSetupResultValue } from './chatSetup.js';
-import { GitHubPaths, IDefaultAccountService } from '../../../../../platform/defaultAccount/common/defaultAccount.js';
+import { IDefaultAccountService } from '../../../../../platform/defaultAccount/common/defaultAccount.js';
 import { IHostService } from '../../../../services/host/browser/host.js';
 import { IExtensionService } from '../../../../services/extensions/common/extensions.js';
 import { ExtensionIdentifier } from '../../../../../platform/extensions/common/extensions.js';
@@ -338,7 +338,7 @@ export class ChatSetup {
 			if (this.usesSafeAppealsCloudSetup()) {
 				return localize('signInSafeAppealsCloud', "Sign in to SafeAppeals Cloud");
 			}
-			return localize('signIn', "Sign in to use GitHub Copilot");
+			return localize('signIn', "Sign in to use SafeAppeals");
 		}
 
 		return localize('startUsing', "Start using AI Features");
@@ -349,13 +349,10 @@ export class ChatSetup {
 
 
 		let footer: string;
-		// SafeAppeals: omit GitHub Terms / public-code Copilot blurb on Cloud path
 		if (this.usesSafeAppealsCloudSetup()) {
 			footer = localize('safeAppealsCloudFooter', "Continue to sign in to SafeAppeals Cloud and use Chat.");
-		} else if (options?.forceAnonymous || this.telemetryService.telemetryLevel === TelemetryLevel.NONE) {
-			footer = localize({ key: 'settingsAnonymous', comment: ['{Locked="["}', '{Locked="]({1})"}', '{Locked="]({2})"}'] }, "By continuing, you agree to {0}'s [Terms]({1}) and [Privacy Statement]({2}).", defaultChat.provider.default.name, defaultChat.termsStatementUrl, defaultChat.privacyStatementUrl);
 		} else {
-			footer = localize({ key: 'settings', comment: ['{Locked="["}', '{Locked="]({1})"}', '{Locked="]({2})"}', '{Locked="]({4})"}', '{Locked="]({5})"}'] }, "By continuing, you agree to {0}'s [Terms]({1}) and [Privacy Statement]({2}). {3} Copilot may show [public code]({4}) suggestions and use your data to improve the product. You can change these [settings]({5}) anytime.", defaultChat.provider.default.name, defaultChat.termsStatementUrl, defaultChat.privacyStatementUrl, defaultChat.provider.default.name, defaultChat.publicCodeMatchesUrl, this.defaultAccountService.resolveGitHubUrl(GitHubPaths.copilotSettings));
+			footer = localize({ key: 'safeAppealsFooter', comment: ['{Locked="]({0})"}', '{Locked="]({1})"}'] }, "By continuing with SafeAppeals, you agree to [Terms]({0}) and [Privacy Statement]({1}).", defaultChat.termsStatementUrl, defaultChat.privacyStatementUrl);
 		}
 		element.appendChild($('p', undefined, disposables.add(this.markdownRendererService.render(new MarkdownString(footer, { isTrusted: true }))).element));
 

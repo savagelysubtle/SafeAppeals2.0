@@ -1119,8 +1119,7 @@ export class ChatWidget extends Disposable implements IChatWidget {
 				const defaultAgent = this.chatAgentService.getDefaultAgent(this.location, this.input.currentModeKind);
 				let additionalMessage: string | IMarkdownString | undefined;
 				if (this.chatEntitlementService.anonymous && !this.chatEntitlementService.sentiment.completed) {
-					const providers = product.defaultChatAgent.provider;
-					additionalMessage = new MarkdownString(localize({ key: 'settings', comment: ['{Locked="]({2})"}', '{Locked="]({3})"}'] }, "By continuing with {0} Copilot, you agree to {1}'s [Terms]({2}) and [Privacy Statement]({3}).", providers.default.name, providers.default.name, product.defaultChatAgent.termsStatementUrl, product.defaultChatAgent.privacyStatementUrl), { isTrusted: true });
+					additionalMessage = new MarkdownString(localize({ key: 'settings', comment: ['{Locked="]({0})"}', '{Locked="]({1})"}'] }, "By continuing with SafeAppeals, you agree to [Terms]({0}) and [Privacy Statement]({1}).", product.defaultChatAgent.termsStatementUrl, product.defaultChatAgent.privacyStatementUrl), { isTrusted: true });
 				} else {
 					additionalMessage = defaultAgent?.metadata.additionalWelcomeMessage;
 				}

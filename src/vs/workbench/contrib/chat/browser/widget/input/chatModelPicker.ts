@@ -540,13 +540,13 @@ export function buildModelPickerItems(
 		// SafeAppeals: brand as SafeAppeals Cloud when that vendor is the path.
 		const headerLabel = useSafeAppealsCloudSetup
 			? localize('chat.modelPicker.setupRequiredSafeAppeals', "Sign in to SafeAppeals Cloud")
-			: localize('chat.modelPicker.setupRequired', "Sign in to use Copilot");
+			: localize('chat.modelPicker.setupRequired', "Sign in to use SafeAppeals");
 		const signInLabel = useSafeAppealsCloudSetup
 			? localize('chat.modelPicker.setupRequired.signInSafeAppeals', "Sign in to SafeAppeals Cloud...")
-			: localize('chat.modelPicker.setupRequired.signIn', "Sign in to use Copilot...");
+			: localize('chat.modelPicker.setupRequired.signIn', "Sign in to use SafeAppeals...");
 		const signInTooltip = useSafeAppealsCloudSetup
 			? localize('chat.modelPicker.setupRequired.signInTooltipSafeAppeals', "Sign in to SafeAppeals Cloud to choose a model.")
-			: localize('chat.modelPicker.setupRequired.signInTooltip', "Sign in to GitHub Copilot to choose a model.");
+			: localize('chat.modelPicker.setupRequired.signInTooltip', "Sign in to SafeAppeals to choose a model.");
 		items.push({
 			kind: ActionListItemKind.Header,
 			label: headerLabel,
@@ -1730,7 +1730,7 @@ export class ModelPickerWidget extends Disposable {
 			: setupRequired
 				? (this.usesSafeAppealsCloudSetup()
 					? localize('chat.modelPicker.ariaLabelSetupRequiredSafeAppeals', "Models, sign in to SafeAppeals Cloud")
-					: localize('chat.modelPicker.ariaLabelSetupRequired', "Models, sign in to use Copilot"))
+					: localize('chat.modelPicker.ariaLabelSetupRequired', "Models, sign in to use SafeAppeals"))
 				: localize('chat.modelPicker.ariaLabel', "Models, {0}", modelLabel);
 		this._domNode.ariaLabel = ariaLabel;
 		this._nameButton.ariaLabel = ariaLabel;

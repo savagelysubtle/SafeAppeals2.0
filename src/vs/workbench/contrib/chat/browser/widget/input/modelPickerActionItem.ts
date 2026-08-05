@@ -200,7 +200,7 @@ export class ModelPickerActionItem extends BaseActionViewItem {
 			// SafeAppeals: brand hover as SafeAppeals Cloud when that vendor is the path
 			return this._pickerWidget.usesSafeAppealsCloudSetup()
 				? localize('chat.modelPicker.setupRequiredHoverSafeAppeals', "{0} • Sign in to SafeAppeals Cloud to choose a model.", label)
-				: localize('chat.modelPicker.setupRequiredHover', "{0} • Sign in to GitHub Copilot to choose a model.", label);
+				: localize('chat.modelPicker.setupRequiredHover', "{0} • Sign in to SafeAppeals to choose a model.", label);
 		}
 		const { statusIcon, tooltip } = this._pickerWidget.selectedModel?.metadata || {};
 		return statusIcon && tooltip ? `${label} • ${tooltip}` : label;

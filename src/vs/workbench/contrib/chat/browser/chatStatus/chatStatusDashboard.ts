@@ -591,16 +591,16 @@ export class ChatStatusDashboard extends DomWidget {
 		let descriptionText: string | MarkdownString;
 		let descriptionClass = '.description';
 		if (newUser && anonymousUser) {
-			descriptionText = new MarkdownString(localize({ key: 'activeDescriptionAnonymous', comment: ['{Locked="]({2})"}', '{Locked="]({3})"}'] }, "By continuing with {0} Copilot, you agree to {1}'s [Terms]({2}) and [Privacy Statement]({3})", defaultChat.provider.default.name, defaultChat.provider.default.name, defaultChat.termsStatementUrl, defaultChat.privacyStatementUrl), { isTrusted: true });
+			descriptionText = new MarkdownString(localize({ key: 'activeDescriptionAnonymous', comment: ['{Locked="]({0})"}', '{Locked="]({1})"}'] }, "By continuing with SafeAppeals, you agree to [Terms]({0}) and [Privacy Statement]({1}).", defaultChat.termsStatementUrl, defaultChat.privacyStatementUrl), { isTrusted: true });
 			descriptionClass = `${descriptionClass}.terms`;
 		} else if (newUser) {
-			descriptionText = localize('activateDescription', "Set up Copilot to use AI features.");
+			descriptionText = localize('activateDescription', "Set up SafeAppeals to use AI features.");
 		} else if (anonymousUser) {
-			descriptionText = localize('enableMoreDescription', "Sign in to enable more Copilot AI features.");
+			descriptionText = localize('enableMoreDescription', "Sign in to enable more SafeAppeals AI features.");
 		} else if (disabled) {
-			descriptionText = localize('enableDescription', "Enable Copilot to use AI features.");
+			descriptionText = localize('enableDescription', "Enable SafeAppeals to use AI features.");
 		} else {
-			descriptionText = localize('signInDescription', "Sign in to use GitHub Copilot AI features.");
+			descriptionText = localize('signInDescription', "Sign in to use SafeAppeals AI features.");
 		}
 
 		let buttonLabel: string;
@@ -611,7 +611,7 @@ export class ChatStatusDashboard extends DomWidget {
 		} else if (disabled) {
 			buttonLabel = localize('enableCopilotButton', "Enable AI Features");
 		} else {
-			buttonLabel = localize('signInToUseAIFeatures', "Sign in to use GitHub Copilot");
+			buttonLabel = localize('signInToUseAIFeatures', "Sign in to use SafeAppeals");
 		}
 
 		let commandId: string;

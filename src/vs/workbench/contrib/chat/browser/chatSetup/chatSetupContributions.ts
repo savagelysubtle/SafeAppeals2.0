@@ -33,7 +33,6 @@ import { ILogService } from '../../../../../platform/log/common/log.js';
 import { IMarkerService } from '../../../../../platform/markers/common/markers.js';
 import { IOpenerService } from '../../../../../platform/opener/common/opener.js';
 import product from '../../../../../platform/product/common/product.js';
-import { GitHubPaths, IDefaultAccountService } from '../../../../../platform/defaultAccount/common/defaultAccount.js';
 import { IProductService } from '../../../../../platform/product/common/productService.js';
 import { ITelemetryService } from '../../../../../platform/telemetry/common/telemetry.js';
 import { ToggleTitleBarConfigAction } from '../../../../browser/parts/titlebar/titlebarActions.js';
@@ -59,7 +58,7 @@ import { CHAT_CATEGORY, CHAT_SETUP_ACTION_ID, CHAT_SETUP_SUPPORT_ANONYMOUS_ACTIO
 import { ChatViewContainerId, IChatWidget, IChatWidgetService } from '../chat.js';
 import { ChatInputNotificationSeverity, IChatInputNotificationService } from '../widget/input/chatInputNotificationService.js';
 import { chatViewsWelcomeRegistry } from '../viewsWelcome/chatViewsWelcome.js';
-import { buildUpgradeUrlWithRedirect, ChatSetupAnonymous, ChatSetupStrategy, refreshTokens } from './chatSetup.js';
+import { ChatSetupAnonymous, ChatSetupStrategy, refreshTokens } from './chatSetup.js';
 import { ChatSetupController } from './chatSetupController.js';
 import { GrowthSessionController, registerGrowthSession } from './chatSetupGrowthSession.js';
 import { AICodeActionsHelper, AINewSymbolNamesProvider, ChatCodeActionsProvider, SetupAgent } from './chatSetupProviders.js';
@@ -67,6 +66,8 @@ import { ChatSetup } from './chatSetupRunner.js';
 
 const defaultChat = {
 	chatExtensionId: product.defaultChatAgent?.chatExtensionId ?? '',
+	upgradePlanUrl: product.defaultChatAgent?.upgradePlanUrl ?? '',
+	managePlanUrl: product.defaultChatAgent?.managePlanUrl ?? '',
 };
 
 const SIGN_IN_TITLE_BAR_ACTION_ID = 'workbench.action.chat.signInIndicator';
@@ -267,7 +268,7 @@ export class ChatSetupContribution extends Disposable implements IWorkbenchContr
 
 		class ChatSetupTriggerAction extends Action2 {
 
-			static CHAT_SETUP_ACTION_LABEL = localize2('triggerChatSetup', "Use AI Features with Copilot for free...");
+			static CHAT_SETUP_ACTION_LABEL = localize2('triggerChatSetup', "Use AI Features with SafeAppeals...");
 
 			constructor() {
 				super({
@@ -370,7 +371,7 @@ export class ChatSetupContribution extends Disposable implements IWorkbenchContr
 			constructor() {
 				super({
 					id: 'workbench.action.chat.triggerSetupForceSignIn',
-					title: localize2('forceSignIn', "Sign in to use GitHub Copilot")
+					title: localize2('forceSignIn', "Sign in to use SafeAppeals")
 				});
 			}
 
@@ -408,7 +409,7 @@ export class ChatSetupContribution extends Disposable implements IWorkbenchContr
 			constructor() {
 				super({
 					id: 'workbench.action.chat.triggerSetupFromAccounts',
-					title: localize2('triggerChatSetupFromAccounts', "Sign in to use GitHub Copilot..."),
+					title: localize2('triggerChatSetupFromAccounts', "Sign in to use SafeAppeals..."),
 					menu: {
 						id: MenuId.AccountsContext,
 						group: '2_copilot',
@@ -508,8 +509,8 @@ export class ChatSetupContribution extends Disposable implements IWorkbenchContr
 			constructor() {
 				super(
 					ChatConfiguration.TitleBarSignInEnabled,
-					localize('toggle.chatSignIn', 'Copilot Sign In'),
-					localize('toggle.chatSignInDescription', "Toggle visibility of the Copilot Sign In button in title bar"),
+					localize('toggle.chatSignIn', 'SafeAppeals Sign In'),
+					localize('toggle.chatSignInDescription', "Toggle visibility of the SafeAppeals Sign In button in title bar"),
 					3,
 					ContextKeyExpr.and(
 						IsWebContext.negate(),
@@ -526,7 +527,7 @@ export class ChatSetupContribution extends Disposable implements IWorkbenchContr
 			constructor() {
 				super({
 					id: 'workbench.action.chat.upgradePlan',
-					title: localize2('managePlan', "Upgrade to GitHub Copilot Pro"),
+					title: localize2('managePlan', "Upgrade SafeAppeals Plan"),
 					category: localize2('chat.category', 'Chat'),
 					f1: true,
 					precondition: ContextKeyExpr.and(
@@ -557,14 +558,10 @@ export class ChatSetupContribution extends Disposable implements IWorkbenchContr
 				const hostService = accessor.get(IHostService);
 				const commandService = accessor.get(ICommandService);
 				const telemetryService = accessor.get(ITelemetryService);
-				const defaultAccountService = accessor.get(IDefaultAccountService);
-				const productService = accessor.get(IProductService);
 
 				telemetryService.publicLog2<WorkbenchActionExecutedEvent, WorkbenchActionExecutedClassification>('workbenchActionExecuted', { id: 'workbench.action.chat.upgradePlan', from: 'command' });
 
-				const baseUrl = defaultAccountService.resolveGitHubUrl(GitHubPaths.copilotUpgrade);
-				const upgradeUrl = buildUpgradeUrlWithRedirect(baseUrl, productService.urlProtocol, productService.quality);
-				openerService.open(upgradeUrl);
+				openerService.open(URI.parse(defaultChat.upgradePlanUrl));
 
 				const entitlement = context.state.entitlement;
 				if (!isProUser(entitlement)) {
@@ -591,7 +588,7 @@ export class ChatSetupContribution extends Disposable implements IWorkbenchContr
 			constructor() {
 				super({
 					id: 'workbench.action.chat.manageAdditionalSpend',
-					title: localize2('manageAdditionalSpend', "Manage GitHub Copilot Budget"),
+					title: localize2('manageAdditionalSpend', "Manage SafeAppeals Credits"),
 					category: localize2('chat.category', 'Chat'),
 					f1: true,
 					precondition: ContextKeyExpr.and(
@@ -627,9 +624,8 @@ export class ChatSetupContribution extends Disposable implements IWorkbenchContr
 			override async run(accessor: ServicesAccessor): Promise<void> {
 				const openerService = accessor.get(IOpenerService);
 				const telemetryService = accessor.get(ITelemetryService);
-				const defaultAccountService = accessor.get(IDefaultAccountService);
 				telemetryService.publicLog2<WorkbenchActionExecutedEvent, WorkbenchActionExecutedClassification>('workbenchActionExecuted', { id: 'workbench.action.chat.manageAdditionalSpend', from: 'command' });
-				openerService.open(URI.parse(defaultAccountService.resolveGitHubUrl(GitHubPaths.billingBudgets)));
+				openerService.open(URI.parse(defaultChat.managePlanUrl));
 			}
 		}
 
