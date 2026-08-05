@@ -2324,6 +2324,41 @@ export class OnboardingVariationA extends Disposable implements IOnboardingServi
 			// Case brief is agent-authored AGENTS.md — open Chat instead of the retired initCase flow.
 			void this._runCreditsFirstAction('workbench.action.chat.open', 'startOwnCase');
 		}));
+
+		// Soft bridge to Local AI Setup — must NOT dismiss onboarding (unlike first-action CTAs).
+		const privateSearchBtn = this._registerStepFocusable(append(actions, $<HTMLButtonElement>('button.onboarding-a-btn.onboarding-a-btn-secondary')));
+		privateSearchBtn.type = 'button';
+		privateSearchBtn.textContent = localize('onboarding.credits.setupPrivateSearch', "Set Up Private Search");
+		this.stepDisposables.add(addDisposableListener(privateSearchBtn, EventType.CLICK, () => {
+			void this._runCreditsSoftPrivateSearchAction();
+		}));
+	}
+
+	/**
+	 * Opens Private Search Setup (and/or Getting Started) without completing the wizard.
+	 * Distinct from {@link _runCreditsFirstAction}, which dismisses onboarding on success.
+	 */
+	private async _runCreditsSoftPrivateSearchAction(): Promise<void> {
+		this._logAction('setupPrivateSearch');
+		try {
+			await this.commandService.executeCommand('safeappeals-rag.setupLocalSearch');
+		} catch {
+			try {
+				await this.commandService.executeCommand(
+					'workbench.action.openWalkthrough',
+					'safeappeals.safeappeals-timeline#safeappealsTimelineSetup',
+					false
+				);
+			} catch {
+				this.notificationService.notify({
+					severity: Severity.Info,
+					message: localize(
+						'onboarding.credits.privateSearchUnavailable',
+						"Private Search Setup is not available yet. Open Get Started after welcome to finish Local AI setup from the checklist."
+					),
+				});
+			}
+		}
 	}
 
 	/**
