@@ -65,6 +65,48 @@ const vscodeMock = {
 		registerCommand: () => ({ dispose() { } }),
 		executeCommand: async () => undefined,
 	},
+	extensions: {
+		getExtension: (id) => {
+			if (id !== 'safeappeals.safeappeals-ml') {
+				return undefined;
+			}
+			const stubEngine = {
+				withLease: async (_kind, _opts, fn) => fn({
+					id: 'stub',
+					kind: _kind,
+					jobId: _opts.jobId,
+					release: async () => { },
+				}),
+				acquire: async (kind, opts) => ({
+					id: 'stub',
+					kind,
+					jobId: opts.jobId,
+					release: async () => { },
+				}),
+				registerAdapter: () => { },
+				reportCrash: () => { },
+				cancelJob: () => { },
+				requestUnload: async () => { },
+				dispose: async () => { },
+			};
+			return {
+				id,
+				isActive: true,
+				exports: {
+					engine: stubEngine,
+					withLease: stubEngine.withLease.bind(stubEngine),
+					reportCrash: stubEngine.reportCrash.bind(stubEngine),
+					registerAdapter: stubEngine.registerAdapter.bind(stubEngine),
+				},
+				activate: async () => ({
+					engine: stubEngine,
+					withLease: stubEngine.withLease.bind(stubEngine),
+					reportCrash: stubEngine.reportCrash.bind(stubEngine),
+					registerAdapter: stubEngine.registerAdapter.bind(stubEngine),
+				}),
+			};
+		},
+	},
 	Uri: {
 		file: (fsPath) => ({ scheme: 'file', fsPath, path: fsPath, toString: () => `file://${fsPath}` }),
 		parse: (value) => ({ scheme: 'file', fsPath: value, path: value, toString: () => value }),

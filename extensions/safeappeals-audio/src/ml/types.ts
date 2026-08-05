@@ -2,6 +2,10 @@
  *  Copyright (c) Safe Appeals. All rights reserved.
  *--------------------------------------------------------------------------------------------*/
 
+/**
+ * Local adapter-facing kinds. The shared {@link MlResourceEngine} (incl. `docparse`)
+ * lives in safeappeals-ml; audio registers whisper/diarization/ffmpeg adapters there.
+ */
 export type ResourceKind = 'whisper' | 'diarization' | 'embedding' | 'ffmpeg';
 
 export type SlotState = 'cold' | 'loading' | 'ready' | 'running' | 'unloading' | 'crashed';

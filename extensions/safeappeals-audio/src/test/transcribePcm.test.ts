@@ -10,13 +10,12 @@ import * as path from 'node:path';
 import type * as vscode from 'vscode';
 import { AudioService } from '../audioService';
 import { WhisperSlotAdapter } from '../ml/adapters/whisperAdapter';
-import { EmbeddingStubAdapter } from '../ml/adapters/embeddingAdapter';
 import { FfmpegStubAdapter } from '../ml/adapters/ffmpegAdapter';
 import { MlBusyError } from '../ml/errors';
-import { MlResourceEngine } from '../ml/resourceEngine';
 import { WHISPER_PCM_SAMPLE_RATE } from '../pcm16';
 import type { WhisperTranscribeOptions } from '../whisperProbe';
 import { WhisperHost } from '../whisperHost';
+import { FakeMlResourceEngine } from './fakeMlEngine';
 
 class FakeSecretStorage implements vscode.SecretStorage {
 	private readonly map = new Map<string, string>();
@@ -77,7 +76,7 @@ function encodePcm16Base64(samples: number[]): string {
 suite('AudioService.transcribePcm', () => {
 	let tempDir: string;
 	let service: AudioService | undefined;
-	let testEngine: MlResourceEngine | undefined;
+	let testEngine: FakeMlResourceEngine | undefined;
 
 	suiteSetup(async () => {
 		tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'sa-transcribe-pcm-'));
@@ -105,9 +104,8 @@ suite('AudioService.transcribePcm', () => {
 				return { text: '  hello dictation  ' };
 			},
 		});
-		testEngine = new MlResourceEngine({}, [
+		testEngine = new FakeMlResourceEngine([
 			new WhisperSlotAdapter(whisperHost),
-			new EmbeddingStubAdapter(),
 			new FfmpegStubAdapter(),
 		]);
 
@@ -132,9 +130,8 @@ suite('AudioService.transcribePcm', () => {
 			getModelPath: () => path.join(tempDir, 'fake-model.bin'),
 			getTranscribe: () => async () => ({ text: 'never' }),
 		});
-		testEngine = new MlResourceEngine({}, [
+		testEngine = new FakeMlResourceEngine([
 			new WhisperSlotAdapter(whisperHost),
-			new EmbeddingStubAdapter(),
 			new FfmpegStubAdapter(),
 		]);
 
@@ -158,7 +155,7 @@ suite('AudioService.transcribePcm', () => {
 
 		await assert.rejects(
 			() => service!.transcribePcm({
-				pcm16Base64: encodePcm16Base64([1, 2]),
+				pcm16Base64: encodePcm16Base64([1, -1]),
 				sampleRate: WHISPER_PCM_SAMPLE_RATE,
 			}),
 			(error: unknown) => error instanceof MlBusyError,

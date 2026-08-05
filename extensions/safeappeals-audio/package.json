@@ -15,6 +15,9 @@
 	"extensionKind": [
 		"workspace"
 	],
+	"extensionDependencies": [
+		"safeappeals.safeappeals-ml"
+	],
 	"activationEvents": [
 		"onStartupFinished"
 	],

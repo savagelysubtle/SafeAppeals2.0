@@ -43,11 +43,10 @@ import {
 	resolveDiarizationPaths,
 } from './diarizationHost';
 import { DiarizationSlotAdapter } from './ml/adapters/diarizationAdapter';
-import { EmbeddingStubAdapter } from './ml/adapters/embeddingAdapter';
 import { FfmpegStubAdapter } from './ml/adapters/ffmpegAdapter';
 import { WhisperSlotAdapter } from './ml/adapters/whisperAdapter';
 import { MlBusyError } from './ml/errors';
-import { MlResourceEngine } from './ml/resourceEngine';
+import { isMlBusyError, resolveMlResourceEngine, type IMlResourceEngine } from './mlEngineBridge';
 import {
 	executeRefinePass,
 	shouldRunAutoRefine,
@@ -64,7 +63,7 @@ export function isRefineEnabledSetting(): boolean {
 }
 
 /**
- * Façade over RecordingStore, FfmpegHost, WhisperHost, MlResourceEngine, and export helpers.
+ * Façade over RecordingStore, FfmpegHost, WhisperHost, shared MlResourceEngine, and export helpers.
  */
 export class AudioService implements vscode.Disposable {
 	private store: RecordingStore | undefined;
@@ -73,7 +72,10 @@ export class AudioService implements vscode.Disposable {
 	private ffmpegHost: FfmpegHost | undefined;
 	private whisperHost: WhisperHost | undefined;
 	private diarizationHost: DiarizationHost | undefined;
-	private mlEngine: MlResourceEngine | undefined;
+	/** Shared engine from safeappeals-ml (or a test-owned double). */
+	private mlEngine: IMlResourceEngine | undefined;
+	/** When true, {@link dispose} / reinitialize may dispose {@link mlEngine} (test doubles only). */
+	private ownsMlEngine = false;
 	private memoryOnly = true;
 	private recorderState: RecorderState = 'idle';
 	private elapsedSeconds = 0;
@@ -323,7 +325,7 @@ export class AudioService implements vscode.Disposable {
 			return updated;
 		} catch (error) {
 			// Busy reject must not sticky-fail a recording that never started Whisper.
-			if (error instanceof MlBusyError) {
+			if (error instanceof MlBusyError || isMlBusyError(error)) {
 				await this.store.updateRecording(id, { status: previousStatus });
 			} else {
 				await this.store.updateRecording(id, { status: 'failed' });
@@ -367,13 +369,15 @@ export class AudioService implements vscode.Disposable {
 
 	/**
 	 * @internal Unit-test seam: swap whisper host + ML engine after {@link initialize}.
+	 * Test engines are owned by this service; the shared safeappeals-ml engine is not disposed.
 	 */
-	async replaceWhisperPipelineForTest(whisperHost: WhisperHost, mlEngine: MlResourceEngine): Promise<void> {
-		if (this.mlEngine && this.mlEngine !== mlEngine) {
+	async replaceWhisperPipelineForTest(whisperHost: WhisperHost, mlEngine: IMlResourceEngine): Promise<void> {
+		if (this.ownsMlEngine && this.mlEngine && this.mlEngine !== mlEngine) {
 			await this.mlEngine.dispose();
 		}
 		this.whisperHost = whisperHost;
 		this.mlEngine = mlEngine;
+		this.ownsMlEngine = true;
 	}
 
 	/**
@@ -779,10 +783,11 @@ export class AudioService implements vscode.Disposable {
 			this.disposables.pop()?.dispose();
 		}
 		this.busyRecordingIds.clear();
-		if (this.mlEngine) {
+		if (this.ownsMlEngine && this.mlEngine) {
 			await this.mlEngine.dispose();
-			this.mlEngine = undefined;
 		}
+		this.mlEngine = undefined;
+		this.ownsMlEngine = false;
 		void this.diarizationHost?.unload();
 		this.diarizationHost = undefined;
 		this.whisperHost = undefined;
@@ -941,10 +946,11 @@ export class AudioService implements vscode.Disposable {
 		this.whisperHost = undefined;
 		void this.diarizationHost?.unload();
 		this.diarizationHost = undefined;
-		if (this.mlEngine) {
+		if (this.ownsMlEngine && this.mlEngine) {
 			await this.mlEngine.dispose();
-			this.mlEngine = undefined;
 		}
+		this.mlEngine = undefined;
+		this.ownsMlEngine = false;
 
 		const folder = vscode.workspace.workspaceFolders?.[0]?.uri;
 		const created = await RecordingStore.create(this.context, folder, this.log);
@@ -988,12 +994,26 @@ export class AudioService implements vscode.Disposable {
 			getPaths: () => resolveDiarizationPaths(globalStorageFsPath, extensionPath),
 			log: this.log,
 		});
-		this.mlEngine = new MlResourceEngine({}, [
-			new WhisperSlotAdapter(this.whisperHost),
-			new DiarizationSlotAdapter(this.diarizationHost),
-			new EmbeddingStubAdapter(),
-			new FfmpegStubAdapter(),
-		]);
+
+		const sharedEngine = await resolveMlResourceEngine(this.log);
+		if (!sharedEngine) {
+			throw new Error(
+				'Safe Appeals Audio requires safeappeals-ml (MlResourceEngine). Ensure the ML extension is installed and activated.',
+			);
+		}
+		this.mlEngine = sharedEngine;
+		this.ownsMlEngine = false;
+		// Unload prior audio adapters so reinitialize can replace them (shared engine persists).
+		for (const kind of ['whisper', 'diarization', 'ffmpeg'] as const) {
+			try {
+				await this.mlEngine.requestUnload(kind);
+			} catch {
+				// Lease held or unload race — registerAdapter will throw if still loaded.
+			}
+		}
+		this.mlEngine.registerAdapter(new WhisperSlotAdapter(this.whisperHost));
+		this.mlEngine.registerAdapter(new DiarizationSlotAdapter(this.diarizationHost));
+		this.mlEngine.registerAdapter(new FfmpegStubAdapter());
 
 		const status = await this.capabilities.refresh();
 		this.onDidChangeCapabilitiesEmitter.fire(status);
