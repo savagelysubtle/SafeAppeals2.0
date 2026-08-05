@@ -7,6 +7,7 @@ import { Codicon } from '../../base/common/codicons.js';
 import { ThemeIcon } from '../../base/common/themables.js';
 import { localize } from '../../nls.js';
 import { ChatEntitlement, IChatSentiment, IQuotaSnapshot } from '../../workbench/services/chat/common/chatEntitlementService.js';
+import { SAFEAPPEALS_CLOUD_VENDOR_ID } from '../../workbench/contrib/chat/common/languageModels.js';
 import { IDefaultAccountService } from '../../platform/defaultAccount/common/defaultAccount.js';
 import { IAuthenticationService } from '../../workbench/services/authentication/common/authentication.js';
 
@@ -18,9 +19,9 @@ export interface IResolvedAccountInfo {
 
 /**
  * Resolves the current account info by trying the default account service
- * first, then falling back to raw GitHub sessions from the authentication
- * service. The fallback covers the window between session creation and
- * {@link IDefaultAccountService} initialization.
+ * first, then falling back to raw GitHub or safeappeals-cloud sessions from
+ * the authentication service. The fallback covers the window between session
+ * creation and {@link IDefaultAccountService} initialization.
  */
 export async function resolveAccountInfo(
 	defaultAccountService: IDefaultAccountService,
@@ -42,6 +43,25 @@ export async function resolveAccountInfo(
 				accountName: sessions[0].account.label,
 				accountProviderId: 'github',
 				accountProviderLabel: 'GitHub',
+			};
+		}
+	} catch {
+		// Provider not available yet
+	}
+
+	try {
+		const sessions = await authenticationService.getSessions(SAFEAPPEALS_CLOUD_VENDOR_ID);
+		if (sessions.length > 0) {
+			let providerLabel = localize('safeAppealsCloudProviderLabel', "SafeAppeals Cloud");
+			try {
+				providerLabel = authenticationService.getProvider(SAFEAPPEALS_CLOUD_VENDOR_ID).label;
+			} catch {
+				// Provider label unavailable yet
+			}
+			return {
+				accountName: sessions[0].account.label,
+				accountProviderId: SAFEAPPEALS_CLOUD_VENDOR_ID,
+				accountProviderLabel: providerLabel,
 			};
 		}
 	} catch {
@@ -105,7 +125,7 @@ export function getAccountTitleBarState(context: IAccountTitleBarStateContext): 
 		};
 	}
 
-	const copilotState = getCopilotPresentation(context.entitlement, context.sentiment, context.quotas);
+	const copilotState = getCopilotPresentation(context.entitlement, context.sentiment, context.quotas, context.accountName);
 	if (copilotState) {
 		return copilotState;
 	}
@@ -135,13 +155,17 @@ export function getAccountTitleBarState(context: IAccountTitleBarStateContext): 
 function getCopilotPresentation(
 	entitlement: ChatEntitlement,
 	sentiment: IChatSentiment,
-	quotas: { readonly chat?: IQuotaSnapshot; readonly completions?: IQuotaSnapshot }
+	quotas: { readonly chat?: IQuotaSnapshot; readonly completions?: IQuotaSnapshot },
+	accountName?: string,
 ): IAccountTitleBarState | undefined {
 	if (sentiment.hidden) {
 		return undefined;
 	}
 
 	if (entitlement === ChatEntitlement.Unknown) {
+		if (accountName) {
+			return undefined;
+		}
 		return {
 			source: 'copilot',
 			kind: 'prominent',

@@ -19,6 +19,7 @@ import { IProductService } from '../../platform/product/common/productService.js
 import { IContextKeyService } from '../../platform/contextkey/common/contextkey.js';
 import { IWorkbenchEnvironmentService } from '../../workbench/services/environment/common/environmentService.js';
 import { IAuthenticationService } from '../../workbench/services/authentication/common/authentication.js';
+import { SAFEAPPEALS_CLOUD_VENDOR_ID } from '../../workbench/contrib/chat/common/languageModels.js';
 import { ICommandService } from '../../platform/commands/common/commands.js';
 import { IWorkbenchLayoutService } from '../../workbench/services/layout/browser/layoutService.js';
 import { IKeybindingService } from '../../platform/keybinding/common/keybinding.js';
@@ -119,35 +120,49 @@ class SessionsSetUpWidget extends Disposable {
 		}
 	}
 
-	private async _checkWebAuth(): Promise<void> {
+	private async _hasCloudSession(): Promise<boolean> {
 		try {
-			const sessions = await this.authenticationService.getSessions('github');
-			if (sessions.length > 0) {
-				this.logService.info('[sessions welcome] GitHub session found on web, skipping welcome');
-				this.storageService.store(WELCOME_COMPLETE_KEY, true, StorageScope.APPLICATION, StorageTarget.MACHINE);
-				this.onCompleted();
-				return;
+			const sessions = await this.authenticationService.getSessions(SAFEAPPEALS_CLOUD_VENDOR_ID);
+			return sessions.length > 0;
+		} catch {
+			return false;
+		}
+	}
+
+	private async _hasAnyAuthSession(): Promise<boolean> {
+		try {
+			const githubSessions = await this.authenticationService.getSessions('github');
+			if (githubSessions.length > 0) {
+				return true;
 			}
 		} catch {
-			// Provider not available yet — show dialog
+			// Provider not available yet
+		}
+		return this._hasCloudSession();
+	}
+
+	private async _checkWebAuth(): Promise<void> {
+		if (await this._hasAnyAuthSession()) {
+			this.logService.info('[sessions welcome] Auth session found on web, skipping welcome');
+			this.storageService.store(WELCOME_COMPLETE_KEY, true, StorageScope.APPLICATION, StorageTarget.MACHINE);
+			this.onCompleted();
+			return;
 		}
 		this._showWelcome(false);
 	}
 
 	private _watchWebAuth(): void {
 		this._register(this.authenticationService.onDidChangeSessions(async e => {
-			if (e.providerId !== 'github' || !e.event.removed?.length) {
+			if (e.providerId !== 'github' && e.providerId !== SAFEAPPEALS_CLOUD_VENDOR_ID) {
 				return;
 			}
-			try {
-				const remaining = await this.authenticationService.getSessions('github');
-				if (remaining.length > 0) {
-					return;
-				}
-			} catch {
-				// Provider became unavailable — treat as signed out
+			if (!e.event.removed?.length) {
+				return;
 			}
-			this.logService.info('[sessions welcome] GitHub session removed on web, re-showing welcome');
+			if (await this._hasAnyAuthSession()) {
+				return;
+			}
+			this.logService.info('[sessions welcome] Auth session removed on web, re-showing welcome');
 			this.storageService.remove(WELCOME_COMPLETE_KEY, StorageScope.APPLICATION);
 			this._showWelcome(false);
 		}));
@@ -158,7 +173,7 @@ class SessionsSetUpWidget extends Disposable {
 		if (this.dialogRef.value) {
 			return;
 		}
-		if (!initialAccount) {
+		if (!initialAccount && !(await this._hasCloudSession())) {
 			this._showWelcome(false);
 			return;
 		}
@@ -170,13 +185,32 @@ class SessionsSetUpWidget extends Disposable {
 	private _watchActiveState(signedIn: boolean): IDisposable {
 		const disposables = new DisposableStore();
 
-		disposables.add(this.defaultAccountService.onDidChangeDefaultAccount(account => {
-			const nowSignedIn = account !== null;
-			if (signedIn && !nowSignedIn) {
-				this.storageService.remove(WELCOME_COMPLETE_KEY, StorageScope.APPLICATION);
-				this._showWelcome(false);
+		const refreshSignedInState = async (): Promise<boolean> => {
+			const defaultAccount = await this.defaultAccountService.getDefaultAccount();
+			return !!defaultAccount || await this._hasCloudSession();
+		};
+
+		disposables.add(this.defaultAccountService.onDidChangeDefaultAccount(() => {
+			void refreshSignedInState().then(nowSignedIn => {
+				if (signedIn && !nowSignedIn) {
+					this.storageService.remove(WELCOME_COMPLETE_KEY, StorageScope.APPLICATION);
+					this._showWelcome(false);
+				}
+				signedIn = nowSignedIn;
+			});
+		}));
+
+		disposables.add(this.authenticationService.onDidChangeSessions(e => {
+			if (e.providerId !== SAFEAPPEALS_CLOUD_VENDOR_ID && e.providerId !== 'github') {
+				return;
 			}
-			signedIn = nowSignedIn;
+			void refreshSignedInState().then(nowSignedIn => {
+				if (signedIn && !nowSignedIn) {
+					this.storageService.remove(WELCOME_COMPLETE_KEY, StorageScope.APPLICATION);
+					this._showWelcome(false);
+				}
+				signedIn = nowSignedIn;
+			});
 		}));
 
 		disposables.add(this.configurationService.onDidChangeConfiguration(e => {
@@ -264,7 +298,7 @@ class SessionsSetUpWidget extends Disposable {
 			overlay.element.classList.add('sessions-loading-dismissed');
 			this.dialogRef.value.add(disposableTimeout(() => overlay.element.remove(), 200));
 
-			if (account) {
+			if (account || await this._hasCloudSession()) {
 				const setupDone = await this.serviceWhenSetupDone();
 				if (this._store.isDisposed) {
 					return;

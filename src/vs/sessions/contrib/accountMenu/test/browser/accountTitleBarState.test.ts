@@ -6,7 +6,10 @@
 import assert from 'assert';
 import { ensureNoDisposablesAreLeakedInTestSuite } from '../../../../../base/test/common/utils.js';
 import { ChatEntitlement } from '../../../../../workbench/services/chat/common/chatEntitlementService.js';
-import { getAccountProfileImageUrl, getAccountTitleBarBadgeKey, getAccountTitleBarState, IAccountTitleBarStateContext } from '../../../../browser/accountTitleBarState.js';
+import { SAFEAPPEALS_CLOUD_VENDOR_ID } from '../../../../../workbench/contrib/chat/common/languageModels.js';
+import { IDefaultAccountService } from '../../../../../platform/defaultAccount/common/defaultAccount.js';
+import { IAuthenticationService } from '../../../../../workbench/services/authentication/common/authentication.js';
+import { getAccountProfileImageUrl, getAccountTitleBarBadgeKey, getAccountTitleBarState, IAccountTitleBarStateContext, resolveAccountInfo } from '../../../../browser/accountTitleBarState.js';
 
 suite('Sessions - Account Title Bar State', () => {
 
@@ -141,6 +144,53 @@ suite('Sessions - Account Title Bar State', () => {
 			source: 'copilot',
 			label: 'Agents Signed Out',
 			kind: 'prominent',
+		});
+	});
+
+	test('does not show Agents Signed Out when accountName is present with Unknown entitlement', () => {
+		const state = getAccountTitleBarState(createState({
+			accountName: 'user@example.com',
+			accountProviderLabel: 'SafeAppeals Cloud',
+			entitlement: ChatEntitlement.Unknown,
+		}));
+
+		assert.deepStrictEqual({
+			source: state.source,
+			label: state.label,
+			kind: state.kind,
+		}, {
+			source: 'account',
+			label: 'user@example.com',
+			kind: 'default',
+		});
+	});
+
+	test('resolveAccountInfo falls back to safeappeals-cloud session', async () => {
+		const defaultAccountService = {
+			getDefaultAccount: async () => null,
+		} as unknown as IDefaultAccountService;
+
+		const authenticationService = {
+			getSessions: async (providerId: string) => {
+				if (providerId === 'github') {
+					return [];
+				}
+				if (providerId === SAFEAPPEALS_CLOUD_VENDOR_ID) {
+					return [{ account: { label: 'user@example.com' }, id: 'session1', scopes: [] }];
+				}
+				return [];
+			},
+			getProvider: (providerId: string) => ({
+				id: providerId,
+				label: 'SafeAppeals Cloud',
+			}),
+		} as unknown as IAuthenticationService;
+
+		const info = await resolveAccountInfo(defaultAccountService, authenticationService);
+		assert.deepStrictEqual(info, {
+			accountName: 'user@example.com',
+			accountProviderId: SAFEAPPEALS_CLOUD_VENDOR_ID,
+			accountProviderLabel: 'SafeAppeals Cloud',
 		});
 	});
 

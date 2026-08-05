@@ -11,7 +11,7 @@ import Severity from '../../../../base/common/severity.js';
 import { Disposable, DisposableStore, MutableDisposable, toDisposable } from '../../../../base/common/lifecycle.js';
 import { localize, localize2 } from '../../../../nls.js';
 import { Action2, MenuRegistry, registerAction2, IMenuService } from '../../../../platform/actions/common/actions.js';
-import { ContextKeyExpr, IContextKeyService } from '../../../../platform/contextkey/common/contextkey.js';
+import { ContextKeyExpr, IContextKeyService, RawContextKey } from '../../../../platform/contextkey/common/contextkey.js';
 import { IDefaultAccountService } from '../../../../platform/defaultAccount/common/defaultAccount.js';
 import { IInstantiationService, ServicesAccessor } from '../../../../platform/instantiation/common/instantiation.js';
 import { IWorkbenchContribution, registerWorkbenchContribution2, WorkbenchPhase } from '../../../../workbench/common/contributions.js';
@@ -37,8 +37,9 @@ import { IsPhoneLayoutContext, SessionsWelcomeVisibleContext } from '../../../co
 import { IsAuxiliaryWindowContext } from '../../../../workbench/common/contextkeys.js';
 import { IAuthenticationAccessService } from '../../../../workbench/services/authentication/browser/authenticationAccessService.js';
 import { IAuthenticationUsageService } from '../../../../workbench/services/authentication/browser/authenticationUsageService.js';
-import { IAuthenticationService } from '../../../../workbench/services/authentication/common/authentication.js';
+import { AuthenticationSession, IAuthenticationService } from '../../../../workbench/services/authentication/common/authentication.js';
 import { IChatDashboardService } from '../../../browser/chatDashboardService.js';
+import { SAFEAPPEALS_CLOUD_VENDOR_ID } from '../../../../workbench/contrib/chat/common/languageModels.js';
 import { InstantiationType, registerSingleton } from '../../../../platform/instantiation/common/extensions.js';
 
 // --- Account Menu Items --- //
@@ -51,6 +52,19 @@ const PERSONALIZE_ACTION_IDS: readonly string[] = [
 ];
 const SIGN_OUT_ACTION_ID = 'workbench.action.agenticSignOut';
 const SIGN_IN_ACTION_ID = 'workbench.action.agenticSignIn';
+
+// SafeAppeals: Accounts menu when-clause — true while a safeappeals-cloud session exists
+const SAFEAPPEALS_CLOUD_SIGNED_IN = new RawContextKey<boolean>('safeappeals.cloud.signedIn', false, true);
+
+const signedInContext = ContextKeyExpr.or(
+	ContextKeyExpr.equals('defaultAccountStatus', 'available'),
+	SAFEAPPEALS_CLOUD_SIGNED_IN,
+);
+
+const signedOutContext = ContextKeyExpr.and(
+	ContextKeyExpr.notEquals('defaultAccountStatus', 'available'),
+	SAFEAPPEALS_CLOUD_SIGNED_IN.negate(),
+);
 
 // Register the shared VS Code update title bar entry into the Agents titlebar layout.
 // Placed as the first (leftmost) item of the leftmost right-cluster container so that, in
@@ -72,14 +86,19 @@ registerAction2(class extends Action2 {
 			icon: Codicon.signIn,
 			menu: {
 				id: AccountMenu,
-				when: ContextKeyExpr.notEquals('defaultAccountStatus', 'available'),
+				when: signedOutContext,
 				group: '1_account',
 				order: 1,
 			}
 		});
 	}
 	async run(accessor: ServicesAccessor): Promise<void> {
+		const authenticationService = accessor.get(IAuthenticationService);
 		const defaultAccountService = accessor.get(IDefaultAccountService);
+		if (authenticationService.isAuthenticationProviderRegistered(SAFEAPPEALS_CLOUD_VENDOR_ID)) {
+			await authenticationService.createSession(SAFEAPPEALS_CLOUD_VENDOR_ID, [], { activateImmediate: true });
+			return;
+		}
 		await defaultAccountService.signIn();
 	}
 });
@@ -93,7 +112,7 @@ registerAction2(class extends Action2 {
 			icon: Codicon.signOut,
 			menu: {
 				id: AccountMenu,
-				when: ContextKeyExpr.equals('defaultAccountStatus', 'available'),
+				when: signedInContext,
 				group: '1_account',
 				order: 1,
 			}
@@ -106,12 +125,40 @@ registerAction2(class extends Action2 {
 		const authenticationUsageService = accessor.get(IAuthenticationUsageService);
 		const authenticationAccessService = accessor.get(IAuthenticationAccessService);
 		const defaultAccount = await defaultAccountService.getDefaultAccount();
-		if (!defaultAccount) {
+
+		if (defaultAccount) {
+			const providerId = defaultAccount.authenticationProvider.id;
+			const accountLabel = defaultAccount.accountName;
+			const { confirmed } = await dialogService.confirm({
+				type: Severity.Info,
+				message: localize('agenticSignOutMessage', "Sign out of the Agents window?"),
+				detail: localize('agenticSignOutDetail', "This will sign out '{0}' from the Agents window.", accountLabel),
+				primaryButton: localize({ key: 'agenticSignOutButton', comment: ['&& denotes a mnemonic'] }, "&&Sign Out")
+			});
+
+			if (!confirmed) {
+				return;
+			}
+
+			const allSessions = await authenticationService.getSessions(providerId);
+			const sessions = allSessions.filter(session => session.account.label === accountLabel);
+			await Promise.all(sessions.map(session => authenticationService.removeSession(providerId, session.id)));
+			authenticationUsageService.removeAccountUsage(providerId, accountLabel);
+			authenticationAccessService.removeAllowedExtensions(providerId, accountLabel);
 			return;
 		}
 
-		const providerId = defaultAccount.authenticationProvider.id;
-		const accountLabel = defaultAccount.accountName;
+		let cloudSessions: ReadonlyArray<AuthenticationSession>;
+		try {
+			cloudSessions = await authenticationService.getSessions(SAFEAPPEALS_CLOUD_VENDOR_ID);
+		} catch {
+			return;
+		}
+		if (cloudSessions.length === 0) {
+			return;
+		}
+
+		const accountLabel = cloudSessions[0].account.label;
 		const { confirmed } = await dialogService.confirm({
 			type: Severity.Info,
 			message: localize('agenticSignOutMessage', "Sign out of the Agents window?"),
@@ -123,11 +170,9 @@ registerAction2(class extends Action2 {
 			return;
 		}
 
-		const allSessions = await authenticationService.getSessions(providerId);
-		const sessions = allSessions.filter(session => session.account.label === accountLabel);
-		await Promise.all(sessions.map(session => authenticationService.removeSession(providerId, session.id)));
-		authenticationUsageService.removeAccountUsage(providerId, accountLabel);
-		authenticationAccessService.removeAllowedExtensions(providerId, accountLabel);
+		await Promise.all(cloudSessions.map(session => authenticationService.removeSession(SAFEAPPEALS_CLOUD_VENDOR_ID, session.id)));
+		authenticationUsageService.removeAccountUsage(SAFEAPPEALS_CLOUD_VENDOR_ID, accountLabel);
+		authenticationAccessService.removeAllowedExtensions(SAFEAPPEALS_CLOUD_VENDOR_ID, accountLabel);
 	}
 });
 
@@ -631,6 +676,50 @@ class AccountWidgetContribution extends Disposable implements IWorkbenchContribu
 }
 
 registerWorkbenchContribution2(AccountWidgetContribution.ID, AccountWidgetContribution, WorkbenchPhase.BlockRestore);
+
+class SafeAppealsCloudSignedInContribution extends Disposable implements IWorkbenchContribution {
+
+	static readonly ID = 'workbench.contrib.sessionsSafeAppealsCloudSignedIn';
+
+	constructor(
+		@IContextKeyService contextKeyService: IContextKeyService,
+		@IAuthenticationService private readonly authenticationService: IAuthenticationService,
+	) {
+		super();
+
+		const signedInKey = SAFEAPPEALS_CLOUD_SIGNED_IN.bindTo(contextKeyService);
+		const refresh = async (): Promise<void> => {
+			try {
+				if (!this.authenticationService.isAuthenticationProviderRegistered(SAFEAPPEALS_CLOUD_VENDOR_ID)) {
+					signedInKey.set(false);
+					return;
+				}
+				const sessions = await this.authenticationService.getSessions(SAFEAPPEALS_CLOUD_VENDOR_ID);
+				signedInKey.set(sessions.length > 0);
+			} catch {
+				signedInKey.set(false);
+			}
+		};
+		this._register(this.authenticationService.onDidChangeSessions(e => {
+			if (e.providerId === SAFEAPPEALS_CLOUD_VENDOR_ID) {
+				void refresh();
+			}
+		}));
+		this._register(this.authenticationService.onDidRegisterAuthenticationProvider(e => {
+			if (e.id === SAFEAPPEALS_CLOUD_VENDOR_ID) {
+				void refresh();
+			}
+		}));
+		this._register(this.authenticationService.onDidUnregisterAuthenticationProvider(e => {
+			if (e.id === SAFEAPPEALS_CLOUD_VENDOR_ID) {
+				signedInKey.set(false);
+			}
+		}));
+		void refresh();
+	}
+}
+
+registerWorkbenchContribution2(SafeAppealsCloudSignedInContribution.ID, SafeAppealsCloudSignedInContribution, WorkbenchPhase.BlockRestore);
 
 // --- Chat Dashboard Service (real implementation for mobile account sheet) --- //
 
