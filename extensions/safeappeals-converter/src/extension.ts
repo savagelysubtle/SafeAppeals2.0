@@ -12,11 +12,20 @@ import { getConversionSpec } from './protocol';
 let converterService: ConverterService | undefined;
 let outputChannel: vscode.OutputChannel | undefined;
 
+/** Activate exports for sibling extensions (e.g. safeappeals-rag digital PDF extract). */
+export interface SafeAppealsConverterApi {
+	getConverterService(): ConverterService | undefined;
+}
+
+export function getConverterService(): ConverterService | undefined {
+	return converterService;
+}
+
 function log(message: string): void {
 	outputChannel?.appendLine(message);
 }
 
-export function activate(context: vscode.ExtensionContext): void {
+export function activate(context: vscode.ExtensionContext): SafeAppealsConverterApi {
 	outputChannel = vscode.window.createOutputChannel('Safe Appeals Converter');
 	converterService = new ConverterService(context.extensionPath, log);
 	context.subscriptions.push(converterService, outputChannel);
@@ -62,6 +71,8 @@ export function activate(context: vscode.ExtensionContext): void {
 			await runMergePdfsCommand(context);
 		}),
 	);
+
+	return { getConverterService };
 }
 
 export function deactivate(): void {

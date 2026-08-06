@@ -13,6 +13,19 @@ A professional time tracking extension for SafeAppeals designed for legal profes
 - **Per-Workspace Storage** - SQLite database following RAG path isolation pattern
 - **Auto-Stop on Exit** - Configurable auto-save when VSCode closes
 - **Live Timer Display** - Status bar shows running timer and today's total
+- **Agent LM Tools** - Chat can read timer state and start/stop via `safeappeals_timer_*` (see below)
+
+## Agent LM Tools
+
+Contributed in `package.json` (`languageModelTools`) and registered from `src/agentTools.ts` with `vscode.lm.registerTool`. Allowed in the agent loop via the `safeappeals_*` prefix (see [Agent LM Tools Pattern](../../agent-tools-pattern.md)).
+
+| Tool | Purpose |
+| ---- | ------- |
+| `safeappeals_timer_getState` | Current running state, elapsed time, matter/rate, description, billable flag |
+| `safeappeals_timer_start` | Start timer (optional `description`, `matterId`, `rateId`, `isBillable`); user confirmation |
+| `safeappeals_timer_stop` | Stop running timer and save a time entry; user confirmation |
+
+There is no LM tool for `updateEntry` or `listMatters` on this surface.
 
 ## Quick Start
 
@@ -90,6 +103,7 @@ extensions/time-tracker/
 ├── tsconfig.json             # TypeScript config
 ├── src/
 │   ├── extension.ts          # Activation + commands
+│   ├── agentTools.ts         # LM tools (getState / start / stop)
 │   ├── timeTrackerService.ts # Core timer logic + 6-min rounding
 │   ├── matterService.ts      # Case/matter management
 │   ├── rateService.ts        # Billing rate configuration
@@ -110,17 +124,15 @@ extensions/time-tracker/
 
 Follows the SafeAppeals per-workspace micro database pattern:
 
-**Development:**
+**Development** (`VSCODE_DEV` → `safe-appeals-dev`; see [storage README](../../storage/README.md)):
 
 ```
-%APPDATA%\code-oss-dev\User\.safe-appeals-navigator\databases\workspaces\{workspaceId}\timetracker.db
+%APPDATA%\safe-appeals-dev\…   (Linux: ~/.config/safe-appeals-dev/…)
 ```
 
-**Production:**
+Time-tracker DB location is owned by `extensions/time-tracker` under extension/workspace storage — confirm in that extension rather than assuming a Void-era `.safe-appeals-navigator/databases/…` tree.
 
-```
-%APPDATA%\SafeAppeals\User\.safe-appeals-navigator\databases\workspaces\{workspaceId}\timetracker.db
-```
+**Production:** Safe Appeals user-data (`product.nameShort` / `safe-appeals-navigator`) — not `%APPDATA%\Void\`.
 
 ## Commands
 

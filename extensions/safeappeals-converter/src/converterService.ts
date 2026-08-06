@@ -9,6 +9,7 @@ import type {
 	BatchConvertResult,
 	ConvertParams,
 	ConvertResult,
+	ExtractPdfPagesResult,
 	MergePdfsParams,
 } from './types';
 import { parseAvailableConversions, unavailableConversionMessage } from './protocol';
@@ -159,6 +160,30 @@ export class ConverterService implements vscode.Disposable {
 		}
 	}
 
+	/**
+	 * Born-digital per-page PDF text extract (sidecar RPC — no docparse lease).
+	 */
+	async extractPdfPages(sourcePath: string): Promise<ExtractPdfPagesResult> {
+		const folders = vscode.workspace.workspaceFolders ?? [];
+		if (folders.length === 0) {
+			return { success: false, error: 'Open a workspace folder before extracting PDF text.' };
+		}
+		if (!this.sidecar.isBinaryAvailable) {
+			return {
+				success: false,
+				error: 'sa-converter binary not found — digital PDF extract unavailable.',
+			};
+		}
+
+		try {
+			const source = await assertPathInWorkspace(sourcePath, folders);
+			const result = await this.sidecar.request('extract_pdf_pages', { source });
+			return mapExtractPdfPagesResult(result);
+		} catch (err) {
+			return { success: false, error: err instanceof Error ? err.message : String(err) };
+		}
+	}
+
 	dispose(): void {
 		this.sidecar.off('progress', this.onSidecarProgress);
 		this._onProgress.dispose();
@@ -198,6 +223,26 @@ function mapBatchConvertResult(result: Record<string, unknown>): BatchConvertRes
 		duration_ms: typeof result.duration_ms === 'number' ? result.duration_ms : undefined,
 		fidelity: typeof result.fidelity === 'string' ? result.fidelity as BatchConvertResult['fidelity'] : undefined,
 		engine: typeof result.engine === 'string' ? result.engine : undefined,
+		error: typeof result.error === 'string' ? result.error : undefined,
+	};
+}
+
+function mapExtractPdfPagesResult(result: Record<string, unknown>): ExtractPdfPagesResult {
+	const rawPages = Array.isArray(result.pages) ? result.pages : [];
+	const pages = rawPages.map(item => {
+		if (typeof item !== 'object' || item === null) {
+			return { page: 0, text: '' };
+		}
+		const entry = item as Record<string, unknown>;
+		return {
+			page: typeof entry.page === 'number' ? entry.page : 0,
+			text: typeof entry.text === 'string' ? entry.text : '',
+		};
+	});
+	return {
+		success: Boolean(result.success),
+		pages,
+		page_count: typeof result.page_count === 'number' ? result.page_count : pages.length,
 		error: typeof result.error === 'string' ? result.error : undefined,
 	};
 }

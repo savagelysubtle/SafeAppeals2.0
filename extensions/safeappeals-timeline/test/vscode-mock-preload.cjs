@@ -94,10 +94,27 @@ const vscodeMock = {
 	},
 	Uri: {
 		file: (fsPath) => ({ scheme: 'file', fsPath, path: fsPath, toString: () => `file://${fsPath}` }),
-		parse: (value) => ({ scheme: 'file', fsPath: value, path: value, toString: () => value }),
+		parse: (value) => {
+			const match = /^([a-zA-Z][a-zA-Z0-9+.-]*):(.*)$/.exec(value);
+			if (!match) {
+				return { scheme: 'file', fsPath: value, path: value, toString: () => value };
+			}
+			const scheme = match[1];
+			let rest = match[2];
+			// Strip authority-style leading slashes: file:///path → /path, vscode-userdata:/path → /path
+			if (rest.startsWith('///')) {
+				rest = rest.slice(2);
+			} else if (rest.startsWith('//')) {
+				const afterAuth = rest.indexOf('/', 2);
+				rest = afterAuth >= 0 ? rest.slice(afterAuth) : rest.slice(1);
+			}
+			const fsPath = rest || '/';
+			return { scheme, fsPath, path: fsPath, toString: () => `${scheme}:${fsPath}` };
+		},
 		joinPath: (base, ...parts) => {
+			const scheme = base.scheme || 'file';
 			const fsPath = [base.fsPath || base.path, ...parts].join('/');
-			return { scheme: 'file', fsPath, path: fsPath, toString: () => `file://${fsPath}` };
+			return { scheme, fsPath, path: fsPath, toString: () => `${scheme}:${fsPath}` };
 		},
 	},
 	ViewColumn: { One: 1 },

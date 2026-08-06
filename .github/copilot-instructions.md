@@ -13,14 +13,16 @@ On this PC, `npm` is **not** a general-purpose command. Use:
 
 The only intended use of `npm` here is **`npm install`** at startup to install dependencies (this repo's install path). Prefer `bun run …` over `npm run …` when invoking scripts; do not assume bare `npm` works for other commands.
 
-## UI inspection: Cursor browser first, Playwright fallback
+## App UI / E2E: attach to Run Dev (CDP), not the web build
 
-When inspecting, verifying, or driving UI (webviews, dashboards, Simple Browser previews, or any in-browser surface):
+SafeAppeals is a **desktop Electron** product. When you need to inspect, automate, or E2E-test the real app:
 
-1. **Prefer Cursor's browser** (`cursor-ide-browser` MCP: navigate, snapshot, click, type, screenshot, CDP). The developer codes against that same Cursor browser, so you share one viewport and see what they see.
-2. **Fall back to `@playwright/cli`** (including the `launch` skill's CDP attach flow) only when Cursor's browser cannot reach the target — e.g. full Electron/Code OSS workbench chrome, Agents window, Monaco chat-input automation, or multi-instance isolated launches.
+1. **Prefer Steve’s live desktop window via Run Dev (CDP)** — VS Code task **“Run Dev (CDP)”** in `.vscode/tasks.json` (`./scripts/code.sh --remote-debugging-port=9222`). Attach Playwright/`@playwright/cli` or CDP tools to `http://127.0.0.1:9222`. Do **not** start **Run Dev (WEB)** / `code-server` / `code-web` for everyday UI or agent E2E work.
+2. If that window is not running, ask Steve to start **Run Dev (CDP)** (or start that task). Prefer attaching to it over spinning up a throwaway `launch.sh` instance.
+3. Use the **launch** skill’s throwaway `launch.sh` profile only when you need an isolated disposable instance (parallel ports, clean slate) and Run Dev (CDP) is unavailable or unsuitable.
+4. **Cursor’s browser** (`cursor-ide-browser`) is for true web surfaces (docs sites, dashboards opened as URLs, Simple Browser). It is **not** a substitute for the Electron workbench — do not treat the web build as the app under test.
 
-Do not open a separate Playwright session by default when the UI is already (or can be) open in Cursor's browser.
+Do not open a separate Playwright session against a web localhost build when the desktop CDP endpoint is available.
 
 ## Project Overview
 

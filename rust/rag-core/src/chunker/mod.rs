@@ -3,7 +3,7 @@
 //! Citation-aware hierarchical chunker (M2).
 //!
 //! Multi-granularity: **child** (~300 tokens) for precise retrieval + **parent**
-//! (≤ embed window − margin, default **480** for BGE-small 512) for context.
+//! (≤ embed window − margin, default **480** for BGE-small 512-token window) for context.
 //! Void used 800-token parents; that blows the BGE window — we bind to the embedder.
 
 mod hierarchical;

@@ -57,6 +57,12 @@ export type OpResult = {
 	count?: number | null;
 };
 
+export type EnsureEmbedderResult = {
+	ok: boolean;
+	error?: string | null;
+	loaded: boolean;
+};
+
 export type EmbedBatchResult = {
 	ok: boolean;
 	error?: string | null;
@@ -130,11 +136,15 @@ export type RagCoreNative = {
 	openWorkspace(rootDir: string, dekBytes: Buffer | Uint8Array): OpResult;
 	closeWorkspace(): OpResult;
 	stats(): RagStats;
+	getDocument(docId: string): IndexDocumentInput | null | undefined;
 	chunkDocument(input: ChunkDocumentInput): ChunkDocumentOutput[];
 	embedBatch(texts: string[]): EmbedBatchResult;
 	indexChunks(doc: IndexDocumentInput, chunks: IndexChunkInput[]): OpResult;
 	removeDoc(docId: string): OpResult;
 	search(query: string, opts: SearchOptions): SearchResult;
+	ensureEmbedderLoaded(): EnsureEmbedderResult;
+	clearEmbedder(): OpResult;
+	clearReranker(): OpResult;
 };
 
 export type LoadResult =

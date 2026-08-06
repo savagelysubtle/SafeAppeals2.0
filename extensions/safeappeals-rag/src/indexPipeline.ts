@@ -19,19 +19,23 @@ import {
 	type RagIndexScope,
 } from './types';
 
-const INDEXABLE_EXTENSIONS = new Set(['txt', 'text', 'md', 'markdown']);
+const INDEXABLE_EXTENSIONS = new Set(['txt', 'text', 'md', 'markdown', 'pdf']);
 
 export interface IndexPipelineDeps {
 	readonly ingest: IngestRouter;
-	readonly host: Pick<RagCoreHost, 'assertIndexingAllowed' | 'chunkDocument' | 'indexChunks'>;
+	readonly host: Pick<RagCoreHost, 'assertIndexingAllowed' | 'chunkDocument' | 'indexChunks' | 'getDocument'>;
 	readonly getWorkspaceRoots: () => readonly string[];
 	readonly readFile?: (fsPath: string) => Promise<Uint8Array>;
 	/**
 	 * Wrap `indexChunks` in MlResourceEngine `withLease('embedding')`.
-	 * When omitted, index runs without a lease (unit tests).
+	 * Required in production; unit tests may inject a passthrough mock.
 	 */
 	readonly withEmbeddingLease?: <T>(fn: () => Promise<T>) => Promise<T>;
 	readonly log?: (message: string) => void;
+	/** Fired when in-flight index count transitions (status-bar spinner). */
+	readonly onIndexingChanged?: (indexing: boolean, inFlight: number) => void;
+	/** Fired after each index attempt completes (batch idle / counters). */
+	readonly onIndexResult?: (result: IndexPipelineResult) => void;
 }
 
 export interface IndexFileRequest {
@@ -99,20 +103,29 @@ export function scopeFromSourcePath(fsPath: string, workspaceRoots: readonly str
 	return 'case_index';
 }
 
-export function isIndexableTextPath(fsPath: string): boolean {
+/** True when the file extension is supported by the index pipeline (txt/md/pdf). */
+export function isIndexableSourcePath(fsPath: string): boolean {
 	return INDEXABLE_EXTENSIONS.has(extensionOf(fsPath));
 }
 
+/** @deprecated Use {@link isIndexableSourcePath}. */
+export function isIndexableTextPath(fsPath: string): boolean {
+	return isIndexableSourcePath(fsPath);
+}
+
 /**
- * PathGuard → ingest → `chunkDocument` → `indexChunks` (txt/md first).
+ * PathGuard → ingest → `chunkDocument` → `indexChunks` (txt/md/pdf).
  */
 export class IndexPipeline {
 	private readonly ingest: IngestRouter;
 	private readonly host: IndexPipelineDeps['host'];
 	private readonly getWorkspaceRoots: () => readonly string[];
 	private readonly readFile: (fsPath: string) => Promise<Uint8Array>;
-	private readonly withEmbeddingLease: <T>(fn: () => Promise<T>) => Promise<T>;
+	private readonly withEmbeddingLease?: <T>(fn: () => Promise<T>) => Promise<T>;
 	private readonly log?: (message: string) => void;
+	private readonly onIndexingChanged?: (indexing: boolean, inFlight: number) => void;
+	private readonly onIndexResult?: (result: IndexPipelineResult) => void;
+	private inFlight = 0;
 
 	constructor(deps: IndexPipelineDeps) {
 		this.ingest = deps.ingest;
@@ -122,11 +135,39 @@ export class IndexPipeline {
 			const buf = await fs.readFile(fsPath);
 			return new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength);
 		});
-		this.withEmbeddingLease = deps.withEmbeddingLease ?? (async fn => fn());
+		this.withEmbeddingLease = deps.withEmbeddingLease;
 		this.log = deps.log;
+		this.onIndexingChanged = deps.onIndexingChanged;
+		this.onIndexResult = deps.onIndexResult;
+	}
+
+	/** True while at least one `indexFile` / `indexPath` call is in flight. */
+	isIndexing(): boolean {
+		return this.inFlight > 0;
+	}
+
+	/** Current in-flight index operations (status bar / tests). */
+	getInFlightCount(): number {
+		return this.inFlight;
 	}
 
 	async indexFile(request: IndexFileRequest): Promise<IndexPipelineResult> {
+		const result = await this.indexFileInner(request);
+		this.onIndexResult?.(result);
+		return result;
+	}
+
+	private beginIndexing(): void {
+		this.inFlight += 1;
+		this.onIndexingChanged?.(true, this.inFlight);
+	}
+
+	private endIndexing(): void {
+		this.inFlight = Math.max(0, this.inFlight - 1);
+		this.onIndexingChanged?.(this.inFlight > 0, this.inFlight);
+	}
+
+	private async indexFileInner(request: IndexFileRequest): Promise<IndexPipelineResult> {
 		const gate = this.host.assertIndexingAllowed();
 		if (!gate.ok) {
 			return {
@@ -151,13 +192,13 @@ export class IndexPipeline {
 			};
 		}
 
-		if (!isIndexableTextPath(fsPath) && request.bytes === undefined) {
-			// Still allow explicit bytes for tests; disk path must be txt/md for auto-index.
+		if (!isIndexableSourcePath(fsPath) && request.bytes === undefined) {
+			// Still allow explicit bytes for tests; disk path must be indexable for auto-index.
 			const ext = extensionOf(fsPath);
 			if (!INDEXABLE_EXTENSIONS.has(ext)) {
 				return {
 					kind: 'skipped',
-					reason: `Extension .${ext || '(none)'} is not in the M6 txt/md index set`,
+					reason: `Extension .${ext || '(none)'} is not in the indexable source set (txt, md, pdf)`,
 				};
 			}
 		}
@@ -177,6 +218,39 @@ export class IndexPipeline {
 			}
 		}
 
+		const checksum = checksumOf(bytes);
+		const docId = docIdForSourceUri(request.sourceUri);
+		const existing = this.host.getDocument(docId);
+		if (existing?.checksum === checksum) {
+			return {
+				kind: 'skipped',
+				reason: 'Document already indexed (unchanged)',
+			};
+		}
+
+		this.beginIndexing();
+		try {
+			return await this.indexFileIngest({
+				request,
+				fsPath,
+				bytes,
+				checksum,
+				docId,
+			});
+		} finally {
+			this.endIndexing();
+		}
+	}
+
+	private async indexFileIngest(input: {
+		readonly request: IndexFileRequest;
+		readonly fsPath: string;
+		readonly bytes: Uint8Array;
+		readonly checksum: string;
+		readonly docId: string;
+	}): Promise<IndexPipelineResult> {
+		const { request, fsPath, bytes, checksum, docId } = input;
+
 		const ingestResult = await this.ingest.ingest({
 			sourceUri: request.sourceUri,
 			bytes,
@@ -190,7 +264,6 @@ export class IndexPipeline {
 			};
 		}
 
-		const docId = docIdForSourceUri(request.sourceUri);
 		const chunks = this.host.chunkDocument({
 			docId,
 			text: ingestResult.markdown,
@@ -206,7 +279,7 @@ export class IndexPipeline {
 			filename,
 			filetype,
 			filesize: bytes.byteLength,
-			checksum: checksumOf(bytes),
+			checksum,
 			scope: request.scope,
 			isCoreReference: request.scope === 'core_reference',
 			createdAt: now,
@@ -231,13 +304,30 @@ export class IndexPipeline {
 			charEnd: chunk.charEnd,
 		}));
 
+		if (!this.withEmbeddingLease) {
+			const reason = 'MlResourceEngine embedding lease unavailable.';
+			return {
+				kind: 'hard-disable',
+				code: 'models-missing',
+				message: hardDisableMessage('models-missing', [reason]),
+				reasons: [reason],
+			};
+		}
+
 		const indexed = await this.withEmbeddingLease(() =>
 			Promise.resolve(this.host.indexChunks(doc, indexChunks)),
 		);
 		if (!indexed.ok) {
 			const reason = indexed.error ?? 'indexChunks failed';
 			const code: HardDisableCode =
-				/model/i.test(reason) ? 'models-missing' : 'extract-failed';
+				/LockBusy/i.test(reason)
+					? 'index-lock-busy'
+					: /model/i.test(reason)
+						? 'models-missing'
+						: 'extract-failed';
+			this.log?.(
+				`Index failed for ${filename}: ${reason}`,
+			);
 			return {
 				kind: 'hard-disable',
 				code,
@@ -246,9 +336,7 @@ export class IndexPipeline {
 			};
 		}
 
-		this.log?.(
-			`Indexed ${filename} → ${chunks.length} chunks (scope=${request.scope}, docId=${docId})`,
-		);
+		// Per-file success is intentionally silent (status bar + batch summaries only).
 		return {
 			kind: 'ok',
 			docId,

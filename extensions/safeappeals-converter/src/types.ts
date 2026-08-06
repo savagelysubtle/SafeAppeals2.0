@@ -103,6 +103,13 @@ export interface BatchConvertResult {
 	error?: string;
 }
 
+export interface ExtractPdfPagesResult {
+	success: boolean;
+	pages?: Array<{ page: number; text: string }>;
+	page_count?: number;
+	error?: string;
+}
+
 /** Webview ↔ extension message types. */
 export type WebviewToHostMessage =
 	| { type: 'ready' }

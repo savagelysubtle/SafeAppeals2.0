@@ -247,7 +247,8 @@ const commonResourcePatterns = [
 	'vs/workbench/browser/media/code-icon.svg',
 	'vs/workbench/browser/parts/editor/media/letterpress*.svg',
 	'vs/sessions/contrib/chat/browser/media/*.svg',
-	'vs/sessions/contrib/welcome/browser/media/themePreviews/*.svg'
+	'vs/sessions/contrib/welcome/browser/media/themePreviews/*.svg',
+	'vs/platform/theme/browser/media/safeappeals-shield-outline.svg'
 ];
 
 // Resources for desktop target

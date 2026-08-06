@@ -20,6 +20,7 @@ import { FileKind } from '../../../../../platform/files/common/files.js';
 import { IHoverService } from '../../../../../platform/hover/browser/hover.js';
 import { ILabelService } from '../../../../../platform/label/common/label.js';
 import { IOpenerService } from '../../../../../platform/opener/common/opener.js';
+import { safeAppealsShieldOutlineIcon } from '../../../../../platform/theme/common/safeAppealsIcons.js';
 import { IChatDebugCustomizationLogEntry, IChatDebugEventCustomizationSummaryContent, IChatDebugEventFileListContent } from '../../common/chatDebugService.js';
 import { InlineAnchorWidget } from '../widget/chatContentParts/chatInlineAnchorWidget.js';
 import { setupCollapsibleToggle } from './chatDebugCollapsible.js';
@@ -437,7 +438,7 @@ export function renderCustomizationSummaryContent(content: IChatDebugEventCustom
 	const sections: { title: string; icon: ThemeIcon; entries: readonly IChatDebugCustomizationLogEntry[] }[] = [
 		{ title: getCategorySectionTitle('applying', instructionEntries.length), icon: Codicon.book, entries: instructionEntries },
 		{ title: getCategorySectionTitle('skill', skillEntries.length), icon: Codicon.lightbulb, entries: skillEntries },
-		{ title: getCategorySectionTitle('custom-agent', agentEntries.length), icon: Codicon.agent, entries: agentEntries },
+		{ title: getCategorySectionTitle('custom-agent', agentEntries.length), icon: safeAppealsShieldOutlineIcon, entries: agentEntries },
 		{ title: getCategorySectionTitle('hook', hookEntries.length), icon: Codicon.zap, entries: hookEntries },
 		{ title: getCategorySectionTitle('skipped', skippedEntries.length), icon: Codicon.close, entries: skippedEntries },
 	];

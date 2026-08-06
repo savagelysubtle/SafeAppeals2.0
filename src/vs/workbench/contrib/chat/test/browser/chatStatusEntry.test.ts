@@ -10,6 +10,7 @@ import { ensureNoDisposablesAreLeakedInTestSuite } from '../../../../../base/tes
 import { IInlineCompletionsService } from '../../../../../editor/browser/services/inlineCompletionsService.js';
 import { IMarkdownRendererService } from '../../../../../platform/markdown/browser/markdownRenderer.js';
 import { IStorageService, StorageScope, StorageTarget } from '../../../../../platform/storage/common/storage.js';
+import { safeAppealsShieldOutlineIcon } from '../../../../../platform/theme/common/safeAppealsIcons.js';
 import { ChatEntitlement, IChatEntitlementService, IChatSentiment } from '../../../../services/chat/common/chatEntitlementService.js';
 import { IStatusbarEntry, IStatusbarEntryAccessor, IStatusbarService } from '../../../../services/statusbar/browser/statusbar.js';
 import { workbenchInstantiationService } from '../../../../test/browser/workbenchTestServices.js';
@@ -24,6 +25,7 @@ const pooledDepleted = { percentRemaining: 0, unlimited: true, hasQuota: false }
 const pooledAvailable = { percentRemaining: 100, unlimited: true, hasQuota: true } as const;
 
 const RESUME_STATE_KEY = 'chat.quotaResumeState';
+const shieldIcon = `$(${safeAppealsShieldOutlineIcon.id})`;
 
 suite('ChatStatusBarEntry - computeQuotaResumeState', () => {
 
@@ -158,10 +160,17 @@ suite('ChatStatusBarEntry', () => {
 		return new Promise<void>(resolve => setTimeout(resolve, 0));
 	}
 
+	test('renders idle entry with SafeAppeals branding', () => {
+		const { statusbar } = createEntry({ entitlement: ChatEntitlement.Free, quotas: { premiumChat: available } });
+
+		assert.strictEqual(statusbar.current?.text, shieldIcon);
+		assert.strictEqual(statusbar.current?.name, 'SafeAppeals Status');
+	});
+
 	test('renders the blocked quota state and persists it', () => {
 		const { statusbar, storageService } = createEntry({ entitlement: ChatEntitlement.Free, quotas: { premiumChat: exhausted } });
 
-		assert.strictEqual(statusbar.current?.text, '$(copilot-warning) Quota reached');
+		assert.strictEqual(statusbar.current?.text, '$(warning) Quota reached');
 		assert.strictEqual(persistedState(storageService), 'blocked');
 	});
 
@@ -172,7 +181,7 @@ suite('ChatStatusBarEntry', () => {
 		svc.quotas = { premiumChat: available };
 		svc.fireQuotaExceeded();
 
-		assert.strictEqual(statusbar.current?.text, '$(copilot) Copilot Resumed');
+		assert.strictEqual(statusbar.current?.text, `${shieldIcon} SafeAppeals Resumed`);
 		assert.strictEqual(persistedState(storageService), 'resumed');
 	});
 
@@ -181,7 +190,7 @@ suite('ChatStatusBarEntry', () => {
 
 		await flushTimers();
 
-		assert.strictEqual(statusbar.current?.text, '$(copilot) Copilot Resumed');
+		assert.strictEqual(statusbar.current?.text, `${shieldIcon} SafeAppeals Resumed`);
 		assert.strictEqual(persistedState(storageService), 'resumed');
 	});
 
@@ -190,14 +199,14 @@ suite('ChatStatusBarEntry', () => {
 
 		await flushTimers();
 
-		assert.notStrictEqual(statusbar.current?.text, '$(copilot) Copilot Resumed');
+		assert.notStrictEqual(statusbar.current?.text, `${shieldIcon} SafeAppeals Resumed`);
 		assert.strictEqual(persistedState(storageService), undefined);
 	});
 
 	test('clears resumed when the dashboard is opened', async () => {
 		const { statusbar, storageService } = createEntry({ entitlement: ChatEntitlement.Free, quotas: { premiumChat: available }, persisted: 'blocked' });
 		await flushTimers();
-		assert.strictEqual(statusbar.current?.text, '$(copilot) Copilot Resumed');
+		assert.strictEqual(statusbar.current?.text, `${shieldIcon} SafeAppeals Resumed`);
 
 		// Opening the dashboard happens through the status entry tooltip element factory.
 		const tooltip = statusbar.current?.tooltip as { element: (token: CancellationToken) => HTMLElement };
@@ -206,18 +215,18 @@ suite('ChatStatusBarEntry', () => {
 		await flushTimers();
 		cts.dispose(true);
 
-		assert.strictEqual(statusbar.current?.text, '$(copilot)');
+		assert.strictEqual(statusbar.current?.text, shieldIcon);
 		assert.strictEqual(persistedState(storageService), undefined);
 	});
 
 	test('resumed is overridden when the user becomes blocked again', () => {
 		const { svc, statusbar, storageService } = createEntry({ entitlement: ChatEntitlement.Free, quotas: { premiumChat: available }, persisted: 'resumed' });
-		assert.strictEqual(statusbar.current?.text, '$(copilot) Copilot Resumed');
+		assert.strictEqual(statusbar.current?.text, `${shieldIcon} SafeAppeals Resumed`);
 
 		svc.quotas = { premiumChat: exhausted };
 		svc.fireQuotaExceeded();
 
-		assert.strictEqual(statusbar.current?.text, '$(copilot-warning) Quota reached');
+		assert.strictEqual(statusbar.current?.text, '$(warning) Quota reached');
 		assert.strictEqual(persistedState(storageService), 'blocked');
 	});
 });

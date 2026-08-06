@@ -1,5 +1,11 @@
 # Feature-Specific Prompts (`prompts.ts`)
 
+> **Historical Void dump (superseded).** Current organize flow is the
+> `organize-files` skill (`extensions/safeappeals-timeline/skills/organize-files`):
+> source `./to_sort`, snake_case folders at workspace root, logs under
+> `.safeAppeals/`. Do not treat `Case_Files/` / PascalCase / `.fileorg.json` as
+> the shipping contract.
+
 **Location**: `src/vs/workbench/contrib/void/common/prompt/prompts.ts`  
 **Approximate size**: ~1,600 lines
 
@@ -370,10 +376,10 @@ The Case Organizer agent is instructed to:
 ### Safety Guardrails (critical)
 
 - ALWAYS run a dry_run plan first (JSON preview before executing)
-- In full_auto: ALWAYS create backups in `tosort/_originals/` before any moves
+- In full_auto: ALWAYS create backups in `to_sort/_originals/` before any moves
 - On filename conflicts: auto-rename with numeric suffix (`_01`, `_02`, etc.)
-- Log ALL operations to `organization_log.json`
-- Produce `undo_plan.json` with reverse operations
+- Log ALL operations to `.safeAppeals/organization_log.json`
+- Produce `.safeAppeals/undo_plan.json` with reverse operations
 - NEVER delete original files unless explicitly requested
 
 ### Standard Workflow (5 Steps)
@@ -381,7 +387,7 @@ The Case Organizer agent is instructed to:
 **Step 1: Mode Selection** — Ask user to choose a mode
 
 **Step 2: Analysis** (for full_auto and interactive)
-1. Check if `./tosort` exists (create if missing)
+1. Check if `./to_sort` exists (create if missing)
 2. Read directory tree with `get_dir_tree`
 3. Categorize files by filename patterns
 4. Sample 1KB of uncertain files (text only)
@@ -392,9 +398,9 @@ The Case Organizer agent is instructed to:
 {
   "mode": "full_auto",
   "operations": [{
-    "source": "./tosort/2024-01-15_medical_exam.pdf",
-    "destination": "./Case_Files/Medical_Reports/2024-01-15_Medical_Exam.pdf",
-    "category": "Medical_Reports",
+    "source": "./to_sort/2024-01-15_medical_exam.pdf",
+    "destination": "./medical_reports/2024-01-15_medical_exam.pdf",
+    "category": "medical_reports",
     "confidence": "high",
     "reason": "Filename contains 'medical' and 'exam'"
   }],
@@ -412,7 +418,7 @@ The Case Organizer agent is instructed to:
 - Create all destination folders
 - In full_auto: copy all files to `_originals/` first
 - Move files one by one, logging success/failure
-- Write `organization_log.json` and `undo_plan.json`
+- Write `.safeAppeals/organization_log.json` and `.safeAppeals/undo_plan.json`
 
 **Step 5: Summary Report**
 ```json
@@ -425,33 +431,33 @@ The Case Organizer agent is instructed to:
     "backups_created": 25,
     "errors": []
   },
-  "logs": "organization_log.json",
-  "undo_plan": "undo_plan.json"
+  "logs": ".safeAppeals/organization_log.json",
+  "undo_plan": ".safeAppeals/undo_plan.json"
 }
 ```
 
 ### Target Folder Structure
 
 ```
-Case_Files/
-├── Medical_Reports/
-├── Correspondence/
-├── Decisions_and_Orders/
-├── Evidence/
-├── Personal_Notes/
-└── Uncategorized/
+medical_reports/
+correspondence/
+decisions_and_orders/
+evidence/
+personal_notes/
+to_sort/
+core_references/
 ```
 
 ### Categorization Heuristics (filename pattern matching)
 
 | Category | Filename Keywords |
 |---|---|
-| Medical_Reports | medical, doctor, physician, exam, assessment, treatment, diagnosis, mri, xray, report |
-| Correspondence | letter, email, correspondence, notice, communication |
-| Decisions_and_Orders | decision, order, ruling, judgment, determination, award |
-| Evidence | evidence, witness, statement, photo, image, document |
-| Personal_Notes | note, journal, diary, personal, draft |
-| Uncategorized | anything that doesn't fit above |
+| medical_reports | medical, doctor, physician, exam, assessment, treatment, diagnosis, mri, xray, report |
+| correspondence | letter, email, correspondence, notice, communication |
+| decisions_and_orders | decision, order, ruling, judgment, determination, award |
+| evidence | evidence, witness, statement, photo, image, document |
+| personal_notes | note, journal, diary, personal, draft |
+| (leave in `to_sort`) | anything that doesn't fit above — do not invent `Uncategorized` |
 
 ### OS-Specific Commands (PowerShell)
 
@@ -477,7 +483,7 @@ Get-ChildItem -Path "<path>" | Format-Table Name, Length
 
 The default first message sent automatically when the Case Organizer is initialized:
 ```
-Let's organize my case files. First, tell me what files you found in ./tosort
+Let's organize my case files. First, tell me what files you found in ./to_sort
 and then ask me which mode I'd like to use.
 ```
 

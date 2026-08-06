@@ -29,9 +29,19 @@ export interface HwSnapshot {
 	readonly probedAt: number;
 }
 
+/** One file in a multi-file HuggingFace-style model pack. */
+export interface ModelArtifactFilePin {
+	readonly relativePath: string;
+	readonly downloadUrl: string;
+	readonly sha256: string;
+}
+
 /**
  * Declarative model install / eligibility thresholds + artifact pin fields.
  * Downloads require consent via {@link ModelArtifactStore.downloadWithConsent}.
+ *
+ * When {@link ModelSpec.files} is set, top-level `downloadUrl` / `artifactFileName` are
+ * unused for download; top-level `sha256` is the pack digest over all pinned files.
  */
 export interface ModelSpec {
 	readonly id: string;
@@ -51,6 +61,8 @@ export interface ModelSpec {
 	readonly downloadUrl?: string;
 	/** File name written under the version directory. */
 	readonly artifactFileName?: string;
+	/** Multi-file pack pins (HF-style dirs with onnx/, tokenizer.json, etc.). */
+	readonly files?: readonly ModelArtifactFilePin[];
 	/** Soft page cap for OCR-style models (e.g. Unlimited-OCR ≈ 40). */
 	readonly pageSoftCap?: number;
 }

@@ -1114,6 +1114,9 @@ export class AICustomizationListWidget extends Disposable {
 		}
 
 		// Non-hook sections: build the full action list
+		const userScopeLabel = promptType === PromptsType.agent
+			? localize('createScopeGlobal', "Global")
+			: localize('createScopeUser', "User");
 
 		if (!override?.rootFile) {
 			// Determine the primary action (first in list)
@@ -1133,9 +1136,9 @@ export class AICustomizationListWidget extends Disposable {
 				});
 				addedTargets.add('workspace');
 			} else {
-				// No workspace: user is primary
+				// No workspace: user/global is primary
 				actions.push({
-					label: `$(${Codicon.add.id}) New ${createTypeLabel} (User)`,
+					label: `$(${Codicon.add.id}) New ${createTypeLabel} (${userScopeLabel})`,
 					enabled: true,
 					run: () => { this._onDidRequestCreateManual.fire({ type: promptType, target: 'user' }); },
 				});
@@ -1154,7 +1157,7 @@ export class AICustomizationListWidget extends Disposable {
 
 		if (!addedTargets.has('user')) {
 			actions.push({
-				label: `$(${Codicon.account.id}) New ${createTypeLabel} (User)`,
+				label: `$(${Codicon.account.id}) New ${createTypeLabel} (${userScopeLabel})`,
 				enabled: true,
 				run: () => { this._onDidRequestCreateManual.fire({ type: promptType, target: 'user' }); },
 			});
@@ -1358,20 +1361,31 @@ export class AICustomizationListWidget extends Disposable {
 		// Instructions use semantic categories (matching core path) so
 		// that provider-supplied groupKeys like 'context-instructions'
 		// are routed to the correct collapsible header.
+		const isAgentsSection = this.currentSection === AICustomizationManagementSection.Agents;
+		const workspaceGroupLabel = localize('workspaceGroup', "Workspace");
+		const workspaceGroupDescription = isAgentsSection
+			? localize('agentsWorkspaceGroupDescription', "SafeAppeals agents in `.safeAppeals/agents`, shared with your team via version control. Compatibility folders such as `.github/agents` may also appear for discovery.")
+			: localize('workspaceGroupDescription', "Customizations stored as files in your project folder and shared with your team via version control.");
+		const userGroupLabel = isAgentsSection
+			? localize('globalGroup', "Global")
+			: localize('userGroup', "User");
+		const userGroupDescription = isAgentsSection
+			? localize('agentsGlobalGroupDescription', "SafeAppeals agents in `~/.safeAppeals/agents`. Private to you and available across all projects. Compatibility agent folders may also appear here.")
+			: localize('userGroupDescription', "Customizations stored locally on your machine in a central location. Private to you and available across all projects.");
 		const groups: { groupKey: string; label: string; icon: ThemeIcon; description: string; items: IAICustomizationListItem[] }[] =
 			this.currentSection === AICustomizationManagementSection.Instructions
 				? [
 					{ groupKey: 'agent-instructions', label: localize('agentInstructionsGroup', "Agent Instructions"), icon: instructionsIcon, description: localize('agentInstructionsGroupDescription', "Instruction files automatically loaded for all agent interactions (e.g. AGENTS.md, CLAUDE.md, copilot-instructions.md)."), items: [] },
 					{ groupKey: 'context-instructions', label: localize('contextInstructionsGroup', "Included Based on Context"), icon: instructionsIcon, description: localize('contextInstructionsGroupDescription', "Instructions automatically loaded when matching files are part of the context."), items: [] },
 					{ groupKey: 'on-demand-instructions', label: localize('onDemandInstructionsGroup', "Loaded on Demand"), icon: instructionsIcon, description: localize('onDemandInstructionsGroupDescription', "Instructions loaded only when explicitly referenced."), items: [] },
-					{ groupKey: PromptsStorage.local, label: localize('workspaceGroup', "Workspace"), icon: workspaceIcon, description: localize('workspaceGroupDescription', "Customizations stored as files in your project folder and shared with your team via version control."), items: [] },
-					{ groupKey: PromptsStorage.user, label: localize('userGroup', "User"), icon: userIcon, description: localize('userGroupDescription', "Customizations stored locally on your machine in a central location. Private to you and available across all projects."), items: [] },
+					{ groupKey: PromptsStorage.local, label: workspaceGroupLabel, icon: workspaceIcon, description: workspaceGroupDescription, items: [] },
+					{ groupKey: PromptsStorage.user, label: userGroupLabel, icon: userIcon, description: userGroupDescription, items: [] },
 					{ groupKey: PromptsStorage.plugin, label: localize('pluginGroup', "Plugins"), icon: pluginIcon, description: localize('pluginGroupDescription', "Read-only customizations provided by installed plugins."), items: [] },
 					{ groupKey: PromptsStorage.builtIn, label: localize('builtinGroup', "Built-in"), icon: builtinIcon, description: localize('builtinGroupDescription', "Built-in customizations shipped with the application."), items: [] },
 				]
 				: [
-					{ groupKey: PromptsStorage.local, label: localize('workspaceGroup', "Workspace"), icon: workspaceIcon, description: localize('workspaceGroupDescription', "Customizations stored as files in your project folder and shared with your team via version control."), items: [] },
-					{ groupKey: PromptsStorage.user, label: localize('userGroup', "User"), icon: userIcon, description: localize('userGroupDescription', "Customizations stored locally on your machine in a central location. Private to you and available across all projects."), items: [] },
+					{ groupKey: PromptsStorage.local, label: workspaceGroupLabel, icon: workspaceIcon, description: workspaceGroupDescription, items: [] },
+					{ groupKey: PromptsStorage.user, label: userGroupLabel, icon: userIcon, description: userGroupDescription, items: [] },
 					{ groupKey: PromptsStorage.plugin, label: localize('pluginGroup', "Plugins"), icon: pluginIcon, description: localize('pluginGroupDescription', "Read-only customizations provided by installed plugins."), items: [] },
 					{ groupKey: PromptsStorage.extension, label: localize('extensionGroup', "Extensions"), icon: extensionIcon, description: localize('extensionGroupDescription', "Read-only customizations provided by installed extensions."), items: [] },
 					{ groupKey: PromptsStorage.builtIn, label: localize('builtinGroup', "Built-in"), icon: builtinIcon, description: localize('builtinGroupDescription', "Built-in customizations shipped with the application."), items: [] },
@@ -1459,7 +1473,7 @@ export class AICustomizationListWidget extends Disposable {
 			case AICustomizationManagementSection.Agents:
 				return {
 					title: localize('noAgents', "No agents yet"),
-					description: localize('createFirstAgent', "Create your first custom agent to get started"),
+					description: localize('createFirstAgent', "Create your first SafeAppeals agent in `.safeAppeals/agents` (workspace) or `~/.safeAppeals/agents` (global)"),
 				};
 			case AICustomizationManagementSection.Skills:
 				return {

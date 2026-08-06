@@ -20,6 +20,7 @@ import {
 	type SearchResultItem,
 	type LoadResult,
 	type RagCoreNative,
+	type EnsureEmbedderResult,
 } from './nativeLoader';
 
 export {
@@ -40,6 +41,7 @@ export {
 	type SearchResultItem,
 	type LoadResult,
 	type RagCoreNative,
+	type EnsureEmbedderResult,
 };
 
 /**
@@ -78,11 +80,15 @@ export function capabilities(): Capabilities {
 }
 
 /** Pass-through `OpResult` from native (check `ok`; do not assume throw). */
-export function openWorkspace(rootDir: string, dekBytes: Buffer | Uint8Array): OpResult {
+export function openWorkspace(
+	rootDir: string,
+	dekBytes: Buffer | Uint8Array,
+	preferSecondary?: boolean,
+): OpResult {
 	if (!loaded.ok) {
 		return { ok: false, error: loaded.error };
 	}
-	return loaded.native.openWorkspace(rootDir, dekBytes);
+	return loaded.native.openWorkspace(rootDir, dekBytes, preferSecondary);
 }
 
 export function closeWorkspace(): OpResult {
@@ -94,6 +100,13 @@ export function closeWorkspace(): OpResult {
 
 export function stats(): RagStats {
 	return requireNative().stats();
+}
+
+export function getDocument(docId: string): IndexDocumentInput | null | undefined {
+	if (!loaded.ok) {
+		return undefined;
+	}
+	return loaded.native.getDocument(docId);
 }
 
 export function chunkDocument(input: ChunkDocumentInput): ChunkDocumentOutput[] {
@@ -125,4 +138,27 @@ export function search(query: string, opts: SearchOptions): SearchResult {
 		return { ok: false, error: loaded.error, results: [] };
 	}
 	return loaded.native.search(query, opts);
+}
+
+/** Load BGE when MlResourceEngine holds an embedding lease. */
+export function ensureEmbedderLoaded(): EnsureEmbedderResult {
+	if (!loaded.ok) {
+		return { ok: false, error: loaded.error, loaded: false };
+	}
+	return loaded.native.ensureEmbedderLoaded();
+}
+
+/** Drop embedder (+ CE) on embedding lease release. */
+export function clearEmbedder(): OpResult {
+	if (!loaded.ok) {
+		return { ok: false, error: loaded.error };
+	}
+	return loaded.native.clearEmbedder();
+}
+
+export function clearReranker(): OpResult {
+	if (!loaded.ok) {
+		return { ok: false, error: loaded.error };
+	}
+	return loaded.native.clearReranker();
 }

@@ -10,6 +10,8 @@ without your consent. You can skip and come back later.
 
 [Open Private Search Setup](command:safeappeals-rag.setupLocalSearch)
 
+[Install Missing Models](command:safeappeals-rag.installMissingModels)
+
 After setup, create a `core_references/` folder and a workspace `AGENTS.md` so Private Search and the agent know where your shared references and case rules live:
 
 [Create Core References Folder](command:safeappeals-rag.scaffoldCoreReferences)

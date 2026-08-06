@@ -6,8 +6,9 @@
 import assert from 'assert';
 import { URI } from '../../../../../../../base/common/uri.js';
 import { ensureNoDisposablesAreLeakedInTestSuite } from '../../../../../../../base/test/common/utils.js';
-import { getPromptFileType, getCleanPromptName, isPromptOrInstructionsFile, isSkillFilename } from '../../../../common/promptSyntax/config/promptFileLocations.js';
-import { PromptsType } from '../../../../common/promptSyntax/promptTypes.js';
+import { DEFAULT_AGENT_SOURCE_FOLDERS, getPromptFileType, getCleanPromptName, isInCompatAgentsFolder, isInSafeAppealsAgentsFolder, isPromptOrInstructionsFile, isSkillFilename, SAFE_APPEALS_AGENTS_SOURCE_FOLDER, SAFE_APPEALS_USER_AGENTS_SOURCE_FOLDER } from '../../../../common/promptSyntax/config/promptFileLocations.js';
+import { PromptFileSource, PromptsType } from '../../../../common/promptSyntax/promptTypes.js';
+import { PromptsStorage } from '../../../../common/promptSyntax/service/promptsService.js';
 
 suite('promptFileLocations', function () {
 	ensureNoDisposablesAreLeakedInTestSuite();
@@ -75,6 +76,36 @@ suite('promptFileLocations', function () {
 
 		test('README.md in ~/.copilot/agents/ should NOT be recognized as agent file', () => {
 			const uri = URI.file('/home/user/.copilot/agents/README.md');
+			assert.strictEqual(getPromptFileType(uri), undefined);
+		});
+
+		test('.md files in .safeAppeals/agents/ folder should be recognized as agent files', () => {
+			const uri = URI.file('/workspace/.safeAppeals/agents/demonstrate.md');
+			assert.strictEqual(getPromptFileType(uri), PromptsType.agent);
+		});
+
+		test('README.md in .safeAppeals/agents/ should NOT be recognized as agent file', () => {
+			const uri = URI.file('/workspace/.safeAppeals/agents/README.md');
+			assert.strictEqual(getPromptFileType(uri), undefined);
+		});
+
+		test('.md files in .safeAppeals/agents/ subfolder should NOT be recognized as agent files', () => {
+			const uri = URI.file('/workspace/.safeAppeals/agents/subfolder/test.md');
+			assert.strictEqual(getPromptFileType(uri), undefined);
+		});
+
+		test('.md files in ~/.safeAppeals/agents/ folder should be recognized as agent files', () => {
+			const uri = URI.file('/home/user/.safeAppeals/agents/my-agent.md');
+			assert.strictEqual(getPromptFileType(uri), PromptsType.agent);
+		});
+
+		test('README.md in ~/.safeAppeals/agents/ should NOT be recognized as agent file', () => {
+			const uri = URI.file('/home/user/.safeAppeals/agents/README.md');
+			assert.strictEqual(getPromptFileType(uri), undefined);
+		});
+
+		test('.md files in ~/.safeAppeals/agents/ subfolder should NOT be recognized as agent files', () => {
+			const uri = URI.file('/home/user/.safeAppeals/agents/subfolder/test.md');
 			assert.strictEqual(getPromptFileType(uri), undefined);
 		});
 
@@ -170,6 +201,16 @@ suite('promptFileLocations', function () {
 			assert.strictEqual(getCleanPromptName(uri), 'my-agent');
 		});
 
+		test('removes .md extension for files in .safeAppeals/agents/', () => {
+			const uri = URI.file('/workspace/.safeAppeals/agents/demonstrate.md');
+			assert.strictEqual(getCleanPromptName(uri), 'demonstrate');
+		});
+
+		test('removes .md extension for files in ~/.safeAppeals/agents/', () => {
+			const uri = URI.file('/home/user/.safeAppeals/agents/my-agent.md');
+			assert.strictEqual(getCleanPromptName(uri), 'my-agent');
+		});
+
 		test('README.md in .github/agents/ should keep .md extension', () => {
 			const uri = URI.file('/workspace/.github/agents/README.md');
 			assert.strictEqual(getCleanPromptName(uri), 'README.md');
@@ -230,6 +271,55 @@ suite('promptFileLocations', function () {
 			assert.strictEqual(isPromptOrInstructionsFile(URI.file('/workspace/.claude/settings.json')), true);
 			assert.strictEqual(isPromptOrInstructionsFile(URI.file('/workspace/.claude/settings.local.json')), true);
 			assert.strictEqual(isPromptOrInstructionsFile(URI.file('/workspace/settings.json')), true);
+		});
+	});
+
+	suite('DEFAULT_AGENT_SOURCE_FOLDERS', () => {
+		test('lists SafeAppeals product paths first', () => {
+			assert.deepStrictEqual(
+				DEFAULT_AGENT_SOURCE_FOLDERS.slice(0, 2),
+				[
+					{ path: SAFE_APPEALS_AGENTS_SOURCE_FOLDER, source: PromptFileSource.SafeAppealsWorkspace, storage: PromptsStorage.local },
+					{ path: SAFE_APPEALS_USER_AGENTS_SOURCE_FOLDER, source: PromptFileSource.SafeAppealsPersonal, storage: PromptsStorage.user },
+				],
+			);
+		});
+
+		test('keeps compat agent folders after SafeAppeals entries', () => {
+			assert.deepStrictEqual(
+				DEFAULT_AGENT_SOURCE_FOLDERS.map(folder => folder.path),
+				[
+					'.safeAppeals/agents',
+					'~/.safeAppeals/agents',
+					'.github/agents',
+					'.claude/agents',
+					'~/.copilot/agents',
+					'~/.claude/agents',
+				],
+			);
+		});
+	});
+
+	suite('isInCompatAgentsFolder / isInSafeAppealsAgentsFolder', () => {
+		test('classifies product vs compatibility agent folders', () => {
+			assert.deepStrictEqual(
+				{
+					safeAppealsWorkspace: isInSafeAppealsAgentsFolder(URI.file('/workspace/.safeAppeals/agents/research.agent.md')),
+					safeAppealsUser: isInSafeAppealsAgentsFolder(URI.file('/home/user/.safeAppeals/agents/research.agent.md')),
+					githubCompat: isInCompatAgentsFolder(URI.file('/workspace/.github/agents/research.agent.md')),
+					claudeCompat: isInCompatAgentsFolder(URI.file('/workspace/.claude/agents/research.agent.md')),
+					copilotCompat: isInCompatAgentsFolder(URI.file('/home/user/.copilot/agents/research.agent.md')),
+					safeAppealsNotCompat: isInCompatAgentsFolder(URI.file('/workspace/.safeAppeals/agents/research.agent.md')),
+				},
+				{
+					safeAppealsWorkspace: true,
+					safeAppealsUser: true,
+					githubCompat: true,
+					claudeCompat: true,
+					copilotCompat: true,
+					safeAppealsNotCompat: false,
+				},
+			);
 		});
 	});
 

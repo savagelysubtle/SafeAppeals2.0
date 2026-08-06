@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { Codicon } from '../../../base/common/codicons.js';
+import { safeAppealsShieldOutlineIcon } from '../../../platform/theme/common/safeAppealsIcons.js';
 import { getWindowId } from '../../../base/browser/dom.js';
 import { mainWindow } from '../../../base/browser/window.js';
 import { Schemas } from '../../../base/common/network.js';
@@ -100,12 +101,19 @@ export class OpenVSCodeWindowAction extends Action2 {
 	constructor() {
 		super({
 			id: OpenVSCodeWindowAction.ID,
-			title: localize2('openVSCodeWindow', 'Open VS Code Window'),
+			title: localize2('openIDE', 'Open IDE'),
+			icon: safeAppealsShieldOutlineIcon,
 			f1: true,
 			keybinding: {
 				primary: KeyMod.CtrlCmd | KeyMod.Shift | KeyCode.KeyA,
 				weight: KeybindingWeight.WorkbenchContrib,
 			},
+			menu: [{
+				id: Menus.TitleBarRightLayout,
+				group: 'navigation',
+				order: 95,
+				when: ContextKeyExpr.and(IsAuxiliaryWindowContext.toNegated(), IsPhoneLayoutContext.negate()),
+			}],
 		});
 	}
 

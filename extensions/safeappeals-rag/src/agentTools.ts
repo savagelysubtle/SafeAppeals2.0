@@ -8,13 +8,14 @@ import {
 	buildSearchContextPack,
 	buildSearchFailureContextPack,
 } from './contextPack';
+import { hardDisableMessage } from './disableMessages';
 import {
 	scopeFromSourcePath,
 	type IndexPipeline,
 	type IndexPipelineResult,
 } from './indexPipeline';
 import { getWorkspaceRootPaths } from './pathGuard';
-import type { RagCoreHost, RagStats } from './ragCoreHost';
+import type { RagCoreHost, RagSearchResult, RagStats } from './ragCoreHost';
 import {
 	RAG_GET_STATS_TOOL,
 	RAG_INDEX_DOCUMENT_TOOL,
@@ -101,9 +102,6 @@ function resolveIndexScope(
 
 /**
  * Map {@link IndexPipelineResult} onto the frozen index tool message.
- *
- * Gap: IndexPipeline does not yet short-circuit "already indexed" — re-index
- * overwrites chunks for the same docId (ok for v1).
  */
 export function formatIndexPipelineResult(result: IndexPipelineResult): string {
 	if (result.kind === 'ok') {
@@ -117,8 +115,36 @@ export function formatIndexPipelineResult(result: IndexPipelineResult): string {
 	return indexHardDisableResult(result.code, result.message).message;
 }
 
+/**
+ * Fallback when IndexPipeline was not wired — distinguish read-only Agents session from true unavailability.
+ */
+export function missingIndexPipelineMessage(getHost: () => RagAgentHost | undefined): string {
+	const host = getHost();
+	if (host) {
+		const status = host.getStatus();
+		if (
+			status.indexWriteRole === 'secondary' ||
+			status.capabilities?.indexWriteCapable === false
+		) {
+			return indexHardDisableResult(
+				'read-only-session',
+				hardDisableMessage('read-only-session', [
+					'Indexing is owned by the primary workbench window.',
+				]),
+			).message;
+		}
+		if (!status.available && status.disableCode && status.disableMessage) {
+			return indexHardDisableResult(status.disableCode, status.disableMessage).message;
+		}
+	}
+	return 'Error: Private Search index pipeline is not available (ingest/rag-core not ready).';
+}
+
 class RagIndexDocumentTool implements vscode.LanguageModelTool<RagIndexDocumentToolInput> {
-	constructor(private readonly getPipeline: () => RagAgentPipeline | undefined) { }
+	constructor(
+		private readonly getPipeline: () => RagAgentPipeline | undefined,
+		private readonly getHost: () => RagAgentHost | undefined,
+	) { }
 
 	async invoke(
 		options: vscode.LanguageModelToolInvocationOptions<RagIndexDocumentToolInput>,
@@ -129,9 +155,7 @@ class RagIndexDocumentTool implements vscode.LanguageModelTool<RagIndexDocumentT
 		}
 		const pipeline = this.getPipeline();
 		if (!pipeline) {
-			return textResult(
-				'Error: Private Search index pipeline is not available (ingest/rag-core not ready).',
-			);
+			return textResult(missingIndexPipelineMessage(() => this.getHost()));
 		}
 
 		const uriInput = options.input?.uri?.trim() ?? '';
@@ -162,6 +186,7 @@ class RagSearchTool implements vscode.LanguageModelTool<RagSearchToolInput> {
 			| typeof RAG_SEARCH_WORKSPACE_TOOL
 			| typeof RAG_SEARCH_ALL_TOOL,
 		private readonly getHost: () => RagAgentHost | undefined,
+		private readonly withEmbeddingLease?: <T>(fn: () => Promise<T>) => Promise<T>,
 	) { }
 
 	async invoke(
@@ -187,8 +212,17 @@ class RagSearchTool implements vscode.LanguageModelTool<RagSearchToolInput> {
 
 		const scope = RAG_TOOL_SCOPE_BY_NAME[this.toolName];
 		const finalK = mapAgentLimitToFinalK(options.input?.limit);
+		if (!this.withEmbeddingLease) {
+			return textResult(
+				buildSearchFailureContextPack(
+					'Private Search requires the ML engine (embedding lease unavailable).',
+				),
+			);
+		}
 		try {
-			const result = host.search(query, { finalK, scope });
+			const runSearch = (): RagSearchResult =>
+				host.search(query, { finalK, scope });
+			const result = await this.withEmbeddingLease(async () => runSearch());
 			if (!result.ok) {
 				return textResult(
 					buildSearchFailureContextPack(result.error ?? 'unknown search error'),
@@ -235,18 +269,22 @@ class RagGetStatsTool implements vscode.LanguageModelTool<Record<string, never>>
 	}
 }
 
+/** Wrap search in MlResourceEngine `withLease('embedding')` when provided. */
+export type WithEmbeddingLease = <T>(fn: () => Promise<T>) => Promise<T>;
+
 /**
  * Build RAG LM tool instances (exported for unit tests).
  */
 export function createRagAgentTools(
 	getHost: () => RagAgentHost | undefined,
 	getPipeline: () => RagAgentPipeline | undefined,
+	withEmbeddingLease?: WithEmbeddingLease,
 ) {
 	return {
-		indexDocument: new RagIndexDocumentTool(getPipeline),
-		searchReference: new RagSearchTool(RAG_SEARCH_REFERENCE_TOOL, getHost),
-		searchWorkspace: new RagSearchTool(RAG_SEARCH_WORKSPACE_TOOL, getHost),
-		searchAll: new RagSearchTool(RAG_SEARCH_ALL_TOOL, getHost),
+		indexDocument: new RagIndexDocumentTool(getPipeline, getHost),
+		searchReference: new RagSearchTool(RAG_SEARCH_REFERENCE_TOOL, getHost, withEmbeddingLease),
+		searchWorkspace: new RagSearchTool(RAG_SEARCH_WORKSPACE_TOOL, getHost, withEmbeddingLease),
+		searchAll: new RagSearchTool(RAG_SEARCH_ALL_TOOL, getHost, withEmbeddingLease),
 		getStats: new RagGetStatsTool(getHost),
 	};
 }
@@ -258,8 +296,9 @@ export function registerAgentTools(
 	context: vscode.ExtensionContext,
 	getHost: () => RagAgentHost | undefined,
 	getPipeline: () => RagAgentPipeline | undefined,
+	withEmbeddingLease?: WithEmbeddingLease,
 ): void {
-	const tools = createRagAgentTools(getHost, getPipeline);
+	const tools = createRagAgentTools(getHost, getPipeline, withEmbeddingLease);
 	context.subscriptions.push(
 		vscode.lm.registerTool(RAG_INDEX_DOCUMENT_TOOL, tools.indexDocument),
 		vscode.lm.registerTool(RAG_SEARCH_REFERENCE_TOOL, tools.searchReference),

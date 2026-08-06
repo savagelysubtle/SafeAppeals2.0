@@ -1,0 +1,14 @@
+{
+	"displayName": "Safe Appeals Documents",
+	"description": "PDF, DOCX, and XLSX custom editors for Safe Appeals",
+	"walkthrough.caseFiles.title": "Case Files and Documents",
+	"walkthrough.caseFiles.description": "Learn the case folder layout, open PDF/DOCX viewers, convert files, and merge PDFs — no credits required.",
+	"walkthrough.caseFiles.layout.title": "Case Folder Layout",
+	"walkthrough.caseFiles.layout.description": "Keep medical reports, correspondence, decisions, evidence, notes, and `to_sort` at the workspace root. Use Tutorials for a sample matter with this layout.",
+	"walkthrough.caseFiles.viewers.title": "Open PDF and DOCX Viewers",
+	"walkthrough.caseFiles.viewers.description": "Open a `.pdf` or `.docx` from the Explorer to use the Safe Appeals viewers.\n[Quick Open a File](command:workbench.action.quickOpen)\n[Show Explorer](command:workbench.view.explorer)",
+	"walkthrough.caseFiles.convert.title": "Convert a File",
+	"walkthrough.caseFiles.convert.description": "Convert a document with the Safe Appeals Converter — no AI credits.\n[Convert File](command:safeappeals-converter.convertFile)",
+	"walkthrough.caseFiles.merge.title": "Merge PDFs",
+	"walkthrough.caseFiles.merge.description": "Combine several PDFs into one packet.\n[Merge PDFs](command:safeappeals-converter.mergePdfs)"
+}

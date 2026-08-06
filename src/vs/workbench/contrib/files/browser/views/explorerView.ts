@@ -58,6 +58,7 @@ import { SAMPLE_CASE_TOUR_TARGETS } from '../../../onboarding/browser/sampleCase
 import { AbstractTreePart } from '../../../../../base/browser/ui/tree/abstractTree.js';
 import { IHoverService } from '../../../../../platform/hover/browser/hover.js';
 import { IAccessibilityService } from '../../../../../platform/accessibility/common/accessibility.js';
+import { shouldCollapseExplorerItemByDefault } from './explorerCollapseDefaults.js';
 
 
 function hasExpandedRootChild(tree: WorkbenchCompressibleAsyncDataTree<ExplorerItem | ExplorerItem[], ExplorerItem, FuzzyScore>, treeInput: ExplorerItem[]): boolean {
@@ -307,6 +308,8 @@ export class ExplorerView extends ViewPane implements IExplorerView {
 		this.container = container;
 		this.treeContainer = DOM.append(container, DOM.$('.explorer-folders-view'));
 		// SafeAppeals: sample-case tour spotlight target (case-files list).
+		// Steps for AGENTS.md and core_references/ reuse this targetId; onBeforeShow
+		// calls revealInExplorer so the tree selection highlights the resource.
 		this._register(markOnboardingTarget(this.treeContainer, SAMPLE_CASE_TOUR_TARGETS.caseFiles));
 
 		this.createTree(this.treeContainer);
@@ -492,12 +495,11 @@ export class ExplorerView extends ViewPane implements IExplorerView {
 			dnd: this.instantiationService.createInstance(FileDragAndDrop, (item) => this.isItemCollapsed(item)),
 			collapseByDefault: (e) => {
 				if (e instanceof ExplorerItem) {
-					if (e.hasNests && getFileNestingSettings(e).expand) {
-						return false;
-					}
-					if (this.findProvider.isShowingFilterResults()) {
-						return false;
-					}
+					return shouldCollapseExplorerItemByDefault(e, {
+						fileNestingExpand: getFileNestingSettings(e).expand,
+						showingFilterResults: this.findProvider.isShowingFilterResults(),
+						expandFoldersByDefault: this.configurationService.getValue<boolean>('explorer.expandFoldersByDefault') !== false,
+					});
 				}
 				return true;
 			},

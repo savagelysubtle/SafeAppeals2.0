@@ -48,7 +48,7 @@ function resolveExistingDir(
 /**
  * Sync `SA_RAG_EMBED_MODEL_DIR` / `SA_RAG_CE_MODEL_DIR` from ML artifact dirs when ready.
  * Preserves existing BYO env values that point at real directories.
- * Does not download; Search pack downloadUrl/sha may still be unpinned → no sync until BYO/consent.
+ * Does not download; syncs after Search pack consent install (or existing BYO env dirs).
  */
 export async function syncRagModelEnv(options: ModelEnvSyncOptions): Promise<ModelEnvSyncResult> {
 	const env = options.env ?? process.env;

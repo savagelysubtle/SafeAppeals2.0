@@ -2,13 +2,19 @@
 
 > Comprehensive documentation for SafeAppeals' LLM-powered chat and agent system.
 
+> **Shipping path (Aug 2026):** Plan/Agent modes via workbench chat + SafeAppeals auth
+> agents; tools are `vscode.lm` contributions (`safeappeals_*` satellites and CORE host
+> tools). House pattern: [Agent LM Tools Pattern](../../agent-tools-pattern.md).
+> Diagrams and pages that describe Void sidebar IPC / `extractXMLToolsWrapper` are
+> **historical** — not the current primary tool pipeline.
+
 ## Overview
 
 The SafeAppeals chat system is a sophisticated conversational AI interface that combines:
 
 - **Multi-provider LLM support** (Anthropic, OpenAI, Gemini, and 10+ other providers)
 - **Extended thinking/reasoning** capabilities (Claude Opus 4.5, Sonnet 4.5)
-- **Tool calling** for code editing, file operations, and web search
+- **Tool calling** via extension `languageModelTools` + agent allowlist (`safeappeals_*`)
 - **Agent modes** for case research, document drafting, and case management
 - **Plan mode** with durable `.safeAppeals/plans/*.plan.md` files via `safeappeals_createPlan` (see [Plan Mode](./plan-mode.md))
 
@@ -52,7 +58,7 @@ The SafeAppeals chat system is a sophisticated conversational AI interface that 
 │                                                                                  │
 │  Post-processing wrappers:                                                      │
 │       ├── extractReasoningWrapper() ── Parses <think> tags (open-source)       │
-│       └── extractXMLToolsWrapper()  ── Parses XML tool calls                   │
+│       └── extractXMLToolsWrapper()  ── Parses XML tool calls (Void-era)        │
 │                                                                                  │
 └─────────────────────────────────────────────────────────────────────────────────┘
 ```
@@ -134,17 +140,20 @@ Historical Void-era mode names still documented under [Chat Modes](./chat-modes.
 
 ### 3. Tool Call Flow
 
-1. LLM outputs XML tool call in response
-2. `extractXMLToolsWrapper` parses the XML
-3. Tool parameters are validated by `toolsService`
-4. User approves (or auto-approve if enabled)
-5. Tool executes and result is added to thread
-6. Loop continues with tool result context
+**Shipping:** Extensions contribute `languageModelTools` and register with
+`vscode.lm.registerTool`; the SafeAppeals agent loop allowlists `safeappeals_*`
+(plus CORE names). Catalog and checklist:
+[Agent LM Tools Pattern](../../agent-tools-pattern.md).
+
+**Historical (Void XML):** LLM emitted ANTML/XML → `extractXMLToolsWrapper` →
+`toolsService` validate/approve/execute. Details in [Tool Calling](./tool-calling.md)
+(legacy only).
 
 ## Related Documentation
 
+- [Agent LM Tools Pattern](../../agent-tools-pattern.md) - Satellite tools + allowlist
 - [Models System](../modelsSystem/README.md) - Provider configuration, capabilities
-- [Tools System](../tools/README.md) - Tool definitions, execution
-- [RAG System](../ragSystem/README.md) - Context gathering, embeddings
+- [Tools System](../tools/README.md) - Tool definitions (shipping LM + historical Void)
+- [Private Search](../../rag/tool-contracts.md) - Shipping RAG agent tools
 - [Storage & Databases](../storage/README.md) - Complete database path reference (dev vs prod)
 - [Per-Workspace Storage](per-workspace-storage.md) - Chat-specific thread storage details

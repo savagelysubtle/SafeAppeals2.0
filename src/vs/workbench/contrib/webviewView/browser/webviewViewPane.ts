@@ -29,6 +29,8 @@ import { IWebviewViewService, WebviewView } from './webviewViewService.js';
 import { IActivityService, NumberBadge } from '../../../services/activity/common/activity.js';
 import { IExtensionService } from '../../../services/extensions/common/extensions.js';
 import { IHoverService } from '../../../../platform/hover/browser/hover.js';
+import { markOnboardingTarget } from '../../onboarding/browser/spotlight/onboardingTarget.js';
+import { SAMPLE_CASE_TOUR_TARGETS } from '../../onboarding/browser/sampleCaseTour.js';
 
 const storageKeys = {
 	webviewState: 'webviewState',
@@ -136,6 +138,11 @@ export class WebviewViewPane extends ViewPane {
 				this._webview.value.focus();
 			}
 		}));
+
+		// SafeAppeals: sample-case tour spotlight target (Case Timeline sidebar).
+		if (this.id === 'safeappeals-timeline.sidebar') {
+			this._register(markOnboardingTarget(container, SAMPLE_CASE_TOUR_TARGETS.timeline));
+		}
 
 		this.layoutWebview();
 	}

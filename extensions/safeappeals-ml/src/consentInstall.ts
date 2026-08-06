@@ -3,8 +3,9 @@
  *--------------------------------------------------------------------------------------------*/
 
 import type { HwCapabilityProbe } from './hwCapabilityProbe';
+import { isArtifactPinConfigured } from './modelCatalog';
 import type { ModelCatalog } from './modelCatalog';
-import type { ModelArtifactStore } from './modelArtifactStore';
+import type { ModelArtifactStore, ArtifactDownloadProgress } from './modelArtifactStore';
 
 export type ConsentInstallOutcome =
 	| { readonly kind: 'installed'; readonly modelId: string; readonly version: string }
@@ -12,6 +13,8 @@ export type ConsentInstallOutcome =
 	| { readonly kind: 'ineligible'; readonly modelId: string; readonly reasons: readonly string[] }
 	| { readonly kind: 'consent-required'; readonly modelId: string }
 	| { readonly kind: 'error'; readonly modelId: string; readonly message: string };
+
+export type { ArtifactDownloadProgress };
 
 export interface ConsentInstallDeps {
 	readonly probe: HwCapabilityProbe;
@@ -36,6 +39,7 @@ export async function consentInstallModel(
 		 * and {@link ModelArtifactStore.isReady} stays false.
 		 */
 		readonly smokeTest?: () => Promise<void>;
+		readonly onProgress?: (progress: ArtifactDownloadProgress) => void;
 	},
 ): Promise<ConsentInstallOutcome> {
 	const { modelId, userConsented } = options;
@@ -48,6 +52,15 @@ export async function consentInstallModel(
 	const evaluation = deps.catalog.evaluate(modelId, snapshot);
 	if (!evaluation.eligible) {
 		return { kind: 'ineligible', modelId, reasons: evaluation.reasons };
+	}
+
+	if (!isArtifactPinConfigured(spec)) {
+		return {
+			kind: 'error',
+			modelId,
+			message:
+				`Model ${modelId} has no sha256 pinned; refusing download until digest is configured.`,
+		};
 	}
 
 	if (await deps.store.isReady(modelId)) {
@@ -68,6 +81,7 @@ export async function consentInstallModel(
 			userConsented: true,
 			downloadUrl: options.downloadUrl,
 			sha256: options.sha256,
+			onProgress: options.onProgress,
 		});
 		if (options.smokeTest) {
 			try {
@@ -92,6 +106,8 @@ export async function consentInstallModel(
 	}
 }
 
+export type DocParseReadyResult = { readonly ready: boolean; readonly detail?: string };
+
 /** Convenience wrapper for Unlimited-OCR consent install. */
 export async function consentInstallUnlimitedOcr(
 	deps: ConsentInstallDeps,
@@ -99,14 +115,34 @@ export async function consentInstallUnlimitedOcr(
 	options: {
 		readonly downloadUrl?: string;
 		readonly sha256?: string;
-		readonly smokeTest?: () => Promise<void>;
+		/**
+		 * Post-download readiness: start managed sidecar (when available) then health smoke.
+		 * Failures do not mark artifacts broken — only corrupt downloads do.
+		 */
+		readonly ensureDocParseReady?: () => Promise<DocParseReadyResult>;
+		readonly onProgress?: (progress: ArtifactDownloadProgress) => void;
 	} = {},
 ): Promise<ConsentInstallOutcome> {
-	return consentInstallModel(deps, {
+	const outcome = await consentInstallModel(deps, {
 		modelId: 'unlimited-ocr',
 		userConsented,
 		downloadUrl: options.downloadUrl,
 		sha256: options.sha256,
-		smokeTest: options.smokeTest,
+		onProgress: options.onProgress,
 	});
+
+	if (outcome.kind !== 'installed' || !options.ensureDocParseReady) {
+		return outcome;
+	}
+
+	const readyResult = await options.ensureDocParseReady();
+	if (readyResult.ready) {
+		return outcome;
+	}
+
+	return {
+		kind: 'error',
+		modelId: 'unlimited-ocr',
+		message: readyResult.detail ?? 'DocParse sidecar is not ready after install.',
+	};
 }

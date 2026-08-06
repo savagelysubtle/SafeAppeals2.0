@@ -165,15 +165,20 @@ export class CustomizationLocationPicker {
 			return undefined;
 		}
 
-		// if (matchingFolders.length === 1) {
-		// 	return matchingFolders[0].uri;
-		// }
+		// First matching folder is the product default create target
+		// (SafeAppeals roots are ordered first in DEFAULT_AGENT_SOURCE_FOLDERS).
+		if (matchingFolders.length === 1) {
+			return matchingFolders[0].uri;
+		}
 
-		// Multiple directories — ask the user which one to use
-		const items: (IQuickPickItem & { uri: URI })[] = matchingFolders.map(folder => ({
-			label: folder.label,
+		// Multiple directories — ask the user which one to use (default listed first)
+		const items: (IQuickPickItem & { uri: URI })[] = matchingFolders.map((folder, index) => ({
+			label: index === 0
+				? localize('pathWithDefault', "{0} (default)", folder.label)
+				: folder.label,
 			description: this.labelService.getUriLabel(folder.uri, { relative: true }),
 			uri: folder.uri,
+			picked: index === 0,
 		}));
 
 		const picked = await this.quickInputService.pick(items, {
@@ -186,6 +191,7 @@ export class CustomizationLocationPicker {
 
 /**
  * Resolves the workspace directory for a new customization file based on the active project root.
+ * Picks the first local default location (for agents, `.safeAppeals/agents`).
  */
 export function resolveWorkspaceTargetDirectory(workspaceService: IAICustomizationWorkspaceService, type: PromptsType): URI | undefined {
 	const basePath = workspaceService.getActiveProjectRoot();
@@ -202,14 +208,15 @@ export function resolveWorkspaceTargetDirectory(workspaceService: IAICustomizati
 
 /**
  * Resolves the user-level directory for a new customization file.
- * Delegates to IPromptsService.getSourceFolders() which returns the appropriate
- * user root (VS Code profile in core, ~/.copilot in sessions).
+ * Uses {@link IPromptsService.getResolvedSourceFolders} so storage tagging is
+ * correct and the first user folder is the product default (for agents,
+ * `~/.safeAppeals/agents`).
  */
 export async function resolveUserTargetDirectory(
 	promptsService: IPromptsService,
 	type: PromptsType,
 ): Promise<URI | undefined> {
-	const folders = await promptsService.getSourceFolders(type);
+	const folders = await promptsService.getResolvedSourceFolders(type);
 	const userFolder = folders.find(f => f.storage === PromptsStorage.user);
 	return userFolder?.uri;
 }

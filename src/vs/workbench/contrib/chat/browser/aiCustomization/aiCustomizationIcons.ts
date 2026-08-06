@@ -7,6 +7,7 @@ import { Codicon } from '../../../../../base/common/codicons.js';
 import { ThemeIcon } from '../../../../../base/common/themables.js';
 import { localize } from '../../../../../nls.js';
 import { registerIcon } from '../../../../../platform/theme/common/iconRegistry.js';
+import { safeAppealsShieldOutlineIcon } from '../../../../../platform/theme/common/safeAppealsIcons.js';
 import { type AICustomizationSource, AICustomizationSources } from '../../common/aiCustomizationWorkspaceService.js';
 
 /**
@@ -17,7 +18,7 @@ export const aiCustomizationViewIcon = registerIcon('ai-customization-view-icon'
 /**
  * Icon for custom agents.
  */
-export const agentIcon = registerIcon('ai-customization-agent', Codicon.agent, localize('aiCustomizationAgentIcon', "Icon for custom agents."));
+export const agentIcon = registerIcon('ai-customization-agent', safeAppealsShieldOutlineIcon, localize('aiCustomizationAgentIcon', "Icon for custom agents."));
 
 /**
  * Icon for skills.

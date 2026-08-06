@@ -36,6 +36,7 @@ import { ILogService } from '../../../../../platform/log/common/log.js';
 import { observableConfigValue } from '../../../../../platform/observable/common/platformObservableUtils.js';
 import { Registry } from '../../../../../platform/registry/common/platform.js';
 import { IStorageService, StorageScope, StorageTarget } from '../../../../../platform/storage/common/storage.js';
+import { safeAppealsShieldOutlineIcon } from '../../../../../platform/theme/common/safeAppealsIcons.js';
 import { ITelemetryService } from '../../../../../platform/telemetry/common/telemetry.js';
 import { IExtensionService } from '../../../../services/extensions/common/extensions.js';
 import { ChatContextKeys } from '../../common/actions/chatContextKeys.js';
@@ -230,7 +231,7 @@ export class LanguageModelToolsService extends Disposable implements ILanguageMo
 			'agent',
 			SpecedToolAliases.agent,
 			{
-				icon: ThemeIcon.fromId(Codicon.agent.id),
+				icon: safeAppealsShieldOutlineIcon,
 				description: localize('copilot.toolSet.agent.description', 'Delegate tasks to other agents'),
 				deprecated: true,
 			}

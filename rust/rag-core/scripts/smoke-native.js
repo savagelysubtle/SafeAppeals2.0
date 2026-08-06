@@ -31,8 +31,19 @@ const expectedCaps = {
 	queryProcessor: true,
 	modelsPresent: false,
 	storageReady: true,
-	dims: 512,
+	dims: 384,
+	indexWriteRole: undefined,
+	indexWriteCapable: false,
 };
+
+function capsMatch(actual, expected) {
+	for (const key of Object.keys(expected)) {
+		if (actual[key] !== expected[key]) {
+			return false;
+		}
+	}
+	return typeof actual.indexWriteCapable === 'boolean';
+}
 
 if (pong !== 'pong') {
 	console.error('[rag-core] unexpected ping:', pong);
@@ -42,7 +53,7 @@ if (typeof ver !== 'string' || ver.length === 0) {
 	console.error('[rag-core] unexpected version:', ver);
 	process.exit(1);
 }
-if (JSON.stringify(caps) !== JSON.stringify(expectedCaps)) {
+if (!capsMatch(caps, expectedCaps)) {
 	console.error('[rag-core] unexpected capabilities:', caps);
 	console.error('[rag-core] expected:', expectedCaps);
 	process.exit(1);
@@ -57,6 +68,9 @@ const requiredFns = [
 	'indexChunks',
 	'removeDoc',
 	'search',
+	'ensureEmbedderLoaded',
+	'clearEmbedder',
+	'clearReranker',
 ];
 for (const name of requiredFns) {
 	if (typeof result.native[name] !== 'function') {

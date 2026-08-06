@@ -54,6 +54,11 @@ import {
 	type ProfileRole,
 } from '../common/profileRuleTemplate.js';
 
+/** Command that returns a JSON-serializable Private Search setup scan. */
+const GET_SETUP_SCAN_COMMAND = 'safeappeals-rag.getSetupScan';
+/** Command that installs missing Search pack / OCR models with user consent. */
+const INSTALL_MISSING_MODELS_COMMAND = 'safeappeals-rag.installMissingModels';
+
 /** Pricing page opened from the Credits & First Steps step. */
 const CREDITS_PRICING_URL = 'https://safeappeals.com/#pricing';
 /** Docs page explaining how AI credits work. */
@@ -76,6 +81,24 @@ interface OnboardingCreditPack {
 	readonly currency: string;
 	readonly description: string;
 	readonly popular?: boolean;
+}
+
+/** Mirrors `PrivateSearchSetupScan` in `extensions/safeappeals-rag/src/setupScan.ts`. */
+type SetupScanSearchStatus = 'ready' | 'missing' | 'unavailable';
+type SetupScanOcrStatus = 'ready' | 'missing-eligible' | 'ineligible' | 'unavailable';
+
+interface PrivateSearchSetupScan {
+	readonly searchPack: {
+		readonly status: SetupScanSearchStatus;
+		readonly readyModelIds: readonly string[];
+		readonly missingModelIds: readonly string[];
+		readonly diskMb: number;
+	};
+	readonly ocr: {
+		readonly status: SetupScanOcrStatus;
+		readonly diskMb: number;
+	};
+	readonly includeOcrInInstall: boolean;
 }
 
 /** Auth provider contributed by `extensions/safeappeals-authentication`. */
@@ -1007,6 +1030,12 @@ export class OnboardingVariationA extends Disposable implements IOnboardingServi
 				break;
 			case OnboardingStepId.CreditsHandoff:
 				this._renderCreditsHandoffStep(this.contentEl);
+				break;
+			case OnboardingStepId.PrivateSearch:
+				this._renderPrivateSearchStep(this.contentEl);
+				break;
+			case OnboardingStepId.GetStarted:
+				this._renderGetStartedStep(this.contentEl);
 				break;
 		}
 
@@ -2263,7 +2292,7 @@ export class OnboardingVariationA extends Disposable implements IOnboardingServi
 
 	/**
 	 * Renders the honest credits handoff: what is free, AI is metered, live
-	 * balance when signed in, pricing/docs links, and a zero-cost first action.
+	 * balance when signed in, and pricing/docs links.
 	 */
 	private _renderCreditsHandoffStep(container: HTMLElement): void {
 		const wrapper = append(container, $('.onboarding-a-credits'));
@@ -2298,48 +2327,204 @@ export class OnboardingVariationA extends Disposable implements IOnboardingServi
 			CREDITS_PRICING_URL,
 			'viewPricing'
 		);
+	}
 
-		const firstAction = append(wrapper, $('.onboarding-a-credits-first-action'));
-		const heading = append(firstAction, $('h3.onboarding-a-credits-first-heading'));
-		heading.textContent = this._getCreditsRoleHeading();
+	// =====================================================================
+	// Step: Private Search on This Computer
+	// =====================================================================
 
-		const firstActionHint = append(firstAction, $('p.onboarding-a-credits-first-hint'));
-		firstActionHint.textContent = localize(
-			'onboarding.credits.firstAction.hint',
-			"Walk through a fictional sample appeal — case files, where chat opens, and how approvals look — without spending credits."
+	/**
+	 * Explains local Private Search indexing — informational only; Continue lives in the footer.
+	 */
+	private _renderPrivateSearchStep(container: HTMLElement): void {
+		const wrapper = append(container, $('.onboarding-a-private-search'));
+
+		const intro = append(wrapper, $('p.onboarding-a-private-search-intro'));
+		intro.textContent = localize(
+			'onboarding.privateSearch.intro',
+			"Private Search builds a local index so you can find passages in case files without uploading the whole file for every search. Cloud chat still only sends what you ask."
 		);
 
-		const actions = append(firstAction, $('.onboarding-a-credits-actions'));
-		const sampleBtn = this._registerStepFocusable(append(actions, $<HTMLButtonElement>('button.onboarding-a-btn.onboarding-a-btn-primary')));
-		sampleBtn.type = 'button';
-		sampleBtn.textContent = localize('onboarding.credits.openSampleCase', "Open the Sample Case");
-		this.stepDisposables.add(addDisposableListener(sampleBtn, EventType.CLICK, () => {
-			void this._runCreditsFirstAction('safeappeals-timeline.openSampleCase', 'openSampleCase');
+		const list = append(wrapper, $('ul.onboarding-a-profile-info-list'));
+		const points = [
+			localize('onboarding.privateSearch.point.localIndex', "The index stays on this computer"),
+			localize('onboarding.privateSearch.point.searchTools', "Search tools (~350 MB) are optional and download only with your consent"),
+			localize('onboarding.privateSearch.point.ocrTools', "Scanned-PDF tools (~7 GB) install only if this computer is eligible — also consent-only"),
+			localize('onboarding.privateSearch.point.skip', "You can skip this step and set up Private Search later"),
+		];
+		for (const point of points) {
+			const item = append(list, $('li.onboarding-a-profile-info-item'));
+			const icon = item.appendChild(renderIcon(Codicon.check));
+			icon.setAttribute('aria-hidden', 'true');
+			const text = append(item, $('span'));
+			text.textContent = point;
+		}
+	}
+
+	// =====================================================================
+	// Step: Get Started
+	// =====================================================================
+
+	/**
+	 * Scans Private Search readiness on this computer, then offers install / setup / sample-case actions.
+	 */
+	private _renderGetStartedStep(container: HTMLElement): void {
+		const wrapper = append(container, $('.onboarding-a-get-started'));
+
+		const statusRegion = append(wrapper, $('.onboarding-a-get-started-status'));
+		statusRegion.setAttribute('aria-live', 'polite');
+		statusRegion.setAttribute('aria-atomic', 'true');
+
+		const checking = append(statusRegion, $('p.onboarding-a-get-started-checking'));
+		checking.textContent = localize('onboarding.getStarted.checking', "Checking this computer…");
+		const checkingHint = append(statusRegion, $('p.onboarding-a-get-started-checking-hint'));
+		checkingHint.textContent = localize(
+			'onboarding.getStarted.checkingHint',
+			"This can take up to 2 minutes. The screen may look still — the check is still running."
+		);
+
+		let cancelled = false;
+		this.stepDisposables.add({ dispose: () => { cancelled = true; } });
+
+		void this.commandService.executeCommand<PrivateSearchSetupScan>(GET_SETUP_SCAN_COMMAND)
+			.then(scan => {
+				if (cancelled || !statusRegion.isConnected) {
+					return;
+				}
+				this._renderGetStartedScanStatus(statusRegion, scan ?? this._unavailablePrivateSearchSetupScan());
+				this._renderGetStartedActions(wrapper, scan ?? this._unavailablePrivateSearchSetupScan());
+			}, () => {
+				if (cancelled || !statusRegion.isConnected) {
+					return;
+				}
+				const scan = this._unavailablePrivateSearchSetupScan();
+				this._renderGetStartedScanStatus(statusRegion, scan);
+				this._renderGetStartedActions(wrapper, scan);
+			});
+	}
+
+	private _unavailablePrivateSearchSetupScan(): PrivateSearchSetupScan {
+		// Mirrors DEFAULT_SEARCH_PACK_DISK_MB / DEFAULT_OCR_DISK_MB in safeappeals-rag
+		// (workbench cannot import the extension module).
+		return {
+			searchPack: {
+				status: 'unavailable',
+				readyModelIds: [],
+				missingModelIds: [],
+				diskMb: 350,
+			},
+			ocr: {
+				status: 'unavailable',
+				diskMb: 7000,
+			},
+			includeOcrInInstall: false,
+		};
+	}
+
+	private _renderGetStartedScanStatus(statusRegion: HTMLElement, scan: PrivateSearchSetupScan): void {
+		clearNode(statusRegion);
+
+		const searchLine = append(statusRegion, $('p.onboarding-a-get-started-status-line'));
+		searchLine.textContent = this._formatSetupScanSearchStatus(scan.searchPack.status);
+
+		const ocrLine = append(statusRegion, $('p.onboarding-a-get-started-status-line'));
+		ocrLine.textContent = this._formatSetupScanOcrStatus(scan.ocr.status);
+	}
+
+	private _formatSetupScanSearchStatus(status: SetupScanSearchStatus): string {
+		switch (status) {
+			case 'ready':
+				return localize('onboarding.getStarted.searchStatus.ready', "Search tools: ready");
+			case 'missing':
+				return localize('onboarding.getStarted.searchStatus.missing', "Search tools: not installed");
+			case 'unavailable':
+				return localize('onboarding.getStarted.searchStatus.unavailable', "Search tools: unavailable");
+		}
+	}
+
+	private _formatSetupScanOcrStatus(status: SetupScanOcrStatus): string {
+		switch (status) {
+			case 'ready':
+				return localize('onboarding.getStarted.ocrStatus.ready', "Scanned-PDF tools: ready");
+			case 'missing-eligible':
+				return localize('onboarding.getStarted.ocrStatus.missingEligible', "Scanned-PDF tools: eligible — not installed");
+			case 'ineligible':
+				return localize('onboarding.getStarted.ocrStatus.ineligible', "Scanned-PDF tools: not eligible on this computer");
+			case 'unavailable':
+				return localize('onboarding.getStarted.ocrStatus.unavailable', "Scanned-PDF tools: unavailable");
+		}
+	}
+
+	private _isPrivateSearchSetupComplete(scan: PrivateSearchSetupScan): boolean {
+		if (scan.searchPack.status !== 'ready') {
+			return false;
+		}
+		return scan.ocr.status === 'ready' || scan.ocr.status === 'ineligible';
+	}
+
+	private _canInstallMissingPrivateSearchModels(scan: PrivateSearchSetupScan): boolean {
+		if (scan.searchPack.status === 'unavailable' && scan.ocr.status === 'unavailable') {
+			return false;
+		}
+		return !this._isPrivateSearchSetupComplete(scan);
+	}
+
+	private _renderGetStartedActions(wrapper: HTMLElement, scan: PrivateSearchSetupScan): void {
+		const actionsHost = append(wrapper, $('.onboarding-a-credits-first-action'));
+		const actions = append(actionsHost, $('.onboarding-a-credits-actions'));
+
+		if (this._canInstallMissingPrivateSearchModels(scan)) {
+			const installBtn = this._registerStepFocusable(append(actions, $<HTMLButtonElement>('button.onboarding-a-btn.onboarding-a-btn-primary')));
+			installBtn.type = 'button';
+			installBtn.textContent = localize('onboarding.getStarted.installMissing', "Install What's Missing");
+			this.stepDisposables.add(addDisposableListener(installBtn, EventType.CLICK, () => {
+				this._logAction('installMissing', OnboardingStepId.GetStarted);
+				void this.commandService.executeCommand(INSTALL_MISSING_MODELS_COMMAND).catch(() => {
+					this.notificationService.notify({
+						severity: Severity.Info,
+						message: localize(
+							'onboarding.getStarted.installMissingUnavailable',
+							"Could not start installation right now. Try Set Up Private Search for the guided checklist."
+						),
+					});
+				});
+			}));
+		}
+
+		const setupBtn = this._registerStepFocusable(append(actions, $<HTMLButtonElement>('button.onboarding-a-btn.onboarding-a-btn-secondary')));
+		setupBtn.type = 'button';
+		setupBtn.textContent = localize('onboarding.credits.setupPrivateSearch', "Set Up Private Search");
+		this.stepDisposables.add(addDisposableListener(setupBtn, EventType.CLICK, () => {
+			void this._runCreditsSoftPrivateSearchAction(OnboardingStepId.GetStarted);
+		}));
+
+		const tutorialsBtn = this._registerStepFocusable(append(actions, $<HTMLButtonElement>('button.onboarding-a-btn.onboarding-a-btn-primary')));
+		tutorialsBtn.type = 'button';
+		tutorialsBtn.textContent = localize('onboarding.getStarted.tutorials', "Tutorials");
+		this.stepDisposables.add(addDisposableListener(tutorialsBtn, EventType.CLICK, () => {
+			void this._runGetStartedTutorials();
 		}));
 
 		const ownCaseBtn = this._registerStepFocusable(append(actions, $<HTMLButtonElement>('button.onboarding-a-btn.onboarding-a-btn-secondary')));
 		ownCaseBtn.type = 'button';
 		ownCaseBtn.textContent = localize('onboarding.credits.startOwnCase', "Start with My Own Case");
 		this.stepDisposables.add(addDisposableListener(ownCaseBtn, EventType.CLICK, () => {
-			// Case brief is agent-authored AGENTS.md — open Chat instead of the retired initCase flow.
-			void this._runCreditsFirstAction('workbench.action.chat.open', 'startOwnCase');
+			void this._runCreditsFirstAction('workbench.action.chat.open', 'startOwnCase', OnboardingStepId.GetStarted);
 		}));
 
-		// Soft bridge to Local AI Setup — must NOT dismiss onboarding (unlike first-action CTAs).
-		const privateSearchBtn = this._registerStepFocusable(append(actions, $<HTMLButtonElement>('button.onboarding-a-btn.onboarding-a-btn-secondary')));
-		privateSearchBtn.type = 'button';
-		privateSearchBtn.textContent = localize('onboarding.credits.setupPrivateSearch', "Set Up Private Search");
-		this.stepDisposables.add(addDisposableListener(privateSearchBtn, EventType.CLICK, () => {
-			void this._runCreditsSoftPrivateSearchAction();
-		}));
+		const hint = append(actionsHost, $('p.onboarding-a-credits-first-hint'));
+		hint.textContent = localize(
+			'onboarding.getStarted.tutorialsHint',
+			"Tutorials use the sample case — no credits, AI does not run."
+		);
 	}
 
 	/**
 	 * Opens Private Search Setup (and/or Getting Started) without completing the wizard.
 	 * Distinct from {@link _runCreditsFirstAction}, which dismisses onboarding on success.
 	 */
-	private async _runCreditsSoftPrivateSearchAction(): Promise<void> {
-		this._logAction('setupPrivateSearch');
+	private async _runCreditsSoftPrivateSearchAction(stepOverride?: OnboardingStepId): Promise<void> {
+		this._logAction('setupPrivateSearch', stepOverride);
 		try {
 			await this.commandService.executeCommand('safeappeals-rag.setupLocalSearch');
 		} catch {
@@ -2399,7 +2584,7 @@ export class OnboardingVariationA extends Disposable implements IOnboardingServi
 				}
 				status.textContent = localize(
 					'onboarding.credits.balanceUnavailable',
-					"Your balance could not be loaded right now. You can still explore the sample case for free, or buy a pack below."
+					"Your balance could not be loaded right now. You can still buy a pack below, or continue and try the sample case on the last step."
 				);
 			}, () => {
 				if (cancelled || !status.isConnected) {
@@ -2407,7 +2592,7 @@ export class OnboardingVariationA extends Disposable implements IOnboardingServi
 				}
 				status.textContent = localize(
 					'onboarding.credits.balanceUnavailable',
-					"Your balance could not be loaded right now. You can still explore the sample case for free, or buy a pack below."
+					"Your balance could not be loaded right now. You can still buy a pack below, or continue and try the sample case on the last step."
 				);
 			});
 	}
@@ -2541,59 +2726,6 @@ export class OnboardingVariationA extends Disposable implements IOnboardingServi
 	}
 
 	/**
-	 * Role-tailored first-action heading from the stored profile role, with a
-	 * neutral fallback when the role is empty or unrecognized.
-	 */
-	private _getCreditsRoleHeading(): string {
-		const fromProfile = this.profileValues.role?.trim() ?? '';
-		const fromConfig = String(this.configurationService.getValue('safeappeals.profile.role') ?? '').trim();
-		const role = (fromProfile || fromConfig).toLowerCase();
-
-		if (!role) {
-			return localize(
-				'onboarding.credits.firstHeading.neutral',
-				"Try the Sample Case — No Credits Needed"
-			);
-		}
-		if (/\b(lawyer|attorney|counsel)\b/.test(role)) {
-			return localize(
-				'onboarding.credits.firstHeading.lawyer',
-				"Try It on a Sample Matter — No Credits Needed"
-			);
-		}
-		if (/\bparalegal\b/.test(role)) {
-			return localize(
-				'onboarding.credits.firstHeading.paralegal',
-				"Try It on a Sample File — No Credits Needed"
-			);
-		}
-		if (/\b(advocate|appeals representative|union representative)\b/.test(role)) {
-			return localize(
-				'onboarding.credits.firstHeading.advocate',
-				"Try It on a Sample Case — No Credits Needed"
-			);
-		}
-		// Prefer "injured worker" over bare "worker" so Office Worker stays neutral.
-		if (/\b(injured worker|claimant|representing myself|self-represented|self represented)\b/.test(role)) {
-			return localize(
-				'onboarding.credits.firstHeading.claimant',
-				"Explore a Sample Appeal — No Credits Needed"
-			);
-		}
-		if (/\b(student|teacher|researcher)\b/.test(role)) {
-			return localize(
-				'onboarding.credits.firstHeading.education',
-				"Try It on a Sample Project — No Credits Needed"
-			);
-		}
-		// Office Worker, Software Developer, and unrecognized roles: stay neutral.
-		return localize(
-			'onboarding.credits.firstHeading.neutral',
-			"Try the Sample Case — No Credits Needed"
-		);
-	}
-
-	/**
 	 * Doc-style external link that opens via {@link IOpenerService} (Electron-safe).
 	 */
 	private _createCreditsExternalLink(parent: HTMLElement, label: string, href: string, linkId: string): void {
@@ -2611,10 +2743,33 @@ export class OnboardingVariationA extends Disposable implements IOnboardingServi
 	}
 
 	/**
+	 * Opens Tutorials (sample case walkthrough). Dismisses the overlay first so
+	 * same-window tour UI is not covered. Distinct error copy from
+	 * {@link _runCreditsFirstAction} — checklist/setup messaging is wrong here.
+	 */
+	private async _runGetStartedTutorials(): Promise<void> {
+		this._logAction('openTutorials', OnboardingStepId.GetStarted);
+		// Dismiss before openTutorials: when the sample is already open, the
+		// command runs takeTour() in-window and would otherwise await under the overlay.
+		this._dismiss('complete');
+		try {
+			await this.commandService.executeCommand('safeappeals-timeline.openTutorials');
+		} catch {
+			this.notificationService.notify({
+				severity: Severity.Info,
+				message: localize(
+					'onboarding.getStarted.tutorialsUnavailable',
+					"Tutorials could not open. Try Help → Tutorials after trusting the folder, or Close Folder and try again."
+				),
+			});
+		}
+	}
+
+	/**
 	 * Runs a zero-cost first-action command, then completes the wizard on success.
 	 */
-	private async _runCreditsFirstAction(commandId: string, actionId: string): Promise<void> {
-		this._logAction(actionId);
+	private async _runCreditsFirstAction(commandId: string, actionId: string, stepOverride?: OnboardingStepId): Promise<void> {
+		this._logAction(actionId, stepOverride);
 		try {
 			await this.commandService.executeCommand(commandId);
 			this._dismiss('complete');

@@ -1043,7 +1043,7 @@ suite('ComputeAutomaticInstructions', () => {
 			assert.strictEqual(data.claudeRulesCount, 0, 'Should have no Claude rules count');
 		});
 
-		test('should track Claude agents in telemetry', async () => {
+		test('does not list or count compatibility agents for runSubagent', async () => {
 			const rootFolderName = 'telemetry-claude-agents-test';
 			const rootFolder = `/${rootFolderName}`;
 			const rootFolderUri = URI.file(rootFolder);
@@ -1052,6 +1052,7 @@ suite('ComputeAutomaticInstructions', () => {
 			testConfigService.setUserConfiguration(PromptsConfig.AGENTS_LOCATION_KEY, {
 				[AGENTS_SOURCE_FOLDER]: true,
 				'.claude/agents': true,
+				'.safeAppeals/agents': true,
 			});
 
 			await mockFiles(fileService, [
@@ -1071,6 +1072,15 @@ suite('ComputeAutomaticInstructions', () => {
 						'description: \'A GitHub agent\'',
 						'---',
 						'GitHub agent content',
+					]
+				},
+				{
+					path: `${rootFolder}/.safeAppeals/agents/safe-agent.agent.md`,
+					contents: [
+						'---',
+						'description: \'A SafeAppeals agent\'',
+						'---',
+						'SafeAppeals agent content',
 					]
 				},
 				{
@@ -1101,7 +1111,14 @@ suite('ComputeAutomaticInstructions', () => {
 			const telemetryEvent = telemetryEvents.find(e => e.eventName === 'instructionsCollected');
 			assert.ok(telemetryEvent, 'Should emit telemetry event');
 			const data = telemetryEvent.data as InstructionsCollectionEvent;
-			assert.strictEqual(data.claudeAgentsCount, 1, 'Should count 1 Claude agent');
+			assert.strictEqual(data.claudeAgentsCount, 0, 'Compatibility Claude agents must not be listed for runSubagent');
+
+			const textVariables = variables.asArray().filter(v => isPromptTextVariableEntry(v));
+			assert.strictEqual(textVariables.length, 1, 'Should emit one agents list text variable');
+			const agentsXml = textVariables[0].value;
+			assert.ok(agentsXml.includes('<name>safe-agent</name>'), 'SafeAppeals agent should be offered by name');
+			assert.ok(!agentsXml.includes('claude-agent'), 'Claude compat agent must not be offered by name');
+			assert.ok(!agentsXml.includes('gh-agent'), 'GitHub compat agent must not be offered by name');
 		});
 	});
 
@@ -1546,7 +1563,7 @@ suite('ComputeAutomaticInstructions', () => {
 
 			await mockFiles(fileService, [
 				{
-					path: `${rootFolder}/.github/agents/test-agent-1.agent.md`,
+					path: `${rootFolder}/.safeAppeals/agents/test-agent-1.agent.md`,
 					contents: [
 						'---',
 						'description: \'Test agent 1\'',
@@ -1557,7 +1574,7 @@ suite('ComputeAutomaticInstructions', () => {
 					]
 				},
 				{
-					path: `${rootFolder}/.github/agents/test-agent-2.agent.md`,
+					path: `${rootFolder}/.safeAppeals/agents/test-agent-2.agent.md`,
 					contents: [
 						'---',
 						'description: \'Test agent 2\'',
@@ -1568,7 +1585,7 @@ suite('ComputeAutomaticInstructions', () => {
 					]
 				},
 				{
-					path: `${rootFolder}/.github/agents/test-agent-3.agent.md`,
+					path: `${rootFolder}/.safeAppeals/agents/test-agent-3.agent.md`,
 					contents: [
 						'---',
 						'description: \'Test agent 3\'',
@@ -1579,7 +1596,7 @@ suite('ComputeAutomaticInstructions', () => {
 					]
 				},
 				{
-					path: `${rootFolder}/.github/agents/test-agent-4.agent.md`,
+					path: `${rootFolder}/.safeAppeals/agents/test-agent-4.agent.md`,
 					contents: [
 						'---',
 						'description: \'Test agent 4\'',
@@ -1590,7 +1607,7 @@ suite('ComputeAutomaticInstructions', () => {
 					]
 				},
 				{
-					path: `${rootFolder}/.github/agents/test-agent-5.agent.md`,
+					path: `${rootFolder}/.safeAppeals/agents/test-agent-5.agent.md`,
 					contents: [
 						'---',
 						'description: \'Test agent 5\'',

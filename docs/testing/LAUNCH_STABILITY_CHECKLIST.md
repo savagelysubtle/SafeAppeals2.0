@@ -26,12 +26,12 @@ Run through this complete scenario to verify all features work together.
 
 - [ ] Create new folder: `C:\Cases\Smith_v_Employer_2025`
 - [ ] Open folder in SafeAppeals Navigator
-- [ ] Verify `policy-manuals/` folder auto-created
-- [ ] Verify `tosort/` folder auto-created (if enabled)
+- [ ] Run project-setup / Tutorials sample (or create standard folders) and verify `core_references/` when scaffolding shared refs
+- [ ] Verify `to_sort/` folder exists (standard intake folder; snake_case)
 
 **Expected:**
 
-- Both folders appear in Explorer
+- Standard case folders appear in Explorer (`medical_reports`, `to_sort`, etc.)
 - No errors in console (`Help > Toggle Developer Tools`)
 
 **Notes:**
@@ -47,16 +47,18 @@ Issues:
 
 **Actions:**
 
-- [ ] Create folder structure:
+- [ ] Create folder structure (snake_case):
   ```
   Smith_v_Employer_2025/
-  ├── Medical_Reports/
-  ├── Correspondence/
-  ├── Decisions_and_Orders/
-  ├── Evidence/
-  └── tosort/
+  ├── medical_reports/
+  ├── correspondence/
+  ├── decisions_and_orders/
+  ├── evidence/
+  ├── personal_notes/
+  ├── to_sort/
+  └── core_references/
   ```
-- [ ] Or use File Organizer to create structure
+- [ ] Or use project-setup / organize-files skills / Tutorials sample case
 
 **Expected:**
 
@@ -72,7 +74,7 @@ Issues:
 
 ---
 
-### Step 3: Import Test Documents to `tosort/`
+### Step 3: Import Test Documents to `to_sort/`
 
 **Test Files Needed:**
 
@@ -85,7 +87,7 @@ Issues:
 
 **Actions:**
 
-- [x ] Copy all test files to `tosort/` folder
+- [x ] Copy all test files to `to_sort/` folder
 
 **Expected:**
 
@@ -107,7 +109,7 @@ Issues:
 
 - [ ] Open File Organizer (`Ctrl+Shift+O`)
 - [ ] Click "Select Files" or use wizard
-- [ ] Select files from `tosort/`
+- [ ] Select files from `to_sort/`
 - [ ] Verify AI classification runs (or manual classify)
 - [ ] Review proposed destinations
 - [ ] Apply changes
@@ -165,20 +167,20 @@ Issues:
 
 ---
 
-### Step 6: RAG Indexing - Add Policy Manual
+### Step 6: Private Search — Add Core Reference
 
 **Actions:**
 
-- [ ] Copy a PDF to `policy-manuals/` folder
-- [ ] Wait 30 seconds (or right-click → "Index as Policy Manual")
-- [ ] Open Void Chat
-- [ ] Ask: "What does the policy manual say about [topic in PDF]?"
+- [ ] Copy a PDF to `core_references/` folder (or run Create Core References Folder)
+- [ ] Confirm left status bar shows `$(search) Private Search` (not the Copilot shield)
+- [ ] Wait for indexing / run Search Private Index or `safeappeals_rag_get_stats`
+- [ ] In Chat (with Private Search tools available), ask about a topic in that PDF
 
 **Expected:**
 
-- [ ] Document auto-indexed (check console for "RAG: Indexed...")
-- [ ] Chat returns relevant answer with attribution
-- [ ] No embedding errors
+- [ ] Document indexed into Private Search (check Private Search output / status)
+- [ ] Search returns citation-aware hits for core references
+- [ ] No embedding / hard-disable errors (or clear disable message if models missing)
 
 **Notes:**
 

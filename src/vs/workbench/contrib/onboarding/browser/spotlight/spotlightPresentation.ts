@@ -97,7 +97,7 @@ export class SpotlightPresentation extends Disposable implements IOnboardingPres
 					break;
 				}
 
-				const target = await this._resolveTarget(context.targetWindow, step.targetId);
+				const target = await this._resolveTarget(context.targetWindow, step.targetId, step.targetResolveTimeoutMs);
 				if (aborted) {
 					break;
 				}
@@ -144,8 +144,8 @@ export class SpotlightPresentation extends Disposable implements IOnboardingPres
 		}
 	}
 
-	private async _resolveTarget(targetWindow: Window, targetId: string): Promise<HTMLElement | undefined> {
-		const deadline = Date.now() + TARGET_RESOLVE_TIMEOUT;
+	private async _resolveTarget(targetWindow: Window, targetId: string, timeoutMs?: number): Promise<HTMLElement | undefined> {
+		const deadline = Date.now() + (timeoutMs ?? TARGET_RESOLVE_TIMEOUT);
 		let element = findOnboardingTarget(targetWindow, targetId);
 		while (!element && Date.now() < deadline) {
 			await timeout(TARGET_POLL_INTERVAL);

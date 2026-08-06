@@ -4,11 +4,17 @@
 
 import type { ResourceAdapter } from './mlEngineTypes';
 import { syncRagModelEnv, type ModelEnvSyncResult } from './modelEnvSync';
+import type { RagEnsureEmbedderResult } from './ragCoreHost';
 
 export interface EmbeddingAdapterDeps {
 	readonly getArtifactDir: (modelId: string) => Promise<string | undefined>;
 	/** Ensure rag-core can see synced env (e.g. refreshModelGates). */
 	readonly ensureRagCoreReady?: () => Promise<void>;
+	/** Load / unload native BGE residency (MlResourceEngine lease). */
+	readonly ragHost?: {
+		ensureEmbedderLoaded(): RagEnsureEmbedderResult;
+		clearEmbedder(): void;
+	};
 	readonly estimateMb?: number;
 	readonly log?: (message: string) => void;
 }
@@ -25,11 +31,13 @@ export class EmbeddingAdapter implements ResourceAdapter {
 	private lastSync: ModelEnvSyncResult | undefined;
 	private readonly getArtifactDir: (modelId: string) => Promise<string | undefined>;
 	private readonly ensureRagCoreReady?: () => Promise<void>;
+	private readonly ragHost?: EmbeddingAdapterDeps['ragHost'];
 	private readonly log?: (message: string) => void;
 
 	constructor(deps: EmbeddingAdapterDeps) {
 		this.getArtifactDir = deps.getArtifactDir;
 		this.ensureRagCoreReady = deps.ensureRagCoreReady;
+		this.ragHost = deps.ragHost;
 		this.estimateMb = deps.estimateMb ?? 400;
 		this.log = deps.log;
 	}
@@ -50,6 +58,15 @@ export class EmbeddingAdapter implements ResourceAdapter {
 		if (signal.aborted) {
 			throw new Error('Embedding load aborted.');
 		}
+		if (this.ragHost) {
+			const ensureResult = this.ragHost.ensureEmbedderLoaded();
+			if (!ensureResult.ok) {
+				throw new Error(
+					ensureResult.error ??
+					'Embedding model failed to load in rag-core (ensureEmbedderLoaded).',
+				);
+			}
+		}
 		if (this.ensureRagCoreReady) {
 			await this.ensureRagCoreReady();
 		}
@@ -60,8 +77,9 @@ export class EmbeddingAdapter implements ResourceAdapter {
 	}
 
 	async unload(): Promise<void> {
-		// Native rag-core residency is managed by RagCoreHost; clear lease bookkeeping only.
+		this.ragHost?.clearEmbedder();
 		this.loaded = false;
+		this.log?.('EmbeddingAdapter unloaded (native embedder cleared).');
 	}
 
 	isLoaded(): boolean {

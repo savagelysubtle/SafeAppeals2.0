@@ -17,6 +17,11 @@ export function hardDisableMessage(code: HardDisableCode, reasons: readonly stri
 				'This scanned PDF cannot be indexed on this computer. Private Search needs Unlimited-OCR, which is not available for this machine.{0}',
 				detail,
 			);
+		case 'scanned-ocr-unpinned':
+			return vscode.l10n.t(
+				'This scanned PDF cannot be indexed yet. Unlimited-OCR download pins are not configured for this build.{0}',
+				detail,
+			);
 		case 'scanned-ocr-not-installed':
 			return vscode.l10n.t(
 				'This scanned PDF cannot be indexed until Unlimited-OCR is installed with your consent. Run “Set Up Private Search” ({0}) to install it when eligible.{1}',
@@ -46,6 +51,16 @@ export function hardDisableMessage(code: HardDisableCode, reasons: readonly stri
 		case 'native-missing':
 			return vscode.l10n.t(
 				'Private Search is unavailable because the on-device search engine is missing or does not match this runtime (native addon / ABI).{0}',
+				detail,
+			);
+		case 'index-lock-busy':
+			return vscode.l10n.t(
+				'Private Search index is locked by another Safe Appeals window — close other windows using this profile and reload.{0}',
+				detail,
+			);
+		case 'read-only-session':
+			return vscode.l10n.t(
+				'Private Search indexing is owned by the main workbench window. Search is available here in read-only mode.{0}',
 				detail,
 			);
 		case 'models-missing':

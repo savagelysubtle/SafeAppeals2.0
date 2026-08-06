@@ -21,6 +21,7 @@ import { IWorkspaceContextService } from '../../../../../platform/workspace/comm
 import { ChatRequestVariableSet, IChatRequestVariableEntry, isPromptFileVariableEntry, toPromptFileVariableEntry, toPromptTextVariableEntry, PromptFileVariableKind, IPromptTextVariableEntry, ChatRequestToolReferenceEntry, toToolVariableEntry } from '../attachments/chatVariableEntries.js';
 import { ILanguageModelToolsService, IToolData, VSCodeToolReference } from '../tools/languageModelToolsService.js';
 import { PromptsConfig } from './config/config.js';
+import { isAgentInvocableViaRunSubagent } from './agentSubagentInvoke.js';
 import { isInClaudeAgentsFolder, isInClaudeRulesFolder, isPromptOrInstructionsFile } from './config/promptFileLocations.js';
 import { ParsedPromptFile } from './promptFileParser.js';
 import { AgentInstructionFileType, IAgentSkill, ICustomAgent, IInstructionFile, IPromptsService, matchesSessionType, newInstructionsCollectionEvent, newInstructionsCollectionDebugInfo, type InstructionsCollectionEvent, type InstructionsCollectionDebugInfo } from './service/promptsService.js';
@@ -517,7 +518,11 @@ export class ComputeAutomaticInstructions {
 					return (agent: ICustomAgent) => subagents.includes(agent.name) && matchesSessionType(agent.sessionTypes, currentSessionType);
 				}
 			})();
-			const agents = (await this._promptsService.getCustomAgents(token)).filter(a => a.enabled);
+			// Only offer agents that runSubagent will accept (SafeAppeals / extension /
+			// plugin / builtin) — compatibility folder agents stay discoverable in UI
+			// but must not be advertised by name here.
+			const agents = (await this._promptsService.getCustomAgents(token))
+				.filter(a => isAgentInvocableViaRunSubagent(a));
 
 			if (agents.length > 0) {
 				entries.push('<agents>');

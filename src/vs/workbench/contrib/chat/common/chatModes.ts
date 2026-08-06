@@ -26,6 +26,7 @@ import { ICustomizationHarnessService } from './customizationHarnessService.js';
 import { PromptFileSource, Target } from './promptSyntax/promptTypes.js';
 import { ThemeIcon } from '../../../../base/common/themables.js';
 import { Codicon } from '../../../../base/common/codicons.js';
+import { safeAppealsShieldOutlineIcon } from '../../../../platform/theme/common/safeAppealsIcons.js';
 import { hash } from '../../../../base/common/hash.js';
 import { isString } from '../../../../base/common/types.js';
 import { isTarget } from './promptSyntax/languageProviders/promptFileAttributes.js';
@@ -710,7 +711,7 @@ export class BuiltinChatMode implements IChatMode {
 export namespace ChatMode {
 	export const Ask = new BuiltinChatMode(ChatModeKind.Ask, 'Ask', localize('chatDescription', "Explore and understand your code"), Codicon.question);
 	export const Edit = new BuiltinChatMode(ChatModeKind.Edit, 'Edit', localize('editsDescription', "Edit or refactor selected code"), Codicon.edit);
-	export const Agent = new BuiltinChatMode(ChatModeKind.Agent, 'Agent', localize('agentDescription', "Describe what to build"), Codicon.agent);
+	export const Agent = new BuiltinChatMode(ChatModeKind.Agent, 'Agent', localize('agentDescription', "Describe what to build"), safeAppealsShieldOutlineIcon);
 }
 
 export function isBuiltinChatMode(mode: IChatMode): boolean {

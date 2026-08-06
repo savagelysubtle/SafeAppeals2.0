@@ -313,12 +313,16 @@ suite('SafeAppeals Cloud SetupAgent helpers', () => {
 				plan: prompt.includes('Plan'),
 				neverAsk: /NEVER ask/i.test(prompt),
 				mode: prompt.includes('Ask'),
+				neverPush: prompt.includes('never push'),
+				gitConfidentialWarn: prompt.includes('confidential documents would leave this computer'),
 			}, {
 				switchMode: true,
 				agent: true,
 				plan: true,
 				neverAsk: true,
 				mode: true,
+				neverPush: true,
+				gitConfidentialWarn: true,
 			});
 		});
 

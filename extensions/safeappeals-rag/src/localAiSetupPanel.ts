@@ -8,6 +8,7 @@ import {
 	GETTING_STARTED_PRIVATE_SEARCH_WALKTHROUGH,
 	markLocalAiSetupCompleted,
 } from './localAiSetupCompletion';
+import { installOcrWithEnsure } from './localAiSetupOcr';
 import {
 	applyOcrResult,
 	applyScanResult,
@@ -22,6 +23,7 @@ import {
 	skipToDone,
 	type LocalAiSetupSession,
 } from './localAiSetupState';
+import { searchPackModelPercent } from './localAiSetupProgress';
 import type { MlBridge } from './mlBridge';
 import {
 	BGE_SMALL_MODEL_ID,
@@ -49,6 +51,8 @@ type HostToWebviewMessage =
 		readonly busy: boolean;
 		readonly statusMessage: string | undefined;
 		readonly mlAvailable: boolean;
+		readonly progressPercent?: number;
+		readonly progressIndeterminate?: boolean;
 	};
 
 /**
@@ -72,6 +76,8 @@ export class LocalAiSetupPanel {
 	private session: LocalAiSetupSession;
 	private busy = false;
 	private statusMessage: string | undefined;
+	private progressPercent: number | undefined;
+	private progressIndeterminate = false;
 	private probeStarted = false;
 
 	private constructor(
@@ -177,6 +183,11 @@ export class LocalAiSetupPanel {
 		}
 	}
 
+	private clearProgress(): void {
+		this.progressPercent = undefined;
+		this.progressIndeterminate = false;
+	}
+
 	private async postState(): Promise<void> {
 		const message: HostToWebviewMessage = {
 			type: 'state',
@@ -185,6 +196,8 @@ export class LocalAiSetupPanel {
 			busy: this.busy,
 			statusMessage: this.statusMessage,
 			mlAvailable: Boolean(this.ml),
+			progressPercent: this.progressPercent,
+			progressIndeterminate: this.progressIndeterminate,
 		};
 		void this.panel.webview.postMessage(message);
 	}
@@ -288,6 +301,8 @@ export class LocalAiSetupPanel {
 			return;
 		}
 		this.busy = true;
+		this.progressIndeterminate = true;
+		this.progressPercent = undefined;
 		this.statusMessage = vscode.l10n.t('Installing search tools…');
 		await this.postState();
 
@@ -295,8 +310,11 @@ export class LocalAiSetupPanel {
 		let anyAlready = true;
 		const errors: string[] = [];
 
-		for (const modelId of SEARCH_PACK_MODEL_IDS) {
+		for (let index = 0; index < SEARCH_PACK_MODEL_IDS.length; index++) {
+			const modelId = SEARCH_PACK_MODEL_IDS[index]!;
 			this.statusMessage = vscode.l10n.t('Installing {0}…', modelId);
+			this.progressPercent = searchPackModelPercent(index, SEARCH_PACK_MODEL_IDS.length);
+			this.progressIndeterminate = false;
 			await this.postState();
 			const outcome = await this.ml.consentInstall(modelId, true);
 			const classified = classifyOutcome(outcome);
@@ -310,9 +328,12 @@ export class LocalAiSetupPanel {
 				anyAlready = false;
 				errors.push(outcomeMessage(outcome));
 			}
+			this.progressPercent = searchPackModelPercent(index + 1, SEARCH_PACK_MODEL_IDS.length);
+			await this.postState();
 		}
 
 		this.busy = false;
+		this.clearProgress();
 		if (errors.length) {
 			const message = friendlyInstallError(errors.join(' '));
 			this.session = applySearchPackResult(this.session, 'failed', message);
@@ -358,23 +379,36 @@ export class LocalAiSetupPanel {
 			return;
 		}
 		this.busy = true;
+		this.progressIndeterminate = true;
+		this.progressPercent = undefined;
 		this.statusMessage = vscode.l10n.t('Installing scanned-PDF tools…');
 		await this.postState();
 
-		const outcome = await this.ml.consentInstall(UNLIMITED_OCR_MODEL_ID, true);
+		const result = await installOcrWithEnsure(this.ml, async (message, percent, indeterminate) => {
+			this.statusMessage = vscode.l10n.t(message);
+			if (indeterminate) {
+				this.progressIndeterminate = true;
+				this.progressPercent = undefined;
+			} else if (percent !== undefined) {
+				this.progressPercent = percent;
+				this.progressIndeterminate = false;
+			} else {
+				this.progressIndeterminate = true;
+				this.progressPercent = undefined;
+			}
+			await this.postState();
+		});
+
 		this.busy = false;
-		const classified = classifyOutcome(outcome);
-		if (classified === 'installed') {
-			this.session = applyOcrResult(this.session, 'installed');
+		this.clearProgress();
+		if (result.sessionOutcome === 'installed' || result.sessionOutcome === 'already-ready') {
+			this.session = applyOcrResult(this.session, result.sessionOutcome);
 			this.statusMessage = undefined;
-		} else if (classified === 'already-ready') {
-			this.session = applyOcrResult(this.session, 'already-ready');
-			this.statusMessage = undefined;
-		} else if (classified === 'ineligible') {
+		} else if (result.sessionOutcome === 'ineligible') {
 			this.session = applyOcrResult(this.session, 'ineligible');
 			this.statusMessage = undefined;
 		} else {
-			const message = friendlyInstallError(outcomeMessage(outcome));
+			const message = friendlyInstallError(result.errorMessage ?? 'Install did not complete.');
 			this.session = applyOcrResult(this.session, 'failed', message);
 			this.statusMessage = message;
 		}
@@ -488,7 +522,15 @@ function getPanelHtml(webview: vscode.Webview, extensionUri: vscode.Uri): string
 			<h1 id="headline">Private Search Setup</h1>
 			<p id="subtitle" class="subtitle"></p>
 		</header>
-		<div id="status" class="status-banner hidden" role="status"></div>
+		<div id="status" class="status-banner hidden" role="status">
+			<span id="status-text"></span>
+			<div id="progress" class="progress hidden" aria-hidden="true">
+				<div class="progress-track" aria-hidden="true">
+					<div id="progress-fill" class="progress-fill"></div>
+				</div>
+				<span id="progress-label" class="progress-label"></span>
+			</div>
+		</div>
 		<section id="beat" class="panel" aria-live="polite"></section>
 		<footer class="actions">
 			<button id="skip-all" type="button" class="secondary">Skip Setup</button>

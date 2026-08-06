@@ -37,6 +37,18 @@
 	white-space: nowrap;
 }
 
+.ai-customization-view .ai-customization-tree-item .inline-badge {
+	flex-shrink: 0;
+	margin-left: 6px;
+	font-size: var(--vscode-agents-fontSize-label3, 11px);
+	padding: 0 4px;
+	border-radius: 3px;
+	color: var(--vscode-descriptionForeground);
+	background: var(--vscode-toolbar-hoverBackground, rgba(90, 93, 94, 0.31));
+	white-space: nowrap;
+	line-height: 16px;
+}
+
 .ai-customization-view .ai-customization-tree-item .actions {
 	display: none;
 	flex-shrink: 0;

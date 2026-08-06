@@ -88,7 +88,7 @@ fn configure_then_convert_path_validation() {
 #[test]
 fn registry_lists_all_canonical_keys() {
 	let keys = all_keys();
-	assert_eq!(keys.len(), 40);
+	assert_eq!(keys.len(), 41);
 	assert_eq!(resolve_key("pdf2ocr"), "pdf2ocr_layer");
 	assert!(keys.contains(&"pdf2ocr_layer".to_string()));
 }

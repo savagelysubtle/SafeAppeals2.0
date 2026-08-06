@@ -1,5 +1,17 @@
 # RAG (Retrieval-Augmented Generation) System Documentation
 
+> **Superseded for shipping SafeAppeals.** Current Private Search lives in
+> `extensions/safeappeals-rag` + `rust/rag-core`. Prefer:
+>
+> - [`docs/rag/tool-contracts.md`](../rag/tool-contracts.md) — frozen `safeappeals_rag_*` tools
+> - [`docs/rag/packaging-rung-14.md`](../rag/packaging-rung-14.md) — native / packaging
+>
+> Product UI: left status bar **`$(search) Private Search`** (not the Copilot shield).
+> Shared references folder on disk: **`core_references/`** (not `policy-manuals/`).
+> Legacy tool name `rag_search_policy` maps to `safeappeals_rag_search_reference`
+> (`policy_manual` → scope `core_reference`). Docling/Chroma paths below describe
+> the retired Void contrib stack and must not be treated as current behavior.
+
 ## Overview
 
 The Void RAG system is a sophisticated document indexing and retrieval system designed specifically for legal and medical document analysis. It combines traditional keyword search with modern vector embeddings to provide highly accurate document retrieval for workers' compensation appeals and legal research.
@@ -437,7 +449,7 @@ The AI agent has access to three RAG search tools:
 
 | Tool | Searches | Use Case |
 |------|----------|----------|
-| `rag_search_policy` | Policy manuals only | WC rules, procedures, regulations, eligibility |
+| `safeappeals_rag_search_reference` (legacy alias `rag_search_policy`) | Core references (`core_references/`) | WC rules, procedures, regulations, eligibility |
 | `rag_search_workspace` | Case files only | Medical reports, IME evals, correspondence |
 | `rag_search_all` | **Both sources** | Comprehensive research, unsure where info is |
 
@@ -470,12 +482,12 @@ Search BOTH policy manuals AND case files simultaneously.
 
 **On Drag-and-Drop:**
 When files are dropped into the chat, they are automatically indexed:
-- Files in `policy-manuals/` folder → indexed as policy manuals
+- Files in `core_references/` folder → indexed as core references (Void docs said `policy-manuals/`; that name is retired)
 - All other files → indexed as case files
 
 **On Workspace Open:**
 When a workspace opens (if `ragAutoIndexCaseFiles` setting is true):
-- All folders except `policy-manuals/` are scanned
+- Case folders are scanned; shared refs live under `core_references/` (not `policy-manuals/`)
 - Unindexed documents are automatically indexed as case files
 
 ## Integration with Void Platform

@@ -78,6 +78,8 @@ suite('contextPack', () => {
 		assert.ok(packed.startsWith('Found 1 relevant chunk(s) [scope=core_reference]'));
 		assert.ok(packed.includes('hybrid BM25+vector → RRF → optional cross-encoder; not MMR'));
 		assert.ok(packed.includes(hitA.text));
+		assert.ok(packed.includes('Cite sources using [n] headers'));
+		assert.ok(packed.includes('Do not invent citations'));
 	});
 
 	test('buildSearchFailureContextPack uses Search failed prefix', () => {

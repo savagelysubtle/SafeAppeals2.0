@@ -16,7 +16,7 @@ use crate::embed;
 use crate::query_processor::{self, RoutedScope};
 use crate::rerank::{self, RerankDoc};
 use crate::rrf::{self, FusedHit, OVERFETCH_MULTIPLIER, RRF_K};
-use crate::storage::{workspace, ChunkRow, StorageError, WorkspaceSession};
+use crate::storage::{workspace, ChunkRow, StorageError, IndexWriteRole};
 use crate::text::{BM25_B, BM25_K1};
 
 /// Search scope filter (DB `documents.scope` values). `all` = no filter.
@@ -220,7 +220,7 @@ fn maybe_rerank(query: &str, mut candidates: Vec<SearchHit>, final_k: usize) -> 
 /// depth == pool depth preserves M3 top-`finalK` ordering when CE is absent
 /// (fuse-to-pool then truncate ≡ fuse-to-finalK over the same leg lists).
 fn hybrid_search_one(
-	session: &mut WorkspaceSession,
+	session: &mut workspace::WorkspaceSession,
 	query: &str,
 	pool_k: usize,
 	scope: SearchScope,
@@ -228,6 +228,18 @@ fn hybrid_search_one(
 	if pool_k == 0 || query.trim().is_empty() {
 		return Ok(Vec::new());
 	}
+
+	session
+		.text
+		.reload_reader()
+		.map_err(|e| StorageError::Message(e.to_string()))?;
+	if session.role == IndexWriteRole::Secondary {
+		session
+			.vectors
+			.reload_if_stale()
+			.map_err(|e| StorageError::Message(e.to_string()))?;
+	}
+
 	let retrieval_k = pool_k;
 	let scope_filter = scope.as_db_filter();
 

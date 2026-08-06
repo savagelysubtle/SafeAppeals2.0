@@ -64,28 +64,31 @@ type FakeNative = RagCoreNativeApi & {
 };
 
 function fakeNative(overrides: Partial<RagCapabilities> = {}): FakeNative {
-	const caps: RagCapabilities = {
+	const caps = {
 		hybrid: true,
 		rerank: false,
 		queryProcessor: true,
 		modelsPresent: true,
 		storageReady: true,
-		dims: 512,
+		dims: 384,
+		indexWriteCapable: true,
+		indexWriteRole: 'primary' as const,
 		...overrides,
 	};
 	let open = false;
 	return {
 		ping: () => 'pong',
 		version: () => '0.1.0-test',
-		capabilities: () => ({ ...caps }),
+		capabilities: () => ({ ...caps }) as RagCapabilities,
 		setCapabilities: (partial: Partial<RagCapabilities>) => {
 			Object.assign(caps, partial);
 		},
-		openWorkspace: (_root, dek): RagOpResult => {
+		openWorkspace: (_root, dek, _preferSecondary): RagOpResult => {
 			if (dek.length !== 32) {
 				return { ok: false, error: 'DEK must be 32 bytes' };
 			}
 			open = true;
+			// Role comes from capabilities (flock is SoT in real native); preferSecondary is a no-op hint.
 			return { ok: true };
 		},
 		closeWorkspace: (): RagOpResult => {
@@ -98,6 +101,7 @@ function fakeNative(overrides: Partial<RagCapabilities> = {}): FakeNative {
 			vectors: open ? 2 : 0,
 			textDocs: open ? 2 : 0,
 		}),
+		getDocument: () => null,
 		chunkDocument: input => [
 			{
 				chunkId: `${input.docId}:0`,
@@ -164,7 +168,88 @@ suite('ragCoreHost gates', () => {
 		assert.strictEqual(status.disableCode, 'native-missing');
 		assert.strictEqual(status.available, false);
 		assert.ok(status.expectedPath?.includes('electron-146'));
-		assert.ok(status.electron146Note.length > 0);
+		assert.ok(status.electron146Note.includes('electron-146'));
+		assert.ok(!status.electron146Note.includes('not produced yet'));
+	});
+
+	test('openWorkspace succeeds with lazy writer; LockBusy surfaces on indexChunks', async () => {
+		const context = fakeContext(tmpRoot);
+		const lockError =
+			'LockBusy: Failed to acquire index writer at .../text.tantivy/.tantivy-writer.lock';
+		const native = fakeNative({ modelsPresent: true });
+		native.indexChunks = () => ({ ok: false, error: lockError });
+
+		const host = await RagCoreHost.create({
+			context: context as never,
+			workspaceId: 'ws-lock',
+			getArtifactDir: async () => undefined,
+			skipModelsGate: true,
+			load: () => ({
+				ok: true,
+				native,
+				bindingPath: '/fake/rag_core.node',
+			}),
+		});
+
+		const status = host.getStatus();
+		assert.strictEqual(status.disableCode, undefined);
+		assert.strictEqual(status.available, true);
+		assert.strictEqual(status.workspaceOpen, true);
+
+		const indexResult = host.indexChunks(
+			{
+				id: 'd1',
+				path: '/x',
+				filename: 'x',
+				filetype: 'md',
+				filesize: 1,
+				checksum: 'c',
+				scope: 'case_index',
+				isCoreReference: false,
+				createdAt: 't',
+				lastIndexedAt: 't',
+			},
+			[],
+		);
+		assert.strictEqual(indexResult.ok, false);
+		assert.ok(indexResult.error?.includes('LockBusy'));
+
+		const gate = host.assertIndexingAllowed();
+		assert.strictEqual(gate.ok, false);
+		if (!gate.ok) {
+			assert.strictEqual(gate.code, 'index-lock-busy');
+		}
+		assert.strictEqual(host.getStatus().disableCode, 'index-lock-busy');
+	});
+
+	test('secondary session allows search but blocks indexing', async () => {
+		const context = fakeContext(tmpRoot);
+		const host = await RagCoreHost.create({
+			context: context as never,
+			workspaceId: 'ws-secondary',
+			getArtifactDir: async () => undefined,
+			skipModelsGate: true,
+			preferSecondary: true,
+			load: () => ({
+				ok: true,
+				native: fakeNative({ indexWriteRole: 'secondary', indexWriteCapable: false }),
+				bindingPath: '/fake/rag_core.node',
+			}),
+		});
+
+		const status = host.getStatus();
+		assert.strictEqual(status.indexWriteRole, 'secondary');
+		assert.strictEqual(status.available, true);
+		assert.strictEqual(host.assertSearchAllowed().ok, true);
+
+		const indexGate = host.assertIndexingAllowed();
+		assert.strictEqual(indexGate.ok, false);
+		if (!indexGate.ok) {
+			assert.strictEqual(indexGate.code, 'read-only-session');
+		}
+
+		const search = host.search('query', { finalK: 4 });
+		assert.strictEqual(search.ok, true);
 	});
 
 	test('crypto-unavailable when SecretStorage probe fails', async () => {
@@ -241,7 +326,50 @@ suite('ragCoreHost gates', () => {
 		assert.strictEqual(close.ok, true);
 	});
 
-	test('refreshModelGates clears models-missing after Search pack dirs appear', async () => {
+	test('refreshModelGates keeps models-missing when ensureEmbedderLoaded fails', async () => {
+		const context = fakeContext(tmpRoot);
+		const embedDir = path.join(tmpRoot, 'bge-small');
+		await fs.mkdir(embedDir, { recursive: true });
+		let artifactDir: string | undefined;
+		const native = fakeNative({ modelsPresent: false });
+		native.ensureEmbedderLoaded = () => ({
+			ok: false,
+			error: 'fastembed load failed',
+			loaded: false,
+		});
+		const host = await RagCoreHost.create({
+			context: context as never,
+			workspaceId: 'ws1',
+			getArtifactDir: async () => artifactDir,
+			load: () => ({
+				ok: true,
+				native,
+				bindingPath: '/fake/rag_core.node',
+			}),
+		});
+		assert.strictEqual(host.getStatus().disableCode, 'models-missing');
+		assert.strictEqual(host.isAvailable, false);
+
+		artifactDir = embedDir;
+		await host.refreshModelGates();
+
+		// Artifacts present but cold — still available until ensure fails.
+		assert.strictEqual(host.getStatus().disableCode, undefined);
+		assert.strictEqual(host.isAvailable, true);
+
+		const ensureResult = host.ensureEmbedderLoaded();
+		assert.strictEqual(ensureResult.ok, false);
+		await host.refreshModelGates();
+
+		const status = host.getStatus();
+		assert.strictEqual(status.disableCode, 'models-missing');
+		assert.strictEqual(status.modelEnv?.embedReady, true);
+		assert.strictEqual(status.capabilities?.modelsPresent, false);
+		assert.strictEqual(host.isAvailable, false);
+		assert.ok(status.reasons[0]?.includes('failed to load'));
+	});
+
+	test('refreshModelGates clears models-missing when Search pack dirs appear', async () => {
 		const context = fakeContext(tmpRoot);
 		const embedDir = path.join(tmpRoot, 'bge-small');
 		await fs.mkdir(embedDir, { recursive: true });
@@ -261,7 +389,6 @@ suite('ragCoreHost gates', () => {
 		assert.strictEqual(host.isAvailable, false);
 
 		artifactDir = embedDir;
-		native.setCapabilities({ modelsPresent: true });
 		await host.refreshModelGates();
 
 		assert.strictEqual(host.getStatus().disableCode, undefined);
@@ -270,21 +397,53 @@ suite('ragCoreHost gates', () => {
 		assert.strictEqual(host.getStatus().modelEnv?.embedReady, true);
 	});
 
-	test('openWorkspace clearing modelsPresent sticky models-missing after try_load_default', async () => {
+	test('initialize stays available when embed dir present but embedder cold', async () => {
 		const context = fakeContext(tmpRoot);
+		const embedDir = path.join(tmpRoot, 'bge-small');
+		await fs.mkdir(embedDir, { recursive: true });
+		const host = await RagCoreHost.create({
+			context: context as never,
+			workspaceId: 'ws-cold',
+			getArtifactDir: async () => embedDir,
+			load: () => ({
+				ok: true,
+				native: fakeNative({ modelsPresent: false }),
+				bindingPath: '/fake/rag_core.node',
+			}),
+		});
+
+		const status = host.getStatus();
+		assert.strictEqual(status.disableCode, undefined);
+		assert.strictEqual(status.workspaceOpen, true);
+		assert.strictEqual(status.modelEnv?.embedReady, true);
+		assert.strictEqual(status.capabilities?.modelsPresent, false);
+		assert.strictEqual(host.isAvailable, true);
+		assert.strictEqual(host.assertIndexingAllowed().ok, true);
+	});
+
+	test('openWorkspace does not auto-load embedder; ensureEmbedderLoaded flips modelsPresent', async () => {
+		const context = fakeContext(tmpRoot);
+		const embedDir = path.join(tmpRoot, 'bge-small');
+		await fs.mkdir(embedDir, { recursive: true });
+		let ensureCalled = false;
 		const native = fakeNative({ modelsPresent: false });
 		const originalOpen = native.openWorkspace.bind(native);
 		native.openWorkspace = (root, dek) => {
 			const result = originalOpen(root, dek);
-			// Simulate native try_load_default succeeding during openWorkspace.
-			native.setCapabilities({ modelsPresent: true });
+			// openWorkspace must not load BGE — modelsPresent stays false until lease load.
+			assert.strictEqual(native.capabilities().modelsPresent, false);
 			return result;
+		};
+		native.ensureEmbedderLoaded = () => {
+			ensureCalled = true;
+			native.setCapabilities({ modelsPresent: true });
+			return { ok: true, loaded: true };
 		};
 
 		const host = await RagCoreHost.create({
 			context: context as never,
 			workspaceId: 'ws-sticky',
-			getArtifactDir: async () => undefined,
+			getArtifactDir: async () => embedDir,
 			load: () => ({
 				ok: true,
 				native,
@@ -294,7 +453,51 @@ suite('ragCoreHost gates', () => {
 
 		assert.strictEqual(host.getStatus().disableCode, undefined);
 		assert.strictEqual(host.isAvailable, true);
+		assert.strictEqual(host.getStatus().capabilities?.modelsPresent, false);
+
+		host.ensureEmbedderLoaded();
+		assert.strictEqual(ensureCalled, true);
 		assert.strictEqual(host.getStatus().capabilities?.modelsPresent, true);
+
+		await host.refreshModelGates();
+		assert.strictEqual(host.getStatus().disableCode, undefined);
+		assert.strictEqual(host.isAvailable, true);
+		assert.strictEqual(host.assertIndexingAllowed().ok, true);
+	});
+
+	test('clearEmbedder after warm load keeps availability when artifacts present', async () => {
+		const context = fakeContext(tmpRoot);
+		const embedDir = path.join(tmpRoot, 'bge-small');
+		await fs.mkdir(embedDir, { recursive: true });
+		const native = fakeNative({ modelsPresent: false });
+		native.ensureEmbedderLoaded = () => {
+			native.setCapabilities({ modelsPresent: true });
+			return { ok: true, loaded: true };
+		};
+		native.clearEmbedder = () => {
+			native.setCapabilities({ modelsPresent: false });
+			return { ok: true };
+		};
+
+		const host = await RagCoreHost.create({
+			context: context as never,
+			workspaceId: 'ws-unload',
+			getArtifactDir: async () => embedDir,
+			load: () => ({
+				ok: true,
+				native,
+				bindingPath: '/fake/rag_core.node',
+			}),
+		});
+
+		assert.strictEqual(host.isAvailable, true);
+		host.ensureEmbedderLoaded();
+		assert.strictEqual(host.getStatus().capabilities?.modelsPresent, true);
+
+		host.clearEmbedder();
+		assert.strictEqual(host.getStatus().capabilities?.modelsPresent, false);
+		assert.strictEqual(host.getStatus().disableCode, undefined);
+		assert.strictEqual(host.isAvailable, true);
 		assert.strictEqual(host.assertIndexingAllowed().ok, true);
 	});
 });

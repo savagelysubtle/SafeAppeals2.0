@@ -3,6 +3,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import type { ChildProcess } from 'node:child_process';
+import { terminateChildProcess } from '../docParseSidecarHost';
 import {
 	assertLoopbackSmokeUrl,
 	DEFAULT_DOCPARSE_SMOKE_URL,
@@ -139,10 +140,6 @@ export class DocParseAdapter implements ResourceAdapter {
 			return;
 		}
 		this.log?.(`DocParseAdapter killing owned sidecar pid=${child.pid ?? 'unknown'}`);
-		try {
-			child.kill('SIGTERM');
-		} catch {
-			// best-effort
-		}
+		await terminateChildProcess(child);
 	}
 }

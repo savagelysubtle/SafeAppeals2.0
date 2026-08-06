@@ -9,6 +9,7 @@ Complete TypeScript interface and service documentation.
 - [UTBMS Codes](#utbms-codes)
 - [LEDES Formatter](#ledes-formatter)
 - [Webview Messages](#webview-messages)
+- [Agent LM Tools](#agent-lm-tools)
 
 ## Types
 
@@ -728,6 +729,16 @@ type WebviewMessage =
 	  };
 ```
 
+## Agent LM Tools
+
+Registered from `src/agentTools.ts` (`vscode.lm.registerTool`). See [Agent LM Tools Pattern](../../agent-tools-pattern.md).
+
+| Name | Inputs | Notes |
+| ---- | ------ | ----- |
+| `safeappeals_timer_getState` | none | JSON state: `isRunning`, elapsed, matter/rate ids, description, billable |
+| `safeappeals_timer_start` | optional `description`, `matterId`, `rateId`, `isBillable` (default true) | User confirmation; starts via `TimeTrackerService.start` |
+| `safeappeals_timer_stop` | none | User confirmation; saves a time entry when a timer was running |
+
 ---
 
-**See Also:** [Developer Guide](./developer-guide.md) | [User Guide](./user-guide.md) | [README](./README.md)
+**See Also:** [Developer Guide](./developer-guide.md) | [User Guide](./user-guide.md) | [README](./README.md) | [Agent LM Tools Pattern](../../agent-tools-pattern.md)

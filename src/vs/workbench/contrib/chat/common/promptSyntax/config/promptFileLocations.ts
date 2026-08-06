@@ -112,6 +112,16 @@ export const CLAUDE_AGENTS_SOURCE_FOLDER = '.claude/agents';
 export const COPILOT_USER_AGENTS_SOURCE_FOLDER = '~/.copilot/agents';
 
 /**
+ * SafeAppeals workspace agents folder.
+ */
+export const SAFE_APPEALS_AGENTS_SOURCE_FOLDER = '.safeAppeals/agents';
+
+/**
+ * SafeAppeals user-global agents folder.
+ */
+export const SAFE_APPEALS_USER_AGENTS_SOURCE_FOLDER = '~/.safeAppeals/agents';
+
+/**
  * Claude rules folder.
  */
 export const CLAUDE_RULES_SOURCE_FOLDER = '.claude/rules';
@@ -163,6 +173,7 @@ export const DEFAULT_SKILL_SOURCE_FOLDERS: readonly IPromptSourceFolder[] = [
 	{ path: '.agents/skills', source: PromptFileSource.AgentsWorkspace, storage: PromptsStorage.local },
 	{ path: '.github/skills', source: PromptFileSource.GitHubWorkspace, storage: PromptsStorage.local },
 	{ path: '.claude/skills', source: PromptFileSource.ClaudeWorkspace, storage: PromptsStorage.local },
+	{ path: '.safeAppeals/skills', source: PromptFileSource.SafeAppealsWorkspace, storage: PromptsStorage.local },
 	{ path: '~/.agents/skills', source: PromptFileSource.AgentsPersonal, storage: PromptsStorage.user },
 	{ path: '~/.copilot/skills', source: PromptFileSource.CopilotPersonal, storage: PromptsStorage.user },
 	{ path: '~/.claude/skills', source: PromptFileSource.ClaudePersonal, storage: PromptsStorage.user },
@@ -187,8 +198,11 @@ export const DEFAULT_PROMPT_SOURCE_FOLDERS: readonly IPromptSourceFolder[] = [
 
 /**
  * Default agent source folders.
+ * SafeAppeals product paths are first so create-target resolution prefers them.
  */
 export const DEFAULT_AGENT_SOURCE_FOLDERS: readonly IPromptSourceFolder[] = [
+	{ path: SAFE_APPEALS_AGENTS_SOURCE_FOLDER, source: PromptFileSource.SafeAppealsWorkspace, storage: PromptsStorage.local },
+	{ path: SAFE_APPEALS_USER_AGENTS_SOURCE_FOLDER, source: PromptFileSource.SafeAppealsPersonal, storage: PromptsStorage.user },
 	{ path: AGENTS_SOURCE_FOLDER, source: PromptFileSource.GitHubWorkspace, storage: PromptsStorage.local },
 	{ path: CLAUDE_AGENTS_SOURCE_FOLDER, source: PromptFileSource.ClaudeWorkspace, storage: PromptsStorage.local },
 	{ path: COPILOT_USER_AGENTS_SOURCE_FOLDER, source: PromptFileSource.CopilotPersonal, storage: PromptsStorage.user },
@@ -208,11 +222,33 @@ export const DEFAULT_HOOK_FILE_PATHS: readonly IPromptSourceFolder[] = [
 ];
 
 /**
- * Helper function to check if a file is directly in the .github/agents/ folder (not in subfolders).
+ * Helper function to check if a file is directly in a `.safeAppeals/agents` folder
+ * (workspace `.safeAppeals/agents` or resolved user-home `~/.safeAppeals/agents`).
+ */
+export function isInSafeAppealsAgentsFolder(fileUri: URI): boolean {
+	const dir = dirname(fileUri).path;
+	// Both product paths resolve to a directory ending with `/.safeAppeals/agents`.
+	return dir.endsWith('/' + SAFE_APPEALS_AGENTS_SOURCE_FOLDER);
+}
+
+/**
+ * Helper function to check if a file is directly in a compatibility agents folder
+ * (`.github/agents`, `.claude/agents`, or `~/.copilot/agents` / `~/.claude/agents`).
+ * These may appear in discovery UI but are not SafeAppeals product agent roots.
+ */
+export function isInCompatAgentsFolder(fileUri: URI): boolean {
+	const dir = dirname(fileUri).path;
+	return dir.endsWith('/' + AGENTS_SOURCE_FOLDER)
+		|| dir.endsWith('/' + CLAUDE_AGENTS_SOURCE_FOLDER)
+		|| isInCopilotAgentsFolder(fileUri);
+}
+
+/**
+ * Helper function to check if a file is directly in a known agents folder (not in subfolders).
  */
 function isInAgentsFolder(fileUri: URI): boolean {
-	const dir = dirname(fileUri).path;
-	return dir.endsWith('/' + AGENTS_SOURCE_FOLDER) || dir.endsWith('/' + CLAUDE_AGENTS_SOURCE_FOLDER) || isInCopilotAgentsFolder(fileUri);
+	return isInCompatAgentsFolder(fileUri)
+		|| isInSafeAppealsAgentsFolder(fileUri);
 }
 
 /**

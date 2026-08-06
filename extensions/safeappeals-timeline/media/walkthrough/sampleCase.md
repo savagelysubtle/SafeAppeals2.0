@@ -1,6 +1,8 @@
-# Try It Without Client Data
+# Tutorials — Try the Sample Case
 
-The sample case is a bundled practice matter. Nothing leaves this computer,
-no credits are spent, and nothing is a real client file.
+Tutorials open this bundled practice matter, then guide you through a short
+tour and checklist. Nothing leaves this computer, no credits are spent, the
+AI does not run, and nothing here is a real client file.
 
-Use it to see how a case folder is organized before you open your own matter.
+Use Tutorials (or Open Sample Case alone) to see how a case folder is organized
+before you open your own matter.

@@ -57,6 +57,11 @@ export interface ISpotlightStep {
 	 * that hosts the target. Awaited before the target is resolved.
 	 */
 	readonly onBeforeShow?: () => Promise<void> | void;
+
+	/**
+	 * Override the default target resolve wait (ms) when the target may appear later.
+	 */
+	readonly targetResolveTimeoutMs?: number;
 }
 
 /**

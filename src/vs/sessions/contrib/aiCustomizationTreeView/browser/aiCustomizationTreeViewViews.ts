@@ -30,6 +30,7 @@ import { IPromptsService, PromptsStorage, IAgentSkill, IPromptPath } from '../..
 import { ResourceSet } from '../../../../base/common/map.js';
 import { PromptsType } from '../../../../workbench/contrib/chat/common/promptSyntax/promptTypes.js';
 import { agentIcon, automationIcon, extensionIcon, instructionsIcon, mcpServerIcon, pluginIcon, promptIcon, skillIcon, userIcon, workspaceIcon, builtinIcon } from '../../../../workbench/contrib/chat/browser/aiCustomization/aiCustomizationIcons.js';
+import { getAgentCatalogSourceBadge } from '../../../../workbench/contrib/chat/browser/aiCustomization/promptsServiceCustomizationItemProvider.js';
 import { AICustomizationItemMenuId } from './aiCustomizationTreeView.js';
 import { AICustomizationManagementSection } from '../../../../workbench/contrib/chat/browser/aiCustomization/aiCustomizationManagement.js';
 import { CHAT_AUTOMATIONS_ENABLED_SETTING } from '../../../../workbench/contrib/chat/common/automations/automationsEnabled.js';
@@ -93,6 +94,8 @@ interface IAICustomizationGroupItem {
 	readonly type: 'group';
 	readonly id: string;
 	readonly label: string;
+	/** Optional hover/aria detail (e.g. SafeAppeals default path + compat note). */
+	readonly description?: string;
 	readonly storage: AICustomizationSource;
 	readonly promptType: PromptsType;
 	readonly icon: ThemeIcon;
@@ -110,6 +113,9 @@ interface IAICustomizationFileItem {
 	readonly storage: AICustomizationSource;
 	readonly promptType: PromptsType;
 	readonly disabled: boolean;
+	/** Subtle source badge (e.g. Compat for compatibility agent folders). */
+	readonly badge?: string;
+	readonly badgeTooltip?: string;
 }
 
 /**
@@ -162,6 +168,7 @@ interface IFileTemplateData {
 	readonly container: HTMLElement;
 	readonly icon: HTMLElement;
 	readonly name: HTMLElement;
+	readonly badge: HTMLElement;
 	readonly actionBar: ActionBar;
 	readonly elementDisposables: DisposableStore;
 	readonly templateDisposables: DisposableStore;
@@ -197,6 +204,9 @@ class AICustomizationGroupRenderer implements ITreeRenderer<IAICustomizationGrou
 
 	renderElement(node: ITreeNode<IAICustomizationGroupItem, FuzzyScore>, _index: number, templateData: IGroupTemplateData): void {
 		templateData.label.textContent = node.element.label;
+		templateData.container.title = node.element.description
+			? `${node.element.label}\n${node.element.description}`
+			: node.element.label;
 	}
 
 	disposeTemplate(_templateData: IGroupTemplateData): void { }
@@ -215,6 +225,8 @@ class AICustomizationFileRenderer implements ITreeRenderer<IAICustomizationFileI
 		const element = dom.append(container, dom.$('.ai-customization-tree-item'));
 		const icon = dom.append(element, dom.$('.icon'));
 		const name = dom.append(element, dom.$('.name'));
+		const badge = dom.append(element, dom.$('.inline-badge.item-badge'));
+		badge.style.display = 'none';
 		const actionsContainer = dom.append(element, dom.$('.actions'));
 
 		const templateDisposables = new DisposableStore();
@@ -222,7 +234,7 @@ class AICustomizationFileRenderer implements ITreeRenderer<IAICustomizationFileI
 			actionViewItemProvider: createActionViewItem.bind(undefined, this.instantiationService),
 		}));
 
-		return { container: element, icon, name, actionBar, elementDisposables: new DisposableStore(), templateDisposables };
+		return { container: element, icon, name, badge, actionBar, elementDisposables: new DisposableStore(), templateDisposables };
 	}
 
 	renderElement(node: ITreeNode<IAICustomizationFileItem, FuzzyScore>, _index: number, templateData: IFileTemplateData): void {
@@ -252,11 +264,24 @@ class AICustomizationFileRenderer implements ITreeRenderer<IAICustomizationFileI
 
 		templateData.name.textContent = item.name;
 
+		if (item.badge) {
+			templateData.badge.textContent = item.badge;
+			templateData.badge.style.display = '';
+			templateData.badge.title = item.badgeTooltip ?? '';
+		} else {
+			templateData.badge.textContent = '';
+			templateData.badge.style.display = 'none';
+			templateData.badge.title = '';
+		}
+
 		// Apply disabled styling
 		templateData.container.classList.toggle('disabled', item.disabled);
 
-		// Set tooltip with name and description
-		const tooltip = item.description ? `${item.name} - ${item.description}` : item.name;
+		// Set tooltip with name, description, and badge context
+		let tooltip = item.description ? `${item.name} - ${item.description}` : item.name;
+		if (item.badgeTooltip) {
+			tooltip += `\n\n${item.badgeTooltip}`;
+		}
 		templateData.container.title = tooltip;
 
 		// Build context for menu actions
@@ -508,13 +533,29 @@ class UnifiedAICustomizationDataSource implements IAsyncDataSource<RootElement, 
 	 * Creates a group item with consistent structure.
 	 */
 	private createGroupItem(promptType: PromptsType, storage: AICustomizationSource, count: number): IAICustomizationGroupItem {
+		const isAgents = promptType === PromptsType.agent;
 		const storageLabels: Record<string, string> = {
-			[AICustomizationSources.local]: localize('workspaceWithCount', "Workspace ({0})", count),
-			[AICustomizationSources.user]: localize('userWithCount', "User ({0})", count),
+			[AICustomizationSources.local]: isAgents
+				? localize('agentsWorkspaceWithCount', "Workspace ({0})", count)
+				: localize('workspaceWithCount', "Workspace ({0})", count),
+			[AICustomizationSources.user]: isAgents
+				? localize('agentsGlobalWithCount', "Global ({0})", count)
+				: localize('userWithCount', "User ({0})", count),
 			[AICustomizationSources.extension]: localize('extensionsWithCount', "Extensions ({0})", count),
 			[AICustomizationSources.plugin]: localize('pluginsWithCount', "Plugins ({0})", count),
 			[AICustomizationSources.builtin]: localize('builtinWithCount', "Built-in ({0})", count),
 		};
+
+		const storageDescriptions: Partial<Record<string, string>> = isAgents ? {
+			[AICustomizationSources.local]: localize(
+				'agentsWorkspaceGroupDescription',
+				"SafeAppeals agents default to `.safeAppeals/agents`. Compatibility agents (for example `.github/agents`) may also appear here.",
+			),
+			[AICustomizationSources.user]: localize(
+				'agentsGlobalGroupDescription',
+				"SafeAppeals agents default to `~/.safeAppeals/agents`. Compatibility agents (for example `~/.copilot/agents`) may also appear here.",
+			),
+		} : {};
 
 		const storageIcons: Record<string, ThemeIcon> = {
 			[AICustomizationSources.local]: workspaceIcon,
@@ -536,6 +577,7 @@ class UnifiedAICustomizationDataSource implements IAsyncDataSource<RootElement, 
 			type: 'group',
 			id: `group-${promptType}-${storageSuffixes[storage]}`,
 			label: storageLabels[storage],
+			description: storageDescriptions[storage],
 			storage,
 			promptType,
 			icon: storageIcons[storage],
@@ -596,16 +638,23 @@ class UnifiedAICustomizationDataSource implements IAsyncDataSource<RootElement, 
 
 		// Use cached files data (already fetched in getStorageGroups)
 		const items = [...(cached?.files?.get(storage) || [])];
-		return items.map(item => ({
-			type: 'file' as const,
-			id: item.uri.toString(),
-			uri: item.uri,
-			name: item.name || basename(item.uri),
-			description: item.description,
-			storage: item.storage,
-			promptType,
-			disabled: disabledUris.has(item.uri),
-		}));
+		return items.map(item => {
+			const sourceBadge = promptType === PromptsType.agent
+				? getAgentCatalogSourceBadge(item.uri)
+				: undefined;
+			return {
+				type: 'file' as const,
+				id: item.uri.toString(),
+				uri: item.uri,
+				name: item.name || basename(item.uri),
+				description: item.description,
+				storage: item.storage,
+				promptType,
+				disabled: disabledUris.has(item.uri),
+				badge: sourceBadge?.badge,
+				badgeTooltip: sourceBadge?.badgeTooltip,
+			};
+		});
 	}
 }
 
@@ -712,12 +761,17 @@ export class AICustomizationViewPane extends ViewPane {
 							return element.label;
 						}
 						if (element.type === 'group') {
-							return element.label;
+							return element.description
+								? localize('groupAriaLabelWithDescription', "{0}, {1}", element.label, element.description)
+								: element.label;
 						}
-						// For files, include description and disabled state
-						const nameAndDesc = element.description
+						// For files, include description, badge, and disabled state
+						let nameAndDesc = element.description
 							? localize('fileAriaLabel', "{0}, {1}", element.name, element.description)
 							: element.name;
+						if (element.badge) {
+							nameAndDesc = localize('fileAriaLabelWithBadge', "{0}, {1}", nameAndDesc, element.badge);
+						}
 						return element.disabled
 							? localize('fileAriaLabelDisabled', "{0}, disabled", nameAndDesc)
 							: nameAndDesc;

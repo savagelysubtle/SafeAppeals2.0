@@ -266,6 +266,16 @@ pub fn build_registry(avail: EngineAvailability) -> HashMap<String, ConversionSp
 			install_hint: None,
 		},
 	);
+	registry.insert(
+		"extract_pdf_pages".to_string(),
+		ConversionSpec {
+			key: "extract_pdf_pages".to_string(),
+			fidelity: Fidelity::Semantic,
+			engine: "pdf-extract".to_string(),
+			available: true,
+			install_hint: None,
+		},
+	);
 
 	registry
 }
@@ -316,8 +326,8 @@ mod tests {
 	use super::*;
 
 	#[test]
-	fn registry_has_40_keys() {
-		assert_eq!(build_registry(EngineAvailability::default()).len(), 40);
+	fn registry_has_41_keys() {
+		assert_eq!(build_registry(EngineAvailability::default()).len(), 41);
 	}
 
 	#[test]
@@ -388,6 +398,7 @@ mod tests {
 		let keys = all_keys();
 		assert!(keys.contains(&"merge_pdfs".to_string()));
 		assert!(keys.contains(&"batch_convert".to_string()));
+		assert!(keys.contains(&"extract_pdf_pages".to_string()));
 	}
 
 	#[test]

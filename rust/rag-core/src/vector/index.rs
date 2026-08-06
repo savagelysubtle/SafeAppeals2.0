@@ -3,6 +3,7 @@
 //! usearch HNSW index wrapper with save/load under the workspace root.
 
 use std::path::{Path, PathBuf};
+use std::time::SystemTime;
 
 use thiserror::Error;
 use usearch::{Index, IndexOptions, MetricKind, ScalarKind};
@@ -27,6 +28,7 @@ pub struct VectorIndex {
 	index: Index,
 	path: PathBuf,
 	dims: usize,
+	loaded_mtime: Option<SystemTime>,
 }
 
 impl std::fmt::Debug for VectorIndex {
@@ -44,21 +46,42 @@ impl VectorIndex {
 	pub fn open(root_dir: impl AsRef<Path>, dims: usize) -> Result<Self, VectorError> {
 		let path = root_dir.as_ref().join(VECTOR_FILENAME);
 		if path.exists() {
-			let index = Index::restore(path.to_str().ok_or_else(|| {
-				VectorError::Message("vector index path is not valid UTF-8".into())
-			})?)
-			.map_err(|e| VectorError::Usearch(e.to_string()))?;
-			let restored_dims = index.dimensions();
-			if restored_dims != dims {
-				return Err(VectorError::DimMismatch {
-					expected: dims,
-					got: restored_dims,
-				});
-			}
-			Ok(Self { index, path, dims })
+			Self::restore_from_path(path, dims)
 		} else {
 			Self::create_empty(path, dims)
 		}
+	}
+
+	/// Open an existing index read-only (restore only; never creates on disk).
+	pub fn open_read_only(root_dir: impl AsRef<Path>, dims: usize) -> Result<Self, VectorError> {
+		let path = root_dir.as_ref().join(VECTOR_FILENAME);
+		if path.exists() {
+			Self::restore_from_path(path, dims)
+		} else {
+			Err(VectorError::Message(
+				"vector index does not exist (read-only)".into(),
+			))
+		}
+	}
+
+	fn restore_from_path(path: PathBuf, dims: usize) -> Result<Self, VectorError> {
+		let index = Index::restore(path.to_str().ok_or_else(|| {
+			VectorError::Message("vector index path is not valid UTF-8".into())
+		})?)
+		.map_err(|e| VectorError::Usearch(e.to_string()))?;
+		let restored_dims = index.dimensions();
+		if restored_dims != dims {
+			return Err(VectorError::DimMismatch {
+				expected: dims,
+				got: restored_dims,
+			});
+		}
+		Ok(Self {
+			index,
+			path: path.clone(),
+			dims,
+			loaded_mtime: file_mtime(&path),
+		})
 	}
 
 	fn create_empty(path: PathBuf, dims: usize) -> Result<Self, VectorError> {
@@ -71,7 +94,12 @@ impl VectorIndex {
 		index
 			.reserve(256)
 			.map_err(|e| VectorError::Usearch(e.to_string()))?;
-		Ok(Self { index, path, dims })
+		Ok(Self {
+			index,
+			path,
+			dims,
+			loaded_mtime: None,
+		})
 	}
 
 	pub fn path(&self) -> &Path {
@@ -119,6 +147,37 @@ impl VectorIndex {
 			.map_err(|e| VectorError::Usearch(e.to_string()))
 	}
 
+	/// Reload vectors from disk so secondary processes see primary saves.
+	pub fn reload_from_disk(&mut self) -> Result<(), VectorError> {
+		if !self.path.exists() {
+			self.loaded_mtime = None;
+			return Ok(());
+		}
+		let index = Index::restore(self.path.to_str().ok_or_else(|| {
+			VectorError::Message("vector index path is not valid UTF-8".into())
+		})?)
+		.map_err(|e| VectorError::Usearch(e.to_string()))?;
+		let restored_dims = index.dimensions();
+		if restored_dims != self.dims {
+			return Err(VectorError::DimMismatch {
+				expected: self.dims,
+				got: restored_dims,
+			});
+		}
+		self.index = index;
+		self.loaded_mtime = file_mtime(&self.path);
+		Ok(())
+	}
+
+	/// Reload from disk when the on-disk file is newer than the in-memory copy.
+	pub fn reload_if_stale(&mut self) -> Result<(), VectorError> {
+		let disk_mtime = file_mtime(&self.path);
+		if disk_mtime != self.loaded_mtime {
+			self.reload_from_disk()?;
+		}
+		Ok(())
+	}
+
 	pub fn search(&self, query: &[f32], k: usize) -> Result<Vec<(u64, f32)>, VectorError> {
 		if query.len() != self.dims {
 			return Err(VectorError::DimMismatch {
@@ -160,6 +219,10 @@ impl VectorIndex {
 	}
 }
 
+fn file_mtime(path: &Path) -> Option<SystemTime> {
+	std::fs::metadata(path).ok()?.modified().ok()
+}
+
 #[cfg(test)]
 mod tests {
 	use super::*;
@@ -189,5 +252,19 @@ mod tests {
 		idx.upsert(10, &[1.0, 0.0, 0.0, 0.0]).unwrap();
 		assert_eq!(idx.remove(10).unwrap(), 1);
 		assert_eq!(idx.len(), 0);
+	}
+
+	#[test]
+	fn open_read_only_restore_only() {
+		let dir = tempdir().unwrap();
+		let mut idx = VectorIndex::open(dir.path(), 4).unwrap();
+		idx.upsert(1, &[1.0, 0.0, 0.0, 0.0]).unwrap();
+		idx.save().unwrap();
+
+		let ro = VectorIndex::open_read_only(dir.path(), 4).unwrap();
+		assert_eq!(ro.len(), 1);
+
+		let missing = VectorIndex::open_read_only(tempdir().unwrap().path(), 4);
+		assert!(missing.is_err());
 	}
 }

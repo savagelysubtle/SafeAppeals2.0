@@ -92,7 +92,7 @@ Handles PDF generation using Electron's `BrowserWindow.printToPDF()`:
    ↓
 2. TimelineService.initializeTimeline()
    ↓
-3. Load .timeline.json from workspace root
+3. Load .safeAppeals/timeline.json from workspace
    ↓
 4. Parse JSON → CaseTimeline object
    ↓
@@ -116,7 +116,7 @@ Handles PDF generation using Electron's `BrowserWindow.printToPDF()`:
    ↓
 6. Add to events array
    ↓
-7. Save to .timeline.json
+7. Save to .safeAppeals/timeline.json
    ↓
 8. Fire onDidChangeTimeline event
    ↓

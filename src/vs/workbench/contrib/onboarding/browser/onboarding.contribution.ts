@@ -20,6 +20,7 @@ import { IOnboardingScenarioService, ONBOARDING_DEVELOPER_MODE_CONFIG, ONBOARDIN
 import { OnboardingScenarioService } from './onboardingService.js';
 import { SpotlightPresentation } from './spotlight/spotlightPresentation.js';
 import './sampleCaseTour.contribution.js';
+import './sampleCaseTourTargets.contribution.js';
 
 registerSingleton(IOnboardingScenarioService, OnboardingScenarioService, InstantiationType.Delayed);
 

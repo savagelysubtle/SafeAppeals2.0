@@ -48,36 +48,38 @@ bun run test:native
 node ./scripts/smoke-native.js
 ```
 
-## Status (M5)
+## Status
 
-- **linux-x64 / node-137** — rebuilt for M5 (`hybrid:true`, `queryProcessor:true`,
-  `rerank` field present — typically `false` in smoke without CE weights,
-  `storageReady:true`, `dims:512`, hybrid→CE pool inside `search`). Verify with
-  `bun run test:native`.
-- **linux-x64 / electron-146** — **not** produced in this environment (needs
-  Electron 42.x headers / ABI 146 toolchain). Desktop host remains hard-disabled
-  until an electron-146 prebuild is installed via the flow below.
+- **linux-x64 / node-137** — present (`hybrid:true`, `queryProcessor:true`,
+  `rerank` typically `false` without CE weights, `storageReady:true`, `dims:384`).
+  Verify with `bun run test:native`.
+- **linux-x64 / electron-146** — present for Electron **42.6.0** (ABI 146).
+  Verify with `../../scripts/node-electron.sh ./scripts/smoke-native.js` from
+  `rust/rag-core` (requires `.build/electron` from a desktop gulp fetch).
+
+`rag-core` is built with **N-API** (`napi` feature), so a Node-built `.node` can
+load under Electron when ABIs differ — install into the electron-146 slot via
+`node-electron.sh` (below). Do **not** use `napi build --target electron-42.6.0`:
+napi-cli 3.x expects Rust target triples, not Electron version strings.
 
 ## Electron ABI (146)
 
-Build against Electron 42.x headers (same major as the SafeAppeals desktop
-shell). Exact flags depend on the napi-rs / Electron toolchain of the day;
-typical flow:
+Preferred install (uses the already-built Node artifact, places it under
+`electron-146` because `process.versions.modules === '146'` inside Electron):
 
 ```bash
-# Example — adjust Electron version when the shell upgrades:
-bunx napi build --platform --release --target electron-42.6.0
-# then copy/install into electron-146:
-node ./scripts/install-prebuild.js
-# (run under Electron so process.versions.modules === '146', or copy manually)
+# From repo root — needs .build/electron (gulp electron once)
+bun run build:prebuild   # from rust/rag-core, if you need a fresh .node
+../../scripts/node-electron.sh ./scripts/install-prebuild.js
+../../scripts/node-electron.sh ./scripts/smoke-native.js
 ```
 
-Manual copy when the build ran under Node but you already have an Electron
-`.node`:
+Manual copy of an existing N-API `.node`:
 
 ```bash
 mkdir -p prebuilds/linux-x64/electron-146
-cp /path/to/rag_core.node prebuilds/linux-x64/electron-146/rag_core.node
+cp rag_core.linux-x64-gnu.node prebuilds/linux-x64/electron-146/rag_core.node
+# or: cp prebuilds/linux-x64/node-137/rag_core.node prebuilds/linux-x64/electron-146/rag_core.node
 ```
 
 ## Fail soft
@@ -141,7 +143,9 @@ Linux build packages typically needed for the default feature:
 sudo apt-get install -y build-essential pkg-config libssl-dev
 ```
 
-N-API prebuilds (`bun run build:prebuild`) inherit the same Cargo features.
+N-API prebuilds (`bun run build:prebuild`) enable **`fastembed`** and **`cross-encoder`**
+(see `package.json` `napi build … -F "fastembed cross-encoder"`). A SQLCipher-only
+prebuild cannot load Search pack weights even when `SA_RAG_*` dirs are set.
 Document any ABI-specific link flags here if CI diverges from the default.
 
 ### Host contract

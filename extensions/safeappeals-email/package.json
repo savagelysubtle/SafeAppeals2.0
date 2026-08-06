@@ -722,7 +722,58 @@
           }
         }
       }
-    }
+    },
+    "walkthroughs": [
+      {
+        "id": "safeappealsInboxAndDeadlines",
+        "title": "%walkthrough.inbox.title%",
+        "description": "%walkthrough.inbox.description%",
+        "steps": [
+          {
+            "id": "whyConnectInbox",
+            "title": "%walkthrough.inbox.why.title%",
+            "description": "%walkthrough.inbox.why.description%",
+            "media": {
+              "markdown": "media/walkthrough/whyConnectInbox.md"
+            }
+          },
+          {
+            "id": "addEmailAccount",
+            "title": "%walkthrough.inbox.addAccount.title%",
+            "description": "%walkthrough.inbox.addAccount.description%",
+            "media": {
+              "markdown": "media/walkthrough/addEmailAccount.md"
+            },
+            "completionEvents": [
+              "onCommand:safeappeals-email.addAccount"
+            ]
+          },
+          {
+            "id": "connectCalendar",
+            "title": "%walkthrough.inbox.connectCalendar.title%",
+            "description": "%walkthrough.inbox.connectCalendar.description%",
+            "media": {
+              "markdown": "media/walkthrough/connectCalendar.md"
+            },
+            "completionEvents": [
+              "onCommand:safeappeals-calendar.connect"
+            ]
+          },
+          {
+            "id": "openDashboard",
+            "title": "%walkthrough.inbox.dashboard.title%",
+            "description": "%walkthrough.inbox.dashboard.description%",
+            "media": {
+              "markdown": "media/walkthrough/openDashboard.md"
+            },
+            "completionEvents": [
+              "onCommand:safeappeals-email.openDashboard",
+              "onCommand:safeappeals-email.syncStatus"
+            ]
+          }
+        ]
+      }
+    ]
   },
   "scripts": {
     "compile": "npm run build-webview && gulp compile-extension:safeappeals-email",

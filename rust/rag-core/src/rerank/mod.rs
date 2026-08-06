@@ -100,6 +100,9 @@ pub fn clear_reranker() {
 /// Fail-soft: returns `Ok(false)` when the directory is unset/missing or the
 /// `cross-encoder` feature is off. Never downloads weights.
 pub fn try_load_default() -> Result<bool, RerankError> {
+	if is_loaded() {
+		return Ok(true);
+	}
 	#[cfg(feature = "cross-encoder")]
 	{
 		let path = match std::env::var(CE_MODEL_DIR_ENV) {

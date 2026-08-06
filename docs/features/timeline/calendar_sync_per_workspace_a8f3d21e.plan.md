@@ -1,6 +1,6 @@
 ---
 name: Per-Workspace Calendar Sync
-overview: Implement calendar export and sync with complete workspace isolation. Phase 1 (ICS export) complete.
+overview: Implement calendar export and sync with complete workspace isolation. Phase 1 (ICS export) complete. Timeline storage path is `.safeAppeals/timeline.json` (not root `.timeline.json`).
 todos:
   - id: cal-1.1
     content: Add syncToCalendar field to TimelineEvent type
@@ -93,7 +93,7 @@ The timeline contains TWO types of events:
 
 ### Per-Event Calendar Toggle
 
-Each event in `timeline.json` gets a `syncToCalendar` flag:
+Each event in `.safeAppeals/timeline.json` gets a `syncToCalendar` flag:
 
 ```json
 {
@@ -242,7 +242,7 @@ interface TimelineEvent {
 }
 ```
 
-**Why optional?** Existing `.timeline.json` files continue to work unchanged.
+**Why optional?** Existing `.safeAppeals/timeline.json` files continue to work unchanged.
 
 ### Sync Logic (Backward Compatible)
 
@@ -292,7 +292,7 @@ function shouldSyncToCalendar(event: TimelineEvent): boolean {
 Workspace: D:\Cases\SmithVsAcme\
 ├── .vscode/
 │   └── workspace.json  ← Contains workspace ID (UUID)
-├── timeline.json       ← Events to sync
+├── .safeAppeals/timeline.json  ← Events to sync
 ├── .caseinfo.json      ← Case name for event tagging
 └── .calendar-sync.json ← Sync state (NEW)
 ```
@@ -431,7 +431,7 @@ END:VCALENDAR
 - `syncToCalendar` optional field added to TimelineEvent type
 - TimelineEventCard shows calendar toggle button per event
 - Button uses `event.syncToCalendar ?? event.isDeadline` for state
-- Clicking toggle updates event and persists to .timeline.json
+- Clicking toggle updates event and persists to `.safeAppeals/timeline.json`
 - TimelineToolbar has "Export to .ics" button with event count
 - Export filters to only calendar-enabled events
 - .ics file includes VALARM for each reminderDay
@@ -584,7 +584,7 @@ async function syncToGoogle(workspaceId: string) {
   - "Disconnect" option
 - **Step 3.5**: Implement two-way sync (optional)
   - Detect events modified in Google Calendar
-  - Update local timeline.json
+  - Update local `.safeAppeals/timeline.json`
   - Handle conflicts (local wins? remote wins? prompt?)
 
 ### Exit Criteria
@@ -623,7 +623,7 @@ Same as Phase 3 but for Microsoft Outlook/365.
 ```
 safeappeals-{workspaceId}-{eventId}
      │           │           │
-     │           │           └── From timeline.json (evt_001, evt_002, etc.)
+     │           │           └── From `.safeAppeals/timeline.json` (evt_001, evt_002, etc.)
      │           │
      │           └── UUID of workspace (from VS Code workspace state)
      │

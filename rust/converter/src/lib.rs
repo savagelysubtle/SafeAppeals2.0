@@ -111,6 +111,9 @@ impl Server {
 			"convert" => self.handle_convert(&request.id, &request.params, writer),
 			"batch_convert" => self.handle_batch_convert(&request.id, &request.params, writer),
 			"merge_pdfs" => self.handle_merge_pdfs(&request.id, &request.params, writer),
+			"extract_pdf_pages" => {
+				self.handle_extract_pdf_pages(&request.id, &request.params, writer)
+			}
 			other => write_error(
 				writer,
 				&request.id,
@@ -398,6 +401,57 @@ impl Server {
 		}
 	}
 
+	fn handle_extract_pdf_pages<W: Write>(
+		&mut self,
+		id: &str,
+		params: &Value,
+		writer: &mut W,
+	) -> io::Result<()> {
+		let extract_params: ExtractPdfPagesParams = match serde_json::from_value(params.clone()) {
+			Ok(p) => p,
+			Err(e) => {
+				return write_error(
+					writer,
+					id,
+					"INVALID_PARAMS",
+					&format!("extract_pdf_pages params invalid: {e}"),
+				);
+			}
+		};
+
+		if let Err(e) = self.sandbox.validate_path(&extract_params.source) {
+			return write_sandbox_error(writer, id, &e);
+		}
+
+		match engines::pdf_extract::extract_pdf_pages(std::path::Path::new(
+			&extract_params.source,
+		)) {
+			Ok(pages) => {
+				let page_count = pages.len();
+				let items: Vec<Value> = pages
+					.into_iter()
+					.enumerate()
+					.map(|(idx, text)| {
+						json!({
+							"page": idx + 1,
+							"text": text,
+						})
+					})
+					.collect();
+				write_response(
+					writer,
+					id,
+					json!({
+						"success": true,
+						"pages": items,
+						"page_count": page_count,
+					}),
+				)
+			}
+			Err(e) => write_engine_error(writer, id, &e),
+		}
+	}
+
 	fn handle_merge_pdfs<W: Write>(
 		&mut self,
 		id: &str,
@@ -515,6 +569,11 @@ struct BatchConvertParams {
 }
 
 #[derive(Debug, Deserialize)]
+struct ExtractPdfPagesParams {
+	source: String,
+}
+
+#[derive(Debug, Deserialize)]
 struct MergePdfsParams {
 	inputs: Vec<String>,
 	output: String,
@@ -626,6 +685,23 @@ mod tests {
 		let resp = handle_json(&mut server, &line);
 		assert!(resp.contains("ENGINE_UNAVAILABLE"));
 		assert!(resp.contains("install_hint"));
+	}
+
+	#[test]
+	fn extract_pdf_pages_succeeds() {
+		let mut server = Server::new();
+		let tmp = tempfile::TempDir::new().unwrap();
+		let root = tmp.path().to_string_lossy().to_string();
+		server.sandbox_mut().configure(&[root.clone()]).unwrap();
+		let pdf = tmp.path().join("doc.pdf");
+		engines::pdf_extract::write_fixture_pdf(&pdf, "Page one text").unwrap();
+		let line = format!(
+			r#"{{"id":"ep","method":"extract_pdf_pages","params":{{"source":"{}"}}}}"#,
+			pdf.display()
+		);
+		let resp = handle_json(&mut server, &line);
+		assert!(resp.contains(r#""success":true"#));
+		assert!(resp.contains(r#""pages""#));
 	}
 
 	#[test]

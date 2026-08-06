@@ -38,7 +38,7 @@ Right-click any file in Explorer → **"Link to Timeline Event..."** → Select 
 
 ## Storage
 
-Timeline data is stored in `.timeline.json` at your workspace root:
+Timeline data is stored in `.safeAppeals/timeline.json` under the workspace root:
 
 ```json
 {
@@ -98,37 +98,36 @@ Timeline data is stored in `.timeline.json` at your workspace root:
 |--------|----------|
 | Open Timeline | `Ctrl+Shift+T` |
 
+## Tutorials & sample case
+
+- Command: `safeappeals-timeline.openTutorials` (Help → Tutorials; Get Started CTA “Tutorials”)
+- Opens/ensures the bundled sample case as a real `file://` workspace (not a virtual `vscode-userdata:` workspace) so extensions activate, then runs the Setup/Beginner walkthrough
+- Explore More links feature walkthroughs: Private Search, Case Files, Email and Calendar, Hearings and Audio
+- Local Git is optional backup only — Safe Appeals does not auto-run `git init`; agents are taught never to push legal case data
+
 ## File Structure
 
 ```
-src/vs/workbench/contrib/void/
-├── browser/timeline/           # Browser-side services
-│   ├── timeline.contribution.ts   # View registration & commands
-│   ├── timelineService.ts         # Core service implementation
-│   ├── timelinePane.ts            # Sidebar panel
-│   └── jurisdictionConfig.ts      # Jurisdiction data
-├── common/timeline/            # Shared types
-│   └── timelineTypes.ts           # Interfaces & helpers
-├── electron-main/
-│   └── timelineExportChannel.ts   # PDF export (main process)
-└── browser/react/src/timeline-tsx/  # React UI components
-    ├── TimelineDashboard.tsx      # Main container
-    ├── TimelineEventCard.tsx      # Event cards
-    ├── TimelineToolbar.tsx        # Filters & actions
-    ├── EventEditor.tsx            # Create/edit modal
-    ├── DeadlineWarnings.tsx       # Alert banners
-    ├── CaseSummary.tsx            # KPI cards
-    └── CalendarView.tsx           # Calendar visualization
+extensions/safeappeals-timeline/
+├── src/
+│   ├── timelineStore.ts       # `.safeAppeals/timeline.json` persistence
+│   ├── timelineService.ts     # Core service
+│   ├── sampleCase.ts          # Sample matter materialization
+│   ├── tutorialsHub.ts        # openTutorials / resume pending
+│   ├── scaffold.ts            # Standard snake_case case folders
+│   └── agentTools.ts          # Timeline LM tools
+├── media/walkthrough/         # Get Started + feature steps
+└── skills/                    # project-setup, organize-files
 ```
 
 ## Related Features
 
-- **File Organizer** - Organize case documents by category
-- **RAG System** - Index documents for AI-powered search
-- **Case Info** - Manage case metadata and parties
+- **organize-files skill** — file case documents into standard folders
+- **Private Search** — on-device index (`docs/rag/`); status bar `$(search) Private Search`
+- **`.safeAppeals/`** — settings, skills, agents, plans, timeline
 
 ---
 
 **Version**: 1.0
-**Last Updated**: December 25, 2025
+**Last Updated**: August 2026
 

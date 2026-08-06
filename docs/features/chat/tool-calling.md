@@ -1,10 +1,16 @@
+<!-- Copyright (c) Safe Appeals. All rights reserved. -->
+
 # Tool Calling System
 
-This document explains how SafeAppeals handles LLM tool calls, from XML parsing to execution.
+> **Historical Void XML notes (not the shipping path).** Agent tools today are VS Code
+> `vscode.lm` language-model tools contributed by extensions (`safeappeals_*` satellites,
+> CORE host tools such as `timeline_*`). See
+> [Agent LM Tools Pattern](../../agent-tools-pattern.md). The sections below document the
+> retired Void ANTML / `extractXMLToolsWrapper` stack for reference only.
 
-## Overview
+## Overview (Void-era)
 
-SafeAppeals uses XML-based tool calling where:
+The Void agent used XML-based tool calling where:
 1. LLM outputs tool calls as XML in its response
 2. `extractXMLToolsWrapper` parses the XML
 3. Parameters are validated by `toolsService`
@@ -178,39 +184,36 @@ type ToolMessage<T extends ToolName> = {
 )
 ```
 
-## Native vs XML Tool Calling
+## Native vs XML Tool Calling (Void-era)
 
-### Current State: XML Only
+### Shipping today
 
-Currently, all providers use XML tool calling because:
-1. System prompt includes XML tool definitions
-2. Consistent parsing across providers
-3. Better control over tool format
+SafeAppeals Agent uses the workbench / Copilot LM tools pipeline (`vscode.lm.registerTool`
++ `contributes.languageModelTools`). Satellite catalogs and allowlisting:
+[Agent LM Tools Pattern](../../agent-tools-pattern.md).
 
-### Native Tool Calling (Disabled)
+### Historical: Void forced XML
 
-Native tool calling is implemented but disabled:
+In the Void stack, providers were forced through XML tool calling because:
+1. System prompt included XML tool definitions
+2. Parsing was consistent across providers via `extractXMLToolsWrapper`
+3. Native provider tool formats existed in code but were disabled
 
 ```typescript
-// sendLLMMessage.impl.ts
+// sendLLMMessage.impl.ts (Void-era)
 // FORCE XML parsing: System prompt uses XML tool definitions
 let specialToolFormat: 'anthropic-style' | 'openai-style' | undefined = undefined
 // Was: getToolFormatFromRoute(route)
 ```
 
-**To Enable Native Tools** (future work):
-1. Remove XML definitions from system prompt
-2. Set `specialToolFormat` based on provider
-3. Update tool response format in conversation
+### Provider Native Formats (Void-era status)
 
-### Provider Native Formats
-
-| Provider | Native Format | Status |
-|----------|---------------|--------|
-| Anthropic | `tool_use` blocks | Implemented, disabled |
-| OpenAI | `function_calling` | Implemented, disabled |
-| Gemini | `functionCall` | Implemented, disabled |
-| Others | N/A | Use XML |
+| Provider | Native Format | Void-era status |
+|----------|---------------|-----------------|
+| Anthropic | `tool_use` blocks | Implemented, disabled in Void |
+| OpenAI | `function_calling` | Implemented, disabled in Void |
+| Gemini | `functionCall` | Implemented, disabled in Void |
+| Others | N/A | Used XML in Void |
 
 ## Parallel Tool Execution
 

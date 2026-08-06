@@ -58,10 +58,8 @@ todos:
       caseFolderPath + sort filters (AI auto-tagging/auto-linking seam)'
     status: completed
   - id: pattern-docs
-    content:
-      'docs/agent-tools-pattern.md house pattern for future extensions
-      (cancelled at plan close; follow house pattern from shipped satellites)'
-    status: cancelled
+    content: docs/agent-tools-pattern.md house pattern for future extensions
+    status: completed
   - id: tests
     content:
       'Tests: docx/xlsx round-trips + formula/overlay/external-sync unit tests;

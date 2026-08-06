@@ -1,6 +1,5 @@
 /*---------------------------------------------------------------------------------------------
- *  Copyright (c) Microsoft Corporation. All rights reserved.
- *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *  Copyright (c) Safe Appeals. All rights reserved.
  *--------------------------------------------------------------------------------------------*/
 
 .safeappeals-approval-mock-host {
@@ -10,7 +9,8 @@
 	align-items: center;
 	justify-content: center;
 	pointer-events: none;
-	z-index: 2500;
+	/* Same stacking context as spotlight (2600); mock must sit below the dim layer. */
+	z-index: 2550;
 }
 
 .safeappeals-approval-mock {
@@ -19,8 +19,9 @@
 	max-width: 420px;
 	padding: 16px 18px;
 	border-radius: var(--vscode-cornerRadius-large, 8px);
-	background: var(--vscode-editorWidget-background);
-	color: var(--vscode-editorWidget-foreground);
+	/* Solid fill so walkthrough checklist text cannot bleed through the spotlight hole. */
+	background-color: var(--vscode-editor-background);
+	color: var(--vscode-editor-foreground);
 	border: 1px solid var(--vscode-editorWidget-border, var(--vscode-widget-border));
 	box-shadow: 0 8px 24px var(--vscode-widget-shadow);
 	font-family: var(--vscode-font-family);

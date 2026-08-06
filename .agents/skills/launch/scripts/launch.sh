@@ -8,6 +8,12 @@
 # the encrypted blob in User/globalStorage/state.vscdb (per-UDD). The slim copy
 # keeps the auth-relevant state and drops caches / workspaceStorage / logs.
 #
+# Agent throwaways always start empty: after the profile copy we strip window
+# restore (backupWorkspaces / windowsState / sticky workspaceStorage) so a
+# missing vscode-userdata sample workspace cannot kill the launch. To test
+# Steve's live profile instead, attach CDP to his Run Dev task — do not use
+# this throwaway path for that.
+#
 # Prints a single JSON line to stdout with the chosen ports + paths so the
 # caller can pick them up programmatically. Logs go to stderr.
 #
@@ -23,14 +29,14 @@
 #                       slim copy is missing something you need.
 #
 # Defaults:
-#   --source-user-data-dir  $CODE_OSS_DEV_AUTHED_USER_DATA_DIR  (else ~/.vscode-oss-dev)
+#   --source-user-data-dir  $CODE_OSS_DEV_AUTHED_USER_DATA_DIR  (else ~/.safe-appeals-dev)
 #   --repo                  $PWD if it looks like a vscode checkout; otherwise pass it explicitly
 
 set -euo pipefail
 umask 077
 
 AGENTS=0
-SOURCE_UDD="${CODE_OSS_DEV_AUTHED_USER_DATA_DIR:-$HOME/.vscode-oss-dev}"
+SOURCE_UDD="${CODE_OSS_DEV_AUTHED_USER_DATA_DIR:-$HOME/.safe-appeals-dev}"
 REPO=""
 EXTRA_ARGS=()
 CLONE_EXTENSIONS=0
@@ -77,7 +83,7 @@ MAIN_PORT=$(pick_port)
 AGENTHOST_PORT=$(pick_port)
 
 STAMP=$(date +%Y%m%d-%H%M%S)-$$
-RUN_DIR="${TMPDIR:-/tmp}/code-oss-dev/$STAMP"
+RUN_DIR="${TMPDIR:-/tmp}/safe-appeals-dev/$STAMP"
 DEST_UDD="$RUN_DIR/user-data"
 SHARED_DATA_DIR="$RUN_DIR/shared-data"
 mkdir -p "$DEST_UDD" "$SHARED_DATA_DIR"
@@ -118,6 +124,52 @@ mkdir -p "$EXT_DIR"
 if [[ "$FULL" != "1" && "$CLONE_EXTENSIONS" == "1" ]]; then
 	echo "[launch.sh] copying extensions: $SOURCE_UDD/extensions -> $EXT_DIR" >&2
 	rsync -a "$SOURCE_UDD/extensions/" "$EXT_DIR/"
+fi
+
+# Reset window restore so throwaways open empty. The source profile can still
+# remember a sticky vscode-userdata sample workspace (backupWorkspaces /
+# windowsState) even when that file is gone — do not restore it here.
+# Leaves User/globalStorage/state.vscdb alone (auth).
+rm -rf "$DEST_UDD/User/workspaceStorage" "$DEST_UDD/Backups"
+STORAGE_JSON="$DEST_UDD/User/globalStorage/storage.json"
+if [[ -f "$STORAGE_JSON" ]]; then
+	if ! node - "$STORAGE_JSON" <<'NODE'
+const fs = require('fs');
+const f = process.argv[2];
+let data;
+try {
+	data = JSON.parse(fs.readFileSync(f, 'utf8'));
+} catch (e) {
+	console.error('[launch.sh] cannot parse ' + f + ': ' + e.message);
+	process.exit(1);
+}
+const cleared = [];
+for (const key of ['backupWorkspaces', 'windowsState', 'windowSplashWorkspaceOverride']) {
+	if (Object.prototype.hasOwnProperty.call(data, key)) {
+		delete data[key];
+		cleared.push(key);
+	}
+}
+if (data.profileAssociations && typeof data.profileAssociations === 'object') {
+	if (data.profileAssociations.workspaces && Object.keys(data.profileAssociations.workspaces).length) {
+		data.profileAssociations.workspaces = {};
+		cleared.push('profileAssociations.workspaces');
+	}
+}
+// Prefer an empty window over reopening a missing multi-root workspace.
+data.backupWorkspaces = { workspaces: [], folders: [], emptyWindows: [] };
+if (!cleared.includes('backupWorkspaces')) {
+	cleared.push('backupWorkspaces(reset)');
+}
+fs.writeFileSync(f, JSON.stringify(data, null, 4) + '\n');
+console.error('[launch.sh] cleared window restore keys: ' + (cleared.join(', ') || '(none)'));
+NODE
+	then
+		echo "[launch.sh] failed to reset window restore in $STORAGE_JSON" >&2
+		exit 1
+	fi
+else
+	echo "[launch.sh] no storage.json in throwaway profile — nothing to reset" >&2
 fi
 
 # Force the simple (quick-input) file dialog so automation can drive

@@ -428,7 +428,7 @@ suite('PromptsConfig', () => {
 			test('empty object returns default skill folders', () => {
 				assert.deepStrictEqual(
 					getPaths(PromptsConfig.promptSourceFolders(createMock({}), PromptsType.skill)),
-					['.agents/skills', '.github/skills', '.claude/skills', '~/.agents/skills', '~/.copilot/skills', '~/.claude/skills'],
+					['.agents/skills', '.github/skills', '.claude/skills', '.safeAppeals/skills', '~/.agents/skills', '~/.copilot/skills', '~/.claude/skills'],
 					'Must return default skill folders.',
 				);
 			});
@@ -443,6 +443,7 @@ suite('PromptsConfig', () => {
 						'.agents/skills',
 						'.github/skills',
 						'.claude/skills',
+						'.safeAppeals/skills',
 						'~/.agents/skills',
 						'~/.copilot/skills',
 						'~/.claude/skills',
@@ -462,6 +463,7 @@ suite('PromptsConfig', () => {
 					[
 						'.agents/skills',
 						'.claude/skills',
+						'.safeAppeals/skills',
 						'~/.agents/skills',
 						'~/.copilot/skills',
 						'~/.claude/skills',
@@ -477,6 +479,7 @@ suite('PromptsConfig', () => {
 						'.github/skills': false,
 						'.agents/skills': false,
 						'.claude/skills': false,
+						'.safeAppeals/skills': false,
 						'~/.copilot/skills': false,
 						'~/.agents/skills': false,
 						'~/.claude/skills': false,
@@ -502,6 +505,7 @@ suite('PromptsConfig', () => {
 						'.agents/skills',
 						'.github/skills',
 						'.claude/skills',
+						'.safeAppeals/skills',
 						'~/.agents/skills',
 						'~/.copilot/skills',
 						'~/.claude/skills',
@@ -518,6 +522,7 @@ suite('PromptsConfig', () => {
 						'.github/skills': true,
 						'.agents/skills': true,
 						'.claude/skills': true,
+						'.safeAppeals/skills': true,
 						'~/.copilot/skills': true,
 						'~/.agents/skills': true,
 						'~/.claude/skills': true,
@@ -527,6 +532,7 @@ suite('PromptsConfig', () => {
 						'.agents/skills',
 						'.github/skills',
 						'.claude/skills',
+						'.safeAppeals/skills',
 						'~/.agents/skills',
 						'~/.copilot/skills',
 						'~/.claude/skills',

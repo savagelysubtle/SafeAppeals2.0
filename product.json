@@ -192,7 +192,14 @@
 			"defaultChatParticipant",
 			"chatParticipantAdditions",
 			"chatParticipantPrivate",
-			"chatPromptFiles"
+			"chatPromptFiles",
+			"contribLanguageModelToolSets",
+			"findTextInFiles",
+			"textSearchProvider"
+		],
+		"safeappeals.safeappeals-rag": [
+			"agentSessionsWorkspace",
+			"contribLanguageModelToolSets"
 		]
 	},
 	"onboardingSkipSignInStep": false,

@@ -53,7 +53,7 @@ export class PromptLaunchersAICustomizationWelcomePage extends Disposable implem
 			id: AICustomizationManagementSection.Agents,
 			label: localize('agents', "Agents"),
 			icon: agentIcon,
-			description: localize('agentsDesc', "Define custom agents with specialized personas, tool access, and instructions for specific tasks."),
+			description: localize('agentsDesc', "Define SafeAppeals agents in `.safeAppeals/agents` or `~/.safeAppeals/agents` with specialized personas, tool access, and instructions."),
 			promptType: PromptsType.agent,
 		},
 		{

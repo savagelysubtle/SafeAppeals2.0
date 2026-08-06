@@ -15,6 +15,7 @@ import {
 import { GoogleAuthProvider } from './googleAuthProvider';
 import { MicrosoftAuthProvider } from './microsoftAuthProvider';
 import { registerSafeAppealsAgentParticipant } from './chat/agentParticipant';
+import { ensureGlobalStarterAgents } from './chat/globalStarterAgents';
 import { registerPlanAgentProvider } from './chat/planAgentProvider';
 import { registerSafeAppealsAgentTools } from './chat/tools';
 import { CloudChatProvider } from './llm/cloudChatProvider';
@@ -88,6 +89,18 @@ export async function activate(context: vscode.ExtensionContext): Promise<SafeAp
 	);
 
 	await provider.initialize();
+
+	try {
+		const starters = await ensureGlobalStarterAgents();
+		if (starters.written.length > 0) {
+			output.appendLine(
+				`[extension] Installed global starter agents under ${starters.directory}: ${starters.written.join(', ')}`,
+			);
+		}
+	} catch (error) {
+		const message = error instanceof Error ? error.message : String(error);
+		output.appendLine(`[extension] Could not install global starter agents: ${message}`);
+	}
 
 	context.subscriptions.push(
 		vscode.commands.registerCommand('safeappeals.cloud.getBalance', async () => {

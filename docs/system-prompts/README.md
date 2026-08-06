@@ -1,5 +1,12 @@
 # System Prompts Documentation
 
+> **Historical Void dump (superseded).** These pages document the retired
+> `src/vs/workbench/contrib/void/common/prompt/` stack. Shipping SafeAppeals uses
+> upstream chat + extension LM tools / skills. Prefer:
+> [`docs/rag/tool-contracts.md`](../rag/tool-contracts.md) (Private Search
+> `safeappeals_rag_*`), `extensions/safeappeals-timeline/skills/organize-files`,
+> and `.safeAppeals/timeline.json` — not Void `.fileorg.json` / PascalCase folders.
+
 ## Overview
 
 SafeAppealNavigator uses a modular, research-backed system prompt architecture to guide its AI assistant. The prompts are organized into two primary source files and follow a section-based assembly pattern that allows context-aware customization per chat mode.

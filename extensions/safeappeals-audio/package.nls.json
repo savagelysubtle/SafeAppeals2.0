@@ -31,5 +31,13 @@
 	"config.diarization.maxSpeakers": "Expected number of speakers for clustering (1–4). Default 2. Machine-scoped; not synced.",
 	"config.diarization.binaryPath": "Absolute path to sherpa-onnx-offline-speaker-diarization. Leave empty to use managed app-data models/diarization/bin/ or the extension .spike-diarization/ layout when present. Machine-scoped; not synced.",
 	"config.diarization.segmentationModelPath": "Absolute path to the pyannote segmentation ONNX model. Leave empty for managed models/diarization/. Machine-scoped; not synced.",
-	"config.diarization.embeddingModelPath": "Absolute path to the speaker embedding ONNX model (e.g. CAM++). Leave empty for managed models/diarization/. Machine-scoped; not synced."
+	"config.diarization.embeddingModelPath": "Absolute path to the speaker embedding ONNX model (e.g. CAM++). Leave empty for managed models/diarization/. Machine-scoped; not synced.",
+	"walkthrough.hearingsAudio.title": "Hearings and Audio",
+	"walkthrough.hearingsAudio.description": "Record or import hearing audio, transcribe on this computer with consent, and export a transcript — no credits required.",
+	"walkthrough.hearingsAudio.openRecorder.title": "Open the Audio Recorder",
+	"walkthrough.hearingsAudio.openRecorder.description": "Open the Audio side bar to record a hearing or review saved recordings on this computer.\n[Open Audio Recorder](command:safeappeals-audio.openRecorder)",
+	"walkthrough.hearingsAudio.importTranscribe.title": "Import and Transcribe",
+	"walkthrough.hearingsAudio.importTranscribe.description": "Import an audio file or transcribe a recording. Whisper models install only with your consent — this tutorial never starts a download for you.\n[Import Audio File](command:safeappeals-audio.importAudio)\n[Transcribe Recording](command:safeappeals-audio.transcribe)\n[Choose Whisper Model](command:safeappeals-audio.chooseWhisperModel)",
+	"walkthrough.hearingsAudio.exportTranscript.title": "Export the Transcript",
+	"walkthrough.hearingsAudio.exportTranscript.description": "Save a finished transcript for your case file or filing packet.\n[Export Transcript](command:safeappeals-audio.exportTranscript)"
 }

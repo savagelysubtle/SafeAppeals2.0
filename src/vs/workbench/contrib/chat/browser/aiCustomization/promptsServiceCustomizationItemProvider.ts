@@ -15,12 +15,48 @@ import { IProductService } from '../../../../../platform/product/common/productS
 import { IAICustomizationWorkspaceService, AICustomizationSources } from '../../common/aiCustomizationWorkspaceService.js';
 import { HookType, HOOK_METADATA } from '../../common/promptSyntax/hookTypes.js';
 import { formatHookCommandLabel } from '../../common/promptSyntax/hookSchema.js';
+import { isCompatAgentUriForSubagentInvoke } from '../../common/promptSyntax/agentSubagentInvoke.js';
+import { IResolvedPromptSourceFolder } from '../../common/promptSyntax/config/promptFileLocations.js';
 import { PromptsType } from '../../common/promptSyntax/promptTypes.js';
 import { ICustomAgent, IPromptsService, matchesSessionType, PromptsStorage } from '../../common/promptSyntax/service/promptsService.js';
 import { ICustomizationItem, ICustomizationItemProvider, ICustomizationSourceFolder } from '../../common/customizationHarnessService.js';
 import { BUILTIN_STORAGE } from './aiCustomizationManagement.js';
 import { getFriendlyName, isChatExtensionItem } from './aiCustomizationItemSource.js';
 import { getChatSessionType } from '../../common/model/chatUri.js';
+
+/**
+ * Filters resolved source folders for the create/location picker.
+ * Matches {@link IPromptsService.getSourceFolders}: user skill roots are omitted
+ * (skills historically have no user create target via this path).
+ */
+export function filterResolvedFoldersForCreatePicker(
+	type: PromptsType,
+	folders: readonly IResolvedPromptSourceFolder[],
+): readonly IResolvedPromptSourceFolder[] {
+	if (type !== PromptsType.skill) {
+		return folders;
+	}
+	return folders.filter(folder => folder.storage !== PromptsStorage.user);
+}
+
+/**
+ * Subtle catalog badge for agents discovered from compatibility folders
+ * (`.github/agents`, `.claude/agents`, `~/.copilot/agents`). These remain
+ * visible when discovery is on but are not invocable via runSubagent.
+ * Uses the same path gate as {@link isCompatAgentUriForSubagentInvoke}.
+ */
+export function getAgentCatalogSourceBadge(uri: URI): { badge: string; badgeTooltip: string } | undefined {
+	if (!isCompatAgentUriForSubagentInvoke(uri)) {
+		return undefined;
+	}
+	return {
+		badge: localize('compatAgentBadge', "Compat"),
+		badgeTooltip: localize(
+			'compatAgentBadgeTooltip',
+			"Discovered from a compatibility agent folder. Not invocable via runSubagent — use a SafeAppeals agent under `.safeAppeals/agents` or `~/.safeAppeals/agents`.",
+		),
+	};
+}
 
 /**
  * Adapts the rich promptsService model to the same provider-shaped items
@@ -63,10 +99,20 @@ export class PromptsServiceCustomizationItemProvider implements ICustomizationIt
 	}
 
 	async provideSourceFolders(_sessionResource: URI, type: PromptsType, _token: CancellationToken): Promise<readonly ICustomizationSourceFolder[]> {
-		const folders = await this.promptsService.getSourceFolders(type);
+		// Prefer resolved folders so create targets keep correct local/user
+		// storage and SafeAppeals defaults stay first for agents. Omit user
+		// skill roots to match getSourceFolders create-target policy.
+		const folders = filterResolvedFoldersForCreatePicker(
+			type,
+			await this.promptsService.getResolvedSourceFolders(type),
+		);
 		return folders.map(folder => ({
 			uri: folder.uri,
-			label: this.promptsService.getPromptLocationLabel(folder),
+			label: folder.displayPath ?? this.promptsService.getPromptLocationLabel({
+				uri: folder.uri,
+				storage: folder.storage,
+				type,
+			}),
 			source: folder.storage
 		}));
 	}
@@ -85,6 +131,7 @@ export class PromptsServiceCustomizationItemProvider implements ICustomizationIt
 				}
 			}
 			for (const agent of agents) {
+				const sourceBadge = getAgentCatalogSourceBadge(agent.uri);
 				items.push({
 					uri: agent.uri,
 					type: promptType,
@@ -92,6 +139,8 @@ export class PromptsServiceCustomizationItemProvider implements ICustomizationIt
 					description: agent.description,
 					source: agent.source.storage,
 					enabled: agent.enabled,
+					badge: sourceBadge?.badge,
+					badgeTooltip: sourceBadge?.badgeTooltip,
 					extensionId: agent.source.storage === PromptsStorage.extension ? agent.source.extensionId.value : undefined,
 					pluginUri: agent.source.storage === PromptsStorage.plugin ? agent.source.pluginUri : undefined,
 					userInvocable: agent.visibility.userInvocable

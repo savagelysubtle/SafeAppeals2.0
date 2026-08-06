@@ -51,7 +51,7 @@ export const CORE_REFERENCES_README_TEMPLATE = [
 	'- Correspondence and working drafts',
 	'- Other case-specific files',
 	'',
-	'Those are case-specific files that belong with the case (case index), not in this reference library.',
+	'Those are case-specific files that belong elsewhere in the workspace — Private Search indexes them under the `case_index` search scope (not a folder named `case_index`).',
 	'',
 	'For workspace rules about this case or project, edit the `AGENTS.md` file at the workspace root.',
 	'',

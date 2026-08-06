@@ -126,6 +126,56 @@ header h1 {
 	color: var(--fg);
 }
 
+.progress {
+	margin-top: 10px;
+}
+
+.progress-track {
+	position: relative;
+	height: 4px;
+	border-radius: 2px;
+	overflow: hidden;
+	background: var(--vscode-progressBar-background, rgba(127, 127, 127, 0.25));
+}
+
+.progress-fill {
+	height: 100%;
+	width: 0%;
+	border-radius: 2px;
+	background: var(--vscode-progressBar-background, var(--accent));
+	transition: width 0.2s ease;
+}
+
+.progress-fill.indeterminate {
+	width: 100% !important;
+	background: linear-gradient(
+		90deg,
+		transparent 0%,
+		var(--vscode-progressBar-background, var(--accent)) 35%,
+		var(--vscode-progressBar-background, var(--accent)) 65%,
+		transparent 100%
+	);
+	background-size: 200% 100%;
+	animation: progress-indeterminate 1.2s linear infinite;
+}
+
+@keyframes progress-indeterminate {
+	from {
+		background-position: 200% 0;
+	}
+	to {
+		background-position: -200% 0;
+	}
+}
+
+.progress-label {
+	display: block;
+	margin-top: 6px;
+	font-size: 0.85rem;
+	color: var(--muted);
+	text-align: right;
+}
+
 .hidden {
 	display: none !important;
 }

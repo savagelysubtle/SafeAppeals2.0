@@ -28,8 +28,8 @@
 		"node": ">= 20"
 	},
 	"scripts": {
-		"build": "napi build --platform --release --no-js",
-		"build:debug": "napi build --platform --no-js",
+		"build": "napi build --platform --release --no-js -F \"fastembed cross-encoder\"",
+		"build:debug": "napi build --platform --no-js -F \"fastembed cross-encoder\"",
 		"artifacts": "napi artifacts",
 		"install-prebuild": "node ./scripts/install-prebuild.js",
 		"build:prebuild": "bun run build && bun run install-prebuild",

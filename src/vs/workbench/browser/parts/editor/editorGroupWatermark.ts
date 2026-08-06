@@ -38,6 +38,7 @@ const showChat: WatermarkEntry = { text: localize('watermark.showChat', "Show Ch
 const draftCaseBrief: WatermarkEntry = { text: localize('watermark.draftCaseBrief', "Draft Case Brief"), id: 'workbench.action.chat.open', when: { native: draftCaseBriefWhen, web: draftCaseBriefWhen } };
 const openCaseFolder: WatermarkEntry = { text: localize('watermark.openCaseFolder', "Open Case Folder"), id: 'workbench.action.files.openFolder' };
 const takeTour: WatermarkEntry = { text: localize('watermark.takeTour', "Take the Tour"), id: 'safeappeals-timeline.takeTour' };
+const openTutorials: WatermarkEntry = { text: localize('watermark.openTutorials', "Tutorials"), id: 'safeappeals-timeline.openTutorials' };
 
 // SafeAppeals: one tip list for empty window and workspace (Draft Case Brief is gated by when, not by list).
 const caseEntries: WatermarkEntry[] = [
@@ -45,6 +46,7 @@ const caseEntries: WatermarkEntry[] = [
 	draftCaseBrief,
 	openCaseFolder,
 	takeTour,
+	openTutorials,
 ];
 
 export class EditorGroupWatermark extends Disposable {

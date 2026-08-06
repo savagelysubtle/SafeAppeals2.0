@@ -11,8 +11,12 @@ export interface Capabilities {
   modelsPresent: boolean
   /** True when this build linked SQLCipher and can open encrypted workspace DBs. */
   storageReady: boolean
-  /** Configured embedding dims (BGE-small = 512). */
+  /** Configured embedding dims (BGE-small = 384). */
   dims: number
+  /** Role when a workspace is open; unset when closed. */
+  indexWriteRole?: IndexWriteRoleNapi
+  /** True when the open session may index (`indexWriteRole == primary`). */
+  indexWriteCapable: boolean
 }
 
 /** Citation-aware hierarchical chunker for the host ingest path. */
@@ -46,10 +50,16 @@ export interface ChunkDocumentNapiOutput {
   charEnd?: number
 }
 
+/** Drop process-global embedder (and CE used with search) — MlResourceEngine unload path. */
+export declare function clearEmbedder(): OpResult
+
+/** Drop process-global cross-encoder only. */
+export declare function clearReranker(): OpResult
+
 /** Close the open workspace, persist `vectors.usearch`, drop key material. */
 export declare function closeWorkspace(): OpResult
 
-/** Embed a batch of texts (BGE-small when loaded; fail-soft if model missing). */
+/** Embed a batch of texts (BGE-small when loaded via `ensureEmbedderLoaded`). */
 export declare function embedBatch(texts: Array<string>): EmbedBatchResult
 
 /** Result of `embedBatch`. */
@@ -59,6 +69,19 @@ export interface EmbedBatchResult {
   embeddings?: Array<Array<number>>
   dims: number
 }
+
+/** Load BGE from `SA_RAG_EMBED_MODEL_DIR` when not already resident (MlResourceEngine lease path). */
+export declare function ensureEmbedderLoaded(): EnsureEmbedderResult
+
+/** Result of `ensureEmbedderLoaded`. */
+export interface EnsureEmbedderResult {
+  ok: boolean
+  error?: string
+  loaded: boolean
+}
+
+/** Lookup indexed document metadata by id (`null` when missing or workspace closed). */
+export declare function getDocument(docId: string): IndexDocumentInput | null
 
 /** Chunk row for `indexChunks`. */
 export interface IndexChunkInput {
@@ -98,8 +121,18 @@ export interface IndexDocumentInput {
   lastIndexedAt: string
 }
 
-/** Open encrypted chunk DB + usearch index under `root_dir`. */
-export declare function openWorkspace(rootDir: string, dekBytes: Buffer): OpResult
+/** Indexing role for the open workspace (primary holds flock; secondary is search-only). */
+export declare const enum IndexWriteRoleNapi {
+  Primary = 'primary',
+  Secondary = 'secondary'
+}
+
+/**
+ * Open encrypted chunk DB + usearch index under `root_dir`.
+ *
+ * `prefer_secondary`: soft host hint (e.g. Agents window); flock always decides role.
+ */
+export declare function openWorkspace(rootDir: string, dekBytes: Buffer, preferSecondary?: boolean | undefined | null): OpResult
 
 /** Status object for mutating N-API calls (avoids `napi::Error` so `cargo test` can link). */
 export interface OpResult {

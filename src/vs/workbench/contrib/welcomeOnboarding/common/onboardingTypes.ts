@@ -16,8 +16,12 @@ export const enum OnboardingStepId {
 	Profile = 'onboarding.profile',
 	/** SafeAppeals: agent mental model, approval literacy, hallucination inoculation. */
 	AgentIntro = 'onboarding.agentIntro',
-	/** SafeAppeals: honest zero-credit handoff and first zero-cost action. */
+	/** SafeAppeals: honest zero-credit handoff (packs, balance, pricing). */
 	CreditsHandoff = 'onboarding.creditsHandoff',
+	/** SafeAppeals: local indexing for private search on this computer. */
+	PrivateSearch = 'onboarding.privateSearch',
+	/** SafeAppeals: readiness scan, optional install, and sample case without credits. */
+	GetStarted = 'onboarding.getStarted',
 }
 
 /**
@@ -36,6 +40,12 @@ export function getOnboardingStepTitle(stepId: OnboardingStepId): string {
 		case OnboardingStepId.CreditsHandoff:
 			// SafeAppeals
 			return localize('onboarding.step.creditsHandoff', "What's Free, and What Isn't");
+		case OnboardingStepId.PrivateSearch:
+			// SafeAppeals
+			return localize('onboarding.step.privateSearch', "Private Search on This Computer");
+		case OnboardingStepId.GetStarted:
+			// SafeAppeals
+			return localize('onboarding.step.getStarted', "Get Started");
 	}
 }
 
@@ -56,6 +66,12 @@ export function getOnboardingStepSubtitle(stepId: OnboardingStepId, productServi
 		case OnboardingStepId.CreditsHandoff:
 			// SafeAppeals
 			return localize('onboarding.step.creditsHandoff.subtitle', "{0} is free to download and use — your account is free too. Email, calendar, and documents never cost anything; you only pay for AI credits.", productService.nameLong);
+		case OnboardingStepId.PrivateSearch:
+			// SafeAppeals
+			return localize('onboarding.step.privateSearch.subtitle', "Index case files on this computer so search does not upload the whole file for every query");
+		case OnboardingStepId.GetStarted:
+			// SafeAppeals
+			return localize('onboarding.step.getStarted.subtitle', "See what this computer needs for Private Search, then try a sample case — no credits required");
 	}
 }
 
@@ -67,6 +83,8 @@ const ALL_ONBOARDING_STEPS: readonly OnboardingStepId[] = [
 	OnboardingStepId.Profile,
 	OnboardingStepId.AgentIntro,
 	OnboardingStepId.CreditsHandoff,
+	OnboardingStepId.PrivateSearch,
+	OnboardingStepId.GetStarted,
 ];
 
 /**

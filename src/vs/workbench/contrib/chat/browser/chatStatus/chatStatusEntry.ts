@@ -27,6 +27,7 @@ import { isCompletionsEnabled } from '../../../../../editor/common/services/comp
 import { CHAT_SETUP_ACTION_ID } from '../actions/chatActions.js';
 import { IContextKeyService } from '../../../../../platform/contextkey/common/contextkey.js';
 import { isWeb } from '../../../../../base/common/platform.js';
+import { safeAppealsShieldOutlineIcon } from '../../../../../platform/theme/common/safeAppealsIcons.js';
 import { InEditorZenModeContext } from '../../../../common/contextkeys.js';
 import { ChatConfiguration } from '../../common/constants.js';
 
@@ -330,8 +331,8 @@ export class ChatStatusBarEntry extends Disposable implements IWorkbenchContribu
 	//#endregion
 
 	private getEntryProps(): IStatusbarEntry {
-		let text = '$(copilot)';
-		let ariaLabel = localize('chatStatusAria', "Copilot status");
+		let text = `$(${safeAppealsShieldOutlineIcon.id})`;
+		let ariaLabel = localize('safeAppealsStatusAria', "SafeAppeals status");
 		let kind: StatusbarEntryKind | undefined;
 
 		if (isNewUser(this.chatEntitlementService)) {
@@ -351,8 +352,8 @@ export class ChatStatusBarEntry extends Disposable implements IWorkbenchContribu
 
 			// Disabled
 			if (this.chatEntitlementService.sentiment.disabled || this.chatEntitlementService.sentiment.untrusted) {
-				text = '$(copilot-unavailable)';
-				ariaLabel = localize('copilotDisabledStatus', "Copilot disabled");
+				text = '$(circle-slash)';
+				ariaLabel = localize('safeAppealsDisabledStatus', "SafeAppeals disabled");
 			}
 
 			// Signed out — keep showing Sign-in affordance even when BYOK models are present
@@ -364,34 +365,34 @@ export class ChatStatusBarEntry extends Disposable implements IWorkbenchContribu
 			// Quota Exceeded (all tracked plans share the premium chat quota)
 			else if (isTrackedEntitlement(this.chatEntitlementService.entitlement) && isQuotaBlocked(quotas)) {
 				const quotaWarning = localize('chatQuotaExceededStatus', "Quota reached");
-				text = `$(copilot-warning) ${quotaWarning}`;
+				text = `$(warning) ${quotaWarning}`;
 				ariaLabel = quotaWarning;
 				kind = 'prominent';
 			}
 
-			// Copilot Resumed (limit reset after the user was previously blocked)
+			// SafeAppeals Resumed (limit reset after the user was previously blocked)
 			else if (this.quotaResumeState === 'resumed') {
-				const resumedLabel = localize('chatResumedStatus', "Copilot Resumed");
-				text = `$(copilot) ${resumedLabel}`;
+				const resumedLabel = localize('safeAppealsResumedStatus', "SafeAppeals Resumed");
+				text = `$(${safeAppealsShieldOutlineIcon.id}) ${resumedLabel}`;
 				ariaLabel = resumedLabel;
 				kind = 'prominent';
 			}
 
 			// Completions Disabled
 			else if (this.editorService.activeTextEditorLanguageId && !isCompletionsEnabled(this.configurationService, this.editorService.activeTextEditorLanguageId)) {
-				text = '$(copilot-unavailable)';
+				text = '$(circle-slash)';
 				ariaLabel = localize('completionsDisabledStatus', "Inline suggestions disabled");
 			}
 
 			// Completions Snoozed
 			else if (this.completionsService.isSnoozing()) {
-				text = '$(copilot-snooze)';
+				text = '$(bell-slash)';
 				ariaLabel = localize('completionsSnoozedStatus', "Inline suggestions snoozed");
 			}
 		}
 
 		const baseResult = {
-			name: localize('chatStatus', "Copilot Status"),
+			name: localize('safeAppealsStatus', "SafeAppeals Status"),
 			text,
 			ariaLabel,
 			command: ShowTooltipCommand,
@@ -408,9 +409,9 @@ export class ChatStatusBarEntry extends Disposable implements IWorkbenchContribu
 		const showSignInLabel = !this.isSignInTitleBarAffordanceVisible();
 		const signInLabel = localize('signIn', "Sign In");
 		return {
-			name: localize('chatStatus', "Copilot Status"),
-			text: showSignInLabel ? `$(copilot) ${signInLabel}` : '$(copilot)',
-			ariaLabel: showSignInLabel ? signInLabel : localize('chatStatusAria', "Copilot status"),
+			name: localize('safeAppealsStatus', "SafeAppeals Status"),
+			text: showSignInLabel ? `$(${safeAppealsShieldOutlineIcon.id}) ${signInLabel}` : `$(${safeAppealsShieldOutlineIcon.id})`,
+			ariaLabel: showSignInLabel ? signInLabel : localize('safeAppealsStatusAria', "SafeAppeals status"),
 			command: CHAT_SETUP_ACTION_ID,
 			showInAllWindows: true,
 			kind: undefined,

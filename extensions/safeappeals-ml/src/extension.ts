@@ -2,6 +2,7 @@
  *  Copyright (c) Safe Appeals. All rights reserved.
  *--------------------------------------------------------------------------------------------*/
 
+import * as os from 'node:os';
 import * as vscode from 'vscode';
 import { DocParseAdapter } from './adapters/docParseAdapter';
 import {
@@ -9,6 +10,7 @@ import {
 	consentInstallUnlimitedOcr,
 	type ConsentInstallOutcome,
 } from './consentInstall';
+import { DocParseSidecarHost } from './docParseSidecarHost';
 import { smokeDocParseHealth } from './docParseSmoke';
 import type {
 	AcquireOptions,
@@ -16,13 +18,15 @@ import type {
 	ResourceAdapter,
 	ResourceKind,
 } from './engineTypes';
-import { HwCapabilityProbe } from './hwCapabilityProbe';
+import { HwCapabilityProbe, bytesToMb } from './hwCapabilityProbe';
 import { ModelArtifactStore } from './modelArtifactStore';
-import { createDefaultModelCatalog, type ModelCatalog } from './modelCatalog';
+import { createDefaultModelCatalog, isArtifactPinConfigured, type ModelCatalog } from './modelCatalog';
+import { peakRssBudgetFromTotalRamMb } from './engineTypes';
 import { MlResourceEngine } from './resourceEngine';
 
 let outputChannel: vscode.OutputChannel | undefined;
 let mlEngine: MlResourceEngine | undefined;
+let docParseSidecarHost: DocParseSidecarHost | undefined;
 
 /**
  * Public API for sibling hosts (safeappeals-audio, safeappeals-rag).
@@ -37,9 +41,13 @@ export interface SafeAppealsMlApi {
 	isArtifactReady(modelId: string): Promise<boolean>;
 	/**
 	 * Consent-gated install. Pass `userConsented: true` only after an explicit UI confirm.
-	 * Ineligible hardware never downloads. Unlimited-OCR runs a localhost `/health` smoke after download.
+	 * Ineligible hardware never downloads. Unlimited-OCR starts the managed sidecar then smokes `/health`.
 	 */
-	consentInstall(modelId: string, userConsented: boolean): Promise<ConsentInstallOutcome>;
+	consentInstall(
+		modelId: string,
+		userConsented: boolean,
+		options?: { readonly onProgress?: (progress: import('./modelArtifactStore').ArtifactDownloadProgress) => void },
+	): Promise<ConsentInstallOutcome>;
 	/** Purge `ml-models/<modelId>` or the entire `ml-models` root when omitted. */
 	purgeArtifacts(modelId?: string): Promise<{ readonly purged: readonly string[] }>;
 	/** Convenience: acquire a lease, run `fn`, always release. */
@@ -52,6 +60,8 @@ export interface SafeAppealsMlApi {
 	reportCrash(kind: ResourceKind, message?: string): void;
 	/** Register or replace a cold adapter (whisper / diarization / embedding / …). */
 	registerAdapter(adapter: ResourceAdapter): void;
+	/** Start managed DocParse sidecar when artifacts + binary are ready; smoke `/health`. */
+	ensureDocParseReady(): Promise<{ readonly ready: boolean; readonly detail?: string }>;
 }
 
 /**
@@ -65,14 +75,8 @@ export function activate(context: vscode.ExtensionContext): SafeAppealsMlApi {
 	const catalog = createDefaultModelCatalog();
 	const artifactStore = ModelArtifactStore.fromExtensionContext(context, catalog);
 
-	const unlimitedOcrSmoke = async (): Promise<void> => {
-		const configured = vscode.workspace
-			.getConfiguration()
-			.get<string>('safeappeals.rag.docParseSidecarUrl');
-		await smokeDocParseHealth({
-			baseUrl: configured?.trim() || undefined,
-		});
-	};
+	// Heavy kinds stay XOR; budget caps total heavy + ffmpeg RSS (25% of RAM, 1–4 GB).
+	const peakRssBudgetMb = peakRssBudgetFromTotalRamMb(bytesToMb(os.totalmem()));
 
 	const docParseBaseUrl = (): string => {
 		const fromEnv = process.env.SAFEAPPEALS_DOCPARSE_URL?.trim();
@@ -85,12 +89,74 @@ export function activate(context: vscode.ExtensionContext): SafeAppealsMlApi {
 		);
 	};
 
-	const engine = new MlResourceEngine({}, [
+	const sidecarHost = new DocParseSidecarHost({
+		extensionPath: context.extensionPath,
+		baseUrl: docParseBaseUrl(),
+		log: message => outputChannel?.appendLine(message),
+	});
+	docParseSidecarHost = sidecarHost;
+	context.subscriptions.push({ dispose: () => sidecarHost.dispose() });
+
+	const refreshDocParseModelDir = async (): Promise<string | undefined> => {
+		const spec = catalog.get('unlimited-ocr');
+		if (!spec?.version) {
+			return undefined;
+		}
+		if (!(await artifactStore.isReady('unlimited-ocr'))) {
+			return undefined;
+		}
+		return artifactStore.artifactDir('unlimited-ocr', spec.version);
+	};
+
+	const ensureDocParseReady = async (): Promise<{ readonly ready: boolean; readonly detail?: string }> => {
+		const modelDir = await refreshDocParseModelDir();
+		if (!modelDir) {
+			return {
+				ready: false,
+				detail: 'Unlimited-OCR artifacts are not installed or verified.',
+			};
+		}
+		sidecarHost.setModelDir(modelDir);
+
+		if (sidecarHost.isBinaryAvailable) {
+			try {
+				await sidecarHost.start();
+				return { ready: true };
+			} catch (err) {
+				const message = err instanceof Error ? err.message : String(err);
+				return { ready: false, detail: message };
+			}
+		}
+
+		try {
+			await smokeDocParseHealth({ baseUrl: docParseBaseUrl() });
+			return { ready: true };
+		} catch (err) {
+			const message = err instanceof Error ? err.message : String(err);
+			return {
+				ready: false,
+				detail: `DocParse BYO health failed: ${message}`,
+			};
+		}
+	};
+
+	void refreshDocParseModelDir().then(dir => {
+		if (dir) {
+			sidecarHost.setModelDir(dir);
+		}
+	});
+
+	const engine = new MlResourceEngine({ peakRssBudgetMb }, [
 		new DocParseAdapter({
 			baseUrl: docParseBaseUrl(),
 			log: message => outputChannel?.appendLine(message),
-			// v1: BYO localhost health only — Unlimited-OCR runner binary may be absent.
-			// When a spawn path lands later, pass spawnOwned and unload will kill the child.
+			spawnOwned: async () => {
+				const modelDir = await refreshDocParseModelDir();
+				if (modelDir) {
+					sidecarHost.setModelDir(modelDir);
+				}
+				return sidecarHost.ensureStarted();
+			},
 		}),
 	]);
 	mlEngine = engine;
@@ -109,19 +175,26 @@ export function activate(context: vscode.ExtensionContext): SafeAppealsMlApi {
 		artifactStore,
 		engine,
 		isArtifactReady: (modelId: string) => artifactStore.isReady(modelId),
-		consentInstall: (modelId: string, userConsented: boolean) =>
-			consentInstallModel(
-				{ probe, catalog, store: artifactStore },
-				{
-					modelId,
+		consentInstall: (
+			modelId: string,
+			userConsented: boolean,
+			options?: { readonly onProgress?: (progress: import('./modelArtifactStore').ArtifactDownloadProgress) => void },
+		) =>
+			modelId === 'unlimited-ocr'
+				? consentInstallUnlimitedOcr(
+					{ probe, catalog, store: artifactStore },
 					userConsented,
-					smokeTest: modelId === 'unlimited-ocr' ? unlimitedOcrSmoke : undefined,
-				},
-			),
+					{ ensureDocParseReady, onProgress: options?.onProgress },
+				)
+				: consentInstallModel(
+					{ probe, catalog, store: artifactStore },
+					{ modelId, userConsented, onProgress: options?.onProgress },
+				),
 		purgeArtifacts: (modelId?: string) => artifactStore.purge(modelId),
 		withLease: (kind, options, fn) => engine.withLease(kind, options, fn),
 		reportCrash: (kind, message) => engine.reportCrash(kind, message),
 		registerAdapter: adapter => engine.registerAdapter(adapter),
+		ensureDocParseReady,
 	};
 
 	context.subscriptions.push(
@@ -129,6 +202,8 @@ export function activate(context: vscode.ExtensionContext): SafeAppealsMlApi {
 			try {
 				const snapshot = await api.probe.snapshot();
 				const ocr = api.catalog.evaluate('unlimited-ocr', snapshot);
+				const ocrSpec = api.catalog.get('unlimited-ocr');
+				const ocrPinned = isArtifactPinConfigured(ocrSpec);
 				const ready = await api.isArtifactReady('unlimited-ocr');
 				const lines = [
 					`Platform: ${snapshot.platform} ${snapshot.arch} (${snapshot.osRelease})`,
@@ -137,6 +212,7 @@ export function activate(context: vscode.ExtensionContext): SafeAppealsMlApi {
 					`Disk free: ${snapshot.diskFreeMb} MB`,
 					`GPU: ${snapshot.gpuName ?? 'none detected'} / VRAM ${snapshot.gpuVramMb ?? 'unknown'} MB`,
 					`Unlimited-OCR: ${ocr.eligible ? 'eligible' : 'not eligible'}${ocr.reasons.length ? ` — ${ocr.reasons.join('; ')}` : ''}`,
+					`Unlimited-OCR artifact pins: ${ocrPinned ? 'configured' : 'not configured (install blocked)'}`,
 					`Unlimited-OCR artifacts: ${ready ? 'ready' : 'not installed'}`,
 					`ML engine heavy: ${engine.getSnapshot().heavyKindLoaded ?? '(none)'} queue=${engine.getSnapshot().queueLength}`,
 				];
@@ -167,6 +243,16 @@ export function activate(context: vscode.ExtensionContext): SafeAppealsMlApi {
 				return;
 			}
 
+			const ocrSpec = api.catalog.get('unlimited-ocr');
+			if (!isArtifactPinConfigured(ocrSpec)) {
+				void vscode.window.showWarningMessage(
+					vscode.l10n.t(
+						'Unlimited-OCR cannot be installed: artifact download pins are not configured for this build.',
+					),
+				);
+				return;
+			}
+
 			if (await api.isArtifactReady('unlimited-ocr')) {
 				void vscode.window.showInformationMessage(
 					vscode.l10n.t('Unlimited-OCR is already installed and verified.'),
@@ -189,7 +275,7 @@ export function activate(context: vscode.ExtensionContext): SafeAppealsMlApi {
 			const outcome = await consentInstallUnlimitedOcr(
 				{ probe, catalog, store: artifactStore },
 				true,
-				{ smokeTest: unlimitedOcrSmoke },
+				{ ensureDocParseReady },
 			);
 			logConsentOutcome(outcome);
 			switch (outcome.kind) {
@@ -276,6 +362,12 @@ function logConsentOutcome(outcome: ConsentInstallOutcome): void {
 export function deactivate(): void {
 	outputChannel = undefined;
 	mlEngine = undefined;
+	docParseSidecarHost = undefined;
+}
+
+/** Managed DocParse sidecar host (undefined before activate). */
+export function getDocParseSidecarHost(): DocParseSidecarHost | undefined {
+	return docParseSidecarHost;
 }
 
 // Re-exports for consumers / tests that resolve the package modules after compile.

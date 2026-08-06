@@ -8,9 +8,11 @@ import * as vscode from 'vscode';
 import {
 	createRagAgentTools,
 	formatIndexPipelineResult,
+	missingIndexPipelineMessage,
 	type RagAgentHost,
 	type RagAgentPipeline,
 } from '../agentTools';
+import { hardDisableMessage } from '../disableMessages';
 import type { IndexPipelineResult } from '../indexPipeline';
 import type { RagCoreHostStatus, RagSearchResult } from '../ragCoreHost';
 import {
@@ -50,6 +52,7 @@ function baseStatus(overrides?: Partial<RagCoreHostStatus>): RagCoreHostStatus {
 		},
 		workspaceRoot: '/tmp/rag',
 		workspaceOpen: true,
+		indexWriteRole: 'primary',
 		modelEnv: undefined,
 		dekReason: undefined,
 		electron146Note: 'test',
@@ -123,6 +126,7 @@ suite('rag agentTools', () => {
 				chunkCount: 4,
 				scope: 'case_index',
 			}),
+			async fn => fn(),
 		);
 	});
 
@@ -156,7 +160,7 @@ suite('rag agentTools', () => {
 				}),
 				skipped: formatIndexPipelineResult({
 					kind: 'skipped',
-					reason: 'Extension .pdf is not in the M6 txt/md index set',
+					reason: 'Extension .docx is not in the indexable source set (txt, md, pdf)',
 				}),
 				hard: formatIndexPipelineResult({
 					kind: 'hard-disable',
@@ -167,7 +171,7 @@ suite('rag agentTools', () => {
 			},
 			{
 				ok: 'Indexed document d1: 3 chunk(s) (scope=core_reference).',
-				skipped: 'Skipped: Extension .pdf is not in the M6 txt/md index set',
+				skipped: 'Skipped: Extension .docx is not in the indexable source set (txt, md, pdf)',
 				hard: 'Hard-disable [models-missing]: Embedding model not loaded',
 			},
 		);
@@ -189,12 +193,12 @@ suite('rag agentTools', () => {
 			() => mockHost(),
 			() => mockPipeline({
 				kind: 'skipped',
-				reason: 'Extension .pdf is not in the M6 txt/md index set',
+				reason: 'Extension .docx is not in the indexable source set (txt, md, pdf)',
 			}),
 		);
 		const skipped = toolText(await skippedTools.indexDocument.invoke({
 			toolInvocationToken: undefined,
-			input: { uri: 'scan.pdf' },
+			input: { uri: 'scan.docx' },
 		}, token));
 
 		assert.deepStrictEqual(
@@ -209,11 +213,42 @@ suite('rag agentTools', () => {
 
 	test('search tools map scopes and limit to finalK and return contextPack', async () => {
 		const token = cancellationToken();
+		let leaseWrapped = false;
+		const leasedTools = createRagAgentTools(
+			() => mockHost({
+				search: (query, opts) => {
+					lastSearch = { query, finalK: opts.finalK, scope: opts.scope };
+					return {
+						ok: true,
+						results: [{
+							chunkId: 'c1',
+							docId: 'd1',
+							text: 'Appeal rights under section 3.',
+							fusedScore: 0.91,
+							sourceUri: 'file:///workspace/case/core_references/regs.md',
+							heading: 'Appeals',
+							scope: String(opts.scope ?? 'all'),
+						}],
+					};
+				},
+			}),
+			() => mockPipeline({
+				kind: 'ok',
+				docId: 'abc123',
+				chunkCount: 4,
+				scope: 'case_index',
+			}),
+			async fn => {
+				leaseWrapped = true;
+				return fn();
+			},
+		);
 
-		const refText = toolText(await tools.searchReference.invoke({
+		const refText = toolText(await leasedTools.searchReference.invoke({
 			toolInvocationToken: undefined,
 			input: { query: 'appeal rights', limit: 12 },
 		}, token));
+		assert.strictEqual(leaseWrapped, true);
 		assert.deepStrictEqual(lastSearch, {
 			query: 'appeal rights',
 			finalK: 12,
@@ -230,12 +265,26 @@ suite('rag agentTools', () => {
 		assert.strictEqual(lastSearch?.scope, 'case_index');
 		assert.strictEqual(lastSearch?.finalK, 8);
 
-		await tools.searchAll.invoke({
+		await leasedTools.searchAll.invoke({
 			toolInvocationToken: undefined,
 			input: { query: 'all docs', limit: 0 },
 		}, token);
 		assert.strictEqual(lastSearch?.scope, 'all');
 		assert.strictEqual(lastSearch?.finalK, 1);
+	});
+
+	test('search fails closed when embedding lease unavailable', async () => {
+		const token = cancellationToken();
+		const noLeaseTools = createRagAgentTools(
+			() => mockHost(),
+			() => undefined,
+		);
+		const text = toolText(await noLeaseTools.searchAll.invoke({
+			toolInvocationToken: undefined,
+			input: { query: 'appeal' },
+		}, token));
+		assert.ok(text.startsWith(SEARCH_FAILED_PREFIX));
+		assert.ok(text.includes('embedding lease unavailable'));
 	});
 
 	test('search failures and missing query use Search failed prefix', async () => {
@@ -245,6 +294,7 @@ suite('rag agentTools', () => {
 				search: () => ({ ok: false, error: 'models-missing', results: [] }),
 			}),
 			() => undefined,
+			async fn => fn(),
 		);
 
 		const missingQuery = toolText(await tools.searchAll.invoke({
@@ -294,6 +344,56 @@ suite('rag agentTools', () => {
 		assert.strictEqual(noHost, 'Error: Private Search host is not available.');
 	});
 
+	test('indexDocument on secondary host returns read-only-session via pipeline', async () => {
+		const token = cancellationToken();
+		const readOnlyMessage = hardDisableMessage('read-only-session', [
+			'Indexing is owned by the primary workbench window.',
+		]);
+		const secondaryTools = createRagAgentTools(
+			() => mockHost({
+				status: baseStatus({
+					indexWriteRole: 'secondary',
+					capabilities: {
+						hybrid: true,
+						queryProcessor: true,
+						rerank: true,
+						modelsPresent: true,
+						storageReady: true,
+						dims: 384,
+						indexWriteRole: 'secondary',
+						indexWriteCapable: false,
+					},
+				}),
+			}),
+			() => mockPipeline({
+				kind: 'hard-disable',
+				code: 'read-only-session',
+				message: readOnlyMessage,
+				reasons: ['Indexing is owned by the primary workbench window.'],
+			}),
+		);
+		const text = toolText(await secondaryTools.indexDocument.invoke({
+			toolInvocationToken: undefined,
+			input: { uri: 'notes.md' },
+		}, token));
+		assert.ok(text.includes('read-only-session'));
+		assert.ok(text.includes('main workbench window'));
+		assert.ok(!text.includes('ingest/rag-core not ready'));
+	});
+
+	test('missingIndexPipelineMessage explains read-only Agents session', () => {
+		const secondaryHost = mockHost({
+			status: baseStatus({ indexWriteRole: 'secondary' }),
+		});
+		const secondaryMessage = missingIndexPipelineMessage(() => secondaryHost);
+		assert.ok(secondaryMessage.includes('read-only-session'));
+		assert.ok(secondaryMessage.includes('main workbench window'));
+		assert.ok(!secondaryMessage.includes('ingest/rag-core not ready'));
+
+		const unavailableMessage = missingIndexPipelineMessage(() => undefined);
+		assert.ok(unavailableMessage.includes('index pipeline is not available'));
+	});
+
 	test('index, search, and stats require workspace; pipeline guard is clear', async () => {
 		const token = cancellationToken();
 		(vscode.workspace as { workspaceFolders?: undefined }).workspaceFolders = undefined;
@@ -321,11 +421,21 @@ suite('rag agentTools', () => {
 			input: { uri: 'a.md' },
 		}, token));
 
+		const secondaryNoPipeline = toolText(await createRagAgentTools(
+			() => mockHost({ status: baseStatus({ indexWriteRole: 'secondary' }) }),
+			() => undefined,
+		).indexDocument.invoke({
+			toolInvocationToken: undefined,
+			input: { uri: 'a.md' },
+		}, token));
+
 		assert.ok(indexNoWs.includes('open a workspace folder'));
 		assert.ok(searchNoWs.startsWith(SEARCH_FAILED_PREFIX));
 		assert.ok(searchNoWs.includes('open a workspace folder'));
 		assert.ok(statsNoWs.includes('open a workspace folder'));
 		assert.ok(noPipeline.includes('index pipeline is not available'));
+		assert.ok(secondaryNoPipeline.includes('read-only-session'));
+		assert.ok(!secondaryNoPipeline.includes('ingest/rag-core not ready'));
 	});
 
 	test('search and index tools do not expose prepareInvocation', () => {

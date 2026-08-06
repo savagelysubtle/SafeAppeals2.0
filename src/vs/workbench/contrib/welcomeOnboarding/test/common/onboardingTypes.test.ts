@@ -16,13 +16,15 @@ import {
 suite('onboardingTypes', () => {
 	ensureNoDisposablesAreLeakedInTestSuite();
 
-	test('default step order is SignIn → Profile → AgentIntro → CreditsHandoff', () => {
+	test('default step order is SignIn → Profile → AgentIntro → CreditsHandoff → PrivateSearch → GetStarted', () => {
 		const productService = { onboardingSkipSignInStep: false } as Partial<IProductService> as IProductService;
 		assert.deepStrictEqual(getOnboardingSteps(productService), [
 			OnboardingStepId.SignIn,
 			OnboardingStepId.Profile,
 			OnboardingStepId.AgentIntro,
 			OnboardingStepId.CreditsHandoff,
+			OnboardingStepId.PrivateSearch,
+			OnboardingStepId.GetStarted,
 		]);
 	});
 
@@ -32,6 +34,8 @@ suite('onboardingTypes', () => {
 			OnboardingStepId.Profile,
 			OnboardingStepId.AgentIntro,
 			OnboardingStepId.CreditsHandoff,
+			OnboardingStepId.PrivateSearch,
+			OnboardingStepId.GetStarted,
 		]);
 	});
 });

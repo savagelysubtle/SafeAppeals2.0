@@ -27,12 +27,15 @@ export type IngestFidelity = 'digital' | 'ocr' | 'native-text';
  */
 export type HardDisableCode =
 	| 'scanned-ocr-ineligible'
+	| 'scanned-ocr-unpinned'
 	| 'scanned-ocr-not-installed'
 	| 'scanned-ocr-sidecar-not-ready'
 	| 'path-outside-workspace'
 	| 'unsupported-format'
 	| 'extract-failed'
 	| 'native-missing'
+	| 'index-lock-busy'
+	| 'read-only-session'
 	| 'models-missing'
 	| 'crypto-unavailable';
 
@@ -92,6 +95,14 @@ export interface IModelSpecLite {
 	readonly id: string;
 	readonly diskMb: number;
 	readonly version?: string;
+	readonly sha256?: string;
+	readonly downloadUrl?: string;
+	readonly artifactFileName?: string;
+	readonly files?: readonly {
+		readonly relativePath: string;
+		readonly downloadUrl: string;
+		readonly sha256: string;
+	}[];
 }
 
 /** Catalog surface used by the ingest ladder (safeappeals-ml ModelCatalog). */

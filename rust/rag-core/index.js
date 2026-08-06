@@ -42,11 +42,11 @@ function capabilities() {
 	return requireNative().capabilities();
 }
 
-function openWorkspace(rootDir, dekBytes) {
+function openWorkspace(rootDir, dekBytes, preferSecondary) {
 	if (!loaded.ok) {
 		return { ok: false, error: loaded.error };
 	}
-	return loaded.native.openWorkspace(rootDir, dekBytes);
+	return loaded.native.openWorkspace(rootDir, dekBytes, preferSecondary);
 }
 
 function closeWorkspace() {
@@ -58,6 +58,13 @@ function closeWorkspace() {
 
 function stats() {
 	return requireNative().stats();
+}
+
+function getDocument(docId) {
+	if (!loaded.ok) {
+		return undefined;
+	}
+	return loaded.native.getDocument(docId);
 }
 
 function chunkDocument(input) {
@@ -89,6 +96,27 @@ function search(query, opts) {
 	return loaded.native.search(query, opts);
 }
 
+function ensureEmbedderLoaded() {
+	if (!loaded.ok) {
+		return { ok: false, error: loaded.error, loaded: false };
+	}
+	return loaded.native.ensureEmbedderLoaded();
+}
+
+function clearEmbedder() {
+	if (!loaded.ok) {
+		return { ok: false, error: loaded.error };
+	}
+	return loaded.native.clearEmbedder();
+}
+
+function clearReranker() {
+	if (!loaded.ok) {
+		return { ok: false, error: loaded.error };
+	}
+	return loaded.native.clearReranker();
+}
+
 module.exports = {
 	ADDON_FILENAME,
 	loadRagCore,
@@ -103,9 +131,13 @@ module.exports = {
 	openWorkspace,
 	closeWorkspace,
 	stats,
+	getDocument,
 	chunkDocument,
 	embedBatch,
 	indexChunks,
 	removeDoc,
 	search,
+	ensureEmbedderLoaded,
+	clearEmbedder,
+	clearReranker,
 };

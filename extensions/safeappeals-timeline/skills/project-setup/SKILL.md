@@ -116,6 +116,15 @@ For `self`, use plain language and avoid assuming they have counsel.
   …
   ```
 
+- **Required in Notes for the agent** (adapt voice; do not omit for legal /
+  self / education / research / office matters that may hold confidential
+  documents): if this workspace is a legal matter, case folder, or contains
+  legal/client documents — **never push** to GitHub or any git remote; only
+  commit locally when the user wants history; if they ask to push, warn that
+  confidential documents would leave this computer and proceed only after
+  explicit confirmation. For a clearly coding/software project (not a client
+  matter), confirm once when they ask to push, then you may push.
+
 - Remind the user they own this file and can edit it freely.
 
 ## 4. Optional folder scaffold
@@ -127,15 +136,34 @@ Ask whether to create folders. Never delete existing files.
 Offer folders similar to the extension's standard legal layout
 (`scaffold.ts` `STANDARD_FOLDERS`):
 
-- `Medical_Reports`
-- `Correspondence`
-- `Decisions_and_Orders`
-- `Evidence`
-- `Personal_Notes`
-- `tosort`
+- `medical_reports`
+- `correspondence`
+- `decisions_and_orders`
+- `evidence`
+- `personal_notes`
+- `to_sort`
 
 Optionally add a short nested `AGENTS.md` in each new folder describing its
 purpose (preserve existing nested briefs).
+
+Optionally also offer:
+
+- A root `.gitignore` that skips OS/editor noise and Safe Appeals organizer
+  churn (`.safeAppeals/organization_log.json`, `.safeAppeals/undo_plan.json`,
+  `to_sort/_originals/`) while keeping case document folders and
+  `.safeAppeals/skills/` tracked — for users who want local git backups of
+  matter docs. Do not ignore all of `.safeAppeals/` (skills must stay
+  trackable; timeline.json may be optionally ignored).
+- A `<matter_name>.code-workspace` file (single folder, `path: "."`) with the
+  same Chat settings as `.safeAppeals/settings.json` — at least
+  `"chat.useNestedAgentsMdFiles": true` so nested folder briefs work when the
+  workspace file is opened. Prefer `.safeAppeals/settings.json` over
+  `.vscode/settings.json`. Do not auto-run `git init`.
+- Optional case-local skills under `.safeAppeals/skills/<skill-name>/SKILL.md`
+  for repeatable matter tasks. Safe Appeals discovers this root by default;
+  if skills do not appear, ensure `chat.agentSkillsLocations` in
+  `.safeAppeals/settings.json` includes `.safeAppeals/skills: true` (keep other
+  default roots when overriding). Only create skills the user asks for.
 
 ### `education`
 

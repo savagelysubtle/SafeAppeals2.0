@@ -74,6 +74,17 @@ export const DEFAULT_ML_ENGINE_OPTIONS: MlEngineOptions = {
 	estimatesMb: { ...DEFAULT_ML_ESTIMATES_MB },
 };
 
+/**
+ * Derive peak RSS budget from total system RAM (Mb).
+ * Heavy XOR is unchanged — this limits heavy + ffmpeg stack on laptops.
+ */
+export function peakRssBudgetFromTotalRamMb(totalRamMb: number): number {
+	if (!Number.isFinite(totalRamMb) || totalRamMb <= 0) {
+		return DEFAULT_ML_ENGINE_OPTIONS.peakRssBudgetMb;
+	}
+	return Math.max(1024, Math.min(4096, Math.floor(totalRamMb * 0.25)));
+}
+
 const HEAVY_KINDS: readonly ResourceKind[] = ['whisper', 'diarization', 'embedding', 'docparse'];
 
 export function isHeavyKind(kind: ResourceKind): boolean {

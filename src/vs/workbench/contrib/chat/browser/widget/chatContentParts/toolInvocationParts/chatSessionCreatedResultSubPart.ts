@@ -11,6 +11,7 @@ import { URI } from '../../../../../../../base/common/uri.js';
 import { IMarkdownRenderer } from '../../../../../../../platform/markdown/browser/markdownRenderer.js';
 import { IOpenerService } from '../../../../../../../platform/opener/common/opener.js';
 import { defaultButtonStyles } from '../../../../../../../platform/theme/browser/defaultStyles.js';
+import { safeAppealsShieldOutlineIcon } from '../../../../../../../platform/theme/common/safeAppealsIcons.js';
 import { IChatSessionCreatedData, IChatToolInvocation, IChatToolInvocationSerialized } from '../../../../common/chatService/chatService.js';
 import { IChatCodeBlockInfo } from '../../../chat.js';
 import { IChatContentPartRenderContext } from '../chatContentParts.js';
@@ -56,6 +57,6 @@ export class ChatSessionCreatedResultSubPart extends BaseChatToolInvocationSubPa
 	}
 
 	protected override getIcon(): ThemeIcon {
-		return this.data.isChat ? Codicon.commentDiscussion : Codicon.agent;
+		return this.data.isChat ? Codicon.commentDiscussion : safeAppealsShieldOutlineIcon;
 	}
 }

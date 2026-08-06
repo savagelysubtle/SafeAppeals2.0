@@ -1,5 +1,9 @@
 # RAG System Configuration Guide
 
+> **Historical Void configuration.** Current Private Search settings and consent
+> installs are in `extensions/safeappeals-rag` (see [`docs/rag/`](../rag/)).
+> Workspace shared refs folder is `core_references/`, not `policy-manuals/`.
+
 ## 📋 Configuration Overview
 
 The RAG system is highly configurable to adapt to different deployment environments, performance requirements, and use cases. Configuration is managed through Void settings, environment variables, and service parameters.
@@ -69,7 +73,7 @@ globalSettings: {
 
 **When `ragAutoIndexCaseFiles` is enabled:**
 
-1. On workspace open, all folders (except `policy-manuals/`) are scanned
+1. On workspace open, folders are scanned (historical Void excluded `policy-manuals/`; current shared refs use `core_references/`)
 2. Unindexed PDF, DOCX, TXT, etc. files are automatically indexed as case files
 3. Already-indexed files are skipped
 

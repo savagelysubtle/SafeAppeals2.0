@@ -5,8 +5,9 @@
 import * as vscode from 'vscode';
 import { registerAgentTools } from './agentTools';
 import { runProfileSetup } from './profile';
-import { openSampleCase } from './sampleCase';
+import { openSampleCase, upgradeSampleCaseToFileSchemeIfNeeded } from './sampleCase';
 import { takeTour } from './tour';
+import { openTutorials, resumePendingTutorials } from './tutorialsHub';
 import { TimelinePanel, TimelineSidebarProvider } from './timelinePanel';
 import { TimelineService } from './timelineService';
 
@@ -16,6 +17,12 @@ export function activate(context: vscode.ExtensionContext): void {
 	const folder = vscode.workspace.workspaceFolders?.[0];
 	timelineService = new TimelineService(folder);
 	context.subscriptions.push({ dispose: () => timelineService?.dispose() });
+
+	// New window / reload after Tutorials → Open Sample Case.
+	void resumePendingTutorials(context);
+	// Sticky virtual sample (vscode-userdata:) — offer reopen as file://; never
+	// auto closeFolder/openFolder on activate (tears down the only window).
+	void upgradeSampleCaseToFileSchemeIfNeeded(context);
 
 	const ensureService = (): TimelineService | undefined => {
 		if (!timelineService && vscode.workspace.workspaceFolders?.[0]) {
@@ -73,6 +80,7 @@ export function activate(context: vscode.ExtensionContext): void {
 	context.subscriptions.push(
 		vscode.commands.registerCommand('safeappeals-timeline.setupProfile', () => runProfileSetup()),
 		vscode.commands.registerCommand('safeappeals-timeline.openSampleCase', () => openSampleCase(context)),
+		vscode.commands.registerCommand('safeappeals-timeline.openTutorials', () => openTutorials(context)),
 		vscode.commands.registerCommand('safeappeals-timeline.takeTour', () => takeTour()),
 		vscode.commands.registerCommand('safeappeals-timeline.openTimeline', () => openTimelinePanel()),
 	);

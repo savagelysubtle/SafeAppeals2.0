@@ -1,7 +1,7 @@
 {
   "name": "safeappeals-documents",
-  "displayName": "Safe Appeals Documents",
-  "description": "PDF, DOCX, and XLSX custom editors for Safe Appeals",
+  "displayName": "%displayName%",
+  "description": "%description%",
   "version": "1.0.0",
   "publisher": "safeappeals",
   "license": "MIT",
@@ -475,6 +475,57 @@
             "path"
           ]
         }
+      }
+    ],
+    "walkthroughs": [
+      {
+        "id": "safeappealsCaseFiles",
+        "title": "%walkthrough.caseFiles.title%",
+        "description": "%walkthrough.caseFiles.description%",
+        "steps": [
+          {
+            "id": "caseFolderLayout",
+            "title": "%walkthrough.caseFiles.layout.title%",
+            "description": "%walkthrough.caseFiles.layout.description%",
+            "media": {
+              "markdown": "media/walkthrough/caseFolderLayout.md"
+            }
+          },
+          {
+            "id": "openViewers",
+            "title": "%walkthrough.caseFiles.viewers.title%",
+            "description": "%walkthrough.caseFiles.viewers.description%",
+            "media": {
+              "markdown": "media/walkthrough/openViewers.md"
+            },
+            "completionEvents": [
+              "onCommand:workbench.action.quickOpen",
+              "onCommand:workbench.view.explorer"
+            ]
+          },
+          {
+            "id": "convertFile",
+            "title": "%walkthrough.caseFiles.convert.title%",
+            "description": "%walkthrough.caseFiles.convert.description%",
+            "media": {
+              "markdown": "media/walkthrough/convertFile.md"
+            },
+            "completionEvents": [
+              "onCommand:safeappeals-converter.convertFile"
+            ]
+          },
+          {
+            "id": "mergePdfs",
+            "title": "%walkthrough.caseFiles.merge.title%",
+            "description": "%walkthrough.caseFiles.merge.description%",
+            "media": {
+              "markdown": "media/walkthrough/mergePdfs.md"
+            },
+            "completionEvents": [
+              "onCommand:safeappeals-converter.mergePdfs"
+            ]
+          }
+        ]
       }
     ]
   },

@@ -17,6 +17,7 @@ import { TestConfigurationService } from '../../../../../platform/configuration/
 import { TestStorageService } from '../../../../test/common/workbenchTestServices.js';
 import { IChatAgentService } from '../../common/participants/chatAgents.js';
 import { ChatMode, ChatModeService } from '../../common/chatModes.js';
+import { safeAppealsShieldOutlineIcon } from '../../../../../platform/theme/common/safeAppealsIcons.js';
 import { ChatModeKind } from '../../common/constants.js';
 import { IAgentSource, ICustomAgent, IPromptsService, PromptsStorage } from '../../common/promptSyntax/service/promptsService.js';
 import { createVSCodeHarnessDescriptor, CustomizationHarnessServiceBase, ICustomizationHarnessService } from '../../common/customizationHarnessService.js';
@@ -115,6 +116,9 @@ suite('ChatModeService', () => {
 		assert.ok(agentMode);
 		assert.strictEqual(agentMode.id, ChatMode.Agent.id);
 		assert.strictEqual(agentMode.kind, ChatModeKind.Agent);
+		const agentIcon = agentMode!.icon.get();
+		assert.ok(agentIcon);
+		assert.strictEqual(agentIcon.id, safeAppealsShieldOutlineIcon.id);
 	});
 
 	test('should return undefined for non-existent mode', async () => {

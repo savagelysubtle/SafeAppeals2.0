@@ -32,6 +32,16 @@ pub mod storage;
 /// Crate version string exposed to the host.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
+/// Indexing role for the open workspace (primary holds flock; secondary is search-only).
+#[napi(string_enum)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum IndexWriteRoleNapi {
+	#[napi(value = "primary")]
+	Primary,
+	#[napi(value = "secondary")]
+	Secondary,
+}
+
 /// Capability flags reported to the extension host.
 #[napi(object)]
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -45,8 +55,14 @@ pub struct Capabilities {
 	/// True when this build linked SQLCipher and can open encrypted workspace DBs.
 	#[napi(js_name = "storageReady")]
 	pub storage_ready: bool,
-	/// Configured embedding dims (BGE-small = 512).
+	/// Configured embedding dims (BGE-small = 384).
 	pub dims: u32,
+	/// Role when a workspace is open; unset when closed.
+	#[napi(js_name = "indexWriteRole")]
+	pub index_write_role: Option<IndexWriteRoleNapi>,
+	/// True when the open session may index (`indexWriteRole == primary`).
+	#[napi(js_name = "indexWriteCapable")]
+	pub index_write_capable: bool,
 }
 
 /// Index statistics.
@@ -267,9 +283,22 @@ pub struct ChunkDocumentNapiOutput {
 
 /// Build capabilities for the current feature set + runtime embedder/CE state.
 pub fn capabilities_for_build() -> Capabilities {
-	// Best-effort BYO load (no download). Safe to call repeatedly.
-	let _ = embed::try_load_default();
-	let _ = rerank::try_load_default();
+	let (index_write_role, index_write_capable) = {
+		#[cfg(any(feature = "sqlcipher", feature = "sqlcipher-vendored"))]
+		{
+			use storage::IndexWriteRole;
+			match storage::session_index_write_role() {
+				Some(IndexWriteRole::Primary) => (Some(IndexWriteRoleNapi::Primary), true),
+				Some(IndexWriteRole::Secondary) => (Some(IndexWriteRoleNapi::Secondary), false),
+				None => (None, false),
+			}
+		}
+		#[cfg(not(any(feature = "sqlcipher", feature = "sqlcipher-vendored")))]
+		{
+			let _ = ();
+			(None, false)
+		}
+	};
 	Capabilities {
 		// M3: hybrid BM25+vector+RRF is live inside Rust `search()`.
 		hybrid: cfg!(any(feature = "sqlcipher", feature = "sqlcipher-vendored")),
@@ -280,6 +309,8 @@ pub fn capabilities_for_build() -> Capabilities {
 		models_present: embed::is_loaded(),
 		storage_ready: cfg!(any(feature = "sqlcipher", feature = "sqlcipher-vendored")),
 		dims: embed::configured_dims(),
+		index_write_role,
+		index_write_capable,
 	}
 }
 
@@ -301,20 +332,70 @@ pub fn capabilities() -> Capabilities {
 	capabilities_for_build()
 }
 
+/// Result of `ensureEmbedderLoaded`.
+#[napi(object)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EnsureEmbedderResult {
+	pub ok: bool,
+	pub error: Option<String>,
+	pub loaded: bool,
+}
+
+/// Load BGE from `SA_RAG_EMBED_MODEL_DIR` when not already resident (MlResourceEngine lease path).
+#[napi(js_name = "ensureEmbedderLoaded")]
+pub fn ensure_embedder_loaded() -> EnsureEmbedderResult {
+	match embed::try_load_default() {
+		Ok(loaded) => EnsureEmbedderResult {
+			ok: true,
+			error: None,
+			loaded,
+		},
+		Err(e) => EnsureEmbedderResult {
+			ok: false,
+			error: Some(e.to_string()),
+			loaded: embed::is_loaded(),
+		},
+	}
+}
+
+/// Drop process-global embedder (and CE used with search) — MlResourceEngine unload path.
+#[napi(js_name = "clearEmbedder")]
+pub fn clear_embedder_napi() -> OpResult {
+	embed::clear_embedder();
+	rerank::clear_reranker();
+	OpResult::ok()
+}
+
+/// Drop process-global cross-encoder only.
+#[napi(js_name = "clearReranker")]
+pub fn clear_reranker_napi() -> OpResult {
+	rerank::clear_reranker();
+	OpResult::ok()
+}
+
 /// Open encrypted chunk DB + usearch index under `root_dir`.
+///
+/// `prefer_secondary`: soft host hint (e.g. Agents window); flock always decides role.
 #[napi(js_name = "openWorkspace")]
-pub fn open_workspace(root_dir: String, dek_bytes: Buffer) -> OpResult {
+pub fn open_workspace(
+	root_dir: String,
+	dek_bytes: Buffer,
+	prefer_secondary: Option<bool>,
+) -> OpResult {
 	#[cfg(any(feature = "sqlcipher", feature = "sqlcipher-vendored"))]
 	{
-		let _ = embed::try_load_default();
-		match storage::open_workspace(&root_dir, dek_bytes.as_ref()) {
-			Ok(()) => OpResult::ok(),
+		match storage::open_workspace(
+			&root_dir,
+			dek_bytes.as_ref(),
+			prefer_secondary.unwrap_or(false),
+		) {
+			Ok(_role) => OpResult::ok(),
 			Err(e) => OpResult::err(e.to_string()),
 		}
 	}
 	#[cfg(not(any(feature = "sqlcipher", feature = "sqlcipher-vendored")))]
 	{
-		let _ = (root_dir, dek_bytes);
+		let _ = (root_dir, dek_bytes, prefer_secondary);
 		OpResult::err("rag-core built without SQLCipher; storage is unavailable (fail-closed)")
 	}
 }
@@ -332,6 +413,43 @@ pub fn close_workspace() -> OpResult {
 	#[cfg(not(any(feature = "sqlcipher", feature = "sqlcipher-vendored")))]
 	{
 		OpResult::err("rag-core built without SQLCipher; storage is unavailable (fail-closed)")
+	}
+}
+
+fn document_row_to_napi(row: storage::DocumentRow) -> IndexDocumentInput {
+	IndexDocumentInput {
+		id: row.id,
+		path: row.path,
+		filename: row.filename,
+		filetype: row.filetype,
+		filesize: row.filesize,
+		checksum: row.checksum,
+		scope: row.scope,
+		is_core_reference: row.is_core_reference,
+		metadata_json: Some(row.metadata_json),
+		created_at: row.created_at,
+		last_indexed_at: row.last_indexed_at,
+	}
+}
+
+/// Lookup indexed document metadata by id (`null` when missing or workspace closed).
+#[napi(js_name = "getDocument")]
+pub fn get_document_napi(doc_id: String) -> Option<IndexDocumentInput> {
+	#[cfg(any(feature = "sqlcipher", feature = "sqlcipher-vendored"))]
+	{
+		if !storage::is_open() {
+			return None;
+		}
+		match storage::get_document(&doc_id) {
+			Ok(Some(row)) => Some(document_row_to_napi(row)),
+			Ok(None) => None,
+			Err(_) => None,
+		}
+	}
+	#[cfg(not(any(feature = "sqlcipher", feature = "sqlcipher-vendored")))]
+	{
+		let _ = doc_id;
+		None
 	}
 }
 
@@ -411,10 +529,20 @@ pub fn chunk_document_napi(input: ChunkDocumentNapiInput) -> Vec<ChunkDocumentNa
 		.collect()
 }
 
-/// Embed a batch of texts (BGE-small when loaded; fail-soft if model missing).
+/// Embed a batch of texts (BGE-small when loaded via `ensureEmbedderLoaded`).
 #[napi(js_name = "embedBatch")]
 pub fn embed_batch(texts: Vec<String>) -> EmbedBatchResult {
-	let _ = embed::try_load_default();
+	if !embed::is_loaded() {
+		return EmbedBatchResult {
+			ok: false,
+			error: Some(format!(
+				"{} Call ensureEmbedderLoaded before embedBatch.",
+				embed::EmbedError::ModelMissing
+			)),
+			embeddings: None,
+			dims: embed::configured_dims(),
+		};
+	}
 	match embed::embed_batch(&texts) {
 		Ok(vectors) => {
 			let dims = vectors.first().map(|v| v.len() as u32).unwrap_or(embed::configured_dims());
@@ -445,9 +573,11 @@ pub fn index_chunks(doc: IndexDocumentInput, chunks: Vec<IndexChunkInput>) -> Op
 	{
 		use storage::{ChunkRow, DocumentRow};
 
-		let _ = embed::try_load_default();
 		if !embed::is_loaded() {
-			return OpResult::err(embed::EmbedError::ModelMissing.to_string());
+			return OpResult::err(format!(
+				"{} Call ensureEmbedderLoaded before indexChunks.",
+				embed::EmbedError::ModelMissing
+			));
 		}
 		let doc_row = DocumentRow {
 			id: doc.id,
@@ -521,7 +651,16 @@ pub fn remove_doc(doc_id: String) -> OpResult {
 pub fn search(query: String, opts: SearchOptions) -> SearchResult {
 	#[cfg(any(feature = "sqlcipher", feature = "sqlcipher-vendored"))]
 	{
-		let _ = embed::try_load_default();
+		if !embed::is_loaded() {
+			return SearchResult {
+				ok: false,
+				error: Some(format!(
+					"{} Call ensureEmbedderLoaded before search.",
+					embed::EmbedError::ModelMissing
+				)),
+				results: vec![],
+			};
+		}
 		let _ = rerank::try_load_default();
 		let scope = match search_ops::SearchScope::parse(opts.scope.as_deref()) {
 			Ok(s) => s,
@@ -581,15 +720,13 @@ pub fn search(query: String, opts: SearchOptions) -> SearchResult {
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use std::sync::Mutex;
 
 	/// Serialize tests that mutate process-global embedder / CE / workspace state.
 	fn with_globals_lock<F, T>(f: F) -> T
 	where
 		F: FnOnce() -> T,
 	{
-		static LOCK: Mutex<()> = Mutex::new(());
-		let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+		let _g = storage::test_lock::guard();
 		#[cfg(any(feature = "sqlcipher", feature = "sqlcipher-vendored"))]
 		{
 			let _ = storage::close_workspace();
@@ -627,7 +764,7 @@ mod tests {
 				caps.query_processor,
 				"M4 sets queryProcessor=true when SQLCipher build is live"
 			);
-			assert_eq!(caps.dims, 512);
+			assert_eq!(caps.dims, 384);
 			assert!(caps.storage_ready);
 			assert!(!caps.models_present);
 		});
@@ -640,7 +777,7 @@ mod tests {
 			let caps = capabilities_for_build();
 			assert!(caps.models_present);
 			assert!(!caps.rerank);
-			assert_eq!(caps.dims, 512);
+			assert_eq!(caps.dims, 384);
 		});
 	}
 
@@ -658,8 +795,69 @@ mod tests {
 		with_globals_lock(|| {
 			let result = embed_batch(vec!["hello".into()]);
 			assert!(!result.ok);
-			assert!(result.error.is_some());
-			assert_eq!(result.dims, 512);
+			let err = result.error.unwrap_or_default();
+			assert!(err.contains("embedding model is not loaded"));
+			assert!(err.contains("ensureEmbedderLoaded"));
+			assert_eq!(result.dims, 384);
+		});
+	}
+
+	#[cfg(any(feature = "sqlcipher", feature = "sqlcipher-vendored"))]
+	#[test]
+	fn search_fail_closed_without_embedder() {
+		use storage::DEK_LEN;
+		use tempfile::tempdir;
+
+		with_globals_lock(|| {
+			let dir = tempdir().unwrap();
+			let root = dir.path().join("case_index");
+			let dek = [4u8; DEK_LEN];
+			storage::open_workspace(root.to_str().unwrap(), &dek, false).unwrap();
+
+			let result = search(
+				"hello".into(),
+				SearchOptions {
+					final_k: 4,
+					scope: Some("all".into()),
+				},
+			);
+			assert!(!result.ok);
+			let err = result.error.unwrap_or_default();
+			assert!(err.contains("embedding model is not loaded"));
+			assert!(err.contains("ensureEmbedderLoaded"));
+
+			storage::close_workspace().unwrap();
+		});
+	}
+
+	#[test]
+	fn ensure_embedder_loaded_idempotent_with_fake() {
+		with_globals_lock(|| {
+			embed::install_fake_for_tests();
+			let first = ensure_embedder_loaded();
+			assert!(first.ok);
+			assert!(first.loaded);
+			assert!(embed::is_loaded());
+			let second = ensure_embedder_loaded();
+			assert!(second.ok);
+			assert!(second.loaded);
+		});
+	}
+
+	#[test]
+	fn clear_embedder_clears_reranker_too() {
+		with_globals_lock(|| {
+			embed::install_fake_for_tests();
+			rerank::install_fake_for_tests();
+			assert!(capabilities_for_build().models_present);
+			assert!(capabilities_for_build().rerank);
+			let cleared = clear_embedder_napi();
+			assert!(cleared.ok);
+			assert!(!embed::is_loaded());
+			assert!(!rerank::is_loaded());
+			let caps = capabilities_for_build();
+			assert!(!caps.models_present);
+			assert!(!caps.rerank);
 		});
 	}
 
@@ -675,7 +873,7 @@ mod tests {
 			let root = dir.path().join("case_index");
 			let dek = [7u8; DEK_LEN];
 
-			storage::open_workspace(root.to_str().unwrap(), &dek).expect("open_workspace");
+			storage::open_workspace(root.to_str().unwrap(), &dek, false).expect("open_workspace");
 
 			let s0 = stats();
 			assert_eq!(
@@ -754,7 +952,7 @@ mod tests {
 			let dir = tempdir().unwrap();
 			let root = dir.path().join("case_index");
 			let dek = [9u8; DEK_LEN];
-			storage::open_workspace(root.to_str().unwrap(), &dek).unwrap();
+			storage::open_workspace(root.to_str().unwrap(), &dek, false).unwrap();
 
 			let doc = IndexDocumentInput {
 				id: "doc-x".into(),
@@ -822,7 +1020,7 @@ mod tests {
 			let dir = tempdir().unwrap();
 			let root = dir.path().join("case_index");
 			let dek = [11u8; DEK_LEN];
-			storage::open_workspace(root.to_str().unwrap(), &dek).unwrap();
+			storage::open_workspace(root.to_str().unwrap(), &dek, false).unwrap();
 
 			let text = include_str!("../fixtures/golden_brief.md");
 			let chunks = chunker::chunk_document(&chunker::ChunkDocumentInput {
@@ -963,7 +1161,7 @@ mod tests {
 			let dir = tempdir().unwrap();
 			let root = dir.path().join("case_index");
 			let dek = [17u8; DEK_LEN];
-			storage::open_workspace(root.to_str().unwrap(), &dek).unwrap();
+			storage::open_workspace(root.to_str().unwrap(), &dek, false).unwrap();
 
 			let text = include_str!("../fixtures/golden_brief.md");
 			let chunks = chunker::chunk_document(&chunker::ChunkDocumentInput {
@@ -1080,7 +1278,7 @@ mod tests {
 			let dir = tempdir().unwrap();
 			let root = dir.path().join("case_index");
 			let dek = [13u8; DEK_LEN];
-			storage::open_workspace(root.to_str().unwrap(), &dek).unwrap();
+			storage::open_workspace(root.to_str().unwrap(), &dek, false).unwrap();
 
 			let text = include_str!("../fixtures/golden_brief.md");
 			let chunks = chunker::chunk_document(&chunker::ChunkDocumentInput {
@@ -1264,7 +1462,7 @@ mod tests {
 			let dir = tempdir().unwrap();
 			let root = dir.path().join("case_index");
 			let dek = [3u8; DEK_LEN];
-			storage::open_workspace(root.to_str().unwrap(), &dek).unwrap();
+			storage::open_workspace(root.to_str().unwrap(), &dek, false).unwrap();
 
 			let doc = IndexDocumentInput {
 				id: "no-model".into(),
@@ -1301,7 +1499,7 @@ mod tests {
 			assert!(!r.ok);
 			let err = r.error.unwrap_or_default();
 			assert!(
-				err.contains("embedding model is not loaded") || err.contains("SA_RAG_EMBED_MODEL_DIR"),
+				err.contains("embedding model is not loaded") && err.contains("ensureEmbedderLoaded"),
 				"unexpected error: {err}"
 			);
 			assert_eq!(stats().documents, 0);

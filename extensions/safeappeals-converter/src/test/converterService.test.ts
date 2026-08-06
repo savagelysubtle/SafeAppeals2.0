@@ -4,6 +4,10 @@
 
 import 'mocha';
 import * as assert from 'assert';
+import * as fs from 'node:fs/promises';
+import * as os from 'node:os';
+import * as path from 'node:path';
+import * as vscode from 'vscode';
 import { ConverterService } from '../converterService';
 import { parseAvailableConversions, unavailableConversionMessage } from '../protocol';
 import type { AvailableConversions } from '../types';
@@ -84,5 +88,50 @@ suite('converterService availability gate', () => {
 		assert.strictEqual(result.success, false);
 		assert.strictEqual(result.error, 'Install LibreOffice (soffice) for office-fidelity conversions.');
 		assert.strictEqual(requestCalled, false);
+	});
+
+	test('extractPdfPages calls sidecar extract_pdf_pages RPC', async () => {
+		const root = await fs.mkdtemp(path.join(os.tmpdir(), 'sa-converter-svc-'));
+		const pdfPath = path.join(root, 'brief.pdf');
+		await fs.writeFile(pdfPath, '%PDF');
+		(vscode.workspace as { workspaceFolders?: vscode.WorkspaceFolder[] }).workspaceFolders = [{
+			uri: vscode.Uri.file(root),
+			name: 'ws',
+			index: 0,
+		}];
+
+		const service = new ConverterService('/nonexistent/safeappeals-converter', () => { });
+		let capturedMethod = '';
+		const mutable = service as unknown as {
+			sidecar: {
+				isBinaryAvailable: boolean;
+				request: (method: string, params: Record<string, unknown>) => Promise<unknown>;
+			};
+		};
+		mutable.sidecar = {
+			isBinaryAvailable: true,
+			request: async (method, params) => {
+				capturedMethod = method;
+				assert.strictEqual(params.source, pdfPath);
+				return {
+					success: true,
+					pages: [{ page: 1, text: 'Page one' }],
+					page_count: 1,
+				};
+			},
+		};
+
+		const result = await service.extractPdfPages(pdfPath);
+		assert.strictEqual(capturedMethod, 'extract_pdf_pages');
+		assert.strictEqual(result.success, true);
+		assert.strictEqual(result.pages?.length, 1);
+		assert.strictEqual(result.pages?.[0]?.text, 'Page one');
+	});
+
+	test('extractPdfPages fails closed without sidecar binary', async () => {
+		const service = new ConverterService('/nonexistent/safeappeals-converter', () => { });
+		const result = await service.extractPdfPages('/workspace/brief.pdf');
+		assert.strictEqual(result.success, false);
+		assert.ok(result.error?.includes('sa-converter binary'));
 	});
 });

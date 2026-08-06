@@ -3,7 +3,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as path from 'node:path';
-import type * as vscode from 'vscode';
+import * as vscode from 'vscode';
 import { hardDisableMessage } from './disableMessages';
 import { syncRagModelEnv, type ModelEnvSyncResult } from './modelEnvSync';
 import {
@@ -17,6 +17,9 @@ import {
 	type HardDisableCode,
 } from './types';
 
+/** Indexing role reported by rag-core when a workspace is open. */
+export type IndexWriteRole = 'primary' | 'secondary';
+
 /** Minimal native surface used by the host (mirrors `@safeappeals/rag-core`). */
 export interface RagCapabilities {
 	readonly hybrid: boolean;
@@ -25,6 +28,8 @@ export interface RagCapabilities {
 	readonly modelsPresent: boolean;
 	readonly storageReady: boolean;
 	readonly dims: number;
+	readonly indexWriteRole?: IndexWriteRole;
+	readonly indexWriteCapable: boolean;
 }
 
 export interface RagStats {
@@ -38,6 +43,12 @@ export interface RagOpResult {
 	readonly ok: boolean;
 	readonly error?: string | null;
 	readonly count?: number | null;
+}
+
+export interface RagEnsureEmbedderResult {
+	readonly ok: boolean;
+	readonly error?: string | null;
+	readonly loaded: boolean;
 }
 
 export interface RagSearchOptions {
@@ -132,13 +143,17 @@ export interface RagCoreNativeApi {
 	ping(): string;
 	version(): string;
 	capabilities(): RagCapabilities;
-	openWorkspace(rootDir: string, dekBytes: Buffer | Uint8Array): RagOpResult;
+	openWorkspace(rootDir: string, dekBytes: Buffer | Uint8Array, preferSecondary?: boolean): RagOpResult;
 	closeWorkspace(): RagOpResult;
 	stats(): RagStats;
+	getDocument(docId: string): RagIndexDocumentInput | null | undefined;
 	chunkDocument(input: RagChunkDocumentInput): RagChunkDocumentOutput[];
 	indexChunks(doc: RagIndexDocumentInput, chunks: RagIndexChunkInput[]): RagOpResult;
 	removeDoc(docId: string): RagOpResult;
 	search(query: string, opts: RagSearchOptions): RagSearchResult;
+	ensureEmbedderLoaded?(): RagEnsureEmbedderResult;
+	clearEmbedder?(): RagOpResult;
+	clearReranker?(): RagOpResult;
 }
 
 export type RagCoreLoadResult =
@@ -159,9 +174,10 @@ export interface RagCoreHostStatus {
 	readonly stats: RagStats | undefined;
 	readonly workspaceRoot: string | undefined;
 	readonly workspaceOpen: boolean;
+	readonly indexWriteRole: IndexWriteRole | undefined;
 	readonly modelEnv: ModelEnvSyncResult | undefined;
 	readonly dekReason: DekUnavailableReason | undefined;
-	/** Honest packaging gap: Electron ABI 146 prebuild still missing for desktop. */
+	/** Packaging note when electron-146 prebuild load failed; empty when native is loaded. */
 	readonly electron146Note: string;
 }
 
@@ -174,10 +190,22 @@ export interface RagCoreHostCreateOptions {
 	readonly log?: (message: string) => void;
 	/** When true, skip modelsPresent gate (unit tests with fake native). */
 	readonly skipModelsGate?: boolean;
+	/** Soft hint only (e.g. Agents window). Flock decides primary vs secondary; not used for role election. */
+	readonly preferSecondary?: boolean;
 }
 
-const ELECTRON_146_NOTE =
-	'linux-x64/electron-146 prebuild is not produced yet — packaged Electron desktop hard-disables until built; node-137 works for tests.';
+/** Proposed API: true in the Agents / sessions dedicated window. */
+export function isAgentSessionsWindow(): boolean {
+	return (vscode.workspace as { isAgentSessionsWorkspace?: boolean }).isAgentSessionsWorkspace === true;
+}
+
+/** Only shown when native load failed and expectedPath targets electron-146. */
+function electron146PackagingNote(expectedPath: string | undefined): string {
+	if (!expectedPath?.includes('electron-146')) {
+		return '';
+	}
+	return 'linux-x64/electron-146 prebuild was not found for this runtime; rebuild rag-core prebuilds or use node-137 for tests.';
+}
 
 /**
  * Soft-load `@safeappeals/rag-core` without throwing when the `.node` is missing.
@@ -212,10 +240,13 @@ export class RagCoreHost {
 	private dekReason: DekUnavailableReason | undefined;
 	private workspaceRoot: string | undefined;
 	private workspaceOpen = false;
+	private indexWriteRole: IndexWriteRole | undefined;
 	private disableCode: HardDisableCode | undefined;
 	private reasons: string[] = [];
 	private modelEnv: ModelEnvSyncResult | undefined;
 	private capabilitiesCache: RagCapabilities | undefined;
+	/** Set when `ensureEmbedderLoaded` fails; cleared on success. Idle unload does not set this. */
+	private embedInitFailed = false;
 
 	private constructor(
 		private readonly context: vscode.ExtensionContext,
@@ -233,7 +264,11 @@ export class RagCoreHost {
 			options.log,
 			options.skipModelsGate === true,
 		);
-		await host.initialize(options.load ?? defaultLoadRagCore, options.packageRoot);
+		await host.initialize(
+			options.load ?? defaultLoadRagCore,
+			options.packageRoot,
+			options.preferSecondary === true || isAgentSessionsWindow(),
+		);
 		return host;
 	}
 
@@ -258,8 +293,12 @@ export class RagCoreHost {
 
 	/**
 	 * Re-sync BYO / ML artifact model dirs and re-read native capabilities.
-	 * Clears only a `models-missing` gate when embed is ready or `modelsPresent`.
-	 * Leaves `native-missing` / `crypto-unavailable` alone.
+	 *
+	 * `models-missing` means Search pack artifacts are absent or `ensureEmbedderLoaded`
+	 * failed — not "cold between MlResourceEngine leases" (idle unload keeps availability
+	 * when artifacts remain on disk).
+	 *
+	 * Clears only a `models-missing` gate; leaves `native-missing` / `index-lock-busy` / `crypto-unavailable` alone.
 	 */
 	async refreshModelGates(): Promise<void> {
 		this.modelEnv = await syncRagModelEnv({
@@ -283,17 +322,34 @@ export class RagCoreHost {
 			return;
 		}
 
-		const caps = this.capabilitiesCache;
-		const embedOk =
-			this.skipModelsGate ||
-			this.modelEnv.embedReady === true ||
-			caps?.modelsPresent === true;
-		if (embedOk) {
+		if (this.skipModelsGate) {
 			this.clearModelsMissingDisable();
+			return;
 		}
+
+		if (!this.modelEnv.embedReady) {
+			this.setDisable('models-missing', [
+				'Search pack models not installed; use Install Missing Models or set BYO SA_RAG_EMBED_MODEL_DIR.',
+			]);
+			return;
+		}
+
+		if (this.embedInitFailed) {
+			this.setDisable('models-missing', [
+				'Search pack files are present but the embedding model failed to load in rag-core. Rebuild rag-core with the fastembed feature, or check Private Search output.',
+			]);
+			return;
+		}
+
+		// Artifacts present; cold between leases (modelsPresent false) stays available.
+		this.clearModelsMissingDisable();
 	}
 
-	private async initialize(load: RagCoreLoader, packageRoot?: string): Promise<void> {
+	private async initialize(
+		load: RagCoreLoader,
+		packageRoot: string | undefined,
+		preferSecondary: boolean,
+	): Promise<void> {
 		this.modelEnv = await syncRagModelEnv({
 			getArtifactDir: this.getArtifactDir,
 			log: this.log,
@@ -302,7 +358,11 @@ export class RagCoreHost {
 		const loaded = load(packageRoot);
 		if (!loaded.ok) {
 			this.expectedPath = loaded.expectedPath;
-			this.setDisable('native-missing', [loaded.error, ELECTRON_146_NOTE]);
+			const note = electron146PackagingNote(loaded.expectedPath);
+			this.setDisable(
+				'native-missing',
+				note ? [loaded.error, note] : [loaded.error],
+			);
 			return;
 		}
 
@@ -316,14 +376,13 @@ export class RagCoreHost {
 			this.capabilitiesCache = caps;
 		} catch (err) {
 			const message = err instanceof Error ? err.message : String(err);
-			this.setDisable('native-missing', [message, ELECTRON_146_NOTE]);
+			this.setDisable('native-missing', [message]);
 			return;
 		}
 
 		if (!caps.storageReady) {
 			this.setDisable('native-missing', [
 				'rag-core storageReady=false (SQLCipher build missing or failed).',
-				ELECTRON_146_NOTE,
 			]);
 			return;
 		}
@@ -347,18 +406,16 @@ export class RagCoreHost {
 
 		if (!this.skipModelsGate && !caps.modelsPresent && !this.modelEnv.embedReady) {
 			this.setDisable('models-missing', [
-				'Search pack downloadUrl/sha still unpinned; set BYO SA_RAG_EMBED_MODEL_DIR or install Search Tools when pinned.',
+				'Search pack models not installed; use Install Missing Models or set BYO SA_RAG_EMBED_MODEL_DIR.',
 			]);
 			// Still open workspace so status/stats work; index/search remain gated via disableCode.
 		}
 
 		await ensureDir(rootDir);
-		const open = loaded.native.openWorkspace(rootDir, this.dek);
+		const open = loaded.native.openWorkspace(rootDir, this.dek, preferSecondary);
 		if (!open.ok) {
-			this.setDisable('native-missing', [
-				open.error ?? 'openWorkspace failed',
-				ELECTRON_146_NOTE,
-			]);
+			const err = open.error ?? 'openWorkspace failed';
+			this.setDisable('native-missing', [err]);
 			return;
 		}
 
@@ -366,32 +423,22 @@ export class RagCoreHost {
 		this.workspaceOpen = true;
 		try {
 			this.capabilitiesCache = loaded.native.capabilities();
+			this.indexWriteRole = this.capabilitiesCache.indexWriteRole;
 		} catch {
-			// keep prior cache
+			this.indexWriteRole = 'primary';
 		}
 
-		// openWorkspace / try_load_default may flip modelsPresent after the pre-open gate.
-		// Re-sync and clear sticky models-missing when embed env or native models are ready.
 		await this.refreshModelGates();
-		if (!this.skipModelsGate) {
-			const after = this.capabilitiesCache;
-			const embedOk =
-				this.modelEnv?.embedReady === true || after?.modelsPresent === true;
-			if (!embedOk && this.disableCode === undefined) {
-				this.setDisable('models-missing', [
-					'Embedding model not loaded (Search pack / BYO SA_RAG_EMBED_MODEL_DIR).',
-				]);
-			}
-		}
 
 		this.log?.(
 			`rag-core ready: version=${loaded.native.version()} root=${rootDir}` +
+			` role=${this.indexWriteRole ?? 'unknown'}` +
 			(this.disableCode ? ` (gated: ${this.disableCode})` : ''),
 		);
 	}
 
 	get isAvailable(): boolean {
-		return this.disableCode === undefined && this.workspaceOpen && this.native !== undefined;
+		return this.assertSearchAllowed().ok;
 	}
 
 	getDisableCode(): HardDisableCode | undefined {
@@ -402,8 +449,70 @@ export class RagCoreHost {
 		return this.native;
 	}
 
-	/** True when index/search may run (workspace open + no hard-disable). */
-	assertIndexingAllowed(): { ok: true } | { ok: false; code: HardDisableCode; message: string } {
+	/**
+	 * Load BGE into rag-core when MlResourceEngine holds an embedding lease.
+	 * Returns `{ ok: false }` when native binding lacks the export (older prebuild).
+	 */
+	ensureEmbedderLoaded(): RagEnsureEmbedderResult {
+		if (!this.native) {
+			return { ok: false, error: 'rag-core native is not loaded', loaded: false };
+		}
+		if (typeof this.native.ensureEmbedderLoaded !== 'function') {
+			return {
+				ok: false,
+				error: 'ensureEmbedderLoaded is not exported by this rag-core prebuild',
+				loaded: false,
+			};
+		}
+		try {
+			const result = this.native.ensureEmbedderLoaded();
+			if (!result.ok) {
+				this.embedInitFailed = true;
+				this.log?.(`ensureEmbedderLoaded failed: ${result.error ?? 'unknown error'}`);
+			} else {
+				this.embedInitFailed = false;
+			}
+			this.capabilitiesCache = this.native.capabilities();
+			return result;
+		} catch (err) {
+			const message = err instanceof Error ? err.message : String(err);
+			this.embedInitFailed = true;
+			this.log?.(`ensureEmbedderLoaded threw: ${message}`);
+			return { ok: false, error: message, loaded: false };
+		}
+	}
+
+	/**
+	 * Drop native embedder (+ CE) when MlResourceEngine releases the embedding lease.
+	 * Does not re-gate `models-missing` when Search pack artifacts remain (idle unload).
+	 */
+	clearEmbedder(): void {
+		if (!this.native) {
+			return;
+		}
+		if (typeof this.native.clearEmbedder !== 'function') {
+			return;
+		}
+		try {
+			const result = this.native.clearEmbedder();
+			if (!result.ok) {
+				this.log?.(`clearEmbedder failed: ${result.error ?? 'unknown error'}`);
+			} else {
+				this.log?.('Embedding model unloaded from rag-core.');
+			}
+			this.capabilitiesCache = this.native.capabilities();
+			// Idle unload: artifacts may still be present — stay available for Private Search UX.
+			if (this.modelEnv?.embedReady && !this.embedInitFailed) {
+				this.clearModelsMissingDisable();
+			}
+		} catch (err) {
+			const message = err instanceof Error ? err.message : String(err);
+			this.log?.(`clearEmbedder threw: ${message}`);
+		}
+	}
+
+	/** True when search may run (workspace open + no hard-disable; read-only OK). */
+	assertSearchAllowed(): { ok: true } | { ok: false; code: HardDisableCode; message: string } {
 		if (this.disableCode) {
 			return {
 				ok: false,
@@ -421,12 +530,49 @@ export class RagCoreHost {
 		return { ok: true };
 	}
 
+	/** True when index/remove may run (requires write-capable session). */
+	assertIndexingAllowed(): { ok: true } | { ok: false; code: HardDisableCode; message: string } {
+		const searchGate = this.assertSearchAllowed();
+		if (!searchGate.ok) {
+			return searchGate;
+		}
+		if (
+			this.indexWriteRole === 'secondary' ||
+			this.capabilitiesCache?.indexWriteCapable === false
+		) {
+			return {
+				ok: false,
+				code: 'read-only-session',
+				message: hardDisableMessage('read-only-session', [
+					'Indexing is owned by the primary workbench window.',
+				]),
+			};
+		}
+		return { ok: true };
+	}
+
 	search(query: string, opts: RagSearchOptions): RagSearchResult {
-		const gate = this.assertIndexingAllowed();
+		const gate = this.assertSearchAllowed();
 		if (!gate.ok) {
 			return { ok: false, error: gate.message, results: [] };
 		}
 		return this.native!.search(query, opts);
+	}
+
+	/** Document metadata from the open workspace index, or undefined when missing / unavailable. */
+	getDocument(docId: string): RagIndexDocumentInput | undefined {
+		if (!this.native || !this.workspaceOpen) {
+			return undefined;
+		}
+		if (typeof this.native.getDocument !== 'function') {
+			return undefined;
+		}
+		try {
+			const doc = this.native.getDocument(docId);
+			return doc ?? undefined;
+		} catch {
+			return undefined;
+		}
 	}
 
 	chunkDocument(input: RagChunkDocumentInput): RagChunkDocumentOutput[] {
@@ -441,7 +587,11 @@ export class RagCoreHost {
 		if (!gate.ok) {
 			return { ok: false, error: gate.message };
 		}
-		return this.native!.indexChunks(doc, chunks);
+		const result = this.native!.indexChunks(doc, chunks);
+		if (!result.ok && result.error?.includes('LockBusy')) {
+			this.setDisable('index-lock-busy', [result.error]);
+		}
+		return result;
 	}
 
 	removeDoc(docId: string): RagOpResult {
@@ -449,7 +599,11 @@ export class RagCoreHost {
 		if (!gate.ok) {
 			return { ok: false, error: gate.message };
 		}
-		return this.native!.removeDoc(docId);
+		const result = this.native!.removeDoc(docId);
+		if (!result.ok && result.error?.includes('LockBusy')) {
+			this.setDisable('index-lock-busy', [result.error]);
+		}
+		return result;
 	}
 
 	closeWorkspace(): RagOpResult {
@@ -491,9 +645,10 @@ export class RagCoreHost {
 			stats,
 			workspaceRoot: this.workspaceRoot,
 			workspaceOpen: this.workspaceOpen,
+			indexWriteRole: this.indexWriteRole,
 			modelEnv: this.modelEnv,
 			dekReason: this.dekReason,
-			electron146Note: ELECTRON_146_NOTE,
+			electron146Note: electron146PackagingNote(this.expectedPath),
 		};
 	}
 }

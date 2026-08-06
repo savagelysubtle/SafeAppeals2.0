@@ -7,8 +7,11 @@ import { Codicon } from '../../../../../../base/common/codicons.js';
 import { ThemeIcon } from '../../../../../../base/common/themables.js';
 import { localize } from '../../../../../../nls.js';
 import { registerIcon } from '../../../../../../platform/theme/common/iconRegistry.js';
+import { safeAppealsShieldOutlineIcon } from '../../../../../../platform/theme/common/safeAppealsIcons.js';
 import { ILanguageModelChatMetadataAndIdentifier, isAutoLanguageModel } from '../../../common/languageModels.js';
 
+const autoModelProviderIcon = registerIcon('chat-model-provider-auto', safeAppealsShieldOutlineIcon, localize('chatModelProviderAutoIcon', "Icon for the Auto model picker."));
+const safeAppealsModelProviderIcon = registerIcon('chat-model-provider-safeappeals', safeAppealsShieldOutlineIcon, localize('chatModelProviderSafeAppealsIcon', "Icon for SafeAppeals models."));
 const copilotModelProviderIcon = registerIcon('chat-model-provider-copilot', Codicon.copilotCompact, localize('chatModelProviderCopilotIcon', "Icon for Copilot models."));
 const openAIModelProviderIcon = registerIcon('chat-model-provider-openai', Codicon.openai, localize('chatModelProviderOpenAIIcon', "Icon for OpenAI models."));
 const claudeModelProviderIcon = registerIcon('chat-model-provider-claude', Codicon.claude, localize('chatModelProviderClaudeIcon', "Icon for Claude models."));
@@ -17,12 +20,15 @@ const genericModelProviderIcon = registerIcon('chat-model-provider-generic', Cod
 
 export function getModelProviderIcon(model: ILanguageModelChatMetadataAndIdentifier, useGenericIcon = false): ThemeIcon {
 	if (isAutoLanguageModel(model)) {
-		return copilotModelProviderIcon;
+		return autoModelProviderIcon;
 	}
 	if (useGenericIcon) {
 		return genericModelProviderIcon;
 	}
 	const identity = `${model.metadata.vendor} ${model.metadata.family} ${model.metadata.id} ${model.metadata.name}`.toLowerCase();
+	if (identity.includes('safeappeals') || identity.includes('agent-host')) {
+		return safeAppealsModelProviderIcon;
+	}
 	if (identity.includes('claude') || identity.includes('anthropic')) {
 		return claudeModelProviderIcon;
 	}

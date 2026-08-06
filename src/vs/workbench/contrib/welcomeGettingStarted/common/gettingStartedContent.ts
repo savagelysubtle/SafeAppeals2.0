@@ -116,19 +116,9 @@ type GettingStartedStartEntryContent = BuiltinGettingStartedStartEntry[];
 
 export const startEntries: GettingStartedStartEntryContent = [
 	{
-		id: 'welcome.showNewFileEntries',
-		title: localize('gettingStarted.newFile.title', "New File..."),
-		description: localize('gettingStarted.newFile.description', "Open a new untitled text file, notebook, or custom editor."),
-		icon: Codicon.newFile,
-		content: {
-			type: 'startEntry',
-			command: 'command:welcome.showNewFileEntries',
-		}
-	},
-	{
 		id: 'topLevelOpenMac',
-		title: localize('gettingStarted.openMac.title', "Open..."),
-		description: localize('gettingStarted.openMac.description', "Open a file or folder to start working"),
+		title: localize('gettingStarted.openCaseFolderMac.title', "Open a Case Folder..."),
+		description: localize('gettingStarted.openCaseFolderMac.description', "Open a matter folder to start working in Safe Appeals"),
 		icon: Codicon.folderOpened,
 		when: '!isWeb && isMac',
 		content: {
@@ -137,20 +127,9 @@ export const startEntries: GettingStartedStartEntryContent = [
 		}
 	},
 	{
-		id: 'topLevelOpenFile',
-		title: localize('gettingStarted.openFile.title', "Open File..."),
-		description: localize('gettingStarted.openFile.description', "Open a file to start working"),
-		icon: Codicon.goToFile,
-		when: 'isWeb || !isMac',
-		content: {
-			type: 'startEntry',
-			command: 'command:workbench.action.files.openFile',
-		}
-	},
-	{
 		id: 'topLevelOpenFolder',
-		title: localize('gettingStarted.openFolder.title', "Open Folder..."),
-		description: localize('gettingStarted.openFolder.description', "Open a folder to start working"),
+		title: localize('gettingStarted.openCaseFolder.title', "Open a Case Folder..."),
+		description: localize('gettingStarted.openCaseFolder.description', "Open a matter folder to start working in Safe Appeals"),
 		icon: Codicon.folderOpened,
 		when: '!isWeb && !isMac',
 		content: {
@@ -160,8 +139,8 @@ export const startEntries: GettingStartedStartEntryContent = [
 	},
 	{
 		id: 'topLevelOpenFolderWeb',
-		title: localize('gettingStarted.openFolder.title', "Open Folder..."),
-		description: localize('gettingStarted.openFolder.description', "Open a folder to start working"),
+		title: localize('gettingStarted.openCaseFolder.title', "Open a Case Folder..."),
+		description: localize('gettingStarted.openCaseFolder.description', "Open a matter folder to start working in Safe Appeals"),
 		icon: Codicon.folderOpened,
 		when: '!openFolderWorkspaceSupport && workbenchState == \'workspace\'',
 		content: {
@@ -170,10 +149,44 @@ export const startEntries: GettingStartedStartEntryContent = [
 		}
 	},
 	{
+		id: 'topLevelOpenFile',
+		title: localize('gettingStarted.openFile.title', "Open File..."),
+		description: localize('gettingStarted.openFile.description', "Open a single file from a case folder"),
+		icon: Codicon.goToFile,
+		when: 'isWeb || !isMac',
+		content: {
+			type: 'startEntry',
+			command: 'command:workbench.action.files.openFile',
+		}
+	},
+	{
+		id: 'topLevelTutorials',
+		title: localize('gettingStarted.startTutorials.title', "Tutorials"),
+		description: localize('gettingStarted.startTutorials.description', "Open the practice sample case and Safe Appeals tutorials checklist"),
+		icon: Codicon.book,
+		when: '!isWeb',
+		content: {
+			type: 'startEntry',
+			command: 'command:safeappeals-timeline.openTutorials',
+		}
+	},
+	{
+		id: 'welcome.showNewFileEntries',
+		title: localize('gettingStarted.newFile.title', "New File..."),
+		description: localize('gettingStarted.newFile.description', "Open a new untitled text file, notebook, or custom editor."),
+		icon: Codicon.newFile,
+		when: 'false',
+		content: {
+			type: 'startEntry',
+			command: 'command:welcome.showNewFileEntries',
+		}
+	},
+	// Developer-oriented start entries — hidden for Safe Appeals legal newcomers.
+	{
 		id: 'topLevelGitClone',
 		title: localize('gettingStarted.topLevelGitClone.title', "Clone Git Repository..."),
 		description: localize('gettingStarted.topLevelGitClone.description', "Clone a remote repository to a local folder"),
-		when: 'config.git.enabled && !git.missing',
+		when: 'false',
 		icon: Codicon.sourceControl,
 		content: {
 			type: 'startEntry',
@@ -184,7 +197,7 @@ export const startEntries: GettingStartedStartEntryContent = [
 		id: 'topLevelGitOpen',
 		title: localize('gettingStarted.topLevelGitOpen.title', "Open Repository..."),
 		description: localize('gettingStarted.topLevelGitOpen.description', "Connect to a remote repository or pull request to browse, search, edit, and commit"),
-		when: 'workspacePlatform == \'webworker\'',
+		when: 'false',
 		icon: Codicon.sourceControl,
 		content: {
 			type: 'startEntry',
@@ -195,7 +208,7 @@ export const startEntries: GettingStartedStartEntryContent = [
 		id: 'topLevelRemoteOpen',
 		title: localize('gettingStarted.topLevelRemoteOpen.title', "Connect to..."),
 		description: localize('gettingStarted.topLevelRemoteOpen.description', "Connect to remote development workspaces."),
-		when: '!isWeb',
+		when: 'false',
 		icon: Codicon.remote,
 		content: {
 			type: 'startEntry',
@@ -206,7 +219,7 @@ export const startEntries: GettingStartedStartEntryContent = [
 		id: 'topLevelOpenTunnel',
 		title: localize('gettingStarted.topLevelOpenTunnel.title', "Open Tunnel..."),
 		description: localize('gettingStarted.topLevelOpenTunnel.description', "Connect to a remote machine through a Tunnel"),
-		when: 'isWeb && showRemoteStartEntryInWeb',
+		when: 'false',
 		icon: Codicon.remote,
 		content: {
 			type: 'startEntry',
@@ -218,7 +231,7 @@ export const startEntries: GettingStartedStartEntryContent = [
 		title: localize('gettingStarted.newWorkspaceChat.title', "Generate New Workspace..."),
 		description: localize('gettingStarted.newWorkspaceChat.description', "Chat to create a new workspace"),
 		icon: Codicon.chatSparkle,
-		when: '!isWeb && !chatSetupHidden && !chatSetupDisabledInWorkspace',
+		when: 'false',
 		content: {
 			type: 'startEntry',
 			command: 'command:welcome.newWorkspaceChat',
@@ -257,7 +270,7 @@ export const walkthroughs: GettingStartedWalkthroughContent = [
 	{
 		id: 'Setup',
 		title: localize('gettingStarted.setup.title', "Get started with {0}", productName),
-		description: localize('gettingStarted.setup.description', "Customize your editor, learn the basics, and start coding"),
+		description: localize('gettingStarted.setup.description', "Pick a look you like, then learn Safe Appeals with the sample case — no credits and no AI run"),
 		isFeatured: true,
 		icon: setupIcon,
 		when: '!isWeb',
@@ -266,14 +279,25 @@ export const walkthroughs: GettingStartedWalkthroughContent = [
 		content: {
 			type: 'steps',
 			steps: [
-				createCopilotSetupStep('CopilotSetupAnonymous', CopilotAnonymousButton, 'chatAnonymous && !chatSetupCompleted', true),
-				createCopilotSetupStep('CopilotSetupSignedOut', CopilotSignedOutButton, 'chatEntitlementSignedOut && !chatAnonymous && !github.copilot.hasByokModels', false),
-				createCopilotSetupStep('CopilotSetupComplete', CopilotCompleteButton, 'chatSetupCompleted && !chatSetupDisabled && (chatAnonymous || chatPlanPro || chatPlanProPlus || chatPlanMax || chatPlanBusiness || chatPlanEnterprise || chatPlanFree)', false),
-				createCopilotSetupStep('CopilotSetupSignedIn', CopilotSignedInButton, '!chatEntitlementSignedOut && (!chatSetupCompleted || chatSetupDisabled || chatPlanCanSignUp)', false),
+				{
+					id: 'openTutorials',
+					title: localize('gettingStarted.openTutorials.title', "Start Tutorials"),
+					description: localize('gettingStarted.openTutorials.description.interpolated', "Open the practice sample case, take a short tour, and follow the Safe Appeals tutorials checklist. No credits are used and the AI does not run.\n{0}", Button(localize('gettingStarted.openTutorials.button', "Tutorials"), 'command:safeappeals-timeline.openTutorials')),
+					completionEvents: [
+						'onCommand:safeappeals-timeline.openTutorials',
+						'onCommand:safeappeals-timeline.openSampleCase'
+					],
+					media: { type: 'svg', altText: `${productName} Tutorials`, path: 'learn.svg' },
+				},
+				// Upstream Copilot-centric setup — hidden for Safe Appeals legal onboarding.
+				{ ...createCopilotSetupStep('CopilotSetupAnonymous', CopilotAnonymousButton, 'chatAnonymous && !chatSetupCompleted', true), when: 'false' },
+				{ ...createCopilotSetupStep('CopilotSetupSignedOut', CopilotSignedOutButton, 'chatEntitlementSignedOut && !chatAnonymous && !github.copilot.hasByokModels', false), when: 'false' },
+				{ ...createCopilotSetupStep('CopilotSetupComplete', CopilotCompleteButton, 'chatSetupCompleted && !chatSetupDisabled && (chatAnonymous || chatPlanPro || chatPlanProPlus || chatPlanMax || chatPlanBusiness || chatPlanEnterprise || chatPlanFree)', false), when: 'false' },
+				{ ...createCopilotSetupStep('CopilotSetupSignedIn', CopilotSignedInButton, '!chatEntitlementSignedOut && (!chatSetupCompleted || chatSetupDisabled || chatPlanCanSignUp)', false), when: 'false' },
 				{
 					id: 'pickColorTheme',
 					title: localize('gettingStarted.pickColor.title', "Choose your theme"),
-					description: localize('gettingStarted.pickColor.description.interpolated', "The right theme helps you focus on your code, is easy on your eyes, and is simply more fun to use.\n{0}", Button(localize('titleID', "Browse Color Themes"), 'command:workbench.action.selectTheme')),
+					description: localize('gettingStarted.pickColor.description.interpolated', "Pick a color theme that is easy on your eyes while you read case files and drafts.\n{0}", Button(localize('titleID', "Browse Color Themes"), 'command:workbench.action.selectTheme')),
 					completionEvents: [
 						'onSettingChanged:workbench.colorTheme',
 						'onCommand:workbench.action.selectTheme'
@@ -284,6 +308,7 @@ export const walkthroughs: GettingStartedWalkthroughContent = [
 					id: 'videoTutorial',
 					title: localize('gettingStarted.videoTutorial.title', "Watch video tutorials"),
 					description: localize('gettingStarted.videoTutorial.description.interpolated', "Watch the first in a series of short & practical video tutorials for {0}'s key features.\n{1}", productName, Button(localize('watch', "Watch Tutorial"), 'https://aka.ms/vscode-getting-started-video')),
+					when: 'false',
 					media: { type: 'svg', altText: `${productName} Settings`, path: 'learn.svg' },
 				}
 			]
@@ -487,95 +512,51 @@ export const walkthroughs: GettingStartedWalkthroughContent = [
 		isFeatured: false,
 		title: localize('gettingStarted.beginner.title', "Learn the Fundamentals"),
 		icon: beginnerIcon,
-		description: localize('gettingStarted.beginner.description', "Get an overview of the most essential features"),
+		description: localize('gettingStarted.beginner.description', "Essential {0} skills for working a legal case folder", productName),
 		walkthroughPageTitle: localize('gettingStarted.beginner.walkthroughPageTitle', 'Essential Features'),
 		content: {
 			type: 'steps',
 			steps: [
 				{
-					id: 'settingsAndSync',
+					id: 'commandPalette',
+					title: localize('gettingStarted.commandPalette.title', "Unlock productivity with the Command Palette "),
+					description: localize('gettingStarted.beginner.commandPalette.description.interpolated', "Find any Safe Appeals or editor command without hunting menus — search by name and run it.\n{0}", Button(localize('commandPalette', "Open Command Palette"), 'command:workbench.action.showCommands')),
+					media: { type: 'svg', altText: 'Command Palette overlay for searching and executing commands.', path: 'commandPalette.svg' },
+				},
+				{
+					id: 'quickOpen',
+					title: localize('gettingStarted.quickOpen.title', "Quickly navigate between your files"),
+					description: localize('gettingStarted.beginner.quickOpen.description.interpolated', "Jump to a case document by name with one keystroke. Tip: open several files by pressing the right arrow key.\n{0}", Button(localize('quickOpen', "Quick Open a File"), 'command:toSide:workbench.action.quickOpen')),
+					when: 'workspaceFolderCount != 0',
+					media: {
+						type: 'svg', altText: 'Go to file in quick search.', path: 'search.svg'
+					}
+				},
+				{
+					id: 'caseFilesExplorer',
+					title: localize('gettingStarted.beginner.caseFiles.title', "Browse your case files"),
+					description: localize('gettingStarted.beginner.caseFiles.description.interpolated', "The Explorer lists your matter folders — medical reports, correspondence, decisions, and notes — so you can open and organize documents.\n{0}", Button(localize('gettingStarted.beginner.caseFiles.button', "Open Explorer"), 'command:workbench.view.explorer')),
+					when: 'workspaceFolderCount != 0',
+					media: {
+						type: 'svg', altText: 'Explorer view showing case folders.', path: 'openFolder.svg'
+					}
+				},
+				{
+					id: 'settingsSafeAppeals',
 					title: localize('gettingStarted.settings.title', "Tune your settings"),
-					description: localize('gettingStarted.settingsAndSync.description.interpolated', "Customize every aspect of {0} and [sync](command:workbench.userDataSync.actions.turnOn) customizations across devices.\n{1}", productName, Button(localize('tweakSettings', "Open Settings"), 'command:toSide:workbench.action.openSettings')),
-					when: 'workspacePlatform != \'webworker\' && syncStatus != uninitialized',
-					completionEvents: ['onEvent:sync-enabled'],
+					description: localize('gettingStarted.beginner.settings.description.interpolated', "Customize {0} for how you work. Case-folder settings live under `.safeAppeals/` (for example `.safeAppeals/settings.json`), not a generic editor config folder.\n{1}", productName, Button(localize('tweakSettings', "Open Settings"), 'command:toSide:workbench.action.openSettings')),
+					when: 'workspacePlatform != \'webworker\'',
 					media: {
 						type: 'svg', altText: `${productName} Settings`, path: 'settings.svg'
 					},
 				},
 				{
-					id: 'extensions',
-					title: localize('gettingStarted.extensions.title', "Code with extensions"),
-					description: localize('gettingStarted.extensions.description.interpolated', "Extensions are {0}'s power-ups. They range from handy productivity hacks, expanding out-of-the-box features, to adding completely new capabilities.\n{1}", productName, Button(localize('browsePopular', "Browse Popular Extensions"), 'command:workbench.extensions.action.showPopularExtensions')),
+					id: 'workspaceTrust',
+					title: localize('gettingStarted.beginner.trustedCase.title', "Trust your case folder"),
+					description: localize('gettingStarted.beginner.trustedCase.description.interpolated', "When you open a case folder, {0} asks you to trust it so Safe Appeals features can run for that matter. Only trust folders you control.\n{1}", productName, Button(localize('gettingStarted.beginner.trustedCase.button', "Manage Workspace Trust"), 'command:toSide:workbench.trust.manage')),
 					when: 'workspacePlatform != \'webworker\'',
 					media: {
-						type: 'svg', altText: `${productName} extension marketplace with featured language extensions`, path: 'extensions.svg'
-					},
-				},
-				{
-					id: 'terminal',
-					title: localize('gettingStarted.terminal.title', "Built-in terminal"),
-					description: localize('gettingStarted.terminal.description.interpolated', "Quickly run shell commands and monitor build output, right next to your code.\n{0}", Button(localize('showTerminal', "Open Terminal"), 'command:workbench.action.terminal.toggleTerminal')),
-					when: 'workspacePlatform != \'webworker\' && remoteName != codespaces && !terminalIsOpen',
-					media: {
-						type: 'svg', altText: 'Integrated terminal running a few npm commands', path: 'terminal.svg'
-					},
-				},
-				{
-					id: 'debugging',
-					title: localize('gettingStarted.debug.title', "Watch your code in action"),
-					description: localize('gettingStarted.debug.description.interpolated', "Accelerate your edit, build, test, and debug loop by setting up a launch configuration.\n{0}", Button(localize('runProject', "Run your Project"), 'command:workbench.action.debug.selectandstart')),
-					when: 'workspacePlatform != \'webworker\' && workspaceFolderCount != 0',
-					media: {
-						type: 'svg', altText: 'Run and debug view.', path: 'debug.svg',
-					},
-				},
-				{
-					id: 'scmClone',
-					title: localize('gettingStarted.scm.title', "Track your code with Git"),
-					description: localize('gettingStarted.scmClone.description.interpolated', "Set up the built-in version control for your project to track your changes and collaborate with others.\n{0}", Button(localize('cloneRepo', "Clone Repository"), 'command:git.clone')),
-					when: 'config.git.enabled && !git.missing && workspaceFolderCount == 0',
-					media: {
-						type: 'svg', altText: 'Source Control view.', path: 'git.svg',
-					},
-				},
-				{
-					id: 'scmSetup',
-					title: localize('gettingStarted.scm.title', "Track your code with Git"),
-					description: localize('gettingStarted.scmSetup.description.interpolated', "Set up the built-in version control for your project to track your changes and collaborate with others.\n{0}", Button(localize('initRepo', "Initialize Git Repository"), 'command:git.init')),
-					when: 'config.git.enabled && !git.missing && workspaceFolderCount != 0 && gitOpenRepositoryCount == 0',
-					media: {
-						type: 'svg', altText: 'Source Control view.', path: 'git.svg',
-					},
-				},
-				{
-					id: 'scm',
-					title: localize('gettingStarted.scm.title', "Track your code with Git"),
-					description: localize('gettingStarted.scm.description.interpolated', "No more looking up Git commands! Git and GitHub workflows are seamlessly integrated.\n{0}", Button(localize('openSCM', "Open Source Control"), 'command:workbench.view.scm')),
-					when: 'config.git.enabled && !git.missing && workspaceFolderCount != 0 && gitOpenRepositoryCount != 0 && activeViewlet != \'workbench.view.scm\'',
-					media: {
-						type: 'svg', altText: 'Source Control view.', path: 'git.svg',
-					},
-				},
-				{
-					id: 'installGit',
-					title: localize('gettingStarted.installGit.title', "Install Git"),
-					description: localize({ key: 'gettingStarted.installGit.description.interpolated', comment: ['The placeholders are command link items should not be translated'] }, "Install Git to track changes in your projects.\n{0}\n{1}Reload window{2} after installation to complete Git setup.", Button(localize('installGit', "Install Git"), 'https://aka.ms/vscode-install-git'), '[', '](command:workbench.action.reloadWindow)'),
-					when: 'git.missing',
-					media: {
-						type: 'svg', altText: 'Install Git.', path: 'git.svg',
-					},
-					completionEvents: [
-						'onContext:git.state == initialized'
-					]
-				},
-
-				{
-					id: 'tasks',
-					title: localize('gettingStarted.tasks.title', "Automate your project tasks"),
-					when: 'workspaceFolderCount != 0 && workspacePlatform != \'webworker\'',
-					description: localize('gettingStarted.tasks.description.interpolated', "Create tasks for your common workflows and enjoy the integrated experience of running scripts and automatically checking results.\n{0}", Button(localize('runTasks', "Run Auto-detected Tasks"), 'command:workbench.action.tasks.runTask')),
-					media: {
-						type: 'svg', altText: 'Task runner.', path: 'runTask.svg',
+						type: 'svg', altText: 'Workspace Trust editor in Restricted mode and a primary button for switching to Trusted mode.', path: 'workspaceTrust.svg'
 					},
 				},
 				{
@@ -587,12 +568,58 @@ export const walkthroughs: GettingStartedWalkthroughContent = [
 					}
 				},
 				{
-					id: 'workspaceTrust',
-					title: localize('gettingStarted.workspaceTrust.title', "Safely browse and edit code"),
-					description: localize('gettingStarted.workspaceTrust.description.interpolated', "{0} lets you decide whether your project folders should **allow or restrict** automatic code execution __(required for extensions, debugging, etc)__.\nOpening a file/folder will prompt to grant trust. You can always {1} later.", Button(localize('workspaceTrust', "Workspace Trust"), 'https://code.visualstudio.com/docs/editor/workspace-trust'), Button(localize('enableTrust', "enable trust"), 'command:toSide:workbench.trust.manage')),
-					when: 'workspacePlatform != \'webworker\' && !isWorkspaceTrusted && workspaceFolderCount == 0',
+					id: 'localGitBackups',
+					title: localize('gettingStarted.beginner.localGit.title', "Local Git backups for case files"),
+					description: localize('gettingStarted.beginner.localGit.description.interpolated', "Optionally initialize Git, stage, and commit so you have a history of changes **on this computer**. Read your case `.gitignore` so organizer junk stays out of history. **Never push** client matters to GitHub or any remote unless you trust that provider's privacy policy for confidential legal data — the default is local-only, never push.\n{0}", Button(localize('gettingStarted.beginner.localGit.button', "Open Source Control"), 'command:workbench.view.scm')),
+					when: 'config.git.enabled && !git.missing && workspaceFolderCount != 0',
 					media: {
-						type: 'svg', altText: 'Workspace Trust editor in Restricted mode and a primary button for switching to Trusted mode.', path: 'workspaceTrust.svg'
+						type: 'svg', altText: 'Source Control view for local commits.', path: 'git.svg',
+					},
+				},
+				// Developer-oriented newcomer steps — hidden for Safe Appeals legal users.
+				{
+					id: 'terminal',
+					title: localize('gettingStarted.terminal.title', "Built-in terminal"),
+					description: localize('gettingStarted.terminal.description.interpolated', "Quickly run shell commands and monitor build output, right next to your code.\n{0}", Button(localize('showTerminal', "Open Terminal"), 'command:workbench.action.terminal.toggleTerminal')),
+					when: 'false',
+					media: {
+						type: 'svg', altText: 'Integrated terminal running a few npm commands', path: 'terminal.svg'
+					},
+				},
+				{
+					id: 'debugging',
+					title: localize('gettingStarted.debug.title', "Watch your code in action"),
+					description: localize('gettingStarted.debug.description.interpolated', "Accelerate your edit, build, test, and debug loop by setting up a launch configuration.\n{0}", Button(localize('runProject', "Run your Project"), 'command:workbench.action.debug.selectandstart')),
+					when: 'false',
+					media: {
+						type: 'svg', altText: 'Run and debug view.', path: 'debug.svg',
+					},
+				},
+				{
+					id: 'scmClone',
+					title: localize('gettingStarted.scm.title', "Track your code with Git"),
+					description: localize('gettingStarted.scmClone.description.interpolated', "Set up the built-in version control for your project to track your changes and collaborate with others.\n{0}", Button(localize('cloneRepo', "Clone Repository"), 'command:git.clone')),
+					when: 'false',
+					media: {
+						type: 'svg', altText: 'Source Control view.', path: 'git.svg',
+					},
+				},
+				{
+					id: 'extensions',
+					title: localize('gettingStarted.extensions.title', "Code with extensions"),
+					description: localize('gettingStarted.extensions.description.interpolated', "Extensions are {0}'s power-ups. They range from handy productivity hacks, expanding out-of-the-box features, to adding completely new capabilities.\n{1}", productName, Button(localize('browsePopular', "Browse Popular Extensions"), 'command:workbench.extensions.action.showPopularExtensions')),
+					when: 'false',
+					media: {
+						type: 'svg', altText: `${productName} extension marketplace with featured language extensions`, path: 'extensions.svg'
+					},
+				},
+				{
+					id: 'tasks',
+					title: localize('gettingStarted.tasks.title', "Automate your project tasks"),
+					when: 'false',
+					description: localize('gettingStarted.tasks.description.interpolated', "Create tasks for your common workflows and enjoy the integrated experience of running scripts and automatically checking results.\n{0}", Button(localize('runTasks', "Run Auto-detected Tasks"), 'command:workbench.action.tasks.runTask')),
+					media: {
+						type: 'svg', altText: 'Task runner.', path: 'runTask.svg',
 					},
 				},
 			]

@@ -172,7 +172,9 @@ export function buildSearchContextPack(options: BuildSearchContextPackOptions): 
 	const header =
 		`Found ${n} relevant chunk(s)${scopePart} ` +
 		`(hybrid BM25+vector → RRF → optional cross-encoder; not MMR):\n\n`;
-	return header + body;
+	const footer =
+		'\n\n---\n\nCite sources using [n] headers from this contextPack. Do not invent citations beyond what appears here.';
+	return header + body + footer;
 }
 
 /** Void-compatible failure `contextPack`. */

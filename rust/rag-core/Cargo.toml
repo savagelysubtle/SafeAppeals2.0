@@ -54,6 +54,7 @@ tokenizers = { version = "0.21", optional = true, default-features = false, feat
 	"onig",
 ] }
 tantivy = "0.22"
+fs2 = "0.4"
 
 [build-dependencies]
 napi-build = "2"

@@ -1,5 +1,11 @@
 # RAG System Architecture
 
+> **Historical Void architecture.** Shipping Private Search uses
+> `extensions/safeappeals-rag` + `rust/rag-core` (see
+> [`docs/rag/`](../rag/)). Folder `core_references/` replaces `policy-manuals/`.
+> Do not treat Chroma/Docling/`rag_search_policy` sections below as current product
+> behavior.
+
 ## 🏗️ System Overview
 
 The RAG (Retrieval-Augmented Generation) system is a sophisticated document indexing and semantic search platform designed specifically for legal and medical document analysis. It combines traditional keyword search with modern vector embeddings to provide highly accurate document retrieval.
@@ -475,7 +481,7 @@ When the user switches workspaces:
 
 ### Auto-Indexing on Startup
 When a workspace is opened:
-1. `RAGWorkspaceService` scans all folders (except policy-manuals/)
+1. `RAGWorkspaceService` scans folders (historical: except `policy-manuals/`; current: shared refs in `core_references/`)
 2. New/unindexed files are automatically indexed as case files
 3. Policy manual folder is indexed separately with `isPolicyManual: true`
 

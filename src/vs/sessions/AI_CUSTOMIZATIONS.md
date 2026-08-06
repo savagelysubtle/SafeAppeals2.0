@@ -278,7 +278,7 @@ The first sidebar entry is `Overview`, which opens the AI Customization manageme
 
 ### Item Badges
 
-`IAICustomizationListItem.badge` is an optional string that renders as a small inline tag next to the item name. For context instructions, this badge shows the raw `applyTo` pattern (e.g. a glob like `**/*.ts`), while the tooltip (`badgeTooltip`) explains the behavior. For skills with UI integrations, the badge reads "UI Integration" with a tooltip describing which UI surface invokes the skill. The badge text is also included in search filtering.
+`IAICustomizationListItem.badge` is an optional string that renders as a small inline tag next to the item name. For context instructions, this badge shows the raw `applyTo` pattern (e.g. a glob like `**/*.ts`), while the tooltip (`badgeTooltip`) explains the behavior. For skills with UI integrations, the badge reads "UI Integration" with a tooltip describing which UI surface invokes the skill. Agents discovered from compatibility folders (`.github/agents`, `.claude/agents`, `~/.copilot/agents`, `~/.claude/agents`) show a **Compat** badge; they remain visible when discovery is on but are not invocable via `runSubagent` (see [SafeAppeals Subagents](#safeappeals-subagents)). The badge text is also included in search filtering.
 
 ### Embedded Detail Editors
 
@@ -315,6 +315,108 @@ All commands and UI respect `ChatContextKeys.enabled`.
 | `aiCustomization.openManagementEditor` | Opens the management editor, optionally accepting an `AICustomizationManagementSection` to deep-link |
 | `aiCustomization.openMarketplace` | Opens the management editor with marketplace browse mode active. Accepts an optional section (`mcpServers` or `plugins`); defaults to `mcpServers` |
 
+## SafeAppeals Subagents
+
+SafeAppeals ships project- and user-scoped custom agents (`*.agent.md`) that the SafeAppeals Agent can invoke through the core `runSubagent` tool. Product paths are first-class; compatibility folders remain discoverable for migration visibility but are not invocable.
+
+### Agent file locations
+
+| Role | Path | Notes |
+|------|------|-------|
+| Project / case (workspace) | `.safeAppeals/agents/*.agent.md` | Version-control-friendly case agents |
+| User-global | `~/.safeAppeals/agents/*.agent.md` | Private to the user; available across projects |
+
+`chat.agentFilesLocations` defaults from `DEFAULT_AGENT_SOURCE_FOLDERS` in `promptFileLocations.ts`, with SafeAppeals paths ordered first:
+
+1. `.safeAppeals/agents` (workspace)
+2. `~/.safeAppeals/agents` (user)
+3. `.github/agents` (compat)
+4. `.claude/agents` (compat)
+5. `~/.copilot/agents` (compat)
+6. `~/.claude/agents` (compat)
+
+Folder-scoped Chat settings that enable these roots live in `.safeAppeals/settings.json` (not `.vscode/settings.json`). The sample case materializes the same keys into `.safeAppeals/settings.json` and `sample_case.code-workspace`.
+
+**Compatibility discovery:** when those compat locations are enabled in `chat.agentFilesLocations`, agents under them still appear in Agent Customizations and the Sessions tree (badged **Compat**). They are **not** invocable via `runSubagent`. Use a SafeAppeals path (or an extension / plugin / builtin agent) instead.
+
+### Name precedence
+
+Duplicate canonical agent names are resolved with path-gated priority (lower tier wins). Settings-contributed `ConfigWorkspace` / `ConfigPersonal` paths do **not** inherit SafeAppeals product tiers:
+
+1. Workspace `.safeAppeals/agents`
+2. Other workspace locals (`.github/agents`, `.claude/agents`, settings-contributed)
+3. User `~/.safeAppeals/agents`
+4. Other user globals (`~/.copilot/agents`, `~/.claude/agents`, settings-contributed)
+5. Plugin / extension / builtin
+
+Rules:
+
+- The first **enabled** (loaded) agent for a name wins; later same-name files are discovery-skipped with `skipReason: 'duplicate-name'` and omitted from the invocable custom-agent list.
+- A **disabled** higher-priority agent does **not** claim the name, so an enabled lower-priority twin remains available (and is not marked `duplicate-name`).
+
+### Runtime (SafeAppeals Agent)
+
+| Behavior | Implementation |
+|----------|----------------|
+| Core tool | `runSubagent` is allowlisted in `CORE_AGENT_TOOL_NAMES` only — never force-added via `ENSURED_AGENT_TOOL_NAMES` |
+| Copilot tools | Copilot `*_subagent` tools, and Copilot skill / memory tools, stay outside the SafeAppeals allowlist (`isAgentToolAllowed`) |
+| Nested invoke path | Child work runs through the default chat participant `safeappeals.agent` → `runAgentLoop` (Private Search protocol and git privacy rules are composed on every turn, including nested re-entry) |
+| Nesting | Default **off**: `chat.subagents.allowInvocationsFromSubagents` defaults to `false`. When enabled, nesting is capped at depth 5 (`RUN_SUBAGENT_MAX_NESTING_DEPTH`) |
+| Invoke gate | `isAgentInvocableViaRunSubagent`: enabled extension / plugin / builtin agents, plus SafeAppeals-owned file agents under `.safeAppeals/agents` or `~/.safeAppeals/agents`. Compat folder URIs are refused |
+
+**Tool enablement for a named subagent** (`resolveSubagentModeTools` / `createDefaultDenySubagentTools`):
+
+- Omitted or empty `tools:` → seed a read-only allow set and explicitly deny mutators / egress / nesting. **Never** inherits the parent tool map and **never** falls through to empty-selection MVP / ENSURED broadening.
+- Listed `tools:` → start from that same default-deny baseline, then overlay the listed enablement (listed `true` may re-enable a denied tool; unlisted tools stay at baseline).
+
+Read-only seed includes SafeAppeals read / search / list tools, Private Search search + stats (not index), and read-only timeline getters. Default-denied set includes write / edit / create tools, web / command / terminal / browser mutators, RAG index, plan / mode switch, and `runSubagent` itself (nesting may re-enable `runSubagent` only when the agent used the omitted-`tools:` baseline and nesting depth allows it).
+
+### UI
+
+- **Agent Customizations → Agents** section lists discovered agents.
+- **Create** targets prefer SafeAppeals roots (first matching workspace folder is `.safeAppeals/agents`; first user folder is `~/.safeAppeals/agents`).
+- Agents section group labels are **Workspace** and **Global**, with descriptions that call out SafeAppeals product paths; compat agents may appear in those groups with a **Compat** badge.
+- Sessions AI Customization tree uses the same **Workspace** / **Global** grouping for agents (compat may appear; badged).
+
+### Global starter agents
+
+On SafeAppeals authentication extension activate, two generic starters are installed **idempotently** into `~/.safeAppeals/agents` (write only if missing; never overwrite user edits):
+
+- `research.agent.md`
+- `case-summary.agent.md`
+
+Both declare the read-only seed tool set (aligned with `SUBAGENT_DEFAULT_ENABLED_TOOL_IDS`) and `user-invocable: true`. The sample practice case does **not** ship local copies; it materializes `.safeAppeals/agents/README.md` (and `.safeAppeals/skills/README.md`) as tutorials only.
+
+### Agent file schema (v1)
+
+v1 uses the existing `ICustomAgent` / `*.agent.md` frontmatter surface — no separate parser. Common fields:
+
+| Frontmatter key | Role |
+|-----------------|------|
+| `name` | Canonical agent name (invoke / slash identity) |
+| `description` | When to use the agent |
+| `tools` | Tool allow list (see runtime rules above when omitted) |
+| `agents` | Optional subagent name allow list (`*` = all) |
+| `user-invocable` | Whether users can select the agent in the UI |
+| `disable-model-invocation` | When true, blocks model/`runSubagent` invocation |
+
+Cursor-like native attributes such as `readonly` / `is_background` are **deferred** (not first-class schema in v1).
+
+### Out of scope / deferred
+
+- P3b memory
+- Explore builtin subagent
+- Parser v2
+- Background / async subagent execution
+- Personal skill parity under `~/.safeAppeals/skills`
+
 ## Settings
 
-User-facing settings use the `chat.customizations.` namespace. Currently, no settings are exposed for the management editor.
+Management-editor experiments use the `chat.customizations.` namespace (for example `chat.customizations.promptMigration.enabled`). Agent discovery and subagent nesting use the Chat settings below:
+
+| Setting | Role |
+|---------|------|
+| `chat.agentFilesLocations` | Enable/disable agent source folders; defaults from `DEFAULT_AGENT_SOURCE_FOLDERS` (SafeAppeals first) |
+| `chat.subagents.allowInvocationsFromSubagents` | Allow nested `runSubagent` calls (default `false`; max depth 5 when on) |
+
+Case-folder values for these keys belong in `.safeAppeals/settings.json`, not `.vscode`.

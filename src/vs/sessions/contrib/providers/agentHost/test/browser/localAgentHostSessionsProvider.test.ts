@@ -576,7 +576,7 @@ suite('LocalAgentHostSessionsProvider', () => {
 		assert.deepStrictEqual(
 			provider.sessionTypes.map(t => ({ id: t.id, icon: t.icon.id })),
 			[
-				{ id: 'copilotcli', icon: 'copilot' },
+				{ id: 'copilotcli', icon: 'safeappeals-shield-outline' },
 				{ id: 'claude-code', icon: 'claude' },
 				{ id: 'openai', icon: 'openai' },
 				{ id: 'unknown-agent', icon: 'vm' },
@@ -753,7 +753,7 @@ suite('LocalAgentHostSessionsProvider', () => {
 			provider.getSessions().map(s => ({ sessionType: s.sessionType, icon: s.icon.id })).sort((a, b) => a.sessionType.localeCompare(b.sessionType)),
 			[
 				{ sessionType: 'claude-code', icon: 'claude' },
-				{ sessionType: 'copilotcli', icon: 'copilot' },
+				{ sessionType: 'copilotcli', icon: 'safeappeals-shield-outline' },
 				{ sessionType: 'unknown-agent', icon: 'vm' },
 			],
 		);

@@ -54,4 +54,64 @@ suite('EmbeddingAdapter', () => {
 			}
 		}
 	});
+
+	test('unload calls clearEmbedder on rag host', async () => {
+		let cleared = false;
+		const adapter = new EmbeddingAdapter({
+			getArtifactDir: async modelId =>
+				modelId === 'bge-small-en-v1.5' ? '/tmp/fake-bge' : undefined,
+			ensureRagCoreReady: async () => { /* ok */ },
+			ragHost: {
+				ensureEmbedderLoaded: () => ({ ok: true, loaded: true }),
+				clearEmbedder: () => {
+					cleared = true;
+				},
+			},
+		});
+		const prev = process.env[SA_RAG_EMBED_MODEL_DIR];
+		process.env[SA_RAG_EMBED_MODEL_DIR] = '/tmp';
+		try {
+			await adapter.load(new AbortController().signal);
+			assert.strictEqual(adapter.isLoaded(), true);
+			await adapter.unload();
+			assert.strictEqual(adapter.isLoaded(), false);
+			assert.strictEqual(cleared, true);
+		} finally {
+			if (prev === undefined) {
+				delete process.env[SA_RAG_EMBED_MODEL_DIR];
+			} else {
+				process.env[SA_RAG_EMBED_MODEL_DIR] = prev;
+			}
+		}
+	});
+
+	test('load fails when ensureEmbedderLoaded returns not ok', async () => {
+		const prev = process.env[SA_RAG_EMBED_MODEL_DIR];
+		process.env[SA_RAG_EMBED_MODEL_DIR] = '/tmp';
+		const adapter = new EmbeddingAdapter({
+			getArtifactDir: async modelId =>
+				modelId === 'bge-small-en-v1.5' ? '/tmp/fake-bge' : undefined,
+			ragHost: {
+				ensureEmbedderLoaded: () => ({
+					ok: false,
+					error: 'fastembed load failed',
+					loaded: false,
+				}),
+				clearEmbedder: () => { /* noop */ },
+			},
+		});
+		try {
+			await assert.rejects(
+				adapter.load(new AbortController().signal),
+				/fastembed load failed/,
+			);
+			assert.strictEqual(adapter.isLoaded(), false);
+		} finally {
+			if (prev === undefined) {
+				delete process.env[SA_RAG_EMBED_MODEL_DIR];
+			} else {
+				process.env[SA_RAG_EMBED_MODEL_DIR] = prev;
+			}
+		}
+	});
 });

@@ -8,7 +8,7 @@ SafeAppeals Advanced RAG native core (napi-rs). Workspace member of `rust/`.
 |--------|----------|
 | `ping()` | `"pong"` |
 | `version()` | crate / package version string |
-| `capabilities()` | `{ hybrid, rerank, queryProcessor, modelsPresent, storageReady, dims }` — `dims=512` (BGE-small); **`hybrid=true`** (M3); **`queryProcessor=true`** (M4); **`rerank=true`** when ms-marco CE is loaded (M5), else `false` |
+| `capabilities()` | `{ hybrid, rerank, queryProcessor, modelsPresent, storageReady, dims }` — `dims=384` (BGE-small); **`hybrid=true`** (M3); **`queryProcessor=true`** (M4); **`rerank=true`** when ms-marco CE is loaded (M5), else `false` |
 | `openWorkspace(rootDir, dekBytes)` | Open/create SQLCipher DB + usearch + tantivy; returns `OpResult` |
 | `closeWorkspace()` | Persist vectors; commit text index; close DB; returns `OpResult` |
 | `stats()` | `{ documents, chunks, vectors, textDocs }` |

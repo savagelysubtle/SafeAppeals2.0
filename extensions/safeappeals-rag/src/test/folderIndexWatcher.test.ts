@@ -12,7 +12,10 @@ import {
 	isUnderDeniedDir,
 	type FolderIndexGate,
 } from '../folderIndexWatcher';
-import type { IndexPipelineResult } from '../indexPipeline';
+import {
+	docIdForSourceUri,
+	type IndexPipelineResult,
+} from '../indexPipeline';
 import { CORE_REFERENCES_FOLDER } from '../types';
 
 function uriFile(fsPath: string): vscode.Uri {
@@ -41,8 +44,25 @@ suite('folderIndexWatcher', () => {
 		assert.ok(INDEX_DENY_DIR_NAMES.has('node_modules'));
 		assert.ok(INDEX_DENY_DIR_NAMES.has('out'));
 		assert.ok(INDEX_DENY_DIR_NAMES.has('.git'));
+		assert.ok(INDEX_DENY_DIR_NAMES.has('apps'));
+		assert.ok(INDEX_DENY_DIR_NAMES.has('to_sort'));
+		assert.ok(INDEX_DENY_DIR_NAMES.has('tosort'));
+		assert.ok(INDEX_DENY_DIR_NAMES.has('.venv'));
+		assert.ok(INDEX_DENY_DIR_NAMES.has('venv'));
 		assert.strictEqual(
 			isUnderDeniedDir('/case/node_modules/pkg/readme.md', '/case'),
+			true,
+		);
+		assert.strictEqual(
+			isUnderDeniedDir('/case/apps/foo.md', '/case'),
+			true,
+		);
+		assert.strictEqual(
+			isUnderDeniedDir('/case/to_sort/intake.pdf', '/case'),
+			true,
+		);
+		assert.strictEqual(
+			isUnderDeniedDir('/case/tosort/legacy.pdf', '/case'),
 			true,
 		);
 		assert.strictEqual(
@@ -51,14 +71,18 @@ suite('folderIndexWatcher', () => {
 		);
 	});
 
-	test('startup scan schedules core_references and other workspace txt/md', async () => {
+	test('startup scan indexes core_references and other workspace txt/md/pdf', async () => {
 		const root = '/case';
 		const indexed: string[] = [];
 		const walkedRoots: string[] = [];
+		const logLines: string[] = [];
 		const watcher = new FolderIndexWatcher({
 			debounceMs: 10_000,
 			getWorkspaceFolders: () => [workspaceFolder(root)],
 			isIndexingAllowed: () => ({ ok: true }),
+			log: message => {
+				logLines.push(message);
+			},
 			indexPipeline: {
 				indexPath: async source => {
 					indexed.push(source);
@@ -76,7 +100,9 @@ suite('folderIndexWatcher', () => {
 				walkedRoots.push(workspaceRoot);
 				return [
 					path.join(workspaceRoot, CORE_REFERENCES_FOLDER, 'regs.md'),
+					path.join(workspaceRoot, CORE_REFERENCES_FOLDER, 'manual.pdf'),
 					path.join(workspaceRoot, 'pleadings', 'brief.md'),
+					path.join(workspaceRoot, 'pleadings', 'decision.pdf'),
 					path.join(workspaceRoot, 'node_modules', 'pkg', 'readme.md'),
 				];
 			},
@@ -84,15 +110,57 @@ suite('folderIndexWatcher', () => {
 			onDidSaveTextDocument: () => ({ dispose() { /* no-op */ } }),
 		});
 
-		await watcher.runStartupScanForTesting('unit');
+		const scheduled = await watcher.runStartupScanForTesting('unit');
+		assert.strictEqual(scheduled, 4);
 		assert.deepStrictEqual(walkedRoots, [root]);
+		assert.deepStrictEqual(indexed, [
+			uriFile(path.join(root, CORE_REFERENCES_FOLDER, 'regs.md')).toString(),
+			uriFile(path.join(root, CORE_REFERENCES_FOLDER, 'manual.pdf')).toString(),
+			uriFile(path.join(root, 'pleadings', 'brief.md')).toString(),
+			uriFile(path.join(root, 'pleadings', 'decision.pdf')).toString(),
+		]);
+		const stats = watcher.getLastScanStatsForTesting();
+		assert.ok(stats);
+		assert.strictEqual(stats!.scheduled, 4);
+		assert.strictEqual(stats!.indexed, 4);
+		assert.strictEqual(stats!.skippedUnchanged, 0);
+		assert.ok(logLines.some(l => l.includes('Startup scan complete (unit): 4 indexed')));
+		watcher.dispose();
+	});
 
-		const coreUri = uriFile(path.join(root, CORE_REFERENCES_FOLDER, 'regs.md'));
-		const caseUri = uriFile(path.join(root, 'pleadings', 'brief.md'));
-		await watcher.flushForTesting(coreUri);
-		await watcher.flushForTesting(caseUri);
-		// node_modules path must not be scheduled / indexed
-		assert.deepStrictEqual(indexed, [coreUri.toString(), caseUri.toString()]);
+	test('startup scan logs one summary for unchanged skips', async () => {
+		const root = '/case';
+		const logLines: string[] = [];
+		const watcher = new FolderIndexWatcher({
+			debounceMs: 10_000,
+			getWorkspaceFolders: () => [workspaceFolder(root)],
+			isIndexingAllowed: () => ({ ok: true }),
+			log: message => {
+				logLines.push(message);
+			},
+			indexPipeline: {
+				indexPath: async () => ({
+					kind: 'skipped',
+					reason: 'Document already indexed (unchanged)',
+				}),
+			},
+			walkWorkspaceIndexableFiles: async workspaceRoot => [
+				path.join(workspaceRoot, 'a.md'),
+				path.join(workspaceRoot, 'b.md'),
+			],
+			createWatcher: () => fakeFsWatcher(),
+			onDidSaveTextDocument: () => ({ dispose() { /* no-op */ } }),
+		});
+
+		await watcher.runStartupScanForTesting('unit');
+		assert.ok(logLines.some(l => l.includes('Startup scan complete (unit): 2 skipped (unchanged)')));
+		assert.strictEqual(
+			logLines.filter(l => l.includes('Auto-index skipped')).length,
+			0,
+		);
+		const stats = watcher.getLastScanStatsForTesting();
+		assert.strictEqual(stats?.skippedUnchanged, 2);
+		assert.strictEqual(stats?.indexed, 0);
 		watcher.dispose();
 	});
 
@@ -131,6 +199,93 @@ suite('folderIndexWatcher', () => {
 		});
 		assert.strictEqual(watcher.isStartupScanPendingForTesting(), false);
 		assert.deepStrictEqual(walked, ['/case']);
+		watcher.dispose();
+	});
+
+	test('warm-then-scan sequencing: deferInitialScan then runInitialScan after gate clears', async () => {
+		let gate: FolderIndexGate = { ok: false, code: 'models-missing', message: 'missing' };
+		const walked: string[] = [];
+		const watcher = new FolderIndexWatcher({
+			debounceMs: 10_000,
+			getWorkspaceFolders: () => [workspaceFolder('/case')],
+			isIndexingAllowed: () => gate,
+			indexPipeline: {
+				indexPath: async () => ({ kind: 'skipped', reason: 'unused' }),
+			},
+			walkWorkspaceIndexableFiles: async root => {
+				walked.push(root);
+				return [path.join(root, 'pleadings', 'a.md')];
+			},
+			createWatcher: () => fakeFsWatcher(),
+			onDidSaveTextDocument: () => ({ dispose() { /* no-op */ } }),
+		});
+
+		// Activate order: start watchers without scan → warm clears gate → runInitialScan.
+		watcher.start({ deferInitialScan: true });
+		assert.strictEqual(watcher.isStartupScanPendingForTesting(), false);
+		assert.deepStrictEqual(walked, []);
+
+		gate = { ok: true };
+		await watcher.runInitialScan('activate-after-warm');
+		watcher.notifyModelsReady(); // no-op when not pending
+		assert.strictEqual(watcher.isStartupScanPendingForTesting(), false);
+		assert.deepStrictEqual(walked, ['/case']);
+		watcher.dispose();
+	});
+
+	test('delete of case-scope PDF calls removeDoc with PathGuard docId', async () => {
+		const root = '/case';
+		const removed: string[] = [];
+		const pdfUri = uriFile(path.join(root, 'pleadings', 'decision.pdf'));
+		const watcher = new FolderIndexWatcher({
+			debounceMs: 10_000,
+			getWorkspaceFolders: () => [workspaceFolder(root)],
+			isIndexingAllowed: () => ({ ok: true }),
+			indexPipeline: {
+				indexPath: async () => ({ kind: 'skipped', reason: 'unused' }),
+			},
+			walkWorkspaceIndexableFiles: async () => [],
+			removeDoc: docId => {
+				removed.push(docId);
+				return { ok: true };
+			},
+			createWatcher: () => fakeFsWatcher(),
+			onDidSaveTextDocument: () => ({ dispose() { /* no-op */ } }),
+		});
+		watcher.start({ deferInitialScan: true });
+
+		await watcher.handleDeleteForTesting(pdfUri);
+		assert.deepStrictEqual(removed, [docIdForSourceUri(pdfUri.toString())]);
+		watcher.dispose();
+	});
+
+	test('delete of case-scope file calls removeDoc with PathGuard docId', async () => {
+		const root = '/case';
+		const removed: string[] = [];
+		const caseUri = uriFile(path.join(root, 'pleadings', 'claim.txt'));
+		const junkUri = uriFile(path.join(root, 'node_modules', 'pkg', 'readme.md'));
+		const watcher = new FolderIndexWatcher({
+			debounceMs: 10_000,
+			getWorkspaceFolders: () => [workspaceFolder(root)],
+			isIndexingAllowed: () => ({ ok: true }),
+			indexPipeline: {
+				indexPath: async () => ({ kind: 'skipped', reason: 'unused' }),
+			},
+			walkWorkspaceIndexableFiles: async () => [],
+			removeDoc: docId => {
+				removed.push(docId);
+				return { ok: true };
+			},
+			createWatcher: () => fakeFsWatcher(),
+			onDidSaveTextDocument: () => ({ dispose() { /* no-op */ } }),
+		});
+		watcher.start({ deferInitialScan: true });
+
+		await watcher.handleDeleteForTesting(caseUri);
+		assert.deepStrictEqual(removed, [docIdForSourceUri(caseUri.toString())]);
+
+		await watcher.handleDeleteForTesting(junkUri);
+		assert.deepStrictEqual(removed, [docIdForSourceUri(caseUri.toString())]);
 		watcher.dispose();
 	});
 

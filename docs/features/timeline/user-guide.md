@@ -289,7 +289,7 @@ The timeline integrates with the AI chat agent. Ask the agent to:
 ### Timeline Not Saving
 
 - Ensure you have write access to the workspace
-- Check that `.timeline.json` isn't read-only
+- Check that `.safeAppeals/timeline.json` isn't read-only
 
 ### Deadlines Not Showing
 

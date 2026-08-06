@@ -17,6 +17,7 @@ import { ThemeIcon } from '../../../../../base/common/themables.js';
 import { URI } from '../../../../../base/common/uri.js';
 import { generateUuid } from '../../../../../base/common/uuid.js';
 import { localize } from '../../../../../nls.js';
+import { safeAppealsShieldOutlineIcon } from '../../../../../platform/theme/common/safeAppealsIcons.js';
 import { AgentSession, AuthenticateParams, AuthenticateResult, IAgentConnection, IAgentSessionMetadata } from '../../../../../platform/agentHost/common/agentService.js';
 import { buildAnnotationsUri } from '../../../../../platform/agentHost/common/annotationsUri.js';
 import { getEffectiveAgents } from '../../../../../platform/agentHost/common/customAgents.js';
@@ -164,11 +165,11 @@ function isGitHubInfoEqual(a: IGitHubInfo | undefined, b: IGitHubInfo | undefine
 // AgentHostSessionAdapter — shared adapter for local and remote sessions
 // ============================================================================
 
-/** Copilot CLI session type */
+/** SafeAppeals Agent (agent-host) session type */
 export const CopilotCLISessionType: ISessionType = {
 	id: 'copilotcli',
 	label: localize('safeAppealsAgent', "SafeAppeals Agent"),
-	icon: Codicon.copilot,
+	icon: safeAppealsShieldOutlineIcon,
 };
 
 /**

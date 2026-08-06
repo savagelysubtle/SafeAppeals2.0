@@ -3,13 +3,21 @@
 //! `indexChunks` / `removeDoc` orchestration (SQLCipher + usearch + tantivy).
 
 use crate::embed;
-use crate::storage::{workspace, ChunkRow, DocumentRow, StorageError};
+use crate::storage::{workspace, ChunkRow, DocumentRow, StorageError, IndexWriteRole};
+
+fn assert_primary(session: &workspace::WorkspaceSession) -> Result<(), StorageError> {
+	if session.role != IndexWriteRole::Primary {
+		return Err(StorageError::Message("secondary session".into()));
+	}
+	Ok(())
+}
 
 /// Index (or replace) a document and its chunks; embed + upsert into usearch + tantivy.
 ///
 /// Indexes **all** chunks passed (parents + children) — same as M2.
 pub fn index_chunks(doc: &DocumentRow, chunks: &[ChunkRow]) -> Result<u32, StorageError> {
 	workspace::with_session(|session| {
+		assert_primary(session)?;
 		// Collect stale vector keys before SQL CASCADE clears vector_keys.
 		let old_ids: Vec<String> = session
 			.db
@@ -82,6 +90,7 @@ pub fn index_chunks(doc: &DocumentRow, chunks: &[ChunkRow]) -> Result<u32, Stora
 /// Remove a document, its chunks, vectors, and BM25 docs.
 pub fn remove_doc(doc_id: &str) -> Result<u32, StorageError> {
 	workspace::with_session(|session| {
+		assert_primary(session)?;
 		let chunk_ids = session
 			.db
 			.get_chunks_for_doc(doc_id)?

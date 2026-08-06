@@ -5,10 +5,24 @@
 use crate::engines::error::{EngineError, EngineResult};
 use image::{ImageBuffer, Rgb, RgbImage};
 use lopdf::{Document, Object};
-use pdf_extract::extract_text;
+use pdf_extract::{extract_text, extract_text_by_pages, extract_text_from_mem_by_pages};
 use serde_json::Value;
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::Path;
+
+/// Per-page born-digital text extract for RAG scanned detection (no OCR).
+pub fn extract_pdf_pages(input: &Path) -> EngineResult<Vec<String>> {
+	let pages = extract_text_by_pages(input)
+		.map_err(|e| EngineError::conversion(format!("pdf page extract: {e}")))?;
+	Ok(pages)
+}
+
+/// Per-page extract from in-memory PDF bytes (tests / callers without a path).
+pub fn extract_pdf_pages_from_mem(buffer: &[u8]) -> EngineResult<Vec<String>> {
+	let pages = extract_text_from_mem_by_pages(buffer)
+		.map_err(|e| EngineError::conversion(format!("pdf page extract: {e}")))?;
+	Ok(pages)
+}
 
 pub fn pdf2md(input: &Path, output: &Path) -> EngineResult<()> {
 	let text = extract_text(input).map_err(|e| EngineError::conversion(format!("pdf extract: {e}")))?;
@@ -171,5 +185,16 @@ mod tests {
 		pdf2md(&pdf, &md).unwrap();
 		let content = fs::read_to_string(&md).unwrap();
 		assert!(content.contains("Hello") || content.contains("PDF"));
+	}
+
+	#[test]
+	fn extract_pdf_pages_returns_page_texts() {
+		let tmp = tempfile::tempdir().unwrap();
+		let pdf = tmp.path().join("pages.pdf");
+		write_fixture_pdf(&pdf, "Hello PDF").unwrap();
+		let pages = extract_pdf_pages(&pdf).unwrap();
+		assert!(!pages.is_empty());
+		let joined = pages.join(" ");
+		assert!(joined.contains("Hello") || joined.contains("PDF"));
 	}
 }

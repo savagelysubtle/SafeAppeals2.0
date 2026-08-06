@@ -18,25 +18,21 @@ export interface DigitalPdfExtractUnavailable {
 export type DigitalPdfExtractResult = DigitalPdfExtractOk | DigitalPdfExtractUnavailable;
 
 /**
- * Born-digital PDF text extract (pdfium / pdf-extract lane).
- * Injected so tests can fake pages without shipping PDFium in the EH.
+ * Born-digital PDF text extract via sa-converter sidecar (pdf-extract lane).
+ * Injected so tests can fake pages without shipping PDF libraries in the EH.
  */
 export interface IDigitalPdfExtractor {
 	extract(sourceUri: string, bytes: Uint8Array): Promise<DigitalPdfExtractResult>;
 }
 
 /**
- * Default extractor until pdfium (or rag-core native extract) is wired.
- *
- * TODO(M1b-followup / M6): call pdfium or rag-core digital extract without adding
- * heavy EH deps. Converter’s Rust `pdf_extract` is sidecar-owned — do not pull it here.
+ * Fallback when no {@link IDigitalPdfExtractor} is injected (unit tests only).
  */
 export class StubDigitalPdfExtractor implements IDigitalPdfExtractor {
 	async extract(_sourceUri: string, _bytes: Uint8Array): Promise<DigitalPdfExtractResult> {
 		return {
 			kind: 'unavailable',
-			reason:
-				'TODO: wire pdfium / rag-core born-digital extract; digital extract unavailable in M1b stub',
+			reason: 'Born-digital PDF extract is not configured (stub extractor).',
 		};
 	}
 }

@@ -29,7 +29,8 @@ import { WELCOME_COMPLETE_KEY } from '../common/welcome.js';
 import { SessionsWelcomeVisibleContext } from '../common/contextkeys.js';
 
 import { IConfigurationService } from '../../platform/configuration/common/configuration.js';
-import { Codicon } from '../../base/common/codicons.js';
+import { ThemeIcon } from '../../base/common/themables.js';
+import { safeAppealsShieldOutlineIcon } from '../../platform/theme/common/safeAppealsIcons.js';
 import { $, append } from '../../base/browser/dom.js';
 import { Dialog, DialogContentsAlignment } from '../../base/browser/ui/dialog/dialog.js';
 import { createWorkbenchDialogOptions } from '../../workbench/browser/parts/dialogs/dialog.js';
@@ -256,7 +257,7 @@ class SessionsSetUpWidget extends Disposable {
 				type: 'none',
 				extraClasses: ['chat-setup-dialog', 'sessions-welcome-dialog'],
 				detail: localize('sessions.aiDisabled.detail', "Enable AI features to continue using Agents."),
-				icon: Codicon.agent,
+				icon: safeAppealsShieldOutlineIcon,
 				alignment: DialogContentsAlignment.Vertical,
 				cancelId: 1,
 				disableCloseButton: true,
@@ -329,7 +330,8 @@ class SessionsSetUpWidget extends Disposable {
 		overlay.setAttribute('role', 'status');
 		overlay.setAttribute('aria-busy', 'true');
 		overlay.setAttribute('aria-label', localize('loading', "Loading"));
-		append(overlay, $('div.sessions-loading-icon.codicon.codicon-agent'));
+		const loadingIcon = append(overlay, $('div.sessions-loading-icon'));
+		loadingIcon.classList.add(...ThemeIcon.asClassNameArray(safeAppealsShieldOutlineIcon));
 		return { element: overlay, dispose: () => overlay.remove() };
 	}
 
@@ -340,7 +342,7 @@ class SessionsSetUpWidget extends Disposable {
 
 		const success = await this.commandService.executeCommand<boolean>('workbench.action.chat.triggerSetup', undefined, {
 			forceSignInDialog: true,
-			dialogIcon: Codicon.agent,
+			dialogIcon: safeAppealsShieldOutlineIcon,
 			dialogTitle: localize('sessions.signIn', "Sign in to use Agents"),
 			disableCloseButton: true,
 			onSignInStarted: () => {
@@ -354,7 +356,7 @@ class SessionsSetUpWidget extends Disposable {
 						type: 'none',
 						extraClasses: ['chat-setup-dialog', 'sessions-welcome-dialog'],
 						detail: localize('sessions.signingIn.detail', "Please complete sign-in in the browser."),
-						icon: Codicon.agent,
+						icon: safeAppealsShieldOutlineIcon,
 						alignment: DialogContentsAlignment.Vertical,
 						cancelId: 0,
 						disableCloseButton: true,
@@ -392,7 +394,7 @@ class SessionsSetUpWidget extends Disposable {
 				extraClasses: ['chat-setup-dialog', 'sessions-welcome-dialog', 'sessions-main-welcome-dialog'],
 				// SafeAppeals: case-language welcome copy (replaces "AI-powered coding experience").
 				detail: localize('sessions.welcome.detail', "Your legal workspace where an AI assistant helps you explore cases, draft documents, and work through appeals."),
-				icon: Codicon.agent,
+				icon: safeAppealsShieldOutlineIcon,
 				alignment: DialogContentsAlignment.Vertical,
 				cancelId: 1,
 				disableCloseButton: true,

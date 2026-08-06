@@ -15,12 +15,18 @@
 	"extensionKind": [
 		"workspace"
 	],
+	"enabledApiProposals": [
+		"agentSessionsWorkspace",
+		"contribLanguageModelToolSets"
+	],
 	"extensionDependencies": [
 		"safeappeals.safeappeals-ml"
 	],
 	"activationEvents": [
 		"onStartupFinished",
 		"onCommand:safeappeals-rag.setupLocalSearch",
+		"onCommand:safeappeals-rag.installMissingModels",
+		"onCommand:safeappeals-rag.getSetupScan",
 		"onCommand:safeappeals-rag.scaffoldCoreReferences",
 		"onCommand:safeappeals-rag.search",
 		"onCommand:safeappeals-rag.showStatus"
@@ -35,6 +41,13 @@
 		"configuration": {
 			"title": "%config.title%",
 			"properties": {
+				"safeappeals.rag.models.install": {
+					"type": "null",
+					"default": null,
+					"scope": "machine",
+					"markdownDescription": "%config.modelsInstall%",
+					"order": 0
+				},
 				"safeappeals.rag.docParseSidecarUrl": {
 					"type": "string",
 					"default": "http://127.0.0.1:8742",
@@ -61,6 +74,16 @@
 				"category": "%command.category%"
 			},
 			{
+				"command": "safeappeals-rag.installMissingModels",
+				"title": "%command.installMissingModels%",
+				"category": "%command.category%"
+			},
+			{
+				"command": "safeappeals-rag.getSetupScan",
+				"title": "%command.getSetupScan%",
+				"category": "%command.category%"
+			},
+			{
 				"command": "safeappeals-rag.scaffoldCoreReferences",
 				"title": "%command.scaffoldCoreReferences%",
 				"category": "%command.category%",
@@ -79,6 +102,9 @@
 				},
 				{
 					"command": "safeappeals-rag.setupLocalSearch"
+				},
+				{
+					"command": "safeappeals-rag.installMissingModels"
 				},
 				{
 					"command": "safeappeals-rag.scaffoldCoreReferences"
@@ -208,6 +234,79 @@
 					"type": "object",
 					"properties": {}
 				}
+			}
+		],
+		"languageModelToolSets": [
+			{
+				"name": "safeappeals_privateSearch",
+				"description": "%toolSet.privateSearch.description%",
+				"icon": "$(search-fuzzy)",
+				"tools": [
+					"ragGetStats",
+					"ragSearchReference",
+					"ragSearchWorkspace",
+					"ragSearchAll",
+					"ragIndexDocument"
+				]
+			}
+		],
+		"walkthroughs": [
+			{
+				"id": "safeappealsPrivateSearch",
+				"title": "%walkthrough.privateSearch.title%",
+				"description": "%walkthrough.privateSearch.description%",
+				"steps": [
+					{
+						"id": "whatStaysLocal",
+						"title": "%walkthrough.privateSearch.whatStaysLocal.title%",
+						"description": "%walkthrough.privateSearch.whatStaysLocal.description%",
+						"media": {
+							"markdown": "media/walkthrough/whatStaysLocal.md"
+						}
+					},
+					{
+						"id": "setupPrivateSearch",
+						"title": "%walkthrough.privateSearch.setup.title%",
+						"description": "%walkthrough.privateSearch.setup.description%",
+						"media": {
+							"markdown": "media/walkthrough/setupPrivateSearch.md"
+						},
+						"completionEvents": [
+							"onCommand:safeappeals-rag.setupLocalSearch"
+						]
+					},
+					{
+						"id": "installSearchPack",
+						"title": "%walkthrough.privateSearch.install.title%",
+						"description": "%walkthrough.privateSearch.install.description%",
+						"media": {
+							"markdown": "media/walkthrough/installSearchPack.md"
+						},
+						"completionEvents": [
+							"onCommand:safeappeals-rag.installMissingModels"
+						]
+					},
+					{
+						"id": "optionalOcr",
+						"title": "%walkthrough.privateSearch.ocr.title%",
+						"description": "%walkthrough.privateSearch.ocr.description%",
+						"media": {
+							"markdown": "media/walkthrough/optionalOcr.md"
+						}
+					},
+					{
+						"id": "coreReferencesSearch",
+						"title": "%walkthrough.privateSearch.coreRefs.title%",
+						"description": "%walkthrough.privateSearch.coreRefs.description%",
+						"media": {
+							"markdown": "media/walkthrough/coreReferencesSearch.md"
+						},
+						"completionEvents": [
+							"onCommand:safeappeals-rag.scaffoldCoreReferences",
+							"onCommand:safeappeals-rag.search"
+						]
+					}
+				]
 			}
 		]
 	},

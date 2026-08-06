@@ -5,8 +5,10 @@
 
 import { $, addDisposableListener } from '../../../../../base/browser/dom.js';
 import { DisposableStore } from '../../../../../base/common/lifecycle.js';
+import { ThemeIcon } from '../../../../../base/common/themables.js';
 import { localize } from '../../../../../nls.js';
 import { ICommandService, CommandsRegistry } from '../../../../../platform/commands/common/commands.js';
+import { safeAppealsShieldOutlineIcon } from '../../../../../platform/theme/common/safeAppealsIcons.js';
 import { ITelemetryService } from '../../../../../platform/telemetry/common/telemetry.js';
 import { IChatEntitlementService } from '../../../../services/chat/common/chatEntitlementService.js';
 
@@ -67,10 +69,13 @@ export function createAgentsBanner(
 	const disposables = new DisposableStore();
 	const label = options.label ?? localize('agentsBanner.tryAgentsAppLabel', "Try out the new Agents window");
 
+	const iconWidget = $('.icon-widget');
+	iconWidget.classList.add(...ThemeIcon.asClassNameArray(safeAppealsShieldOutlineIcon));
+
 	const button = $('button.agents-banner-button', {
 		title: label,
 	},
-		$('.codicon.codicon-agent.icon-widget'),
+		iconWidget,
 		$('span.category-title', {}, label),
 	);
 	disposables.add(addDisposableListener(button, 'click', () => {

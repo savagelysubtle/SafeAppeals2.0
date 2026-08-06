@@ -517,6 +517,11 @@ configurationRegistry.registerConfiguration({
 			'description': nls.localize('expandSingleFolderWorkspaces', "Controls whether the Explorer should expand multi-root workspaces containing only one folder during initialization"),
 			'default': true
 		},
+		'explorer.expandFoldersByDefault': {
+			'type': 'boolean',
+			'description': nls.localize('expandFoldersByDefault', "Controls whether folders in the Explorer are expanded when revealed. When enabled, a reload re-applies this behavior, so folders you collapsed may reopen. Set to false for the upstream collapse-by-default behavior."),
+			'default': true
+		},
 		'explorer.sortOrder': {
 			'type': 'string',
 			'enum': [SortOrder.Default, SortOrder.Mixed, SortOrder.FilesFirst, SortOrder.Type, SortOrder.Modified, SortOrder.FoldersNestsFiles],
@@ -577,7 +582,7 @@ configurationRegistry.registerConfiguration({
 		'explorer.compactFolders': {
 			'type': 'boolean',
 			'description': nls.localize('compressSingleChildFolders', "Controls whether the Explorer should render folders in a compact form. In such a form, single child folders will be compressed in a combined tree element. Useful for Java package structures, for example."),
-			'default': true
+			'default': false
 		},
 		'explorer.copyRelativePathSeparator': {
 			'type': 'string',

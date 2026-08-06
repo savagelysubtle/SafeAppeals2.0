@@ -2,249 +2,115 @@
 
 ## Overview
 
-SafeAppeals Navigator uses a **per-workspace micro database architecture**. Each workspace/project gets its own isolated set of SQLite databases. This ensures complete data isolation between cases/projects - critical for legal compliance.
+SafeAppeals Navigator keeps matter data isolated per workspace/profile. Electron
+**user-data** paths differ for development vs an installed build.
 
-> **No Global Storage**: All custom data is stored per-workspace. There is NO global fallback.
-
----
-
-## ⚠️ CRITICAL: Development vs Production Paths
-
-SafeAppeals uses **DIFFERENT paths** depending on how you run the app:
-
-| Environment | How to Run | Our Databases Location |
-|-------------|------------|------------------------|
-| **Development** | `.\scripts\code.bat` | `%APPDATA%\code-oss-dev\User\.safe-appeals-navigator\` |
-| **Production** | Installed app | `%APPDATA%\Void\User\.safe-appeals-navigator\` |
+> Prefer extension `globalStorageUri` / `storageUri` for new stores. Case-local
+> product config lives under **`.safeAppeals/`** in the workspace (settings,
+> skills, agents, plans, timeline) — not `.vscode/` for new SafeAppeals case
+> config.
 
 ---
 
-## Development Environment Paths (When Running `.\scripts\code.bat`)
+## CRITICAL: Development vs Production User-Data Paths
 
-### 🗂️ Two Separate Directories!
+| Environment | How to run | Electron user-data product folder |
+|-------------|------------|-----------------------------------|
+| **Development** | `VSCODE_DEV` set (e.g. `./scripts/code.sh`) | `safe-appeals-dev` |
+| **Production** | Installed Safe Appeals | `product.nameShort` → **Safe Appeals** (`applicationName` / `dataFolderName`: `safe-appeals-navigator` / `.safe-appeals-navigator`) |
 
-Development has **TWO** important directories that serve different purposes:
+Dev override is hard-coded in `src/vs/platform/environment/node/userDataPath.ts`
+when `VSCODE_DEV` is set (`productName = 'safe-appeals-dev'`). It is **not**
+`code-oss-dev` / `.vscode-oss-dev`, and production is **not** `%APPDATA%\Void\`.
 
-#### 1. VSCode Config Directory (Extensions, Settings)
-```
-C:\Users\[USER]\.vscode-oss-dev\
-└── extensions\              ← Installed extensions only
-```
+### Platform examples (development)
 
-#### 2. App Data Directory (OUR DATABASES, Electron Data)
-```
-C:\Users\[USER]\AppData\Roaming\code-oss-dev\
-├── Cache\                   ← Electron cache
-├── Code Cache\              ← V8 compiled JS cache
-├── GPUCache\                ← GPU rendering cache
-├── logs\                    ← Application logs
-└── User\
-    ├── globalStorage\       ← VSCode's global storage (state.vscdb)
-    ├── workspaceStorage\    ← VSCode's per-workspace storage
-    └── .safe-appeals-navigator\    ← ⭐ OUR CUSTOM DATABASES
-        └── databases\
-            └── workspaces\
-                └── [workspaceHash]\
-                    ├── workspace.db    ← RAG document metadata
-                    ├── threads.db      ← Chat threads
-                    ├── emails.db       ← Email data
-                    └── chroma\
-                        └── embeddings.db   ← Vector embeddings
-```
+| Platform | User-data root |
+|----------|----------------|
+| Linux | `~/.config/safe-appeals-dev` |
+| Windows | `%APPDATA%\safe-appeals-dev` |
+| macOS | `~/Library/Application Support/safe-appeals-dev` |
 
-### 📍 Full Path Example (Dev)
+Inside that tree, VS Code / Electron layout is the usual `User/`,
+`User/globalStorage/`, `User/workspaceStorage/`, logs, caches, etc.
 
-For workspace `d:\Steve\Documents\HumanRights` (hash: `2fb73011`):
+### Platform examples (production)
 
-```
-C:\Users\Steve\AppData\Roaming\code-oss-dev\User\.safe-appeals-navigator\databases\workspaces\2fb73011\
-├── workspace.db     (RAG metadata)
-├── threads.db       (Chat threads)
-├── emails.db        (Email data)
-└── chroma\
-    └── embeddings.db (Vector embeddings)
-```
+| Platform | User-data root (from `product.nameShort`) |
+|----------|-------------------------------------------|
+| Linux | `~/.config/Safe Appeals` (or equivalent under `XDG_CONFIG_HOME`) |
+| Windows | `%APPDATA%\Safe Appeals` |
+| macOS | `~/Library/Application Support/Safe Appeals` |
+
+Product identity (`product.json`): `applicationName` =
+`safe-appeals-navigator`, `dataFolderName` = `.safe-appeals-navigator`.
 
 ---
 
-## Production Environment Paths (Installed App)
+## Private Search (current RAG)
 
-When running the installed SafeAppealsNavigator (or Void) application:
-
-```
-C:\Users\[USER]\AppData\Roaming\Void\
-├── Cache\                   ← Electron cache
-├── Code Cache\              ← V8 compiled JS cache
-├── logs\                    ← Application logs
-└── User\
-    ├── globalStorage\       ← VSCode's global storage
-    ├── workspaceStorage\    ← VSCode's per-workspace storage
-    └── .safe-appeals-navigator\    ← ⭐ OUR CUSTOM DATABASES
-        └── databases\
-            └── workspaces\
-                └── [workspaceHash]\
-                    ├── workspace.db
-                    ├── threads.db
-                    ├── emails.db
-                    └── chroma\
-                        └── embeddings.db
-```
-
-### 📍 Full Path Example (Production)
-
-For workspace `d:\Steve\Documents\HumanRights` (hash: `2fb73011`):
+Private Search (`extensions/safeappeals-rag`) stores indexes under the
+extension's `globalStorageUri`:
 
 ```
-C:\Users\Steve\AppData\Roaming\Void\User\.safe-appeals-navigator\databases\workspaces\2fb73011\
-├── workspace.db
-├── threads.db
-├── emails.db
-└── chroma\
-    └── embeddings.db
+<extension-globalStorage>/rag/<workspaceId>/
 ```
+
+(see `RagCoreHost.storageRoot` in `extensions/safeappeals-rag/src/ragCoreHost.ts`).
+Sealed markdown caches use `…/rag/<workspaceId>/sealed_md/`.
+
+Left status bar label: `$(search) Private Search`. Shared workspace folder for
+references: `core_references/`.
 
 ---
 
-## Quick Comparison Table
+## Case workspace paths (on disk in the matter folder)
 
-| What | Development Path | Production Path |
-|------|------------------|-----------------|
-| **Extensions** | `%USERPROFILE%\.vscode-oss-dev\extensions\` | (integrated in app) |
-| **App Data Root** | `%APPDATA%\code-oss-dev\` | `%APPDATA%\Void\` |
-| **VSCode Global Storage** | `%APPDATA%\code-oss-dev\User\globalStorage\` | `%APPDATA%\Void\User\globalStorage\` |
-| **Our Base Dir** | `%APPDATA%\code-oss-dev\User\.safe-appeals-navigator\` | `%APPDATA%\Void\User\.safe-appeals-navigator\` |
-| **Workspace DBs** | `...\databases\workspaces\[hash]\` | `...\databases\workspaces\[hash]\` |
-
----
-
-## Database Files Explained
-
-Each workspace has these SQLite database files:
-
-| File | Purpose | Service |
-|------|---------|---------|
-| `workspace.db` | RAG document metadata, chunks, document registry | `RAGService` |
-| `threads.db` | Chat conversation threads, messages, history | `ChatThreadStorageService` |
-| `emails.db` | Email data, attachments, metadata | `EmailService` |
-| `chroma/embeddings.db` | Vector embeddings for semantic search | `ChromaDB` (via RAG) |
+| Path | Purpose |
+|------|---------|
+| `.safeAppeals/settings.json` | Case / folder Chat settings (not `.vscode/` for new SafeAppeals case config) |
+| `.safeAppeals/skills/` | Case-local agent skills |
+| `.safeAppeals/agents/` | Case-local custom agents |
+| `.safeAppeals/plans/` | Product CreatePlan files |
+| `.safeAppeals/timeline.json` | Case timeline store |
+| `core_references/` | Shared statutes / policy excerpts for Private Search |
+| `medical_reports/`, `correspondence/`, `decisions_and_orders/`, `evidence/`, `personal_notes/`, `to_sort/` | Standard case folders (snake_case) |
 
 ---
 
-## Workspace Hash Computation
+## Historical Void-era layout (do not treat as current)
 
-The `[workspaceHash]` is a stable identifier computed from the workspace folder path:
-
-```typescript
-// Algorithm (same in RAGService and ChatThreadService)
-function computeWorkspaceId(folderPath: string): string {
-    let hash = 0
-    for (let i = 0; i < folderPath.length; i++) {
-        hash = ((hash << 5) - hash) + folderPath.charCodeAt(i)
-        hash = hash & hash // Convert to 32-bit integer
-    }
-    return Math.abs(hash).toString(16).padStart(8, '0').substring(0, 16)
-}
-```
-
-### Example Workspace Hashes
-
-| Workspace Folder | Hash |
-|------------------|------|
-| `d:\Steve\Documents\HumanRights` | `2fb73011` |
-| `D:\Coding\SafeAppeals2.0` | (different hash) |
-
----
-
-## PowerShell Debug Commands
-
-### Check Development Databases
-
-```powershell
-# List all workspace databases (Dev)
-dir "$env:APPDATA\code-oss-dev\User\.safe-appeals-navigator\databases\workspaces\"
-
-# List all .db files (Dev)
-Get-ChildItem "$env:APPDATA\code-oss-dev\User\.safe-appeals-navigator" -Recurse -Filter "*.db"
-
-# Check specific workspace (Dev) - replace hash with your workspace hash
-dir "$env:APPDATA\code-oss-dev\User\.safe-appeals-navigator\databases\workspaces\2fb73011\"
-
-# Query threads.db (Dev)
-cd D:\Coding\SafeAppeals2.0
-node -e "const Database = require('@vscode/sqlite3').Database; const db = new Database('C:/Users/Steve/AppData/Roaming/code-oss-dev/User/.safe-appeals-navigator/databases/workspaces/2fb73011/threads.db', (err) => { if(err) console.log('Error:', err); else { db.all('SELECT id, last_modified FROM threads', (err, rows) => { console.log('Threads:', rows); db.close(); }); } });"
-```
-
-### Check Production Databases
-
-```powershell
-# List all workspace databases (Production)
-dir "$env:APPDATA\Void\User\.safe-appeals-navigator\databases\workspaces\"
-
-# List all .db files (Production)
-Get-ChildItem "$env:APPDATA\Void\User\.safe-appeals-navigator" -Recurse -Filter "*.db"
-```
-
-### Clean Development Databases (Fresh Start)
-
-```powershell
-# ⚠️ DANGER: Deletes ALL development databases!
-Remove-Item "$env:APPDATA\code-oss-dev\User\.safe-appeals-navigator" -Recurse -Force
-```
-
----
-
-## How Paths Are Determined (Code)
-
-The base path comes from `IEnvironmentService.userRoamingDataHome`:
-
-```typescript
-// In RAGPathService (src/vs/workbench/contrib/void/common/rag/ragPathService.ts)
-export class RAGPathService implements IRAGPathService {
-    private getBaseDir(): string {
-        // userRoamingDataHome resolves to:
-        // - Dev:  C:\Users\[USER]\AppData\Roaming\code-oss-dev\User
-        // - Prod: C:\Users\[USER]\AppData\Roaming\Void\User
-        const baseDir = join(this.environmentService.userRoamingDataHome.fsPath, '.safe-appeals-navigator')
-        return baseDir
-    }
-
-    getChatThreadsSqlitePath(workspaceId: string): string {
-        return join(this.getBaseDir(), 'databases', 'workspaces', workspaceId, 'threads.db')
-    }
-
-    getWorkspaceSqlitePath(workspaceId: string): string {
-        return join(this.getBaseDir(), 'databases', 'workspaces', workspaceId, 'workspace.db')
-    }
-
-    getChromaPath(workspaceId: string): string {
-        return join(this.getBaseDir(), 'databases', 'workspaces', workspaceId, 'chroma')
-    }
-}
-```
+Older Void contrib docs described per-workspace SQLite trees such as
+`User/.safe-appeals-navigator/databases/workspaces/[hash]/{workspace,threads,emails}.db`
+and `chroma/embeddings.db` under **`code-oss-dev`** / **`Void`**. That stack is
+retired for Private Search. Chat / email extensions may still use their own
+encrypted or SQLite stores under extension global/workspace storage — inspect the
+owning extension rather than assuming the Void `RAGPathService` paths.
 
 ---
 
 ## Related Documentation
 
-- [Chat Thread Storage](../chat/per-workspace-storage.md) - Chat-specific storage details
-- [RAG System](../ragSystem/README.md) - RAG database details
-- [Email Dashboard](../email-dashboard/README.md) - Email database details
+- [Private Search tool contracts](../rag/tool-contracts.md)
+- [Timeline configuration](../features/timeline/configuration-guide.md)
+- [Chat per-workspace storage notes](../features/chat/per-workspace-storage.md) (may still mention legacy path names)
 
 ## Related Code Files
 
 | File | Purpose |
 |------|---------|
-| `src/vs/workbench/contrib/void/common/rag/ragPathService.ts` | Path computation for all databases |
-| `src/vs/workbench/contrib/void/electron-main/chat/chatThreadStorageService.ts` | Thread SQLite operations |
-| `src/vs/workbench/contrib/void/browser/chat/chatThreadStorageService.ts` | Browser-side IPC proxy |
-| `src/vs/workbench/contrib/void/electron-main/chat/chatThreadStorageChannel.ts` | IPC channel handler |
+| `src/vs/platform/environment/node/userDataPath.ts` | `VSCODE_DEV` → `safe-appeals-dev` |
+| `src/main.ts` | Passes `product.nameShort` into `getUserDataPath` |
+| `product.json` | `applicationName`, `dataFolderName`, `nameShort` |
+| `extensions/safeappeals-rag/src/ragCoreHost.ts` | Private Search storage root |
+| `extensions/safeappeals-timeline/src/timelineStore.ts` | `.safeAppeals/timeline.json` |
+| `extensions/safeappeals-authentication/src/chat/planPaths.ts` | `.safeAppeals/plans/` |
 
 ---
 
 ## Important Notes
 
-1. **Development uses TWO directories** - Don't confuse `.vscode-oss-dev` (extensions) with `AppData\code-oss-dev` (databases)
-2. **No global storage** - All data is per-workspace only
-3. **Workspace hash is stable** - Same folder always produces same hash
-4. **URI revival required** - Thread data contains URI objects that need special JSON parsing
-5. **IPC required** - Browser process communicates with main process for SQLite access
+1. **Dev product folder is `safe-appeals-dev`** — not `code-oss-dev` / `.vscode-oss-dev`
+2. **Production is Safe Appeals / `safe-appeals-navigator`** — not Void
+3. **Case config brand path is `.safeAppeals/`** in the workspace
+4. Prefer managed extension storage URIs for new encrypted stores

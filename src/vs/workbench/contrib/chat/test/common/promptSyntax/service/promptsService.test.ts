@@ -1732,6 +1732,239 @@ suite('PromptsService', () => {
 			assert.ok(disabledFile.agent, 'Disabled agent file should still carry resolved agent');
 			assert.strictEqual(disabledFile.agent.enabled, false);
 		});
+
+		test('SafeAppeals workspace agent wins over .github agent with same name', async () => {
+			const rootFolderName = 'agent-precedence-safeappeals-vs-github';
+			const rootFolder = `/${rootFolderName}`;
+			const rootFolderUri = URI.file(rootFolder);
+
+			workspaceContextService.setWorkspace(testWorkspace(rootFolderUri));
+
+			await mockFiles(fileService, [
+				{
+					path: `${rootFolder}/.github/agents/research.agent.md`,
+					contents: [
+						'---',
+						'description: \'GitHub compat version\'',
+						'---',
+						'GitHub agent body',
+					]
+				},
+				{
+					path: `${rootFolder}/.safeAppeals/agents/research.agent.md`,
+					contents: [
+						'---',
+						'description: \'SafeAppeals workspace version\'',
+						'---',
+						'SafeAppeals agent body',
+					]
+				},
+			]);
+
+			const agents = await service.getCustomAgents(CancellationToken.None);
+			const researchAgents = agents.filter(a => a.name === 'research');
+			assert.strictEqual(researchAgents.length, 1, 'Duplicate name should resolve to a single invocable agent');
+			assert.strictEqual(researchAgents[0].description, 'SafeAppeals workspace version');
+			assert.ok(researchAgents[0].uri.path.includes('/.safeAppeals/agents/'), 'Winner should be from .safeAppeals/agents');
+
+			const discoveryInfo = await service.getDiscoveryInfo(PromptsType.agent, CancellationToken.None);
+			const duplicate = discoveryInfo.files.find(f => f.skipReason === 'duplicate-name');
+			assert.ok(duplicate, 'Discovery should surface the losing duplicate');
+			assert.ok(duplicate.promptPath.uri.path.includes('/.github/agents/'), 'Loser should be the .github agent');
+		});
+
+		test('workspace SafeAppeals agent wins over ~/.safeAppeals/agents with same name', async () => {
+			const rootFolderName = 'agent-precedence-workspace-vs-personal';
+			const rootFolder = `/${rootFolderName}`;
+			const rootFolderUri = URI.file(rootFolder);
+
+			workspaceContextService.setWorkspace(testWorkspace(rootFolderUri));
+
+			await mockFiles(fileService, [
+				{
+					path: '/home/user/.safeAppeals/agents/research.agent.md',
+					contents: [
+						'---',
+						'description: \'Personal SafeAppeals version\'',
+						'---',
+						'Personal agent body',
+					]
+				},
+				{
+					path: `${rootFolder}/.safeAppeals/agents/research.agent.md`,
+					contents: [
+						'---',
+						'description: \'Workspace SafeAppeals version\'',
+						'---',
+						'Workspace agent body',
+					]
+				},
+			]);
+
+			const agents = await service.getCustomAgents(CancellationToken.None);
+			const researchAgents = agents.filter(a => a.name === 'research');
+			assert.strictEqual(researchAgents.length, 1, 'Duplicate name should resolve to a single invocable agent');
+			assert.strictEqual(researchAgents[0].description, 'Workspace SafeAppeals version');
+			assert.ok(researchAgents[0].uri.path.includes(`${rootFolder}/.safeAppeals/agents/`), 'Winner should be workspace .safeAppeals/agents');
+			assert.strictEqual(researchAgents[0].source.storage, PromptsStorage.local);
+
+			const discoveryInfo = await service.getDiscoveryInfo(PromptsType.agent, CancellationToken.None);
+			const duplicate = discoveryInfo.files.find(f => f.skipReason === 'duplicate-name');
+			assert.ok(duplicate, 'Discovery should surface the losing duplicate');
+			assert.ok(duplicate.promptPath.uri.path.includes('/home/user/.safeAppeals/agents/'), 'Loser should be the personal SafeAppeals agent');
+		});
+
+		test('~/.safeAppeals/agents wins over ~/.copilot/agents with same name', async () => {
+			const rootFolderName = 'agent-precedence-personal-vs-copilot';
+			const rootFolder = `/${rootFolderName}`;
+			const rootFolderUri = URI.file(rootFolder);
+
+			workspaceContextService.setWorkspace(testWorkspace(rootFolderUri));
+
+			await mockFiles(fileService, [
+				{
+					path: '/home/user/.copilot/agents/research.agent.md',
+					contents: [
+						'---',
+						'description: \'Copilot personal version\'',
+						'---',
+						'Copilot agent body',
+					]
+				},
+				{
+					path: '/home/user/.safeAppeals/agents/research.agent.md',
+					contents: [
+						'---',
+						'description: \'SafeAppeals personal version\'',
+						'---',
+						'SafeAppeals personal agent body',
+					]
+				},
+			]);
+
+			const agents = await service.getCustomAgents(CancellationToken.None);
+			const researchAgents = agents.filter(a => a.name === 'research');
+			assert.strictEqual(researchAgents.length, 1, 'Duplicate name should resolve to a single invocable agent');
+			assert.strictEqual(researchAgents[0].description, 'SafeAppeals personal version');
+			assert.ok(researchAgents[0].uri.path.includes('/home/user/.safeAppeals/agents/'), 'Winner should be from ~/.safeAppeals/agents');
+			assert.strictEqual(researchAgents[0].source.storage, PromptsStorage.user);
+
+			const discoveryInfo = await service.getDiscoveryInfo(PromptsType.agent, CancellationToken.None);
+			const duplicate = discoveryInfo.files.find(f => f.skipReason === 'duplicate-name');
+			assert.ok(duplicate, 'Discovery should surface the losing duplicate');
+			assert.ok(duplicate.promptPath.uri.path.includes('/home/user/.copilot/agents/'), 'Loser should be the ~/.copilot agent');
+		});
+
+		test('SafeAppeals workspace path beats settings-contributed ConfigWorkspace path with same name', async () => {
+			const rootFolderName = 'agent-precedence-safeappeals-vs-custom-config';
+			const rootFolder = `/${rootFolderName}`;
+			const rootFolderUri = URI.file(rootFolder);
+
+			workspaceContextService.setWorkspace(testWorkspace(rootFolderUri));
+
+			// Settings-contributed workspace path gets ConfigWorkspace source but must not
+			// share tier 0 with the product `.safeAppeals/agents` folder.
+			testConfigService.setUserConfiguration(PromptsConfig.AGENTS_LOCATION_KEY, {
+				[AGENTS_SOURCE_FOLDER]: true,
+				'.custom-agents': true,
+			});
+			service.dispose();
+			service = disposables.add(instaService.createInstance(PromptsService));
+
+			await mockFiles(fileService, [
+				{
+					path: `${rootFolder}/.custom-agents/research.agent.md`,
+					contents: [
+						'---',
+						'description: \'Settings-contributed ConfigWorkspace version\'',
+						'---',
+						'Custom config agent body',
+					]
+				},
+				{
+					path: `${rootFolder}/.safeAppeals/agents/research.agent.md`,
+					contents: [
+						'---',
+						'description: \'SafeAppeals product workspace version\'',
+						'---',
+						'SafeAppeals agent body',
+					]
+				},
+			]);
+
+			const agents = await service.getCustomAgents(CancellationToken.None);
+			const researchAgents = agents.filter(a => a.name === 'research');
+			assert.strictEqual(researchAgents.length, 1, 'Duplicate name should resolve to a single invocable agent');
+			assert.strictEqual(researchAgents[0].description, 'SafeAppeals product workspace version');
+			assert.ok(researchAgents[0].uri.path.includes('/.safeAppeals/agents/'), 'Winner must be product .safeAppeals/agents, not settings ConfigWorkspace path');
+
+			const discoveryInfo = await service.getDiscoveryInfo(PromptsType.agent, CancellationToken.None);
+			const duplicate = discoveryInfo.files.find(f => f.skipReason === 'duplicate-name');
+			assert.ok(duplicate, 'Discovery should surface the losing duplicate');
+			assert.ok(duplicate.promptPath.uri.path.includes('/.custom-agents/'), 'Loser should be the settings-contributed path');
+			assert.strictEqual(duplicate.promptPath.source, PromptFileSource.ConfigWorkspace);
+
+			// Restore suite default agent locations for subsequent tests.
+			testConfigService.setUserConfiguration(PromptsConfig.AGENTS_LOCATION_KEY, { [AGENTS_SOURCE_FOLDER]: true });
+		});
+
+		test('disabled higher-priority agent does not shadow enabled lower-priority twin', async () => {
+			const rootFolderName = 'agent-precedence-disabled-shadow';
+			const rootFolder = `/${rootFolderName}`;
+			const rootFolderUri = URI.file(rootFolder);
+
+			workspaceContextService.setWorkspace(testWorkspace(rootFolderUri));
+
+			// Use a real InMemoryStorageService so disabled state persists across rediscovery
+			instaService.stub(IStorageService, disposables.add(new InMemoryStorageService()));
+			service.dispose();
+			const testService = disposables.add(instaService.createInstance(PromptsService));
+
+			await mockFiles(fileService, [
+				{
+					path: `${rootFolder}/.safeAppeals/agents/research.agent.md`,
+					contents: [
+						'---',
+						'description: \'SafeAppeals workspace version (disabled)\'',
+						'---',
+						'SafeAppeals agent body',
+					]
+				},
+				{
+					path: `${rootFolder}/.github/agents/research.agent.md`,
+					contents: [
+						'---',
+						'description: \'GitHub compat version (enabled)\'',
+						'---',
+						'GitHub agent body',
+					]
+				},
+			]);
+
+			const initial = await testService.getCustomAgents(CancellationToken.None);
+			const safeAppealsAgent = initial.find(a => a.uri.path.includes('/.safeAppeals/agents/'));
+			assert.ok(safeAppealsAgent, 'Should discover the SafeAppeals agent before disabling');
+
+			const disabledUris = new ResourceSet();
+			disabledUris.add(URI.from(safeAppealsAgent.uri));
+			testService.setDisabledPromptFiles(PromptsType.agent, disabledUris);
+
+			const agents = await testService.getCustomAgents(CancellationToken.None);
+			const researchAgents = agents.filter(a => a.name === 'research');
+			assert.strictEqual(researchAgents.length, 2, 'Disabled winner and enabled twin should both remain listed');
+
+			const disabledWinner = researchAgents.find(a => a.uri.path.includes('/.safeAppeals/agents/'));
+			assert.ok(disabledWinner, 'Disabled SafeAppeals agent should still be listed');
+			assert.strictEqual(disabledWinner.enabled, false);
+
+			const enabledTwin = researchAgents.find(a => a.uri.path.includes('/.github/agents/'));
+			assert.ok(enabledTwin, 'Enabled .github twin must remain invocable');
+			assert.strictEqual(enabledTwin.enabled, true);
+			assert.strictEqual(enabledTwin.description, 'GitHub compat version (enabled)');
+
+			const discoveryInfo = await testService.getDiscoveryInfo(PromptsType.agent, CancellationToken.None);
+			assert.ok(!discoveryInfo.files.some(f => f.skipReason === 'duplicate-name'), 'Enabled twin must not be marked duplicate-name when higher-priority is disabled');
+		});
 	});
 
 	suite('listPromptFiles - prompts', () => {

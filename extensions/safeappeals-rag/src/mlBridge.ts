@@ -20,6 +20,23 @@ import type {
 	ModelEvaluateResult,
 } from './types';
 
+import { UNLIMITED_OCR_MODEL_ID } from './types';
+
+export interface ConsentInstallProgress {
+	readonly completedFiles: number;
+	readonly totalFiles: number;
+	readonly relativePath: string;
+	readonly fileIndex?: number;
+	readonly bytesReceived?: number;
+	readonly bytesTotal?: number;
+	readonly packBytesReceived?: number;
+	readonly packBytesTotal?: number;
+}
+
+export interface ConsentInstallOptions {
+	readonly onProgress?: (progress: ConsentInstallProgress) => void;
+}
+
 const ML_EXTENSION_ID = 'safeappeals.safeappeals-ml';
 
 /**
@@ -40,7 +57,11 @@ export interface SafeAppealsMlApi {
 	 * Consent-gated install. Pass `userConsented: true` only after an explicit UI confirm.
 	 * Never downloads without consent; fails closed when downloadUrl/sha256 are unset.
 	 */
-	consentInstall(modelId: string, userConsented: boolean): Promise<ConsentInstallOutcome>;
+	consentInstall(
+		modelId: string,
+		userConsented: boolean,
+		options?: ConsentInstallOptions,
+	): Promise<ConsentInstallOutcome>;
 	withLease?<T>(
 		kind: ResourceKind,
 		options: AcquireOptions,
@@ -48,6 +69,8 @@ export interface SafeAppealsMlApi {
 	): Promise<T>;
 	reportCrash?(kind: ResourceKind, message?: string): void;
 	registerAdapter?(adapter: ResourceAdapter): void;
+	/** Start managed DocParse sidecar when artifacts + binary are ready; smoke `/health`. */
+	ensureDocParseReady?(): Promise<{ readonly ready: boolean; readonly detail?: string }>;
 }
 
 export interface MlBridge {
@@ -55,7 +78,11 @@ export interface MlBridge {
 	readonly probe: IHwProbe;
 	readonly artifacts: IArtifactReadiness;
 	readonly engine: IMlResourceEngine | undefined;
-	consentInstall(modelId: string, userConsented: boolean): Promise<ConsentInstallOutcome>;
+	consentInstall(
+		modelId: string,
+		userConsented: boolean,
+		options?: ConsentInstallOptions,
+	): Promise<ConsentInstallOutcome>;
 	/** Absolute artifact directory when ready; undefined otherwise. */
 	artifactDir(modelId: string): Promise<string | undefined>;
 	withLease<T>(
@@ -65,6 +92,7 @@ export interface MlBridge {
 	): Promise<T>;
 	reportCrash(kind: ResourceKind, message?: string): void;
 	registerAdapter(adapter: ResourceAdapter): void;
+	ensureDocParseReady(): Promise<{ readonly ready: boolean; readonly detail?: string }>;
 }
 
 function resolveArtifactDir(
@@ -107,17 +135,21 @@ export async function resolveMlBridge(log?: (message: string) => void): Promise<
 		log?.('safeappeals-ml activate() did not export catalog/probe');
 		return undefined;
 	}
-	const consentInstall =
+	const consentInstall = (
+		modelId: string,
+		userConsented: boolean,
+		options?: ConsentInstallOptions,
+	): Promise<ConsentInstallOutcome> =>
 		typeof api.consentInstall === 'function'
-			? api.consentInstall.bind(api)
-			: async (modelId: string, _userConsented: boolean): Promise<ConsentInstallOutcome> => {
+			? api.consentInstall(modelId, userConsented, options)
+			: (async (): Promise<ConsentInstallOutcome> => {
 				log?.('safeappeals-ml activate() did not export consentInstall');
 				return {
 					kind: 'error',
 					modelId,
 					message: 'Private Search install is unavailable (safeappeals-ml consentInstall missing).',
 				};
-			};
+			})();
 
 	const artifactDir = (modelId: string) => resolveArtifactDir(api, modelId);
 	const engine = api.engine;
@@ -159,6 +191,16 @@ export async function resolveMlBridge(log?: (message: string) => void): Promise<
 		log?.('safeappeals-ml activate() did not export engine (M7 expected)');
 	}
 
+	const ensureDocParseReady = async (): Promise<{ readonly ready: boolean; readonly detail?: string }> => {
+		if (typeof api.ensureDocParseReady === 'function') {
+			return api.ensureDocParseReady();
+		}
+		return {
+			ready: false,
+			detail: 'DocParse sidecar ensure is unavailable (safeappeals-ml ensureDocParseReady missing).',
+		};
+	};
+
 	return {
 		catalog: api.catalog,
 		probe: api.probe,
@@ -172,18 +214,40 @@ export async function resolveMlBridge(log?: (message: string) => void): Promise<
 		withLease,
 		reportCrash,
 		registerAdapter,
+		ensureDocParseReady,
 	};
 }
+
+/** Minimal pinned Unlimited-OCR spec for ingest ladder unit tests. */
+export const PINNED_OCR_SPEC_LITE: IModelSpecLite = {
+	id: UNLIMITED_OCR_MODEL_ID,
+	diskMb: 7000,
+	version: '1.0.0-test',
+	sha256: 'deadbeef',
+	files: [
+		{
+			relativePath: 'model.bin',
+			downloadUrl: 'https://example.test/unlimited-ocr/model.bin',
+			sha256: 'deadbeef',
+		},
+	],
+};
 
 /** Test helper: fixed evaluate + readiness + optional consentInstall / artifact dirs / engine. */
 export function fakeMlBridge(options: {
 	readonly evaluate?: ModelEvaluateResult;
 	readonly artifactReady?: boolean;
 	readonly snapshot?: HwSnapshot;
-	readonly consentInstall?: (modelId: string, userConsented: boolean) => Promise<ConsentInstallOutcome>;
+	readonly consentInstall?: (
+		modelId: string,
+		userConsented: boolean,
+		options?: ConsentInstallOptions,
+	) => Promise<ConsentInstallOutcome>;
 	readonly catalogGet?: IModelCatalog['get'];
 	readonly artifactDirs?: Readonly<Record<string, string>>;
 	readonly engine?: IMlResourceEngine;
+	readonly ocrPinConfigured?: boolean;
+	readonly ensureDocParseReady?: () => Promise<{ readonly ready: boolean; readonly detail?: string }>;
 }): MlBridge {
 	const snapshot: HwSnapshot = options.snapshot ?? {
 		platform: 'linux',
@@ -199,6 +263,10 @@ export function fakeMlBridge(options: {
 		probedAt: 1,
 	};
 	const evaluate = options.evaluate ?? { eligible: true, reasons: [] };
+	const defaultCatalogGet: IModelCatalog['get'] = modelId =>
+		modelId === UNLIMITED_OCR_MODEL_ID && options.ocrPinConfigured !== false
+			? PINNED_OCR_SPEC_LITE
+			: undefined;
 	const artifactDir = async (modelId: string): Promise<string | undefined> => {
 		if (options.artifactReady !== true && !options.artifactDirs?.[modelId]) {
 			return undefined;
@@ -225,7 +293,7 @@ export function fakeMlBridge(options: {
 	return {
 		catalog: {
 			evaluate: () => evaluate,
-			get: options.catalogGet,
+			get: options.catalogGet ?? defaultCatalogGet,
 		},
 		probe: {
 			snapshot: async () => snapshot,
@@ -236,7 +304,7 @@ export function fakeMlBridge(options: {
 			artifactDir,
 		},
 		engine,
-		consentInstall: options.consentInstall ?? (async (modelId, userConsented) => {
+		consentInstall: options.consentInstall ?? (async (modelId, userConsented, _installOptions) => {
 			if (userConsented !== true) {
 				return { kind: 'consent-required', modelId };
 			}
@@ -251,5 +319,9 @@ export function fakeMlBridge(options: {
 			}
 			engine.registerAdapter(adapter);
 		},
+		ensureDocParseReady: options.ensureDocParseReady ?? (async () => ({
+			ready: options.artifactReady === true,
+			detail: options.artifactReady === true ? undefined : 'Unlimited-OCR artifacts are not ready.',
+		})),
 	};
 }

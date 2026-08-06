@@ -26,14 +26,13 @@ import { ILabelService } from '../../../../../../platform/label/common/label.js'
 import { ILogService } from '../../../../../../platform/log/common/log.js';
 import { IStorageService, StorageScope, StorageTarget } from '../../../../../../platform/storage/common/storage.js';
 import { ITelemetryService } from '../../../../../../platform/telemetry/common/telemetry.js';
-import { IUserDataProfileService } from '../../../../../services/userDataProfile/common/userDataProfile.js';
 import { IVariableReference } from '../../chatModes.js';
 import { PromptsConfig } from '../config/config.js';
-import { AGENT_MD_FILENAME, CLAUDE_CONFIG_FOLDER, CLAUDE_LOCAL_MD_FILENAME, CLAUDE_MD_FILENAME, COPILOT_CONFIG_FOLDER, COPILOT_CUSTOM_INSTRUCTIONS_FILENAME, getCleanPromptName, getSkillFolderName, GITHUB_CONFIG_FOLDER, IResolvedPromptSourceFolder, isInClaudeRulesFolder } from '../config/promptFileLocations.js';
+import { AGENT_MD_FILENAME, CLAUDE_CONFIG_FOLDER, CLAUDE_LOCAL_MD_FILENAME, CLAUDE_MD_FILENAME, COPILOT_CONFIG_FOLDER, COPILOT_CUSTOM_INSTRUCTIONS_FILENAME, getCleanPromptName, getSkillFolderName, GITHUB_CONFIG_FOLDER, IResolvedPromptSourceFolder, isInClaudeRulesFolder, isInSafeAppealsAgentsFolder } from '../config/promptFileLocations.js';
 import { PROMPT_LANGUAGE_ID, PromptFileSource, PromptsType, Target, getPromptsTypeForLanguageId } from '../promptTypes.js';
 import { IWorkspaceInstructionFile, PromptFilesLocator } from '../utils/promptFilesLocator.js';
 import { evaluateApplyToPattern, PromptFileParser, ParsedPromptFile, PromptHeaderAttributes } from '../promptFileParser.js';
-import { IAgentInstructions, IAgentSource, IChatPromptSlashCommand, IConfiguredHooksInfo, ICustomAgent, IExtensionPromptPath, ILocalPromptPath, IPluginPromptPath, IBuiltinPromptPath, IPromptPath, IPromptsService, IAgentSkill, IInstructionDiscoveryInfo, IInstructionDiscoveryResult, IInstructionFile, IUserPromptPath, PromptsStorage, IPromptFileContext, IPromptFileResource, IPromptDiscoveryInfo, IPromptFileDiscoveryResult, IPromptSourceFolderResult, ICustomAgentVisibility, IAgentInstructionFile, AgentInstructionFileType, Logger, ISlashCommandDiscoveryInfo, ISlashCommandDiscoveryResult, IAgentDiscoveryInfo, IAgentDiscoveryResult, IHookDiscoveryInfo, IResolvedChatPromptSlashCommand, matchesSessionType } from './promptsService.js';
+import { IAgentInstructions, IAgentSource, IChatPromptSlashCommand, IConfiguredHooksInfo, ICustomAgent, IExtensionPromptPath, IPluginPromptPath, IBuiltinPromptPath, IPromptPath, IPromptsService, IAgentSkill, IInstructionDiscoveryInfo, IInstructionDiscoveryResult, IInstructionFile, PromptsStorage, IPromptFileContext, IPromptFileResource, IPromptDiscoveryInfo, IPromptFileDiscoveryResult, IPromptSourceFolderResult, ICustomAgentVisibility, IAgentInstructionFile, AgentInstructionFileType, Logger, ISlashCommandDiscoveryInfo, ISlashCommandDiscoveryResult, IAgentDiscoveryInfo, IAgentDiscoveryResult, IHookDiscoveryInfo, IResolvedChatPromptSlashCommand, matchesSessionType } from './promptsService.js';
 import { Delayer, raceCancellationError } from '../../../../../../base/common/async.js';
 import { Schemas } from '../../../../../../base/common/network.js';
 import { ChatRequestHooks, parseSubagentHooksFromYaml } from '../hookSchema.js';
@@ -139,7 +138,6 @@ export class PromptsService extends Disposable implements IPromptsService {
 		@ILabelService private readonly labelService: ILabelService,
 		@IModelService private readonly modelService: IModelService,
 		@IInstantiationService protected readonly instantiationService: IInstantiationService,
-		@IUserDataProfileService private readonly userDataService: IUserDataProfileService,
 		@IConfigurationService private readonly configurationService: IConfigurationService,
 		@IFileService protected readonly fileService: IFileService,
 		@IStorageService private readonly storageService: IStorageService,
@@ -333,8 +331,8 @@ export class PromptsService extends Disposable implements IPromptsService {
 
 	private async computeListPromptFiles(type: PromptsType, token: CancellationToken): Promise<readonly IPromptPath[]> {
 		const prompts = await Promise.all([
-			this.fileLocator.listFiles(type, PromptsStorage.user, token).then(uris => uris.map(uri => ({ uri, storage: PromptsStorage.user, type } satisfies IUserPromptPath))),
-			this.fileLocator.listFiles(type, PromptsStorage.local, token).then(uris => uris.map(uri => ({ uri, storage: PromptsStorage.local, type } satisfies ILocalPromptPath))),
+			this.fileLocator.listFiles(type, PromptsStorage.user, token),
+			this.fileLocator.listFiles(type, PromptsStorage.local, token),
 			this.getExtensionPromptFiles(type, token),
 			this._pluginPromptFilesByType.get(type) ?? [],
 			this.getBuiltinPromptFiles(type, token),
@@ -375,10 +373,10 @@ export class PromptsService extends Disposable implements IPromptsService {
 				promptPaths = await this.getExtensionPromptFiles(type, token);
 				break;
 			case PromptsStorage.local:
-				promptPaths = await this.fileLocator.listFiles(type, PromptsStorage.local, token).then(uris => uris.map(uri => ({ uri, storage: PromptsStorage.local, type } satisfies ILocalPromptPath)));
+				promptPaths = await this.fileLocator.listFiles(type, PromptsStorage.local, token);
 				break;
 			case PromptsStorage.user:
-				promptPaths = await this.fileLocator.listFiles(type, PromptsStorage.user, token).then(uris => uris.map(uri => ({ uri, storage: PromptsStorage.user, type } satisfies IUserPromptPath)));
+				promptPaths = await this.fileLocator.listFiles(type, PromptsStorage.user, token);
 				break;
 			case PromptsStorage.plugin:
 				promptPaths = this._pluginPromptFilesByType.get(type) ?? [];
@@ -416,16 +414,23 @@ export class PromptsService extends Disposable implements IPromptsService {
 			for (const folder of hooksFolders) {
 				result.push({ uri: folder.uri, storage: folder.storage, type, source: folder.source });
 			}
-		} else {
-			for (const uri of await this.fileLocator.getConfigBasedSourceFolders(type)) {
-				result.push({ uri, storage: PromptsStorage.local, type });
-			}
+			return result;
 		}
 
-		if (type !== PromptsType.skill && type !== PromptsType.hook) {
-			// no user source folders for skills and hooks
-			const userHome = this.userDataService.currentProfile.promptsHome;
-			result.push({ uri: userHome, storage: PromptsStorage.user, type });
+		// Use resolved folders so create targets keep correct local/user storage
+		// and product defaults (SafeAppeals agent roots) stay first.
+		const resolvedFolders = await this.fileLocator.getResolvedSourceFolders(type);
+		for (const folder of resolvedFolders) {
+			if (type === PromptsType.skill && folder.storage === PromptsStorage.user) {
+				// Skills historically had no user create target via this API.
+				continue;
+			}
+			result.push({
+				uri: folder.uri,
+				storage: folder.storage,
+				type,
+				source: folder.source,
+			});
 		}
 
 		return result;
@@ -657,6 +662,10 @@ export class PromptsService extends Disposable implements IPromptsService {
 	private async computeAgentDiscoveryInfo(token: CancellationToken): Promise<IAgentDiscoveryInfo> {
 		const stopWatch = StopWatch.create(true);
 		const allAgentFiles = await this.listPromptFiles(PromptsType.agent, token);
+		// Order by precedence before parsing so duplicate-name dedup keeps a
+		// deterministic winner (SafeAppeals workspace > other workspace >
+		// SafeAppeals personal > other personal > extension/plugin/builtin).
+		const orderedAgentFiles = [...allAgentFiles].sort((a, b) => this.getAgentPriority(a) - this.getAgentPriority(b));
 		const disabledAgents = this.getDisabledPromptFiles(PromptsType.agent);
 		const useChatHooks = this.configurationService.getValue(PromptsConfig.USE_CHAT_HOOKS);
 		const isWorkspaceTrusted = this.workspaceTrustService.isWorkspaceTrusted();
@@ -666,7 +675,7 @@ export class PromptsService extends Disposable implements IPromptsService {
 		const userHome = userHomeUri.scheme === Schemas.file ? userHomeUri.fsPath : userHomeUri.path;
 		const defaultFolder = this.workspaceService.getWorkspace().folders[0];
 
-		const files = await Promise.all(allAgentFiles.map(async (promptPath): Promise<IAgentDiscoveryResult> => {
+		const parseResults = await Promise.all(orderedAgentFiles.map(async (promptPath): Promise<IAgentDiscoveryResult> => {
 			const uri = promptPath.uri;
 			const isEnabled = !disabledAgents.has(uri);
 
@@ -709,6 +718,34 @@ export class PromptsService extends Disposable implements IPromptsService {
 				};
 			}
 		}));
+
+		// Deduplicate agents that resolve to the same canonical name. parseResults
+		// preserves input order, so agents are already sorted by precedence; the
+		// first *loaded* (enabled) occurrence of a name wins. Disabled higher-
+		// priority agents do not claim the name, so an enabled lower-priority
+		// twin remains invocable. Losers stay in discovery diagnostics as
+		// duplicate-name skips but are omitted from getCustomAgents.
+		const seenAgentNames = new Set<string>();
+		const nameToUri = new Map<string, URI>();
+		const files: IAgentDiscoveryResult[] = [];
+		for (const result of parseResults) {
+			const agentName = result.agent?.name ?? result.promptPath.name;
+			if (agentName !== undefined && result.agent && result.status === 'loaded') {
+				if (seenAgentNames.has(agentName)) {
+					this.logger.debug(`[computeAgentDiscoveryInfo] Skipping duplicate agent name: ${agentName} at ${result.promptPath.uri}`);
+					files.push({
+						status: 'skipped',
+						skipReason: 'duplicate-name',
+						duplicateOf: nameToUri.get(agentName),
+						promptPath: this.withPromptPathMetadata(result.promptPath, agentName, result.agent.description ?? result.promptPath.description),
+					});
+					continue;
+				}
+				seenAgentNames.add(agentName);
+				nameToUri.set(agentName, result.promptPath.uri);
+			}
+			files.push(result);
+		}
 
 		const sourceFolders = await this._collectSourceFolderDiagnostics(PromptsType.agent);
 		return { type: PromptsType.agent, files, sourceFolders, durationInMillis: stopWatch.elapsed() };
@@ -989,6 +1026,7 @@ export class PromptsService extends Disposable implements IPromptsService {
 			githubWorkspace: number;
 			agentsPersonal: number;
 			agentsWorkspace: number;
+			safeAppealsWorkspace: number;
 			configPersonal: number;
 			configWorkspace: number;
 			extensionContribution: number;
@@ -1009,6 +1047,7 @@ export class PromptsService extends Disposable implements IPromptsService {
 			githubWorkspace: { classification: 'SystemMetaData'; purpose: 'FeatureInsight'; isMeasurement: true; comment: 'Number of GitHub workspace skills.' };
 			agentsPersonal: { classification: 'SystemMetaData'; purpose: 'FeatureInsight'; isMeasurement: true; comment: 'Number of .agents personal skills.' };
 			agentsWorkspace: { classification: 'SystemMetaData'; purpose: 'FeatureInsight'; isMeasurement: true; comment: 'Number of .agents workspace skills.' };
+			safeAppealsWorkspace: { classification: 'SystemMetaData'; purpose: 'FeatureInsight'; isMeasurement: true; comment: 'Number of Safe Appeals workspace skills.' };
 			configPersonal: { classification: 'SystemMetaData'; purpose: 'FeatureInsight'; isMeasurement: true; comment: 'Number of custom configured personal skills.' };
 			configWorkspace: { classification: 'SystemMetaData'; purpose: 'FeatureInsight'; isMeasurement: true; comment: 'Number of custom configured workspace skills.' };
 			extensionContribution: { classification: 'SystemMetaData'; purpose: 'FeatureInsight'; isMeasurement: true; comment: 'Number of extension contributed skills.' };
@@ -1032,6 +1071,7 @@ export class PromptsService extends Disposable implements IPromptsService {
 			githubWorkspace: skillsBySource.get(PromptFileSource.GitHubWorkspace) ?? 0,
 			agentsPersonal: skillsBySource.get(PromptFileSource.AgentsPersonal) ?? 0,
 			agentsWorkspace: skillsBySource.get(PromptFileSource.AgentsWorkspace) ?? 0,
+			safeAppealsWorkspace: skillsBySource.get(PromptFileSource.SafeAppealsWorkspace) ?? 0,
 			configWorkspace: skillsBySource.get(PromptFileSource.ConfigWorkspace) ?? 0,
 			configPersonal: skillsBySource.get(PromptFileSource.ConfigPersonal) ?? 0,
 			extensionContribution: skillsBySource.get(PromptFileSource.ExtensionContribution) ?? 0,
@@ -1325,6 +1365,37 @@ export class PromptsService extends Disposable implements IPromptsService {
 			return 4;
 		}
 		return 5;
+	}
+
+	/**
+	 * Precedence used when deduplicating agents that share the same canonical
+	 * name. Lower numbers win:
+	 * 1. Workspace `.safeAppeals/agents` (product path only)
+	 * 2. Other workspace locals (`.github` / `.claude` / settings-contributed)
+	 * 3. User `~/.safeAppeals/agents` (product path only)
+	 * 4. Other user globals (`~/.copilot`, `~/.claude`, settings-contributed)
+	 * 5. plugin / extension / builtin
+	 *
+	 * Tier 0/2 are path-gated so settings-contributed ConfigWorkspace/
+	 * ConfigPersonal paths do not inherit SafeAppeals product precedence.
+	 */
+	private getAgentPriority(agent: IPromptPath): number {
+		if (agent.storage === PromptsStorage.local) {
+			return isInSafeAppealsAgentsFolder(agent.uri) ? 0 : 1;
+		}
+		if (agent.storage === PromptsStorage.user) {
+			return isInSafeAppealsAgentsFolder(agent.uri) ? 2 : 3;
+		}
+		if (agent.storage === PromptsStorage.plugin) {
+			return 4;
+		}
+		if (agent.source === PromptFileSource.ExtensionAPI) {
+			return 5;
+		}
+		if (agent.source === PromptFileSource.ExtensionContribution) {
+			return 6;
+		}
+		return 7; // builtin / unknown
 	}
 
 	/**

@@ -27,7 +27,7 @@ constructor(
 ### Lifecycle Methods
 
 #### `loadTimeline(): Promise<CaseTimeline | null>`
-Load timeline from workspace storage (`.timeline.json`).
+Load timeline from workspace storage (`.safeAppeals/timeline.json`).
 
 ```typescript
 const timeline = await timelineService.loadTimeline();

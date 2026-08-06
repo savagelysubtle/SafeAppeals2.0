@@ -149,6 +149,8 @@ export enum PromptFileSource {
 	ClaudeWorkspaceLocal = 'claude-workspace-local',
 	AgentsWorkspace = 'agents-workspace',
 	AgentsPersonal = 'agents-personal',
+	SafeAppealsWorkspace = 'safeappeals-workspace',
+	SafeAppealsPersonal = 'safeappeals-personal',
 	ConfigWorkspace = 'config-workspace',
 	ConfigPersonal = 'config-personal',
 	UserData = 'user-data',
@@ -167,17 +169,21 @@ export function getSourceDescription(source: PromptFileSource): string | undefin
 		case PromptFileSource.AgentsPersonal:
 			return localize('source.agentsPersonal', "Global");
 		case PromptFileSource.GitHubWorkspace:
-			return localize('source.githubWorkspace', "Workspace (only used by Copilot agents)");
+			return localize('source.githubWorkspace', "Workspace (compatibility — Copilot agents)");
 		case PromptFileSource.CopilotPersonal:
-			return localize('source.copilotPersonal', "Global (only used by Copilot agents)");
+			return localize('source.copilotPersonal', "Global (compatibility — Copilot agents)");
 		case PromptFileSource.ClaudeWorkspace:
-			return localize('source.claudeWorkspace', "Workspace (only used by Claude agents)");
+			return localize('source.claudeWorkspace', "Workspace (compatibility — Claude agents)");
 		case PromptFileSource.ClaudeWorkspaceLocal:
-			return localize('source.claudeWorkspaceLocal', "Workspace (only used by Claude agents, usually git-ignored)");
+			return localize('source.claudeWorkspaceLocal', "Workspace (compatibility — Claude agents, usually git-ignored)");
 		case PromptFileSource.ClaudePersonal:
-			return localize('source.claudePersonal', "Global (only used by Claude agents)");
+			return localize('source.claudePersonal', "Global (compatibility — Claude agents)");
 		case PromptFileSource.UserData:
 			return localize('source.userData', "Global (roams with Settings Sync, only used by VS Code)");
+		case PromptFileSource.SafeAppealsWorkspace:
+			return localize('source.safeAppealsWorkspace', "Workspace (SafeAppeals)");
+		case PromptFileSource.SafeAppealsPersonal:
+			return localize('source.safeAppealsPersonal', "Global (SafeAppeals)");
 		case PromptFileSource.ConfigWorkspace:
 			return localize('source.configWorkspace', "Workspace (contributed from settings)");
 		case PromptFileSource.ConfigPersonal:

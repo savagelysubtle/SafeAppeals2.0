@@ -1,5 +1,11 @@
 # Main System Prompt (`systemPrompt.ts`)
 
+> **Historical Void dump (superseded).** Source path below is the retired Void
+> contrib prompt. Current product paths: `.safeAppeals/timeline.json`, snake_case
+> case folders + `core_references/`, Private Search tools `safeappeals_rag_*`
+> (see [`docs/rag/tool-contracts.md`](../rag/tool-contracts.md)). Void short
+> names `rag_*` still substitute to `safeappeals_rag_*` in the allowlist.
+
 **Location**: `src/vs/workbench/contrib/void/common/prompt/systemPrompt.ts`  
 **Entry point**: `export const getSystemPrompt = (options: SystemPromptOptions): string`  
 **Approximate size**: ~2,300 lines, ~16,500 tokens
@@ -84,7 +90,7 @@ This value is injected live into Section 6 (Context Window Management) so the AI
 | Timeline Management | `timeline_add_event`, `timeline_get_events`, `timeline_update_event`, `timeline_delete_event`, `timeline_link_document`, `timeline_get_deadlines` |
 | File Operations | `read_file`, `edit_file`, `create_file_or_folder`, `delete_file_or_folder`, `edit_document` |
 | Terminal Commands | `run_command`, `run_persistent_command`, `open_persistent_terminal`, `kill_persistent_terminal` |
-| Search & Discovery | `rag_search_reference`, `rag_search_workspace`, `search_for_files`, `search_in_file` |
+| Search & Discovery | `safeappeals_rag_search_reference`, `safeappeals_rag_search_workspace`, `search_for_files`, `search_in_file` |
 | Web Research | `web_search`, `multi_link_search` |
 
 **Core Expertise Areas**:
@@ -280,7 +286,7 @@ All tool calls use XML wrapped in `<function_calls>` tags:
 <invoke name="read_file">
   <parameter name="uri">/cases/report1.pdf</parameter>
 </invoke>
-<invoke name="rag_search_reference">
+ <invoke name="safeappeals_rag_search_reference">
   <parameter name="query">appeal requirements</parameter>
   <parameter name="limit">5</parameter>
 </invoke>
@@ -348,7 +354,7 @@ Agent: read_file(report1) → read_file(report2) → read_file(report3)
 
 **Step 1: Check Available Resources**
 ```
-rag_get_stats → Review what core reference documents are indexed
+safeappeals_rag_get_stats → Review what core reference documents are indexed
 ```
 
 **Step 2: Search Strategically**
@@ -419,7 +425,7 @@ Structured extraction framework for IME reports, QME reports, and treatment reco
 ### Tool Usage Pattern for Medical Analysis
 ```
 1. read_file (full report)
-2. rag_search_workspace (cross-reference with case history)
+2. safeappeals_rag_search_workspace (cross-reference with case history)
 3. Extract findings into summary or argument
 ```
 
@@ -450,8 +456,8 @@ Available for conversation: ~[availableForConversation] tokens
 **1. Progressive Loading (Start Light)**
 ```
 Step 1: get_dir_tree → ~500 tokens
-Step 2: rag_get_stats → ~300 tokens
-Step 3: rag_search_reference → ~2,000 tokens per search
+Step 2: safeappeals_rag_get_stats → ~300 tokens
+Step 3: safeappeals_rag_search_reference → ~2,000 tokens per search
 Step 4: read_file (targeted sections) → Variable
 ```
 
@@ -544,9 +550,9 @@ This is a large section (~230 lines) that gives the AI complete ownership of the
 
 ### Bulk Operations via Direct JSON Editing
 
-When adding 6+ events at once, the AI is instructed to edit `.timeline.json` directly rather than making many individual tool calls.
+When adding 6+ events at once, the AI is instructed to edit `.safeAppeals/timeline.json` directly rather than making many individual tool calls.
 
-**Timeline JSON Schema** (`.timeline.json` in workspace root):
+**Timeline JSON Schema** (`.safeAppeals/timeline.json` under the workspace root):
 ```json
 {
   "version": "1.0",
@@ -653,7 +659,7 @@ The prompt includes full JSON templates for each workspace type, including a com
 - `parties.opposing`: party name, lawyers, experts, doctors
 - `parties.tribunal`: board name, adjudicators, caseOfficers, referenceNumbers
 - `classification.keywords`: Your Side keywords, Their Side keywords
-- `categories`: Medical_Reports, Correspondence, Decisions_and_Orders, Evidence, Personal_Notes, Uncategorized
+- `categories` (historical Void names): prefer snake_case folders `medical_reports`, `correspondence`, `decisions_and_orders`, `evidence`, `personal_notes`, `to_sort` (+ `core_references/` for shared refs)
 
 ---
 
@@ -718,15 +724,16 @@ Safety protocols for file operations:
 
 **XML tag**: (file organization section)
 
-Standard folder structures and naming conventions for workers' compensation case files:
+Standard folder structures and naming conventions for workers' compensation case files
+(flat at workspace root — no `Case_Files/` wrapper):
 ```
-Case_Files/
-├── Medical_Reports/
-├── Correspondence/
-├── Decisions_and_Orders/
-├── Evidence/
-├── Personal_Notes/
-└── Uncategorized/
+medical_reports/
+correspondence/
+decisions_and_orders/
+evidence/
+personal_notes/
+to_sort/
+core_references/
 ```
 
 ---

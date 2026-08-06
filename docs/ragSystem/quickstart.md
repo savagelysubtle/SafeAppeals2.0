@@ -1,5 +1,9 @@
 # RAG System Quick Start Guide
 
+> **Superseded.** For shipping Private Search, use Set Up Private Search
+> (`safeappeals-rag.setupLocalSearch`) and [`docs/rag/tool-contracts.md`](../rag/tool-contracts.md).
+> This Void contrib quickstart is historical.
+
 ## 🎯 Overview
 
 This guide will get you up and running with the RAG system in 15 minutes. By the end, you'll be able to index documents and perform semantic searches.

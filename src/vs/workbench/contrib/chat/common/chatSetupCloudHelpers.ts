@@ -227,6 +227,14 @@ export const SAFEAPPEALS_SWITCH_MODE_TOOL_ID = 'safeappeals_switchMode';
 export const SAFEAPPEALS_ASK_CLOUD_SWITCH_MODE_MAX_ROUNDS = 3;
 
 /**
+ * SafeAppeals: git privacy rules for Ask/Edit Cloud.
+ * Keep aligned with `buildSafeAppealsGitPrivacyRulesMessage` in safeappeals-authentication
+ * (workbench cannot import extension sources).
+ */
+const SAFEAPPEALS_GIT_PRIVACY_RULES =
+	'If this workspace is a legal matter, case folder, or contains legal/client documents: never push to GitHub or any git remote. Only commit locally when the user wants history. If they ask to push, warn that confidential documents would leave this computer and proceed only after explicit confirmation. If this is clearly a coding/software project (not a client matter) and the user asks to push, confirm once, then you may push.';
+
+/**
  * SafeAppeals: system prompt for Ask/Edit Cloud when `safeappeals_switchMode` is available.
  */
 export function buildSafeAppealsAskCloudSystemPrompt(modeLabel: string): string {
@@ -235,6 +243,7 @@ export function buildSafeAppealsAskCloudSystemPrompt(modeLabel: string): string 
 		'Be concise and helpful for Q&A.',
 		`When the user needs implementation, multi-file edits, research, architecture, or planning, call ${SAFEAPPEALS_SWITCH_MODE_TOOL_ID} yourself with mode "Agent" or "Plan" — NEVER ask which mode.`,
 		'Do not narrate mode switches.',
+		SAFEAPPEALS_GIT_PRIVACY_RULES,
 	].join(' ');
 }
 
@@ -246,6 +255,7 @@ export function buildSafeAppealsAskCloudSystemPromptWithoutSwitchTool(modeLabel:
 		`You are SafeAppeals Cloud assistant in ${modeLabel} mode.`,
 		'Be concise and helpful for Q&A.',
 		'For implementation or planning work, ask the user to switch to Agent or Plan via the mode picker.',
+		SAFEAPPEALS_GIT_PRIVACY_RULES,
 	].join(' ');
 }
 

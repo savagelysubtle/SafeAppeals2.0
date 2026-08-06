@@ -1,0 +1,16 @@
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Safe Appeals. All rights reserved.
+ *--------------------------------------------------------------------------------------------*/
+
+.codicon-safeappeals-shield-outline::before,
+.codicon-ai-customization-agent::before,
+.codicon-chat-model-provider-auto::before,
+.codicon-chat-model-provider-safeappeals::before {
+	content: '';
+	display: inline-block;
+	width: 16px;
+	height: 16px;
+	background-color: currentColor;
+	-webkit-mask: url('./safeappeals-shield-outline.svg') no-repeat 50% 50% / contain;
+	mask: url('./safeappeals-shield-outline.svg') no-repeat 50% 50% / contain;
+}

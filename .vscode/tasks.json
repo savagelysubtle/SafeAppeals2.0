@@ -417,8 +417,8 @@
 			},
 			"args": [
 				"--agents",
-				"--user-data-dir=${userHome}/.vscode-oss-dev",
-				"--extensions-dir=${userHome}/.vscode-oss-dev/extensions"
+				"--user-data-dir=${userHome}/.safe-appeals-dev",
+				"--extensions-dir=${userHome}/.safe-appeals-dev/extensions"
 			],
 			"problemMatcher": []
 		},
@@ -469,7 +469,7 @@
 				"none"
 			],
 			"label": "Run code web",
-			"detail": "BROWSER (serverless): serve the pure web build at http://localhost:8080 - no NodeJS backend, web extensions only. Use to test the browser-only build; for everyday UI work prefer Run Dev (WEB).",
+			"detail": "BROWSER (serverless): serve the pure web build at http://localhost:8080 - no NodeJS backend, web extensions only. For everyday SafeAppeals UI/E2E work prefer Run Dev (CDP) (desktop Electron on port 9222), not this web build.",
 			"isBackground": true,
 			"problemMatcher": {
 				"pattern": {
@@ -486,7 +486,7 @@
 		},
 		{
 			"label": "Run Dev (WEB)",
-			"detail": "BROWSER: serve the app at http://localhost:8080/?tkn=dev-token (open manually). Use this for UI work - iterate on the workbench UI in the browser with DevTools, just reload the tab after the watcher recompiles.",
+			"detail": "BROWSER: serve the app at http://localhost:8080/?tkn=dev-token (open manually). Use only when testing the browser/code-server build. For everyday SafeAppeals UI/E2E work prefer Run Dev (CDP) (desktop Electron on port 9222).",
 			"type": "shell",
 			"command": "./scripts/code-server.sh",
 			"windows": {
@@ -515,7 +515,7 @@
 		},
 		{
 			"label": "Run Code Server (Launch Browser)",
-			"detail": "BROWSER: same as Run Dev (WEB) but opens your browser automatically. UI runs in the browser, extensions run in a NodeJS code server on the desktop.",
+			"detail": "BROWSER: same as Run Dev (WEB) but opens your browser automatically. Prefer Run Dev (CDP) for everyday SafeAppeals UI/E2E; use this only when testing the browser/code-server build.",
 			"type": "shell",
 			"command": "./scripts/code-server.sh",
 			"windows": {
@@ -627,6 +627,19 @@
 			"windows": {
 				"command": ".\\scripts\\code.bat"
 			},
+			"problemMatcher": []
+		},
+		{
+			"label": "Run Dev (CDP)",
+			"detail": "PREFERRED for agent UI/E2E: same as Run Dev, plus --remote-debugging-port=9222. Agents should attach Playwright/CDP to this window (http://127.0.0.1:9222) instead of Run Dev (WEB) or a throwaway launch.sh instance.",
+			"type": "shell",
+			"command": "./scripts/code.sh",
+			"windows": {
+				"command": ".\\scripts\\code.bat"
+			},
+			"args": [
+				"--remote-debugging-port=9222"
+			],
 			"problemMatcher": []
 		},
 		{

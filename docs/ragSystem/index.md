@@ -1,5 +1,11 @@
 # RAG System Documentation Index
 
+> **Historical Void docs — superseded.** Shipping Private Search is documented in
+> [`docs/rag/tool-contracts.md`](../rag/tool-contracts.md) and
+> [`docs/rag/packaging-rung-14.md`](../rag/packaging-rung-14.md)
+> (`extensions/safeappeals-rag`). Shared folder: `core_references/`. Status bar:
+> `$(search) Private Search`.
+
 ## 📚 Documentation Overview
 
 The Retrieval-Augmented Generation (RAG) system in Void provides sophisticated document indexing and semantic search capabilities optimized for legal and medical document analysis.
@@ -34,15 +40,19 @@ The Retrieval-Augmented Generation (RAG) system in Void provides sophisticated d
 2. [Migration Guide](./migration.md) - Database updates
 3. [Performance Monitoring](./performance.md) - Health checks
 
-## 🔧 Agent RAG Tools
+## 🔧 Agent RAG Tools (current — see `docs/rag/tool-contracts.md`)
 
 | Tool | Description | Scope |
 |------|-------------|-------|
-| `rag_search_policy` | Search policy manuals only | `policy_manual` |
-| `rag_search_workspace` | Search case files only | `case_index` |
-| `rag_search_all` | Search ALL documents (both) | `workspace_all` |
-| `rag_index_document` | Index a document | N/A |
-| `rag_get_stats` | Get system statistics | N/A |
+| `safeappeals_rag_search_reference` | Search core references (`core_references/`) | `core_reference` |
+| `safeappeals_rag_search_workspace` | Search case files | `case_index` |
+| `safeappeals_rag_search_all` | Search both | `all` |
+| `safeappeals_rag_index_document` | Index a document | `core_reference` or `case_index` |
+| `safeappeals_rag_get_stats` | Index statistics | — |
+
+Void-era aliases such as `rag_search_policy` / scope `policy_manual` normalize to
+`safeappeals_rag_search_reference` / `core_reference` and must not be documented as
+the primary API.
 
 ## 📊 System Status
 

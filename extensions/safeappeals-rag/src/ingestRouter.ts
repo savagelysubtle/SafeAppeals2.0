@@ -3,6 +3,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { hardDisableMessage } from './disableMessages';
+import { isArtifactPinConfigured } from './artifactPin';
 import {
 	FakeDigitalPdfExtractor,
 	StubDigitalPdfExtractor,
@@ -45,6 +46,13 @@ export interface IngestRouterDeps {
 	 * When omitted, parse runs without a lease (unit tests).
 	 */
 	readonly withDocParseLease?: <T>(fn: () => Promise<T>) => Promise<T>;
+	/**
+	 * One-shot ensure before scanned ingest when artifacts are ready but sidecar is not.
+	 * Shared with setup panel via safeappeals-ml bridge.
+	 */
+	readonly ensureDocParseReady?: () => Promise<{ readonly ready: boolean; readonly detail?: string }>;
+	/** Refresh DocParse backend readiness cache after ensure succeeds. */
+	readonly refreshDocParseReady?: () => Promise<boolean>;
 	readonly log?: (message: string) => void;
 }
 
@@ -79,6 +87,8 @@ export class IngestRouter {
 	private readonly docParse: IDocParseBackend;
 	private readonly sealedStore: ISealedMarkdownStore | undefined;
 	private readonly withDocParseLease: <T>(fn: () => Promise<T>) => Promise<T>;
+	private readonly ensureDocParseReady?: () => Promise<{ readonly ready: boolean; readonly detail?: string }>;
+	private readonly refreshDocParseReady?: () => Promise<boolean>;
 	private readonly log?: (message: string) => void;
 
 	constructor(deps: IngestRouterDeps) {
@@ -89,6 +99,8 @@ export class IngestRouter {
 		this.docParse = deps.docParse ?? new NotReadyDocParseBackend();
 		this.sealedStore = deps.sealedStore;
 		this.withDocParseLease = deps.withDocParseLease ?? (async fn => fn());
+		this.ensureDocParseReady = deps.ensureDocParseReady;
+		this.refreshDocParseReady = deps.refreshDocParseReady;
 		this.log = deps.log;
 	}
 
@@ -175,6 +187,17 @@ export class IngestRouter {
 			});
 		}
 
+		const ocrSpec = this.catalog.get?.(UNLIMITED_OCR_MODEL_ID);
+		if (!isArtifactPinConfigured(ocrSpec)) {
+			return hardDisable(
+				'scanned-ocr-unpinned',
+				[
+					'Unlimited-OCR artifact downloadUrl/sha256 are not configured for this build',
+				],
+				{ scanned: true, charsPerPage, pageCount },
+			);
+		}
+
 		const installed = await this.artifacts.isReady(UNLIMITED_OCR_MODEL_ID);
 		if (!installed) {
 			return hardDisable(
@@ -182,6 +205,19 @@ export class IngestRouter {
 				['Unlimited-OCR artifacts are not installed (consent install required)'],
 				{ scanned: true, charsPerPage, pageCount },
 			);
+		}
+
+		if (!this.docParse.isReady()) {
+			if (this.ensureDocParseReady) {
+				const ensureResult = await this.ensureDocParseReady();
+				if (ensureResult.ready) {
+					await this.refreshDocParseReady?.();
+				} else {
+					this.log?.(
+						`DocParse ensure before scanned ingest failed: ${ensureResult.detail ?? 'not ready'}`,
+					);
+				}
+			}
 		}
 
 		if (!this.docParse.isReady()) {

@@ -139,6 +139,13 @@ const apiMenus: IAPIMenu[] = [
 		supportsSubmenus: false
 	},
 	{
+		// SafeAppeals: Help → Tutorials and other product Help items from extensions
+		key: 'MenubarHelpMenu',
+		id: MenuId.MenubarHelpMenu,
+		description: localize('menus.help', "The top-level Help menu"),
+		supportsSubmenus: false
+	},
+	{
 		key: 'menuBar/edit/copy',
 		id: MenuId.MenubarCopy,
 		description: localize('menus.opy', "'Copy as' submenu in the top level Edit menu")

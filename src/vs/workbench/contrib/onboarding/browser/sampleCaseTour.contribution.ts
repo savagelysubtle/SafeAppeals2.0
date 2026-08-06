@@ -1,6 +1,5 @@
 /*---------------------------------------------------------------------------------------------
- *  Copyright (c) Microsoft Corporation. All rights reserved.
- *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *  Copyright (c) Safe Appeals. All rights reserved.
  *--------------------------------------------------------------------------------------------*/
 
 import { Disposable } from '../../../../base/common/lifecycle.js';
@@ -9,20 +8,22 @@ import { Categories } from '../../../../platform/action/common/actionCommonCateg
 import { Action2, registerAction2 } from '../../../../platform/actions/common/actions.js';
 import { ICommandService } from '../../../../platform/commands/common/commands.js';
 import { ServicesAccessor } from '../../../../platform/instantiation/common/instantiation.js';
+import { IWorkspaceContextService } from '../../../../platform/workspace/common/workspace.js';
 import { IWorkbenchContribution, registerWorkbenchContribution2, WorkbenchPhase } from '../../../common/contributions.js';
+import { IEditorService } from '../../../services/editor/common/editorService.js';
+import { IWorkbenchLayoutService } from '../../../services/layout/browser/layoutService.js';
 import { onboardingScenarioRegistry } from '../common/onboardingRegistry.js';
 import { IOnboardingScenarioService } from '../common/onboardingScenarioService.js';
 import {
-	clearApprovalPromptMocks,
 	createSampleCaseTourScenario,
+	runSampleCaseTourCommand,
 	SAMPLE_CASE_TOUR_COMMAND_ID,
-	SAMPLE_CASE_TOUR_ID,
 	showApprovalPromptMock,
 } from './sampleCaseTour.js';
 
 /**
  * Registers the Safe Appeals sample-case spotlight scenario. The approval mock
- * is tracked inside {@link showApprovalPromptMock} / {@link clearApprovalPromptMocks}.
+ * is tracked inside {@link showApprovalPromptMock}.
  */
 class SampleCaseTourContribution extends Disposable implements IWorkbenchContribution {
 
@@ -30,10 +31,12 @@ class SampleCaseTourContribution extends Disposable implements IWorkbenchContrib
 
 	constructor(
 		@ICommandService commandService: ICommandService,
+		@IWorkspaceContextService contextService: IWorkspaceContextService,
+		@IWorkbenchLayoutService layoutService: IWorkbenchLayoutService,
 	) {
 		super();
-		this._register(onboardingScenarioRegistry.register(createSampleCaseTourScenario(commandService, {
-			show: () => showApprovalPromptMock(),
+		this._register(onboardingScenarioRegistry.register(createSampleCaseTourScenario(commandService, contextService, {
+			show: () => showApprovalPromptMock(layoutService),
 		})));
 	}
 }
@@ -51,12 +54,10 @@ registerAction2(class extends Action2 {
 	}
 
 	async run(accessor: ServicesAccessor): Promise<void> {
-		clearApprovalPromptMocks();
-		const onboarding = accessor.get(IOnboardingScenarioService);
-		try {
-			await onboarding.runScenario(SAMPLE_CASE_TOUR_ID);
-		} finally {
-			clearApprovalPromptMocks();
-		}
+		await runSampleCaseTourCommand(
+			accessor.get(IOnboardingScenarioService),
+			accessor.get(IEditorService),
+			accessor.get(ICommandService),
+		);
 	}
 });

@@ -96,6 +96,33 @@ suite('ingestRouter ladder', () => {
 		}
 	});
 
+	test('scanned PDF hard-disables when artifact pins are not configured', async () => {
+		const ml = fakeMlBridge({
+			evaluate: { eligible: true, reasons: [] },
+			artifactReady: true,
+			ocrPinConfigured: false,
+		});
+		const router = new IngestRouter({
+			...ml,
+			digitalPdf: new FakeDigitalPdfExtractor({
+				kind: 'ok',
+				pages: [{ text: 'tiny' }],
+			}),
+			docParse: readyDocParse(),
+		});
+
+		const result = await router.ingest({
+			sourceUri: 'file:///case/scan.pdf',
+			bytes: utf8('%PDF-fake'),
+		});
+
+		assert.strictEqual(result.kind, 'hard-disable');
+		if (result.kind === 'hard-disable') {
+			assert.strictEqual(result.code, 'scanned-ocr-unpinned');
+			assert.ok(/downloadUrl|sha256|pins/i.test(result.message));
+		}
+	});
+
 	test('scanned PDF hard-disables when eligible but artifacts not installed', async () => {
 		const ml = fakeMlBridge({ evaluate: { eligible: true, reasons: [] }, artifactReady: false });
 		const router = new IngestRouter({
@@ -134,6 +161,75 @@ suite('ingestRouter ladder', () => {
 			bytes: utf8('%PDF-fake'),
 		});
 
+		assert.strictEqual(result.kind, 'hard-disable');
+		if (result.kind === 'hard-disable') {
+			assert.strictEqual(result.code, 'scanned-ocr-sidecar-not-ready');
+		}
+	});
+
+	test('scanned PDF tries ensure once before sidecar-not-ready hard-disable', async () => {
+		let ensureCalls = 0;
+		let ready = false;
+		const ml = fakeMlBridge({ evaluate: { eligible: true, reasons: [] }, artifactReady: true });
+		const router = new IngestRouter({
+			...ml,
+			digitalPdf: new FakeDigitalPdfExtractor({
+				kind: 'ok',
+				pages: [{ text: 'x'.repeat(10) }],
+			}),
+			docParse: {
+				isReady: () => ready,
+				parsePdf: async (request) => ({
+					kind: 'ok',
+					markdown: '# OCR after ensure',
+					anchors: [{ sourceUri: request.sourceUri, page: 1 }],
+					pageCount: 1,
+				}),
+			},
+			ensureDocParseReady: async () => {
+				ensureCalls++;
+				return { ready: true };
+			},
+			refreshDocParseReady: async () => {
+				ready = true;
+				return true;
+			},
+		});
+
+		const result = await router.ingest({
+			sourceUri: 'file:///case/scan.pdf',
+			bytes: utf8('%PDF-fake'),
+		});
+
+		assert.strictEqual(ensureCalls, 1);
+		assert.strictEqual(result.kind, 'ok');
+		if (result.kind === 'ok') {
+			assert.strictEqual(result.fidelity, 'ocr');
+			assert.strictEqual(result.markdown, '# OCR after ensure');
+		}
+	});
+
+	test('scanned PDF ensure failure still hard-disables sidecar-not-ready', async () => {
+		let ensureCalls = 0;
+		const ml = fakeMlBridge({ evaluate: { eligible: true, reasons: [] }, artifactReady: true });
+		const router = new IngestRouter({
+			...ml,
+			digitalPdf: new FakeDigitalPdfExtractor({
+				kind: 'ok',
+				pages: [{ text: 'x'.repeat(10) }],
+			}),
+			ensureDocParseReady: async () => {
+				ensureCalls++;
+				return { ready: false, detail: 'sidecar refused to start' };
+			},
+		});
+
+		const result = await router.ingest({
+			sourceUri: 'file:///case/scan.pdf',
+			bytes: utf8('%PDF-fake'),
+		});
+
+		assert.strictEqual(ensureCalls, 1);
 		assert.strictEqual(result.kind, 'hard-disable');
 		if (result.kind === 'hard-disable') {
 			assert.strictEqual(result.code, 'scanned-ocr-sidecar-not-ready');

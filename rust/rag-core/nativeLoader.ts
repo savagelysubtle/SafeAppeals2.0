@@ -15,6 +15,8 @@ import * as path from 'path';
 
 export const ADDON_FILENAME = 'rag_core.node';
 
+export type IndexWriteRole = 'primary' | 'secondary';
+
 export type Capabilities = {
 	hybrid: boolean;
 	rerank: boolean;
@@ -23,6 +25,8 @@ export type Capabilities = {
 	/** True when the native build linked SQLCipher and can open encrypted DBs. */
 	storageReady: boolean;
 	dims: number;
+	indexWriteRole?: IndexWriteRole;
+	indexWriteCapable: boolean;
 };
 
 export type RagStats = {
@@ -75,6 +79,12 @@ export type OpResult = {
 	error?: string | null;
 	/** Chunks indexed / removed when relevant. */
 	count?: number | null;
+};
+
+export type EnsureEmbedderResult = {
+	ok: boolean;
+	error?: string | null;
+	loaded: boolean;
 };
 
 export type EmbedBatchResult = {
@@ -147,14 +157,18 @@ export type RagCoreNative = {
 	ping(): string;
 	version(): string;
 	capabilities(): Capabilities;
-	openWorkspace(rootDir: string, dekBytes: Buffer | Uint8Array): OpResult;
+	openWorkspace(rootDir: string, dekBytes: Buffer | Uint8Array, preferSecondary?: boolean): OpResult;
 	closeWorkspace(): OpResult;
 	stats(): RagStats;
+	getDocument(docId: string): IndexDocumentInput | null | undefined;
 	chunkDocument(input: ChunkDocumentInput): ChunkDocumentOutput[];
 	embedBatch(texts: string[]): EmbedBatchResult;
 	indexChunks(doc: IndexDocumentInput, chunks: IndexChunkInput[]): OpResult;
 	removeDoc(docId: string): OpResult;
 	search(query: string, opts: SearchOptions): SearchResult;
+	ensureEmbedderLoaded(): EnsureEmbedderResult;
+	clearEmbedder(): OpResult;
+	clearReranker(): OpResult;
 };
 
 export type LoadResult =

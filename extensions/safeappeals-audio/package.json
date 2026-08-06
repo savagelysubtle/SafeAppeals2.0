@@ -272,7 +272,51 @@
 					"name": "%view.sidebar.name%"
 				}
 			]
-		}
+		},
+		"walkthroughs": [
+			{
+				"id": "safeappealsHearingsAudio",
+				"title": "%walkthrough.hearingsAudio.title%",
+				"description": "%walkthrough.hearingsAudio.description%",
+				"steps": [
+					{
+						"id": "openRecorder",
+						"title": "%walkthrough.hearingsAudio.openRecorder.title%",
+						"description": "%walkthrough.hearingsAudio.openRecorder.description%",
+						"media": {
+							"markdown": "media/walkthrough/openRecorder.md"
+						},
+						"completionEvents": [
+							"onCommand:safeappeals-audio.openRecorder"
+						]
+					},
+					{
+						"id": "importTranscribe",
+						"title": "%walkthrough.hearingsAudio.importTranscribe.title%",
+						"description": "%walkthrough.hearingsAudio.importTranscribe.description%",
+						"media": {
+							"markdown": "media/walkthrough/importTranscribe.md"
+						},
+						"completionEvents": [
+							"onCommand:safeappeals-audio.importAudio",
+							"onCommand:safeappeals-audio.transcribe",
+							"onCommand:safeappeals-audio.chooseWhisperModel"
+						]
+					},
+					{
+						"id": "exportTranscript",
+						"title": "%walkthrough.hearingsAudio.exportTranscript.title%",
+						"description": "%walkthrough.hearingsAudio.exportTranscript.description%",
+						"media": {
+							"markdown": "media/walkthrough/exportTranscript.md"
+						},
+						"completionEvents": [
+							"onCommand:safeappeals-audio.exportTranscript"
+						]
+					}
+				]
+			}
+		]
 	},
 	"scripts": {
 		"compile": "node ./esbuild.mjs && gulp compile-extension:safeappeals-audio",

@@ -19,8 +19,8 @@ use std::sync::{Arc, Mutex, OnceLock};
 
 use thiserror::Error;
 
-/// BGE-small-en-v1.5 embedding dimensionality.
-pub const BGE_SMALL_DIMS: usize = 512;
+/// BGE-small-en-v1.5 embedding dimensionality (BAAI / Xenova export).
+pub const BGE_SMALL_DIMS: usize = 384;
 
 /// Env var: directory with BYO ONNX + tokenizer files for BGE-small.
 pub const EMBED_MODEL_DIR_ENV: &str = "SA_RAG_EMBED_MODEL_DIR";
@@ -109,6 +109,9 @@ pub fn clear_embedder() {
 /// Fail-soft: returns `Ok(false)` when the directory is unset/missing or the
 /// `fastembed` feature is off. Never downloads weights.
 pub fn try_load_default() -> Result<bool, EmbedError> {
+	if is_loaded() {
+		return Ok(true);
+	}
 	#[cfg(feature = "fastembed")]
 	{
 		let path = match std::env::var(EMBED_MODEL_DIR_ENV) {
@@ -139,7 +142,7 @@ pub fn embed_batch(texts: &[String]) -> Result<Vec<Vec<f32>>, EmbedError> {
 	embedder.embed_batch(texts)
 }
 
-/// Install FakeEmbedder for tests (dim = BGE 512).
+/// Install FakeEmbedder for tests (dim = BGE 384).
 #[cfg(test)]
 pub fn install_fake_for_tests() {
 	set_embedder(Arc::new(FakeEmbedder::new(EmbedModelKind::BgeSmallEnV15)));
@@ -152,11 +155,11 @@ mod tests {
 	#[test]
 	fn fake_embedder_dims_and_deterministic() {
 		let fake = FakeEmbedder::new(EmbedModelKind::BgeSmallEnV15);
-		assert_eq!(fake.dims(), 512);
+		assert_eq!(fake.dims(), 384);
 		let a = fake.embed_batch(&["hello".into()]).unwrap();
 		let b = fake.embed_batch(&["hello".into()]).unwrap();
 		assert_eq!(a, b);
-		assert_eq!(a[0].len(), 512);
+		assert_eq!(a[0].len(), 384);
 		// L2-normalized
 		let norm: f32 = a[0].iter().map(|x| x * x).sum::<f32>().sqrt();
 		assert!((norm - 1.0).abs() < 1e-4);
@@ -166,4 +169,5 @@ mod tests {
 	fn minilm_stub_dims() {
 		assert_eq!(EmbedModelKind::MiniLmL6V2Light.dims(), 384);
 	}
+
 }

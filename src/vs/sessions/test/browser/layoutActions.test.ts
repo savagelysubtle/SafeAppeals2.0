@@ -5,17 +5,20 @@
 
 import assert from 'assert';
 import { Codicon } from '../../../base/common/codicons.js';
+import { safeAppealsShieldOutlineIcon } from '../../../platform/theme/common/safeAppealsIcons.js';
 import { ThemeIcon } from '../../../base/common/themables.js';
 import { ensureNoDisposablesAreLeakedInTestSuite } from '../../../base/test/common/utils.js';
 import { isIMenuItem, MenuId, MenuRegistry } from '../../../platform/actions/common/actions.js';
+import type { ContextKeyExpression, ContextKeyValue } from '../../../platform/contextkey/common/contextkey.js';
 import { CommandsRegistry } from '../../../platform/commands/common/commands.js';
 import { ToggleAuxiliaryBarAction } from '../../../workbench/browser/parts/auxiliarybar/auxiliaryBarActions.js';
-import { MainEditorAreaVisibleContext } from '../../../workbench/common/contextkeys.js';
+import { IsAuxiliaryWindowContext, MainEditorAreaVisibleContext } from '../../../workbench/common/contextkeys.js';
 import { Menus } from '../../browser/menus.js';
-import { HasDockedDetailsContext } from '../../common/contextkeys.js';
+import { HasDockedDetailsContext, IsPhoneLayoutContext, SessionsWelcomeVisibleContext } from '../../common/contextkeys.js';
 
 // Import layout actions to trigger menu registration
 import '../../browser/layoutActions.js';
+import '../../electron-browser/sessions.desktop.contribution.js';
 
 suite('Sessions - Layout Actions', () => {
 
@@ -29,6 +32,62 @@ suite('Sessions - Layout Actions', () => {
 
 		assert.ok(toggleAlwaysOnTop, 'toggleWindowAlwaysOnTop should be contributed to TitleBarRight');
 		assert.strictEqual(toggleAlwaysOnTop.group, 'navigation');
+	});
+
+	test('open IDE action is contributed to TitleBarRight at order 95', async () => {
+		await import('../../contrib/tunnelHost/electron-browser/tunnelHost.contribution.js');
+		await import('../../contrib/accountMenu/browser/account.contribution.js');
+
+		const menuItems = MenuRegistry.getMenuItems(Menus.TitleBarRightLayout).filter(isIMenuItem);
+
+		const openIDE = menuItems.find(item => item.command.id === 'agents.openVSCodeWindow');
+		assert.ok(openIDE, 'agents.openVSCodeWindow should be contributed to TitleBarRight');
+
+		const title = typeof openIDE.command.title === 'string' ? openIDE.command.title : openIDE.command.title.value;
+		assert.deepStrictEqual({
+			group: openIDE.group,
+			order: openIDE.order,
+			icon: ThemeIcon.isThemeIcon(openIDE.command.icon) ? openIDE.command.icon.id : undefined,
+			title,
+		}, {
+			group: 'navigation',
+			order: 95,
+			icon: safeAppealsShieldOutlineIcon.id,
+			title: 'Open IDE',
+		});
+
+		const orderOf = (id: string) => menuItems.find(item => item.command.id === id)?.order;
+		assert.deepStrictEqual([
+			orderOf('sessions.tunnelHost.toggleSharing'),
+			orderOf('agents.openVSCodeWindow'),
+			orderOf('sessions.action.titleBarAccountWidget'),
+		], [90, 95, 100]);
+
+		if (!openIDE.when) {
+			assert.fail('open IDE menu item should have a when clause');
+		}
+
+		const evalWhen = (when: ContextKeyExpression, values: Record<string, ContextKeyValue>) => {
+			return when.evaluate({ getValue: <T extends ContextKeyValue = ContextKeyValue>(key: string) => values[key] as T });
+		};
+		const base = {
+			[IsAuxiliaryWindowContext.key]: false,
+			[IsPhoneLayoutContext.key]: false,
+		};
+
+		assert.deepStrictEqual({
+			agentsWindow: evalWhen(openIDE.when, base),
+			welcomeVisible: evalWhen(openIDE.when, { ...base, [SessionsWelcomeVisibleContext.key]: true }),
+			auxiliaryWindow: evalWhen(openIDE.when, { ...base, [IsAuxiliaryWindowContext.key]: true }),
+			phoneLayout: evalWhen(openIDE.when, { ...base, [IsPhoneLayoutContext.key]: true }),
+		}, {
+			agentsWindow: true,
+			welcomeVisible: true,
+			auxiliaryWindow: false,
+			phoneLayout: false,
+		});
+
+		assert.ok(!openIDE.when.serialize().includes(SessionsWelcomeVisibleContext.key), 'open IDE should not be gated on welcome visibility');
 	});
 
 	test('original-layout auxiliary bar toggle reuses the core command with state-dependent icons on the editor title layout menu', () => {

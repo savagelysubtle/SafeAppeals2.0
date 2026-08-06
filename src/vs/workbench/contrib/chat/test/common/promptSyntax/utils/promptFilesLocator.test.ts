@@ -23,6 +23,7 @@ import { IFileMatch, IFileQuery, ISearchService } from '../../../../../../servic
 import { IUserDataProfileService } from '../../../../../../services/userDataProfile/common/userDataProfile.js';
 import { IPathService } from '../../../../../../services/path/common/pathService.js';
 import { PromptsConfig } from '../../../../common/promptSyntax/config/config.js';
+import { DEFAULT_AGENT_SOURCE_FOLDERS, DEFAULT_SKILL_SOURCE_FOLDERS } from '../../../../common/promptSyntax/config/promptFileLocations.js';
 import { getSourceDescription, PromptFileSource, PromptsType } from '../../../../common/promptSyntax/promptTypes.js';
 import { hasGlobPattern, isValidGlob, isValidPromptFolderPath, PromptFilesLocator } from '../../../../common/promptSyntax/utils/promptFilesLocator.js';
 import { mockFiles } from '../testUtils/mockFilesystem.js';
@@ -2095,6 +2096,7 @@ suite('PromptFilesLocator', () => {
 					'.github/skills': false,
 					'.agents/skills': false,
 					'.claude/skills': false,
+					'.safeAppeals/skills': false,
 					'~/.copilot/skills': false,
 					'~/.agents/skills': false,
 					'~/.claude/skills': false,
@@ -2118,6 +2120,7 @@ suite('PromptFilesLocator', () => {
 					'.github/skills': false,
 					'.agents/skills': false,
 					'.claude/skills': false,
+					'.safeAppeals/skills': false,
 					'~/.copilot/skills': false,
 					'~/.agents/skills': false,
 					'~/.claude/skills': false,
@@ -2142,6 +2145,7 @@ suite('PromptFilesLocator', () => {
 					'.github/skills': false,
 					'.agents/skills': false,
 					'.claude/skills': false,
+					'.safeAppeals/skills': false,
 					'~/.copilot/skills': false,
 					'~/.agents/skills': false,
 					'~/.claude/skills': false,
@@ -2168,6 +2172,7 @@ suite('PromptFilesLocator', () => {
 					'.github/skills': false,
 					'.agents/skills': false,
 					'.claude/skills': false,
+					'.safeAppeals/skills': false,
 					'~/.copilot/skills': false,
 					'~/.agents/skills': false,
 					'~/.claude/skills': false,
@@ -2193,6 +2198,7 @@ suite('PromptFilesLocator', () => {
 					'.github/skills': false,
 					'.agents/skills': false,
 					'.claude/skills': false,
+					'.safeAppeals/skills': false,
 					'~/.copilot/skills': false,
 					'~/.agents/skills': false,
 					'~/.claude/skills': false,
@@ -2220,6 +2226,7 @@ suite('PromptFilesLocator', () => {
 					// explicitly disable other defaults we don't want for this test
 					'.github/skills': false,
 					'.agents/skills': false,
+					'.safeAppeals/skills': false,
 					'~/.copilot/skills': false,
 					'~/.agents/skills': false,
 					'~/.claude/skills': false,
@@ -2252,6 +2259,7 @@ suite('PromptFilesLocator', () => {
 					// explicitly disable other defaults we don't want for this test
 					'.github/skills': false,
 					'.agents/skills': false,
+					'.safeAppeals/skills': false,
 					'~/.copilot/skills': false,
 					'~/.agents/skills': false,
 					'~/.claude/skills': false,
@@ -2286,6 +2294,7 @@ suite('PromptFilesLocator', () => {
 						'/Users/legomushroom/repos/vscode/.agents/skills',
 						'/Users/legomushroom/repos/vscode/.github/skills',
 						'/Users/legomushroom/repos/vscode/.claude/skills',
+						'/Users/legomushroom/repos/vscode/.safeAppeals/skills',
 						'/Users/legomushroom/.agents/skills',
 						'/Users/legomushroom/.copilot/skills',
 						'/Users/legomushroom/.claude/skills',
@@ -2895,7 +2904,7 @@ suite('PromptFilesLocator', () => {
 
 			const files = await locator.listFiles(PromptsType.hook, PromptsStorage.local, CancellationToken.None);
 			assert.deepStrictEqual(
-				files.map(f => f.path).sort(),
+				files.map(f => f.uri.path).sort(),
 				[
 					'/Users/legomushroom/repos/vscode/.claude/settings.json',
 					'/Users/legomushroom/repos/vscode/.claude/settings.local.json',
@@ -2923,7 +2932,7 @@ suite('PromptFilesLocator', () => {
 
 			const files = await locator.listFiles(PromptsType.hook, PromptsStorage.user, CancellationToken.None);
 			assert.deepStrictEqual(
-				files.map(f => f.path).sort(),
+				files.map(f => f.uri.path).sort(),
 				[
 					'/Users/legomushroom/.claude/settings.json',
 					'/Users/legomushroom/.copilot/hooks/my-hook.json',
@@ -2943,6 +2952,8 @@ suite('PromptFilesLocator', () => {
 				PromptFileSource.ClaudeWorkspaceLocal,
 				PromptFileSource.ClaudePersonal,
 				PromptFileSource.UserData,
+				PromptFileSource.SafeAppealsWorkspace,
+				PromptFileSource.SafeAppealsPersonal,
 				PromptFileSource.ConfigWorkspace,
 				PromptFileSource.ConfigPersonal,
 			];
@@ -2953,6 +2964,46 @@ suite('PromptFilesLocator', () => {
 			}
 		});
 
+		test('brands SafeAppeals agent folder sources distinctly from settings and compat', () => {
+			assert.deepStrictEqual(
+				{
+					safeAppealsWorkspace: getSourceDescription(PromptFileSource.SafeAppealsWorkspace),
+					safeAppealsPersonal: getSourceDescription(PromptFileSource.SafeAppealsPersonal),
+					configWorkspace: getSourceDescription(PromptFileSource.ConfigWorkspace),
+					githubWorkspace: getSourceDescription(PromptFileSource.GitHubWorkspace),
+				},
+				{
+					safeAppealsWorkspace: 'Workspace (SafeAppeals)',
+					safeAppealsPersonal: 'Global (SafeAppeals)',
+					configWorkspace: 'Workspace (contributed from settings)',
+					githubWorkspace: 'Workspace (compatibility — Copilot agents)',
+				},
+			);
+		});
+
+		test('tags .safeAppeals/skills as SafeAppealsWorkspace', () => {
+			const folder = DEFAULT_SKILL_SOURCE_FOLDERS.find(f => f.path === '.safeAppeals/skills');
+			assert.deepStrictEqual(
+				{ path: folder?.path, source: folder?.source, storage: folder?.storage },
+				{ path: '.safeAppeals/skills', source: PromptFileSource.SafeAppealsWorkspace, storage: PromptsStorage.local },
+			);
+		});
+
+		test('tags .safeAppeals/agents as SafeAppealsWorkspace and ~/.safeAppeals/agents as SafeAppealsPersonal', () => {
+			const workspaceFolder = DEFAULT_AGENT_SOURCE_FOLDERS.find(f => f.path === '.safeAppeals/agents');
+			const personalFolder = DEFAULT_AGENT_SOURCE_FOLDERS.find(f => f.path === '~/.safeAppeals/agents');
+			assert.deepStrictEqual(
+				[
+					{ path: workspaceFolder?.path, source: workspaceFolder?.source, storage: workspaceFolder?.storage },
+					{ path: personalFolder?.path, source: personalFolder?.source, storage: personalFolder?.storage },
+				],
+				[
+					{ path: '.safeAppeals/agents', source: PromptFileSource.SafeAppealsWorkspace, storage: PromptsStorage.local },
+					{ path: '~/.safeAppeals/agents', source: PromptFileSource.SafeAppealsPersonal, storage: PromptsStorage.user },
+				],
+			);
+		});
+
 		test('returns undefined for extension/plugin sources', () => {
 			assert.strictEqual(getSourceDescription(PromptFileSource.ExtensionContribution), undefined);
 			assert.strictEqual(getSourceDescription(PromptFileSource.ExtensionAPI), undefined);
@@ -2961,6 +3012,6 @@ suite('PromptFilesLocator', () => {
 	});
 });
 
-function assertOutcome(actual: readonly URI[], expected: string[], message: string) {
-	assert.deepStrictEqual(actual.map((uri) => uri.path), expected, message);
+function assertOutcome(actual: readonly URI[] | readonly { readonly uri: URI }[], expected: string[], message: string) {
+	assert.deepStrictEqual(actual.map(item => URI.isUri(item) ? item.path : item.uri.path), expected, message);
 }

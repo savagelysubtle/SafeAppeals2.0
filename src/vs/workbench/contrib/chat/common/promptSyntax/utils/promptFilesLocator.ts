@@ -165,11 +165,12 @@ export class PromptFilesLocator {
 	}
 
 	/**
-	 * List all prompt files from the filesystem.
+	 * List all prompt files from the filesystem, preserving each file's source
+	 * folder metadata so callers can apply deterministic name precedence.
 	 *
-	 * @returns List of prompt files found in the workspace.
+	 * @returns List of prompt files found for the given storage scope.
 	 */
-	public async listFiles(type: PromptsType, storage: PromptsStorage, token: CancellationToken): Promise<readonly URI[]> {
+	public async listFiles(type: PromptsType, storage: PromptsStorage, token: CancellationToken): Promise<readonly IPromptPath[]> {
 		if (storage !== PromptsStorage.user && storage !== PromptsStorage.local) {
 			throw new Error(`Unsupported prompt file storage: ${storage}`);
 		}
@@ -181,22 +182,24 @@ export class PromptFilesLocator {
 			absoluteLocations.push(this.userDataFolder);
 		}
 
-		const paths = new ResourceSet();
+		const seen = new ResourceSet();
+		const result: IPromptPath[] = [];
 
-		for (const { searchRoot, filePattern } of absoluteLocations) {
+		for (const { searchRoot, filePattern, source, storage: folderStorage } of absoluteLocations) {
 			const files = (filePattern === undefined)
 				? await this.resolveFilesAtLocation(searchRoot, type, token) // if the location does not contain a glob pattern, resolve the location directly
 				: await this.searchFilesInLocation(searchRoot, filePattern, token);
 			for (const file of files) {
-				if (getPromptFileType(file) === type) {
-					paths.add(file);
+				if (getPromptFileType(file) === type && !seen.has(file)) {
+					seen.add(file);
+					result.push({ uri: file, storage: folderStorage, type, source });
 				}
 			}
 			if (token.isCancellationRequested) {
 				return [];
 			}
 		}
-		return [...paths];
+		return result;
 	}
 
 	public createFilesUpdatedEvent(type: PromptsType): { readonly event: Event<void>; dispose: () => void } {

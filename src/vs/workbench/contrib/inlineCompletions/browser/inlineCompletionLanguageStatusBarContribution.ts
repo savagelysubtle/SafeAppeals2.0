@@ -10,6 +10,7 @@ import Severity from '../../../../base/common/severity.js';
 import { isCodeEditor } from '../../../../editor/browser/editorBrowser.js';
 import { InlineCompletionsController } from '../../../../editor/contrib/inlineCompletions/browser/controller/inlineCompletionsController.js';
 import { localize } from '../../../../nls.js';
+import { safeAppealsShieldOutlineIcon } from '../../../../platform/theme/common/safeAppealsIcons.js';
 import { IWorkbenchContribution } from '../../../common/contributions.js';
 import { IChatEntitlementService } from '../../../services/chat/common/chatEntitlementService.js';
 import { IEditorService } from '../../../services/editor/common/editorService.js';
@@ -69,9 +70,9 @@ export class InlineCompletionLanguageStatusBarContribution extends Disposable im
 
 			const statusMap: Record<typeof status, { shortLabel: string; label: string; loading: boolean }> = {
 				loading: { shortLabel: '', label: localize('inlineSuggestionLoading', "Loading..."), loading: true, },
-				ghostText: { shortLabel: '$(lightbulb)', label: '$(copilot) ' + localize('inlineCompletionAvailable', "Inline completion available"), loading: false, },
-				inlineEdit: { shortLabel: '$(lightbulb-sparkle)', label: '$(copilot) ' + localize('inlineEditAvailable', "Inline edit available"), loading: false, },
-				noSuggestion: { shortLabel: '$(circle-slash)', label: '$(copilot) ' + localize('noInlineSuggestionAvailable', "No inline suggestion available"), loading: false, },
+				ghostText: { shortLabel: '$(lightbulb)', label: `$(${safeAppealsShieldOutlineIcon.id}) ` + localize('inlineCompletionAvailable', "Inline completion available"), loading: false, },
+				inlineEdit: { shortLabel: '$(lightbulb-sparkle)', label: `$(${safeAppealsShieldOutlineIcon.id}) ` + localize('inlineEditAvailable', "Inline edit available"), loading: false, },
+				noSuggestion: { shortLabel: '$(circle-slash)', label: `$(${safeAppealsShieldOutlineIcon.id}) ` + localize('noInlineSuggestionAvailable', "No inline suggestion available"), loading: false, },
 			};
 
 			store.add(this._languageStatusService.addStatus({

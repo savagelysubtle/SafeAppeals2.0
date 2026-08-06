@@ -3,7 +3,13 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-/** Command id prefixes considered safe enough to run without an extra confirmation prompt. */
+/**
+ * Command id prefixes considered safe enough to run without an extra confirmation prompt.
+ *
+ * Note: `git.` includes remote-facing commands (e.g. push). Agents must still follow
+ * git privacy rules — never push legal/client matter workspaces without explicit user
+ * confirmation after a confidentiality warning. Do not block local `git.commit`.
+ */
 const SAFE_COMMAND_PREFIXES: readonly string[] = [
 	'editor.',
 	'workbench.action.files.',

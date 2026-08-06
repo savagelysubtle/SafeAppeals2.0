@@ -42,13 +42,15 @@ import { WORKSPACE_TRUST_SETTING_TAG } from '../../preferences/common/preference
 import { IPreferencesService } from '../../../services/preferences/common/preferences.js';
 import { ILabelService, Verbosity } from '../../../../platform/label/common/label.js';
 import { IProductService } from '../../../../platform/product/common/productService.js';
-import { MANAGE_TRUST_COMMAND_ID, WorkspaceTrustContext } from '../common/workspace.js';
+import { MANAGE_TRUST_COMMAND_ID, resolveSafeAppealsSampleCaseTrustUri, TRUST_SAFE_APPEALS_SAMPLE_CASE_COMMAND_ID, WorkspaceTrustContext } from '../common/workspace.js';
 import { isWeb } from '../../../../base/common/platform.js';
 import { IRemoteAgentService } from '../../../services/remote/common/remoteAgentService.js';
 import { securityConfigurationNodeBase } from '../../../common/configuration.js';
 import { basename, dirname as uriDirname } from '../../../../base/common/resources.js';
 import { URI } from '../../../../base/common/uri.js';
 import { IFileService } from '../../../../platform/files/common/files.js';
+import { CommandsRegistry } from '../../../../platform/commands/common/commands.js';
+import { IUserDataProfilesService } from '../../../../platform/userDataProfile/common/userDataProfile.js';
 
 const BANNER_RESTRICTED_MODE = 'workbench.banner.restrictedMode';
 const STARTUP_PROMPT_SHOWN_KEY = 'workspace.trust.startupPrompt.shown';
@@ -786,6 +788,18 @@ registerAction2(class extends Action2 {
 		editorService.openEditor(input, { pinned: true });
 		return;
 	}
+});
+
+/**
+ * Silent trust for SafeAppeals Open Sample Case only.
+ * Resolves the known sample-case path under timeline globalStorage — ignores
+ * any caller args so this is not a general-purpose silent-trust API.
+ */
+CommandsRegistry.registerCommand(TRUST_SAFE_APPEALS_SAMPLE_CASE_COMMAND_ID, async (accessor: ServicesAccessor) => {
+	const workspaceTrustManagementService = accessor.get(IWorkspaceTrustManagementService);
+	const userDataProfilesService = accessor.get(IUserDataProfilesService);
+	const sampleRoot = resolveSafeAppealsSampleCaseTrustUri(userDataProfilesService.currentProfile.globalStorageHome);
+	await workspaceTrustManagementService.setUrisTrust([sampleRoot], true);
 });
 
 

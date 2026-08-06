@@ -1,6 +1,6 @@
 ---
 name: organize-files
-description: Organize case documents from tosort (or a user-chosen folder) into the standard Safe Appeals legal folders with a dry-run plan and confirmation. Use when the user asks to organize files, sort the docket, file documents into Medical_Reports/Correspondence/etc., or clean up unsorted intake.
+description: Organize case documents from to_sort (or a user-chosen folder) into the standard Safe Appeals legal folders with a dry-run plan and confirmation. Use when the user asks to organize files, sort the docket, file documents into medical_reports/correspondence/etc., or clean up unsorted intake.
 ---
 
 # Safe Appeals file organizer
@@ -22,12 +22,12 @@ Folders live **flat at the workspace root** (same as `scaffold.ts`
 
 | Folder | Purpose |
 | ------ | ------- |
-| `Medical_Reports` | Doctor reports, exams, assessments, imaging, treatment records |
-| `Correspondence` | Letters, emails, notices, board/employer communication |
-| `Decisions_and_Orders` | Official decisions, orders, rulings, awards |
-| `Evidence` | Witness statements, photos, pay records, non-medical supporting docs |
-| `Personal_Notes` | User notes, drafts, agent summaries (not originals) |
-| `tosort` | Unsorted intake — source folder for organization |
+| `medical_reports` | Doctor reports, exams, assessments, imaging, treatment records |
+| `correspondence` | Letters, emails, notices, board/employer communication |
+| `decisions_and_orders` | Official decisions, orders, rulings, awards |
+| `evidence` | Witness statements, photos, pay records, non-medical supporting docs |
+| `personal_notes` | User notes, drafts, agent summaries (not originals) |
+| `to_sort` | Unsorted intake — source folder for organization |
 
 If standard folders are missing, offer to run the **project-setup** skill
 first (scaffold-only) or create only the missing folders after asking. Do not
@@ -45,8 +45,8 @@ Ask once unless the user already specified a mode.
 
 ## 3. Source folder
 
-1. Default source: `./tosort` at workspace root.
-2. If `./tosort` is missing, ask whether to create it or use a different folder.
+1. Default source: `./to_sort` at workspace root.
+2. If `./to_sort` is missing, ask whether to create it or use a different folder.
 3. If the user names another folder, use that path instead.
 4. Recurse only within the chosen source tree; do not move files already sitting in destination folders unless the user asks to re-sort them.
 
@@ -56,14 +56,14 @@ For each file in the source tree:
 
 1. **Filename heuristics** (case-insensitive substring match):
 
-   - **Medical_Reports:** medical, doctor, physician, exam, assessment,
+   - **medical_reports:** medical, doctor, physician, exam, assessment,
      treatment, diagnosis, mri, xray, report (when clearly medical context)
-   - **Correspondence:** letter, email, correspondence, notice, communication
-   - **Decisions_and_Orders:** decision, order, ruling, judgment, determination,
+   - **correspondence:** letter, email, correspondence, notice, communication
+   - **decisions_and_orders:** decision, order, ruling, judgment, determination,
      award
-   - **Evidence:** evidence, witness, statement, photo, image, document (when
+   - **evidence:** evidence, witness, statement, photo, image, document (when
      not better fit elsewhere)
-   - **Personal_Notes:** note, journal, diary, personal, draft
+   - **personal_notes:** note, journal, diary, personal, draft
 
 2. **Content sample:** for text-like files with ambiguous filenames, read roughly
    the first 1 KB and use content to refine category.
@@ -73,7 +73,7 @@ For each file in the source tree:
    - **high** — clear filename or content match
    - **medium** — plausible match, minor ambiguity
    - **low** — unclear; in **interactive** mode ask the user; in **full_auto**
-     leave in `tosort` (do not invent extra folders)
+     leave in `to_sort` (do not invent extra folders)
 
 4. **Never delete originals.** Moves only. On destination filename conflict,
    auto-rename with numeric suffix (`_01`, `_02`, …).
@@ -90,20 +90,20 @@ which creates folders only).
 ```json
 {
   "mode": "interactive",
-  "source": "./tosort",
+  "source": "./to_sort",
   "operations": [
     {
-      "source": "./tosort/2024-01-15_medical_exam.pdf",
-      "destination": "./Medical_Reports/2024-01-15_Medical_Exam.pdf",
-      "category": "Medical_Reports",
+      "source": "./to_sort/2024-01-15_medical_exam.pdf",
+      "destination": "./medical_reports/2024-01-15_medical_exam.pdf",
+      "category": "medical_reports",
       "confidence": "high",
       "reason": "Filename contains 'medical' and 'exam'"
     }
   ],
   "skipped": [
     {
-      "source": "./tosort/scan001.pdf",
-      "reason": "low confidence — left in tosort pending user input"
+      "source": "./to_sort/scan001.pdf",
+      "reason": "low confidence — left in to_sort pending user input"
     }
   ],
   "stats": {
@@ -129,7 +129,7 @@ without moving files.
 ## 6. Execute (interactive or full_auto, after approval)
 
 1. Create any missing destination folders (flat at workspace root).
-2. **full_auto only:** create `./tosort/_originals/` and copy every file
+2. **full_auto only:** create `./to_sort/_originals/` and copy every file
    slated to move into `_originals/` **before** moving (preserve relative paths
    or basenames as needed for restore).
 3. For each approved operation:
@@ -147,7 +147,7 @@ without moving files.
 
 ## 7. Summary
 
-Report a short summary: files moved, skipped (still in `tosort`), conflicts
+Report a short summary: files moved, skipped (still in `to_sort`), conflicts
 resolved, backup count (**full_auto**), errors, and paths to the log files.
 
 ```json
@@ -189,7 +189,7 @@ resolved, backup count (**full_auto**), errors, and paths to the log files.
 
 ## 11. Finish
 
-1. Summarize what moved and what remains in `tosort`.
+1. Summarize what moved and what remains in `to_sort`.
 2. Remind the user that `.safeAppeals/undo_plan.json` describes reverse moves
    if they need to undo.
 3. For project facts or root `AGENTS.md`, point them to **project-setup** —

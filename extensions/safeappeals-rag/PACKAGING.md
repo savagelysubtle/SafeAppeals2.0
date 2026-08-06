@@ -23,11 +23,12 @@ See `rust/rag-core/PREBUILDS.md` for build steps. **Do not block M6** on electro
 - Embed: `SA_RAG_EMBED_MODEL_DIR` (BGE-small)
 - CE: `SA_RAG_CE_MODEL_DIR` (ms-marco MiniLM)
 - Host syncs these from `safeappeals-ml` artifact dirs when ready; BYO dirs honored when already set.
-- Catalog `downloadUrl` / `sha256` for the Search pack are still **unpinned** → install fails closed → `models-missing` hard-disable until BYO or pins land.
+- Search pack (BGE + ms-marco CE) is **commit-pinned** in `safeappeals-ml` `ModelCatalog` via per-file `files[]` entries (Hugging Face Xenova repos) with pack-level and per-file `sha256` digests. Consent install succeeds when the user confirms via **Settings → Install Missing Models** or command `safeappeals-rag.installMissingModels`.
+- **Unlimited-OCR** is **HF commit-pinned** in `safeappeals-ml` `ModelCatalog` (`files[]` under `baidu/Unlimited-OCR` @ `d549bb9…`) with pack-level and per-file `sha256` digests. Consent install succeeds when HW eligible + user confirms via **Set Up Private Search** or `safeappeals-ml.installUnlimitedOcr`. Sidecar must be running separately (BYO vLLM/sglang).
 
 ## Honest gaps (not faked in M6)
 
-- Digital PDF extract remains a stub.
+- Born-digital PDF extract uses sa-converter sidecar; scanned PDF OCR uses Unlimited-OCR when HW+consent+sidecar ready.
 - electron-146 prebuild missing for packaged Electron.
 - MlResourceEngine / agent tools = M7 / M8.
 - Intermediate usearch/tantivy work files are not sealed when cold (SQLCipher owns chunk DB encryption).

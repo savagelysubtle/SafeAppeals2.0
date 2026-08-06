@@ -78,8 +78,8 @@ separate eligible-only offer.
 
 - **Installer size:** keep v1 lean — natives + host only. Search pack (~hundreds of MB) and
   OCR (~7 GB) stay out of the default download.
-- **Pins:** catalog `sha256` + `downloadUrl` before any consent download; refuse until set
-  (Unlimited-OCR pins still deferred to ops / this packaging track).
+- **Pins:** catalog `sha256` + `downloadUrl` before any consent download; refuse until set.
+- **Unlimited-OCR:** HF `baidu/Unlimited-OCR` commit `d549bb9d6a055dbe291408916d66acc2cd5920f6` (12-file pack, ~6.7 GB weights).
 - **ort pin:** `=2.0.0-rc.13` (see PREBUILDS.md) — bump deliberately with CVE review.
 - **Native CVE surface:** treat committed `.node` like any native dependency — rebuild on
   toolchain/dep advisories; prefer missing binary over a stale/wrong one.
@@ -108,7 +108,23 @@ Cross-compiling Windows Electron ABI from Linux is **not** supported.
 - [x] Document dual-ABI + model layout (this note)
 - [ ] `linux-x64/electron-146` prebuild
 - [ ] `win32-x64` node-137 + electron-146
-- [ ] Pinned Search-pack + Unlimited-OCR download URLs / digests
+- [x] Pinned Search-pack download URLs / digests (HF Xenova commit pins via ModelCatalog `files[]`)
+- [x] Pinned Unlimited-OCR download URLs / digests (HF baidu/Unlimited-OCR @ d549bb9)
 - [ ] Optional offline media / enterprise OCR bundle (explicit product decision)
 
 Until those land, Private Search and OCR stay capability-gated: BYO or consent install, or hard-disable.
+
+---
+
+## sa-docparse sidecar (Unlimited-OCR HTTP)
+
+Local dev / packaging copy for the ML extension sidecar:
+
+```bash
+cargo build -p docparse --release
+cp rust/target/release/sa-docparse extensions/safeappeals-ml/bin/
+mkdir -p extensions/safeappeals-ml/bin/python
+cp rust/docparse/python/infer_unlimited_ocr.py extensions/safeappeals-ml/bin/python/
+```
+
+`DocParseSidecarHost` resolves `extensionPath/bin/sa-docparse` (or `SAFEAPPEALS_DOCPARSE_PATH`) and sets `SA_DOCPARSE_INFER_SCRIPT` to the bundled Python helper when present.

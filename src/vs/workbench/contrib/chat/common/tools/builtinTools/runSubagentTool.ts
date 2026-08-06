@@ -24,12 +24,27 @@ import { ChatAgentLocation, ChatConfiguration, ChatModeKind } from '../../consta
 import { COPILOT_VENDOR_ID, ILanguageModelChatMetadata, ILanguageModelsService } from '../../languageModels.js';
 import type { ChatModel, IChatRequestModeInstructions } from '../../model/chatModel.js';
 import { getChatSessionType } from '../../model/chatUri.js';
-import { IChatAgentRequest, IChatAgentResult, IChatAgentService } from '../../participants/chatAgents.js';
+import { IChatAgentRequest, IChatAgentResult, IChatAgentService, UserSelectedTools } from '../../participants/chatAgents.js';
+import {
+	COMPAT_AGENT_PATH_MARKERS_FOR_SUBAGENT_INVOKE,
+	SAFE_APPEALS_AGENT_PATH_MARKERS_FOR_SUBAGENT_INVOKE,
+	isAgentInvocableViaRunSubagent,
+	isCompatAgentUriForSubagentInvoke,
+	isSafeAppealsOwnedAgentUriForSubagentInvoke,
+} from '../../promptSyntax/agentSubagentInvoke.js';
 import { ComputeAutomaticInstructions } from '../../promptSyntax/computeAutomaticInstructions.js';
 import { ChatRequestHooks, mergeHooks } from '../../promptSyntax/hookSchema.js';
 import { HookType } from '../../promptSyntax/hookTypes.js';
 import { ICustomAgent, IPromptsService } from '../../promptSyntax/service/promptsService.js';
 import { isBuiltinAgent } from '../../promptSyntax/utils/promptsServiceUtils.js';
+
+export {
+	COMPAT_AGENT_PATH_MARKERS_FOR_SUBAGENT_INVOKE,
+	SAFE_APPEALS_AGENT_PATH_MARKERS_FOR_SUBAGENT_INVOKE,
+	isAgentInvocableViaRunSubagent,
+	isCompatAgentUriForSubagentInvoke,
+	isSafeAppealsOwnedAgentUriForSubagentInvoke,
+};
 import {
 	CountTokensCallback,
 	ILanguageModelToolsService,
@@ -44,8 +59,164 @@ import {
 	ToolProgress,
 	VSCodeToolReference,
 } from '../languageModelToolsService.js';
+import { TerminalToolId } from '../terminalToolIds.js';
+import { ExtensionEditToolId, InternalEditToolId } from './editFileTool.js';
 import { ManageTodoListToolToolId } from './manageTodoListTool.js';
 import { createToolSimpleTextResult } from './toolHelpers.js';
+
+/** Keep inline to avoid a circular import with `tools.ts` (which registers RunSubagentTool). */
+const InternalFetchWebPageToolId = 'vscode_fetchWebPage_internal';
+
+/**
+ * Read-only baseline seeded as `true` when a subagent omits `tools:`.
+ *
+ * Purpose: `selectAgentTools` treats an all-false enablement map as empty selection
+ * (`selectedByName.size === 0`) and falls through to pool + ENSURED (MVP), which would
+ * re-add write/web tools. Seeding at least one allowed tool keeps selection non-empty so
+ * ENSURED cannot broaden beyond tools that are not explicitly `false`.
+ *
+ * Includes SafeAppeals read/search/list + RAG search/stats (not index) + read-only timeline getters.
+ */
+export const SUBAGENT_DEFAULT_ENABLED_TOOL_IDS: readonly string[] = [
+	'safeappeals_readFile',
+	'safeappeals_listDir',
+	'safeappeals_findFiles',
+	'safeappeals_findTextInFiles',
+	'safeappeals_searchWorkspaceSymbols',
+	'safeappeals_getErrors',
+	'safeappeals_getChangedFiles',
+	'safeappeals_searchCodebase',
+	'safeappeals_rag_get_stats',
+	'safeappeals_rag_search_reference',
+	'safeappeals_rag_search_workspace',
+	'safeappeals_rag_search_all',
+	'timeline_get_events',
+	'timeline_get_deadlines',
+];
+
+/**
+ * Tool ids that must be explicitly disabled when a subagent omits `tools:` (default-deny).
+ * Cross-checked against auth `ENSURED_AGENT_TOOL_NAMES` + `CORE_AGENT_TOOL_NAMES` mutators
+ * so ENSURED / pool fallback cannot re-enable them when present as `false` in `request.tools`.
+ */
+export const SUBAGENT_DEFAULT_DENIED_TOOL_IDS: readonly string[] = [
+	// SafeAppeals write / mutate (ENSURED)
+	'safeappeals_editFile',
+	'safeappeals_createFile',
+	'safeappeals_createDirectory',
+	'safeappeals_replaceString',
+	'safeappeals_multiReplaceString',
+	'safeappeals_applyPatch',
+	// SafeAppeals command / web egress / mode / plan / index (ENSURED or pool)
+	'safeappeals_runVscodeCommand',
+	'safeappeals_fetchWebPage',
+	'safeappeals_webSearch',
+	'safeappeals_multiWebSearch',
+	'safeappeals_switchMode',
+	'safeappeals_createPlan',
+	'safeappeals_rag_index_document',
+	// Nesting: runSubagent is in the default-deny seed (explicit false). Depth gating
+	// re-enables it only when nesting is on and the agent omitted tools: (baseline).
+	'runSubagent',
+	// Core edit / fetch / terminal
+	InternalEditToolId,
+	ExtensionEditToolId,
+	InternalFetchWebPageToolId,
+	TerminalToolId.RunInTerminal,
+	TerminalToolId.SendToTerminal,
+	TerminalToolId.CreateAndRunTask,
+	TerminalToolId.RunTask,
+	TerminalToolId.KillTerminal,
+	'manage_todo_list',
+	// CORE browser automation (mutating / egress)
+	'browserTool',
+	'open_browser_page',
+	'click_element',
+	'screenshot_page',
+	'navigate_page',
+	'read_page',
+	'hover_element',
+	'drag_element',
+	'type_in_page',
+	'handle_dialog',
+	'run_playwright_code',
+	// Timeline mutators (CORE)
+	'timeline_add_event',
+	'timeline_update_event',
+	'timeline_delete_event',
+	'timeline_link_document',
+	// Common toolReferenceName / short forms that may appear as enablement keys
+	'editFile',
+	'createFile',
+	'createDirectory',
+	'replaceString',
+	'multiReplaceString',
+	'applyPatch',
+	'runVscodeCommand',
+	'runCommand',
+	'fetchWebPage',
+	'fetch',
+	'webSearch',
+	'multiWebSearch',
+	'switchMode',
+	'createPlan',
+	'rag_index_document',
+];
+
+const SUBAGENT_DEFAULT_DENIED_TOOL_ID_SET = new Set<string>(SUBAGENT_DEFAULT_DENIED_TOOL_IDS);
+const SUBAGENT_DEFAULT_ENABLED_TOOL_ID_SET = new Set<string>(SUBAGENT_DEFAULT_ENABLED_TOOL_IDS);
+
+/**
+ * Builds an explicit enablement map that default-denies write/command/web/terminal tools
+ * and seeds a read-only allow set.
+ *
+ * Never inherits parent tools. Always includes both `true` (safe reads) and `false`
+ * (mutators) so `selectAgentTools` does not treat the map as empty and MVP/ENSURED-fallback.
+ */
+export function createDefaultDenySubagentTools(knownTools?: Iterable<Pick<IToolData, 'id'>>): UserSelectedTools {
+	const modeTools: UserSelectedTools = {};
+	for (const id of SUBAGENT_DEFAULT_ENABLED_TOOL_IDS) {
+		modeTools[id] = true;
+	}
+	// Denies applied after enables so any accidental overlap fails closed.
+	for (const id of SUBAGENT_DEFAULT_DENIED_TOOL_IDS) {
+		modeTools[id] = false;
+	}
+	if (knownTools) {
+		for (const tool of knownTools) {
+			if (SUBAGENT_DEFAULT_DENIED_TOOL_ID_SET.has(tool.id)) {
+				modeTools[tool.id] = false;
+			} else if (SUBAGENT_DEFAULT_ENABLED_TOOL_ID_SET.has(tool.id)) {
+				modeTools[tool.id] = true;
+			}
+		}
+	}
+	return modeTools;
+}
+
+/**
+ * Resolves the subagent tool enablement map.
+ * - Missing/empty `tools:` → default-deny + seed-enable (no parent inherit).
+ * - Present `tools:` → start from default-deny baseline, then overlay listed enablement
+ *   (listed `true` may re-enable a denied tool; unlisted stay denied / seed state from baseline
+ *   until the conversion map overwrites them with explicit `false`).
+ */
+export function resolveSubagentModeTools(
+	subagentTools: readonly string[] | undefined,
+	convertListedTools: (listedTools: readonly string[]) => UserSelectedTools,
+	knownTools?: Iterable<Pick<IToolData, 'id'>>,
+): UserSelectedTools {
+	const baseline = createDefaultDenySubagentTools(knownTools);
+	if (!subagentTools?.length) {
+		return baseline;
+	}
+	const listed = convertListedTools(subagentTools);
+	const modeTools: UserSelectedTools = { ...baseline };
+	for (const [id, enabled] of Object.entries(listed)) {
+		modeTools[id] = enabled;
+	}
+	return modeTools;
+}
 
 const BaseModelDescription = `Launch a new agent to handle complex, multi-step tasks autonomously. This tool is good at researching complex questions, searching for code, and executing multi-step tasks. When you are searching for a keyword or file and are not confident that you will find the right match in the first few tries, use this agent to perform the search for you.
 
@@ -164,6 +335,8 @@ export class RunSubagentTool extends Disposable implements IToolImpl {
 			let modeInstructions: IChatRequestModeInstructions | undefined;
 			let subagent: ICustomAgent | undefined;
 			let resolvedModelName: string | undefined;
+			/** True when tools came from default-deny baseline (omitted/empty `tools:`), not an explicit list. */
+			let usedDefaultDenyBaseline = false;
 			const currentModeInstructions = request.modeInfo?.modeInstructions;
 
 			const subAgentName = this.normalizeRequestedAgentName(args.agentName);
@@ -185,19 +358,23 @@ export class RunSubagentTool extends Disposable implements IToolImpl {
 						resolvedModelName = resolved.resolvedModelName;
 					}
 
-					// Use mode-specific tools if available
-					const modeCustomTools = subagent.tools;
-					if (modeCustomTools) {
-						// Convert the mode's custom tools (array of qualified names) to UserSelectedTools format
-						const enablementMap = this.languageModelToolsService.toToolAndToolSetEnablementMap(modeCustomTools, undefined);
-						// Convert enablement map to UserSelectedTools (Record<string, boolean>)
-						modeTools = {};
-						for (const [tool, enabled] of enablementMap) {
-							if (!isToolSet(tool)) {
-								modeTools[tool.id] = enabled;
+					// Resolve tools: omit/empty ⇒ explicit default-deny (never inherit parent).
+					// Present list ⇒ enablement map with unlisted tools false.
+					usedDefaultDenyBaseline = !subagent.tools?.length;
+					modeTools = resolveSubagentModeTools(
+						subagent.tools,
+						listedTools => {
+							const enablementMap = this.languageModelToolsService.toToolAndToolSetEnablementMap(listedTools, undefined);
+							const converted: UserSelectedTools = {};
+							for (const [tool, enabled] of enablementMap) {
+								if (!isToolSet(tool)) {
+									converted[tool.id] = enabled;
+								}
 							}
-						}
-					}
+							return converted;
+						},
+						this.languageModelToolsService.getAllToolsIncludingDisabled(),
+					);
 
 					const instructions = subagent.agentInstructions;
 					modeInstructions = instructions && {
@@ -290,10 +467,14 @@ export class RunSubagentTool extends Disposable implements IToolImpl {
 				modeTools = {};
 			}
 
-			// Only further-restrict RunSubagentTool: do not re-enable it if it was explicitly disabled.
+			// Nesting depth owns runSubagent after default-deny. Baseline seeds runSubagent:false;
+			// when tools: was omitted, that false is not an agent choice — nesting may re-enable.
+			// When tools: was listed, respect an explicit false (do not re-enable).
 			const existingRunSubagentEnablement = modeTools[RunSubagentTool.Id];
-			if (existingRunSubagentEnablement !== false) {
-				modeTools[RunSubagentTool.Id] = depthAllowed; // only enable the Run Subagent tool if we are under the max depth limit
+			if (usedDefaultDenyBaseline) {
+				modeTools[RunSubagentTool.Id] = depthAllowed;
+			} else if (existingRunSubagentEnablement !== false) {
+				modeTools[RunSubagentTool.Id] = depthAllowed;
 			}
 
 			modeTools[ManageTodoListToolToolId] = false;
@@ -423,7 +604,18 @@ export class RunSubagentTool extends Disposable implements IToolImpl {
 
 	private async getSubAgentByName(name: string): Promise<ICustomAgent | undefined> {
 		const agents = await this.promptsService.getCustomAgents(CancellationToken.None);
-		return agents.find(agent => agent.name === name && agent.enabled);
+		const matches = agents.filter(agent => agent.name === name && agent.enabled);
+		const invocable = matches.find(agent => isAgentInvocableViaRunSubagent(agent));
+		if (invocable) {
+			return invocable;
+		}
+		const compatMatch = matches.find(agent => isCompatAgentUriForSubagentInvoke(agent.uri));
+		if (compatMatch) {
+			throw new Error(
+				`Requested agent '${name}' is from a compatibility agent source and cannot be invoked via runSubagent. Use a SafeAppeals agent (.safeAppeals/agents or ~/.safeAppeals/agents) or a built-in/extension agent.`
+			);
+		}
+		return undefined;
 	}
 
 	/**

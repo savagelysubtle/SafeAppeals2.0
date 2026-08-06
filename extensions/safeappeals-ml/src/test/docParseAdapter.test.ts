@@ -59,6 +59,7 @@ suite('DocParseAdapter', () => {
 		(fake as { kill: (signal?: NodeJS.Signals) => boolean }).kill = () => {
 			killed = true;
 			(fake as { killed: boolean }).killed = true;
+			fake.emit('exit', 0, 'SIGTERM');
 			return true;
 		};
 

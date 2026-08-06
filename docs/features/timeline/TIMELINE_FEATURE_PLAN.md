@@ -16,7 +16,7 @@ A visual timeline of case events for tracking injury progression, medical visits
 
 | Decision           | Choice                             | Rationale                                                       |
 | ------------------ | ---------------------------------- | --------------------------------------------------------------- |
-| **Storage**        | `.timeline.json` in workspace      | Portable, version-controllable, syncs across machines           |
+| **Storage**        | `.safeAppeals/timeline.json` in workspace | Portable, version-controllable, syncs across machines    |
 | **Timeline UI**    | Custom React (Tailwind)            | Full control, VSCode integration, avoid external library issues |
 | **PDF Export**     | Electron HTML-to-PDF               | Clean output, full styling control (Phase 2)                    |
 | **Notifications**  | Scheduled on app startup           | Simple, reliable, no background service needed                  |
@@ -78,7 +78,7 @@ interface TimelineEvent {
 }
 ```
 
-### CaseTimeline (`.timeline.json`)
+### CaseTimeline (`.safeAppeals/timeline.json`)
 
 ```typescript
 interface CaseTimeline {
@@ -170,7 +170,7 @@ interface CaseTimeline {
 7. **Service Infrastructure**
 
    - ✅ ITimelineService interface
-   - ✅ File-based storage (.timeline.json)
+   - ✅ File-based storage (.safeAppeals/timeline.json)
    - ✅ Event-driven updates
    - ✅ Registered in React accessor
 
@@ -313,7 +313,7 @@ Ctrl+Shift+T (or Command Palette → "Open Case Timeline")
 - [ x] Filter by category
 - [ x] Toggle "Deadlines only"
 - [ x] Mark deadline as complete
-- [ x] Verify `.timeline.json` created in workspace
+- [ x] Verify `.safeAppeals/timeline.json` created in workspace
 - [ x] Verify deadline notifications on reload
 
 ---

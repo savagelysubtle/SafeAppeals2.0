@@ -1,5 +1,15 @@
 {
 	"command.category": "Safe Appeals Email",
 	"command.addAccount.title": "Add Email Account",
-	"command.reconnectMailbox.title": "Reconnect Mailbox"
+	"command.reconnectMailbox.title": "Reconnect Mailbox",
+	"walkthrough.inbox.title": "Email and Calendar",
+	"walkthrough.inbox.description": "Connect inbox and calendar so correspondence and deadlines stay with the case — no AI credits required.",
+	"walkthrough.inbox.why.title": "Why Connect Your Inbox",
+	"walkthrough.inbox.why.description": "Keep threads with the case instead of a separate app. Connecting does not spend credits or run the AI.",
+	"walkthrough.inbox.addAccount.title": "Add Email Account",
+	"walkthrough.inbox.addAccount.description": "Add an IMAP/SMTP mailbox. Credentials stay in secret storage on this computer.\n[Add Email Account](command:safeappeals-email.addAccount)",
+	"walkthrough.inbox.connectCalendar.title": "Connect Calendar",
+	"walkthrough.inbox.connectCalendar.description": "Optional: link the calendar you already use for hearings and deadlines.\n[Connect Calendar](command:safeappeals-calendar.connect)",
+	"walkthrough.inbox.dashboard.title": "Open Email Dashboard and Sync Status",
+	"walkthrough.inbox.dashboard.description": "Review threads and sync status from the Email Dashboard.\n[Open Email Dashboard](command:safeappeals-email.openDashboard)\n[Show Sync Status](command:safeappeals-email.syncStatus)"
 }

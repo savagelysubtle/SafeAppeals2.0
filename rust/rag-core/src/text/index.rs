@@ -17,7 +17,7 @@ use tantivy::schema::{
 };
 use tantivy::{
 	DocAddress, DocSet, Index, IndexReader, IndexWriter, Postings, ReloadPolicy, Searcher,
-	TERMINATED,
+	TantivyError, TERMINATED,
 };
 use thiserror::Error;
 
@@ -52,26 +52,41 @@ pub struct Bm25Hit {
 /// Tantivy BM25 index persisted at `{root}/text.tantivy`.
 pub struct TextIndex {
 	index: Index,
-	writer: IndexWriter,
+	writer: Option<IndexWriter>,
 	reader: IndexReader,
 	chunk_id_field: Field,
 	doc_id_field: Field,
 	scope_field: Field,
 	body_field: Field,
 	path: PathBuf,
+	read_only: bool,
 }
 
 impl std::fmt::Debug for TextIndex {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		f.debug_struct("TextIndex")
 			.field("path", &self.path)
+			.field("read_only", &self.read_only)
+			.field("has_writer", &self.writer.is_some())
 			.finish_non_exhaustive()
 	}
 }
 
 impl TextIndex {
 	/// Open existing index or create empty at `{root_dir}/text.tantivy`.
+	///
+	/// Does **not** acquire an `IndexWriter` — use lazy `ensure_writer` on first
+	/// upsert/remove/commit so multiple processes can open readers concurrently.
 	pub fn open(root_dir: impl AsRef<Path>) -> Result<Self, TextError> {
+		Self::open_inner(root_dir, false)
+	}
+
+	/// Open an existing index read-only (no writer, no create).
+	pub fn open_read_only(root_dir: impl AsRef<Path>) -> Result<Self, TextError> {
+		Self::open_inner(root_dir, true)
+	}
+
+	fn open_inner(root_dir: impl AsRef<Path>, read_only: bool) -> Result<Self, TextError> {
 		let path = root_dir.as_ref().join(TEXT_INDEX_DIRNAME);
 		let schema = build_schema();
 
@@ -80,16 +95,22 @@ impl TextIndex {
 			let exists = Index::exists(&dir).map_err(|e| TextError::Message(e.to_string()))?;
 			if exists {
 				Index::open_in_dir(&path)?
+			} else if read_only {
+				return Err(TextError::Message(
+					"text index directory exists but index is missing (read-only)".into(),
+				));
 			} else {
 				Index::create_in_dir(&path, schema)?
 			}
+		} else if read_only {
+			return Err(TextError::Message(
+				"text index does not exist (read-only)".into(),
+			));
 		} else {
 			std::fs::create_dir_all(&path)?;
 			Index::create_in_dir(&path, schema)?
 		};
 
-		// Always bind Field handles from the live index schema (not a freshly
-		// built Schema value that may diverge after open_in_dir).
 		let live = index.schema();
 		let chunk_id_field = live
 			.get_field("chunk_id")
@@ -104,7 +125,6 @@ impl TextIndex {
 			.get_field("body")
 			.map_err(|e| TextError::Message(format!("missing body field: {e}")))?;
 
-		let writer = index.writer(WRITER_HEAP_BYTES)?;
 		let reader = index
 			.reader_builder()
 			.reload_policy(ReloadPolicy::Manual)
@@ -112,18 +132,52 @@ impl TextIndex {
 
 		Ok(Self {
 			index,
-			writer,
+			writer: None,
 			reader,
 			chunk_id_field,
 			doc_id_field,
 			scope_field,
 			body_field,
 			path,
+			read_only,
 		})
 	}
 
 	pub fn path(&self) -> &Path {
 		&self.path
+	}
+
+	pub fn is_read_only(&self) -> bool {
+		self.read_only
+	}
+
+	/// True when this session may index (read-write mode; writer may be lazy).
+	pub fn index_write_capable(&self) -> bool {
+		!self.read_only
+	}
+
+	pub fn has_writer(&self) -> bool {
+		self.writer.is_some()
+	}
+
+	/// Reload the searcher so secondary processes see primary commits.
+	pub fn reload_reader(&self) -> Result<(), TextError> {
+		self.reader.reload()?;
+		Ok(())
+	}
+
+	fn ensure_writer(&mut self) -> Result<(), TextError> {
+		if self.read_only {
+			return Err(TextError::Message("read-only session".into()));
+		}
+		if self.writer.is_none() {
+			self.writer = Some(
+				self.index
+					.writer(WRITER_HEAP_BYTES)
+					.map_err(map_writer_error)?,
+			);
+		}
+		Ok(())
 	}
 
 	/// Number of live documents in the searchable index (after last commit/reload).
@@ -136,33 +190,41 @@ impl TextIndex {
 		&mut self,
 		chunks: &[(String, String, String, String)],
 	) -> Result<(), TextError> {
-		// (chunk_id, doc_id, scope, text)
+		self.ensure_writer()?;
+		let chunk_id_field = self.chunk_id_field;
+		let doc_id_field = self.doc_id_field;
+		let scope_field = self.scope_field;
+		let body_field = self.body_field;
+		let writer = self.writer.as_mut().expect("writer ensured");
 		for (chunk_id, doc_id, scope, text) in chunks {
-			self.writer
-				.delete_term(Term::from_field_text(self.chunk_id_field, chunk_id));
+			writer.delete_term(Term::from_field_text(chunk_id_field, chunk_id));
 			let mut doc = TantivyDocument::default();
-			doc.add_text(self.chunk_id_field, chunk_id);
-			doc.add_text(self.doc_id_field, doc_id);
-			doc.add_text(self.scope_field, scope);
-			doc.add_text(self.body_field, text);
-			self.writer.add_document(doc)?;
+			doc.add_text(chunk_id_field, chunk_id);
+			doc.add_text(doc_id_field, doc_id);
+			doc.add_text(scope_field, scope);
+			doc.add_text(body_field, text);
+			writer.add_document(doc)?;
 		}
 		Ok(())
 	}
 
 	/// Remove chunks by id. Caller should [`commit`](Self::commit).
 	pub fn remove_chunks(&mut self, chunk_ids: &[String]) -> Result<(), TextError> {
+		self.ensure_writer()?;
+		let chunk_id_field = self.chunk_id_field;
+		let writer = self.writer.as_mut().expect("writer ensured");
 		for chunk_id in chunk_ids {
-			self.writer
-				.delete_term(Term::from_field_text(self.chunk_id_field, chunk_id));
+			writer.delete_term(Term::from_field_text(chunk_id_field, chunk_id));
 		}
 		Ok(())
 	}
 
-	/// Commit writer and reload the searcher.
+	/// Commit writer and reload the searcher. No-op when no writer was acquired.
 	pub fn commit(&mut self) -> Result<(), TextError> {
-		self.writer.commit()?;
-		self.reader.reload()?;
+		if let Some(writer) = self.writer.as_mut() {
+			writer.commit()?;
+			self.reader.reload()?;
+		}
 		Ok(())
 	}
 
@@ -177,6 +239,7 @@ impl TextIndex {
 		if limit == 0 || query.trim().is_empty() {
 			return Ok(Vec::new());
 		}
+		self.reader.reload()?;
 		let searcher = self.reader.searcher();
 		let tokens = tokenize_query(&self.index, self.body_field, query)?;
 		if tokens.is_empty() {
@@ -186,7 +249,6 @@ impl TextIndex {
 		let total_num_docs = searcher.num_docs().max(1);
 		let avgdl = average_field_length(&searcher, self.body_field)?;
 
-		// Accumulate BM25 scores by DocAddress, then resolve chunk_id.
 		let mut scores: HashMap<DocAddress, f32> = HashMap::new();
 
 		for token in &tokens {
@@ -219,7 +281,6 @@ impl TextIndex {
 			}
 		}
 
-		// Optional scope filter + hydrate chunk_id from stored fields.
 		let mut hits: Vec<(f32, String)> = Vec::with_capacity(scores.len());
 		for (addr, score) in scores {
 			let retrieved: TantivyDocument = searcher.doc(addr)?;
@@ -249,6 +310,14 @@ impl TextIndex {
 			.into_iter()
 			.map(|(score, chunk_id)| Bm25Hit { chunk_id, score })
 			.collect())
+	}
+}
+
+fn map_writer_error(e: TantivyError) -> TextError {
+	if matches!(e, TantivyError::LockFailure(..)) {
+		TextError::Message(format!("LockBusy: {e}"))
+	} else {
+		TextError::Tantivy(e)
 	}
 }
 
@@ -295,7 +364,6 @@ fn idf(doc_freq: u64, doc_count: u64) -> f32 {
 	(1.0 + x).ln()
 }
 
-/// BM25 contribution for one term in one document.
 fn bm25_tf_score(tf: f32, doc_len: f32, avgdl: f32, idf: f32, k1: f32, b: f32) -> f32 {
 	let norm = k1 * (1.0 - b + b * doc_len / avgdl.max(1.0));
 	idf * (tf * (k1 + 1.0)) / (tf + norm)
@@ -350,5 +418,75 @@ mod tests {
 	fn bm25_params_are_void_defaults() {
 		assert!((BM25_K1 - 0.8).abs() < f32::EPSILON);
 		assert!((BM25_B - 0.5).abs() < f32::EPSILON);
+	}
+
+	#[test]
+	fn two_reader_opens_without_writer() {
+		let dir = tempdir().unwrap();
+		let mut primary = TextIndex::open(dir.path()).unwrap();
+		primary
+			.upsert_chunks(&[(
+				"c1".into(),
+				"d1".into(),
+				"case_index".into(),
+				"flare-ups and ratings".into(),
+			)])
+			.unwrap();
+		primary.commit().unwrap();
+
+		let reader_a = TextIndex::open(dir.path()).unwrap();
+		let reader_b = TextIndex::open(dir.path()).unwrap();
+		assert!(!reader_a.has_writer());
+		assert!(!reader_b.has_writer());
+
+		let hits = reader_a.search("flare-ups", 5, None).unwrap();
+		assert_eq!(hits[0].chunk_id, "c1");
+	}
+
+	#[test]
+	fn read_only_rejects_indexing() {
+		let dir = tempdir().unwrap();
+		let mut primary = TextIndex::open(dir.path()).unwrap();
+		primary
+			.upsert_chunks(&[(
+				"c1".into(),
+				"d1".into(),
+				"case_index".into(),
+				"indexed once".into(),
+			)])
+			.unwrap();
+		primary.commit().unwrap();
+
+		let mut ro = TextIndex::open_read_only(dir.path()).unwrap();
+		let err = ro
+			.upsert_chunks(&[(
+				"c2".into(),
+				"d2".into(),
+				"case_index".into(),
+				"should fail".into(),
+			)])
+			.unwrap_err();
+		assert!(err.to_string().contains("read-only session"));
+	}
+
+	#[test]
+	fn secondary_reader_sees_commit_after_reload() {
+		let dir = tempdir().unwrap();
+		let mut primary = TextIndex::open(dir.path()).unwrap();
+		let secondary = TextIndex::open(dir.path()).unwrap();
+
+		primary
+			.upsert_chunks(&[(
+				"c1".into(),
+				"d1".into(),
+				"case_index".into(),
+				"post-commit visibility".into(),
+			)])
+			.unwrap();
+		primary.commit().unwrap();
+
+		let hits = secondary.search("visibility", 5, None).unwrap();
+		assert_eq!(hits.len(), 1);
+		assert_eq!(hits[0].chunk_id, "c1");
 	}
 }

@@ -62,10 +62,16 @@ const vscodeMock = {
 		}),
 		asRelativePath: (uri) => String(uri),
 	},
+	ProgressLocation: { Notification: 15 },
 	window: {
 		showErrorMessage: async () => undefined,
 		showWarningMessage: async () => undefined,
 		showInformationMessage: async () => undefined,
+		withProgress: async (_options, task) =>
+			task(
+				{ report: () => { } },
+				{ isCancellationRequested: false, onCancellationRequested: () => ({ dispose() { } }) },
+			),
 		showInputBox: async () => undefined,
 		showSaveDialog: async () => undefined,
 		showOpenDialog: async () => undefined,

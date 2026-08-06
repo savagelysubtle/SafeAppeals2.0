@@ -12,7 +12,7 @@ For full path details, see the [Storage documentation](../storage/README.md). Qu
 
 | Environment | threads.db Location |
 |-------------|---------------------|
-| **Development** | `%APPDATA%\code-oss-dev\User\.safe-appeals-navigator\databases\workspaces\[hash]\threads.db` |
+| **Development** | `%APPDATA%\safe-appeals-dev\` (Linux: `~/.config/safe-appeals-dev`) — see [storage README](./README.md); legacy Void path was `code-oss-dev\User\.safe-appeals-navigator\…` |
 | **Production** | `%APPDATA%\SafeAppealsNavigator\User\.safe-appeals-navigator\databases\workspaces\[hash]\threads.db` |
 
 ---![1768786252933](image/per-workspace-storage/1768786252933.png)
@@ -219,7 +219,7 @@ See [Storage documentation](../storage/README.md#powershell-debug-commands) for 
 Quick check:
 ```powershell
 # Dev - Query thread count
-node -e "const Database = require('@vscode/sqlite3').Database; const db = new Database('C:/Users/Steve/AppData/Roaming/code-oss-dev/User/.safe-appeals-navigator/databases/workspaces/2fb73011/threads.db', (err) => { if(err) console.log('Error:', err); else { db.all('SELECT COUNT(*) as count FROM threads', (err, rows) => { console.log('Thread count:', rows[0].count); db.close(); }); } });"
+node -e "const Database = require('@vscode/sqlite3').Database; const db = new Database('C:/Users/Steve/AppData/Roaming/safe-appeals-dev/User/globalStorage/<extension-id>/…/threads.db', (err) => { if(err) console.log('Error:', err); else { db.all('SELECT COUNT(*) as count FROM threads', (err, rows) => { console.log('Thread count:', rows[0].count); db.close(); }); } });"
 ```
 
 ---

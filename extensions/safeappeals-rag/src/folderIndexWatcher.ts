@@ -7,7 +7,7 @@ import * as path from 'node:path';
 import * as vscode from 'vscode';
 import {
 	docIdForSourceUri,
-	isIndexableTextPath,
+	isIndexableSourcePath,
 	type IndexPipeline,
 	type IndexPipelineResult,
 } from './indexPipeline';
@@ -19,6 +19,9 @@ import type { HardDisableCode } from './types';
 import { CORE_REFERENCES_FOLDER } from './types';
 
 const DEFAULT_DEBOUNCE_MS = 400;
+
+/** Glob suffixes watched for delete (and optional create/change) outside the editor save path. */
+const INDEXABLE_GLOB_SUFFIXES = ['md', 'markdown', 'txt', 'text', 'pdf'] as const;
 
 /**
  * Directory basenames skipped during workspace walks / save eligibility.
@@ -47,6 +50,11 @@ export const INDEX_DENY_DIR_NAMES = new Set([
 	'temp',
 	'bin',
 	'obj',
+	'apps',
+	'to_sort',
+	'tosort', // legacy folder name — keep so old workspaces are not indexed
+	'.venv',
+	'venv',
 ]);
 
 export interface FolderIndexGate {
@@ -55,11 +63,20 @@ export interface FolderIndexGate {
 	readonly message?: string;
 }
 
+/** Counts recorded by the most recent startup scan. */
+export interface FolderIndexScanStats {
+	readonly scheduled: number;
+	readonly indexed: number;
+	readonly skippedUnchanged: number;
+	readonly skippedOther: number;
+	readonly hardDisable: number;
+}
+
 export interface FolderIndexWatcherDeps {
 	readonly indexPipeline: Pick<IndexPipeline, 'indexPath'>;
 	readonly getWorkspaceFolders?: () => readonly vscode.WorkspaceFolder[] | undefined;
 	readonly debounceMs?: number;
-	readonly log?: (message: string) => void;
+	readonly log?: (message: string, consoleLevel?: 'log' | 'warn' | 'none') => void;
 	/**
 	 * When indexing is gated (e.g. models-missing), startup scan is deferred until
 	 * {@link FolderIndexWatcher.notifyModelsReady} runs.
@@ -76,7 +93,7 @@ export interface FolderIndexWatcherDeps {
 		listener: (document: vscode.TextDocument) => void,
 	) => vscode.Disposable;
 	/**
-	 * Walk a workspace root for indexable absolute paths (txt/md), applying the deny-list.
+	 * Walk a workspace root for indexable absolute paths (txt/md/pdf), applying the deny-list.
 	 * Injectable for unit tests; defaults to recursive filesystem walk.
 	 */
 	readonly walkWorkspaceIndexableFiles?: (
@@ -104,7 +121,7 @@ export function isUnderDeniedDir(fsPath: string, workspaceRoot: string): boolean
 }
 
 /**
- * Recursively list indexable txt/md under a workspace root, skipping deny-listed dirs.
+ * Recursively list indexable txt/md/pdf under a workspace root, skipping deny-listed dirs.
  * Missing roots yield an empty list.
  */
 export async function walkWorkspaceIndexableFilesDefault(
@@ -140,7 +157,7 @@ export async function walkWorkspaceIndexableFilesDefault(
 				await walk(full);
 				continue;
 			}
-			if (entry.isFile() && isIndexableTextPath(full)) {
+			if (entry.isFile() && isIndexableSourcePath(full)) {
 				found.push(full);
 			}
 		}
@@ -161,7 +178,7 @@ function pathToFileUri(fsPath: string): string {
 /**
  * Private Search folder indexer:
  * - FS watch `core_references/**` (create/change/delete)
- * - Startup walk of each workspace root for txt/md (deny-list applied)
+ * - Startup walk of each workspace root for txt/md/pdf (deny-list applied)
  * - `onDidSaveTextDocument` for any workspace indexable file
  *
  * Scope is inferred by {@link IndexPipeline.indexPath} / `scopeFromSourcePath`:
@@ -175,7 +192,7 @@ export class FolderIndexWatcher implements vscode.Disposable {
 	private readonly indexPipeline: Pick<IndexPipeline, 'indexPath'>;
 	private readonly getWorkspaceFolders: () => readonly vscode.WorkspaceFolder[] | undefined;
 	private readonly debounceMs: number;
-	private readonly log?: (message: string) => void;
+	private readonly log?: (message: string, consoleLevel?: 'log' | 'warn' | 'none') => void;
 	private readonly isIndexingAllowed?: () => FolderIndexGate;
 	private readonly removeDoc?: (docId: string) => { ok: boolean; error?: string | null };
 	private readonly createWatcher: (
@@ -187,9 +204,10 @@ export class FolderIndexWatcher implements vscode.Disposable {
 	private readonly walkWorkspaceIndexableFiles: (
 		workspaceRootFsPath: string,
 	) => Promise<readonly string[]>;
-	/** True when a startup scan was deferred due to models-missing / host unavailable. */
+	/** True when a startup scan was deferred due to models-missing / host / index lock. */
 	private startupScanPending = false;
 	private startupScanRunning = false;
+	private lastScanStats: FolderIndexScanStats | undefined;
 
 	constructor(deps: FolderIndexWatcherDeps) {
 		this.indexPipeline = deps.indexPipeline;
@@ -211,8 +229,12 @@ export class FolderIndexWatcher implements vscode.Disposable {
 			deps.walkWorkspaceIndexableFiles ?? walkWorkspaceIndexableFilesDefault;
 	}
 
-	/** Start core_references watchers, save listener, and fire-and-forget startup scan. */
-	start(): void {
+	/**
+	 * Start FS watchers + save listener.
+	 * By default runs a fire-and-forget startup scan; pass `deferInitialScan` when
+	 * the host will `await` model warm first, then call {@link runInitialScan}.
+	 */
+	start(options?: { readonly deferInitialScan?: boolean }): void {
 		this.rebuildWatchers();
 		this.lifetime.push(
 			vscode.workspace.onDidChangeWorkspaceFolders(() => {
@@ -223,7 +245,14 @@ export class FolderIndexWatcher implements vscode.Disposable {
 				this.scheduleIfIndexCandidate(document.uri);
 			}),
 		);
-		void this.runStartupScan('activate');
+		if (!options?.deferInitialScan) {
+			void this.runStartupScan('activate');
+		}
+	}
+
+	/** Awaitable first/retry startup scan (after model warm). Returns files scheduled. */
+	async runInitialScan(reason = 'activate'): Promise<number> {
+		return this.runStartupScan(reason);
 	}
 
 	/**
@@ -258,9 +287,19 @@ export class FolderIndexWatcher implements vscode.Disposable {
 		await this.handle(uri);
 	}
 
-	/** Test helper: run startup scan and await completion. */
-	async runStartupScanForTesting(reason = 'test'): Promise<void> {
-		await this.runStartupScan(reason);
+	/** Test helper: run startup scan and await completion. Returns files scheduled. */
+	async runStartupScanForTesting(reason = 'test'): Promise<number> {
+		return this.runStartupScan(reason);
+	}
+
+	/** Stats from the most recent startup scan (undefined before first scan). */
+	getLastScanStats(): FolderIndexScanStats | undefined {
+		return this.lastScanStats;
+	}
+
+	/** Test helper: stats from the most recent startup scan. */
+	getLastScanStatsForTesting(): FolderIndexScanStats | undefined {
+		return this.lastScanStats;
 	}
 
 	private disposeWatchers(): void {
@@ -281,28 +320,44 @@ export class FolderIndexWatcher implements vscode.Disposable {
 			if (folder.uri.scheme !== 'file') {
 				continue;
 			}
-			const pattern = new vscode.RelativePattern(
+			// core_references: create / change / delete
+			const corePattern = new vscode.RelativePattern(
 				folder,
 				`${CORE_REFERENCES_FOLDER}/**/*`,
 			);
-			const watcher = this.createWatcher(pattern);
+			const coreWatcher = this.createWatcher(corePattern);
 			this.watchers.push(
-				watcher,
-				watcher.onDidCreate(uri => this.schedule(uri)),
-				watcher.onDidChange(uri => this.schedule(uri)),
-				watcher.onDidDelete(uri => {
+				coreWatcher,
+				coreWatcher.onDidCreate(uri => this.schedule(uri)),
+				coreWatcher.onDidChange(uri => this.schedule(uri)),
+				coreWatcher.onDidDelete(uri => {
 					void this.handleDelete(uri);
 				}),
 			);
 			this.log?.(
 				`Watching ${path.join(folder.uri.fsPath, CORE_REFERENCES_FOLDER)} for auto-index`,
 			);
+
+			// Workspace-wide txt/md/pdf deletes (case_index scope + core overlap). Deny-list in handleDelete.
+			for (const suffix of INDEXABLE_GLOB_SUFFIXES) {
+				const pattern = new vscode.RelativePattern(folder, `**/*.${suffix}`);
+				const watcher = this.createWatcher(pattern);
+				this.watchers.push(
+					watcher,
+					watcher.onDidDelete(uri => {
+						void this.handleDelete(uri);
+					}),
+				);
+			}
+			this.log?.(
+				`Watching ${folder.uri.fsPath}/**/*.{md,txt,pdf,…} for index remove-on-delete`,
+			);
 		}
 	}
 
-	/** Workspace file eligible for save/startup index (txt/md, not deny-listed). */
+	/** Workspace file eligible for save/startup index (txt/md/pdf, not deny-listed). */
 	private isIndexCandidate(fsPath: string): boolean {
-		if (!isIndexableTextPath(fsPath)) {
+		if (!isIndexableSourcePath(fsPath)) {
 			return false;
 		}
 		const roots = getWorkspaceRootPaths(this.getWorkspaceFolders());
@@ -342,30 +397,40 @@ export class FolderIndexWatcher implements vscode.Disposable {
 		this.pending.set(key, timer);
 	}
 
-	private async runStartupScan(reason: string): Promise<void> {
+	private async runStartupScan(reason: string): Promise<number> {
 		if (this.startupScanRunning) {
-			return;
+			return 0;
 		}
 		const gate = this.isIndexingAllowed?.();
 		if (gate && !gate.ok) {
-			if (gate.code === 'models-missing' || gate.code === 'native-missing') {
+			if (
+				gate.code === 'models-missing' ||
+				gate.code === 'native-missing' ||
+				gate.code === 'index-lock-busy'
+			) {
 				this.startupScanPending = true;
 				this.log?.(
 					`Startup index deferred (${reason}): ${gate.code}${gate.message ? ` — ${gate.message}` : ''}`,
 				);
-				return;
+				return 0;
 			}
 			this.log?.(
 				`Startup index skipped (${reason}): ${gate.code ?? 'unavailable'}`,
 			);
-			return;
+			return 0;
 		}
 
 		this.startupScanRunning = true;
 		this.startupScanPending = false;
+		const stats = {
+			scheduled: 0,
+			indexed: 0,
+			skippedUnchanged: 0,
+			skippedOther: 0,
+			hardDisable: 0,
+		};
 		try {
 			const folders = this.getWorkspaceFolders() ?? [];
-			let scheduled = 0;
 			for (const folder of folders) {
 				if (folder.uri.scheme !== 'file') {
 					continue;
@@ -384,16 +449,93 @@ export class FolderIndexWatcher implements vscode.Disposable {
 					if (!this.isIndexCandidate(fsPath)) {
 						continue;
 					}
-					this.schedule(vscode.Uri.file(fsPath));
-					scheduled += 1;
+					stats.scheduled += 1;
+					await new Promise<void>(resolve => setImmediate(resolve));
+					await this.indexStartupFile(vscode.Uri.file(fsPath), stats);
 				}
 			}
-			this.log?.(
-				`Startup index scheduled ${scheduled} file(s) (${reason})`,
-			);
+			this.lastScanStats = stats;
+			this.logStartupScanSummary(reason, stats);
+			return stats.scheduled;
 		} finally {
 			this.startupScanRunning = false;
 		}
+	}
+
+	private async indexStartupFile(
+		uri: vscode.Uri,
+		stats: {
+			indexed: number;
+			skippedUnchanged: number;
+			skippedOther: number;
+			hardDisable: number;
+		},
+	): Promise<void> {
+		const roots = getWorkspaceRootPaths(this.getWorkspaceFolders());
+		try {
+			assertSourceUriInWorkspace(uri.toString(), roots);
+		} catch (err) {
+			this.log?.(
+				`Folder index watch skipped (PathGuard): ${err instanceof Error ? err.message : String(err)}`,
+				'none',
+			);
+			return;
+		}
+
+		if (!this.isIndexCandidate(uri.fsPath)) {
+			return;
+		}
+
+		const result = await this.indexPipeline.indexPath(uri.toString());
+		this.recordStartupIndexResult(result, stats);
+	}
+
+	private recordStartupIndexResult(
+		result: IndexPipelineResult,
+		stats: {
+			indexed: number;
+			skippedUnchanged: number;
+			skippedOther: number;
+			hardDisable: number;
+		},
+	): void {
+		if (result.kind === 'ok') {
+			stats.indexed += 1;
+			return;
+		}
+		if (result.kind === 'hard-disable') {
+			stats.hardDisable += 1;
+			if (result.code === 'models-missing') {
+				this.startupScanPending = true;
+			}
+			return;
+		}
+		if (result.reason === 'Document already indexed (unchanged)') {
+			stats.skippedUnchanged += 1;
+			return;
+		}
+		stats.skippedOther += 1;
+	}
+
+	private logStartupScanSummary(
+		reason: string,
+		stats: FolderIndexScanStats,
+	): void {
+		const skippedTotal = stats.skippedUnchanged + stats.skippedOther;
+		const parts: string[] = [];
+		if (skippedTotal > 0) {
+			parts.push(`${skippedTotal} skipped (unchanged)`);
+		}
+		if (stats.indexed > 0) {
+			parts.push(`${stats.indexed} indexed`);
+		}
+		if (stats.hardDisable > 0) {
+			parts.push(`${stats.hardDisable} hard-disable`);
+		}
+		const detail = parts.length > 0 ? parts.join(', ') : 'no files to index';
+		this.log?.(
+			`Startup scan complete (${reason}): ${detail} (${stats.scheduled} scheduled).`,
+		);
 	}
 
 	private async handle(uri: vscode.Uri): Promise<void> {
@@ -419,7 +561,8 @@ export class FolderIndexWatcher implements vscode.Disposable {
 		if (!this.removeDoc || uri.scheme !== 'file') {
 			return;
 		}
-		if (!isIndexableTextPath(uri.fsPath)) {
+		// Path-based eligibility (deny-list + extension); file need not exist anymore.
+		if (!this.isIndexCandidate(uri.fsPath)) {
 			return;
 		}
 		const roots = getWorkspaceRootPaths(this.getWorkspaceFolders());
@@ -440,19 +583,31 @@ export class FolderIndexWatcher implements vscode.Disposable {
 		}
 	}
 
+	/** Test helper: invoke delete path directly. */
+	async handleDeleteForTesting(uri: vscode.Uri): Promise<void> {
+		await this.handleDelete(uri);
+	}
+
 	private logIndexResult(uri: vscode.Uri, result: IndexPipelineResult): void {
+		// Per-file OK is silent (status bar spinner + startup/batch summaries only).
 		if (result.kind === 'ok') {
-			this.log?.(
-				`Auto-indexed ${path.basename(uri.fsPath)} (${result.chunkCount} chunks, scope=${result.scope})`,
-			);
-		} else if (result.kind === 'hard-disable') {
+			return;
+		}
+		if (result.kind === 'hard-disable') {
 			if (result.code === 'models-missing') {
 				this.startupScanPending = true;
 			}
 			this.log?.(`Auto-index hard-disable (${result.code}): ${result.message}`);
-		} else {
-			this.log?.(`Auto-index skipped: ${result.reason}`);
+			return;
 		}
+		if (result.reason === 'Document already indexed (unchanged)') {
+			this.log?.(
+				`Auto-index skipped (${path.basename(uri.fsPath)}): ${result.reason}`,
+				'none',
+			);
+			return;
+		}
+		this.log?.(`Auto-index skipped (${path.basename(uri.fsPath)}): ${result.reason}`);
 	}
 
 	dispose(): void {

@@ -64,16 +64,27 @@ suite('model provider icons', () => {
 			getModelProviderIcon(createModel('auto', 'Auto', 'openai'), true).id,
 			getModelProviderIcon(createModel('custom', 'Custom Model', 'third-party')).id,
 			getModelProviderIcon(createModel('claude-sonnet-5', 'Claude Sonnet 5'), true).id,
+			getModelProviderIcon(createModel('cloud-model', 'SafeAppeals Cloud', 'safeappeals-cloud')).id,
+			getModelProviderIcon(createModel('claude-haiku', 'Claude Haiku', 'agent-host-copilotcli')).id,
 		], [
 			'chat-model-provider-openai',
 			'chat-model-provider-claude',
 			'chat-model-provider-gemini',
-			'chat-model-provider-copilot',
-			'chat-model-provider-copilot',
-			'chat-model-provider-copilot',
+			'chat-model-provider-auto',
+			'chat-model-provider-auto',
+			'chat-model-provider-auto',
 			'chat-model-provider-generic',
 			'chat-model-provider-generic',
+			'chat-model-provider-safeappeals',
+			'chat-model-provider-safeappeals',
 		]);
+	});
+
+	test('plain copilot vendor keeps copilot provider icon', () => {
+		assert.strictEqual(
+			getModelProviderIcon(createModel('default', 'Default Model', 'copilot')).id,
+			'chat-model-provider-copilot',
+		);
 	});
 
 	test('status icon wins, warning text keeps provider icon', () => {

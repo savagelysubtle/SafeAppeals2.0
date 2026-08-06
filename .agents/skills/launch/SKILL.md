@@ -1,32 +1,32 @@
 ---
 name: launch
-description: "Launch Code OSS (VS Code from sources) into an isolated throwaway profile with unique debug ports. Prefer Cursor's browser (cursor-ide-browser MCP) for UI inspection so you see the same surface the developer uses; fall back to @playwright/cli over CDP when Electron/workbench automation is required. Also supports dap-cli for breakpoints in the renderer / extension host / main process. Use when working on VS Code itself and you want to interact with the running workbench, automate chat or UI flows, test UI features, take screenshots, set breakpoints, or combine UI driving with debugging."
+description: "Attach to or launch SafeAppeals / Code OSS for UI and E2E. Prefer Steve's desktop Run Dev (CDP) on port 9222 over Run Dev (WEB) or throwaway launch.sh. Use throwaway launch.sh only for isolated disposable instances. Also supports dap-cli for breakpoints. Use when working on the app workbench, automating chat/UI flows, screenshots, or debugging."
 ---
 
 # Code OSS Dev - Launch + Debug
 
-You're working on VS Code itself and you want to:
+You're working on SafeAppeals / Code OSS and you want to inspect or drive the **desktop Electron** app.
 
-1. Launch a Code OSS build from sources that is **already signed in** (Copilot, GitHub, etc.) so chat / agent flows work end-to-end.
-2. Inspect and drive UI **first with Cursor's browser** (`cursor-ide-browser` MCP) — the same browser the developer uses while coding the app — so agent and developer share one viewport.
-3. Fall back to `@playwright/cli` over CDP only when Cursor's browser cannot reach the target (full Electron workbench, Agents window, Monaco chat input, multi-instance CDP isolation, etc.).
-4. Optionally attach a debugger via **dap-cli** to set breakpoints in the renderer, extension host, or main process.
-5. Run multiple instances at once without port conflicts.
+## Attach priority (SafeAppeals)
 
-## UI observation priority (Cursor browser first)
-
-**Always prefer Cursor's browser before Playwright.** The developer is iterating in that same Cursor browser tab; using it first means you see what they see (layout, CSS, webview/dashboard state) instead of a separate Playwright session that can drift.
-
-| Priority | Tool | When to use |
-|----------|------|-------------|
-| 1 (default) | Cursor browser (`cursor-ide-browser` MCP: navigate, snapshot, click, type, screenshot, CDP evaluate) | Web pages, Simple Browser / preview URLs, extension webviews or dashboards opened as a URL the developer already has in Cursor's browser, any surface already visible there |
-| 2 (fallback) | `@playwright/cli` attach to `cdpPort` from this launcher | Electron workbench chrome the Cursor browser cannot open, Agents window, Monaco chat-input paste flows, parallel isolated Code OSS instances, or when Cursor browser tools are unavailable |
+| Priority | Target | When to use |
+|----------|--------|-------------|
+| 1 (default) | **Run Dev (CDP)** — VS Code task in `.vscode/tasks.json`; CDP at `http://127.0.0.1:9222` | Everyday UI/E2E against Steve’s live desktop window. Attach `@playwright/cli` / Playwright MCP with `--cdp-endpoint http://127.0.0.1:9222`. |
+| 2 | This skill’s **throwaway `launch.sh`** | Isolated disposable profile / parallel ports when Run Dev (CDP) is down or you must not touch the shared profile. |
+| 3 | Cursor browser (`cursor-ide-browser`) | True web URLs only (docs, hosted dashboards). **Not** a substitute for the Electron workbench. |
+| Avoid | **Run Dev (WEB)** / `code-server` / `code-web` | Browser-only builds. Do not use these for everyday SafeAppeals product UI or agent E2E. |
 
 Workflow:
 
-1. Check whether the target UI is already open (or can be opened) in Cursor's browser — list tabs, snapshot, screenshot, interact there.
-2. Only if that path cannot reach the surface you need, launch via this skill and drive with `@playwright/cli` as documented below.
-3. Prefer screenshots/snapshots from Cursor's browser for paper trails when that was the inspection path.
+1. If port **9222** is listening, attach there — do not start WEB or a second Electron.
+2. If not, ask Steve to run **Run Dev (CDP)**, or start that task, then attach.
+3. Only then fall back to `scripts/launch.sh` below for a throwaway instance.
+4. Optionally attach **dap-cli** to renderer / extension host / main for breakpoints.
+
+You're working on VS Code itself and you may still want to:
+
+1. Launch a Code OSS build from sources that is **already signed in** (Copilot, GitHub, etc.) so chat / agent flows work end-to-end (throwaway profile).
+2. Run multiple isolated instances at once without port conflicts.
 
 This skill provides a launcher that clones an authenticated user-data-dir to a throwaway temp folder, picks free ports for every debug surface, and prints them as JSON so you can pick them up programmatically.
 
@@ -37,7 +37,7 @@ The clone is **slim**: workspace storage, browser caches, file history, cached V
 - macOS or Linux. The launcher is a bash script and depends on `rsync`, `curl`, `nohup`, and Node on `PATH`. The example caller snippets below also use `jq` (parse the JSON output) and `lsof` (kill-by-port fallback) — install those if you plan to use them, but the launcher itself does not require them.
 - A VS Code checkout with `node_modules/` installed (`npm install` if missing — do **not** symlink from a sibling worktree; that breaks builds in subtle ways).
 - A VS Code checkout with sources built. Run `npm run compile` once (one-shot) or `npm run watch` for incremental rebuilds. Both build the full client **and** all built-in extensions under `extensions/`. You must build the full product to run successfully, building just the client is not enough.
-- An **authenticated** Code OSS profile to seed from. By default the launcher uses `~/.vscode-oss-dev`, which is the user-data-dir the repo's `launch.json` configs use - if the user has ever signed in to Copilot in a dev build, this should work. Only pass `--source-user-data-dir <path>` (or set `$CODE_OSS_DEV_AUTHED_USER_DATA_DIR`) when you specifically want to seed from a different profile (e.g. your regular `~/Library/Application Support/Code` install).
+- An **authenticated** Safe Appeals / Code OSS profile to seed from. By default the launcher uses `~/.safe-appeals-dev`, which is the user-data-dir the repo's `launch.json` configs use - if the user has ever signed in to Copilot in a dev build, this should work. Only pass `--source-user-data-dir <path>` (or set `$CODE_OSS_DEV_AUTHED_USER_DATA_DIR`) when you specifically want to seed from a different profile (e.g. your regular `~/Library/Application Support/Code` install).
   - If Code OSS launches and needs a sign-in, don't give up! Use the questions tool to ask the user to sign in.
 - `@playwright/cli` available (it's a devDependency in the vscode repo - `npm install` then use `npx @playwright/cli`).
 - For debugger work: `dap-cli` on `PATH`. If debugger support would be useful but the `dap-cli` skill is not present, prompt the user to install it from https://github.com/roblourens/dap-cli.

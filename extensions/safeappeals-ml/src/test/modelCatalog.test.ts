@@ -10,6 +10,7 @@ import {
 	ModelCatalog,
 	UNLIMITED_OCR_SPEC,
 	createDefaultModelCatalog,
+	isArtifactPinConfigured,
 } from '../modelCatalog';
 import type { HwSnapshot } from '../types';
 
@@ -39,8 +40,17 @@ suite('modelCatalog', () => {
 		assert.strictEqual(UNLIMITED_OCR_SPEC.minVramMb, 8192);
 		assert.strictEqual(UNLIMITED_OCR_SPEC.diskMb, 7000);
 		assert.strictEqual(UNLIMITED_OCR_SPEC.pageSoftCap, 40);
+		assert.ok(UNLIMITED_OCR_SPEC.sha256);
+		assert.ok(UNLIMITED_OCR_SPEC.files?.length);
+		assert.ok(isArtifactPinConfigured(UNLIMITED_OCR_SPEC));
 		assert.strictEqual(BGE_SMALL_SPEC.minVramMb, 0);
+		assert.strictEqual(BGE_SMALL_SPEC.diskMb, 150);
 		assert.strictEqual(MS_MARCO_MINILM_SPEC.minVramMb, 0);
+		assert.strictEqual(MS_MARCO_MINILM_SPEC.diskMb, 100);
+		assert.ok(BGE_SMALL_SPEC.files?.length);
+		assert.ok(MS_MARCO_MINILM_SPEC.files?.length);
+		assert.ok(BGE_SMALL_SPEC.sha256);
+		assert.ok(MS_MARCO_MINILM_SPEC.sha256);
 	});
 
 	test('evaluate marks Unlimited-OCR eligible on capable machine', () => {
@@ -95,6 +105,21 @@ suite('modelCatalog', () => {
 			eligible: true,
 			reasons: [],
 		});
+	});
+
+	test('isArtifactPinConfigured rejects missing sha256 and incomplete files', () => {
+		assert.strictEqual(isArtifactPinConfigured(undefined), false);
+		assert.strictEqual(
+			isArtifactPinConfigured({ ...UNLIMITED_OCR_SPEC, sha256: undefined }),
+			false,
+		);
+		assert.strictEqual(
+			isArtifactPinConfigured({
+				...UNLIMITED_OCR_SPEC,
+				files: [{ relativePath: 'x.bin', downloadUrl: '', sha256: 'abc' }],
+			}),
+			false,
+		);
 	});
 
 	test('evaluate returns unknown-model reason', () => {

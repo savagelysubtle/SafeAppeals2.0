@@ -71,12 +71,13 @@ todos:
       onboarding_redesign_newcomer.plan.md §9 Phase B."
     status: completed
   - id: r7-timeline
-    content: "Rung 7 rewrite (Aug 2): rename safeappeals-case →
-      safeappeals-timeline; retire case.json/case-info; role project-setup
-      skill; timeline store/UI + six void timeline agent tools under
-      .safeAppeals/timeline.json. Statute calc; ICS first; calendar getEvents
-      pull (Q5 open). Plan: safeappeals_timeline_rung7_5ce1bf30.plan.md."
-    status: pending
+    content: "DONE (Aug 5): safeappeals-timeline shipped — rename from case,
+      retire case.json/case-info, project-setup + organize-files skills,
+      timeline store/UI + agent tools under .safeAppeals/timeline.json,
+      sample case file:// trust, tutorials hub, 8-step spotlight tour +
+      Explore More handoff. Q5 calendar write-back still open. Plan:
+      archive/safeappeals_timeline_rung7_5ce1bf30.plan.md."
+    status: completed
   - id: r8-organizer
     content: "Rung 8 organizer (shipped Aug 3): organize-files chat skill on
       safeappeals-timeline (contributes.chatSkills) — dry-run/undo, flat
@@ -92,20 +93,18 @@ todos:
       safeappeals_converter_r8_production.plan.md."
     status: completed
   - id: r9-audio
-    content: "Rung 9: NEW safeappeals-audio extension — recorder + Whisper
+    content: "DONE (Aug 5): safeappeals-audio shipped — recorder + Whisper
       (kutalia GGML in EH) + BYO ffmpeg; encryptedStore under globalStorageUri;
-      hard-disable when model/ffmpeg missing. Asset bundling → rung 14.
-      Evaluate upstream speech AFTER it works. Plan:
-      safeappeals_audio_r9_production.plan.md."
-    status: pending
+      hard-disable when model/ffmpeg missing; walkthrough contributed.
+      Asset bundling → rung 14. Plan: archive/safeappeals_audio_r9_production.plan.md."
+    status: completed
   - id: r10-rag
-    content: "Rung 10: NEW safeappeals-rag extension, WRITTEN IN RUST
-      (decision Jul 29, no TS-first): rust/rag-core napi-rs module —
-      fastembed embeddings, usearch HNSW, tantivy BM25, RRF fusion; dual-ABI
-      pattern from time-tracker. Advanced RAG scope mandatory (hybrid
-      retriever + query processor + reranker). Detail: merge plan 'Rust
-      strategy' + gap-audit item 5."
-    status: pending
+    content: "DONE (Aug 5): safeappeals-rag + rust/rag-core shipped — hybrid
+      BM25+vector, Private Search status bar (pinned id), setup/consent UI,
+      core_references scaffold/watch, agent tools, walkthrough. Reranker /
+      packaging polish may continue under r14. Plan:
+      archive/safeappeals_rag_r10_production.plan.md."
+    status: completed
   - id: r65-auth-remainder
     content: "DONE Aug 3 (engineering): Service Connections + unified sign-in limb
       closed. Cloud identity; /connections/* multi-account google/microsoft;
@@ -197,7 +196,7 @@ A future agent can follow these blindly, with the caveats listed:
 | Plan file | Status | Caveat |
 | --------- | ------ | ------ |
 | `onboarding_redesign_newcomer.plan.md` | Archived (M1/M2 done) | see `archive/onboarding_redesign_newcomer.plan.md` |
-| `safeappeals_timeline_rung7_5ce1bf30.plan.md` | **ACTIVE** (Aug 2) | rename → `safeappeals-timeline`; retire case-info; role skill + timeline tools; supersedes archived case-extension plan |
+| `archive/safeappeals_timeline_rung7_5ce1bf30.plan.md` | **DONE** (Aug 5) | Timeline + tutorials/tour shipped; Q5 calendar push still open |
 | `archive/safeappeals_case_extension_rung7.plan.md` | Superseded Aug 2 | historical slice 1; do not implement |
 | `unified_safeappeals_sign-in_225af75a.plan.md` | **DONE** Aug 3 | All todos completed. Canonical detail: `~/.cursor/plans/service_connections_auth_3fbdccee.plan.md`. Business leftovers: `r65-business-ops`. |
 | `archive/email_oauth_piggyback_e435d610.plan.md` | Archived / superseded | WP0 moved to master `r65-business-ops` |
@@ -282,10 +281,10 @@ source tree. Trust this section over any other document on this branch.
   view as the calendar UI. **No event write-back to Google/Outlook**
   (`syncEngine.ts` header; no create/update calls) — display works, push
   does not exist; see Q5.
-- **`extensions/safeappeals-case`** → **rename to `safeappeals-timeline`**
-  (Aug 2 plan). Case-info retiring; keep profile re-run / sample / role skill;
-  ship timeline store/UI/tools. Plan:
-  `safeappeals_timeline_rung7_5ce1bf30.plan.md`.
+- **`extensions/safeappeals-timeline`** (Aug 5: rename from case **done**).
+  Case-info retired; profile re-run / sample / project-setup skill; timeline
+  store/UI/tools; tutorials hub + 8-step tour. Plan:
+  `archive/safeappeals_timeline_rung7_5ce1bf30.plan.md`. Q5 calendar push open.
 - **`extensions/safeappeals-shared`** — source-only, NOT build-wired by
   design: canonical AES-256-GCM encrypted-store helpers distributed as
   committed per-extension copies in each consumer's `src/shared/`, synced by
@@ -331,16 +330,15 @@ phase to reuse the existing four-message protocol rather than inventing
 
 ### Not built anywhere (the genuine remaining work)
 
-With `void-reference/` line counts for scale: RAG ~7,890 (rung 10, Rust);
-timeline + deadlines + notifications + calendar UI ~7,800+ (rung 7 slice 2 —
-includes `jurisdictionConfig.ts` with real per-jurisdiction
-`statuteOfLimitationsDays` + `deadlineRules[]`); file organizer **shipped**
-as `organize-files` chat skill on `safeappeals-timeline` (docket UI dropped
-Aug 3); file converter ~2,100+ (rung 8, Rust sidecar retiring
-`python/`); audio recorder + transcription ~2,500+ (rung 9); email classifier
-432 (rung 12); document LM tools (tools pass); cloud auth + credits ~1,500
-(M1 T1 + M2 T13 + rung 13 remainder — `extensions/safeappeals-authentication`
-does not exist yet, T1 creates it).
+**Aug 5 update:** Rungs 7 (timeline + tutorials), 9 (audio), and 10 (RAG /
+`rust/rag-core`) are **shipped in-tree**. Remaining genuine gaps are smaller:
+
+email classifier ~432 (rung 12); tools-pass remainder (email read/organize,
+etc.); cloud credits / server polish (rung 13); agent rebrand + BYOK
+(rung 11); Q5 timeline→calendar push; packaging / win32 prebuilds (rung 14).
+`extensions/safeappeals-authentication` **exists** (T1/M1). Calendar remains
+pull-only (no write-back UI). Reference scale from `void-reference/` for
+unbuilt classifier / packaging work only.
 
 **Removed from scope entirely (D1–D3, confirmed Jul 29 — ~5,000 lines):**
 unified settings pane ~3,900, case-info dashboard 780, extension transfer
@@ -469,13 +467,14 @@ unblocks rung 12 (classifier). The tools pass is now unblocked / in
 progress alongside Cloud Agent (see Tools pass below).
 → **Plan: `onboarding_redesign_newcomer.plan.md` §9 Phase B.**
 
-### Rung 7 — Timeline + deadlines (rewrite Aug 2; deps: M1 shipped)
+### Rung 7 — Timeline + deadlines — DONE (Aug 5; deps: M1 shipped)
 
-**Aug 2 decision:** rename extension to **`safeappeals-timeline`**; drop
-`case.json` / case-info UI; keep role-based project-setup skill; build
-timeline store/UI + six agent tools against `.safeAppeals/timeline.json`.
-Onboarding owns profile; AGENTS.md optional. **Q5** calendar write-back open.
-→ **Plan: `safeappeals_timeline_rung7_5ce1bf30.plan.md`.**
+**Shipped:** `safeappeals-timeline`; no `case.json` / case-info UI;
+project-setup + organize-files skills; timeline store/UI + agent tools under
+`.safeAppeals/timeline.json`; sample case + tutorials hub + 8-step spotlight
+tour → Explore More. Onboarding owns profile; AGENTS.md user-authored.
+**Still open:** **Q5** calendar write-back.
+→ **Plan: `archive/safeappeals_timeline_rung7_5ce1bf30.plan.md`.**
 (Old: `archive/safeappeals_case_extension_rung7.plan.md`.)
 
 ### Rung 8 — Organizer skill + converter (no case.json; folder / AGENTS.md heuristics)
@@ -499,30 +498,22 @@ checklist; delete at rung 15.
 → **Detail: `safeappeals_converter_r8_production.plan.md`** (supersedes merge-plan
 “LO unsupported / shell out” for this rung).
 
-### Rung 9 — Audio extension
+### Rung 9 — Audio extension — DONE (Aug 5)
 
-NEW `extensions/safeappeals-audio`: legal case recorder (MediaRecorder webview)
-+ local Whisper GGML via `@kutalia/whisper-node-addon` in the extension host
-+ BYO ffmpeg/ffprobe; encrypted catalog + sealed audio under
-`context.globalStorageUri`. Hard-disable transcription/import-convert when
-model or ffmpeg missing. Bundled `resources/ffmpeg|models` packaging lands
-with rung 14. Evaluate upstream `speech` / `agentsVoice` only after it works.
-→ **Detail: `safeappeals_audio_r9_production.plan.md`** (supersedes merge-plan
-contrib/channel wording for this rung).
+**Shipped:** `extensions/safeappeals-audio` — recorder (MediaRecorder webview)
++ local Whisper GGML via `@kutalia/whisper-node-addon` + BYO ffmpeg/ffprobe;
+encrypted catalog under `context.globalStorageUri`; hard-disable when
+model/ffmpeg missing; walkthrough contributed. Bundled ffmpeg/models →
+rung 14. → **Detail: `archive/safeappeals_audio_r9_production.plan.md`.**
 
-### Rung 10 — RAG extension, in Rust (deps: none hard; late for native-ABI risk)
+### Rung 10 — RAG extension (Rust) — DONE (Aug 5)
 
-NEW `extensions/safeappeals-rag` backed by `rust/rag-core` (napi-rs;
-`fastembed` all-MiniLM-L6-v2 via ort, `usearch` HNSW with mmap persistence,
-`tantivy` BM25; RRF fusion may start in TS), N-API surface ≈ `embedBatch` /
-`indexChunks` / `search` / `removeDoc` / `stats`; SQLite chunk store reuses
-the time-tracker dual-ABI pattern. **Scope is Advanced RAG** — hybrid
-BM25+RRF retriever, query processor, cross-encoder reranker (reranker may
-follow as a fast-follow inside the same module) — not basic vector search;
-plus policy-manuals auto-create/watch behaviors. Written in Rust from the
-start (user, Jul 29): no TS-first-then-port. RAG's ~5 agent tools land in
-the tools pass, not here. → **Detail: merge plan "Rust strategy" (rung 10
-subsection) + gap-audit item 5.**
+**Shipped:** `extensions/safeappeals-rag` + `rust/rag-core` (napi-rs;
+fastembed / usearch / tantivy hybrid search); Private Search status + setup
+consent UI; `core_references` scaffold/watch; agent tools; walkthrough.
+Packaging/prebuilds and any reranker polish continue under rung 14 as needed.
+→ **Detail: `archive/safeappeals_rag_r10_production.plan.md` + merge plan
+"Rust strategy".**
 
 ### Rung 6.5 remainder — Service Connections auth (deps: M1 T1; before rung 13 remainder)
 

@@ -16,13 +16,16 @@ Configure jurisdictions, notifications, and timeline behavior.
 
 ### File Location
 
-Timeline data is stored in `.timeline.json` at your workspace root.
+Timeline data is stored in `.safeAppeals/timeline.json` under the workspace root
+(`extensions/safeappeals-timeline/src/timelineStore.ts`).
 
 ```
 my-case-folder/
-├── .timeline.json          # Timeline data
-├── .caseinfo               # Case metadata (optional)
-├── documents/
+├── .safeAppeals/
+│   └── timeline.json       # Timeline data
+├── medical_reports/
+├── to_sort/
+├── core_references/
 └── ...
 ```
 
@@ -318,7 +321,7 @@ The custom jurisdiction has no pre-defined deadline rules. You can:
 
 Currently, the timeline does not use environment variables. All configuration is stored in:
 
-- `.timeline.json` - Timeline data and preferences
+- `.safeAppeals/timeline.json` - Timeline data and preferences
 - `.caseinfo` - Case metadata (optional sync source)
 
 ---
@@ -349,7 +352,7 @@ Currently, the timeline does not use environment variables. All configuration is
 
 ### Timeline Not Loading
 
-- Check `.timeline.json` exists and is valid JSON
+- Check `.safeAppeals/timeline.json` exists and is valid JSON
 - Verify file permissions
 - Look for parse errors in DevTools console
 

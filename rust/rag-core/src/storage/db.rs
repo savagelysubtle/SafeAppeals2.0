@@ -9,7 +9,7 @@ use std::path::{Path, PathBuf};
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
 
-use rusqlite::{Connection, OptionalExtension};
+use rusqlite::{Connection, OpenFlags, OptionalExtension};
 use zeroize::Zeroize;
 
 use super::error::StorageError;
@@ -102,6 +102,35 @@ impl WorkspaceDb {
 		// Push WAL pages to the main file so the header check sees real content.
 		let _ = conn.execute_batch("PRAGMA wal_checkpoint(TRUNCATE);");
 		assert_encrypted_on_disk(&db_path)?;
+
+		Ok(Self {
+			conn,
+			root_dir,
+			db_path,
+		})
+	}
+
+	/// Open an existing encrypted `chunks.db` read-only (secondary EH / search-only).
+	pub fn open_read_only(root_dir: impl AsRef<Path>, dek_bytes: &[u8]) -> Result<Self, StorageError> {
+		if dek_bytes.len() != DEK_LEN {
+			return Err(StorageError::InvalidDekLength(dek_bytes.len()));
+		}
+
+		let root_dir = root_dir.as_ref().to_path_buf();
+		if !root_dir.is_dir() {
+			return Err(StorageError::NotADirectory(root_dir.display().to_string()));
+		}
+
+		let db_path = root_dir.join(DB_FILENAME);
+		if !db_path.exists() {
+			return Err(StorageError::Message(
+				"database does not exist (read-only open)".into(),
+			));
+		}
+		reject_plaintext_sqlite(&db_path)?;
+
+		let conn = open_encrypted_read_only(&db_path, dek_bytes)?;
+		verify_schema(&conn)?;
 
 		Ok(Self {
 			conn,
@@ -568,7 +597,28 @@ fn open_encrypted(db_path: &Path, dek: &[u8]) -> Result<Connection, StorageError
 	let conn = Connection::open(db_path).map_err(|e| {
 		StorageError::CryptoUnavailable(format!("failed to open database file: {e}"))
 	})?;
+	configure_encrypted_connection(&conn, dek)?;
+	conn.busy_timeout(std::time::Duration::from_millis(5000))
+		.map_err(|e| StorageError::Sqlite(e))?;
 
+	#[cfg(unix)]
+	{
+		let _ = fs::set_permissions(db_path, fs::Permissions::from_mode(0o600));
+	}
+
+	Ok(conn)
+}
+
+fn open_encrypted_read_only(db_path: &Path, dek: &[u8]) -> Result<Connection, StorageError> {
+	let conn = Connection::open_with_flags(db_path, OpenFlags::SQLITE_OPEN_READ_ONLY).map_err(
+		|e| StorageError::CryptoUnavailable(format!("failed to open database read-only: {e}")),
+	)?;
+	configure_encrypted_connection(&conn, dek)?;
+	conn.pragma_update(None, "query_only", true)?;
+	Ok(conn)
+}
+
+fn configure_encrypted_connection(conn: &Connection, dek: &[u8]) -> Result<(), StorageError> {
 	// SQLCipher 4 defaults apply (page size / KDF). Raw 256-bit key via x'hex'.
 	let mut key_hex = hex::encode(dek);
 	let mut key_pragma = format!("x'{key_hex}'");
@@ -577,7 +627,6 @@ fn open_encrypted(db_path: &Path, dek: &[u8]) -> Result<Connection, StorageError
 	key_hex.zeroize();
 	key_result.map_err(|e| StorageError::CryptoUnavailable(format!("PRAGMA key failed: {e}")))?;
 
-	// Confirm cipher is active and key is accepted (fail-closed).
 	match conn.query_row("SELECT count(*) FROM sqlite_master", [], |r| r.get::<_, i64>(0)) {
 		Ok(_) => {}
 		Err(e) => {
@@ -587,20 +636,12 @@ fn open_encrypted(db_path: &Path, dek: &[u8]) -> Result<Connection, StorageError
 		}
 	}
 
-	// Optional: expose cipher version for diagnostics (non-fatal if missing).
 	let _ = conn.pragma_query_value(None, "cipher_version", |r| r.get::<_, String>(0));
 
 	conn.pragma_update(None, "foreign_keys", true)?;
-	// WAL is fine with SQLCipher; page writes stay atomic at the DB layer.
 	conn.pragma_update(None, "journal_mode", "WAL")?;
 	conn.pragma_update(None, "synchronous", "NORMAL")?;
-
-	#[cfg(unix)]
-	{
-		let _ = fs::set_permissions(db_path, fs::Permissions::from_mode(0o600));
-	}
-
-	Ok(conn)
+	Ok(())
 }
 
 fn apply_schema(conn: &Connection) -> Result<(), StorageError> {
@@ -617,6 +658,22 @@ fn apply_schema(conn: &Connection) -> Result<(), StorageError> {
 			"INSERT INTO meta (key, value) VALUES ('schema_version', ?1)",
 			rusqlite::params![SCHEMA_VERSION.to_string()],
 		)?;
+	}
+	Ok(())
+}
+
+fn verify_schema(conn: &Connection) -> Result<(), StorageError> {
+	let current: Option<String> = conn
+		.query_row(
+			"SELECT value FROM meta WHERE key = 'schema_version'",
+			[],
+			|r| r.get(0),
+		)
+		.optional()?;
+	if current.is_none() {
+		return Err(StorageError::Message(
+			"database schema missing (read-only open)".into(),
+		));
 	}
 	Ok(())
 }

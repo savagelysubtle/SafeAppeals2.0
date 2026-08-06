@@ -7,7 +7,7 @@ import * as assert from 'assert';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { promises as fs } from 'node:fs';
-import { consentInstallModel } from '../consentInstall';
+import { consentInstallModel, consentInstallUnlimitedOcr } from '../consentInstall';
 import type { HwCapabilityProbe } from '../hwCapabilityProbe';
 import { ModelCatalog } from '../modelCatalog';
 import { ModelArtifactStore, sha256Hex } from '../modelArtifactStore';
@@ -108,6 +108,33 @@ suite('consentInstall', () => {
 		assert.strictEqual(fetchCount, 0);
 	});
 
+	test('eligible + consent refuses when catalog pins are missing', async () => {
+		let fetchCount = 0;
+		const catalog = new ModelCatalog([
+			ocrSpec({ sha256: undefined, downloadUrl: undefined, files: undefined }),
+		]);
+		const store = new ModelArtifactStore({
+			globalStorageFsPath: tmpRoot,
+			catalog,
+			fetcher: async () => {
+				fetchCount++;
+				return PAYLOAD;
+			},
+		});
+		const probe = fakeProbe(eligibleSnapshot());
+
+		const outcome = await consentInstallModel(
+			{ probe, catalog, store },
+			{ modelId: 'unlimited-ocr', userConsented: true },
+		);
+
+		assert.strictEqual(outcome.kind, 'error');
+		if (outcome.kind === 'error') {
+			assert.ok(/sha256 pinned/.test(outcome.message));
+		}
+		assert.strictEqual(fetchCount, 0);
+	});
+
 	test('eligible + consent downloads and marks ready', async () => {
 		const catalog = new ModelCatalog([ocrSpec()]);
 		const store = new ModelArtifactStore({
@@ -155,6 +182,58 @@ suite('consentInstall', () => {
 			assert.ok(/smoke failed/.test(outcome.message));
 		}
 		assert.strictEqual(await store.isReady('unlimited-ocr'), false);
+	});
+
+	test('unlimited-OCR ensureDocParseReady success keeps artifacts ready', async () => {
+		const catalog = new ModelCatalog([ocrSpec()]);
+		const store = new ModelArtifactStore({
+			globalStorageFsPath: tmpRoot,
+			catalog,
+			fetcher: async () => PAYLOAD,
+		});
+		const probe = fakeProbe(eligibleSnapshot());
+
+		const outcome = await consentInstallUnlimitedOcr(
+			{ probe, catalog, store },
+			true,
+			{
+				ensureDocParseReady: async () => ({ ready: true }),
+			},
+		);
+
+		assert.deepStrictEqual(outcome, {
+			kind: 'installed',
+			modelId: 'unlimited-ocr',
+			version: '1.0.0-test',
+		});
+		assert.strictEqual(await store.isReady('unlimited-ocr'), true);
+	});
+
+	test('unlimited-OCR ensureDocParseReady failure does not mark broken', async () => {
+		const catalog = new ModelCatalog([ocrSpec()]);
+		const store = new ModelArtifactStore({
+			globalStorageFsPath: tmpRoot,
+			catalog,
+			fetcher: async () => PAYLOAD,
+		});
+		const probe = fakeProbe(eligibleSnapshot());
+
+		const outcome = await consentInstallUnlimitedOcr(
+			{ probe, catalog, store },
+			true,
+			{
+				ensureDocParseReady: async () => ({
+					ready: false,
+					detail: 'sidecar was down before start',
+				}),
+			},
+		);
+
+		assert.strictEqual(outcome.kind, 'error');
+		if (outcome.kind === 'error') {
+			assert.ok(/sidecar was down/.test(outcome.message));
+		}
+		assert.strictEqual(await store.isReady('unlimited-ocr'), true);
 	});
 });
 

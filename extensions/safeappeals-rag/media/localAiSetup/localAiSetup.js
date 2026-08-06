@@ -9,6 +9,10 @@
 		subtitle: document.getElementById('subtitle'),
 		beat: document.getElementById('beat'),
 		status: document.getElementById('status'),
+		statusText: document.getElementById('status-text'),
+		progress: document.getElementById('progress'),
+		progressFill: document.getElementById('progress-fill'),
+		progressLabel: document.getElementById('progress-label'),
 		primary: document.getElementById('primary'),
 		secondary: document.getElementById('secondary'),
 		skipAll: document.getElementById('skip-all'),
@@ -20,6 +24,8 @@
 		busy: false,
 		statusMessage: undefined,
 		mlAvailable: false,
+		progressPercent: undefined,
+		progressIndeterminate: false,
 	};
 
 	els.skipAll.addEventListener('click', () => {
@@ -84,6 +90,8 @@
 			busy: Boolean(msg.busy),
 			statusMessage: msg.statusMessage,
 			mlAvailable: Boolean(msg.mlAvailable),
+			progressPercent: typeof msg.progressPercent === 'number' ? msg.progressPercent : undefined,
+			progressIndeterminate: Boolean(msg.progressIndeterminate),
 		};
 		render();
 	});
@@ -121,14 +129,48 @@
 	function renderStatus() {
 		if (!state.statusMessage) {
 			els.status.classList.add('hidden');
-			els.status.textContent = '';
+			els.statusText.textContent = '';
 			els.status.classList.remove('error', 'busy');
+			renderProgress(false);
 			return;
 		}
 		els.status.classList.remove('hidden');
-		els.status.textContent = state.statusMessage;
+		els.statusText.textContent = state.statusMessage;
 		els.status.classList.toggle('busy', state.busy);
 		els.status.classList.toggle('error', !state.busy && /fail|refus|not |error|unavailable/i.test(state.statusMessage));
+		renderProgress(true);
+	}
+
+	function renderProgress(hasStatusMessage) {
+		const showProgress =
+			hasStatusMessage &&
+			(state.busy || typeof state.progressPercent === 'number' || state.progressIndeterminate);
+		if (!showProgress) {
+			els.progress.classList.add('hidden');
+			els.progress.setAttribute('aria-hidden', 'true');
+			els.progressFill.style.width = '0%';
+			els.progressFill.classList.remove('indeterminate');
+			els.progressLabel.textContent = '';
+			return;
+		}
+
+		els.progress.classList.remove('hidden');
+		els.progress.setAttribute('aria-hidden', 'false');
+
+		const indeterminate =
+			state.progressIndeterminate ||
+			(state.busy && typeof state.progressPercent !== 'number');
+		if (indeterminate) {
+			els.progressFill.classList.add('indeterminate');
+			els.progressFill.style.width = '100%';
+			els.progressLabel.textContent = '';
+			return;
+		}
+
+		const percent = Math.max(0, Math.min(100, Math.round(state.progressPercent)));
+		els.progressFill.classList.remove('indeterminate');
+		els.progressFill.style.width = `${percent}%`;
+		els.progressLabel.textContent = `${percent}%`;
 	}
 
 	function setActions(primaryLabel, secondaryLabel) {
@@ -213,7 +255,7 @@
 			body += `<p>${escapeHtml(session.ocrError)}</p>`;
 		}
 		els.beat.innerHTML = body;
-		setActions('Install Scanned PDF Tools', 'Skip');
+		setActions('Install & Start Scanned PDF Tools', 'Skip');
 		if (!state.mlAvailable) {
 			els.primary.disabled = true;
 		}

@@ -19,7 +19,7 @@
     "onStartupFinished"
   ],
   "capabilities": {
-    "virtualWorkspaces": false,
+    "virtualWorkspaces": true,
     "untrustedWorkspaces": {
       "supported": false
     }
@@ -34,6 +34,11 @@
       {
         "command": "safeappeals-timeline.openSampleCase",
         "title": "%command.openSampleCase%",
+        "category": "%command.category%"
+      },
+      {
+        "command": "safeappeals-timeline.openTutorials",
+        "title": "%command.openTutorials%",
         "category": "%command.category%"
       },
       {
@@ -59,6 +64,13 @@
           "command": "safeappeals-timeline.openTimeline",
           "when": "view == safeappeals-timeline.sidebar",
           "group": "navigation"
+        }
+      ],
+      "MenubarHelpMenu": [
+        {
+          "command": "safeappeals-timeline.openTutorials",
+          "group": "1_welcome",
+          "order": 2
         }
       ]
     },
@@ -306,7 +318,8 @@
               "markdown": "media/walkthrough/sampleCase.md"
             },
             "completionEvents": [
-              "onCommand:safeappeals-timeline.openSampleCase"
+              "onCommand:safeappeals-timeline.openSampleCase",
+              "onCommand:safeappeals-timeline.openTutorials"
             ]
           },
           {
@@ -364,6 +377,25 @@
               "onCommand:safeappeals-email.addAccount",
               "onCommand:safeappeals-calendar.connect"
             ]
+          },
+          {
+            "id": "openCaseTimeline",
+            "title": "%walkthrough.openCaseTimeline.title%",
+            "description": "%walkthrough.openCaseTimeline.description%",
+            "media": {
+              "markdown": "media/walkthrough/caseTimeline.md"
+            },
+            "completionEvents": [
+              "onCommand:safeappeals-timeline.openTimeline"
+            ]
+          },
+          {
+            "id": "exploreMoreTutorials",
+            "title": "%walkthrough.exploreMore.title%",
+            "description": "%walkthrough.exploreMore.description%",
+            "media": {
+              "markdown": "media/walkthrough/exploreMore.md"
+            }
           }
         ]
       }

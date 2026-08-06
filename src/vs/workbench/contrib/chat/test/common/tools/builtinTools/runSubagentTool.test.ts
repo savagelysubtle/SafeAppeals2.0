@@ -9,7 +9,17 @@ import { URI } from '../../../../../../../base/common/uri.js';
 import { ensureNoDisposablesAreLeakedInTestSuite } from '../../../../../../../base/test/common/utils.js';
 import { NullLogService } from '../../../../../../../platform/log/common/log.js';
 import { TestConfigurationService } from '../../../../../../../platform/configuration/test/common/testConfigurationService.js';
-import { RUN_SUBAGENT_MAX_NESTING_DEPTH, RunSubagentTool } from '../../../../common/tools/builtinTools/runSubagentTool.js';
+import {
+	createDefaultDenySubagentTools,
+	isAgentInvocableViaRunSubagent,
+	isCompatAgentUriForSubagentInvoke,
+	isSafeAppealsOwnedAgentUriForSubagentInvoke,
+	resolveSubagentModeTools,
+	RUN_SUBAGENT_MAX_NESTING_DEPTH,
+	RunSubagentTool,
+	SUBAGENT_DEFAULT_DENIED_TOOL_IDS,
+	SUBAGENT_DEFAULT_ENABLED_TOOL_IDS,
+} from '../../../../common/tools/builtinTools/runSubagentTool.js';
 import { MockLanguageModelToolsService } from '../mockLanguageModelToolsService.js';
 import { IChatAgentHistoryEntry, IChatAgentRequest, IChatAgentResult, IChatAgentService, UserSelectedTools } from '../../../../common/participants/chatAgents.js';
 import { IChatProgress, IChatService } from '../../../../common/chatService/chatService.js';
@@ -23,6 +33,9 @@ import { ExtensionIdentifier } from '../../../../../../../platform/extensions/co
 import { IToolInvocation, ToolProgress } from '../../../../common/tools/languageModelToolsService.js';
 import { IChatModel, IChatRequestModeInstructions } from '../../../../common/model/chatModel.js';
 import { ChatConfiguration } from '../../../../common/constants.js';
+import { ExtensionEditToolId, InternalEditToolId } from '../../../../common/tools/builtinTools/editFileTool.js';
+import { InternalFetchWebPageToolId } from '../../../../common/tools/builtinTools/tools.js';
+import { TerminalToolId } from '../../../../common/tools/terminalToolIds.js';
 
 suite('RunSubagentTool', () => {
 	const testDisposables = ensureNoDisposablesAreLeakedInTestSuite();
@@ -53,8 +66,8 @@ suite('RunSubagentTool', () => {
 
 			const promptsService = new MockPromptsService();
 			const customMode: ICustomAgent = {
-				id: 'file:///test/custom-agent.md',
-				uri: URI.parse('file:///test/custom-agent.md'),
+				id: 'file:///workspace/.safeAppeals/agents/custom-agent.md',
+				uri: URI.parse('file:///workspace/.safeAppeals/agents/custom-agent.md'),
 				name: 'CustomAgent',
 				description: 'A test custom agent',
 				tools: ['tool1', 'tool2'],
@@ -298,7 +311,7 @@ suite('RunSubagentTool', () => {
 		}
 
 		function createAgent(name: string, modelQualifiedNames?: string[]): ICustomAgent {
-			const id = `file:///test/${name}.md`;
+			const id = `file:///workspace/.safeAppeals/agents/${name}.md`;
 			return {
 				uri: URI.parse(id),
 				id,
@@ -742,7 +755,7 @@ suite('RunSubagentTool', () => {
 		}
 
 		function createAgent(name: string, modelQualifiedNames?: string[]): ICustomAgent {
-			const id = `file:///test/${name}.md`;
+			const id = `file:///workspace/.safeAppeals/agents/${name}.md`;
 			return {
 				id,
 				uri: URI.parse(id),
@@ -921,16 +934,41 @@ suite('RunSubagentTool', () => {
 		 * The returned `capturedRequests` array collects every IChatAgentRequest passed to invokeAgent.
 		 */
 		let callIdCounter = 0;
+
+		function createNamedSafeAppealsAgent(opts: { name: string; tools?: readonly string[] }): ICustomAgent {
+			const id = `file:///workspace/.safeAppeals/agents/${opts.name}.md`;
+			return {
+				id,
+				uri: URI.parse(id),
+				name: opts.name,
+				description: `Agent ${opts.name}`,
+				tools: opts.tools,
+				agentInstructions: { content: 'test', toolReferences: [] },
+				source: { storage: PromptsStorage.local },
+				target: Target.Undefined,
+				visibility: { userInvocable: true, agentInvocable: true },
+				enabled: true,
+			};
+		}
+
 		function createInvokableTool(opts: {
 			allowInvocationsFromSubagents: boolean;
 			capturedRequests: IChatAgentRequest[];
 			currentModeInstructions?: IChatRequestModeInstructions;
+			customAgents?: ICustomAgent[];
+			registerToolIds?: readonly string[];
 		}) {
 			const mockToolsService = testDisposables.add(new MockLanguageModelToolsService());
+			for (const id of opts.registerToolIds ?? []) {
+				mockToolsService.addRegisteredToolId(id);
+			}
 			const configService = new TestConfigurationService({
 				[ChatConfiguration.SubagentsAllowInvocationsFromSubagents]: opts.allowInvocationsFromSubagents,
 			});
 			const promptsService = new MockPromptsService();
+			if (opts.customAgents) {
+				promptsService.setCustomModes(opts.customAgents);
+			}
 
 			const mockChatAgentService: Pick<IChatAgentService, 'getDefaultAgent' | 'invokeAgent'> = {
 				getDefaultAgent() {
@@ -981,11 +1019,11 @@ suite('RunSubagentTool', () => {
 			return { tool, mockChatAgentService };
 		}
 
-		function createInvocation(sessionUri: URI, userSelectedTools?: UserSelectedTools): IToolInvocation {
+		function createInvocation(sessionUri: URI, userSelectedTools?: UserSelectedTools, agentName?: string): IToolInvocation {
 			return {
 				callId: `call-${++callIdCounter}`,
 				toolId: 'runSubagent',
-				parameters: { prompt: 'do something', description: 'test' },
+				parameters: { prompt: 'do something', description: 'test', ...(agentName ? { agentName } : {}) },
 				context: { sessionResource: sessionUri },
 				userSelectedTools: userSelectedTools ?? { runSubagent: true },
 			} as IToolInvocation;
@@ -1075,6 +1113,60 @@ suite('RunSubagentTool', () => {
 			assert.strictEqual(capturedRequests[0].subAgentName, 'CurrentAgent');
 			assert.deepStrictEqual(capturedRequests[0].modeInstructions, currentModeInstructions);
 		});
+
+		test('named agent omitted tools: nesting on re-enables runSubagent', async () => {
+			const agent = createNamedSafeAppealsAgent({ name: 'NestOmitTools' }); // tools: omitted
+			const capturedRequests: IChatAgentRequest[] = [];
+			const { tool } = createInvokableTool({
+				allowInvocationsFromSubagents: true,
+				capturedRequests,
+				customAgents: [agent],
+			});
+			const sessionUri = URI.parse('test://session/nest-omit-tools');
+
+			const result = await tool.invoke(
+				createInvocation(sessionUri, { runSubagent: true }, 'NestOmitTools'),
+				countTokens,
+				noProgress,
+				CancellationToken.None,
+			);
+
+			assert.strictEqual(
+				capturedRequests.length,
+				1,
+				result.content[0].kind === 'text' ? result.content[0].value : 'expected agent invoke',
+			);
+			assert.strictEqual(capturedRequests[0].userSelectedTools?.['runSubagent'], true);
+		});
+
+		test('named agent tools: list reads only: nesting on keeps runSubagent false', async () => {
+			const agent = createNamedSafeAppealsAgent({
+				name: 'NestReadOnly',
+				tools: ['safeappeals_readFile', 'safeappeals_listDir'],
+			});
+			const capturedRequests: IChatAgentRequest[] = [];
+			const { tool } = createInvokableTool({
+				allowInvocationsFromSubagents: true,
+				capturedRequests,
+				customAgents: [agent],
+				registerToolIds: ['safeappeals_readFile', 'safeappeals_listDir', 'runSubagent'],
+			});
+			const sessionUri = URI.parse('test://session/nest-read-only');
+
+			const result = await tool.invoke(
+				createInvocation(sessionUri, { runSubagent: true }, 'NestReadOnly'),
+				countTokens,
+				noProgress,
+				CancellationToken.None,
+			);
+
+			assert.strictEqual(
+				capturedRequests.length,
+				1,
+				result.content[0].kind === 'text' ? result.content[0].value : 'expected agent invoke',
+			);
+			assert.strictEqual(capturedRequests[0].userSelectedTools?.['runSubagent'], false);
+		});
 	});
 
 	suite('subagent credits', () => {
@@ -1162,6 +1254,368 @@ suite('RunSubagentTool', () => {
 			await tool.invoke(invocation, countTokens, noProgress, CancellationToken.None);
 
 			assert.strictEqual(invocation.toolSpecificData?.kind === 'subagent' ? invocation.toolSpecificData.credits : undefined, undefined);
+		});
+	});
+
+	suite('security: default-deny tools and compat invoke gate', () => {
+		const DENIED_SAMPLE_IDS = [
+			'safeappeals_editFile',
+			'safeappeals_createFile',
+			'safeappeals_applyPatch',
+			'safeappeals_multiReplaceString',
+			'safeappeals_runVscodeCommand',
+			'safeappeals_webSearch',
+			'safeappeals_fetchWebPage',
+			'safeappeals_createPlan',
+			'safeappeals_rag_index_document',
+			'safeappeals_switchMode',
+			'browserTool',
+			'timeline_add_event',
+			'timeline_update_event',
+			'timeline_delete_event',
+			'timeline_link_document',
+			InternalEditToolId,
+			ExtensionEditToolId,
+			InternalFetchWebPageToolId,
+			TerminalToolId.RunInTerminal,
+			TerminalToolId.KillTerminal,
+		] as const;
+
+		function createSafeAppealsAgent(opts: { name: string; tools?: readonly string[]; uriPath?: string }): ICustomAgent {
+			const id = opts.uriPath ?? `file:///workspace/.safeAppeals/agents/${opts.name}.md`;
+			return {
+				id,
+				uri: URI.parse(id),
+				name: opts.name,
+				description: `Agent ${opts.name}`,
+				tools: opts.tools,
+				agentInstructions: { content: 'test', toolReferences: [] },
+				source: { storage: PromptsStorage.local },
+				target: Target.Undefined,
+				visibility: { userInvocable: true, agentInvocable: true },
+				enabled: true,
+			};
+		}
+
+		function createCompatAgent(name: string, folder: '.github/agents' | '.claude/agents' | '.copilot/agents'): ICustomAgent {
+			const id = `file:///workspace/${folder}/${name}.md`;
+			return {
+				id,
+				uri: URI.parse(id),
+				name,
+				description: `Compat ${name}`,
+				tools: ['safeappeals_readFile'],
+				agentInstructions: { content: 'test', toolReferences: [] },
+				source: { storage: PromptsStorage.local },
+				target: Target.Undefined,
+				visibility: { userInvocable: true, agentInvocable: true },
+				enabled: true,
+			};
+		}
+
+		let callIdCounter = 0;
+		function createInvokableTool(opts: {
+			customAgents?: ICustomAgent[];
+			capturedRequests: IChatAgentRequest[];
+			registerToolIds?: readonly string[];
+		}) {
+			const mockToolsService = testDisposables.add(new MockLanguageModelToolsService());
+			for (const id of opts.registerToolIds ?? []) {
+				mockToolsService.addRegisteredToolId(id);
+			}
+			const promptsService = new MockPromptsService();
+			if (opts.customAgents) {
+				promptsService.setCustomModes(opts.customAgents);
+			}
+
+			const mockChatAgentService: Pick<IChatAgentService, 'getDefaultAgent' | 'invokeAgent'> = {
+				getDefaultAgent() {
+					return { id: 'default-agent' } as IChatAgentService extends { getDefaultAgent(...args: infer _A): infer R } ? NonNullable<R> : never;
+				},
+				async invokeAgent(_id: string, request: IChatAgentRequest): Promise<IChatAgentResult> {
+					opts.capturedRequests.push(request);
+					return {};
+				},
+			};
+
+			const mockChatService: Pick<IChatService, 'getSession'> = {
+				getSession() {
+					return {
+						getRequests: () => [{ id: 'req-1' }],
+						acceptResponseProgress: () => { },
+					} as unknown as IChatModel;
+				},
+			};
+
+			const mockInstantiationService: Pick<IInstantiationService, 'createInstance'> = {
+				createInstance(..._args: never[]): { collect: () => Promise<void> } {
+					return { collect: async () => { } };
+				},
+			};
+
+			const tool = testDisposables.add(new RunSubagentTool(
+				mockChatAgentService as IChatAgentService,
+				mockChatService as IChatService,
+				mockToolsService,
+				{} as ILanguageModelsService,
+				new NullLogService(),
+				new TestConfigurationService(),
+				promptsService,
+				mockInstantiationService as IInstantiationService,
+				{} as IProductService,
+			));
+
+			return tool;
+		}
+
+		function createInvocation(agentName: string, userSelectedTools?: UserSelectedTools): IToolInvocation {
+			return {
+				callId: `security-call-${++callIdCounter}`,
+				toolId: 'runSubagent',
+				parameters: { prompt: 'do something', description: 'test', agentName },
+				context: { sessionResource: URI.parse('test://session/security') },
+				userSelectedTools: userSelectedTools ?? {
+					runSubagent: true,
+					safeappeals_editFile: true,
+					safeappeals_createFile: true,
+					safeappeals_applyPatch: true,
+					safeappeals_multiReplaceString: true,
+					safeappeals_runVscodeCommand: true,
+					safeappeals_webSearch: true,
+					safeappeals_fetchWebPage: true,
+					[InternalEditToolId]: true,
+					[TerminalToolId.RunInTerminal]: true,
+				},
+			} as IToolInvocation;
+		}
+
+		const countTokens = async () => 0;
+		const noProgress: ToolProgress = { report() { } };
+
+		test('omitted tools: default-deny map disables write/command/web/terminal tools', () => {
+			const denied = createDefaultDenySubagentTools();
+			assert.deepStrictEqual(
+				DENIED_SAMPLE_IDS.map(id => ({ id, enabled: denied[id] })),
+				DENIED_SAMPLE_IDS.map(id => ({ id, enabled: false })),
+			);
+			for (const id of SUBAGENT_DEFAULT_DENIED_TOOL_IDS) {
+				assert.strictEqual(denied[id], false, id);
+			}
+		});
+
+		test('omitted tools: default-deny seeds read-only tools as true (blocks empty→MVP fallback)', () => {
+			const map = createDefaultDenySubagentTools();
+			assert.deepStrictEqual(
+				{
+					enabled: SUBAGENT_DEFAULT_ENABLED_TOOL_IDS.map(id => map[id]),
+					hasSeedTrue: SUBAGENT_DEFAULT_ENABLED_TOOL_IDS.some(id => map[id] === true),
+					createPlan: map['safeappeals_createPlan'],
+					ragIndex: map['safeappeals_rag_index_document'],
+					switchMode: map['safeappeals_switchMode'],
+					browser: map['browserTool'],
+					runSubagent: map['runSubagent'],
+				},
+				{
+					enabled: SUBAGENT_DEFAULT_ENABLED_TOOL_IDS.map(() => true),
+					hasSeedTrue: true,
+					createPlan: false,
+					ragIndex: false,
+					switchMode: false,
+					browser: false,
+					runSubagent: false,
+				},
+			);
+		});
+
+		test('omitted tools: resolveSubagentModeTools never inherits parent enablement', () => {
+			const parent: UserSelectedTools = {
+				safeappeals_editFile: true,
+				[TerminalToolId.RunInTerminal]: true,
+				safeappeals_webSearch: true,
+			};
+			const resolved = resolveSubagentModeTools(undefined, () => parent);
+			assert.deepStrictEqual(
+				{
+					edit: resolved['safeappeals_editFile'],
+					terminal: resolved[TerminalToolId.RunInTerminal],
+					web: resolved['safeappeals_webSearch'],
+					readSeed: resolved['safeappeals_readFile'],
+					sameAsParent: resolved === parent,
+				},
+				{ edit: false, terminal: false, web: false, readSeed: true, sameAsParent: false },
+			);
+		});
+
+		test('listed tools: overlay starts from default-deny then applies listed enables', () => {
+			const resolved = resolveSubagentModeTools(
+				['safeappeals_editFile', 'safeappeals_readFile'],
+				listed => {
+					const converted: UserSelectedTools = {
+						safeappeals_editFile: listed.includes('safeappeals_editFile'),
+						safeappeals_readFile: listed.includes('safeappeals_readFile'),
+						safeappeals_createPlan: false,
+						browserTool: false,
+					};
+					return converted;
+				},
+			);
+			assert.deepStrictEqual(
+				{
+					edit: resolved['safeappeals_editFile'],
+					read: resolved['safeappeals_readFile'],
+					createPlan: resolved['safeappeals_createPlan'],
+					browser: resolved['browserTool'],
+					terminal: resolved[TerminalToolId.RunInTerminal],
+				},
+				{
+					edit: true, // explicitly listed — may override default deny
+					read: true,
+					createPlan: false,
+					browser: false,
+					terminal: false, // remains denied from baseline
+				},
+			);
+		});
+
+		test('agent with no tools: invoke emits default-deny (not parent inherit)', async () => {
+			const agent = createSafeAppealsAgent({ name: 'NoToolsAgent' }); // tools omitted
+			const capturedRequests: IChatAgentRequest[] = [];
+			const tool = createInvokableTool({ customAgents: [agent], capturedRequests });
+
+			const result = await tool.invoke(createInvocation('NoToolsAgent'), countTokens, noProgress, CancellationToken.None);
+
+			assert.strictEqual(
+				capturedRequests.length,
+				1,
+				result.content[0].kind === 'text' ? result.content[0].value : 'expected agent invoke',
+			);
+			const modeTools = capturedRequests[0].userSelectedTools!;
+			assert.deepStrictEqual(
+				{
+					denied: DENIED_SAMPLE_IDS.map(id => modeTools[id]),
+					seedRead: modeTools['safeappeals_readFile'],
+					seedRagSearch: modeTools['safeappeals_rag_search_reference'],
+					// Nesting product-default off + default-deny seed: child cannot runSubagent.
+					runSubagent: modeTools['runSubagent'],
+				},
+				{
+					denied: DENIED_SAMPLE_IDS.map(() => false),
+					seedRead: true,
+					seedRagSearch: true,
+					runSubagent: false,
+				},
+			);
+		});
+
+		test('agent with restrictive tools: unlisted mutating tools are false', async () => {
+			const agent = createSafeAppealsAgent({
+				name: 'ReadOnlyAgent',
+				tools: ['safeappeals_readFile', 'safeappeals_listDir'],
+			});
+			const registerToolIds = [
+				'safeappeals_readFile',
+				'safeappeals_listDir',
+				...DENIED_SAMPLE_IDS,
+			];
+			const capturedRequests: IChatAgentRequest[] = [];
+			const tool = createInvokableTool({ customAgents: [agent], capturedRequests, registerToolIds });
+
+			const result = await tool.invoke(createInvocation('ReadOnlyAgent'), countTokens, noProgress, CancellationToken.None);
+
+			assert.strictEqual(
+				capturedRequests.length,
+				1,
+				result.content[0].kind === 'text' ? result.content[0].value : 'expected agent invoke',
+			);
+			const modeTools = capturedRequests[0].userSelectedTools!;
+			assert.deepStrictEqual(
+				{
+					read: modeTools['safeappeals_readFile'],
+					list: modeTools['safeappeals_listDir'],
+					edit: modeTools['safeappeals_editFile'],
+					create: modeTools['safeappeals_createFile'],
+					applyPatch: modeTools['safeappeals_applyPatch'],
+					multiReplace: modeTools['safeappeals_multiReplaceString'],
+					runCommand: modeTools['safeappeals_runVscodeCommand'],
+					webSearch: modeTools['safeappeals_webSearch'],
+					fetch: modeTools['safeappeals_fetchWebPage'],
+					terminal: modeTools[TerminalToolId.RunInTerminal],
+				},
+				{
+					read: true,
+					list: true,
+					edit: false,
+					create: false,
+					applyPatch: false,
+					multiReplace: false,
+					runCommand: false,
+					webSearch: false,
+					fetch: false,
+					terminal: false,
+				},
+			);
+		});
+
+		test('compat .github/agents agent is rejected for invoke', async () => {
+			const agent = createCompatAgent('GithubCompat', '.github/agents');
+			const capturedRequests: IChatAgentRequest[] = [];
+			const tool = createInvokableTool({ customAgents: [agent], capturedRequests });
+
+			const result = await tool.invoke(createInvocation('GithubCompat'), countTokens, noProgress, CancellationToken.None);
+
+			assert.strictEqual(capturedRequests.length, 0);
+			assert.ok(result.content[0].kind === 'text' && result.content[0].value.includes('compatibility agent source'));
+		});
+
+		test('compat .claude/agents agent is rejected for invoke', async () => {
+			const agent = createCompatAgent('ClaudeCompat', '.claude/agents');
+			const capturedRequests: IChatAgentRequest[] = [];
+			const tool = createInvokableTool({ customAgents: [agent], capturedRequests });
+
+			const result = await tool.invoke(createInvocation('ClaudeCompat'), countTokens, noProgress, CancellationToken.None);
+
+			assert.strictEqual(capturedRequests.length, 0);
+			assert.ok(result.content[0].kind === 'text' && result.content[0].value.includes('compatibility agent source'));
+		});
+
+		test('.safeAppeals/agents agent remains resolvable for invoke', () => {
+			const agent = createSafeAppealsAgent({ name: 'SafeOwned' });
+			assert.deepStrictEqual(
+				{
+					safeUri: isSafeAppealsOwnedAgentUriForSubagentInvoke(agent.uri),
+					compatUri: isCompatAgentUriForSubagentInvoke(agent.uri),
+					invocable: isAgentInvocableViaRunSubagent(agent),
+				},
+				{ safeUri: true, compatUri: false, invocable: true },
+			);
+		});
+
+		test('~/.safeAppeals/agents agent remains resolvable for invoke', () => {
+			const agent = createSafeAppealsAgent({
+				name: 'UserSafeOwned',
+				uriPath: 'file:///home/user/.safeAppeals/agents/UserSafeOwned.md',
+			});
+			assert.strictEqual(isAgentInvocableViaRunSubagent(agent), true);
+		});
+
+		test('extension-contributed agent remains invocable', () => {
+			const agent: ICustomAgent = {
+				...createSafeAppealsAgent({ name: 'Plan' }),
+				uri: URI.parse('extension:/github.copilot-chat/agents/Plan.md'),
+				source: { storage: PromptsStorage.extension, extensionId: new ExtensionIdentifier('github.copilot-chat') },
+			};
+			assert.strictEqual(isAgentInvocableViaRunSubagent(agent), true);
+		});
+
+		test('compat path markers are not invocable via helper', () => {
+			assert.deepStrictEqual(
+				{
+					github: isAgentInvocableViaRunSubagent(createCompatAgent('g', '.github/agents')),
+					claude: isAgentInvocableViaRunSubagent(createCompatAgent('c', '.claude/agents')),
+					copilot: isAgentInvocableViaRunSubagent(createCompatAgent('p', '.copilot/agents')),
+				},
+				{ github: false, claude: false, copilot: false },
+			);
 		});
 	});
 });

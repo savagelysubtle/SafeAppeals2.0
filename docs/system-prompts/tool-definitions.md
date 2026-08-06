@@ -1,5 +1,11 @@
 # Built-in Tool Definitions
 
+> **Historical Void dump (superseded).** Void `builtinTools` short names below are
+> not the shipping surface. Private Search registers `safeappeals_rag_*` (see
+> [`docs/rag/tool-contracts.md`](../rag/tool-contracts.md)); Void `rag_*` aliases
+> substitute via `AGENT_TOOL_NAME_SUBSTITUTIONS`. Timeline tools remain
+> `timeline_*` and persist to `.safeAppeals/timeline.json`.
+
 **Source**: `src/vs/workbench/contrib/void/common/prompt/prompts.ts` — `builtinTools` object  
 **Type**: `satisfies { [T in keyof BuiltinToolResultType]: InternalToolInfo }`
 
@@ -42,11 +48,11 @@ The `availableTools(chatMode, mcpTools)` function determines which tools are exp
 | `run_persistent_command` | ✅ | — | — |
 | `open_persistent_terminal` | ✅ | — | — |
 | `kill_persistent_terminal` | ✅ | — | — |
-| `rag_index_document` | ✅ | ✅ | — |
-| `rag_search_reference` | ✅ | ✅ | ✅ |
-| `rag_search_workspace` | ✅ | ✅ | ✅ |
-| `rag_search_all` | ✅ | ✅ | — |
-| `rag_get_stats` | ✅ | ✅ | ✅ |
+| `safeappeals_rag_index_document` (alias `rag_index_document`) | ✅ | ✅ | — |
+| `safeappeals_rag_search_reference` (alias `rag_search_reference`) | ✅ | ✅ | ✅ |
+| `safeappeals_rag_search_workspace` (alias `rag_search_workspace`) | ✅ | ✅ | ✅ |
+| `safeappeals_rag_search_all` (alias `rag_search_all`) | ✅ | ✅ | — |
+| `safeappeals_rag_get_stats` (alias `rag_get_stats`) | ✅ | ✅ | ✅ |
 | `web_search` | ✅ | ✅ | ✅ |
 | `multi_link_search` | ✅ | ✅ | ✅ |
 | `timeline_add_event` | ✅ | — | ✅ |
@@ -82,9 +88,9 @@ Several tools include inline ANTML example calls in their prompt definition:
 - `read_file`
 - `edit_file`
 - `edit_document`
-- `rag_search_reference`
-- `rag_search_workspace`
-- `rag_search_all`
+- `safeappeals_rag_search_reference` (alias `rag_search_reference`)
+- `safeappeals_rag_search_workspace` (alias `rag_search_workspace`)
+- `safeappeals_rag_search_all` (alias `rag_search_all`)
 - `create_file_or_folder`
 - `timeline_add_event`
 - `timeline_get_events`
@@ -380,25 +386,28 @@ Interrupts and closes a persistent terminal.
 
 ---
 
-## RAG (Retrieval Augmented Generation) Tools
+## Private Search (RAG) Tools
 
-### `rag_index_document`
+Canonical names: `safeappeals_rag_*`. Void short names `rag_*` still map through
+the authentication allowlist. Full contracts: [`docs/rag/tool-contracts.md`](../rag/tool-contracts.md).
 
-Manually indexes a document for RAG search.
+### `safeappeals_rag_index_document` (alias `rag_index_document`)
 
-> Auto-indexing is preferred: documents in `core_references/` are auto-indexed for reference search; workspace documents are auto-indexed if `ragAutoIndexCaseFiles` is enabled.
+Manually indexes a document for Private Search.
+
+> Auto-indexing is preferred: documents in `core_references/` are auto-indexed for reference search; workspace documents are auto-indexed by the folder indexer when Private Search is available.
 
 **Parameters**:
 | Parameter | Required | Description |
 |---|:---:|---|
 | `uri` | ✅ | Full path to the document |
-| `is_core_reference` | — | `true` for policy manuals/textbooks; `false` (default) for case documents |
+| `is_core_reference` | — | `true` for core references (policy manuals/textbooks under `core_references/`); `false` (default) for case documents |
 
 ---
 
-### `rag_search_reference`
+### `safeappeals_rag_search_reference` (alias `rag_search_reference`)
 
-Searches indexed **core reference documents** (policy manuals, regulations, textbooks).
+Searches indexed **core reference documents** in `core_references/` (policy manuals, regulations, textbooks).
 
 **Primary use**: Before answering ANY question about WC rules, procedures, benefits, or requirements.
 
@@ -421,7 +430,7 @@ Searches indexed **core reference documents** (policy manuals, regulations, text
 
 ---
 
-### `rag_search_workspace`
+### `safeappeals_rag_search_workspace` (alias `rag_search_workspace`)
 
 Searches indexed **case-specific documents** (medical reports, IME evaluations, decisions, correspondence).
 
@@ -446,19 +455,19 @@ Searches indexed **case-specific documents** (medical reports, IME evaluations, 
 
 ---
 
-### `rag_search_all`
+### `safeappeals_rag_search_all` (alias `rag_search_all`)
 
 Searches BOTH core reference documents AND case-specific documents simultaneously.
 
 **When to use**: Unsure if answer is in policy or case files; need comprehensive cross-source view; comparing policy requirements against case-specific facts.
 
-**Parameters**: Same as `rag_search_reference` and `rag_search_workspace`.
+**Parameters**: Same as `safeappeals_rag_search_reference` and `safeappeals_rag_search_workspace`.
 
 **Token cost**: ~2,500 tokens (slightly higher due to dual-source retrieval).
 
 ---
 
-### `rag_get_stats`
+### `safeappeals_rag_get_stats` (alias `rag_get_stats`)
 
 Returns statistics about indexed documents: which documents are indexed, number of chunks per document, total indexed content.
 

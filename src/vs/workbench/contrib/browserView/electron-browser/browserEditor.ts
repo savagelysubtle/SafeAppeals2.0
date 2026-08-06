@@ -26,6 +26,8 @@ import { getZoomFactor, onDidChangeZoomLevel } from '../../../../base/browser/br
 import { Disposable, DisposableStore } from '../../../../base/common/lifecycle.js';
 import { Emitter, Event } from '../../../../base/common/event.js';
 import { ILayoutService } from '../../../../platform/layout/browser/layoutService.js';
+import { markOnboardingTarget } from '../../onboarding/browser/spotlight/onboardingTarget.js';
+import { SAMPLE_CASE_TOUR_TARGETS } from '../../onboarding/browser/sampleCaseTour.js';
 
 export const CONTEXT_BROWSER_FOCUSED = new RawContextKey<boolean>('browserFocused', true, localize('browser.editorFocused', "Whether the browser editor is focused"));
 export const CONTEXT_BROWSER_HAS_URL = new RawContextKey<boolean>('browserHasUrl', false, localize('browser.hasUrl', "Whether the browser has a URL loaded"));
@@ -470,6 +472,8 @@ export class BrowserEditor extends EditorPane {
 		const root = $('.browser-root');
 		root.tabIndex = -1; // Click focusable (for kb shortcuts), but not in tab order
 		parent.appendChild(root);
+		// SafeAppeals: sample-case tour spotlight target (integrated browser editor).
+		this._register(markOnboardingTarget(root, SAMPLE_CASE_TOUR_TARGETS.browser));
 
 		// Collect widgets from all contributions, grouped by location.
 		const widgetsByLocation = new Map<BrowserWidgetLocation, IBrowserEditorWidget[]>();

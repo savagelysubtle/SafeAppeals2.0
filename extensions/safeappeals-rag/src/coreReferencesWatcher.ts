@@ -4,7 +4,7 @@
 
 /**
  * Back-compat re-export. Prefer {@link FolderIndexWatcher}:
- * FS-watches `core_references/`, startup-scans the workspace (txt/md),
+ * FS-watches `core_references/`, startup-scans the workspace (txt/md/pdf),
  * and reindexes on save. Scope `case_index` = non-core_references workspace files.
  */
 export {
