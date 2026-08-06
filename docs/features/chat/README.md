@@ -18,7 +18,7 @@ The SafeAppeals chat system is a sophisticated conversational AI interface that 
 - **Agent modes** for case research, document drafting, and case management
 - **Plan mode** with durable `.safeAppeals/plans/*.plan.md` files via `safeappeals_createPlan` (see [Plan Mode](./plan-mode.md))
 
-## Architecture
+## Architecture (historical Void diagram)
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────────┐
