@@ -1,5 +1,9 @@
 # Email Dashboard User Guide
 
+> **Historical Void-era guide.** Shipping email UX is `extensions/safeappeals-email`
+> (Service Connections, sync, dashboard Attach+Send; agent drafts via LM tools — no
+> agent send). See [README shipping note](./README.md).
+
 This guide covers how to use the Email Dashboard to manage case correspondence in SafeAppeals Navigator.
 
 ## Table of Contents

@@ -1,5 +1,9 @@
 # Email Dashboard API Reference
 
+> **Historical Void-era API.** Shipping APIs live under `extensions/safeappeals-email`.
+> Agent tool catalog: [Agent LM Tools Pattern](../../agent-tools-pattern.md). See
+> [README shipping note](./README.md).
+
 Complete API documentation for the Email Dashboard services.
 
 ## Table of Contents

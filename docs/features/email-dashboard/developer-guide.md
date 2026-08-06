@@ -1,5 +1,9 @@
 # Email Dashboard Developer Guide
 
+> **Historical Void-era guide.** Prefer extending `extensions/safeappeals-email` for
+> product work. See [README shipping note](./README.md) and
+> [Agent LM Tools Pattern](../../agent-tools-pattern.md).
+
 This guide covers how to extend, customize, and contribute to the Email Dashboard feature.
 
 ## Table of Contents
