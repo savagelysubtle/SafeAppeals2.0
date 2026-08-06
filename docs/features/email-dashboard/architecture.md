@@ -1,5 +1,10 @@
 # Email Dashboard Architecture
 
+> **Historical Void-era architecture.** Shipping email lives in
+> `extensions/safeappeals-email` (Service Connections, LM tools, dashboard Attach+Send;
+> no agent send). See [README shipping note](./README.md) and
+> [Agent LM Tools Pattern](../../agent-tools-pattern.md).
+
 This document describes the technical architecture of the Email Dashboard feature.
 
 ## Table of Contents

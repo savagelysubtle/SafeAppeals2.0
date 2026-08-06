@@ -10,7 +10,7 @@ A visual timeline system for tracking case events in workers' compensation appea
 - **🔔 Notifications** - Alerts for upcoming/overdue deadlines and document reminders
 - **📎 Document Linking** - Attach files to events from the Explorer
 - **📄 PDF Export** - Export timeline to formatted PDF document
-- **🤖 Agent Tools** - AI can programmatically manage timeline events
+- **🤖 Agent Tools** - CORE allowlist names `timeline_*` (not `safeappeals_*`); see [Agent LM Tools Pattern](../../agent-tools-pattern.md)
 
 ## Quick Start
 

@@ -1,5 +1,17 @@
 # Email Dashboard
 
+> **Shipping extension (Aug 2026):** Live product email is
+> [`extensions/safeappeals-email`](../../../extensions/safeappeals-email/) —
+> IMAP/SMTP (Google XOAUTH2 + app-password), Service Connections for mail accounts,
+> sidebar + dashboard, tags/case links, local drafts. Agent LM tools (14×
+> `safeappeals_email_*`, including `createDraft` with workspace-bounded attachments)
+> — **no agent send**; user sends from the dashboard (Attach + Send uses sealed
+> draft-attachment store). Catalog: [Agent LM Tools Pattern](../../agent-tools-pattern.md).
+>
+> **This folder** documents the older Void-era import/FTS dashboard (`.eml`/PDF
+> import, `void-channel-email`). Treat diagrams and paths below as historical
+> reference unless confirmed against `safeappeals-email`.
+
 A workspace-scoped email management system for SafeAppeals Navigator that enables users to import, view, search, and manage case-related correspondence with AI-assisted draft replies.
 
 ## Features
