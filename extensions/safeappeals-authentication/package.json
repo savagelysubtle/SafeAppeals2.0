@@ -666,6 +666,79 @@
 						"mode"
 					]
 				}
+			},
+			{
+				"name": "safeappeals_createPlan",
+				"toolReferenceName": "createPlan",
+				"displayName": "%tool.createPlan.displayName%",
+				"modelDescription": "%tool.createPlan.modelDescription%",
+				"userDescription": "%tool.createPlan.userDescription%",
+				"canBeReferencedInPrompt": true,
+				"icon": "$(notebook)",
+				"inputSchema": {
+					"type": "object",
+					"properties": {
+						"name": {
+							"type": "string",
+							"description": "Short plan title (required when creating)."
+						},
+						"overview": {
+							"type": "string",
+							"description": "One- or two-sentence summary (required when creating)."
+						},
+						"plan": {
+							"type": "string",
+							"description": "Markdown plan body. Required on create; on update provide plan OR oldStr+newStr."
+						},
+						"todos": {
+							"type": "array",
+							"description": "Optional structured checklist entries.",
+							"items": {
+								"type": "object",
+								"properties": {
+									"id": {
+										"type": "string",
+										"description": "Stable todo id."
+									},
+									"content": {
+										"type": "string",
+										"description": "Todo text."
+									},
+									"status": {
+										"type": "string",
+										"description": "Todo status (default pending).",
+										"enum": [
+											"pending",
+											"completed",
+											"in_progress",
+											"cancelled"
+										]
+									}
+								},
+								"required": [
+									"id",
+									"content"
+								]
+							}
+						},
+						"isProject": {
+							"type": "boolean",
+							"description": "Whether this is a multi-plan project (default false)."
+						},
+						"planPath": {
+							"type": "string",
+							"description": "Existing plan URI or path under .safeAppeals/plans/ (updates)."
+						},
+						"oldStr": {
+							"type": "string",
+							"description": "Exact text to replace once (update). Must be paired with newStr."
+						},
+						"newStr": {
+							"type": "string",
+							"description": "Replacement text (update). Must be paired with oldStr."
+						}
+					}
+				}
 			}
 		],
 		"languageModelToolSets": [
@@ -802,7 +875,8 @@
 			}
 		},
 		"configurationDefaults": {
-			"github.copilot.chat.switchAgent.enabled": false
+			"github.copilot.chat.switchAgent.enabled": false,
+			"chat.subagents.allowInvocationsFromSubagents": false
 		}
 	},
 	"scripts": {

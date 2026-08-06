@@ -5,6 +5,9 @@
 
 import 'mocha';
 import * as assert from 'assert';
+import * as fs from 'fs';
+import * as path from 'path';
+import { buildAgentLoopPrefixMessages } from '../chat/agentLoop';
 import { MAX_AGENT_ITERATIONS, nextAgentLoopDecision } from '../chat/agentLoopHelpers';
 import { isBlockedVscodeCommand, isSafeVscodeCommand } from '../chat/commandAllowlist';
 import { applyHunkToText, parseSimplePatch } from '../chat/patchHelpers';
@@ -15,12 +18,16 @@ import {
 	filterAgentTools,
 	isAgentToolAllowed,
 	isPathInsideWorkspaceRoot,
+	isPlanEditDeniedTool,
+	isPlanModeName,
 	MVP_AGENT_TOOL_NAMES,
+	PLAN_MODE_EDIT_DENYLIST,
 	resolveAgentToolName,
 	resolveAllowedInvokeToolName,
 	SAFEAPPEALS_APPLY_PATCH_TOOL,
 	SAFEAPPEALS_CREATE_DIRECTORY_TOOL,
 	SAFEAPPEALS_CREATE_FILE_TOOL,
+	SAFEAPPEALS_CREATE_PLAN_TOOL,
 	SAFEAPPEALS_EDIT_FILE_TOOL,
 	SAFEAPPEALS_FETCH_WEB_PAGE_TOOL,
 	SAFEAPPEALS_MULTI_WEB_SEARCH_TOOL,
@@ -37,11 +44,19 @@ import {
 	SAFEAPPEALS_SEARCH_WORKSPACE_SYMBOLS_TOOL,
 	SAFEAPPEALS_SWITCH_MODE_TOOL,
 	SAFEAPPEALS_WEB_SEARCH_TOOL,
+	SAFEAPPEALS_RAG_GET_STATS_TOOL,
+	SAFEAPPEALS_RAG_SEARCH_REFERENCE_TOOL,
+	SAFEAPPEALS_RAG_SEARCH_WORKSPACE_TOOL,
+	SAFEAPPEALS_RAG_SEARCH_ALL_TOOL,
+	SAFEAPPEALS_RAG_INDEX_DOCUMENT_TOOL,
+	requestToolsMapFromEnablement,
 	selectAgentTools,
+	stripPlanEditTools,
 	VSCODE_EDIT_FILE_TOOL,
 	VSCODE_EDIT_FILE_TOOL_ALIAS,
 	VSCODE_FETCH_WEB_PAGE_TOOL,
 } from '../chat/toolAllowlist';
+import { buildPrivateSearchAgentProtocolMessage } from '../chat/privateSearchAgentProtocol';
 import { buildModeReminderMessage, resolveModeId } from '../chat/switchModeHelpers';
 
 suite('nextAgentLoopDecision', () => {
@@ -96,6 +111,9 @@ suite('agent tool allowlist', () => {
 				editInternal: isAgentToolAllowed(VSCODE_EDIT_FILE_TOOL),
 				editAlias: isAgentToolAllowed(VSCODE_EDIT_FILE_TOOL_ALIAS),
 				ensured: ENSURED_AGENT_TOOL_NAMES.every(isAgentToolAllowed),
+				runSubagent: isAgentToolAllowed('runSubagent'),
+				runSubagentInCore: CORE_AGENT_TOOL_NAMES.includes('runSubagent'),
+				runSubagentInEnsured: ENSURED_AGENT_TOOL_NAMES.includes('runSubagent'),
 				copilot: isAgentToolAllowed('copilot_readFile'),
 				memory: isAgentToolAllowed('copilot_memory'),
 				exploreSubagent: isAgentToolAllowed('explore_subagent'),
@@ -109,6 +127,9 @@ suite('agent tool allowlist', () => {
 				editInternal: true,
 				editAlias: false,
 				ensured: true,
+				runSubagent: true,
+				runSubagentInCore: true,
+				runSubagentInEnsured: false,
 				copilot: false,
 				memory: false,
 				exploreSubagent: false,
@@ -369,6 +390,11 @@ suite('selectAgentTools', () => {
 			{ name: 'copilot_switchAgent', description: 'sa' },
 			{ name: 'web_search', description: 'ws' },
 			{ name: 'multi_link_search', description: 'mls' },
+			{ name: 'rag_get_stats', description: 'rgs' },
+			{ name: 'rag_search_reference', description: 'rsr' },
+			{ name: 'rag_search_workspace', description: 'rsw' },
+			{ name: 'rag_search_all', description: 'rsa' },
+			{ name: 'rag_index_document', description: 'rid' },
 			{ name: VSCODE_EDIT_FILE_TOOL, description: 'Edit' },
 		];
 		const enabled = disabledAliases[disabledAliases.length - 1];
@@ -397,18 +423,25 @@ suite('selectAgentTools', () => {
 		);
 	});
 
-	test('ensured descriptors include replace, fetch, web search, and switch mode tools', () => {
+	test('ensured descriptors include replace, fetch, web search, RAG, and switch mode tools', () => {
 		assert.deepStrictEqual(
 			{
 				hasReplace: ENSURED_AGENT_TOOL_NAMES.includes(SAFEAPPEALS_REPLACE_STRING_TOOL),
 				hasFetch: ENSURED_AGENT_TOOL_NAMES.includes(SAFEAPPEALS_FETCH_WEB_PAGE_TOOL),
 				hasWebSearch: ENSURED_AGENT_TOOL_NAMES.includes(SAFEAPPEALS_WEB_SEARCH_TOOL),
 				hasMultiWebSearch: ENSURED_AGENT_TOOL_NAMES.includes(SAFEAPPEALS_MULTI_WEB_SEARCH_TOOL),
+				hasRagStats: ENSURED_AGENT_TOOL_NAMES.includes(SAFEAPPEALS_RAG_GET_STATS_TOOL),
+				hasRagSearchRef: ENSURED_AGENT_TOOL_NAMES.includes(SAFEAPPEALS_RAG_SEARCH_REFERENCE_TOOL),
+				hasRagSearchWs: ENSURED_AGENT_TOOL_NAMES.includes(SAFEAPPEALS_RAG_SEARCH_WORKSPACE_TOOL),
+				hasRagSearchAll: ENSURED_AGENT_TOOL_NAMES.includes(SAFEAPPEALS_RAG_SEARCH_ALL_TOOL),
+				hasRagIndex: ENSURED_AGENT_TOOL_NAMES.includes(SAFEAPPEALS_RAG_INDEX_DOCUMENT_TOOL),
 				hasSwitchMode: ENSURED_AGENT_TOOL_NAMES.includes(SAFEAPPEALS_SWITCH_MODE_TOOL),
 				replaceDesc: ENSURED_AGENT_TOOL_DESCRIPTORS[SAFEAPPEALS_REPLACE_STRING_TOOL]?.name,
 				fetchDesc: ENSURED_AGENT_TOOL_DESCRIPTORS[SAFEAPPEALS_FETCH_WEB_PAGE_TOOL]?.name,
 				webSearchDesc: ENSURED_AGENT_TOOL_DESCRIPTORS[SAFEAPPEALS_WEB_SEARCH_TOOL]?.name,
 				multiWebSearchDesc: ENSURED_AGENT_TOOL_DESCRIPTORS[SAFEAPPEALS_MULTI_WEB_SEARCH_TOOL]?.name,
+				ragStatsDesc: ENSURED_AGENT_TOOL_DESCRIPTORS[SAFEAPPEALS_RAG_GET_STATS_TOOL]?.name,
+				ragSearchRefDesc: ENSURED_AGENT_TOOL_DESCRIPTORS[SAFEAPPEALS_RAG_SEARCH_REFERENCE_TOOL]?.description.includes('core reference'),
 				switchModeDesc: ENSURED_AGENT_TOOL_DESCRIPTORS[SAFEAPPEALS_SWITCH_MODE_TOOL]?.name,
 			},
 			{
@@ -416,12 +449,246 @@ suite('selectAgentTools', () => {
 				hasFetch: true,
 				hasWebSearch: true,
 				hasMultiWebSearch: true,
+				hasRagStats: true,
+				hasRagSearchRef: true,
+				hasRagSearchWs: true,
+				hasRagSearchAll: true,
+				hasRagIndex: true,
 				hasSwitchMode: true,
 				replaceDesc: SAFEAPPEALS_REPLACE_STRING_TOOL,
 				fetchDesc: SAFEAPPEALS_FETCH_WEB_PAGE_TOOL,
 				webSearchDesc: SAFEAPPEALS_WEB_SEARCH_TOOL,
 				multiWebSearchDesc: SAFEAPPEALS_MULTI_WEB_SEARCH_TOOL,
+				ragStatsDesc: SAFEAPPEALS_RAG_GET_STATS_TOOL,
+				ragSearchRefDesc: true,
 				switchModeDesc: SAFEAPPEALS_SWITCH_MODE_TOOL,
+			},
+		);
+	});
+
+	test('createPlan is never force-ensured for Agent', () => {
+		assert.deepStrictEqual(
+			{
+				inEnsured: ENSURED_AGENT_TOOL_NAMES.includes(SAFEAPPEALS_CREATE_PLAN_TOOL),
+				hasDescriptor: SAFEAPPEALS_CREATE_PLAN_TOOL in ENSURED_AGENT_TOOL_DESCRIPTORS,
+			},
+			{
+				inEnsured: false,
+				hasDescriptor: true,
+			},
+		);
+	});
+
+	test('Agent mode selection still includes ENSURED edit tools', () => {
+		const selected = selectAgentTools({ pool: [], modeName: 'Agent' }).map(t => t.name);
+		assert.deepStrictEqual(
+			{
+				edit: selected.includes(SAFEAPPEALS_EDIT_FILE_TOOL),
+				createFile: selected.includes(SAFEAPPEALS_CREATE_FILE_TOOL),
+				createDir: selected.includes(SAFEAPPEALS_CREATE_DIRECTORY_TOOL),
+				replace: selected.includes(SAFEAPPEALS_REPLACE_STRING_TOOL),
+				multiReplace: selected.includes(SAFEAPPEALS_MULTI_REPLACE_STRING_TOOL),
+				applyPatch: selected.includes(SAFEAPPEALS_APPLY_PATCH_TOOL),
+				createPlan: selected.includes(SAFEAPPEALS_CREATE_PLAN_TOOL),
+			},
+			{
+				edit: true,
+				createFile: true,
+				createDir: true,
+				replace: true,
+				multiReplace: true,
+				applyPatch: true,
+				createPlan: false,
+			},
+		);
+	});
+
+	test('Plan mode selection strips all edit denylist tools', () => {
+		const requestTools = new Map([
+			[pool[2], true], // copilot_insertEdit → safeappeals_editFile
+			[pool[6], true], // vscode_editFile_internal
+			[pool[10], true], // copilot_createFile
+			[pool[11], true], // copilot_createDirectory
+		]);
+		const selected = selectAgentTools({ pool, requestTools, modeName: 'Plan' }).map(t => t.name);
+		assert.deepStrictEqual(
+			{
+				isPlan: isPlanModeName('Plan'),
+				isPlanLower: isPlanModeName(' plan '),
+				deniedEdit: isPlanEditDeniedTool(SAFEAPPEALS_EDIT_FILE_TOOL),
+				deniedInternal: isPlanEditDeniedTool(VSCODE_EDIT_FILE_TOOL),
+				anyDenied: selected.some(isPlanEditDeniedTool),
+				stripped: stripPlanEditTools(PLAN_MODE_EDIT_DENYLIST.map(name => ({ name }))).length,
+				hasRead: selected.includes(SAFEAPPEALS_READ_FILE_TOOL),
+				hasSwitch: selected.includes(SAFEAPPEALS_SWITCH_MODE_TOOL),
+				hasCreatePlan: selected.includes(SAFEAPPEALS_CREATE_PLAN_TOOL),
+			},
+			{
+				isPlan: true,
+				isPlanLower: true,
+				deniedEdit: true,
+				deniedInternal: true,
+				anyDenied: false,
+				stripped: 0,
+				hasRead: true,
+				hasSwitch: true,
+				hasCreatePlan: false,
+			},
+		);
+	});
+
+	test('runSubagent is CORE∩pool when picker absent; explicit false keeps it out (never ENSURED)', () => {
+		const runSubagent = { name: 'runSubagent', description: 'Run Subagent' };
+		const poolWithRunSubagent = [
+			{ name: SAFEAPPEALS_READ_FILE_TOOL, description: 'read' },
+			runSubagent,
+		];
+
+		const whenAbsentPicker = selectAgentTools({ pool: poolWithRunSubagent }).map(t => t.name);
+		const whenEmptyPicker = selectAgentTools({
+			pool: poolWithRunSubagent,
+			requestTools: new Map(),
+		}).map(t => t.name);
+		const whenNestingDisabled = selectAgentTools({
+			pool: poolWithRunSubagent,
+			requestTools: new Map([
+				[poolWithRunSubagent[0], true],
+				[runSubagent, false],
+			]),
+		}).map(t => t.name);
+
+		assert.deepStrictEqual(
+			{
+				inEnsured: ENSURED_AGENT_TOOL_NAMES.includes('runSubagent'),
+				absentPicker: whenAbsentPicker.includes('runSubagent'),
+				emptyPicker: whenEmptyPicker.includes('runSubagent'),
+				nestingDisabled: whenNestingDisabled.includes('runSubagent'),
+				nestingStillHasRead: whenNestingDisabled.includes(SAFEAPPEALS_READ_FILE_TOOL),
+			},
+			{
+				inEnsured: false,
+				absentPicker: true,
+				emptyPicker: true,
+				nestingDisabled: false,
+				nestingStillHasRead: true,
+			},
+		);
+	});
+
+	test('subagent default-deny enablement map does not leak mutators via selectAgentTools', () => {
+		// Contract with core `createDefaultDenySubagentTools` / `SUBAGENT_DEFAULT_*_TOOL_IDS`
+		// in runSubagentTool.ts: seed-enable read/search; explicit-false mutators.
+		const seedEnabled = [
+			SAFEAPPEALS_READ_FILE_TOOL,
+			SAFEAPPEALS_LIST_DIR_TOOL,
+			SAFEAPPEALS_FIND_FILES_TOOL,
+			SAFEAPPEALS_FIND_TEXT_IN_FILES_TOOL,
+			SAFEAPPEALS_SEARCH_WORKSPACE_SYMBOLS_TOOL,
+			SAFEAPPEALS_GET_ERRORS_TOOL,
+			SAFEAPPEALS_GET_CHANGED_FILES_TOOL,
+			SAFEAPPEALS_SEARCH_CODEBASE_TOOL,
+			SAFEAPPEALS_RAG_GET_STATS_TOOL,
+			SAFEAPPEALS_RAG_SEARCH_REFERENCE_TOOL,
+			SAFEAPPEALS_RAG_SEARCH_WORKSPACE_TOOL,
+			SAFEAPPEALS_RAG_SEARCH_ALL_TOOL,
+			'timeline_get_events',
+			'timeline_get_deadlines',
+		] as const;
+		const mustStayDisabled = [
+			SAFEAPPEALS_EDIT_FILE_TOOL,
+			SAFEAPPEALS_CREATE_FILE_TOOL,
+			SAFEAPPEALS_CREATE_DIRECTORY_TOOL,
+			SAFEAPPEALS_REPLACE_STRING_TOOL,
+			SAFEAPPEALS_MULTI_REPLACE_STRING_TOOL,
+			SAFEAPPEALS_APPLY_PATCH_TOOL,
+			SAFEAPPEALS_RUN_VSCODE_COMMAND_TOOL,
+			SAFEAPPEALS_FETCH_WEB_PAGE_TOOL,
+			SAFEAPPEALS_WEB_SEARCH_TOOL,
+			SAFEAPPEALS_MULTI_WEB_SEARCH_TOOL,
+			SAFEAPPEALS_SWITCH_MODE_TOOL,
+			SAFEAPPEALS_CREATE_PLAN_TOOL,
+			SAFEAPPEALS_RAG_INDEX_DOCUMENT_TOOL,
+			VSCODE_EDIT_FILE_TOOL,
+			VSCODE_FETCH_WEB_PAGE_TOOL,
+			'run_in_terminal',
+			'kill_terminal',
+			// Nesting disable: CORE-allowed but must not reappear via ENSURED if mistakenly added later.
+			'runSubagent',
+			'browserTool',
+			'open_browser_page',
+			'click_element',
+			'screenshot_page',
+			'navigate_page',
+			'read_page',
+			'hover_element',
+			'drag_element',
+			'type_in_page',
+			'handle_dialog',
+			'run_playwright_code',
+			'timeline_add_event',
+			'timeline_update_event',
+			'timeline_delete_event',
+			'timeline_link_document',
+		] as const;
+
+		const enablement: Record<string, boolean> = {};
+		for (const id of seedEnabled) {
+			enablement[id] = true;
+		}
+		for (const id of mustStayDisabled) {
+			enablement[id] = false;
+		}
+
+		const pool = [
+			...new Set([...ENSURED_AGENT_TOOL_NAMES, ...CORE_AGENT_TOOL_NAMES, ...mustStayDisabled, ...seedEnabled]),
+		].map(name => ({ name, description: name }));
+
+		const selected = selectAgentTools({
+			pool,
+			requestTools: requestToolsMapFromEnablement(enablement, pool),
+		}).map(t => t.name);
+
+		assert.deepStrictEqual(
+			{
+				hasRead: selected.includes(SAFEAPPEALS_READ_FILE_TOOL),
+				hasList: selected.includes(SAFEAPPEALS_LIST_DIR_TOOL),
+				hasRagSearch: selected.includes(SAFEAPPEALS_RAG_SEARCH_REFERENCE_TOOL),
+				leaked: mustStayDisabled.filter(id => selected.includes(id)),
+				// Empty selection would MVP-fallback and re-add ENSURED edits — must not happen.
+				nonEmpty: selected.length > 0,
+			},
+			{
+				hasRead: true,
+				hasList: true,
+				hasRagSearch: true,
+				leaked: [],
+				nonEmpty: true,
+			},
+		);
+	});
+
+	test('all-false enablement map without seed-enable still leaks ENSURED mutators (documents the hazard)', () => {
+		// Guardrail: proves why RunSubagentTool must seed at least one `true` read tool.
+		const enablement: Record<string, boolean> = {
+			[SAFEAPPEALS_EDIT_FILE_TOOL]: false,
+			[SAFEAPPEALS_CREATE_FILE_TOOL]: false,
+		};
+		const pool = ENSURED_AGENT_TOOL_NAMES.map(name => ({ name, description: name }));
+		const selected = selectAgentTools({
+			pool,
+			requestTools: requestToolsMapFromEnablement(enablement, pool),
+		}).map(t => t.name);
+		assert.deepStrictEqual(
+			{
+				// Only two tools explicitly false → selection empty → ENSURED re-adds the rest including edits.
+				hasEdit: selected.includes(SAFEAPPEALS_EDIT_FILE_TOOL),
+				hasReplace: selected.includes(SAFEAPPEALS_REPLACE_STRING_TOOL),
+				hasSwitch: selected.includes(SAFEAPPEALS_SWITCH_MODE_TOOL),
+			},
+			{
+				hasEdit: false, // explicitly disabled — ENSURED respects false
+				hasReplace: true, // NOT in the false map → ENSURED force-adds (the leak)
+				hasSwitch: true,
 			},
 		);
 	});
@@ -437,6 +704,52 @@ suite('selectAgentTools', () => {
 				plan: 'Plan',
 				agent: 'agent',
 				invalid: undefined,
+			},
+		);
+	});
+
+	test('private search protocol includes RAG-first cite and scope rules', () => {
+		const protocol = buildPrivateSearchAgentProtocolMessage();
+		assert.deepStrictEqual(
+			{
+				hasHeader: protocol.includes('Private Search protocol'),
+				ragFirst: protocol.includes('before** web search'),
+				getStats: protocol.includes('safeappeals_rag_get_stats'),
+				searchReference: protocol.includes('safeappeals_rag_search_reference'),
+				searchWorkspace: protocol.includes('safeappeals_rag_search_workspace'),
+				searchAll: protocol.includes('safeappeals_rag_search_all'),
+				citeHeaders: protocol.includes('[n]'),
+				noInvent: protocol.includes('never invent'),
+				webSupplement: protocol.includes('supplement'),
+				indexPrimary: protocol.includes('primary workbench'),
+				indexDocument: protocol.includes('safeappeals_rag_index_document'),
+				pdfIndexBeforeSearch: protocol.includes('before** relying on search alone'),
+				bornDigitalPdf: protocol.includes('Born-digital PDFs index via sa-converter'),
+				scannedHardDisable: protocol.includes('scanned-ocr-ineligible'),
+				scannedUnpinned: protocol.includes('scanned-ocr-unpinned'),
+				scannedNotInstalled: protocol.includes('scanned-ocr-not-installed'),
+				scannedSidecar: protocol.includes('scanned-ocr-sidecar-not-ready'),
+				noInventPdf: protocol.includes('never invent PDF text'),
+			},
+			{
+				hasHeader: true,
+				ragFirst: true,
+				getStats: true,
+				searchReference: true,
+				searchWorkspace: true,
+				searchAll: true,
+				citeHeaders: true,
+				noInvent: true,
+				webSupplement: true,
+				indexPrimary: true,
+				indexDocument: true,
+				pdfIndexBeforeSearch: true,
+				bornDigitalPdf: true,
+				scannedHardDisable: true,
+				scannedUnpinned: true,
+				scannedNotInstalled: true,
+				scannedSidecar: true,
+				noInventPdf: true,
 			},
 		);
 	});
@@ -460,6 +773,173 @@ suite('selectAgentTools', () => {
 				askLeave: true,
 				hasContent: true,
 				defaultName: true,
+			},
+		);
+	});
+});
+
+suite('WP5 nesting + Private Search composition', () => {
+	const packageJson = JSON.parse(
+		fs.readFileSync(path.join(__dirname, '..', '..', 'package.json'), 'utf8'),
+	) as {
+		contributes: {
+			chatParticipants: Array<{ id: string; isDefault?: boolean }>;
+			configurationDefaults?: Record<string, unknown>;
+		};
+	};
+
+	test('default agent identity is safeappeals.agent (isDefault) → runAgentLoop participant', () => {
+		const participant = packageJson.contributes.chatParticipants.find(p => p.id === 'safeappeals.agent');
+		assert.deepStrictEqual(
+			{
+				contribId: participant?.id,
+				isDefault: participant?.isDefault === true,
+				// Nested invoke uses getDefaultAgent → this participant → runAgentLoop.
+				runSubagentNotEnsured: ENSURED_AGENT_TOOL_NAMES.includes('runSubagent'),
+			},
+			{
+				contribId: 'safeappeals.agent',
+				isDefault: true,
+				runSubagentNotEnsured: false,
+			},
+		);
+	});
+
+	test('nesting default is false (product + auth configurationDefaults)', () => {
+		assert.deepStrictEqual(
+			{
+				authDefault: packageJson.contributes.configurationDefaults?.['chat.subagents.allowInvocationsFromSubagents'],
+				// Explicit false from nested child enablement is honored (not ENSURED).
+				selectKeepsOut: selectAgentTools({
+					pool: [
+						{ name: SAFEAPPEALS_READ_FILE_TOOL, description: 'read' },
+						{ name: 'runSubagent', description: 'nest' },
+					],
+					requestTools: requestToolsMapFromEnablement(
+						{ [SAFEAPPEALS_READ_FILE_TOOL]: true, runSubagent: false },
+						[
+							{ name: SAFEAPPEALS_READ_FILE_TOOL, description: 'read' },
+							{ name: 'runSubagent', description: 'nest' },
+						],
+					),
+				}).map(t => t.name).includes('runSubagent'),
+			},
+			{
+				authDefault: false,
+				selectKeepsOut: false,
+			},
+		);
+	});
+
+	test('child seeded deny map: runSubagent out; Private Search RAG search tools in', () => {
+		const seedEnabled = [
+			SAFEAPPEALS_READ_FILE_TOOL,
+			SAFEAPPEALS_LIST_DIR_TOOL,
+			SAFEAPPEALS_RAG_GET_STATS_TOOL,
+			SAFEAPPEALS_RAG_SEARCH_REFERENCE_TOOL,
+			SAFEAPPEALS_RAG_SEARCH_WORKSPACE_TOOL,
+			SAFEAPPEALS_RAG_SEARCH_ALL_TOOL,
+		] as const;
+		const enablement: Record<string, boolean> = { runSubagent: false };
+		for (const id of seedEnabled) {
+			enablement[id] = true;
+		}
+		for (const id of ENSURED_AGENT_TOOL_NAMES) {
+			if (!(id in enablement)) {
+				enablement[id] = false;
+			}
+		}
+
+		const pool = [
+			...new Set([...ENSURED_AGENT_TOOL_NAMES, ...CORE_AGENT_TOOL_NAMES, 'runSubagent', ...seedEnabled]),
+		].map(name => ({ name, description: name }));
+
+		const selected = selectAgentTools({
+			pool,
+			requestTools: requestToolsMapFromEnablement(enablement, pool),
+			modeName: 'Agent',
+		}).map(t => t.name);
+
+		assert.deepStrictEqual(
+			{
+				runSubagent: selected.includes('runSubagent'),
+				ragStats: selected.includes(SAFEAPPEALS_RAG_GET_STATS_TOOL),
+				ragRef: selected.includes(SAFEAPPEALS_RAG_SEARCH_REFERENCE_TOOL),
+				ragWs: selected.includes(SAFEAPPEALS_RAG_SEARCH_WORKSPACE_TOOL),
+				ragAll: selected.includes(SAFEAPPEALS_RAG_SEARCH_ALL_TOOL),
+				ragIndex: selected.includes(SAFEAPPEALS_RAG_INDEX_DOCUMENT_TOOL),
+				editLeaked: selected.includes(SAFEAPPEALS_EDIT_FILE_TOOL),
+			},
+			{
+				runSubagent: false,
+				ragStats: true,
+				ragRef: true,
+				ragWs: true,
+				ragAll: true,
+				ragIndex: false,
+				editLeaked: false,
+			},
+		);
+	});
+
+	test('parent empty picker: runSubagent available when in pool (never ENSURED)', () => {
+		const selected = selectAgentTools({
+			pool: [
+				{ name: SAFEAPPEALS_READ_FILE_TOOL, description: 'read' },
+				{ name: 'runSubagent', description: 'Run Subagent' },
+			],
+			requestTools: new Map(),
+		}).map(t => t.name);
+		assert.deepStrictEqual(
+			{
+				runSubagent: selected.includes('runSubagent'),
+				inEnsured: ENSURED_AGENT_TOOL_NAMES.includes('runSubagent'),
+			},
+			{
+				runSubagent: true,
+				inEnsured: false,
+			},
+		);
+	});
+
+	test('nested-shaped Agent turn still injects Private Search protocol prefix', () => {
+		const prefix = buildAgentLoopPrefixMessages({
+			modeName: 'Agent',
+			modeContent: 'Nested research subagent.',
+		});
+		const joined = prefix.join('\n');
+		assert.deepStrictEqual(
+			{
+				messageCount: prefix.length,
+				hasPrivateSearch: joined.includes('Private Search protocol'),
+				hasRagSearchRef: joined.includes('safeappeals_rag_search_reference'),
+				hasModeReminder: joined.includes('currently running in "Agent" mode'),
+				// Same builder the loop uses — nested re-entry has no alternate path.
+				matchesStandalone: prefix.includes(buildPrivateSearchAgentProtocolMessage()),
+			},
+			{
+				messageCount: 3,
+				hasPrivateSearch: true,
+				hasRagSearchRef: true,
+				hasModeReminder: true,
+				matchesStandalone: true,
+			},
+		);
+	});
+
+	test('Copilot *_subagent tools stay denied on SafeAppeals allowlist', () => {
+		assert.deepStrictEqual(
+			{
+				explore: isAgentToolAllowed('explore_subagent'),
+				execution: isAgentToolAllowed('execution_subagent'),
+				search: isAgentToolAllowed('search_subagent'),
+				runSubagent: isAgentToolAllowed('runSubagent'),
+			},
+			{
+				explore: false,
+				execution: false,
+				search: false,
+				runSubagent: true,
 			},
 		);
 	});

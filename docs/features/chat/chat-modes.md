@@ -2,6 +2,19 @@
 
 SafeAppeals supports multiple chat modes, each tailored for different use cases with specific tools and system prompts.
 
+## Shipping today: Plan and Agent
+
+The current SafeAppeals workbench uses two primary chat modes wired through `extensions/safeappeals-authentication`:
+
+| Mode | Purpose |
+|------|---------|
+| **Plan** | Custom Plan agent — discovery, askQuestions, `safeappeals_createPlan` → `.safeAppeals/plans/*.plan.md`, then `reviewPlan`. No general file edits. |
+| **Agent** | Implementation — edit/create tools available; CreatePlan is **not** force-ensured. |
+
+Switch with `safeappeals_switchMode` (`mode`: `Plan` \| `Agent`) or the chat UI. Full persistence contract, sticky sessions, frontmatter, and tool gating: **[Plan Mode and CreatePlan Persistence](./plan-mode.md)**.
+
+The sections below document older Void-era mode names (`gather`, `normal`, `case_manager`, `research`, `drafting`) and tool matrices. Treat them as historical reference unless you confirm the matching code path still ships.
+
 ## Available Modes
 
 | Mode | Purpose | Tools | System Prompt Focus |

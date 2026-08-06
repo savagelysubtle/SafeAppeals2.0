@@ -18,6 +18,7 @@ import {
 	SAFEAPPEALS_READ_FILE_TOOL,
 	VSCODE_EDIT_FILE_TOOL,
 } from './toolAllowlist';
+import { registerCreatePlanTool } from './createPlanTool';
 import { registerSwitchModeTool } from './switchModeTool';
 import { registerWebAgentTools } from './webTools';
 import { registerWorkspaceAgentTools } from './workspaceTools';
@@ -319,5 +320,6 @@ export function registerSafeAppealsAgentTools(apiClient: CloudApiClient): vscode
 		registerWebAgentTools(),
 		registerBraveSearchTools(apiClient),
 		registerSwitchModeTool(),
+		registerCreatePlanTool(),
 	);
 }

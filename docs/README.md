@@ -6,37 +6,36 @@ This directory contains comprehensive documentation for the SafeAppeals system c
 
 ### Core Systems
 
-#### [File Organizer System](./fileOrganizer/)
+#### [File Organizer System](./features/fileOrganizer/)
 
-A comprehensive file organization and classification system designed for legal case management.
+Case-folder organization via the `organize-files` skill (standard snake_case folders under the case root).
 
 **Components:**
 
-- [Main README](./fileOrganizer/README.md) - Overview and architecture
-- [User Guide](./fileOrganizer/user-guide.md) - Complete usage instructions
-- [Developer Guide](./fileOrganizer/developer-guide.md) - Technical implementation details
-- [API Reference](./fileOrganizer/api-reference.md) - Complete API documentation
-- [Configuration Guide](./fileOrganizer/configuration-guide.md) - Setup and customization
-- [Examples](./fileOrganizer/examples.md) - Practical usage examples
+- [Main README](./features/fileOrganizer/README.md) - Overview and architecture
+- [User Guide](./features/fileOrganizer/user-guide.md) - Complete usage instructions
+- [Developer Guide](./features/fileOrganizer/developer-guide.md) - Technical implementation details
+- [API Reference](./features/fileOrganizer/api-reference.md) - Complete API documentation
+- [Configuration Guide](./features/fileOrganizer/configuration-guide.md) - Setup and customization
+- [Examples](./features/fileOrganizer/examples.md) - Practical usage examples
+- [Case config notes](./features/FILE_ORG_CASE_CONFIG.md) - Historical `.fileorg.json` / current `AGENTS.md` + `.safeAppeals/` layout
 
 **Key Features:**
 
-- Automated file classification (Your Side vs Their Side)
-- AI-assisted organization with confidence scoring
-- Customizable templates for different case types
-- Workers' compensation case support
-- Case-specific keyword configuration
+- Standard folders: `medical_reports`, `correspondence`, `decisions_and_orders`, `evidence`, `personal_notes`, `to_sort`, plus `core_references/` for shared refs
+- Skill-driven organize flow (`extensions/safeappeals-timeline/skills/organize-files`)
+- Case config and skills under `.safeAppeals/` (not `.vscode/` for new SafeAppeals case settings)
 
-#### [AI Models Configuration](./models/)
+#### [AI Models Configuration](./modelsSystem/)
 
-Comprehensive AI model configuration and capabilities system for Void/VSCode extension.
+Comprehensive AI model configuration and capabilities system for SafeAppeals / VS Code.
 
 **Components:**
 
-- [Main README](./models/README.md) - Overview and architecture
-- [API Reference](./models/api-reference.md) - Complete type definitions and functions
-- [Provider Guide](./models/provider-guide.md) - Detailed provider configurations
-- [Reasoning Guide](./models/reasoning-guide.md) - Advanced reasoning capabilities
+- [Main README](./modelsSystem/README.md) - Overview and architecture
+- [API Reference](./modelsSystem/api-reference.md) - Complete type definitions and functions
+- [Provider Guide](./modelsSystem/provider-guide.md) - Detailed provider configurations
+- [Reasoning Guide](./modelsSystem/reasoning-guide.md) - Advanced reasoning capabilities
 
 **Key Features:**
 
@@ -70,56 +69,58 @@ Comprehensive AI tool calling system with XML parsing, schema validation, and se
 - Streaming support for real-time tool call processing
 - Comprehensive telemetry and performance monitoring
 
-#### [Chat System](./chat/)
+#### [Chat System](./features/chat/)
 
 LLM-powered conversational AI with extended thinking and tool calling.
 
 **Components:**
 
-- [Main README](./chat/README.md) - Overview and architecture
-- [Architecture](./chat/architecture.md) - System design, process model, data flow
-- [Message Flow](./chat/message-flow.md) - End-to-end message lifecycle
-- [Reasoning System](./chat/reasoning-system.md) - Extended thinking, separation
-- [Tool Calling](./chat/tool-calling.md) - XML parsing, execution flow
-- [Chat Modes](./chat/chat-modes.md) - Agent, gather, research modes
-- [Bug Fixes](./chat/bug-fixes.md) - Known issues and solutions
-- [API Reference](./chat/api-reference.md) - Service interfaces and types
+- [Main README](./features/chat/README.md) - Overview and architecture
+- [Architecture](./features/chat/architecture.md) - System design, process model, data flow
+- [Message Flow](./features/chat/message-flow.md) - End-to-end message lifecycle
+- [Reasoning System](./features/chat/reasoning-system.md) - Extended thinking, separation
+- [Tool Calling](./features/chat/tool-calling.md) - Historical Void XML notes (legacy)
+- [Agent LM Tools Pattern](./agent-tools-pattern.md) - Satellite tools (`languageModelTools` + allowlist)
+- [Chat Modes](./features/chat/chat-modes.md) - Plan/Agent (shipping) and historical Void modes
+- [Plan Mode](./features/chat/plan-mode.md) - CreatePlan persistence under `.safeAppeals/plans/`
+- [Bug Fixes](./features/chat/bug-fixes.md) - Known issues and solutions
+- [API Reference](./features/chat/api-reference.md) - Service interfaces and types
 
 **Key Features:**
 
 - Multi-provider LLM support (Anthropic, OpenAI, Gemini, 10+ providers)
 - Extended thinking/reasoning (Claude Opus 4.5, Sonnet 4.5)
-- XML-based tool calling with streaming support
-- Multiple chat modes (agent, gather, research, drafting)
+- Extension LM tools via `contributes.languageModelTools` + `vscode.lm.registerTool` (`safeappeals_*`)
+- Plan and Agent modes (`safeappeals_switchMode`); durable plans via `safeappeals_createPlan`
+- Historical Void-era modes also documented (gather, research, drafting, …)
 - Context window tracking and management
 - Agent loop with tool execution and checkpoints
 
 #### [Storage & Database System](./storage/)
 
-Per-workspace micro database architecture for complete data isolation.
+Per-workspace isolation and Electron user-data paths.
 
 **Components:**
 
-- [Main README](./storage/README.md) - Complete path reference for dev vs production
+- [Main README](./storage/README.md) - Dev vs production user-data paths
 
 **Key Features:**
 
-- Per-workspace SQLite databases (no global storage)
-- Development path: `%APPDATA%\code-oss-dev\User\.safe-appeals-navigator\`
-- Production path: `%APPDATA%\Void\User\.safe-appeals-navigator\`
-- Workspace hash-based isolation
-- Databases: `threads.db`, `workspace.db`, `emails.db`, `chroma/`
+- Development (`VSCODE_DEV`): user-data product name `safe-appeals-dev` (Linux: `~/.config/safe-appeals-dev`; Windows: `%APPDATA%\safe-appeals-dev`)
+- Production: Safe Appeals (`product.json` `applicationName` / `dataFolderName`: `safe-appeals-navigator` / `.safe-appeals-navigator`) — not Void / code-oss-dev
+- Private Search indexes live under the RAG extension `globalStorageUri` (`…/rag/<workspaceId>/`)
+- Case timeline data: `.safeAppeals/timeline.json` in the workspace
 
-#### [Time Tracker](./timeTracker/)
+#### [Time Tracker](./features/timeTracker/)
 
 Professional legal time tracking with UTBMS codes and LEDES export.
 
 **Components:**
 
-- [Main README](./timeTracker/README.md) - Overview and architecture
-- [User Guide](./timeTracker/user-guide.md) - Complete usage instructions
-- [Developer Guide](./timeTracker/developer-guide.md) - Technical implementation details
-- [API Reference](./timeTracker/api-reference.md) - TypeScript interfaces and services
+- [Main README](./features/timeTracker/README.md) - Overview and architecture
+- [User Guide](./features/timeTracker/user-guide.md) - Complete usage instructions
+- [Developer Guide](./features/timeTracker/developer-guide.md) - Technical implementation details
+- [API Reference](./features/timeTracker/api-reference.md) - TypeScript interfaces and services
 
 **Key Features:**
 
@@ -131,16 +132,16 @@ Professional legal time tracking with UTBMS codes and LEDES export.
 - Per-workspace SQLite storage
 - Live timer in status bar and sidebar
 
-#### [Audio Recorder](./audioRecorder/)
+#### [Audio Recorder](./features/audioRecorder/)
 
 Audio recording, playback, and transcription for legal professionals.
 
 **Components:**
 
-- [Main README](./audioRecorder/README.md) - Overview and architecture
-- [User Guide](./audioRecorder/user-guide.md) - Complete usage instructions
-- [Developer Guide](./audioRecorder/developer-guide.md) - Technical implementation details
-- [API Reference](./audioRecorder/api-reference.md) - TypeScript interfaces and services
+- [Main README](./features/audioRecorder/README.md) - Overview and architecture
+- [User Guide](./features/audioRecorder/user-guide.md) - Complete usage instructions
+- [Developer Guide](./features/audioRecorder/developer-guide.md) - Technical implementation details
+- [API Reference](./features/audioRecorder/api-reference.md) - TypeScript interfaces and services
 
 **Key Features:**
 
@@ -150,17 +151,41 @@ Audio recording, playback, and transcription for legal professionals.
 - Import audio files (WAV, MP3, M4A, OGG, WEBM, FLAC)
 - Export transcripts as DOCX, TXT, SRT, JSON
 - Per-workspace SQLite storage
-- Native contribution (faster than extension)
+- Hearings Audio walkthrough (`safeappeals-audio`)
 
-#### [RAG System](./ragSystem/)
+#### [Case Timeline](./features/timeline/)
 
-Research-Augmented Generation system for enhanced AI responses.
+Case chronology, deadlines, sample case, and Tutorials hub.
 
-**Status:** In development
+**Components:**
 
-- Advanced document processing and retrieval
-- Integration with legal research databases
-- Context-aware response generation
+- [Main README](./features/timeline/README.md) - Overview
+- [User Guide](./features/timeline/user-guide.md) - Usage
+- [Configuration Guide](./features/timeline/configuration-guide.md) - Storage and jurisdictions
+- [API Reference](./features/timeline/api-reference.md) - Services and types
+
+**Key Features:**
+
+- Persists under `.safeAppeals/timeline.json` (not root `.timeline.json`)
+- Command `safeappeals-timeline.openTutorials` (Help → Tutorials) opens/ensures the sample case as a real `file://` workspace, then Setup/Beginner walkthrough + feature walkthroughs
+- Standard case folders are snake_case (`medical_reports`, `to_sort`, …) plus `core_references/`
+
+#### [Private Search (RAG)](./rag/)
+
+On-device Private Search — shipped in `extensions/safeappeals-rag`.
+
+**Status:** Shipped
+
+**Current docs (prefer these):**
+
+- [Tool contracts](./rag/tool-contracts.md) — frozen `safeappeals_rag_*` tools and scopes
+- [Packaging](./rag/packaging-rung-14.md) — native / prebuild notes
+
+**UI:** left status bar `$(search) Private Search` (RAG). The Copilot shield icon is not Private Search.
+
+**Shared refs folder:** `core_references/` (not `policy-manuals/`).
+
+> Historical Void-era notes under [`./ragSystem/`](./ragSystem/) (Docling/Chroma/`rag_search_policy`) are superseded by `docs/rag/` + the shipping Private Search extension.
 
 #### [SafeAppeals Cloud](./SafeAppealsCloud/)
 
@@ -202,55 +227,56 @@ Setup guides, migration plans, and installation documentation.
 
 Research, analysis, and implementation details for advanced features.
 
-- **[XML Parser Improvements](./technical-research/XML_PARSER_IMPROVEMENTS_SUMMARY.md)** - XML parsing enhancements summary
-- **[XML Tool Parsing Research](./technical-research/XML_TOOL_PARSING_RESEARCH.md)** - Comprehensive XML parsing strategies
-- **[Deep XML Research](./technical-research/DEEP_RESEARCH_XML_PARSING.md)** - Advanced XML parsing techniques
-- **[Comprehensive XML Research](./technical-research/COMPREHENSIVE_XML_TOOL_PARSING_RESEARCH.md)** - Extended implementation strategies
-- **[Tool Calling Strategy](./technical-research/TOOL_CALLING_STRATEGY_RECOMMENDATION.md)** - Tool calling recommendations
-- **[Agent System Analysis](./technical-research/CURRENT_AGENT_SYSTEM_ANALYSIS.md)** - Current system architecture
-- **[RAG Enhancement Research](./technical-research/RAG_ENHANCEMENT_RESEARCH.md)** - RAG system improvements
+- **[XML Parser Improvements](./technicalResearch/XML_PARSER_IMPROVEMENTS_SUMMARY.md)** - XML parsing enhancements summary
+- **[XML Tool Parsing Research](./technicalResearch/XML_TOOL_PARSING_RESEARCH.md)** - Comprehensive XML parsing strategies
+- **[Deep XML Research](./technicalResearch/DEEP_RESEARCH_XML_PARSING.md)** - Advanced XML parsing techniques
+- **[Comprehensive XML Research](./technicalResearch/COMPREHENSIVE_XML_TOOL_PARSING_RESEARCH.md)** - Extended implementation strategies
+- **[Tool Calling Strategy](./technicalResearch/TOOL_CALLING_STRATEGY_RECOMMENDATION.md)** - Tool calling recommendations
+- **[Agent System Analysis](./technicalResearch/CURRENT_AGENT_SYSTEM_ANALYSIS.md)** - Current system architecture
+- **[Private Search tool contracts](./rag/tool-contracts.md)** - Shipping RAG agent tools
+- **[RAG Enhancement Research](./technicalResearch/RAG_ENHANCEMENT_RESEARCH.md)** - Historical RAG research
 
 #### [Features](./features/)
 
 User-facing features, configuration, and customization guides.
 
-- **[File Organization Config](./features/FILE_ORG_CASE_CONFIG.md)** - Case-specific file organization
+- **[File Organization Config](./features/FILE_ORG_CASE_CONFIG.md)** - `.safeAppeals/` / `AGENTS.md` case layout
+- **[Case Timeline](./features/timeline/README.md)** - Timeline, Tutorials, sample case
 - **[App Theming Guide](./features/APP_THEMING_GUIDE.md)** - Complete theming and styling guide
 - **[Pagination Implementation](./features/PAGINATION_IMPLEMENTATION.md)** - DOCX editor pagination
 
-#### [Data Analysis](./data-analysis/)
+#### [Data Analysis](./dataAnalysis/)
 
 Research data, matrices, and analysis files.
 
-- **[Provider Matrix](./data-analysis/void_provider_matrix.csv)** - AI provider capabilities comparison
-- **[Streaming Protocols](./data-analysis/streaming_protocols.csv)** - Protocol analysis for AI integration
-- **[Detection Failures](./data-analysis/detection_failures.csv)** - Failure scenario analysis
+- **[Provider Matrix](./dataAnalysis/void_provider_matrix.csv)** - AI provider capabilities comparison
+- **[Streaming Protocols](./dataAnalysis/streaming_protocols.csv)** - Protocol analysis for AI integration
+- **[Detection Failures](./dataAnalysis/detection_failures.csv)** - Failure scenario analysis
 
 ## 🚀 Quick Start
 
 ### For New Developers
 
 1. **Development Setup:**
-   - **[Quick Start Guide](./development/DOCLING_QUICKSTART.md)** - Get up and running in 5 minutes
+   - **[Quick Start Guide](./development/DOCLING_QUICKSTART.md)** - Historical Docling notes
    - **[Local Models Setup](./development/DOCLING_LOCAL_MODELS.md)** - Configure offline ML models
    - **[Bun Migration](./development/BUN_MIGRATION_PLAN.md)** - Upgrade to faster builds
+   - **[Private Search contracts](./rag/tool-contracts.md)** - Shipping on-device search tools
 
 2. **Explore the Codebase:**
-   - Start with [File Organizer Developer Guide](./fileOrganizer/developer-guide.md)
-   - Review [API Reference](./fileOrganizer/api-reference.md)
-   - Check [Examples](./fileOrganizer/examples.md)
+   - Start with [File Organizer Developer Guide](./features/fileOrganizer/developer-guide.md)
+   - Review [API Reference](./features/fileOrganizer/api-reference.md)
+   - Check [Examples](./features/fileOrganizer/examples.md)
 
 ### For Legal Case Management
 
 1. **Case Configuration:**
-   - **[File Organization Guide](./features/FILE_ORG_CASE_CONFIG.md)** - Set up case-specific organization
-   - Create `.fileorg.json` in your workspace root
+   - **[File Organization Guide](./features/FILE_ORG_CASE_CONFIG.md)** — `.safeAppeals/`, `AGENTS.md`, snake_case folders
+   - Prefer Help → **Tutorials** (`safeappeals-timeline.openTutorials`) or the project-setup skill for a sample/standard layout
 
 2. **File Organization:**
-   - Press `Ctrl+Shift+O` or use Command Palette
-   - Select files to organize
-   - Choose organization template
-   - Review and apply changes
+   - Use the `organize-files` skill (default source `./to_sort`)
+   - Confirm moves; logs land under `.safeAppeals/`
 
 ### For Feature Customization
 
@@ -267,20 +293,22 @@ Research data, matrices, and analysis files.
 | Folder                                          | Purpose                                          | Audience       |
 | ----------------------------------------------- | ------------------------------------------------ | -------------- |
 | **[SafeAppealsCloud/](./SafeAppealsCloud/)**    | Cloud backend, pricing, billing, deployment      | DevOps/Admins  |
-| **[chat/](./chat/)**                            | Chat system, LLM integration, agent loop         | Developers     |
-| **[models/](./modelsSystem/)**                  | AI model configuration and capabilities          | Developers     |
+| **[features/chat/](./features/chat/)**          | Chat system, Plan/Agent modes, CreatePlan        | Developers     |
+| **[agent-tools-pattern.md](./agent-tools-pattern.md)** | Satellite LM tools house pattern                 | Developers     |
+| **[modelsSystem/](./modelsSystem/)**            | AI model configuration and capabilities          | Developers     |
 | **[tools/](./tools/)**                          | AI tool calling and execution system             | Developers     |
 | **[development/](./development/)**              | Setup guides, migration plans, installation docs | Developers     |
-| **[technical-research/](./technicalResearch/)** | Research, analysis, implementation details       | Technical team |
+| **[technicalResearch/](./technicalResearch/)** | Research, analysis, implementation details       | Technical team |
 | **[features/](./features/)**                    | User features, configuration, customization      | All users      |
-| **[data-analysis/](./dataAnalysis/)**           | Research data, matrices, analysis files          | Administrators |
-| **[fileOrganizer/](./fileOrganizer/)**          | File organization system documentation           | All users      |
+| **[dataAnalysis/](./dataAnalysis/)**           | Research data, matrices, analysis files          | Administrators |
+| **[features/fileOrganizer/](./features/fileOrganizer/)** | File organization system documentation  | All users      |
 | **[storage/](./storage/)**                      | Database paths, dev vs prod locations            | Developers     |
-| **[ragSystem/](./ragSystem/)**                  | RAG system operational docs                      | Technical team |
-| **[timeTracker/](./timeTracker/)**              | Legal time tracking extension                    | All users      |
-| **[audioRecorder/](./audioRecorder/)**          | Audio recording and transcription                | All users      |
-| **[timeline/](./timeline/)**                    | Timeline feature documentation                   | All users      |
-| **[images/](./images/)**                        | Documentation screenshots and diagrams           | All users      |
+| **[rag/](./rag/)**                              | Private Search tool contracts + packaging (current) | Technical team |
+| **[ragSystem/](./ragSystem/)**                  | Historical Void RAG notes (superseded by `docs/rag/`) | Historical |
+| **[features/timeTracker/](./features/timeTracker/)** | Legal time tracking extension               | All users      |
+| **[features/audioRecorder/](./features/audioRecorder/)** | Audio recording and transcription      | All users      |
+| **[features/timeline/](./features/timeline/)**  | Timeline, Tutorials, sample case                 | All users      |
+| **[features/images/](./features/images/)**      | Documentation screenshots and diagrams           | All users      |
 
 ### File Types
 
@@ -301,13 +329,15 @@ Research data, matrices, and analysis files.
 **New Developers:**
 
 - [Development Setup](./development/README.md) - Getting started guides
-- [File Organizer Developer Guide](./fileOrganizer/developer-guide.md)
-- [Technical Research](./technical-research/README.md) - System architecture
+- [File Organizer Developer Guide](./features/fileOrganizer/developer-guide.md)
+- [Technical Research](./technicalResearch/README.md) - System architecture
+- [Private Search tool contracts](./rag/tool-contracts.md) - Shipping RAG agent tools
 
 **Legal Professionals:**
 
 - [File Organization Features](./features/README.md) - Case management tools
-- [File Organizer User Guide](./fileOrganizer/user-guide.md)
+- [File Organizer User Guide](./features/fileOrganizer/user-guide.md)
+- [Case Timeline](./features/timeline/README.md) - Chronology, Tutorials, sample case
 - [App Theming Guide](./features/APP_THEMING_GUIDE.md) - UI customization
 
 **System Administrators:**
@@ -315,27 +345,29 @@ Research data, matrices, and analysis files.
 - [SafeAppeals Cloud](./SafeAppealsCloud/README.md) - Backend infrastructure
 - [Model Pricing](./SafeAppealsCloud/model-pricing.md) - AI cost management
 - [Deployment Guide](./SafeAppealsCloud/deployment.md) - Railway deployment
-- [Data Analysis](./data-analysis/README.md) - Performance and capability matrices
-- [Technical Research](./technical-research/README.md) - System internals
+- [Data Analysis](./dataAnalysis/README.md) - Performance and capability matrices
+- [Technical Research](./technicalResearch/README.md) - System internals
 
 ### By Task
 
 **Setting up Development Environment:**
 
-- [Docling Quick Start](./development/DOCLING_QUICKSTART.md)
+- [Docling Quick Start](./development/DOCLING_QUICKSTART.md) (historical Docling notes; Private Search uses consent-install models)
 - [Local Models Setup](./development/DOCLING_LOCAL_MODELS.md)
 - [Bun Migration Plan](./development/BUN_MIGRATION_PLAN.md)
 
 **Configuring Legal Cases:**
 
 - [Case Configuration](./features/FILE_ORG_CASE_CONFIG.md)
-- [File Organizer Guide](./fileOrganizer/user-guide.md)
+- [File Organizer Guide](./features/fileOrganizer/user-guide.md)
+- [Timeline configuration](./features/timeline/configuration-guide.md) — `.safeAppeals/timeline.json`
 
 **Understanding Technical Implementation:**
 
-- [XML Parser Research](./technical-research/XML_PARSER_IMPROVEMENTS_SUMMARY.md)
-- [RAG Enhancement Research](./technical-research/RAG_ENHANCEMENT_RESEARCH.md)
-- [Provider Analysis](./data-analysis/void_provider_matrix.csv)
+- [XML Parser Research](./technicalResearch/XML_PARSER_IMPROVEMENTS_SUMMARY.md)
+- [Private Search tool contracts](./rag/tool-contracts.md) (current)
+- [RAG Enhancement Research](./technicalResearch/RAG_ENHANCEMENT_RESEARCH.md) (historical)
+- [Provider Analysis](./dataAnalysis/void_provider_matrix.csv)
 
 **Customizing the Application:**
 
@@ -410,6 +442,6 @@ Research data, matrices, and analysis files.
 
 ---
 
-**Last Updated:** February 2026
+**Last Updated:** August 2026
 **Documentation Reorganized:** December 2025
 **Maintained by:** SafeAppeals Development Team

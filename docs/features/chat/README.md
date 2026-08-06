@@ -10,6 +10,7 @@ The SafeAppeals chat system is a sophisticated conversational AI interface that 
 - **Extended thinking/reasoning** capabilities (Claude Opus 4.5, Sonnet 4.5)
 - **Tool calling** for code editing, file operations, and web search
 - **Agent modes** for case research, document drafting, and case management
+- **Plan mode** with durable `.safeAppeals/plans/*.plan.md` files via `safeappeals_createPlan` (see [Plan Mode](./plan-mode.md))
 
 ## Architecture
 
@@ -64,8 +65,10 @@ The SafeAppeals chat system is a sophisticated conversational AI interface that 
 | [Message Flow](./message-flow.md)         | How messages travel from UI to LLM and back |
 | [System Prompts](./system-prompts.md)     | How prompts are assembled and structured    |
 | [Reasoning System](./reasoning-system.md) | Extended thinking, <think> tags, separation |
-| [Tool Calling](./tool-calling.md)         | XML parsing, native tools, execution        |
+| [Tool Calling](./tool-calling.md)         | Historical Void XML parsing notes (legacy)  |
+| [Agent LM Tools Pattern](../../agent-tools-pattern.md) | Satellite `languageModelTools` + `safeappeals_*` allowlist |
 | [Chat Modes](./chat-modes.md)             | Agent, gather, normal, case-specific modes  |
+| [Plan Mode](./plan-mode.md)               | Plan agent, CreatePlan persistence, sticky sessions |
 | [Bug Fixes](./bug-fixes.md)               | Known issues and their solutions            |
 | [API Reference](./api-reference.md)       | Service interfaces and types                |
 | [Per-Workspace Storage](./per-workspace-storage.md) | Workspace-isolated chat thread storage      |
@@ -115,6 +118,10 @@ When using models with extended thinking (Claude Opus 4.5, Sonnet 4.5):
 - **`displayContent`**: The actual response shown to the user
 
 ### 2. Chat Modes
+
+**Shipping today (workbench):** **Plan** (custom agent — research and write `.safeAppeals/plans/*.plan.md`) and **Agent** (implement). Switch with `safeappeals_switchMode` or the chat mode UI. Details: [Plan Mode](./plan-mode.md).
+
+Historical Void-era mode names still documented under [Chat Modes](./chat-modes.md):
 
 | Mode           | Purpose                        | Tools Available       |
 | -------------- | ------------------------------ | --------------------- |

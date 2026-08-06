@@ -24,6 +24,13 @@ export const SAFEAPPEALS_FETCH_WEB_PAGE_TOOL = 'safeappeals_fetchWebPage';
 export const SAFEAPPEALS_WEB_SEARCH_TOOL = 'safeappeals_webSearch';
 export const SAFEAPPEALS_MULTI_WEB_SEARCH_TOOL = 'safeappeals_multiWebSearch';
 export const SAFEAPPEALS_SWITCH_MODE_TOOL = 'safeappeals_switchMode';
+/** Plan Mode create/update tool — registered in package.json; not force-ensured (Slice D gates availability). */
+export const SAFEAPPEALS_CREATE_PLAN_TOOL = 'safeappeals_createPlan';
+export const SAFEAPPEALS_RAG_GET_STATS_TOOL = 'safeappeals_rag_get_stats';
+export const SAFEAPPEALS_RAG_SEARCH_REFERENCE_TOOL = 'safeappeals_rag_search_reference';
+export const SAFEAPPEALS_RAG_SEARCH_WORKSPACE_TOOL = 'safeappeals_rag_search_workspace';
+export const SAFEAPPEALS_RAG_SEARCH_ALL_TOOL = 'safeappeals_rag_search_all';
+export const SAFEAPPEALS_RAG_INDEX_DOCUMENT_TOOL = 'safeappeals_rag_index_document';
 
 /** Registered core edit tool id (extension API may also surface the legacy alias). */
 export const VSCODE_EDIT_FILE_TOOL = 'vscode_editFile_internal';
@@ -50,6 +57,8 @@ export const CORE_AGENT_TOOL_NAMES: readonly string[] = [
 	VSCODE_FETCH_WEB_PAGE_TOOL,
 	'run_in_terminal',
 	'manage_todo_list',
+	// Core RunSubagentTool — allowlisted for Agent; never force-ensured (avoids nesting onto seeded subagents).
+	'runSubagent',
 	'browserTool',
 	'open_browser_page',
 	'click_element',
@@ -73,6 +82,8 @@ export const CORE_AGENT_TOOL_NAMES: readonly string[] = [
 /**
  * Tools force-added unless the picker explicitly disabled them (or a mapped Copilot alias).
  * Terminal / todo are never force-added — picker opt-out wins.
+ * {@link SAFEAPPEALS_CREATE_PLAN_TOOL} is intentionally never ensured (Plan-only surface).
+ * Core `runSubagent` is intentionally never ensured (CORE-only; nesting must not re-seed it).
  */
 export const ENSURED_AGENT_TOOL_NAMES: readonly string[] = [
 	SAFEAPPEALS_READ_FILE_TOOL,
@@ -93,8 +104,51 @@ export const ENSURED_AGENT_TOOL_NAMES: readonly string[] = [
 	SAFEAPPEALS_FETCH_WEB_PAGE_TOOL,
 	SAFEAPPEALS_WEB_SEARCH_TOOL,
 	SAFEAPPEALS_MULTI_WEB_SEARCH_TOOL,
+	SAFEAPPEALS_RAG_GET_STATS_TOOL,
+	SAFEAPPEALS_RAG_SEARCH_REFERENCE_TOOL,
+	SAFEAPPEALS_RAG_SEARCH_WORKSPACE_TOOL,
+	SAFEAPPEALS_RAG_SEARCH_ALL_TOOL,
+	SAFEAPPEALS_RAG_INDEX_DOCUMENT_TOOL,
 	SAFEAPPEALS_SWITCH_MODE_TOOL,
 ];
+
+/**
+ * Edit / write tools stripped when {@link selectAgentTools} runs in Plan mode
+ * (defense-in-depth if Plan ever hits the Agent participant loop).
+ */
+export const PLAN_MODE_EDIT_DENYLIST: readonly string[] = [
+	SAFEAPPEALS_EDIT_FILE_TOOL,
+	SAFEAPPEALS_CREATE_FILE_TOOL,
+	SAFEAPPEALS_CREATE_DIRECTORY_TOOL,
+	SAFEAPPEALS_REPLACE_STRING_TOOL,
+	SAFEAPPEALS_MULTI_REPLACE_STRING_TOOL,
+	SAFEAPPEALS_APPLY_PATCH_TOOL,
+	VSCODE_EDIT_FILE_TOOL,
+	VSCODE_EDIT_FILE_TOOL_ALIAS,
+];
+
+const PLAN_MODE_EDIT_DENYLIST_SET = new Set(PLAN_MODE_EDIT_DENYLIST);
+
+/**
+ * True when chat mode name is Plan (case-insensitive; trims whitespace).
+ */
+export function isPlanModeName(modeName: string | undefined): boolean {
+	return typeof modeName === 'string' && modeName.trim().toLowerCase() === 'plan';
+}
+
+/**
+ * Whether a resolved tool id is denied in Plan mode.
+ */
+export function isPlanEditDeniedTool(name: string): boolean {
+	return PLAN_MODE_EDIT_DENYLIST_SET.has(name);
+}
+
+/**
+ * Removes Plan-mode edit denylist tools from a selection.
+ */
+export function stripPlanEditTools<T extends { name: string }>(tools: readonly T[]): T[] {
+	return tools.filter(tool => !isPlanEditDeniedTool(tool.name));
+}
 
 const SWITCH_MODE_MODEL_DESCRIPTION =
 	'Switch the current chat between Plan and Agent modes. Call this tool yourself — NEVER ask the user which mode to use.\n\n' +
@@ -111,6 +165,16 @@ const SWITCH_MODE_MODEL_DESCRIPTION =
 	'Do NOT switch to Plan when the user already attached a detailed spec, you already started editing, ' +
 	'the change is a single obvious fix, or the user gave explicit step-by-step instructions.';
 
+const CREATE_PLAN_MODEL_DESCRIPTION =
+	'Create or update a SafeAppeals plan file under .safeAppeals/plans/ (Cursor-style .plan.md with YAML frontmatter).\n\n' +
+	'CREATE (first presentation): provide name, overview, and plan (markdown body). Optional todos ' +
+	'[{ id, content, status }] and isProject (default false).\n\n' +
+	'UPDATE: pass planPath, or omit it to update the last plan created in this chat session. ' +
+	'Provide either plan (full body; optional name/overview/todos/isProject overrides) OR both oldStr and newStr ' +
+	'(exact single-occurrence string replace).\n\n' +
+	'After create/update, call reviewPlan with the returned plan URI so the user can approve — do not skip review. ' +
+	'Do not auto-start implementation.';
+
 const WEB_SEARCH_MODEL_DESCRIPTION =
 	'Search the web via SafeAppeals Cloud (Brave Search). Returns ranked titles, URLs, snippets, and optional metadata ' +
 	'(Published/Domain/extra snippets) for YOU the agent to read — there is no AI summary. Ideal for general queries, news, articles, and recent events. ' +
@@ -123,6 +187,38 @@ const MULTI_WEB_SEARCH_MODEL_DESCRIPTION =
 	'for YOU the agent to read — there is no AI summary. Ideal for batch information gathering. ' +
 	'Optional filters apply to every query: safesearch, freshness, country, search_lang, ui_lang, site. ' +
 	'Credits apply (~250 per query). Maximum 10 queries, 20 results per query.';
+
+const RAG_GET_STATS_MODEL_DESCRIPTION =
+	'Gets Private Search index statistics: which core reference and case documents are indexed, chunk counts, and retrieval tips. ' +
+	'**ALWAYS use FIRST** when unsure what is searchable or before indexing — avoids duplicate index costs and empty searches.';
+
+const RAG_SEARCH_REFERENCE_MODEL_DESCRIPTION =
+	'Search indexed **core reference** documents (core_references/ folder: policy manuals, regulations, textbooks). ' +
+	'**WHEN TO USE:** WC rules, procedures, benefits, appeal standards, disability ratings, eligibility — before answering policy questions. ' +
+	'**NOT** for case-specific files (use safeappeals_rag_search_workspace). ' +
+	'**BEST PRACTICES:** Run 2–3 searches with varied queries for high-stakes topics; limit 8–12. ' +
+	'Returns a citation-aware contextPack with [n] headers — cite verbatim using those headers; do not invent sources.';
+
+const RAG_SEARCH_WORKSPACE_MODEL_DESCRIPTION =
+	'Search indexed **case documents** (medical reports, IME/QME evaluations, board decisions, correspondence, treatment records). ' +
+	'**WHEN TO USE:** Case-specific facts — diagnoses, work restrictions, treatment, causation, claim history. ' +
+	'**NOT** for policy/regulatory guidance (use safeappeals_rag_search_reference). ' +
+	'Use specific medical/legal terminology; run 2–4 varied queries for comprehensive case review. ' +
+	'Returns a citation-aware contextPack with [n] headers — cite using those headers only.';
+
+const RAG_SEARCH_ALL_MODEL_DESCRIPTION =
+	'Search **both** core references and case documents simultaneously. ' +
+	'**WHEN TO USE:** Unsure if answer is in policy or case files; initial broad research; comparing policy requirements to case facts. ' +
+	'Follow with safeappeals_rag_search_reference or safeappeals_rag_search_workspace for targeted depth. ' +
+	'Returns combined contextPack with source scope indicated; cite using [n] headers only.';
+
+const RAG_INDEX_DOCUMENT_MODEL_DESCRIPTION =
+	'Index a workspace document into Private Search (txt, md, pdf). **CRITICAL: Call safeappeals_rag_get_stats first** — only index if NOT already indexed. ' +
+	'Core references (isCoreReference=true or core_references/ path): policy manuals, regulations, textbooks. ' +
+	'Case documents: medical reports, IME/QME, decisions, correspondence, PDFs. ' +
+	'Files in core_references/ auto-index on drop; use this for manual indexing. ' +
+	'Born-digital PDFs index via sa-converter; scanned PDFs require Unlimited-OCR (may hard-disable). ' +
+	'Index writes require the primary workbench; Agents/read-only sessions may be blocked.';
 
 const EDIT_FILE_MODEL_DESCRIPTION =
 	'Insert new code into an existing file in the workspace. Use this tool once per file that needs to be modified, even if there are multiple changes for a file. Generate the "explanation" property first.\n' +
@@ -554,6 +650,86 @@ export const ENSURED_AGENT_TOOL_DESCRIPTORS: Readonly<Record<string, AgentChatTo
 			required: ['queries'],
 		},
 	},
+	[SAFEAPPEALS_RAG_GET_STATS_TOOL]: {
+		name: SAFEAPPEALS_RAG_GET_STATS_TOOL,
+		description: RAG_GET_STATS_MODEL_DESCRIPTION,
+		inputSchema: {
+			type: 'object',
+			properties: {},
+		},
+	},
+	[SAFEAPPEALS_RAG_SEARCH_REFERENCE_TOOL]: {
+		name: SAFEAPPEALS_RAG_SEARCH_REFERENCE_TOOL,
+		description: RAG_SEARCH_REFERENCE_MODEL_DESCRIPTION,
+		inputSchema: {
+			type: 'object',
+			properties: {
+				query: {
+					type: 'string',
+					description: 'Natural language search query over core_references/. Be specific (e.g. "permanent disability rating calculation methodology").',
+				},
+				limit: {
+					type: 'number',
+					description: 'Max results after hybrid retrieve (default 8, use 12–15 for complex topics).',
+				},
+			},
+			required: ['query'],
+		},
+	},
+	[SAFEAPPEALS_RAG_SEARCH_WORKSPACE_TOOL]: {
+		name: SAFEAPPEALS_RAG_SEARCH_WORKSPACE_TOOL,
+		description: RAG_SEARCH_WORKSPACE_MODEL_DESCRIPTION,
+		inputSchema: {
+			type: 'object',
+			properties: {
+				query: {
+					type: 'string',
+					description: 'Natural language query targeting case-specific information. Use medical/legal terminology when possible.',
+				},
+				limit: {
+					type: 'number',
+					description: 'Max results (default 8, use 8–10 for detailed medical report analysis).',
+				},
+			},
+			required: ['query'],
+		},
+	},
+	[SAFEAPPEALS_RAG_SEARCH_ALL_TOOL]: {
+		name: SAFEAPPEALS_RAG_SEARCH_ALL_TOOL,
+		description: RAG_SEARCH_ALL_MODEL_DESCRIPTION,
+		inputSchema: {
+			type: 'object',
+			properties: {
+				query: {
+					type: 'string',
+					description: 'Natural language search query across all indexed documents.',
+				},
+				limit: {
+					type: 'number',
+					description: 'Max results (default 8).',
+				},
+			},
+			required: ['query'],
+		},
+	},
+	[SAFEAPPEALS_RAG_INDEX_DOCUMENT_TOOL]: {
+		name: SAFEAPPEALS_RAG_INDEX_DOCUMENT_TOOL,
+		description: RAG_INDEX_DOCUMENT_MODEL_DESCRIPTION,
+		inputSchema: {
+			type: 'object',
+			properties: {
+				uri: {
+					type: 'string',
+					description: 'Workspace-relative path, absolute path, or file URI of the document to index.',
+				},
+				isCoreReference: {
+					type: 'boolean',
+					description: 'True for core reference documents; false for case documents. Paths under core_references/ map to core_reference automatically.',
+				},
+			},
+			required: ['uri'],
+		},
+	},
 	[SAFEAPPEALS_SWITCH_MODE_TOOL]: {
 		name: SAFEAPPEALS_SWITCH_MODE_TOOL,
 		description: SWITCH_MODE_MODEL_DESCRIPTION,
@@ -567,6 +743,60 @@ export const ENSURED_AGENT_TOOL_DESCRIPTORS: Readonly<Record<string, AgentChatTo
 				},
 			},
 			required: ['mode'],
+		},
+	},
+	[SAFEAPPEALS_CREATE_PLAN_TOOL]: {
+		name: SAFEAPPEALS_CREATE_PLAN_TOOL,
+		description: CREATE_PLAN_MODEL_DESCRIPTION,
+		inputSchema: {
+			type: 'object',
+			properties: {
+				name: {
+					type: 'string',
+					description: 'Short plan title (required when creating).',
+				},
+				overview: {
+					type: 'string',
+					description: 'One- or two-sentence summary (required when creating).',
+				},
+				plan: {
+					type: 'string',
+					description: 'Markdown plan body. Required on create; on update provide plan OR oldStr+newStr.',
+				},
+				todos: {
+					type: 'array',
+					description: 'Optional structured checklist entries.',
+					items: {
+						type: 'object',
+						properties: {
+							id: { type: 'string', description: 'Stable todo id.' },
+							content: { type: 'string', description: 'Todo text.' },
+							status: {
+								type: 'string',
+								enum: ['pending', 'completed', 'in_progress', 'cancelled'],
+								description: 'Todo status (default pending).',
+							},
+						},
+						required: ['id', 'content'],
+					},
+				},
+				isProject: {
+					type: 'boolean',
+					description: 'Whether this is a multi-plan project (default false).',
+				},
+				planPath: {
+					type: 'string',
+					description: 'Existing plan URI or path under .safeAppeals/plans/ (updates).',
+				},
+				oldStr: {
+					type: 'string',
+					description: 'Exact text to replace once (update). Must be paired with newStr.',
+				},
+				newStr: {
+					type: 'string',
+					description: 'Replacement text (update). Must be paired with oldStr.',
+				},
+			},
 		},
 	},
 };
@@ -594,6 +824,11 @@ export const MVP_AGENT_TOOL_NAMES: readonly string[] = [
 	SAFEAPPEALS_FETCH_WEB_PAGE_TOOL,
 	SAFEAPPEALS_WEB_SEARCH_TOOL,
 	SAFEAPPEALS_MULTI_WEB_SEARCH_TOOL,
+	SAFEAPPEALS_RAG_GET_STATS_TOOL,
+	SAFEAPPEALS_RAG_SEARCH_REFERENCE_TOOL,
+	SAFEAPPEALS_RAG_SEARCH_WORKSPACE_TOOL,
+	SAFEAPPEALS_RAG_SEARCH_ALL_TOOL,
+	SAFEAPPEALS_RAG_INDEX_DOCUMENT_TOOL,
 	SAFEAPPEALS_SWITCH_MODE_TOOL,
 	'run_in_terminal',
 	'manage_todo_list',
@@ -636,7 +871,7 @@ export const AGENT_TOOL_NAME_SUBSTITUTIONS: Readonly<Record<string, string>> = {
 
 const CORE_AGENT_TOOL_NAME_SET = new Set(CORE_AGENT_TOOL_NAMES);
 
-interface NamedToolSource {
+export interface NamedToolSource {
 	readonly name: string;
 	readonly description?: string;
 	readonly inputSchema?: object;
@@ -718,6 +953,23 @@ function descriptorForResolvedName(
 }
 
 /**
+ * Builds a `request.tools`-shaped Map from a Record enablement map (as emitted by core
+ * `RunSubagentTool` / `createDefaultDenySubagentTools`). Pool entries supply richer
+ * descriptors when the name matches; otherwise a synthetic `{ name }` source is used.
+ */
+export function requestToolsMapFromEnablement(
+	enablement: Readonly<Record<string, boolean>>,
+	pool: readonly NamedToolSource[] = [],
+): Map<NamedToolSource, boolean> {
+	const poolByName = new Map(pool.map(tool => [tool.name, tool]));
+	const result = new Map<NamedToolSource, boolean>();
+	for (const [name, enabled] of Object.entries(enablement)) {
+		result.set(poolByName.get(name) ?? { name, description: name }, enabled);
+	}
+	return result;
+}
+
+/**
  * Selects tools for `sendRequest` from the picker map and/or host pool.
  *
  * - Enabled picker entries are mapped via {@link resolveAgentToolName}; raw `copilot_*` names are never returned.
@@ -725,12 +977,14 @@ function descriptorForResolvedName(
  *   or {@link ENSURED_AGENT_TOOL_DESCRIPTORS} for SafeAppeals ensured tools).
  * - Force-adds ensured tools when not explicitly disabled, even if absent from `pool`.
  * - Never force-adds terminal/todo over a picker `false`.
+ * - When `modeName` is Plan, strips {@link PLAN_MODE_EDIT_DENYLIST} after selection (defense-in-depth).
  */
 export function selectAgentTools(options: {
 	readonly pool: readonly NamedToolSource[];
 	readonly requestTools?: ReadonlyMap<NamedToolSource, boolean>;
+	readonly modeName?: string;
 }): AgentChatToolDescriptor[] {
-	const { pool, requestTools } = options;
+	const { pool, requestTools, modeName } = options;
 	const poolByName = new Map<string, NamedToolSource>();
 	for (const tool of pool) {
 		poolByName.set(tool.name, tool);
@@ -780,7 +1034,11 @@ export function selectAgentTools(options: {
 		}
 	}
 
-	return [...selectedByName.values()];
+	const selected = [...selectedByName.values()];
+	if (isPlanModeName(modeName)) {
+		return stripPlanEditTools(selected);
+	}
+	return selected;
 }
 
 /**

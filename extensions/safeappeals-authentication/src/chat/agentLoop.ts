@@ -5,6 +5,8 @@
 
 import * as vscode from 'vscode';
 import { MAX_AGENT_ITERATIONS, nextAgentLoopDecision } from './agentLoopHelpers';
+import { buildSafeAppealsGitPrivacyRulesMessage } from './gitPrivacyRules';
+import { buildPrivateSearchAgentProtocolMessage } from './privateSearchAgentProtocol';
 import { buildModeReminderMessage } from './switchModeHelpers';
 import { resolveAllowedInvokeToolName, selectAgentTools } from './toolAllowlist';
 import { toLanguageModelChatTools } from './tools';
@@ -94,6 +96,24 @@ export interface AgentLoopOptions {
 }
 
 /**
+ * Prefix user messages injected on every SafeAppeals agent turn — including nested
+ * re-entry via core runSubagent → default `safeappeals.agent` → this loop.
+ */
+export function buildAgentLoopPrefixMessages(options: {
+	readonly modeName?: string;
+	readonly modeContent?: string;
+}): readonly string[] {
+	return [
+		buildModeReminderMessage({
+			modeName: options.modeName,
+			modeContent: options.modeContent,
+		}),
+		buildPrivateSearchAgentProtocolMessage(),
+		buildSafeAppealsGitPrivacyRulesMessage(),
+	];
+}
+
+/**
  * Agent tool loop: send via request.model with tools → invoke tools → append results → repeat.
  */
 export async function runAgentLoop(options: AgentLoopOptions): Promise<vscode.ChatResult> {
@@ -107,18 +127,21 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<vscode.Ch
 		listTools = () => vscode.lm.tools,
 	} = options;
 
+	const modeInstructions = request.modeInstructions2;
 	const selectedTools = selectAgentTools({
 		pool: listTools(),
 		requestTools: request.tools,
+		modeName: modeInstructions?.name,
 	});
 	const selectedToolNames = new Set(selectedTools.map(tool => tool.name));
 	const tools = toLanguageModelChatTools(selectedTools);
 	const messages = messagesFromHistory(context.history);
-	const modeInstructions = request.modeInstructions2;
-	messages.push(vscode.LanguageModelChatMessage.User(buildModeReminderMessage({
+	for (const prefix of buildAgentLoopPrefixMessages({
 		modeName: modeInstructions?.name,
 		modeContent: modeInstructions?.content,
-	})));
+	})) {
+		messages.push(vscode.LanguageModelChatMessage.User(prefix));
+	}
 	messages.push(vscode.LanguageModelChatMessage.User(request.prompt));
 
 	for (let iteration = 0; ; iteration++) {
