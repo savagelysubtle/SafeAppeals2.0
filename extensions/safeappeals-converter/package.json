@@ -33,6 +33,11 @@
         "icon": "$(file-symlink-file)"
       },
       {
+        "command": "safeappeals-converter.smartConvert",
+        "title": "%command.smartConvert%",
+        "category": "%command.category%"
+      },
+      {
         "command": "safeappeals-converter.convertFile",
         "title": "%command.convertFile%",
         "category": "%command.category%"
@@ -40,6 +45,11 @@
       {
         "command": "safeappeals-converter.mergePdfs",
         "title": "%command.mergePdfs%",
+        "category": "%command.category%"
+      },
+      {
+        "command": "safeappeals-converter.mergePdfsByPage",
+        "title": "%command.mergePdfsByPage%",
         "category": "%command.category%"
       }
     ],
@@ -49,11 +59,19 @@
           "command": "safeappeals-converter.openDashboard"
         },
         {
+          "command": "safeappeals-converter.smartConvert",
+          "when": "workspaceFolderCount != 0"
+        },
+        {
           "command": "safeappeals-converter.convertFile",
           "when": "workspaceFolderCount != 0"
         },
         {
           "command": "safeappeals-converter.mergePdfs",
+          "when": "workspaceFolderCount != 0"
+        },
+        {
+          "command": "safeappeals-converter.mergePdfsByPage",
           "when": "workspaceFolderCount != 0"
         }
       ],
@@ -66,7 +84,7 @@
       ],
       "explorer/context": [
         {
-          "command": "safeappeals-converter.convertFile",
+          "command": "safeappeals-converter.smartConvert",
           "when": "workspaceFolderCount != 0 && explorerResourceIsFolder == false",
           "group": "7_modification@10"
         }

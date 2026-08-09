@@ -2,6 +2,8 @@
 
 (function () {
 	const vscode = acquireVsCodeApi();
+	const { renderMergeByPageRow } = globalThis.converterDashboardRender;
+	const { validatePageRangeInput } = globalThis.converterPageRanges;
 
 	const state = {
 		conversions: { conversions: {}, aliases: {} },
@@ -13,6 +15,9 @@
 		batchInputs: [],
 		mergeInputs: [],
 		mergeOutput: '',
+		mergeByPageInputs: [], // Array of { path: string, pages: number[], fileName: string }
+		mergeByPageOutput: '',
+		uiStrings: {},
 	};
 
 	const els = {
@@ -26,14 +31,41 @@
 		batchInputs: document.getElementById('batch-inputs'),
 		mergeInputs: document.getElementById('merge-inputs'),
 		mergeOutput: document.getElementById('merge-output'),
+		mergeByPageList: document.getElementById('merge-by-page-list'),
+		mergeByPageOutput: document.getElementById('merge-by-page-output'),
+		mergeByPageTitle: document.getElementById('merge-by-page-title'),
+		mergeByPageInputsLabel: document.getElementById('merge-by-page-inputs-label'),
+		mergeByPageOutputLabel: document.getElementById('merge-by-page-output-label'),
+		pickMergeByPageInputs: document.getElementById('pick-merge-by-page-inputs'),
+		pickMergeByPageOutput: document.getElementById('pick-merge-by-page-output'),
 		startConvert: document.getElementById('start-convert'),
 		startBatch: document.getElementById('start-batch'),
 		startMerge: document.getElementById('start-merge'),
+		startMergeByPage: document.getElementById('start-merge-by-page'),
 		progressSection: document.getElementById('progress-section'),
 		progressFill: document.getElementById('progress-fill'),
 		progressMessage: document.getElementById('progress-message'),
 		resultSection: document.getElementById('result-section'),
 		resultMessage: document.getElementById('result-message'),
+		dashboardHeading: document.getElementById('dashboard-heading'),
+		dashboardSubtitle: document.getElementById('dashboard-subtitle'),
+		singleConversionTitle: document.getElementById('single-conversion-title'),
+		conversionLabel: document.getElementById('conversion-label'),
+		inputLabel: document.getElementById('input-label'),
+		outputLabel: document.getElementById('output-label'),
+		pickInput: document.getElementById('pick-input'),
+		pickOutput: document.getElementById('pick-output'),
+		batchConversionTitle: document.getElementById('batch-conversion-title'),
+		batchConversionLabel: document.getElementById('batch-conversion-label'),
+		batchInputsLabel: document.getElementById('batch-inputs-label'),
+		pickBatch: document.getElementById('pick-batch'),
+		mergeTitle: document.getElementById('merge-title'),
+		mergeInputsLabel: document.getElementById('merge-inputs-label'),
+		mergeOutputLabel: document.getElementById('merge-output-label'),
+		pickMergeInputs: document.getElementById('pick-merge-inputs'),
+		pickMergeOutput: document.getElementById('pick-merge-output'),
+		progressTitle: document.getElementById('progress-title'),
+		resultTitle: document.getElementById('result-title'),
 	};
 
 	document.getElementById('pick-input').addEventListener('click', () => vscode.postMessage({ type: 'pickInput' }));
@@ -41,6 +73,28 @@
 	document.getElementById('pick-batch').addEventListener('click', () => vscode.postMessage({ type: 'pickBatchInputs' }));
 	document.getElementById('pick-merge-inputs').addEventListener('click', () => vscode.postMessage({ type: 'pickMergeInputs' }));
 	document.getElementById('pick-merge-output').addEventListener('click', () => vscode.postMessage({ type: 'pickMergeOutput' }));
+	document.getElementById('pick-merge-by-page-inputs').addEventListener('click', () => vscode.postMessage({ type: 'pickMergeByPageInputs' }));
+	document.getElementById('pick-merge-by-page-output').addEventListener('click', () => vscode.postMessage({ type: 'pickMergeByPageOutput' }));
+
+	// Event delegation for merge-by-page list (page inputs and remove buttons)
+	els.mergeByPageList.addEventListener('input', (e) => {
+		const input = e.target.closest('.page-input');
+		if (!input) return;
+		const index = parseInt(input.dataset.index, 10);
+		const item = state.mergeByPageInputs[index];
+		const errorElement = input.closest('.merge-page-row').querySelector('.page-range-error');
+		validatePageRangeInput(input, item, errorElement, state.uiStrings);
+		updateMergeByPageButton();
+	});
+
+	els.mergeByPageList.addEventListener('click', (e) => {
+		const removeBtn = e.target.closest('.remove-pdf-btn');
+		if (!removeBtn) return;
+		const index = parseInt(removeBtn.dataset.index, 10);
+		state.mergeByPageInputs.splice(index, 1);
+		renderMergeByPageList();
+		updateMergeByPageButton();
+	});
 
 	els.conversionSelect.addEventListener('change', () => {
 		state.selectedKey = els.conversionSelect.value;
@@ -56,7 +110,7 @@
 		if (!state.selectedKey || !state.inputPath || !state.outputPath) {
 			return;
 		}
-		showProgress(0, 'Starting…');
+		showProgress(0, state.uiStrings.starting);
 		vscode.postMessage({
 			type: 'convert',
 			conversionKey: state.selectedKey,
@@ -69,7 +123,7 @@
 		if (!state.batchKey || state.batchInputs.length === 0) {
 			return;
 		}
-		showProgress(0, 'Starting batch…');
+		showProgress(0, state.uiStrings.startingBatch);
 		vscode.postMessage({
 			type: 'batchConvert',
 			conversionKey: state.batchKey,
@@ -81,7 +135,7 @@
 		if (state.mergeInputs.length < 2 || !state.mergeOutput) {
 			return;
 		}
-		showProgress(0, 'Merging…');
+		showProgress(0, state.uiStrings.merging);
 		vscode.postMessage({
 			type: 'mergePdfs',
 			inputs: state.mergeInputs,
@@ -89,10 +143,31 @@
 		});
 	});
 
+	els.startMergeByPage.addEventListener('click', () => {
+		if (state.mergeByPageInputs.length === 0 || !state.mergeByPageOutput || state.mergeByPageInputs.some(item => item.valid === false)) {
+			return;
+		}
+		// Filter out entries with no pages selected
+		const validInputs = state.mergeByPageInputs.filter(item => item.pages.length > 0);
+		if (validInputs.length === 0) {
+			return;
+		}
+		showProgress(0, state.uiStrings.mergingByPage);
+		vscode.postMessage({
+			type: 'mergePdfsByPage',
+			inputs: validInputs.map(item => ({ path: item.path, pages: item.pages })),
+			output: state.mergeByPageOutput,
+		});
+	});
+
 	window.addEventListener('message', (event) => {
 		const msg = event.data;
 		switch (msg.type) {
 			case 'bootstrap':
+				state.uiStrings = msg.uiStrings;
+				applyLocalizedStrings();
+				applyConversions(msg.conversions, msg.sidecarReady, msg.sidecarError);
+				break;
 			case 'conversionsUpdated':
 				applyConversions(msg.conversions, msg.sidecarReady, msg.sidecarError);
 				break;
@@ -117,9 +192,24 @@
 					state.mergeOutput = msg.mergeOutput;
 					els.mergeOutput.value = msg.mergeOutput;
 				}
+				if (msg.mergeByPageInputs) {
+					state.mergeByPageInputs = msg.mergeByPageInputs.map(item => ({
+						path: item.path,
+						pages: item.pages,
+						displayName: item.displayName,
+						pageCount: item.pageCount,
+						valid: true,
+					}));
+					renderMergeByPageList();
+				}
+				if (msg.mergeByPageOutput !== undefined) {
+					state.mergeByPageOutput = msg.mergeByPageOutput;
+					els.mergeByPageOutput.value = msg.mergeByPageOutput;
+				}
 				updateSelectedConversion();
 				updateBatchButton();
 				updateMergeButton();
+				updateMergeByPageButton();
 				break;
 			case 'progress':
 				showProgress(msg.progress, msg.message);
@@ -127,8 +217,49 @@
 			case 'result':
 				showResult(msg.success, msg.message, msg.outputPath);
 				break;
+			case 'addToMerge':
+				addToMergeList(msg.path);
+				break;
 		}
 	});
+
+	function applyLocalizedStrings() {
+		document.title = state.uiStrings.dashboardTitle;
+		els.dashboardHeading.textContent = state.uiStrings.dashboardTitle;
+		els.dashboardSubtitle.textContent = state.uiStrings.dashboardSubtitle;
+		els.singleConversionTitle.textContent = state.uiStrings.singleConversion;
+		els.conversionLabel.textContent = state.uiStrings.conversion;
+		els.inputLabel.textContent = state.uiStrings.input;
+		els.inputPath.placeholder = state.uiStrings.pickInputFile;
+		els.pickInput.textContent = state.uiStrings.browse;
+		els.outputLabel.textContent = state.uiStrings.output;
+		els.outputPath.placeholder = state.uiStrings.pickOutputFile;
+		els.pickOutput.textContent = state.uiStrings.browse;
+		els.startConvert.textContent = state.uiStrings.start;
+		els.batchConversionTitle.textContent = state.uiStrings.batchConversion;
+		els.batchConversionLabel.textContent = state.uiStrings.conversion;
+		els.batchInputsLabel.textContent = state.uiStrings.inputs;
+		els.batchInputs.placeholder = state.uiStrings.pickInputFiles;
+		els.pickBatch.textContent = state.uiStrings.browse;
+		els.startBatch.textContent = state.uiStrings.startBatch;
+		els.mergeTitle.textContent = state.uiStrings.mergePdfs;
+		els.mergeInputsLabel.textContent = state.uiStrings.inputs;
+		els.mergeInputs.placeholder = state.uiStrings.pickPdfFiles;
+		els.pickMergeInputs.textContent = state.uiStrings.browse;
+		els.mergeOutputLabel.textContent = state.uiStrings.output;
+		els.mergeOutput.placeholder = state.uiStrings.pickOutputPdf;
+		els.pickMergeOutput.textContent = state.uiStrings.browse;
+		els.startMerge.textContent = state.uiStrings.merge;
+		els.mergeByPageTitle.textContent = state.uiStrings.mergeByPageTitle;
+		els.mergeByPageInputsLabel.textContent = state.uiStrings.inputs;
+		els.pickMergeByPageInputs.textContent = state.uiStrings.browsePdfs;
+		els.mergeByPageOutputLabel.textContent = state.uiStrings.output;
+		els.mergeByPageOutput.placeholder = state.uiStrings.pickOutputPdf;
+		els.pickMergeByPageOutput.textContent = state.uiStrings.browse;
+		els.startMergeByPage.textContent = state.uiStrings.mergeByPageAction;
+		els.progressTitle.textContent = state.uiStrings.progress;
+		els.resultTitle.textContent = state.uiStrings.result;
+	}
 
 	function applyConversions(conversions, sidecarReady, sidecarError) {
 		state.conversions = conversions;
@@ -141,7 +272,7 @@
 		} else if (!state.sidecarReady) {
 			els.sidecarStatus.classList.remove('hidden');
 			els.sidecarStatus.classList.add('error');
-			els.sidecarStatus.textContent = 'sa-converter sidecar is not available.';
+			els.sidecarStatus.textContent = state.uiStrings.sidecarUnavailable;
 		} else {
 			els.sidecarStatus.classList.add('hidden');
 		}
@@ -158,10 +289,11 @@
 		updateSelectedConversion();
 		updateBatchButton();
 		updateMergeButton();
+		updateMergeByPageButton();
 	}
 
 	function populateSelect(select, conversions, availableOnly) {
-		select.innerHTML = '';
+		select.replaceChildren();
 		const keys = Object.keys(conversions.conversions).sort();
 		for (const key of keys) {
 			const spec = conversions.conversions[key];
@@ -170,7 +302,7 @@
 			}
 			const option = document.createElement('option');
 			option.value = key;
-			option.textContent = spec.available ? key : `${key} (unavailable)`;
+			option.textContent = spec.available ? key : state.uiStrings.unavailable.replace('{0}', key);
 			select.appendChild(option);
 		}
 	}
@@ -191,11 +323,19 @@
 
 		els.fidelityBadge.classList.remove('hidden');
 		els.fidelityBadge.className = `badge ${spec.fidelity}`;
-		els.fidelityBadge.textContent = `${spec.fidelity} · ${spec.engine}`;
+		const fidelityLabels = {
+			'office-fidelity': state.uiStrings.fidelityOffice,
+			semantic: state.uiStrings.fidelitySemantic,
+			'browser-print': state.uiStrings.fidelityBrowserPrint,
+			'preview-fast': state.uiStrings.fidelityPreviewFast,
+			'pdf-ops': state.uiStrings.fidelityPdfOperations,
+			ocr: state.uiStrings.fidelityOcr,
+		};
+		els.fidelityBadge.textContent = `${fidelityLabels[spec.fidelity] || spec.fidelity} · ${spec.engine}`;
 
 		if (!spec.available) {
 			els.installGuidance.classList.remove('hidden');
-			els.installGuidance.textContent = spec.install_hint || 'This conversion requires additional software.';
+			els.installGuidance.textContent = spec.install_hint || state.uiStrings.additionalSoftware;
 			els.startConvert.disabled = true;
 		} else {
 			els.installGuidance.classList.add('hidden');
@@ -210,6 +350,37 @@
 
 	function updateMergeButton() {
 		els.startMerge.disabled = !state.sidecarReady || state.mergeInputs.length < 2 || !state.mergeOutput;
+	}
+
+	function updateMergeByPageButton() {
+		const spec = getSpec('merge_pdfs_by_page');
+		const hasValidInputs = state.mergeByPageInputs.some(item => item.pages.length > 0);
+		const hasInvalidInputs = state.mergeByPageInputs.some(item => item.valid === false);
+		els.startMergeByPage.disabled = !state.sidecarReady || !spec?.available || !hasValidInputs || hasInvalidInputs || !state.mergeByPageOutput;
+	}
+
+	function renderMergeByPageList() {
+		if (state.mergeByPageInputs.length === 0) {
+			els.mergeByPageList.replaceChildren();
+			const placeholder = document.createElement('p');
+			placeholder.className = 'placeholder';
+			placeholder.textContent = state.uiStrings.noPdfsSelected;
+			els.mergeByPageList.appendChild(placeholder);
+			return;
+		}
+
+		els.mergeByPageList.replaceChildren(...state.mergeByPageInputs.map((item, index) =>
+			renderMergeByPageRow(document, item, index, state.uiStrings)));
+	}
+
+	function addToMergeList(path) {
+		// Check if already in list
+		if (state.mergeInputs.includes(path)) {
+			return;
+		}
+		state.mergeInputs.push(path);
+		els.mergeInputs.value = state.mergeInputs.join(', ');
+		updateMergeButton();
 	}
 
 	function showProgress(progress, message) {

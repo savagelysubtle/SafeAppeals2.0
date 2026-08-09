@@ -2,8 +2,10 @@
 	"displayName": "Safe Appeals File Converter",
 	"description": "Convert case documents via the sa-converter sidecar — markdown, Office, PDF, and batch operations within the workspace.",
 	"command.openDashboard": "Open Converter",
+	"command.smartConvert": "Convert To…",
 	"command.convertFile": "Convert File",
 	"command.mergePdfs": "Merge PDFs",
+	"command.mergePdfsByPage": "Merge PDFs by Page",
 	"command.category": "Safe Appeals Converter",
 	"view.container.title": "Converter",
 	"view.sidebar.name": "File Converter"

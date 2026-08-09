@@ -167,3 +167,75 @@ button:disabled {
 
 #result-message.success { color: var(--success); }
 #result-message.error { color: var(--error); }
+
+.merge-page-list {
+	margin: 8px 0;
+}
+
+.merge-page-row {
+	display: grid;
+	grid-template-columns: 1fr auto 28px;
+	gap: 8px;
+	align-items: center;
+	padding: 8px 10px;
+	background: var(--vscode-input-background);
+	border: 1px solid var(--border);
+	border-radius: 4px;
+	margin-bottom: 6px;
+}
+
+.merge-page-row .page-range-error {
+	grid-column: 2 / 4;
+	color: var(--error);
+	font-size: 0.8rem;
+}
+
+.merge-page-row .pdf-name {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	font-size: 0.85rem;
+	color: var(--fg);
+	min-width: 0;
+}
+
+.merge-page-row .page-input {
+	width: 180px;
+	padding: 4px 8px;
+	font-size: 0.85rem;
+	background: var(--vscode-input-background);
+	color: var(--vscode-input-foreground);
+	border: 1px solid var(--border);
+	border-radius: 4px;
+}
+
+.merge-page-row .remove-pdf-btn {
+	width: 24px;
+	height: 24px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: 0;
+	font-size: 1rem;
+	line-height: 1;
+	background: transparent;
+	color: var(--muted);
+	border: 1px solid transparent;
+	border-radius: 3px;
+	cursor: pointer;
+	opacity: 0.7;
+}
+
+.merge-page-row .remove-pdf-btn:hover {
+	opacity: 1;
+	background: var(--vscode-button-secondaryBackground, rgba(128, 128, 128, 0.1));
+	color: var(--fg);
+	border-color: var(--border);
+}
+
+.placeholder {
+	color: var(--muted);
+	font-style: italic;
+	font-size: 0.9rem;
+	margin: 8px 0;
+}

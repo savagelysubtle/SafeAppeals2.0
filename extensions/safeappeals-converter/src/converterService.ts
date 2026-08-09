@@ -11,10 +11,12 @@ import type {
 	ConvertResult,
 	ExtractPdfPagesResult,
 	MergePdfsParams,
+	MergePdfsByPageParams,
 } from './types';
 import { parseAvailableConversions, unavailableConversionMessage } from './protocol';
 import { assertPathInWorkspace, assertPathsInWorkspace, getWorkspaceRootPaths } from './pathGuard';
 import { SidecarHost, type SidecarProgressEvent } from './sidecarHost';
+import { normalizePageSelection, PageRangeError } from './pageRanges';
 
 export class ConverterService implements vscode.Disposable {
 	private readonly sidecar: SidecarHost;
@@ -160,6 +162,48 @@ export class ConverterService implements vscode.Disposable {
 		}
 	}
 
+	async mergePdfsByPage(params: MergePdfsByPageParams): Promise<ConvertResult> {
+		const folders = vscode.workspace.workspaceFolders ?? [];
+		if (folders.length === 0) {
+			return { success: false, error: vscode.l10n.t('Open a workspace folder before merging PDFs by page.') };
+		}
+		if (params.inputs.length === 0) {
+			return { success: false, error: vscode.l10n.t('At least one PDF must be selected.') };
+		}
+		if (params.inputs.some(item => item.pages.length === 0)) {
+			return { success: false, error: vscode.l10n.t('At least one page must be specified for each PDF.') };
+		}
+
+		const availabilityError = unavailableConversionMessage('merge_pdfs_by_page', this.cachedConversions);
+		if (availabilityError) {
+			return { success: false, error: availabilityError };
+		}
+
+		try {
+			const inputs = await Promise.all(params.inputs.map(async (item) => {
+				const validatedPath = await assertPathInWorkspace(item.path, folders);
+				const extracted = mapExtractPdfPagesResult(await this.sidecar.request('extract_pdf_pages', { source: validatedPath }));
+				if (!extracted.success || extracted.page_count === undefined) {
+					throw new Error(extracted.error ?? vscode.l10n.t('Could not determine the PDF page count.'));
+				}
+				return {
+					path: validatedPath,
+					pages: normalizePageSelection(item.pages, extracted.page_count),
+				};
+			}));
+			const output = await assertPathInWorkspace(params.output, folders);
+			const result = await this.sidecar.request('merge_pdfs_by_page', { inputs, output });
+			return mapConvertResult(result);
+		} catch (err) {
+			return {
+				success: false,
+				error: err instanceof PageRangeError
+					? localizedPageRangeErrorMessage(err)
+					: err instanceof Error ? err.message : String(err),
+			};
+		}
+	}
+
 	/**
 	 * Born-digital per-page PDF text extract (sidecar RPC — no docparse lease).
 	 */
@@ -245,4 +289,14 @@ function mapExtractPdfPagesResult(result: Record<string, unknown>): ExtractPdfPa
 		page_count: typeof result.page_count === 'number' ? result.page_count : pages.length,
 		error: typeof result.error === 'string' ? result.error : undefined,
 	};
+}
+
+function localizedPageRangeErrorMessage(error: PageRangeError): string {
+	switch (error.code) {
+		case 'empty': return vscode.l10n.t('At least one page must be specified.');
+		case 'duplicate': return vscode.l10n.t('Page {0} is selected more than once.', error.value ?? '');
+		case 'bounds': return vscode.l10n.t('Page {0} exceeds the PDF page count of {1}.', error.value ?? '', String(error.pageCount ?? ''));
+		case 'format': return vscode.l10n.t('Invalid page or range: {0}', error.value ?? '');
+		case 'order': return vscode.l10n.t('Page range must be in ascending order: {0}', error.value ?? '');
+	}
 }

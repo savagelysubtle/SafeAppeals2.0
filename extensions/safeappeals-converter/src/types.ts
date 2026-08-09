@@ -80,6 +80,11 @@ export interface MergePdfsParams {
 	output: string;
 }
 
+export interface MergePdfsByPageParams {
+	inputs: Array<{ path: string; pages: number[] }>;
+	output: string;
+}
+
 export interface ConvertResult {
 	success: boolean;
 	output_path?: string;
@@ -118,13 +123,17 @@ export type WebviewToHostMessage =
 	| { type: 'pickBatchInputs' }
 	| { type: 'pickMergeInputs' }
 	| { type: 'pickMergeOutput' }
+	| { type: 'pickMergeByPageInputs' }
+	| { type: 'pickMergeByPageOutput' }
 	| { type: 'convert'; conversionKey: string; input: string; output: string }
 	| { type: 'batchConvert'; conversionKey: string; inputs: string[]; outputDir?: string }
-	| { type: 'mergePdfs'; inputs: string[]; output: string };
+	| { type: 'mergePdfs'; inputs: string[]; output: string }
+	| { type: 'mergePdfsByPage'; inputs: Array<{ path: string; pages: number[] }>; output: string };
 
 export type HostToWebviewMessage =
-	| { type: 'bootstrap'; conversions: AvailableConversions; sidecarReady: boolean; sidecarError?: string }
-	| { type: 'paths'; input?: string; output?: string; batchInputs?: string[]; mergeInputs?: string[]; mergeOutput?: string }
+	| { type: 'bootstrap'; conversions: AvailableConversions; sidecarReady: boolean; sidecarError?: string; uiStrings: Record<string, string> }
+	| { type: 'paths'; input?: string; output?: string; batchInputs?: string[]; mergeInputs?: string[]; mergeOutput?: string; mergeByPageInputs?: Array<{ path: string; pages: number[]; displayName: string; pageCount: number }>; mergeByPageOutput?: string }
+	| { type: 'addToMerge'; path: string }
 	| { type: 'progress'; jobId: string; progress: number; message: string }
 	| { type: 'result'; success: boolean; message: string; outputPath?: string }
 	| { type: 'conversionsUpdated'; conversions: AvailableConversions };
