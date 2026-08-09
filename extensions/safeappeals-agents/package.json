@@ -16,12 +16,15 @@
 		"ui",
 		"workspace"
 	],
-"enabledApiProposals": [
+	"enabledApiProposals": [
+		"defaultChatParticipant",
+		"chatParticipantAdditions",
 		"chatPromptFiles",
 		"chatParticipantPrivate"
 	],
 	"activationEvents": [
 		"onStartupFinished",
+		"onChatParticipant:safeappeals.agent",
 		"onCustomAgentProvider"
 	],
 	"extensionDependencies": [
@@ -35,6 +38,22 @@
 		}
 	},
 	"contributes": {
+		"chatParticipants": [
+			{
+				"id": "safeappeals.agent",
+				"name": "safeappeals",
+				"fullName": "SafeAppeals",
+				"description": "%chat.agent.description%",
+				"isDefault": true,
+				"locations": [
+					"panel"
+				],
+				"modes": [
+					"agent",
+					"ask"
+				]
+			}
+		],
 		"configuration": {
 			"title": "%config.title%",
 			"properties": {}

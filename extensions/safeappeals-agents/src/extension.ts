@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as vscode from 'vscode';
+import { registerSafeAppealsAgentParticipant } from './chat/agentParticipant';
 import { registerExtensionAgentsProvider } from './chat/extensionAgentsProvider';
 import { registerSafeAppealsAgentTools } from './chat/tools';
 import type { ICloudApiClient } from './cloudApiClient';
@@ -34,6 +35,9 @@ async function getCloudApiClient(): Promise<ICloudApiClient | undefined> {
 }
 
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
+	// Register the default participant before authentication or API initialization can fail.
+	context.subscriptions.push(registerSafeAppealsAgentParticipant());
+
 	// Get the Cloud API client from the authentication extension
 	const apiClient = await getCloudApiClient();
 

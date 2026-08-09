@@ -17,8 +17,6 @@
 		"workspace"
 	],
 	"enabledApiProposals": [
-		"defaultChatParticipant",
-		"chatParticipantAdditions",
 		"chatParticipantPrivate",
 		"chatPromptFiles",
 		"contribLanguageModelToolSets",
@@ -31,7 +29,6 @@
 		"onUri",
 		"onAuthenticationRequest:safeappeals-cloud",
 		"onAuthenticationRequest:safeappeals-google",
-		"onChatParticipant:safeappeals.agent",
 		"onCustomAgentProvider"
 	],
 	"capabilities": {
@@ -55,22 +52,6 @@
 			{
 				"vendor": "safeappeals-cloud",
 				"displayName": "%llm.provider.displayName%"
-			}
-		],
-"chatParticipants": [
-			{
-				"id": "safeappeals.agent",
-				"name": "safeappeals",
-				"fullName": "SafeAppeals",
-				"description": "%chat.agent.description%",
-				"isDefault": true,
-				"locations": [
-					"panel"
-				],
-				"modes": [
-					"agent",
-					"ask"
-				]
 			}
 		],
 		"languageModelTools": [

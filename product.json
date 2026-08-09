@@ -132,8 +132,8 @@
 		}
 	],
 "defaultChatAgent": {
-		"extensionId": "safeappeals.safeappeals-authentication",
-		"chatExtensionId": "safeappeals.safeappeals-authentication",
+		"extensionId": "safeappeals.safeappeals-agents",
+		"chatExtensionId": "safeappeals.safeappeals-agents",
 		"chatExtensionOutputId": "SafeAppeals Cloud Auth",
 		"chatExtensionOutputExtensionStateCommand": "safeappeals.cloud.openCheckout",
 		"documentationUrl": "https://safeappeals.com/docs/ai-assistant",
@@ -199,10 +199,8 @@
 	"trustedExtensionProtocolHandlers": [
 		"safeappeals.safeappeals-authentication"
 	],
-"extensionEnabledApiProposals": {
+	"extensionEnabledApiProposals": {
 		"safeappeals.safeappeals-authentication": [
-			"defaultChatParticipant",
-			"chatParticipantAdditions",
 			"chatParticipantPrivate",
 			"chatPromptFiles",
 			"contribLanguageModelToolSets",
@@ -214,6 +212,8 @@
 			"contribLanguageModelToolSets"
 		],
 		"safeappeals.safeappeals-agents": [
+			"defaultChatParticipant",
+			"chatParticipantAdditions",
 			"chatPromptFiles",
 			"chatParticipantPrivate"
 		]

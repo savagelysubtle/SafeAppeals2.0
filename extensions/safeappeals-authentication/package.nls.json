@@ -5,7 +5,6 @@
 	"auth.safeappealsGoogle.label": "SafeAppeals Google",
 	"auth.safeappealsMicrosoft.label": "SafeAppeals Microsoft",
 	"llm.provider.displayName": "SafeAppeals Cloud",
-	"chat.agent.description": "SafeAppeals Agent for multi-step coding tasks with workspace tools",
 	"tool.readFile.displayName": "Read File",
 	"tool.readFile.modelDescription": "Read the contents of a file in the workspace. Prefer this when you need file text before editing.",
 	"tool.readFile.userDescription": "Read a workspace file",

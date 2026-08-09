@@ -45,8 +45,9 @@ import { IChatRequestVariableEntry } from '../../../common/attachments/chatVaria
 import { IChatVariablesService } from '../../../common/attachments/chatVariables.js';
 import { IChatDebugService } from '../../../common/chatDebugService.js';
 import { ChatDebugServiceImpl } from '../../../common/chatDebugServiceImpl.js';
+import { ChatMode } from '../../../common/chatModes.js';
 import { ChatRequestQueueKind, ChatSendResult, IChatFollowup, IChatModelReference, IChatProgress, IChatService, ResponseModelState } from '../../../common/chatService/chatService.js';
-import { backfillRestoredPickerState, ChatService } from '../../../common/chatService/chatServiceImpl.js';
+import { backfillRestoredPickerState, ChatService, resolveRemoteSessionInitialMode } from '../../../common/chatService/chatServiceImpl.js';
 import { ChatAgentLocation, ChatModeKind } from '../../../common/constants.js';
 import { ChatEditingSessionState, IChatEditingService, IChatEditingSession, IModifiedFileEntry, ModifiedFileEntryState } from '../../../common/editing/chatEditingService.js';
 import { ILanguageModelChatMetadata, ILanguageModelsService } from '../../../common/languageModels.js';
@@ -2323,6 +2324,7 @@ suite('backfillRestoredPickerState', () => {
 	ensureNoDisposablesAreLeakedInTestSuite();
 
 	const AGENT = 'agent';
+	const ASK = 'ask';
 	const model = (identifier: string): ISerializableChatModelInputState['selectedModel'] => ({
 		identifier,
 		metadata: {
@@ -2345,15 +2347,32 @@ suite('backfillRestoredPickerState', () => {
 		assert.strictEqual(result?.selectedModel?.identifier, 'agent-host-claude:opus');
 	});
 
-	test('promotes a stored custom agent over the default Agent only, never over an explicit mode', () => {
-		assert.strictEqual(backfillRestoredPickerState(state(AGENT, undefined), state('custom-uri', undefined), AGENT)?.mode.id, 'custom-uri', 'default Agent → stored custom agent');
-		assert.strictEqual(backfillRestoredPickerState(state('other-uri', undefined), state('custom-uri', undefined), AGENT)?.mode.id, 'other-uri', 'explicit mode is not overridden');
-		assert.strictEqual(backfillRestoredPickerState(state(AGENT, undefined), state(AGENT, undefined), AGENT)?.mode.id, AGENT, 'stored default Agent leaves chosen Agent');
+	test('promotes a stored mode over the Ask fallback only, never over an explicit mode', () => {
+		assert.deepStrictEqual([
+			backfillRestoredPickerState(state(ASK, undefined), state('custom-uri', undefined), ASK)?.mode.id,
+			backfillRestoredPickerState(state(ASK, undefined), state(AGENT, undefined), ASK)?.mode.id,
+			backfillRestoredPickerState(state('other-uri', undefined), state('custom-uri', undefined), ASK)?.mode.id,
+			backfillRestoredPickerState(state(ASK, undefined), state(ASK, undefined), ASK)?.mode.id,
+		], ['custom-uri', AGENT, 'other-uri', ASK]);
 	});
 
 	test('returns the chosen state unchanged when there is no stored state', () => {
 		const chosen = state(AGENT, undefined);
 		assert.strictEqual(backfillRestoredPickerState(chosen, undefined, AGENT), chosen);
+	});
+});
+
+suite('resolveRemoteSessionInitialMode', () => {
+	test('ordinary new sessions start in Ask while explicit agent entrypoints keep Agent mode', () => {
+		const explicitAgent = URI.parse('vscode-chat-agent://safeappeals/research');
+
+		assert.deepStrictEqual([
+			resolveRemoteSessionInitialMode(undefined),
+			resolveRemoteSessionInitialMode(explicitAgent),
+		], [
+			{ kind: ChatModeKind.Ask, id: ChatMode.Ask.id },
+			{ kind: ChatModeKind.Agent, id: explicitAgent.toString() },
+		]);
 	});
 });
 

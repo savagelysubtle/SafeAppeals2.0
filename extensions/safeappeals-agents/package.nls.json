@@ -1,5 +1,6 @@
 {
 	"displayName": "SafeAppeals Agents",
 	"description": "Built-in agents for SafeAppeals legal workflows.",
+	"chat.agent.description": "SafeAppeals Agent for multi-step coding tasks with workspace tools",
 	"config.title": "SafeAppeals Agents"
 }

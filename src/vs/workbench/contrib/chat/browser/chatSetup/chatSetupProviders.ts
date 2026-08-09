@@ -35,7 +35,7 @@ import { IChatProgress, IChatService, ToolConfirmKind } from '../../common/chatS
 import { IChatRequestToolEntry } from '../../common/attachments/chatVariableEntries.js';
 import { ChatAgentLocation, ChatConfiguration, ChatModeKind } from '../../common/constants.js';
 import { ChatMessageRole, IChatMessage, IChatResponseToolUsePart, ILanguageModelChatRequestOptions, ILanguageModelsService, SAFEAPPEALS_CLOUD_VENDOR_ID } from '../../common/languageModels.js';
-import { buildSafeAppealsAskCloudSystemPrompt, buildSafeAppealsAskCloudSystemPromptWithoutSwitchTool, buildSafeAppealsCloudChatMessages, buildSafeAppealsSwitchModeLmTool, hasLiveSafeAppealsCloudModel, hasUsableNonCoreDefaultAgent, isSafeAppealsCloudAgentActivated, isSuccessfulSwitchModeResultText, pickSafeAppealsCloudModelId, resolveChatSetupTimeoutWarning, resolveCloudAgentModeUnavailableMessage, SAFEAPPEALS_AGENT_PARTICIPANT_ID, SAFEAPPEALS_ASK_CLOUD_SWITCH_MODE_MAX_ROUNDS, SAFEAPPEALS_AUTH_EXTENSION_ID, SAFEAPPEALS_SWITCH_MODE_TOOL_ID, shouldFailFastCloudAgentMode, shouldSkipAuthExtensionEnableForCloudAgent, shouldSkipToolsModelWaitForCloudAgent, shouldTreatLiveCloudModelAsLanguageModelReady, shouldUseCloudAgentReadinessPath, toolResultContentToText, usesSafeAppealsCloudSetup } from '../../common/chatSetupCloudHelpers.js';
+import { buildSafeAppealsAskCloudSystemPrompt, buildSafeAppealsAskCloudSystemPromptWithoutSwitchTool, buildSafeAppealsCloudChatMessages, buildSafeAppealsSwitchModeLmTool, hasLiveSafeAppealsCloudModel, hasUsableNonCoreDefaultAgent, isSafeAppealsCloudAgentActivated, isSuccessfulSwitchModeResultText, pickSafeAppealsCloudModelId, resolveChatSetupTimeoutWarning, resolveCloudAgentModeUnavailableMessage, SAFEAPPEALS_AGENT_PARTICIPANT_ID, SAFEAPPEALS_ASK_CLOUD_SWITCH_MODE_MAX_ROUNDS, SAFEAPPEALS_SWITCH_MODE_TOOL_ID, shouldFailFastCloudAgentMode, shouldSkipAuthExtensionEnableForCloudAgent, shouldSkipToolsModelWaitForCloudAgent, shouldTreatLiveCloudModelAsLanguageModelReady, shouldUseCloudAgentReadinessPath, toolResultContentToText, usesSafeAppealsCloudSetup } from '../../common/chatSetupCloudHelpers.js';
 import { CHAT_OPEN_ACTION_ID, CHAT_SETUP_ACTION_ID } from '../actions/chatActions.js';
 import { ChatViewId, IChatWidgetService } from '../chat.js';
 import { IViewsService } from '../../../../services/views/common/viewsService.js';
@@ -995,7 +995,7 @@ export class SetupAgent extends Disposable implements IChatAgentImplementation {
 	}
 
 	/**
-	 * SafeAppeals: activate the auth extension for `safeappeals.agent` specifically.
+	 * SafeAppeals: activate the configured chat extension for `safeappeals.agent` specifically.
 	 * Do not use mode-agnostic getContributedDefaultAgent (may pick vendored Copilot).
 	 * Wait for the agent to actually appear in activated agents.
 	 */
@@ -1003,7 +1003,7 @@ export class SetupAgent extends Disposable implements IChatAgentImplementation {
 		try {
 			this.logService.info('[chat setup] Activating SafeAppeals Cloud agent extension');
 			await this.extensionService.whenInstalledExtensionsRegistered();
-			const extensionId = new ExtensionIdentifier(SAFEAPPEALS_AUTH_EXTENSION_ID);
+			const extensionId = new ExtensionIdentifier(defaultChat.chatExtensionId);
 			await this.extensionService.activateById(extensionId, {
 				activationEvent: `onChatParticipant:${SAFEAPPEALS_AGENT_PARTICIPANT_ID}`,
 				extensionId,

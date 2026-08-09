@@ -134,26 +134,33 @@ const EMPTY_TOOL_ENABLEMENT_MAP: ToolAndToolSetEnablementMap = ToolAndToolSetEna
  *   agent-host model list has not loaded). `savedState` keeps the full model (id + capabilities),
  *   so use it. The input part re-validates it against the live model list and re-resolves it once
  *   the list loads, so a genuinely stale/wrong model is still dropped safely.
- * - `mode`: `stateToApply` falls back to the default Agent when it did not capture the user's
- *   custom agent. Prefer the custom agent from `savedState`, but only promote it OVER the plain
- *   default Agent — never override a different explicit mode.
+ * - `mode`: `stateToApply` falls back to the ordinary default mode when it did not capture the
+ *   user's selected mode. Prefer the mode from `savedState`, but only promote it over that
+ *   fallback — never override a different explicit mode.
  */
 export function backfillRestoredPickerState(
 	stateToApply: ISerializableChatModelInputState | undefined,
 	savedState: ISerializableChatModelInputState | undefined,
-	defaultAgentModeId: string,
+	defaultModeId: string,
 ): ISerializableChatModelInputState | undefined {
 	if (!stateToApply || !savedState) {
 		return stateToApply;
 	}
 	const selectedModel = stateToApply.selectedModel ?? savedState.selectedModel;
-	const mode = (stateToApply.mode.id === defaultAgentModeId && savedState.mode.id !== defaultAgentModeId)
+	const mode = (stateToApply.mode.id === defaultModeId && savedState.mode.id !== defaultModeId)
 		? savedState.mode
 		: stateToApply.mode;
 	if (selectedModel === stateToApply.selectedModel && mode === stateToApply.mode) {
 		return stateToApply;
 	}
 	return { ...stateToApply, selectedModel, mode };
+}
+
+/** Resolve the initial mode for a remote session from its explicit agent, if any. */
+export function resolveRemoteSessionInitialMode(agentUri: URI | undefined): ISerializableChatModelInputState['mode'] {
+	return agentUri
+		? { kind: ChatModeKind.Agent, id: agentUri.toString() }
+		: { kind: ChatModeKind.Ask, id: ChatMode.Ask.id };
 }
 
 export class ChatService extends Disposable implements IChatService {
@@ -677,7 +684,7 @@ export class ChatService extends Disposable implements IChatService {
 		let historySelectedModel: string | undefined = undefined;
 		let historyDerivedModel: ISerializableChatModelInputState['selectedModel'] = undefined;
 		if ((modelId || agentUri)) {
-			const mode: ISerializableChatModelInputState['mode'] = agentUri ? { kind: ChatModeKind.Agent, id: agentUri.toString() } : { kind: ChatModeKind.Agent, id: ChatMode.Agent.id };
+			const mode = resolveRemoteSessionInitialMode(agentUri);
 			const modelMetadata = modelId ? this.languageModelsService.lookupLanguageModel(modelId) : undefined;
 			// The session request history only tells us which model id was last used, not the
 			// user's per-model configuration (e.g. thinking effort, context window). Preserve that
@@ -736,7 +743,7 @@ export class ChatService extends Disposable implements IChatService {
 		// selections (model/mode); restore them from the session's own saved `storedInputState`
 		// (see {@link backfillRestoredPickerState}).
 		const stateToApply = providedSession.transferredState?.inputState ?? restoredDraft;
-		const inputState = backfillRestoredPickerState(stateToApply, storedInputState, ChatMode.Agent.id);
+		const inputState = backfillRestoredPickerState(stateToApply, storedInputState, ChatMode.Ask.id);
 		const modelRef = this._sessionModels.acquireOrCreate({
 			initialData,
 			location,
