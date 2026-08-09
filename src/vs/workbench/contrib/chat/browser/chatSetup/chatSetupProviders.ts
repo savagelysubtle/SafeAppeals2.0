@@ -4,8 +4,6 @@
  *--------------------------------------------------------------------------------------------*/
 
 import './media/chatSetup.css';
-import { $ } from '../../../../../base/browser/dom.js';
-import { Dialog, DialogContentsAlignment } from '../../../../../base/browser/ui/dialog/dialog.js';
 import { WorkbenchActionExecutedClassification, WorkbenchActionExecutedEvent } from '../../../../../base/common/actions.js';
 import { raceTimeout, timeout } from '../../../../../base/common/async.js';
 import { CancellationToken } from '../../../../../base/common/cancellation.js';
@@ -18,20 +16,15 @@ import { Lazy } from '../../../../../base/common/lazy.js';
 import { Disposable, DisposableStore, IDisposable, toDisposable } from '../../../../../base/common/lifecycle.js';
 import { URI } from '../../../../../base/common/uri.js';
 import { localize, localize2 } from '../../../../../nls.js';
-import { createWorkbenchDialogOptions } from '../../../../browser/parts/dialogs/dialog.js';
 import { ContextKeyExpr, IContextKeyService } from '../../../../../platform/contextkey/common/contextkey.js';
 import { IInstantiationService } from '../../../../../platform/instantiation/common/instantiation.js';
-import { IKeybindingService } from '../../../../../platform/keybinding/common/keybinding.js';
-import { ILayoutService } from '../../../../../platform/layout/browser/layoutService.js';
 import { ILogService } from '../../../../../platform/log/common/log.js';
-import { IMarkdownRendererService } from '../../../../../platform/markdown/browser/markdownRenderer.js';
 import product from '../../../../../platform/product/common/product.js';
 import { ITelemetryService } from '../../../../../platform/telemetry/common/telemetry.js';
 import { IWorkspaceTrustManagementService } from '../../../../../platform/workspace/common/workspaceTrust.js';
 import { IAuthenticationService } from '../../../../services/authentication/common/authentication.js';
 import { IWorkbenchEnvironmentService } from '../../../../services/environment/common/environmentService.js';
 import { nullExtensionDescription } from '../../../../services/extensions/common/extensions.js';
-import { IWorkbenchLayoutService } from '../../../../services/layout/browser/layoutService.js';
 import { CountTokensCallback, ILanguageModelToolsService, IPreparedToolInvocation, IToolData, IToolImpl, IToolInvocation, IToolResult, ToolDataSource, ToolProgress } from '../../common/tools/languageModelToolsService.js';
 import { IChatAgentHistoryEntry, IChatAgentImplementation, IChatAgentRequest, IChatAgentResult, IChatAgentService } from '../../common/participants/chatAgents.js';
 import { ChatEntitlementContext, chatRequiresSetup, IChatEntitlementService } from '../../../../services/chat/common/chatEntitlementService.js';
@@ -59,7 +52,7 @@ import { IPosition } from '../../../../../editor/common/core/position.js';
 import { IMarker, IMarkerService, MarkerSeverity } from '../../../../../platform/markers/common/markers.js';
 import { ChatSetupController } from './chatSetupController.js';
 import { ChatGlobalPerfMark, markChatGlobal } from '../../common/chatPerf.js';
-import { ChatSetupAnonymous, ChatSetupStep, IChatSetupResult, maybeEnableAuthExtension, refreshTokens } from './chatSetup.js';
+import { ChatSetupAnonymous, ChatSetupStep, ChatSetupStrategy, IChatSetupResult, maybeEnableAuthExtension, refreshTokens } from './chatSetup.js';
 import { ChatSetup } from './chatSetupRunner.js';
 import { chatViewsWelcomeRegistry } from '../viewsWelcome/chatViewsWelcome.js';
 import { CommandsRegistry, ICommandService } from '../../../../../platform/commands/common/commands.js';
@@ -120,7 +113,10 @@ export class SetupAgent extends Disposable implements IChatAgentImplementation {
 					break;
 			}
 
-			return SetupAgent.doRegisterAgent(instantiationService, chatAgentService, id, `${defaultChat.provider.default.name} Copilot` /* Do NOT change, this hides the username altogether in Chat */, true, description, location, mode, context, controller);
+			// Setup agents are only default for Ask/Edit modes. For Agent mode, SafeAppeals agent should be default.
+			const isDefault = mode !== ChatModeKind.Agent;
+
+			return SetupAgent.doRegisterAgent(instantiationService, chatAgentService, id, `${defaultChat.provider.default.name} Copilot` /* Do NOT change, this hides the username altogether in Chat */, isDefault, description, location, mode, context, controller);
 		});
 	}
 
@@ -215,15 +211,12 @@ export class SetupAgent extends Disposable implements IChatAgentImplementation {
 		@IWorkspaceTrustManagementService private readonly workspaceTrustManagementService: IWorkspaceTrustManagementService,
 		@IChatEntitlementService private readonly chatEntitlementService: IChatEntitlementService,
 		@IAuthenticationService private readonly authenticationService: IAuthenticationService,
+		@IChatAgentService private readonly chatAgentService: IChatAgentService,
 		@IViewsService private readonly viewsService: IViewsService,
 		@IContextKeyService private readonly contextKeyService: IContextKeyService,
 		@IOutputService private readonly outputService: IOutputService,
 		@IExtensionsWorkbenchService private readonly extensionsWorkbenchService: IExtensionsWorkbenchService,
 		@ICommandService private readonly commandService: ICommandService,
-		@ILayoutService private readonly layoutService: IWorkbenchLayoutService,
-		@IKeybindingService private readonly keybindingService: IKeybindingService,
-		@IHostService private readonly hostService: IHostService,
-		@IMarkdownRendererService private readonly markdownRendererService: IMarkdownRendererService,
 		@IExtensionService private readonly extensionService: IExtensionService,
 	) {
 		super();
@@ -533,42 +526,6 @@ export class SetupAgent extends Disposable implements IChatAgentImplementation {
 			return sessions.length > 0;
 		} catch {
 			return false;
-		}
-	}
-
-	/**
-	 * SafeAppeals: small branded modal before OAuth. Returns true if the user
-	 * chose Sign in; false if they cancelled the dialog.
-	 */
-	private async showSafeAppealsCloudSignInDialog(): Promise<boolean> {
-		const disposables = new DisposableStore();
-		try {
-			const primaryLabel = localize('signInSafeAppealsCloudButton', "Sign in to SafeAppeals Cloud...");
-			const dialog = disposables.add(new Dialog(
-				this.layoutService.activeContainer,
-				localize('signInSafeAppealsCloud', "Sign in to SafeAppeals Cloud"),
-				[primaryLabel],
-				createWorkbenchDialogOptions({
-					type: 'none',
-					extraClasses: ['chat-setup-dialog'],
-					detail: ' ',
-					icon: Codicon.account,
-					alignment: DialogContentsAlignment.Vertical,
-					cancelId: 1,
-					renderFooter: footer => {
-						const element = $('.chat-setup-dialog-footer');
-						const text = localize('safeAppealsCloudFooter', "Continue to sign in to SafeAppeals Cloud and use Chat.");
-						element.appendChild($('p', undefined, disposables.add(this.markdownRendererService.render(new MarkdownString(text, { isTrusted: true }))).element));
-						footer.appendChild(element);
-					},
-					buttonOptions: [{ styleButton: (button) => button.element.classList.add('continue-button', 'default') }],
-				}, this.keybindingService, this.layoutService, this.hostService)
-			));
-
-			const { button } = await dialog.show();
-			return button === 0;
-		} finally {
-			disposables.dispose();
 		}
 	}
 
@@ -976,27 +933,39 @@ export class SetupAgent extends Disposable implements IChatAgentImplementation {
 			languageModelsService.getLanguageModelIds().map(id => languageModelsService.lookupLanguageModel(id)?.vendor)
 		);
 		if (hasLiveCloudModel()) {
+			this.logService.info('[chat setup] Cloud language model ready immediately');
 			return;
 		}
-		return Event.toPromise(Event.filter(languageModelsService.onDidChangeLanguageModels, () => hasLiveCloudModel()));
+		this.logService.info('[chat setup] Waiting for cloud language model to become ready');
+		return Event.toPromise(Event.filter(languageModelsService.onDidChangeLanguageModels, () => {
+			const ready = hasLiveCloudModel();
+			if (ready) {
+				this.logService.info('[chat setup] Cloud language model now ready');
+			}
+			return ready;
+		}));
 	}
 
 	private whenToolsModelReady(languageModelToolsService: ILanguageModelToolsService, requestModel: IChatRequestModel): Promise<unknown> | void {
 		const needsToolsModel = requestModel.message.parts.some(part => part instanceof ChatRequestToolPart);
 		if (!needsToolsModel) {
+			this.logService.info('[chat setup] No tools needed in request, tools model ready immediately');
 			return; // No tools in this request, no need to check
 		}
 
 		// check that tools other than setup. and internal tools are registered.
 		for (const tool of languageModelToolsService.getAllToolsIncludingDisabled()) {
-			if (tool.id.startsWith('copilot_')) {
+			if (tool.id.startsWith('copilot_') || tool.id.startsWith('safeappeals_')) {
+				this.logService.info('[chat setup] Tools model ready immediately (found safeappeals_ or copilot_ tools)');
 				return; // we have tools!
 			}
 		}
 
+		this.logService.info('[chat setup] Waiting for tools model to become ready');
 		return Event.toPromise(Event.filter(languageModelToolsService.onDidChangeTools, () => {
 			for (const tool of languageModelToolsService.getAllToolsIncludingDisabled()) {
-				if (tool.id.startsWith('copilot_')) {
+				if (tool.id.startsWith('copilot_') || tool.id.startsWith('safeappeals_')) {
+					this.logService.info('[chat setup] Tools model now ready (found safeappeals_ or copilot_ tools)');
 					return true; // we have tools!
 				}
 			}
@@ -1028,9 +997,11 @@ export class SetupAgent extends Disposable implements IChatAgentImplementation {
 	/**
 	 * SafeAppeals: activate the auth extension for `safeappeals.agent` specifically.
 	 * Do not use mode-agnostic getContributedDefaultAgent (may pick vendored Copilot).
+	 * Wait for the agent to actually appear in activated agents.
 	 */
 	private async whenSafeAppealsCloudAgentActivated(): Promise<void> {
 		try {
+			this.logService.info('[chat setup] Activating SafeAppeals Cloud agent extension');
 			await this.extensionService.whenInstalledExtensionsRegistered();
 			const extensionId = new ExtensionIdentifier(SAFEAPPEALS_AUTH_EXTENSION_ID);
 			await this.extensionService.activateById(extensionId, {
@@ -1038,20 +1009,52 @@ export class SetupAgent extends Disposable implements IChatAgentImplementation {
 				extensionId,
 				startup: false,
 			});
+
+			// Wait for the agent to actually appear in activated agents
+			const isReady = () => isSafeAppealsCloudAgentActivated(
+				this.chatAgentService.getActivatedAgents().map(agent => agent.id)
+			);
+			this.logService.info('[chat setup] Waiting for safeappeals.agent to appear in activated agents', {
+				activatedAgents: this.chatAgentService.getActivatedAgents().map(agent => agent.id)
+			});
+			if (!isReady()) {
+				await Event.toPromise(Event.filter(this.chatAgentService.onDidChangeAgents, () => {
+					const ready = isReady();
+					if (ready) {
+						this.logService.info('[chat setup] safeappeals.agent now appears in activated agents');
+					}
+					return ready;
+				}));
+			}
+			this.logService.info('[chat setup] SafeAppeals Cloud agent activation complete');
 		} catch (error) {
 			this.logService.error('[chat setup] Failed to activate SafeAppeals Cloud agent', error);
 		}
 	}
 
-	/** SafeAppeals: wait until `safeappeals.agent` appears in activated agents. */
+	/** SafeAppeals: wait until `safeappeals.agent` appears in activated agents OR is available as a contributed default agent. */
 	private whenSafeAppealsCloudAgentReady(chatAgentService: IChatAgentService): Promise<unknown> | void {
-		const isReady = () => isSafeAppealsCloudAgentActivated(
-			chatAgentService.getActivatedAgents().map(agent => agent.id)
-		);
+		const isReady = () => {
+			// Check activated agents first
+			if (isSafeAppealsCloudAgentActivated(chatAgentService.getActivatedAgents().map(agent => agent.id))) {
+				return true;
+			}
+			// Also check if it's available as a contributed default agent
+			const contributed = chatAgentService.getContributedDefaultAgent(this.location);
+			if (contributed && contributed.id === SAFEAPPEALS_AGENT_PARTICIPANT_ID) {
+				return true;
+			}
+			return false;
+		};
 		if (isReady()) {
 			return;
 		}
-		return Event.toPromise(Event.filter(chatAgentService.onDidChangeAgents, () => isReady()));
+		return Event.toPromise(Event.filter(chatAgentService.onDidChangeAgents, () => {
+			const activated = isSafeAppealsCloudAgentActivated(chatAgentService.getActivatedAgents().map(agent => agent.id));
+			if (activated) return true;
+			const contributed = chatAgentService.getContributedDefaultAgent(this.location);
+			return contributed?.id === SAFEAPPEALS_AGENT_PARTICIPANT_ID;
+		}));
 	}
 
 	private computeDiagnosticInfo(agentActivated: boolean, agentReady: boolean, languageModelReady: boolean, toolsModelReady: boolean, requestModel: IChatRequestModel, languageModelsService: ILanguageModelsService, chatAgentService: IChatAgentService, modeInfo: { kind?: ChatModeKind } | undefined) {
@@ -1096,12 +1099,16 @@ export class SetupAgent extends Disposable implements IChatAgentImplementation {
 		const widget = chatWidgetService.getWidgetBySessionResource(request.sessionResource);
 		const requestModel = widget?.viewModel?.model.getRequests().at(-1);
 
-		// SafeAppeals: branded modal + createSession only in trusted workspaces (untrusted uses ChatSetup.run trust gate)
+		// SafeAppeals: use the shared setup runner so a request cannot open a second
+		// sign-in dialog while the setup action is already in progress.
 		if (this.usesSafeAppealsCloudSetup(languageModelsService)
 			&& !this.context.state.untrusted
 			&& this.workspaceTrustManagementService.isWorkspaceTrusted()) {
-			const confirmed = await this.showSafeAppealsCloudSignInDialog();
-			if (!confirmed) {
+			const setupResult = await ChatSetup.getInstance(this.instantiationService, this.context, this.controller).run({
+				setupStrategy: ChatSetupStrategy.SetupWithSafeAppealsCloud,
+				disableChatViewReveal: true,
+			});
+			if (!setupResult.success) {
 				progress({
 					kind: 'markdownContent',
 					content: SetupAgent.SETUP_NEEDED_MESSAGE
@@ -1114,8 +1121,6 @@ export class SetupAgent extends Disposable implements IChatAgentImplementation {
 				shimmer: true,
 			});
 			try {
-				await this.authenticationService.createSession(SAFEAPPEALS_CLOUD_VENDOR_ID, [], { activateImmediate: true });
-				await this.context.update({ completed: true });
 				void languageModelsService.selectLanguageModels({ vendor: SAFEAPPEALS_CLOUD_VENDOR_ID });
 				// SafeAppeals: Ask/Edit go straight to Cloud LM; Agent still forwards when a tools agent is present
 				if (this.usesCloudLanguageModelPath()) {

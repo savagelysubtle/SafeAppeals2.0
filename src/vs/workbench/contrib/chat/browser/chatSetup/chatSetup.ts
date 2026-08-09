@@ -95,7 +95,8 @@ export function buildUpgradeUrlWithRedirect(baseUpgradeUrl: string, urlProtocol:
  */
 export async function maybeEnableAuthExtension(
 	extensionsWorkbenchService: IExtensionsWorkbenchService,
-	logService: ILogService
+	logService: ILogService,
+	throwOnError = false,
 ): Promise<boolean> {
 	if (!defaultChat.providerExtensionId) {
 		return false;
@@ -120,6 +121,9 @@ export async function maybeEnableAuthExtension(
 			return true;
 		} catch (error) {
 			logService.error(`[chat setup] failed to re-enable auth provider extension '${defaultChat.providerExtensionId}'`, error);
+			if (throwOnError) {
+				throw error;
+			}
 			return false;
 		}
 	}

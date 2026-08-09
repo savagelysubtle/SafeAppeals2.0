@@ -504,6 +504,12 @@
 	justify-content: center;
 }
 
+.onboarding-a-provider-mark.safeappeals-cloud {
+	background-image: var(--vscode-codicon-shield);
+	mask: var(--vscode-codicon-shield);
+	-webkit-mask: var(--vscode-codicon-shield);
+}
+
 .onboarding-a-provider-mark.google {
 	background-image: url('./google.svg');
 }

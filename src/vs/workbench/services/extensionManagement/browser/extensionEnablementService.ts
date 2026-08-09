@@ -660,7 +660,11 @@ export class ExtensionEnablementService extends Disposable implements IWorkbench
 	}
 
 	private _isDisabledByUnification(identifier: IExtensionIdentifier): boolean {
-		return this._extensionUnificationEnabled && identifier.id.toLowerCase() === this._completionsExtensionId;
+		return this._extensionUnificationEnabled
+			&& !!this._completionsExtensionId
+			&& !!this._chatExtensionId
+			&& !areSameExtensions({ id: this._completionsExtensionId }, { id: this._chatExtensionId })
+			&& areSameExtensions(identifier, { id: this._completionsExtensionId });
 	}
 
 	private _isDisabledBySessionsWindow(extension: IExtension): boolean {

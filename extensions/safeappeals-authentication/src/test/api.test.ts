@@ -112,3 +112,55 @@ suite('CloudApiClient.exchangeCode / refreshSession', () => {
 		}
 	});
 });
+
+suite('CloudApiClient.signOut', () => {
+	test('posts with the explicit session token', async () => {
+		const originalFetch = globalThis.fetch;
+		let request: { url: string; method: string | undefined; authorization: string | null } | undefined;
+		globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit): Promise<Response> => {
+			request = {
+				url: String(input),
+				method: init?.method,
+				authorization: new Headers(init?.headers).get('Authorization'),
+			};
+			return new Response(JSON.stringify({ success: true }), {
+				status: 200,
+				headers: { 'Content-Type': 'application/json' },
+			});
+		}) as typeof fetch;
+		const output = { appendLine: (_line: string) => { /* test stub */ } } as OutputChannel;
+		const client = new CloudApiClient(output, () => 'wrong-token', async () => false);
+
+		try {
+			await client.signOut('session-token');
+			assert.deepStrictEqual(request, {
+				url: `${DEFAULT_API_URL}/auth/sign-out`,
+				method: 'POST',
+				authorization: 'Bearer session-token',
+			});
+		} finally {
+			globalThis.fetch = originalFetch;
+		}
+	});
+
+	test('surfaces server revocation failure without retrying', async () => {
+		const originalFetch = globalThis.fetch;
+		let calls = 0;
+		globalThis.fetch = (async (): Promise<Response> => {
+			calls++;
+			return new Response(JSON.stringify({ error: { message: 'revocation failed' } }), {
+				status: 500,
+				headers: { 'Content-Type': 'application/json' },
+			});
+		}) as typeof fetch;
+		const output = { appendLine: (_line: string) => { /* test stub */ } } as OutputChannel;
+		const client = new CloudApiClient(output, () => undefined, async () => false);
+
+		try {
+			await assert.rejects(client.signOut('session-token'), /revocation failed/);
+			assert.strictEqual(calls, 1);
+		} finally {
+			globalThis.fetch = originalFetch;
+		}
+	});
+});

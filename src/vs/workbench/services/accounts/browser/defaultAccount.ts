@@ -15,7 +15,7 @@ import { isWeb } from '../../../../base/common/platform.js';
 import { IDefaultChatAgent } from '../../../../base/common/product.js';
 import { isString, isUndefined, Mutable } from '../../../../base/common/types.js';
 import { IRequestContext } from '../../../../base/parts/request/common/request.js';
-import { localize2 } from '../../../../nls.js';
+import { localize, localize2 } from '../../../../nls.js';
 import { Action2, registerAction2 } from '../../../../platform/actions/common/actions.js';
 import { ICommandService } from '../../../../platform/commands/common/commands.js';
 import { IConfigurationService } from '../../../../platform/configuration/common/configuration.js';
@@ -24,6 +24,8 @@ import { IDefaultAccountProvider, IDefaultAccountService, ManagedSettingsFetchSt
 import { IInstantiationService, ServicesAccessor } from '../../../../platform/instantiation/common/instantiation.js';
 import { ILogService } from '../../../../platform/log/common/log.js';
 import { IProductService } from '../../../../platform/product/common/productService.js';
+import { Extensions as ConfigurationExtensions, IConfigurationRegistry } from '../../../../platform/configuration/common/configurationRegistry.js';
+import { Registry } from '../../../../platform/registry/common/platform.js';
 import { asJson, IRequestService, isClientError, isSuccess, readHeader, retryAfterFromHeaders } from '../../../../platform/request/common/request.js';
 import { IStorageService, StorageScope, StorageTarget } from '../../../../platform/storage/common/storage.js';
 import { ITelemetryService } from '../../../../platform/telemetry/common/telemetry.js';
@@ -114,6 +116,23 @@ function toDefaultAccountConfig(defaultChatAgent: IDefaultChatAgent): IDefaultAc
 	};
 }
 
+function registerEnterpriseProviderUriSetting(setting: string): void {
+	if (!setting) {
+		return;
+	}
+
+	Registry.as<IConfigurationRegistry>(ConfigurationExtensions.Configuration).registerConfiguration({
+		'id': 'safeappeals.account',
+		'properties': {
+			[setting]: {
+				'type': 'string',
+				'default': '',
+				'description': localize('safeAppealsEnterpriseUri', "SafeAppeals Enterprise instance URL."),
+			}
+		}
+	});
+}
+
 export class DefaultAccountService extends Disposable implements IDefaultAccountService {
 	declare _serviceBrand: undefined;
 
@@ -145,6 +164,7 @@ export class DefaultAccountService extends Disposable implements IDefaultAccount
 	) {
 		super();
 		this.defaultAccountConfig = toDefaultAccountConfig(productService.defaultChatAgent);
+		registerEnterpriseProviderUriSetting(this.defaultAccountConfig.authenticationProvider.enterpriseProviderUriSetting);
 	}
 
 	async getDefaultAccount(): Promise<IDefaultAccount | null> {

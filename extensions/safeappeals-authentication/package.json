@@ -26,11 +26,11 @@
 		"textSearchProvider"
 	],
 	"activationEvents": [
+		"*",
 		"onStartupFinished",
 		"onUri",
 		"onAuthenticationRequest:safeappeals-cloud",
 		"onAuthenticationRequest:safeappeals-google",
-		"onAuthenticationRequest:safeappeals-microsoft",
 		"onChatParticipant:safeappeals.agent",
 		"onCustomAgentProvider"
 	],
@@ -49,10 +49,6 @@
 			{
 				"id": "safeappeals-google",
 				"label": "%auth.safeappealsGoogle.label%"
-			},
-			{
-				"id": "safeappeals-microsoft",
-				"label": "%auth.safeappealsMicrosoft.label%"
 			}
 		],
 		"languageModelChatProviders": [
@@ -61,7 +57,7 @@
 				"displayName": "%llm.provider.displayName%"
 			}
 		],
-		"chatParticipants": [
+"chatParticipants": [
 			{
 				"id": "safeappeals.agent",
 				"name": "safeappeals",
@@ -72,7 +68,8 @@
 					"panel"
 				],
 				"modes": [
-					"agent"
+					"agent",
+					"ask"
 				]
 			}
 		],
@@ -875,7 +872,7 @@
 			}
 		},
 		"configurationDefaults": {
-			"github.copilot.chat.switchAgent.enabled": false,
+			"safeappeals.chat.switchAgent.enabled": false,
 			"chat.subagents.allowInvocationsFromSubagents": false
 		}
 	},

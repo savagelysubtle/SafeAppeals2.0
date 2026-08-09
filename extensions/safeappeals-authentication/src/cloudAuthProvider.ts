@@ -16,17 +16,9 @@ import {
 import { generatePkceChallenge } from './pkce';
 import { OAuthLoopbackServer, startOAuthLoopback } from './oauthLoopback';
 import {
-	ORPHANED_AUTH_CODE_KEY,
-	OrphanedAuthCode,
-	parseOrphanedAuthCode,
-} from './orphanedAuthCode';
-import {
 	isPkceFlowStateReplayError,
 	parseRestoredPendingSignIn,
 	PendingSignIn,
-	PendingSignInWithSource,
-	pickNewestPending,
-	shouldSettlePendingOnExchangeFailure,
 } from './pendingSignIn';
 import { AuthCallbackResult, CloudUriHandler, ConnectCallbackResult } from './uriHandler';
 
@@ -36,16 +28,20 @@ export const AUTH_PROVIDER_ID = 'safeappeals-cloud';
 /** Accounts-menu label. */
 export const AUTH_PROVIDER_LABEL = 'SafeAppeals Cloud';
 
+type AuthExtensionContext = Pick<vscode.ExtensionContext, 'globalState' | 'secrets'> & {
+	readonly extension: Pick<vscode.Extension<never>, 'id'>;
+};
+
 /** Single SecretStorage key for the whole session envelope. */
 const SESSION_SECRET_KEY = 'safeappeals-cloud.session';
 
 /**
- * Key for in-flight PKCE so web reload can finish the exchange.
- * Written to SecretStorage and APPLICATION `globalState`; on Web also mirrored to
- * origin-shared localStorage via `_safeappeals.cloud.*PendingPkce` workbench commands
- * (profile/workspace scope cannot see the OAuth callback's localStorage alone).
+ * SecretStorage key for in-flight PKCE. The live attempt also keeps this in memory.
  */
 const PENDING_SIGN_IN_KEY = 'safeappeals-cloud.pendingSignIn';
+
+/** Legacy plaintext authorization code key, purged during migration and cleanup. */
+const ORPHANED_AUTH_CODE_KEY = 'safeappeals-cloud.orphanedAuthCode';
 
 const SESSION_REFRESH_BUFFER_SECONDS = 5 * 60;
 const SIGN_IN_TIMEOUT_MS = 5 * 60 * 1000;
@@ -92,13 +88,11 @@ export class CloudAuthProvider implements vscode.AuthenticationProvider, vscode.
 	private readonly _sessionChangeEmitter = new vscode.EventEmitter<vscode.AuthenticationProviderAuthenticationSessionsChangeEvent>();
 	/**
 	 * Stable relay for `/connect` deep links. The URI handler itself is created
-	 * during {@link initialize}, so consumers subscribe here instead.
+	 * in the constructor, so consumers subscribe here instead.
 	 */
 	private readonly _connectCallbackEmitter = new vscode.EventEmitter<ConnectCallbackResult>();
 	private readonly _disposables: vscode.Disposable[] = [];
 	private readonly _api: CloudApiClient;
-	/** Registered in `initialize()` after pending restore so early callbacks see pending. */
-	private _uriHandler: CloudUriHandler | undefined;
 
 	private _session: CloudSessionEnvelope | undefined;
 	/** True when SecretStorage failed and the session lives in memory only. */
@@ -124,14 +118,24 @@ export class CloudAuthProvider implements vscode.AuthenticationProvider, vscode.
 	readonly onDidReceiveConnectCallback = this._connectCallbackEmitter.event;
 
 	constructor(
-		private readonly context: vscode.ExtensionContext,
+		private readonly context: AuthExtensionContext,
 		private readonly output: vscode.OutputChannel,
+		dependencies: {
+			readonly api?: CloudApiClient;
+			readonly openExternal?: (uri: vscode.Uri) => Thenable<boolean>;
+			readonly startLoopback?: typeof startOAuthLoopback;
+			readonly registerUriHandler?: boolean;
+			readonly showWarning?: (message: string) => Thenable<string | undefined>;
+		} = {},
 	) {
-		this._api = new CloudApiClient(
+		this._api = dependencies.api ?? new CloudApiClient(
 			output,
 			() => this._session?.accessToken,
 			async () => this.refreshSession(),
 		);
+		this.openExternal = dependencies.openExternal ?? vscode.env.openExternal;
+		this.startLoopback = dependencies.startLoopback ?? startOAuthLoopback;
+		this.showWarning = dependencies.showWarning ?? vscode.window.showWarningMessage;
 		this._disposables.push(
 			vscode.authentication.registerAuthenticationProvider(
 				AUTH_PROVIDER_ID,
@@ -142,47 +146,35 @@ export class CloudAuthProvider implements vscode.AuthenticationProvider, vscode.
 			this._sessionChangeEmitter,
 			this._connectCallbackEmitter,
 		);
+
+		// Register URI handler synchronously so it's ready when auth provider is registered.
+		// handleCallback() lazily restores pending if needed.
+		const uriHandler = new CloudUriHandler(this.output, dependencies.registerUriHandler ?? true);
+		this._disposables.push(
+			uriHandler,
+			uriHandler.onCallback(result => {
+				void this.handleCallback(result);
+			}),
+			uriHandler.onError(result => {
+				void this.handleCallbackError(result);
+			}),
+			uriHandler.onConnectCallback(result => {
+				this._connectCallbackEmitter.fire(result);
+			}),
+		);
 	}
+
+	private readonly openExternal: (uri: vscode.Uri) => Thenable<boolean>;
+	private readonly startLoopback: typeof startOAuthLoopback;
+	private readonly showWarning: (message: string) => Thenable<string | undefined>;
 
 	/**
 	 * Loads any persisted session from SecretStorage and schedules refresh.
 	 * Also restores an in-flight PKCE pending so a web reload can finish OAuth.
 	 */
 	async initialize(): Promise<void> {
+		await this.purgeLegacyPlaintextOAuthState();
 		await this.restorePending();
-		try {
-			await this.tryCompleteOrphanedAuthCode();
-		} catch {
-			// Exchange failure already toasted and cleared pending; continue without a session.
-		}
-		// Register after pending/orphan restore so recovered OAuth URIs see pending.
-		this.registerUriHandler();
-		// Web safety net: peek durable (do not burn) → exchange → clear only on success.
-		// If durable is already gone but an ephemeral url-callbacks[*] remains, take that.
-		if (vscode.env.uiKind === vscode.UIKind.Web) {
-			try {
-				const durable = await vscode.commands.executeCommand<{ code: string; state: string } | undefined>(
-					'_safeappeals.cloud.peekDurableOAuthCallback',
-				);
-				if (durable?.code && durable.state) {
-					await this.handleCallback(durable);
-				} else if (this._pending) {
-					const orphaned = await vscode.commands.executeCommand<{ code: string; state: string } | undefined>(
-						'_safeappeals.cloud.takeOrphanedUrlCallback',
-					);
-					if (orphaned?.code && orphaned.state) {
-						this.output.appendLine('[auth] completing orphaned ephemeral url-callback');
-						await this.handleCallback(orphaned);
-					}
-				}
-			} catch {
-				// Command unavailable outside the web workbench bridge — ignore.
-			}
-		}
-		if (this._session) {
-			// Orphan / durable completion already persisted the session and fired session events.
-			return;
-		}
 
 		const stored = await this.readSessionFromSecrets();
 		if (!stored) {
@@ -233,8 +225,7 @@ export class CloudAuthProvider implements vscode.AuthenticationProvider, vscode.
 		if (this._pending || this._signInWaiters.length) {
 			await this.failPendingSignIn(new vscode.CancellationError());
 		}
-		// Drop any prior orphaned code — a new createSession starts a fresh PKCE state.
-		await this.clearOrphanedAuthCode();
+		await this.purgeLegacyPlaintextOAuthState();
 
 		const pkce = generatePkceChallenge();
 		await this.persistPending({
@@ -242,12 +233,6 @@ export class CloudAuthProvider implements vscode.AuthenticationProvider, vscode.
 			state: pkce.state,
 			startedAt: Date.now(),
 		});
-		// Callback may have arrived (and been stashed) before pending was writable.
-		await this.tryCompleteOrphanedAuthCode();
-		if (this._session) {
-			return this.toAuthSession(this._session);
-		}
-
 		const flow = await this.resolveSignInFlow(pkce.state);
 		const authUrl = buildGoogleAuthorizeUrl({
 			codeChallenge: pkce.codeChallenge,
@@ -255,12 +240,10 @@ export class CloudAuthProvider implements vscode.AuthenticationProvider, vscode.
 			redirectUri: flow.redirectUri,
 		});
 
-		this.output.appendLine(`[auth] opening browser for Google sign-in (redirect ${flow.redirectUri}, flow ${flow.kind})`);
-		// Pass the authorize URL as a string. Uri.parse percent-decodes the query and
-		// openExternal re-encodes poorly (%253F / truncates redirect_uri at `&`). ExtHost
-		// and MainThread accept string | URI and preserve the original string end-to-end
-		// (same pattern as issueFormService openExternal).
-		const opened = await vscode.env.openExternal(authUrl as unknown as vscode.Uri);
+		this.output.appendLine(`[auth] opening SafeAppeals Cloud sign-in (flow ${flow.kind})`);
+		// openExternal requires a real Uri. Strict parsing preserves the already
+		// encoded redirect_uri, state, and PKCE query parameters.
+		const opened = await this.openExternal(vscode.Uri.parse(authUrl));
 		if (!opened) {
 			this.disposeLoopback();
 			await this.clearPending();
@@ -283,17 +266,28 @@ export class CloudAuthProvider implements vscode.AuthenticationProvider, vscode.
 	 */
 	async removeSession(_sessionId: string): Promise<void> {
 		const removed = this._session ? [this.toAuthSession(this._session)] : [];
+		const accessToken = this._session?.accessToken;
+		let revokeError: Error | undefined;
+		if (accessToken) {
+			try {
+				await this._api.signOut(accessToken);
+			} catch {
+				revokeError = new Error(vscode.l10n.t('The server could not revoke this session. Local sign-out completed.'));
+			}
+		}
 		await this.purgeSession();
 		if (removed.length) {
 			this._sessionChangeEmitter.fire({ added: [], removed, changed: [] });
 		}
 		this.output.appendLine('[auth] signed out; session purged');
+		if (revokeError) {
+			void this.showWarning(revokeError.message);
+			throw revokeError;
+		}
 	}
 
 	/**
-	 * Completes a pending sign-in when the user pastes an auth code (or callback URL).
-	 * State mismatch is logged and exchange proceeds with the pending PKCE verifier
-	 * (same policy as the automatic callback path).
+	 * Completes a pending sign-in from a full callback URL with exact state binding.
 	 */
 	async completeWithPastedCode(raw: string): Promise<vscode.AuthenticationSession> {
 		if (!this._pending) {
@@ -304,16 +298,7 @@ export class CloudAuthProvider implements vscode.AuthenticationProvider, vscode.
 			throw new Error(vscode.l10n.t('No sign-in is in progress. Start sign-in first, then paste the code.'));
 		}
 
-		const parsed = parsePastedAuthInput(raw);
-		if (!parsed.code) {
-			throw new Error(vscode.l10n.t('Could not find an authorization code in the pasted text.'));
-		}
-		const stateMatched = !parsed.state || parsed.state === pending.state;
-		if (parsed.state && parsed.state !== pending.state) {
-			this.output.appendLine(
-				`[auth] pasted code state mismatch — proceeding with pending PKCE (paste=${parsed.state.slice(0, 6)}, pending=${pending.state.slice(0, 6)})`,
-			);
-		}
+		const parsed = validatePastedAuthInput(raw, pending.state);
 
 		try {
 			return await this.exchangeAndStore(parsed.code, pending.codeVerifier, pending.state);
@@ -322,12 +307,9 @@ export class CloudAuthProvider implements vscode.AuthenticationProvider, vscode.
 			if (adopted) {
 				return adopted;
 			}
-			if (!shouldSettlePendingOnExchangeFailure(stateMatched)) {
-				const message = error instanceof Error ? error.message : String(error);
-				this.output.appendLine(`[auth] mismatched-state paste exchange failed — keeping pending: ${message}`);
-			}
-			// Matching-state paste failures leave pending for retry (caller may re-prompt).
-			throw error instanceof Error ? error : new Error(String(error));
+			const exchangeError = error instanceof Error ? error : new Error(String(error));
+			await this.failPendingSignIn(exchangeError);
+			throw exchangeError;
 		}
 	}
 
@@ -391,9 +373,7 @@ export class CloudAuthProvider implements vscode.AuthenticationProvider, vscode.
 
 	/**
 	 * Tears down in-process resources only.
-	 * Does **not** clear persisted pending PKCE (SecretStorage + globalState) — a web
-	 * reload mid-OAuth must leave `safeappeals-cloud.pendingSignIn` so the next
-	 * activate can restore it and finish the durable callback exchange.
+	 * Preserves SecretStorage pending PKCE so a reload can resume securely.
 	 */
 	dispose(): void {
 		this.clearRefreshTimer();
@@ -406,32 +386,7 @@ export class CloudAuthProvider implements vscode.AuthenticationProvider, vscode.
 		for (const d of this._disposables) {
 			d.dispose();
 		}
-		this._uriHandler = undefined;
-		this.output.appendLine('[auth] dispose: preserving pending sign-in (secrets + globalState) for reload recovery');
-	}
-
-	/**
-	 * Registers the VS Code URI handler after pending restore.
-	 * Idempotent — safe if `initialize` is called more than once.
-	 */
-	private registerUriHandler(): void {
-		if (this._uriHandler) {
-			return;
-		}
-		const uriHandler = new CloudUriHandler(this.output);
-		this._uriHandler = uriHandler;
-		this._disposables.push(
-			uriHandler,
-			uriHandler.onCallback(result => {
-				void this.handleCallback(result);
-			}),
-			uriHandler.onError(result => {
-				void this.handleCallbackError(result);
-			}),
-			uriHandler.onConnectCallback(result => {
-				this._connectCallbackEmitter.fire(result);
-			}),
-		);
+		this.output.appendLine('[auth] dispose: preserving pending sign-in in SecretStorage for reload recovery');
 	}
 
 	/**
@@ -442,7 +397,7 @@ export class CloudAuthProvider implements vscode.AuthenticationProvider, vscode.
 
 		if (vscode.env.uiKind === vscode.UIKind.Desktop) {
 			try {
-				const loopback = await startOAuthLoopback({
+				const loopback = await this.startLoopback({
 					expectedState,
 					finishUrl: finishUri,
 					log: message => this.output.appendLine(message),
@@ -497,12 +452,7 @@ export class CloudAuthProvider implements vscode.AuthenticationProvider, vscode.
 	}
 
 	/**
-	 * Handles a URI-handler or loopback callback: exchange code, store session.
-	 * Live success callbacks may proceed when state mismatches if a single pending
-	 * exists (GoTrue may rewrite state; the PKCE verifier binds the code). On
-	 * exchange failure for a mismatched-state callback, pending is kept so the
-	 * real callback can still land. Matching-state failures and timeouts settle.
-	 * Restores persisted pending when the workbench reloaded mid-flow.
+	 * Handles a URI-handler or loopback callback only when state exactly matches.
 	 */
 	private async handleCallback(result: AuthCallbackResult): Promise<void> {
 		// Already signed in — ignore late identity callbacks.
@@ -523,25 +473,12 @@ export class CloudAuthProvider implements vscode.AuthenticationProvider, vscode.
 		}
 		const pending = this._pending;
 		if (!pending) {
-			// Do not drop the single-use code — stash for when pending appears (reload / late activate).
-			this.output.appendLine(
-				'[auth] callback arrived with no pending — stashing orphaned auth code',
-			);
-			await this.stashOrphanedAuthCode(result.code, result.state);
-			await this.restorePending();
-			try {
-				await this.tryCompleteOrphanedAuthCode();
-			} catch {
-				// Exchange failure already toasted and cleared pending (unless another window won).
-			}
+			this.output.appendLine('[auth] ignored callback with no pending sign-in');
 			return;
 		}
-		const stateMatched = result.state === pending.state;
-		if (!stateMatched) {
-			// GoTrue may rewrite the state query; PKCE verifier is the real binding.
-			this.output.appendLine(
-				`[auth] callback state mismatch — proceeding with single pending PKCE (callback=${result.state.slice(0, 6)}, pending=${pending.state.slice(0, 6)})`,
-			);
+		if (result.state !== pending.state) {
+			this.output.appendLine('[auth] rejected callback: state mismatch');
+			return;
 		}
 
 		try {
@@ -552,18 +489,13 @@ export class CloudAuthProvider implements vscode.AuthenticationProvider, vscode.
 		} catch (error) {
 			const adopted = await this.tryAdoptSessionAfterExchangeFailure(error);
 			if (adopted) {
-				await this.clearDurableOAuthCallback();
 				void vscode.window.showInformationMessage(
 					vscode.l10n.t('Signed in to SafeAppeals Cloud as {0}.', adopted.account.label),
 				);
 				return;
 			}
 			const message = error instanceof Error ? error.message : String(error);
-			if (!shouldSettlePendingOnExchangeFailure(stateMatched)) {
-				this.output.appendLine(`[auth] mismatched-state callback ignored after exchange failure — keeping pending: ${message}`);
-				return;
-			}
-			void this.failPendingSignIn(error instanceof Error ? error : new Error(message));
+			await this.failPendingSignIn(error instanceof Error ? error : new Error(message));
 			void vscode.window.showErrorMessage(vscode.l10n.t('Sign in failed: {0}', message));
 		}
 	}
@@ -588,7 +520,7 @@ export class CloudAuthProvider implements vscode.AuthenticationProvider, vscode.
 			void this.failPendingSignIn(new vscode.CancellationError());
 			return;
 		}
-		const message = result.message || 'oauth_error';
+		const message = sanitizeOAuthErrorMessage(result.message);
 		void this.failPendingSignIn(new Error(message));
 		void vscode.window.showErrorMessage(vscode.l10n.t('Sign in failed: {0}', message));
 	}
@@ -623,8 +555,6 @@ export class CloudAuthProvider implements vscode.AuthenticationProvider, vscode.
 	private async doExchangeAndStore(code: string, codeVerifier: string): Promise<vscode.AuthenticationSession> {
 		const envelope = await this._api.exchangeCode(code, codeVerifier);
 		await this.persistSession(envelope);
-		// Burn durable only after a successful exchange — peek/recover must leave it on failure.
-		await this.clearDurableOAuthCallback();
 		await this.clearPending();
 		this.disposeLoopback();
 		const authSession = this.toAuthSession(envelope);
@@ -632,22 +562,6 @@ export class CloudAuthProvider implements vscode.AuthenticationProvider, vscode.
 		this.resolvePendingSignIn(authSession);
 		void this.getBalance().catch(() => { /* balance is best-effort after sign-in */ });
 		return authSession;
-	}
-
-	/**
-	 * Clears the web durable OAuth callback key after exchange success or when
-	 * pending sign-in settles unsuccessfully (fail/cancel/timeout).
-	 * No-op outside Web or when the workbench bridge command is unavailable.
-	 */
-	private async clearDurableOAuthCallback(): Promise<void> {
-		if (vscode.env.uiKind !== vscode.UIKind.Web) {
-			return;
-		}
-		try {
-			await vscode.commands.executeCommand('_safeappeals.cloud.clearDurableOAuthCallback');
-		} catch {
-			// Command unavailable outside the web workbench bridge — ignore.
-		}
 	}
 
 	/**
@@ -765,7 +679,7 @@ export class CloudAuthProvider implements vscode.AuthenticationProvider, vscode.
 			this.output.appendLine(`[auth] SecretStorage unavailable; keeping session in memory only: ${error instanceof Error ? error.message : String(error)}`);
 			if (!this._secretStorageWarned) {
 				this._secretStorageWarned = true;
-				void vscode.window.showWarningMessage(
+				void this.showWarning(
 					vscode.l10n.t('Secure storage is unavailable. Your SafeAppeals Cloud session will not persist after restart.'),
 				);
 			}
@@ -789,8 +703,21 @@ export class CloudAuthProvider implements vscode.AuthenticationProvider, vscode.
 				try {
 					await this.context.secrets.store(SESSION_SECRET_KEY, JSON.stringify(cleaned));
 					this.output.appendLine('[auth] cleared legacy Google provider tokens from SecretStorage envelope');
-				} catch (error) {
-					this.output.appendLine(`[auth] failed to rewrite envelope without provider tokens: ${error instanceof Error ? error.message : String(error)}`);
+				} catch {
+					this.output.appendLine('[auth] failed to sanitize legacy session; deleting unsafe SecretStorage envelope');
+					try {
+						await this.context.secrets.delete(SESSION_SECRET_KEY);
+						this._sessionMemoryOnly = true;
+						void this.showWarning(
+							vscode.l10n.t('The stored session could not be migrated securely and was removed. It will remain in memory for this window only.'),
+						);
+						return cleaned;
+					} catch {
+						void this.showWarning(
+							vscode.l10n.t('An unsafe legacy session could not be removed from secure storage. Sign in again after secure storage is repaired.'),
+						);
+						return undefined;
+					}
 				}
 			}
 			return cleaned;
@@ -798,7 +725,7 @@ export class CloudAuthProvider implements vscode.AuthenticationProvider, vscode.
 			this.output.appendLine(`[auth] SecretStorage read failed: ${error instanceof Error ? error.message : String(error)}`);
 			if (!this._secretStorageWarned) {
 				this._secretStorageWarned = true;
-				void vscode.window.showWarningMessage(
+				void this.showWarning(
 					vscode.l10n.t('Secure storage is unavailable. Sign-in will not persist after restart.'),
 				);
 			}
@@ -878,9 +805,7 @@ export class CloudAuthProvider implements vscode.AuthenticationProvider, vscode.
 	}
 
 	/**
-	 * Persists in-flight PKCE to memory, SecretStorage, and APPLICATION globalState.
-	 * globalState is the web reload fallback when SecretStorage does not survive.
-	 * On Web, also mirrors to origin-shared localStorage via workbench bridge commands.
+	 * Persists in-flight PKCE to memory and SecretStorage only.
 	 */
 	private async persistPending(pending: PendingSignIn): Promise<void> {
 		this._pending = pending;
@@ -892,43 +817,23 @@ export class CloudAuthProvider implements vscode.AuthenticationProvider, vscode.
 				return;
 			}
 			const payload = JSON.stringify(pending);
-			let secretsStatus: 'ok' | 'fail' = 'fail';
-			let globalStateStatus: 'ok' | 'fail' = 'fail';
-			let localStorageStatus: 'ok' | 'fail' | undefined;
-
 			try {
 				await this.context.secrets.store(PENDING_SIGN_IN_KEY, payload);
-				secretsStatus = 'ok';
+				this.output.appendLine('[auth] persisted pending sign-in in SecretStorage');
 			} catch (error) {
-				this.output.appendLine(`[auth] secrets store pending failed: ${error instanceof Error ? error.message : String(error)}`);
-			}
-
-			try {
-				await this.context.globalState.update(PENDING_SIGN_IN_KEY, payload);
-				globalStateStatus = 'ok';
-			} catch (error) {
-				this.output.appendLine(`[auth] globalState store pending failed: ${error instanceof Error ? error.message : String(error)}`);
-			}
-
-			if (vscode.env.uiKind === vscode.UIKind.Web) {
-				try {
-					await vscode.commands.executeCommand('_safeappeals.cloud.storePendingPkce', pending);
-					localStorageStatus = 'ok';
-				} catch (error) {
-					localStorageStatus = 'fail';
-					this.output.appendLine(`[auth] localStorage store pending failed: ${error instanceof Error ? error.message : String(error)}`);
+				this.output.appendLine(`[auth] SecretStorage unavailable; keeping pending sign-in in memory only: ${error instanceof Error ? error.message : String(error)}`);
+				if (!this._secretStorageWarned) {
+					this._secretStorageWarned = true;
+					void this.showWarning(
+						vscode.l10n.t('Secure storage is unavailable. This sign-in cannot resume after restart.'),
+					);
 				}
 			}
-
-			const lsPart = localStorageStatus ? `, localStorage=${localStorageStatus}` : '';
-			this.output.appendLine(`[auth] persisted pending sign-in (secrets=${secretsStatus}, globalState=${globalStateStatus}${lsPart})`);
 		});
 	}
 
 	/**
-	 * Clears in-memory, SecretStorage, and globalState pending PKCE.
-	 * Also drops any stashed orphaned auth code (successful exchange, cancel, or new flow).
-	 * On Web, clears the origin-shared localStorage bridge as well.
+	 * Clears in-memory and SecretStorage pending PKCE and purges legacy plaintext keys.
 	 */
 	private async clearPending(): Promise<void> {
 		this._pending = undefined;
@@ -938,116 +843,32 @@ export class CloudAuthProvider implements vscode.AuthenticationProvider, vscode.
 			} catch (error) {
 				this.output.appendLine(`[auth] secrets clear pending failed: ${error instanceof Error ? error.message : String(error)}`);
 			}
-			try {
-				await this.context.globalState.update(PENDING_SIGN_IN_KEY, undefined);
-			} catch (error) {
-				this.output.appendLine(`[auth] globalState clear pending failed: ${error instanceof Error ? error.message : String(error)}`);
-			}
-			if (vscode.env.uiKind === vscode.UIKind.Web) {
-				try {
-					await vscode.commands.executeCommand('_safeappeals.cloud.clearPendingPkce');
-				} catch (error) {
-					this.output.appendLine(`[auth] localStorage clear pending failed: ${error instanceof Error ? error.message : String(error)}`);
-				}
-			}
-			await this.clearOrphanedAuthCode();
+			await this.purgeLegacyPlaintextOAuthState();
 		});
 	}
 
 	/**
-	 * Persists an auth code that arrived before pending PKCE was available (5 min TTL).
-	 * Stays in globalState on purpose — localStorage would not help when restorePending
-	 * already failed across secrets, globalState, and the web bridge.
+	 * Purges plaintext PKCE/auth-code keys from legacy globalState/localStorage paths.
 	 */
-	private async stashOrphanedAuthCode(code: string, state: string): Promise<void> {
-		const orphan: OrphanedAuthCode = { code, state, ts: Date.now() };
-		try {
-			await this.context.globalState.update(ORPHANED_AUTH_CODE_KEY, orphan);
-			this.output.appendLine('[auth] stashed orphaned auth code');
-		} catch (error) {
-			this.output.appendLine(`[auth] failed to stash orphaned auth code: ${error instanceof Error ? error.message : String(error)}`);
-		}
-	}
-
-	/**
-	 * Removes any stashed orphaned auth code from globalState.
-	 */
-	private async clearOrphanedAuthCode(): Promise<void> {
-		try {
-			await this.context.globalState.update(ORPHANED_AUTH_CODE_KEY, undefined);
-		} catch (error) {
-			this.output.appendLine(`[auth] clear orphaned auth code failed: ${error instanceof Error ? error.message : String(error)}`);
-		}
-	}
-
-	/**
-	 * If a stashed orphaned auth code matches the current pending PKCE, exchange it.
-	 * Covers the race where the callback URI was delivered/consumed before pending existed.
-	 */
-	private async tryCompleteOrphanedAuthCode(): Promise<void> {
-		if (this._session || this._exchangeInFlight) {
-			return;
-		}
-
-		let raw: unknown;
-		try {
-			raw = this.context.globalState.get(ORPHANED_AUTH_CODE_KEY);
-		} catch (error) {
-			this.output.appendLine(`[auth] read orphaned auth code failed: ${error instanceof Error ? error.message : String(error)}`);
-			return;
-		}
-		if (raw === undefined || raw === null) {
-			return;
-		}
-
-		const orphan = parseOrphanedAuthCode(raw);
-		if (!orphan) {
-			this.output.appendLine('[auth] cleared expired or invalid orphaned auth code');
-			await this.clearOrphanedAuthCode();
-			return;
-		}
-
-		if (!this._pending) {
-			await this.restorePending();
-		}
-		const pending = this._pending;
-		if (!pending) {
-			return;
-		}
-		if (orphan.state !== pending.state) {
-			this.output.appendLine('[auth] cleared orphaned auth code — state mismatch with pending');
-			await this.clearOrphanedAuthCode();
-			return;
-		}
-
-		try {
-			this.output.appendLine('[auth] completed orphaned auth code');
-			const session = await this.exchangeAndStore(orphan.code, pending.codeVerifier, pending.state);
-			void vscode.window.showInformationMessage(
-				vscode.l10n.t('Signed in to SafeAppeals Cloud as {0}.', session.account.label),
-			);
-		} catch (error) {
-			const adopted = await this.tryAdoptSessionAfterExchangeFailure(error);
-			if (adopted) {
-				await this.clearDurableOAuthCallback();
-				void vscode.window.showInformationMessage(
-					vscode.l10n.t('Signed in to SafeAppeals Cloud as {0}.', adopted.account.label),
-				);
-				return;
+	private async purgeLegacyPlaintextOAuthState(): Promise<void> {
+		for (const key of [PENDING_SIGN_IN_KEY, ORPHANED_AUTH_CODE_KEY]) {
+			try {
+				await this.context.globalState.update(key, undefined);
+			} catch (error) {
+				this.output.appendLine(`[auth] legacy OAuth globalState purge failed: ${error instanceof Error ? error.message : String(error)}`);
 			}
-			const message = error instanceof Error ? error.message : String(error);
-			this.output.appendLine(`[auth] orphaned auth code exchange failed: ${message}`);
-			const err = error instanceof Error ? error : new Error(message);
-			await this.failPendingSignIn(err);
-			void vscode.window.showErrorMessage(vscode.l10n.t('Sign in failed: {0}', message));
-			throw err;
+		}
+		if (vscode.env.uiKind === vscode.UIKind.Web) {
+			try {
+				await vscode.commands.executeCommand('_safeappeals.cloud.clearPendingPkce');
+			} catch {
+				// Legacy bridge may not be registered in this workbench.
+			}
 		}
 	}
 
 	/**
-	 * Restores a non-expired pending PKCE by loading all available sources
-	 * (SecretStorage, globalState, and on Web localStorage) and picking the
-	 * newest by `startedAt` (ties prefer localStorage on Web).
+	 * Restores a non-expired pending PKCE from SecretStorage only.
 	 */
 	private async restorePending(): Promise<void> {
 		if (this._pending) {
@@ -1061,30 +882,7 @@ export class CloudAuthProvider implements vscode.AuthenticationProvider, vscode.
 			this.output.appendLine(`[auth] secrets get pending failed: ${error instanceof Error ? error.message : String(error)}`);
 		}
 
-		let globalRaw: string | undefined;
-		try {
-			const stored = this.context.globalState.get<string>(PENDING_SIGN_IN_KEY);
-			globalRaw = typeof stored === 'string' ? stored : undefined;
-		} catch (error) {
-			this.output.appendLine(`[auth] globalState get pending failed: ${error instanceof Error ? error.message : String(error)}`);
-		}
-
-		let fromLocalStorage: PendingSignIn | undefined;
-		if (vscode.env.uiKind === vscode.UIKind.Web) {
-			try {
-				const fromLs = await vscode.commands.executeCommand<PendingSignIn | undefined>(
-					'_safeappeals.cloud.readPendingPkce',
-				);
-				fromLocalStorage = fromLs
-					? parseRestoredPendingSignIn(JSON.stringify(fromLs))
-					: undefined;
-			} catch (error) {
-				this.output.appendLine(`[auth] localStorage get pending failed: ${error instanceof Error ? error.message : String(error)}`);
-			}
-		}
-
 		const fromSecrets = parseRestoredPendingSignIn(secretsRaw);
-		const fromGlobal = parseRestoredPendingSignIn(globalRaw);
 
 		if (secretsRaw && !fromSecrets) {
 			this.output.appendLine('[auth] secrets pending expired or invalid; clearing');
@@ -1094,28 +892,11 @@ export class CloudAuthProvider implements vscode.AuthenticationProvider, vscode.
 				// Best-effort cleanup.
 			}
 		}
-		if (globalRaw && !fromGlobal) {
-			this.output.appendLine('[auth] globalState pending expired or invalid; clearing');
-			try {
-				await this.context.globalState.update(PENDING_SIGN_IN_KEY, undefined);
-			} catch {
-				// Best-effort cleanup.
-			}
-		}
-
-		const candidates: Array<PendingSignInWithSource | undefined> = [
-			fromSecrets ? { pending: fromSecrets, source: 'secrets' } : undefined,
-			fromGlobal ? { pending: fromGlobal, source: 'globalState' } : undefined,
-			fromLocalStorage ? { pending: fromLocalStorage, source: 'localStorage' } : undefined,
-		];
-		const winner = pickNewestPending(candidates);
-		if (!winner) {
+		if (!fromSecrets) {
 			return;
 		}
-
-		this.output.appendLine(`[auth] restored pending from ${winner.source} (startedAt=${winner.pending.startedAt})`);
-		// Sync winner to all stores so a stale secrets copy cannot win next restore.
-		await this.persistPending(winner.pending);
+		this._pending = fromSecrets;
+		this.output.appendLine('[auth] restored pending sign-in from SecretStorage');
 	}
 
 	private scheduleRefresh(session: CloudSessionEnvelope): void {
@@ -1165,8 +946,6 @@ export class CloudAuthProvider implements vscode.AuthenticationProvider, vscode.
 	}
 
 	private async failPendingSignIn(error: Error): Promise<void> {
-		// Drop durable with pending so recover/peek cannot re-fire a doomed callback.
-		await this.clearDurableOAuthCallback();
 		await this.clearPending();
 		this.disposeLoopback();
 		const waiters = this._signInWaiters.splice(0);
@@ -1221,14 +1000,13 @@ export function parsePastedAuthInput(raw: string): {
 
 	if (trimmed.includes('://') || trimmed.includes('?') || trimmed.includes('#')) {
 		try {
-			const uri = vscode.Uri.parse(trimmed);
-			if (uri.fragment && fragmentLooksLikeTokens(uri.fragment)) {
+			const url = new URL(trimmed);
+			if (url.hash && fragmentLooksLikeTokens(url.hash.slice(1))) {
 				throw new Error(vscode.l10n.t('Sign-in rejected: tokens in the URL fragment are not allowed.'));
 			}
-			const params = new URLSearchParams(uri.query);
 			return {
-				code: params.get('code') ?? undefined,
-				state: params.get('state') ?? undefined,
+				code: url.searchParams.get('code') ?? undefined,
+				state: url.searchParams.get('state') ?? undefined,
 				fromUrl: true,
 			};
 		} catch (error) {
@@ -1250,9 +1028,35 @@ export function parsePastedAuthInput(raw: string): {
 }
 
 /**
+ * Requires a full pasted callback URL whose state exactly matches the live attempt.
+ */
+export function validatePastedAuthInput(raw: string, expectedState: string): {
+	readonly code: string;
+	readonly state: string;
+} {
+	const parsed = parsePastedAuthInput(raw);
+	if (!parsed.fromUrl || !parsed.code || !parsed.state) {
+		throw new Error(vscode.l10n.t('Paste the full callback URL, including its code and state.'));
+	}
+	if (parsed.state !== expectedState) {
+		throw new Error(vscode.l10n.t('Sign-in callback state did not match the active sign-in.'));
+	}
+	return { code: parsed.code, state: parsed.state };
+}
+
+/**
  * Heuristic for implicit-flow fragments in pasted URLs.
  */
 function fragmentLooksLikeTokens(fragment: string): boolean {
 	const params = new URLSearchParams(fragment);
 	return !!(params.get('access_token') || params.get('refresh_token'));
+}
+
+/** Bounds OAuth error text before it reaches user-visible surfaces. */
+function sanitizeOAuthErrorMessage(message: string | undefined): string {
+	if (!message) {
+		return vscode.l10n.t('The authorization server rejected sign-in.');
+	}
+	const sanitized = message.replace(/[\u0000-\u001F\u007F]/g, ' ').trim().slice(0, 200);
+	return sanitized || vscode.l10n.t('The authorization server rejected sign-in.');
 }

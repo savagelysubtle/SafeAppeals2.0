@@ -378,6 +378,18 @@ export class CloudApiClient implements ConnectionsApi {
 	}
 
 	/**
+	 * Revokes the current cloud session using its last known access token.
+	 */
+	async signOut(accessToken: string): Promise<void> {
+		await this.request<{ success?: boolean }>('/auth/sign-out', {
+			method: 'POST',
+			authToken: accessToken,
+			skipRefreshRetry: true,
+			skipTransientRetry: true,
+		});
+	}
+
+	/**
 	 * Starts a mail/calendar connection (POST /connections/start).
 	 * The returned `authorizeUrl` must be opened in the system browser; the code
 	 * exchange happens on the server callback, never here.
@@ -717,6 +729,7 @@ export class CloudApiClient implements ConnectionsApi {
 			skipTransientRetry?: boolean;
 			retryCount?: number;
 			timeoutMs?: number;
+			authToken?: string;
 		} = {},
 	): Promise<T> {
 		const retryCount = options.retryCount ?? 0;
@@ -730,7 +743,7 @@ export class CloudApiClient implements ConnectionsApi {
 		};
 
 		if (!options.skipAuth) {
-			const token = this.getAccessToken();
+			const token = options.authToken ?? this.getAccessToken();
 			if (token) {
 				headers['Authorization'] = `Bearer ${token}`;
 			}

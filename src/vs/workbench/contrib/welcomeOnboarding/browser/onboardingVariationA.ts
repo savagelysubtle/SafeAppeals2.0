@@ -629,6 +629,7 @@ export class OnboardingVariationA extends Disposable implements IOnboardingServi
 		stateProvince: '',
 		city: '',
 		jurisdiction: '',
+		operatingSystem: 'Windows',
 	};
 	/** When true, Country select is "Other" and a free-text country input is shown. */
 	private profileCountryOtherMode = false;
@@ -1193,12 +1194,12 @@ export class OnboardingVariationA extends Disposable implements IOnboardingServi
 	}
 
 	private _renderDefaultSignInActions(actions: HTMLElement): void {
-		const googleLabel = localize('onboarding.signIn.google', "Continue with Google");
-		const googleBtn = this._registerStepFocusable(this._createSignInButton(actions, googleLabel, {
+		const safeAppealsCloudLabel = localize('onboarding.signIn.safeAppealsCloud', "Sign in to SafeAppeals Cloud...");
+		const safeAppealsCloudBtn = this._registerStepFocusable(this._createSignInButton(actions, safeAppealsCloudLabel, {
 			emphasized: true,
-			ariaLabel: googleLabel,
+			ariaLabel: safeAppealsCloudLabel,
 		}));
-		this.stepDisposables.add(addDisposableListener(googleBtn, EventType.CLICK, () => {
+		this.stepDisposables.add(addDisposableListener(safeAppealsCloudBtn, EventType.CLICK, () => {
 			this._logAction('signIn', undefined, SAFEAPPEALS_CLOUD_AUTH_PROVIDER_ID);
 			void this._handleSignIn();
 		}));
@@ -1214,11 +1215,11 @@ export class OnboardingVariationA extends Disposable implements IOnboardingServi
 		spinner.classList.add(...ThemeIcon.asClassNameArray(Codicon.loading), 'codicon-modifier-spin');
 		spinner.setAttribute('aria-hidden', 'true');
 		const message = append(container, $('.onboarding-a-signin-progress-message'));
-		message.textContent = localize('onboarding.signIn.progress', "Finish signing in with Google in your browser — we'll bring you back automatically.");
+		message.textContent = localize('onboarding.signIn.progress', "Finish signing in to SafeAppeals Cloud in your browser — we'll bring you back automatically.");
 	}
 
 	/**
-	 * Creates the primary Google sign-in button for Safe Appeals Cloud.
+	 * Creates the primary SafeAppeals Cloud sign-in button.
 	 */
 	private _createSignInButton(parent: HTMLElement, label: string, options?: { emphasized?: boolean; ariaLabel?: string }): HTMLButtonElement {
 		const btn = append(parent, $<HTMLButtonElement>('button.onboarding-a-signin-btn'));
@@ -1229,7 +1230,7 @@ export class OnboardingVariationA extends Disposable implements IOnboardingServi
 			btn.classList.add('primary');
 		}
 
-		const mark = append(btn, $('span.onboarding-a-provider-mark.google'));
+		const mark = append(btn, $('span.onboarding-a-provider-mark.safeappeals-cloud'));
 		mark.setAttribute('aria-hidden', 'true');
 
 		const labelEl = append(btn, $('span.onboarding-a-signin-btn-label'));
@@ -1270,6 +1271,11 @@ export class OnboardingVariationA extends Disposable implements IOnboardingServi
 
 			if (!isContinuationValid()) {
 				return;
+			}
+
+			const existingSessions = await this.authenticationService.getSessions(SAFEAPPEALS_CLOUD_AUTH_PROVIDER_ID);
+			for (const session of existingSessions) {
+				await this.authenticationService.removeSession(SAFEAPPEALS_CLOUD_AUTH_PROVIDER_ID, session.id);
 			}
 
 			if (!providerReady) {
@@ -1338,7 +1344,7 @@ export class OnboardingVariationA extends Disposable implements IOnboardingServi
 
 	private static readonly PROFILE_KEYS: readonly ProfileFieldKey[] = [
 		'name', 'organization', 'role', 'practiceArea', 'focusArea', 'citationStyle',
-		'country', 'stateProvince', 'city', 'jurisdiction',
+		'country', 'stateProvince', 'city', 'jurisdiction', 'operatingSystem',
 	];
 
 	private _renderProfileStep(container: HTMLElement): void {
@@ -1492,6 +1498,9 @@ export class OnboardingVariationA extends Disposable implements IOnboardingServi
 			}
 			if (key === 'jurisdiction') {
 				this._renderProfileBoardField(host, store, localize('onboarding.profile.jurisdiction', "Compensation Board / Tribunal"));
+			}
+			if (key === 'operatingSystem') {
+				this._renderProfileOperatingSystemField(host, store, localize('onboarding.profile.operatingSystem', "Operating System"));
 			}
 		}
 	}
@@ -2016,6 +2025,54 @@ export class OnboardingVariationA extends Disposable implements IOnboardingServi
 			this.profileValues.jurisdiction = profileNormalizeJurisdictionId(value) || value.trim();
 		}));
 	}
+
+
+	/**
+	 * Operating System select (Windows, Linux, Mac) with Windows as default.
+	 * Helps the AI generate platform-appropriate file paths and terminal commands.
+	 */
+	private _renderProfileOperatingSystemField(form: HTMLElement, store: DisposableStore, labelText: string): void {
+		const fieldEl = append(form, $('.onboarding-a-profile-field'));
+		const inputId = 'onboarding-profile-operatingSystem';
+		const label = append(fieldEl, $<HTMLLabelElement>('label.onboarding-a-section-label'));
+		label.htmlFor = inputId;
+		label.textContent = labelText;
+
+		const notSpecified = localize('onboarding.profile.notSpecified', "Not specified");
+		const options: ISelectOptionItem[] = [
+			{ text: notSpecified },
+			{ text: 'Windows' },
+			{ text: 'Linux' },
+			{ text: 'Mac' },
+		];
+		let selected = 0;
+		if (this.profileValues.operatingSystem) {
+			const idx = options.findIndex(o => o.text === this.profileValues.operatingSystem);
+			selected = idx < 0 ? 0 : idx;
+		} else {
+			// Default to Windows
+			selected = 1;
+		}
+
+		const selectBox = store.add(new SelectBox(options, selected, this.contextViewService, defaultSelectBoxStyles, {
+			ariaLabel: labelText,
+		}));
+		const selectWrapper = append(fieldEl, $('.onboarding-a-profile-select'));
+		selectBox.render(selectWrapper);
+		const osSelectEl = asSelectElement(selectWrapper.lastElementChild);
+		if (osSelectEl) {
+			osSelectEl.id = inputId;
+			this._registerStepFocusable(osSelectEl);
+		}
+		store.add(selectBox.onDidSelect(e => {
+			if (e.index === 0) {
+				this.profileValues.operatingSystem = '';
+			} else {
+
+				this.profileValues.operatingSystem = e.selected;
+			}
+		}));
+}
 
 	/**
 	 * SafeAppeals: persists the profile step to `safeappeals.profile.*` user

@@ -235,7 +235,6 @@ export default defineConfig(
 			'extensions/debug-auto-launch/src/extension.ts',
 			'extensions/emmet/src/updateImageSize.ts',
 			'extensions/emmet/src/util.ts',
-			'extensions/github-authentication/src/node/fetch.ts',
 			'extensions/tunnel-forwarding/src/extension.ts',
 			'extensions/typescript-language-features/src/utils/platform.ts',
 			'extensions/typescript-language-features/web/src/webServer.ts',

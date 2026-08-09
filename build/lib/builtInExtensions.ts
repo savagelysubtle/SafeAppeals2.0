@@ -51,7 +51,16 @@ function getExtensionPath(extension: IExtensionDefinition): string {
 	return path.join(root, '.build', 'builtInExtensions', extension.name);
 }
 
+function getLocalExtensionPath(extension: IExtensionDefinition): string {
+	const packageName = extension.name.slice(extension.name.lastIndexOf('.') + 1);
+	return path.join(root, 'extensions', packageName);
+}
+
 function isUpToDate(extension: IExtensionDefinition): boolean {
+	if (extension.sha256 === 'local-dev-extension') {
+		return false;
+	}
+
 	const packagePath = path.join(getExtensionPath(extension), 'package.json');
 
 	if (!fs.existsSync(packagePath)) {
@@ -71,7 +80,9 @@ function isUpToDate(extension: IExtensionDefinition): boolean {
 function getExtensionDownloadStream(extension: IExtensionDefinition) {
 	let input: Stream;
 
-	if (extension.vsix) {
+	if (extension.sha256 === 'local-dev-extension') {
+		input = vfs.src(['**'], { cwd: getLocalExtensionPath(extension), dot: true });
+	} else if (extension.vsix) {
 		input = ext.fromVsix(path.join(root, extension.vsix), extension);
 	} else if (productjson.extensionsGallery?.serviceUrl) {
 		input = ext.fromMarketplace(productjson.extensionsGallery.serviceUrl, extension);

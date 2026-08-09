@@ -93,6 +93,12 @@ Registry.as<IConfigurationRegistry>(ConfigurationExtensions.Configuration).regis
 			scope: ConfigurationScope.MACHINE,
 			description: localize('safeappealsProfile.jurisdiction', "Default compensation board or tribunal for new cases, e.g. BC WCB, Ontario WSIB, California DWC."),
 		},
+		'safeappeals.profile.operatingSystem': {
+			type: 'string',
+			default: 'Windows',
+			scope: ConfigurationScope.MACHINE,
+			description: localize('safeappealsProfile.operatingSystem', "Operating system used for file paths and terminal commands."),
+		},
 	},
 });
 

@@ -175,7 +175,7 @@ export async function startOAuthLoopback(options: {
 	boundPort = address.port;
 	const redirectUri = `http://${LOOPBACK_HOST}:${boundPort}${callbackPath}`;
 
-	log(`[loopback] listening on ${redirectUri}`);
+	log('[loopback] listening for OAuth callback');
 
 	return {
 		redirectUri,

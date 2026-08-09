@@ -6,6 +6,7 @@
 import * as vscode from 'vscode';
 import type { ConnectionChangeEvent, ConnectionManager, ConnectOptions } from './connectionManager';
 import { isProviderKind, type ConnectionFilter, type ConnectionInfo } from './connectionsApi';
+import type { ICloudApiClient } from './cloudApiClient';
 
 /** Command id: connect a mail/calendar account. */
 export const CONNECT_COMMAND_ID = 'safeappeals.connections.connect';
@@ -31,6 +32,7 @@ export interface SafeAppealsConnectionsApi {
 /** Public shape of `activate()`'s return value. */
 export interface SafeAppealsAuthenticationApi {
 	readonly connections: SafeAppealsConnectionsApi;
+	readonly cloudApiClient: ICloudApiClient;
 }
 
 /**

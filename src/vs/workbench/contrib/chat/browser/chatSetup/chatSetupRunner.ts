@@ -7,7 +7,6 @@ import './media/chatSetup.css';
 import { $ } from '../../../../../base/browser/dom.js';
 import { IButton } from '../../../../../base/browser/ui/button/button.js';
 import { Dialog, DialogContentsAlignment } from '../../../../../base/browser/ui/dialog/dialog.js';
-import { coalesce } from '../../../../../base/common/arrays.js';
 import { Codicon } from '../../../../../base/common/codicons.js';
 import { isCancellationError } from '../../../../../base/common/errors.js';
 import { ThemeIcon } from '../../../../../base/common/themables.js';
@@ -27,27 +26,43 @@ import product from '../../../../../platform/product/common/product.js';
 import { ITelemetryService } from '../../../../../platform/telemetry/common/telemetry.js';
 import { IWorkspaceTrustManagementService, IWorkspaceTrustRequestService } from '../../../../../platform/workspace/common/workspaceTrust.js';
 import { IAuthenticationService } from '../../../../services/authentication/common/authentication.js';
+import { IExtensionsWorkbenchService } from '../../../extensions/common/extensions.js';
 import { IWorkbenchLayoutService } from '../../../../services/layout/browser/layoutService.js';
 import { ChatEntitlement, ChatEntitlementContext, ChatEntitlementService, IChatEntitlementService, isProUser } from '../../../../services/chat/common/chatEntitlementService.js';
 import { usesSafeAppealsCloudSetup } from '../../common/chatSetupCloudHelpers.js';
 import { ILanguageModelsService, SAFEAPPEALS_CLOUD_VENDOR_ID } from '../../common/languageModels.js';
 import { IChatWidgetService } from '../chat.js';
 import { ChatSetupController } from './chatSetupController.js';
-import { IChatSetupResult, ChatSetupAnonymous, InstallChatEvent, InstallChatClassification, ChatSetupStrategy, ChatSetupResultValue } from './chatSetup.js';
+import { IChatSetupResult, ChatSetupAnonymous, InstallChatEvent, InstallChatClassification, ChatSetupStrategy, ChatSetupResultValue, maybeEnableAuthExtension } from './chatSetup.js';
 import { IDefaultAccountService } from '../../../../../platform/defaultAccount/common/defaultAccount.js';
 import { IHostService } from '../../../../services/host/browser/host.js';
-import { IExtensionService } from '../../../../services/extensions/common/extensions.js';
+import { ActivationKind, IExtensionService } from '../../../../services/extensions/common/extensions.js';
 import { ExtensionIdentifier } from '../../../../../platform/extensions/common/extensions.js';
 import { raceTimeout } from '../../../../../base/common/async.js';
 
 const defaultChat = {
 	chatExtensionId: product.defaultChatAgent?.chatExtensionId ?? '',
 	publicCodeMatchesUrl: product.defaultChatAgent?.publicCodeMatchesUrl ?? '',
-	provider: product.defaultChatAgent?.provider ?? { default: { id: '', name: '' }, enterprise: { id: '', name: '' }, apple: { id: '', name: '' }, google: { id: '', name: '' } },
+	provider: product.defaultChatAgent?.provider ?? { default: { id: '', name: '' }, enterprise: { id: '', name: '' }, microsoft: { id: '', name: '' }, google: { id: '', name: '' } },
 	chatRefreshTokenCommand: product.defaultChatAgent?.chatRefreshTokenCommand ?? '',
 	termsStatementUrl: product.defaultChatAgent?.termsStatementUrl ?? '',
 	privacyStatementUrl: product.defaultChatAgent?.privacyStatementUrl ?? ''
 };
+
+export interface ISafeAppealsCloudSetupOperations {
+	readonly enableAuthExtension: () => Promise<void>;
+	readonly activateAuthProvider: () => Promise<void>;
+	readonly getSessionCount: () => Promise<number>;
+	readonly createSession: () => Promise<void>;
+}
+
+export async function runSafeAppealsCloudSetup(operations: ISafeAppealsCloudSetupOperations): Promise<void> {
+	await operations.enableAuthExtension();
+	await operations.activateAuthProvider();
+	if (await operations.getSessionCount() === 0) {
+		await operations.createSession();
+	}
+}
 
 export class ChatSetup {
 
@@ -82,6 +97,7 @@ export class ChatSetup {
 		@IWorkspaceTrustManagementService private readonly workspaceTrustManagementService: IWorkspaceTrustManagementService,
 		@IAuthenticationService private readonly authenticationService: IAuthenticationService,
 		@ILanguageModelsService private readonly languageModelsService: ILanguageModelsService,
+		@IExtensionsWorkbenchService private readonly extensionsWorkbenchService: IExtensionsWorkbenchService,
 	) { }
 
 	/** SafeAppeals: vendor registered, or hasByokModels + cloud auth provider (align with SetupAgent). */
@@ -178,14 +194,19 @@ export class ChatSetup {
 					success = await this.controller.value.setupWithProvider({ useEnterpriseProvider: false, useSocialProvider: 'google', additionalScopes: options?.additionalScopes, forceAnonymous: options?.forceAnonymous });
 					break;
 				case ChatSetupStrategy.SetupWithSafeAppealsCloud:
-					// SafeAppeals: Cloud CTA → createSession, never Copilot controller.setup()
 					try {
-						await this.authenticationService.createSession(SAFEAPPEALS_CLOUD_VENDOR_ID, [], { activateImmediate: true });
+						await runSafeAppealsCloudSetup({
+							enableAuthExtension: async () => { await maybeEnableAuthExtension(this.extensionsWorkbenchService, this.logService, true); },
+							activateAuthProvider: async () => { await this.extensionService.activateByEvent('onAuthenticationRequest:safeappeals-cloud', ActivationKind.Immediate); },
+							getSessionCount: async () => (await this.authenticationService.getSessions(SAFEAPPEALS_CLOUD_VENDOR_ID)).length,
+							createSession: async () => { await this.authenticationService.createSession(SAFEAPPEALS_CLOUD_VENDOR_ID, [], { activateImmediate: true }); },
+						});
 						success = true;
 					} catch (error) {
 						if (isCancellationError(error)) {
 							success = undefined;
 						} else {
+							this.logService.error('[chat setup] SafeAppeals Cloud sign-in failed', error);
 							throw error;
 						}
 					}
@@ -254,9 +275,9 @@ export class ChatSetup {
 		const disposables = new DisposableStore();
 
 		const buttons = this.getButtons(options);
-		// SafeAppeals: avoid Copilot icon when Cloud path still hits this dialog
+		// SafeAppeals: use SafeAppeals shield icon instead of Copilot/Account icons
 		const dialogIcon = options?.dialogIcon
-			?? (this.usesSafeAppealsCloudSetup() ? Codicon.account : Codicon.copilotLarge);
+			?? (this.usesSafeAppealsCloudSetup() ? Codicon.shield : Codicon.shield);
 
 		const dialog = disposables.add(new Dialog(
 			this.layoutService.activeContainer,
@@ -286,34 +307,10 @@ export class ChatSetup {
 		const styleButton = (...classes: string[]) => ({ styleButton: (button: IButton) => button.element.classList.add(...classes) });
 
 		let buttons: Array<ContinueWithButton>;
-		// SafeAppeals: defense in depth — Cloud CTA maps to createSession strategy (not Copilot DefaultSetup)
-		if (this.usesSafeAppealsCloudSetup() && !options?.forceAnonymous && (this.context.state.entitlement === ChatEntitlement.Unknown || options?.forceSignInDialog)) {
-			buttons = [[localize('signInSafeAppealsCloudButton', "Sign in to SafeAppeals Cloud..."), ChatSetupStrategy.SetupWithSafeAppealsCloud, styleButton('continue-button', 'default')]];
-		} else if (!options?.forceAnonymous && (this.context.state.entitlement === ChatEntitlement.Unknown || options?.forceSignInDialog)) {
-			const defaultProviderButton: ContinueWithButton = [localize('continueWith', "Continue with {0}", defaultChat.provider.default.name), ChatSetupStrategy.SetupWithoutEnterpriseProvider, styleButton('continue-button', 'default')];
-			const defaultProviderLink: ContinueWithButton = [defaultProviderButton[0], defaultProviderButton[1], styleButton('link-button')];
-
-			const enterpriseProviderButton: ContinueWithButton = [localize('continueWith', "Continue with {0}", defaultChat.provider.enterprise.name), ChatSetupStrategy.SetupWithEnterpriseProvider, styleButton('continue-button', 'default')];
-			const enterpriseProviderLink: ContinueWithButton = [enterpriseProviderButton[0], enterpriseProviderButton[1], styleButton('link-button')];
-
-			const googleProviderButton: ContinueWithButton = [localize('continueWith', "Continue with {0}", defaultChat.provider.google.name), ChatSetupStrategy.SetupWithGoogleProvider, styleButton('continue-button', 'google')];
-			const appleProviderButton: ContinueWithButton = [localize('continueWith', "Continue with {0}", defaultChat.provider.apple.name), ChatSetupStrategy.SetupWithAppleProvider, styleButton('continue-button', 'apple')];
-
-			if (!this.defaultAccountService.getDefaultAccountAuthenticationProvider().enterprise) {
-				buttons = coalesce([
-					defaultProviderButton,
-					googleProviderButton,
-					appleProviderButton,
-					enterpriseProviderLink
-				]);
-			} else {
-				buttons = coalesce([
-					enterpriseProviderButton,
-					googleProviderButton,
-					appleProviderButton,
-					defaultProviderLink
-				]);
-			}
+		// SafeAppeals always owns sign-in. Do not fall back to the upstream
+		// provider link while the Cloud extension is still registering.
+		if (!options?.forceAnonymous && (this.context.state.entitlement === ChatEntitlement.Unknown || options?.forceSignInDialog)) {
+			buttons = [[localize('signInSafeAppealsCloudButton', "Sign in to SafeAppeals Cloud..."), ChatSetupStrategy.SetupWithSafeAppealsCloud, styleButton('continue-button', 'safeappeals-cloud')]];
 		} else {
 			buttons = [[localize('setupAIButton', "Use AI Features"), ChatSetupStrategy.DefaultSetup, undefined]];
 		}

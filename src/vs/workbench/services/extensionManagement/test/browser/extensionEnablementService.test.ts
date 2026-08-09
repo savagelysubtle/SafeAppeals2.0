@@ -62,8 +62,14 @@ function createStorageService(instantiationService: TestInstantiationService, di
 	return service;
 }
 
+function setExtensionUnificationEnabled(instantiationService: TestInstantiationService, enabled: boolean): void {
+	const configurationService = instantiationService.get(IConfigurationService);
+	assert.ok(configurationService instanceof TestConfigurationService);
+	configurationService.setUserConfiguration('chat.extensionUnification.enabled', enabled);
+}
+
 export class TestExtensionEnablementService extends ExtensionEnablementService {
-	constructor(instantiationService: TestInstantiationService, chatEntitlementService?: IChatEntitlementService) {
+	constructor(instantiationService: TestInstantiationService, chatEntitlementService?: IChatEntitlementService, testProductService: IProductService = productService) {
 		const disposables = new DisposableStore();
 		const storageService = createStorageService(instantiationService, disposables);
 		const extensionManagementServerService = instantiationService.get(IExtensionManagementServerService) ||
@@ -105,7 +111,7 @@ export class TestExtensionEnablementService extends ExtensionEnablementService {
 			chatEntitlementService ?? new TestChatEntitlementService(),
 			instantiationService,
 			new NullLogService(),
-			productService
+			testProductService
 		);
 		this._register(disposables);
 	}
@@ -179,6 +185,65 @@ suite('ExtensionEnablementService Test', () => {
 		await testObject.setEnablement([extension], EnablementState.DisabledGlobally);
 		assert.ok(!testObject.isEnabled(extension));
 		assert.strictEqual(testObject.getEnablementState(extension), EnablementState.DisabledGlobally);
+	});
+
+	test('test extension unification does not disable an extension used for both completions and chat', () => {
+		const extensionId = 'pub.unified';
+		const unifiedProductService: IProductService = {
+			...productService,
+			defaultChatAgent: { ...productService.defaultChatAgent!, extensionId, chatExtensionId: extensionId }
+		};
+		setExtensionUnificationEnabled(instantiationService, true);
+		testObject = disposableStore.add(new TestExtensionEnablementService(instantiationService, undefined, unifiedProductService));
+
+		assert.strictEqual(testObject.getEnablementState(aLocalExtension(extensionId)), EnablementState.EnabledGlobally);
+	});
+
+	test('test extension unification compares completions and chat extension ids case-insensitively', () => {
+		const unifiedProductService: IProductService = {
+			...productService,
+			defaultChatAgent: { ...productService.defaultChatAgent!, extensionId: 'Pub.Unified', chatExtensionId: 'pub.unified' }
+		};
+		setExtensionUnificationEnabled(instantiationService, true);
+		testObject = disposableStore.add(new TestExtensionEnablementService(instantiationService, undefined, unifiedProductService));
+
+		assert.strictEqual(testObject.getEnablementState(aLocalExtension('PUB.UNIFIED')), EnablementState.EnabledGlobally);
+	});
+
+	test('test extension unification disables only the distinct completions extension', () => {
+		const unifiedProductService: IProductService = {
+			...productService,
+			defaultChatAgent: { ...productService.defaultChatAgent!, extensionId: 'pub.completions', chatExtensionId: 'pub.chat' }
+		};
+		setExtensionUnificationEnabled(instantiationService, true);
+		testObject = disposableStore.add(new TestExtensionEnablementService(instantiationService, undefined, unifiedProductService));
+
+		assert.deepStrictEqual([
+			testObject.getEnablementState(aLocalExtension('PUB.COMPLETIONS')),
+			testObject.getEnablementState(aLocalExtension('pub.chat'))
+		], [EnablementState.DisabledByUnification, EnablementState.EnabledGlobally]);
+	});
+
+	test('test disabled extension unification leaves the completions extension enabled', () => {
+		const unifiedProductService: IProductService = {
+			...productService,
+			defaultChatAgent: { ...productService.defaultChatAgent!, extensionId: 'pub.completions', chatExtensionId: 'pub.chat' }
+		};
+		setExtensionUnificationEnabled(instantiationService, false);
+		testObject = disposableStore.add(new TestExtensionEnablementService(instantiationService, undefined, unifiedProductService));
+
+		assert.strictEqual(testObject.getEnablementState(aLocalExtension('pub.completions')), EnablementState.EnabledGlobally);
+	});
+
+	test('test extension unification leaves unrelated extensions enabled', () => {
+		const unifiedProductService: IProductService = {
+			...productService,
+			defaultChatAgent: { ...productService.defaultChatAgent!, extensionId: 'pub.completions', chatExtensionId: 'pub.chat' }
+		};
+		setExtensionUnificationEnabled(instantiationService, true);
+		testObject = disposableStore.add(new TestExtensionEnablementService(instantiationService, undefined, unifiedProductService));
+
+		assert.strictEqual(testObject.getEnablementState(aLocalExtension('pub.unrelated')), EnablementState.EnabledGlobally);
 	});
 
 	test('test disable an extension globally should return truthy promise', () => {

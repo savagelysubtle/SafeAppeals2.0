@@ -283,9 +283,6 @@ export class ChatSetupController extends Disposable {
 						}
 					}
 				},
-				[defaultChat.providerUriSetting]: {
-					'type': 'string'
-				}
 			}
 		});
 

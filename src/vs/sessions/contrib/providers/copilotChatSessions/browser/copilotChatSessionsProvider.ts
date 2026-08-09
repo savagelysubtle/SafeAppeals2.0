@@ -1408,7 +1408,6 @@ export class CopilotChatSessionsProvider extends Disposable implements ISessions
 		if (this._isCopilotCliAvailable()) {
 			types.push(CopilotCLISessionType);
 		}
-		types.push(CopilotCloudSessionType);
 		if (this._isClaudeAvailable()) {
 			types.push(ClaudeCodeSessionType);
 		}
@@ -1548,9 +1547,6 @@ export class CopilotChatSessionsProvider extends Disposable implements ISessions
 	// -- Sessions --
 
 	getSessionTypes(workspaceUri: URI): ISessionType[] {
-		if (workspaceUri.scheme === GITHUB_REMOTE_FILE_SCHEME || workspaceUri.scheme === SessionType.CopilotCloud) {
-			return [CopilotCloudSessionType];
-		}
 		const types: ISessionType[] = [];
 		if (this._isCopilotCliAvailable()) {
 			types.push(CopilotCLISessionType);
@@ -2191,7 +2187,7 @@ export class CopilotChatSessionsProvider extends Disposable implements ISessions
 		// Resolve mode
 		const modeKind = session.chatMode?.kind ?? ChatModeKind.Agent;
 		const modeIsBuiltin = session.chatMode ? isBuiltinChatMode(session.chatMode) : true;
-		const modeId: 'ask' | 'agent' | 'edit' | 'custom' | undefined = modeIsBuiltin ? modeKind : 'custom';
+		const modeId: 'ask' | 'agent' | 'edit' | 'plan' | 'custom' | undefined = modeIsBuiltin ? modeKind : 'custom';
 
 		const rawModeInstructions = session.chatMode?.modeInstructions?.get();
 		const modeInstructions = rawModeInstructions ? {

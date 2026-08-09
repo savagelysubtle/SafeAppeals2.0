@@ -19,8 +19,10 @@
 		display: inline-block;
 	}
 
-	.dialog-buttons-row > .dialog-buttons > .monaco-button.continue-button.default::before {
-		background-image: url('./github.svg');
+	.dialog-buttons-row > .dialog-buttons > .monaco-button.continue-button.safeappeals-cloud::before {
+		background-image: var(--vscode-codicon-shield);
+		mask: var(--vscode-codicon-shield);
+		-webkit-mask: var(--vscode-codicon-shield);
 	}
 
 	.dialog-buttons-row > .dialog-buttons > .monaco-button.continue-button.google::before {

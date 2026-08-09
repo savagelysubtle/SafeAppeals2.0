@@ -457,7 +457,6 @@ class UnifiedAICustomizationDataSource implements IAsyncDataSource<RootElement, 
 
 			const workspaceSkills = cached.skills.filter(s => s.storage === PromptsStorage.local);
 			const userSkills = cached.skills.filter(s => s.storage === PromptsStorage.user);
-			const extensionSkills = cached.skills.filter(s => s.storage === PromptsStorage.extension);
 			const builtinSkills = cached.skills.filter(s => s.storage === PromptsStorage.builtIn);
 
 			if (workspaceSkills.length > 0) {
@@ -466,9 +465,7 @@ class UnifiedAICustomizationDataSource implements IAsyncDataSource<RootElement, 
 			if (userSkills.length > 0) {
 				groups.push(this.createGroupItem(promptType, AICustomizationSources.user, userSkills.length));
 			}
-			if (extensionSkills.length > 0) {
-				groups.push(this.createGroupItem(promptType, AICustomizationSources.extension, extensionSkills.length));
-			}
+			// Extensions section hidden - SafeAppeals ships agents as built-in extensions
 			if (builtinSkills.length > 0) {
 				groups.push(this.createGroupItem(promptType, AICustomizationSources.builtin, builtinSkills.length));
 			}
@@ -510,7 +507,6 @@ class UnifiedAICustomizationDataSource implements IAsyncDataSource<RootElement, 
 
 		const workspaceItems = cached.files!.get(PromptsStorage.local) || [];
 		const userItems = cached.files!.get(PromptsStorage.user) || [];
-		const extensionItems = cached.files!.get(PromptsStorage.extension) || [];
 		const builtinItems = cached.files!.get(PromptsStorage.builtIn) || [];
 
 		if (workspaceItems.length > 0) {
@@ -519,9 +515,7 @@ class UnifiedAICustomizationDataSource implements IAsyncDataSource<RootElement, 
 		if (userItems.length > 0) {
 			groups.push(this.createGroupItem(promptType, PromptsStorage.user, userItems.length));
 		}
-		if (extensionItems.length > 0) {
-			groups.push(this.createGroupItem(promptType, PromptsStorage.extension, extensionItems.length));
-		}
+		// Extensions section hidden - SafeAppeals ships agents as built-in extensions
 		if (builtinItems.length > 0) {
 			groups.push(this.createGroupItem(promptType, PromptsStorage.builtIn, builtinItems.length));
 		}

@@ -96,13 +96,19 @@ export function resolveChatSetupTimeoutWarning(options: {
 /**
  * SafeAppeals: true when an activated or contributed non-core default agent covers `mode`.
  * Contributed (not yet activated) agents count so fail-fast does not race extension activation.
+ * SafeAppeals agent is treated as non-core for Cloud Agent mode readiness.
  */
 export function hasUsableNonCoreDefaultAgent(options: {
-	activatedDefaultAgent: { isCore?: boolean } | undefined;
-	contributedDefaultAgent: { isCore?: boolean; modes: readonly string[] } | undefined;
+	activatedDefaultAgent: { isCore?: boolean; id?: string } | undefined;
+	contributedDefaultAgent: { isCore?: boolean; modes: readonly string[]; id?: string } | undefined;
 	mode: string;
 }): boolean {
 	if (options.activatedDefaultAgent && !options.activatedDefaultAgent.isCore) {
+		return true;
+	}
+	// SafeAppeals agent (safeappeals.agent) is considered usable for Cloud Agent mode
+	// even though it's a core extension, because it provides the tools agent.
+	if (options.activatedDefaultAgent?.id === SAFEAPPEALS_AGENT_PARTICIPANT_ID) {
 		return true;
 	}
 	const contributed = options.contributedDefaultAgent;

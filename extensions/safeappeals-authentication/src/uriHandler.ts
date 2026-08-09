@@ -117,8 +117,8 @@ export class CloudUriHandler implements vscode.UriHandler, vscode.Disposable {
 				this._errorEmitter.fire({ cancelled: true, state });
 				return;
 			}
-			const description = queryParams.get('error_description') || error;
-			this.output.appendLine(`[uri] oauth error: ${description}`);
+			const description = sanitizeOAuthErrorDescription(queryParams.get('error_description'), error);
+			this.output.appendLine('[uri] oauth error received');
 			this._errorEmitter.fire({ cancelled: false, message: description, state });
 			return;
 		}
@@ -185,4 +185,10 @@ function fragmentContainsTokens(fragment: string): boolean {
 	}
 	const params = new URLSearchParams(decoded.startsWith('#') ? decoded.slice(1) : decoded);
 	return !!(params.get('access_token') || params.get('refresh_token') || params.get('provider_token'));
+}
+
+/** Removes control characters and bounds untrusted OAuth error descriptions. */
+function sanitizeOAuthErrorDescription(description: string | null, fallback: string): string {
+	const sanitized = (description || fallback).replace(/[\u0000-\u001F\u007F]/g, ' ').trim().slice(0, 200);
+	return sanitized || fallback.slice(0, 200);
 }

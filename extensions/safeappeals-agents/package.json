@@ -1,0 +1,53 @@
+{
+	"name": "safeappeals-agents",
+	"displayName": "%displayName%",
+	"description": "%description%",
+	"version": "1.0.0",
+	"publisher": "safeappeals",
+	"license": "MIT",
+	"engines": {
+		"vscode": "^1.70.0"
+	},
+	"main": "./out/extension.js",
+	"categories": [
+		"Other"
+	],
+	"extensionKind": [
+		"ui",
+		"workspace"
+	],
+"enabledApiProposals": [
+		"chatPromptFiles",
+		"chatParticipantPrivate"
+	],
+	"activationEvents": [
+		"onStartupFinished",
+		"onCustomAgentProvider"
+	],
+	"extensionDependencies": [
+		"safeappeals.safeappeals-shared",
+		"safeappeals.safeappeals-authentication"
+	],
+	"capabilities": {
+		"virtualWorkspaces": true,
+		"untrustedWorkspaces": {
+			"supported": true
+		}
+	},
+	"contributes": {
+		"configuration": {
+			"title": "%config.title%",
+			"properties": {}
+		}
+	},
+	"scripts": {
+		"compile": "gulp compile-extension:safeappeals-agents",
+		"watch": "gulp watch-extension:safeappeals-agents",
+		"test": "mocha --require ./test/vscode-mock-preload.cjs --ui tdd out/test/*.test.js"
+	},
+	"devDependencies": {
+		"@types/mocha": "^10.0.10",
+		"@types/node": "24.x",
+		"mocha": "^11.1.0"
+	}
+}

@@ -8,6 +8,7 @@ import * as assert from 'assert';
 import type { OutputChannel, Uri } from 'vscode';
 import {
 	CloudUriHandler,
+	type AuthCallbackError,
 	type AuthCallbackResult,
 	type ConnectCallbackResult,
 } from '../uriHandler';
@@ -24,14 +25,17 @@ function deepLink(path: string, query = '', fragment = ''): Uri {
 }
 
 function makeHandler() {
-	const output = { appendLine: (_line: string) => { /* test stub */ } } as OutputChannel;
+	const lines: string[] = [];
+	const output = { appendLine: (line: string) => { lines.push(line); } } as OutputChannel;
 	// register: false — VS Code allows a single URI handler per extension.
 	const handler = new CloudUriHandler(output, false);
 	const auth: AuthCallbackResult[] = [];
 	const connects: ConnectCallbackResult[] = [];
+	const errors: AuthCallbackError[] = [];
 	handler.onCallback(result => auth.push(result));
 	handler.onConnectCallback(result => connects.push(result));
-	return { handler, auth, connects };
+	handler.onError(result => errors.push(result));
+	return { handler, auth, connects, errors, lines };
 }
 
 suite('CloudUriHandler', () => {
@@ -54,6 +58,18 @@ suite('CloudUriHandler', () => {
 				auth: [{ code: 'auth-code', state: 'state-1' }],
 			},
 		);
+		handler.dispose();
+	});
+
+	test('bounds OAuth descriptions without logging attacker-controlled text', () => {
+		const { handler, errors, lines } = makeHandler();
+		const attack = `${'x'.repeat(300)}%0Aforged-log`;
+		handler.handleUri(deepLink('/auth/callback', `error=server_error&state=state-1&error_description=${attack}`));
+
+		assert.deepStrictEqual({
+			errorLength: errors[0]?.cancelled === false ? errors[0].message.length : 0,
+			loggedAttack: lines.some(line => line.includes('forged-log')),
+		}, { errorLength: 200, loggedAttack: false });
 		handler.dispose();
 	});
 
