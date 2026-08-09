@@ -14,6 +14,7 @@ import { getDefaultFolder, getMaxMessagesPerSync, getSyncIntervalMinutes, isWebC
 import type { DraftAttachmentStore } from './draftAttachmentStore';
 import { syncDraftToImap, type SyncDraftToImapResult } from './draftImapSync';
 import { EmailIndex, toSummary } from './emailIndex';
+import { runRetryableEmailIndexingTasks } from './emailRagCommands';
 import {
 	describeImapError,
 	diagnoseConnection,
@@ -32,6 +33,7 @@ import {
 	type EmailAccountConfig,
 	type EmailAccountCredentials,
 	type EmailDraft,
+	type EmailMessage,
 	type EmailOAuthProvider,
 	type ListThreadsQuery,
 	type OutboundAttachment,
@@ -225,6 +227,7 @@ export class SyncEngine implements Disposable {
 	private readonly getSession: MailAuthSessionGetter;
 	private readonly showReconnectWarning: (message: string) => void;
 	private attachmentStore: DraftAttachmentStore | undefined;
+	private emailIndexer: { indexThread: (accountId: string, threadId: string, messages: EmailMessage[], caseFolderPath: string) => Promise<void>; unindexThread: (accountId: string, threadId: string, messages?: readonly Pick<EmailMessage, 'id'>[], caseFolderPath?: string) => Promise<void>; reindexThread: (accountId: string, threadId: string, messages: EmailMessage[], caseFolderPath: string) => Promise<void> } | undefined;
 
 	constructor(
 		private readonly accounts: AccountStore,
@@ -237,6 +240,14 @@ export class SyncEngine implements Disposable {
 		this.classifier = classifier;
 		this.getSession = authDeps.getSession ?? defaultGetSession;
 		this.showReconnectWarning = authDeps.showReconnectWarning ?? defaultShowReconnectWarning;
+	}
+
+	setEmailIndexer(indexer: { indexThread: (accountId: string, threadId: string, messages: EmailMessage[], caseFolderPath: string) => Promise<void>; unindexThread: (accountId: string, threadId: string, messages?: readonly Pick<EmailMessage, 'id'>[], caseFolderPath?: string) => Promise<void>; reindexThread: (accountId: string, threadId: string, messages: EmailMessage[], caseFolderPath: string) => Promise<void> } | undefined): void {
+		this.emailIndexer = indexer;
+	}
+
+	getEmailIndexer(): { indexThread: (accountId: string, threadId: string, messages: EmailMessage[], caseFolderPath: string) => Promise<void>; unindexThread: (accountId: string, threadId: string, messages?: readonly Pick<EmailMessage, 'id'>[], caseFolderPath?: string) => Promise<void>; reindexThread: (accountId: string, threadId: string, messages: EmailMessage[], caseFolderPath: string) => Promise<void> } | undefined {
+		return this.emailIndexer;
 	}
 
 	setAttachmentStore(store: DraftAttachmentStore): void {
@@ -374,6 +385,31 @@ export class SyncEngine implements Disposable {
 				`Synced ${account.label}: fetched=${headers.length} headers, upserted into index, accountTotal=${totalForAccount}`,
 			);
 
+			// Reindex linked threads if they have new/updated messages
+			if (this.emailIndexer) {
+				const emailIndexer = this.emailIndexer;
+				const linkedThreads = this.index.getLinkedThreads?.() ?? [];
+				const tasks: Array<readonly [string, () => Promise<void>]> = [];
+				for (const thread of linkedThreads) {
+					if (!thread.caseFolderPath) continue;
+					const caseFolderPath = thread.caseFolderPath;
+					const hasUpdatedMessage = headers.some(header => header.threadId === thread.threadId);
+					if (hasUpdatedMessage) {
+						tasks.push([thread.threadId, async () => {
+								const completeThread: EmailMessage[] = [];
+								for (const reference of thread.messages) {
+									completeThread.push(await this.getMessage(reference.id));
+								}
+								await emailIndexer.reindexThread(account.id, thread.threadId, completeThread, caseFolderPath);
+							},
+						]);
+					}
+				}
+				await runRetryableEmailIndexingTasks(tasks, (threadId, error) => this.log(
+					`Mailbox sync succeeded, but Private Search email indexing for thread ${threadId} will retry: ${error}`,
+				));
+			}
+
 			// TODO(rung12): classifier will process unclassified here
 			await runClassifierOnNewMessages(headers.map(toSummary), this.classifier);
 		} catch (err) {
@@ -438,8 +474,8 @@ export class SyncEngine implements Disposable {
 		});
 	}
 
-	getThread(threadId: string) {
-		return this.index.getThread(threadId);
+	getThread(accountId: string, threadId: string) {
+		return this.index.getThread(accountId, threadId);
 	}
 
 	async getMessage(messageId: string, forceReload = false) {

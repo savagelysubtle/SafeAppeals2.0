@@ -5,7 +5,7 @@
 import * as vscode from 'vscode';
 import { registerAgentTools } from './agentTools';
 import { AccountStore } from './accountStore';
-import { getCurrentCase, getDefaultFolder, getSyncIntervalMinutes, isWebClient } from './config';
+import { getCurrentCase, getDefaultFolder, getSyncIntervalMinutes, initializeSecureEmailConfig, isWebClient } from './config';
 import { DashboardPanel, EmailSidebarProvider } from './dashboardPanel';
 import { DraftAttachmentStore } from './draftAttachmentStore';
 import { EmailIndex } from './emailIndex';
@@ -30,11 +30,14 @@ import {
 	type EmailAccountConfig,
 	type EmailAccountCredentials,
 	type EmailClassification,
+	type EmailMessage,
 	type EmailOAuthProvider,
 	type ListThreadsQuery,
 	type SendMailRequest,
 	type ThreadStatus,
 } from './types';
+import { generateEmailPdf, sanitizePdfFilename, type PdfLabels } from './pdfExport';
+import { indexThenCommitLink, purgeManifestEntries, purgeThenCommitUnlink } from './emailRagCommands';
 
 let output: vscode.OutputChannel;
 let statusBar: vscode.StatusBarItem;
@@ -54,8 +57,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 	};
 
 	log('Activating…');
+	await initializeSecureEmailConfig(context.secrets);
 
 	accounts = new AccountStore(context.secrets, log);
+	await accounts.initialize();
 	index = new EmailIndex(context.globalStorageUri, context.secrets, context.globalState, log);
 	await index.initialize();
 	draftAttachments = new DraftAttachmentStore(
@@ -103,6 +108,32 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 		refreshUi();
 	});
 	engine.setAttachmentStore(draftAttachments);
+
+	// Try to connect to RAG EmailIndexer for case-linked email indexing
+	const trySetRagEmailIndexer = () => {
+		try {
+			const ragExt = vscode.extensions.getExtension('safeappeals.safeappeals-rag');
+			if (!ragExt?.isActive) {
+				return;
+			}
+			const emailIndexer = ragExt.exports?.getEmailIndexer?.();
+			if (emailIndexer) {
+				engine.setEmailIndexer(emailIndexer);
+				log('Connected to RAG EmailIndexer for case-linked email indexing');
+			}
+		} catch (err) {
+			log(`RAG EmailIndexer connection failed (will retry): ${err instanceof Error ? err.message : String(err)}`);
+		}
+	};
+
+	// Try immediately (RAG might already be active)
+	trySetRagEmailIndexer();
+
+	// Also try when RAG extension activates
+	const ragActivationListener = vscode.extensions.onDidChange(() => {
+		trySetRagEmailIndexer();
+	});
+	context.subscriptions.push(ragActivationListener);
 
 	const openDashboard = () => {
 		DashboardPanel.show(context.extensionUri, engine, accounts, index, log, refreshUi);
@@ -244,20 +275,26 @@ function registerCommands(
 		),
 
 		vscode.commands.registerCommand('safeappeals-email.removeAccount', async (accountIdArg?: string) => {
-			const accountId = accountIdArg || (await pickAccountId('Remove which account?'));
+			const accountId = accountIdArg || (await pickAccountId(vscode.l10n.t('Remove which account?')));
 			if (!accountId) {
 				return { success: false };
 			}
 			const account = accounts.getAccount(accountId);
 			const label = account?.label || accountId;
+			const removeLabel = vscode.l10n.t('Remove');
 			const confirm = await vscode.window.showWarningMessage(
-				`Remove email account “${label}”? Cached messages for this account will be deleted.`,
+				vscode.l10n.t('Remove email account “{0}”? Cached messages for this account will be deleted.', label),
 				{ modal: true },
-				'Remove',
+				removeLabel,
 			);
-			if (confirm !== 'Remove') {
+			if (confirm !== removeLabel) {
 				return { success: false };
 			}
+			const emailIndexer = engine.getEmailIndexer();
+			const manifestEntries = index.getRagManifestEntries(accountId);
+			await purgeManifestEntries(emailIndexer, manifestEntries, new Error(vscode.l10n.t(
+				'Private Search is unavailable; indexed email was not removed. Try again after Private Search starts.',
+			)));
 			await index.clearAccount(accountId);
 			const ok = await accounts.removeAccount(accountId);
 			log(`Account removed: ${accountId}`);
@@ -372,11 +409,11 @@ function registerCommands(
 			(query?: ListThreadsQuery) => engine.listThreads(query || {}),
 		),
 
-		vscode.commands.registerCommand('safeappeals-email.getThread', (threadId: string) => {
+		vscode.commands.registerCommand('safeappeals-email.getThread', (accountId: string, threadId: string) => {
 			if (!threadId) {
 				throw new Error('threadId required');
 			}
-			return engine.getThread(threadId);
+			return engine.getThread(accountId, threadId);
 		}),
 
 		vscode.commands.registerCommand(
@@ -487,16 +524,26 @@ function registerCommands(
 		vscode.commands.registerCommand('safeappeals-email.getStats', () => index.getStats()),
 
 		vscode.commands.registerCommand(
+			'safeappeals-email.exportEmail',
+			async (messageId: string) => {
+				if (!messageId) {
+					throw new Error('messageId required');
+				}
+				return exportEmailToPdf(messageId, log);
+			},
+		),
+
+		vscode.commands.registerCommand(
 			'safeappeals-email.updateThreadStatus',
-			async (threadId: string, status: ThreadStatus) => {
-				await index.updateThreadStatus(threadId, status);
+			async (accountId: string, threadId: string, status: ThreadStatus) => {
+				await index.updateThreadStatus(accountId, threadId, status);
 				return { success: true };
 			},
 		),
 
 		vscode.commands.registerCommand(
 			'safeappeals-email.linkThreadToCase',
-			async (threadId: string, caseFolderPath?: string) => {
+			async (accountId: string, threadId: string, caseFolderPath?: string) => {
 				if (!threadId) {
 					throw new Error('threadId required');
 				}
@@ -507,8 +554,26 @@ function registerCommands(
 					);
 					return { success: false };
 				}
-				await index.linkThreadToCase(threadId, target);
+				// Index before committing the visible link so a failed/private-search-disabled
+				// index never leaves a link claiming the confidential thread is searchable.
+				const emailIndexer = engine.getEmailIndexer?.();
+				if (!emailIndexer) {
+					throw new Error(vscode.l10n.t('Private Search is unavailable; the email thread was not linked.'));
+				}
+				const thread = index.getThread(accountId, threadId);
+				if (!thread) {
+					throw new Error(vscode.l10n.t('Email thread not found.'));
+				}
+				const messages: EmailMessage[] = [];
+				for (const reference of thread.messages) {
+					messages.push(await engine.getMessage(reference.id));
+				}
+				await indexThenCommitLink({
+					indexer: emailIndexer, accountId, threadId, messages, caseFolderPath: target,
+					commitLink: () => index.linkThreadToCase(accountId, threadId, target),
+				});
 				log(`Thread ${threadId} linked to case ${target}`);
+
 				refreshUi();
 				return { success: true };
 			},
@@ -516,11 +581,29 @@ function registerCommands(
 
 		vscode.commands.registerCommand(
 			'safeappeals-email.unlinkThreadFromCase',
-			async (threadId: string) => {
+			async (accountId: string, threadId: string) => {
 				if (!threadId) {
 					throw new Error('threadId required');
 				}
-				await index.unlinkThread(threadId);
+
+				// Unindex from RAG before unlinking (use connected indexer from SyncEngine)
+				const emailIndexer = engine.getEmailIndexer?.();
+				if (!emailIndexer) {
+					throw new Error(vscode.l10n.t('Private Search is unavailable; indexed email was not removed, so the link was retained.'));
+				}
+				const thread = index.getThread(accountId, threadId);
+				if (!thread?.caseFolderPath) {
+					throw new Error(vscode.l10n.t('Linked email thread not found.'));
+				}
+				const messages: EmailMessage[] = [];
+				for (const reference of thread.messages) {
+					messages.push(await engine.getMessage(reference.id));
+				}
+				await purgeThenCommitUnlink({
+					indexer: emailIndexer, unavailableError: new Error('unreachable'), accountId, threadId,
+					messages, caseFolderPath: thread.caseFolderPath,
+					commitUnlink: () => index.unlinkThread(accountId, threadId),
+				});
 				log(`Thread ${threadId} unlinked from case`);
 				refreshUi();
 				return { success: true };
@@ -529,14 +612,14 @@ function registerCommands(
 
 		vscode.commands.registerCommand(
 			'safeappeals-email.tagThread',
-			async (threadId: string, tag: string) => {
+			async (accountId: string, threadId: string, tag: string) => {
 				if (!threadId) {
 					throw new Error('threadId required');
 				}
 				if (!tag || !tag.trim()) {
 					throw new Error('tag required');
 				}
-				await index.tagThread(threadId, tag);
+				await index.tagThread(accountId, threadId, tag);
 				refreshUi();
 				return { success: true };
 			},
@@ -544,14 +627,14 @@ function registerCommands(
 
 		vscode.commands.registerCommand(
 			'safeappeals-email.untagThread',
-			async (threadId: string, tag: string) => {
+			async (accountId: string, threadId: string, tag: string) => {
 				if (!threadId) {
 					throw new Error('threadId required');
 				}
 				if (!tag || !tag.trim()) {
 					throw new Error('tag required');
 				}
-				await index.untagThread(threadId, tag);
+				await index.untagThread(accountId, threadId, tag);
 				refreshUi();
 				return { success: true };
 			},
@@ -574,11 +657,11 @@ function registerCommands(
 
 		vscode.commands.registerCommand(
 			'safeappeals-email.hideThread',
-			async (threadId: string) => {
+			async (accountId: string, threadId: string) => {
 				if (!threadId) {
 					throw new Error('threadId required');
 				}
-				await index.hideThread(threadId);
+				await index.hideThread(accountId, threadId);
 				refreshUi();
 				return { success: true };
 			},
@@ -586,25 +669,31 @@ function registerCommands(
 
 		vscode.commands.registerCommand(
 			'safeappeals-email.unhideThread',
-			async (threadId: string) => {
+			async (accountId: string, threadId: string) => {
 				if (!threadId) {
 					throw new Error('threadId required');
 				}
-				await index.unhideThread(threadId);
+				await index.unhideThread(accountId, threadId);
 				refreshUi();
 				return { success: true };
 			},
 		),
 
 		vscode.commands.registerCommand('safeappeals-email.clearLocalCache', async () => {
+			const clearLabel = vscode.l10n.t('Clear Cache');
 			const confirm = await vscode.window.showWarningMessage(
-				'Delete the local email cache? Synced messages, drafts, tags, and case links stored on this machine will be removed. Accounts and passwords are not affected.',
+				vscode.l10n.t('Delete the local email cache? Synced messages, drafts, tags, and case links stored on this machine will be removed. Accounts and passwords are not affected.'),
 				{ modal: true },
-				'Clear Cache',
+				clearLabel,
 			);
-			if (confirm !== 'Clear Cache') {
+			if (confirm !== clearLabel) {
 				return { success: false };
 			}
+			const manifestEntries = index.getRagManifestEntries();
+			const emailIndexer = engine.getEmailIndexer();
+			await purgeManifestEntries(emailIndexer, manifestEntries, new Error(vscode.l10n.t(
+				'Private Search is unavailable; indexed email was not removed. The cache was not cleared.',
+			)));
 			await index.clearLocalCache();
 			refreshUi();
 			return { success: true };
@@ -1252,6 +1341,58 @@ async function promptSend(): Promise<SendMailRequest | undefined> {
 	return { accountId, to, subject, text };
 }
 
+async function exportEmailToPdf(messageId: string, log: (msg: string) => void): Promise<{ success: boolean; filePath?: string; error?: string }> {
+	const message = index.getMessage(messageId);
+	if (!message) {
+		const error = vscode.l10n.t('Message not found: {0}', messageId);
+		log(error);
+		return { success: false, error };
+	}
+
+	// Load full message body if not already loaded
+	let fullMessage = message;
+	if (!message.bodyLoaded || !message.bodyText) {
+		try {
+			fullMessage = await engine.getMessage(messageId, true);
+		} catch (err) {
+			const error = vscode.l10n.t('Failed to load message body: {0}', err instanceof Error ? err.message : String(err));
+			log(error);
+			return { success: false, error };
+		}
+	}
+
+	// Ask user where to save the PDF
+	const uri = await vscode.window.showSaveDialog({
+		defaultUri: vscode.Uri.file(`${sanitizePdfFilename(fullMessage.subject || vscode.l10n.t('email'))}.pdf`),
+		filters: { [vscode.l10n.t('PDF')]: ['pdf'] },
+		title: vscode.l10n.t('Export Email to PDF'),
+	});
+	if (!uri) {
+		return { success: false, error: vscode.l10n.t('Cancelled by user') };
+	}
+
+	try {
+		await generateEmailPdf(fullMessage, uri.fsPath, pdfLabels());
+		log(`Exported email to PDF: ${uri.fsPath}`);
+		void vscode.window.showInformationMessage(vscode.l10n.t('Email exported to {0}', uri.fsPath));
+		return { success: true, filePath: uri.fsPath };
+	} catch (err) {
+		const error = vscode.l10n.t('Failed to generate PDF: {0}', err instanceof Error ? err.message : String(err));
+		log(error);
+		void vscode.window.showErrorMessage(error);
+		return { success: false, error };
+	}
+}
+
+function pdfLabels(): PdfLabels {
+	return {
+		noSubject: vscode.l10n.t('(no subject)'), from: vscode.l10n.t('From'), to: vscode.l10n.t('To'),
+		cc: vscode.l10n.t('Cc'), bcc: vscode.l10n.t('Bcc'), date: vscode.l10n.t('Date'),
+		messageBody: vscode.l10n.t('Message Body'), empty: vscode.l10n.t('(empty)'),
+		attachments: vscode.l10n.t('Attachments'),
+	};
+}
+
 function guessImapHost(email: string): string {
 	const domain = email.split('@')[1]?.toLowerCase() || '';
 	if (domain.includes('gmail')) {
@@ -1272,4 +1413,14 @@ function guessSmtpHost(email: string): string {
 		return 'smtp.office365.com';
 	}
 	return `smtp.${domain}`;
+}
+
+/** Access to the EmailIndex for cross-extension integration (e.g., RAG indexing). */
+export function getEmailIndex(): EmailIndex {
+	return index;
+}
+
+/** Load a complete email message for cross-extension indexing. */
+export async function getEmailMessage(messageId: string): Promise<EmailMessage> {
+	return engine.getMessage(messageId);
 }

@@ -36,6 +36,7 @@ import { isAgentSessionsWindow, RagCoreHost } from './ragCoreHost';
 import { SealedMarkdownStore } from './sealedMarkdown';
 import { UnlimitedOCRBackend } from './unlimitedOcrBackend';
 import { UNLIMITED_OCR_MODEL_ID } from './types';
+import { EmailIndexer, mapLinkedEmailThreads, type EmailThread } from './emailIndexer';
 
 /** Managed root segment when no workspace folder is open. */
 export const NO_FOLDER_WORKSPACE_KEY = '_nofolder';
@@ -43,6 +44,8 @@ export const NO_FOLDER_WORKSPACE_KEY = '_nofolder';
 const OUTPUT_CHANNEL_NAME = 'Private Search';
 const STATUS_BAR_PRIORITY = 48;
 const INDEX_IDLE_TOAST_DEBOUNCE_MS = 2000;
+const FIRST_INDEXING_NOTICE_THRESHOLD = 50;
+const FIRST_INDEXING_NOTICE_DISMISSED_KEY = 'safeappeals.rag.firstIndexingNoticeDismissed';
 
 let outputChannel: vscode.OutputChannel | undefined;
 let statusBar: vscode.StatusBarItem | undefined;
@@ -53,6 +56,7 @@ let docParseBackend: IDocParseBackend | undefined;
 let mlBridge: MlBridge | undefined;
 let ragCoreHost: RagCoreHost | undefined;
 let indexPipeline: IndexPipeline | undefined;
+let emailIndexer: EmailIndexer | undefined;
 let folderWatcher: FolderIndexWatcher | undefined;
 let hardDisableChannelShown = false;
 let indexIdleToastTimer: ReturnType<typeof setTimeout> | undefined;
@@ -331,11 +335,21 @@ async function ensureIndexPipeline(ml: MlBridge | undefined): Promise<boolean> {
 		indexPipeline = createIndexPipelineInstance(ragCoreHost, ml);
 		refreshStatusBar();
 		log('Private Search index pipeline ready (agent tools + manual index).');
+
+		// Create EmailIndexer now that indexPipeline is ready
+		emailIndexer = new EmailIndexer({
+			indexPipeline,
+			ragCoreHost,
+			log,
+		});
+		log('EmailIndexer ready for case-linked email indexing.');
+
 		return true;
 	} catch (err) {
 		const message = err instanceof Error ? err.message : String(err);
 		log(`Private Search index pipeline startup failed: ${message}`, 'warn');
 		indexPipeline = undefined;
+		emailIndexer = undefined;
 		return false;
 	}
 }
@@ -392,6 +406,26 @@ async function ensureFolderIndexing(
 				scheduleFinishedIndexingToast();
 			}
 			log(`Folder indexing started (${reason}): scheduled ${scanScheduled} file(s).`);
+
+			// First-time indexing notice for large cases
+			if (
+				scanScheduled >= FIRST_INDEXING_NOTICE_THRESHOLD &&
+				context &&
+				!(context.globalState.get<boolean>(FIRST_INDEXING_NOTICE_DISMISSED_KEY) ?? false)
+			) {
+				const dontShowAgain = vscode.l10n.t("Don't Show Again");
+				const choice = await vscode.window.showInformationMessage(
+					vscode.l10n.t(
+						'Welcome! Private Search is indexing your case files ({0} files). This may take a minute. You can continue working while indexing completes in the background.',
+						scanScheduled,
+					),
+					{ modal: false },
+					dontShowAgain,
+				);
+				if (choice === dontShowAgain) {
+					await context.globalState.update(FIRST_INDEXING_NOTICE_DISMISSED_KEY, true);
+				}
+			}
 		} else {
 			log(`Folder indexing wired (${reason}); no indexable files scheduled.`);
 		}
@@ -486,6 +520,23 @@ async function warmThenIndex(
 					`Private Search folder indexing skipped after warm (${status.disableCode ?? 'unavailable'}).`,
 					'warn',
 				);
+			}
+		}
+
+		// Retroactive indexing of already-linked email threads
+		if (emailIndexer) {
+			try {
+				const emailExt = vscode.extensions.getExtension('safeappeals.safeappeals-email');
+				const emailIndex = emailExt?.exports?.getEmailIndex?.();
+				if (emailIndex) {
+					const linkedThreads = emailIndex.getLinkedThreads?.();
+					if (linkedThreads?.length) {
+						const threadMap = mapLinkedEmailThreads(linkedThreads as EmailThread[]);
+						await emailIndexer.indexAllLinkedThreads(threadMap);
+					}
+				}
+			} catch (err) {
+				writeLog(`Retroactive email indexing failed: ${err instanceof Error ? err.message : String(err)}`, 'warn');
 			}
 		}
 	} catch (err) {
@@ -974,6 +1025,7 @@ export function deactivate(): void {
 	ragCoreHost?.closeWorkspace();
 	ragCoreHost = undefined;
 	indexPipeline = undefined;
+	emailIndexer = undefined;
 	folderWatcher = undefined;
 	ingestRouter = undefined;
 	sealedStore = undefined;
@@ -1011,4 +1063,9 @@ export function getRagCoreHost(): RagCoreHost | undefined {
 /** Test / future host access to the index pipeline. */
 export function getIndexPipeline(): IndexPipeline | undefined {
 	return indexPipeline;
+}
+
+/** Access to the EmailIndexer for case-linked email indexing. */
+export function getEmailIndexer(): EmailIndexer | undefined {
+	return emailIndexer;
 }

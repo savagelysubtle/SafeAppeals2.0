@@ -188,7 +188,7 @@ export const App: React.FC = () => {
 						setSelectedThreadId(msg.threadId);
 						setPane('read');
 						pendingSelectRef.current = msg.threadId;
-						vscode.postMessage({ type: 'getThread', threadId: msg.threadId });
+						vscode.postMessage({ type: 'getThread', accountId, threadId: msg.threadId });
 					}
 					break;
 				case 'openCompose':
@@ -435,14 +435,14 @@ export const App: React.FC = () => {
 		if (!selectedThreadId) {
 			return;
 		}
-		vscode.postMessage({ type: 'linkThreadToCase', threadId: selectedThreadId });
+		vscode.postMessage({ type: 'linkThreadToCase', accountId, threadId: selectedThreadId });
 	};
 
 	const onUnlinkCase = () => {
 		if (!selectedThreadId) {
 			return;
 		}
-		vscode.postMessage({ type: 'unlinkThreadFromCase', threadId: selectedThreadId });
+		vscode.postMessage({ type: 'unlinkThreadFromCase', accountId, threadId: selectedThreadId });
 	};
 
 	const onForward = () => {
@@ -461,6 +461,13 @@ export const App: React.FC = () => {
 			`To: ${message.to}\n` +
 			`\n${body}`;
 		startCompose({ to: '', subject, body: forwarded, emailId: message.id });
+	};
+
+	const onExport = () => {
+		if (!selectedMessageId) {
+			return;
+		}
+		vscode.postMessage({ type: 'exportEmail', messageId: selectedMessageId });
 	};
 
 	const onSaveSettings = () => {
@@ -829,6 +836,9 @@ export const App: React.FC = () => {
 											</button>
 											<button type="button" onClick={onForward}>
 												Forward
+											</button>
+											<button type="button" onClick={onExport}>
+												Export
 											</button>
 											{selectedThread.caseFolderPath ? (
 												<button type="button" className="secondary" onClick={onUnlinkCase}>

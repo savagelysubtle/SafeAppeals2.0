@@ -32,8 +32,21 @@ const DRAFTS_FILE = 'email-drafts.json';
 const META_FILE = 'email-sync-meta.json';
 const CASE_LINKS_FILE = 'email-case-links.json';
 const TAGS_FILE = 'email-tags.json';
+const RAG_MANIFEST_FILE = 'email-rag-manifest.json';
 const DEK_KEY_ID = 'safeappeals-email.dek.emailIndex';
-const STORE_FILES = [INDEX_FILE, DRAFTS_FILE, META_FILE, CASE_LINKS_FILE, TAGS_FILE] as const;
+const STORE_FILES = [INDEX_FILE, DRAFTS_FILE, META_FILE, CASE_LINKS_FILE, TAGS_FILE, RAG_MANIFEST_FILE] as const;
+
+export interface EmailRagManifestEntry {
+	readonly accountId: string;
+	readonly caseFolderPath: string;
+	readonly docIds: readonly string[];
+	readonly retryDocIds: readonly string[];
+}
+
+interface RagManifestFile {
+	version: '1.0';
+	threads: Record<string, EmailRagManifestEntry>;
+}
 
 interface IndexFile {
 	version: '1.0';
@@ -102,6 +115,10 @@ function computeThreadId(msg: Pick<EmailMessage, 'references' | 'inReplyTo' | 'm
 	return msg.messageId || msg.id;
 }
 
+function threadKey(accountId: string, threadId: string): string {
+	return `${accountId}\0${threadId}`;
+}
+
 export class EmailIndex {
 	private messages: EmailMessage[] = [];
 	private threadStatus: Record<string, ThreadStatus> = {};
@@ -110,6 +127,7 @@ export class EmailIndex {
 	private knownTags: string[] = [];
 	private threadTags: Record<string, string[]> = {};
 	private hiddenThreads = new Set<string>();
+	private ragManifest: Record<string, EmailRagManifestEntry> = {};
 	private meta: SyncMetaFile = { version: '1.0', lastBackgroundSync: null, perAccount: {} };
 	private dek: Buffer | undefined;
 	private mode: 'encrypted' | 'memory' = 'memory';
@@ -123,6 +141,7 @@ export class EmailIndex {
 		private readonly secrets: vscode.SecretStorage,
 		globalState: vscode.Memento,
 		private readonly log?: (msg: string) => void,
+		private readonly persistOverride?: (filePath: string, payload: unknown) => Promise<void>,
 	) {
 		this.marker = createMementoDekDurabilityMarker(globalState, DEK_KEY_ID);
 	}
@@ -187,6 +206,7 @@ export class EmailIndex {
 		this.knownTags = [];
 		this.threadTags = {};
 		this.hiddenThreads = new Set();
+		this.ragManifest = {};
 		this.meta = { version: '1.0', lastBackgroundSync: null, perAccount: {} };
 		this.dek = undefined;
 		this.mode = 'memory';
@@ -239,7 +259,7 @@ export class EmailIndex {
 	}
 
 	getStats(): EmailStats {
-		const threadIds = new Set(this.messages.map((m) => m.threadId));
+		const threadIds = new Set(this.messages.map(m => threadKey(m.accountId, m.threadId)));
 		const accounts = new Set(this.messages.map((m) => m.accountId));
 		return {
 			totalEmails: this.messages.length,
@@ -289,15 +309,17 @@ export class EmailIndex {
 
 		const byThread = new Map<string, EmailMessage[]>();
 		for (const m of filtered) {
-			const list = byThread.get(m.threadId) || [];
+			const key = threadKey(m.accountId, m.threadId);
+			const list = byThread.get(key) || [];
 			list.push(m);
-			byThread.set(m.threadId, list);
+			byThread.set(key, list);
 		}
 
 		let threads: EmailThread[] = [];
-		for (const [threadId, msgs] of byThread) {
+		for (const [key, msgs] of byThread) {
 			msgs.sort((a, b) => Date.parse(a.date) - Date.parse(b.date));
 			const latest = msgs[msgs.length - 1];
+			const threadId = latest.threadId;
 			const participants = new Set(msgs.map((m) => m.from));
 			threads.push({
 				threadId,
@@ -307,10 +329,10 @@ export class EmailIndex {
 				latestDate: latest.date,
 				emailCount: msgs.length,
 				participantCount: participants.size,
-				status: this.threadStatus[threadId] || 'active',
-				caseFolderPath: this.caseLinks[threadId],
-				tags: this.threadTags[threadId],
-				hidden: this.hiddenThreads.has(threadId),
+				status: this.threadStatus[key] || 'active',
+				caseFolderPath: this.caseLinks[key],
+				tags: this.threadTags[key],
+				hidden: this.hiddenThreads.has(key),
 				messages: msgs.map(toSummary),
 			});
 		}
@@ -353,8 +375,8 @@ export class EmailIndex {
 		};
 	}
 
-	getThread(threadId: string): EmailThread | undefined {
-		const msgs = this.messages.filter((m) => m.threadId === threadId);
+	getThread(accountId: string, threadId: string): EmailThread | undefined {
+		const msgs = this.messages.filter(m => m.accountId === accountId && m.threadId === threadId);
 		if (msgs.length === 0) {
 			return undefined;
 		}
@@ -368,31 +390,46 @@ export class EmailIndex {
 			latestDate: latest.date,
 			emailCount: msgs.length,
 			participantCount: new Set(msgs.map((m) => m.from)).size,
-			status: this.threadStatus[threadId] || 'active',
-			caseFolderPath: this.caseLinks[threadId],
-			tags: this.threadTags[threadId],
-			hidden: this.hiddenThreads.has(threadId),
+			status: this.threadStatus[threadKey(accountId, threadId)] || 'active',
+			caseFolderPath: this.caseLinks[threadKey(accountId, threadId)],
+			tags: this.threadTags[threadKey(accountId, threadId)],
+			hidden: this.hiddenThreads.has(threadKey(accountId, threadId)),
 			messages: msgs.map(toSummary),
 		};
 	}
 
-	async updateThreadStatus(threadId: string, status: ThreadStatus): Promise<void> {
-		this.threadStatus[threadId] = status;
+	async updateThreadStatus(accountId: string, threadId: string, status: ThreadStatus): Promise<void> {
+		this.threadStatus[threadKey(accountId, threadId)] = status;
 		await this.saveIndex();
 	}
 
-	async linkThreadToCase(threadId: string, caseFolderPath: string): Promise<void> {
-		this.caseLinks[threadId] = caseFolderPath;
-		await this.saveCaseLinks();
+	async linkThreadToCase(accountId: string, threadId: string, caseFolderPath: string): Promise<void> {
+		const key = threadKey(accountId, threadId);
+		const previous = this.caseLinks[key];
+		this.caseLinks[key] = caseFolderPath;
+		try {
+			await this.saveCaseLinks();
+		} catch (error) {
+			if (previous === undefined) delete this.caseLinks[key];
+			else this.caseLinks[key] = previous;
+			throw error;
+		}
 	}
 
-	async unlinkThread(threadId: string): Promise<void> {
-		delete this.caseLinks[threadId];
-		await this.saveCaseLinks();
+	async unlinkThread(accountId: string, threadId: string): Promise<void> {
+		const key = threadKey(accountId, threadId);
+		const previous = this.caseLinks[key];
+		delete this.caseLinks[key];
+		try {
+			await this.saveCaseLinks();
+		} catch (error) {
+			if (previous !== undefined) this.caseLinks[key] = previous;
+			throw error;
+		}
 	}
 
-	getThreadCase(threadId: string): string | undefined {
-		return this.caseLinks[threadId];
+	getThreadCase(accountId: string, threadId: string): string | undefined {
+		return this.caseLinks[threadKey(accountId, threadId)];
 	}
 
 	/** Returns the first-use casing when the tag is already known. */
@@ -401,16 +438,17 @@ export class EmailIndex {
 		return this.knownTags.find((t) => t.toLowerCase() === lc) || tag;
 	}
 
-	async tagThread(threadId: string, tag: string): Promise<void> {
+	async tagThread(accountId: string, threadId: string, tag: string): Promise<void> {
+		const key = threadKey(accountId, threadId);
 		const trimmed = tag.trim();
 		if (!trimmed) {
 			throw new Error('Tag must not be empty');
 		}
 		const canonical = this.canonicalTag(trimmed);
 		const lc = canonical.toLowerCase();
-		const existing = this.threadTags[threadId] || [];
+		const existing = this.threadTags[key] || [];
 		if (!existing.some((t) => t.toLowerCase() === lc)) {
-			this.threadTags[threadId] = [...existing, canonical];
+			this.threadTags[key] = [...existing, canonical];
 		}
 		if (!this.knownTags.some((t) => t.toLowerCase() === lc)) {
 			this.knownTags.push(canonical);
@@ -418,17 +456,18 @@ export class EmailIndex {
 		await this.saveTags();
 	}
 
-	async untagThread(threadId: string, tag: string): Promise<void> {
+	async untagThread(accountId: string, threadId: string, tag: string): Promise<void> {
+		const key = threadKey(accountId, threadId);
 		const lc = tag.trim().toLowerCase();
-		const existing = this.threadTags[threadId];
+		const existing = this.threadTags[key];
 		if (!existing) {
 			return;
 		}
 		const next = existing.filter((t) => t.toLowerCase() !== lc);
 		if (next.length > 0) {
-			this.threadTags[threadId] = next;
+			this.threadTags[key] = next;
 		} else {
-			delete this.threadTags[threadId];
+			delete this.threadTags[key];
 		}
 		await this.saveTags();
 	}
@@ -454,8 +493,8 @@ export class EmailIndex {
 		await this.saveTags();
 	}
 
-	getThreadTags(threadId: string): string[] {
-		return [...(this.threadTags[threadId] || [])];
+	getThreadTags(accountId: string, threadId: string): string[] {
+		return [...(this.threadTags[threadKey(accountId, threadId)] || [])];
 	}
 
 	listTags(): { name: string; count: number }[] {
@@ -479,18 +518,18 @@ export class EmailIndex {
 		);
 	}
 
-	async hideThread(threadId: string): Promise<void> {
-		this.hiddenThreads.add(threadId);
+	async hideThread(accountId: string, threadId: string): Promise<void> {
+		this.hiddenThreads.add(threadKey(accountId, threadId));
 		await this.saveTags();
 	}
 
-	async unhideThread(threadId: string): Promise<void> {
-		this.hiddenThreads.delete(threadId);
+	async unhideThread(accountId: string, threadId: string): Promise<void> {
+		this.hiddenThreads.delete(threadKey(accountId, threadId));
 		await this.saveTags();
 	}
 
-	isThreadHidden(threadId: string): boolean {
-		return this.hiddenThreads.has(threadId);
+	isThreadHidden(accountId: string, threadId: string): boolean {
+		return this.hiddenThreads.has(threadKey(accountId, threadId));
 	}
 
 	async upsertMessage(msg: EmailMessage): Promise<EmailMessage> {
@@ -580,9 +619,63 @@ export class EmailIndex {
 		}
 		this.drafts = this.drafts.filter((d) => d.accountId !== accountId);
 		delete this.meta.perAccount[accountId];
+		const prefix = `${accountId}\0`;
+		for (const key of Object.keys(this.threadStatus)) {
+			if (key.startsWith(prefix)) delete this.threadStatus[key];
+		}
+		for (const key of Object.keys(this.caseLinks)) {
+			if (key.startsWith(prefix)) delete this.caseLinks[key];
+		}
+		for (const key of Object.keys(this.threadTags)) {
+			if (key.startsWith(prefix)) delete this.threadTags[key];
+		}
+		for (const key of this.hiddenThreads) {
+			if (key.startsWith(prefix)) this.hiddenThreads.delete(key);
+		}
+		for (const [key, entry] of Object.entries(this.ragManifest)) {
+			if (key.startsWith(prefix) || entry.accountId === accountId) delete this.ragManifest[key];
+		}
+		const usedTags = new Set(Object.values(this.threadTags).flat().map(tag => tag.toLowerCase()));
+		this.knownTags = this.knownTags.filter(tag => usedTags.has(tag.toLowerCase()));
 		await this.saveIndex();
 		await this.saveDrafts();
 		await this.saveMeta();
+		await this.saveCaseLinks();
+		await this.saveTags();
+		await this.saveRagManifest();
+	}
+
+	getRagManifestEntry(accountId: string, threadId: string): EmailRagManifestEntry | undefined {
+		return this.ragManifest[threadKey(accountId, threadId)];
+	}
+
+	isDurableStorageReady(): boolean {
+		return this.mode === 'encrypted' && this.dek !== undefined;
+	}
+
+	getRagManifestEntries(accountId?: string): ReadonlyArray<readonly [string, string, EmailRagManifestEntry]> {
+		return Object.entries(this.ragManifest)
+			.filter(([, entry]) => !accountId || entry.accountId === accountId)
+			.map(([key, entry]) => {
+				const separator = key.indexOf('\0');
+				return [entry.accountId, key.slice(separator + 1), entry] as const;
+			});
+	}
+
+	async setRagManifestEntry(accountId: string, threadId: string, entry: EmailRagManifestEntry | undefined): Promise<void> {
+		if (!this.isDurableStorageReady()) {
+			throw new Error('Encrypted email RAG manifest storage is unavailable.');
+		}
+		const key = threadKey(accountId, threadId);
+		if (entry) {
+			if (entry.accountId !== accountId) {
+				throw new Error('RAG manifest account does not match thread identity.');
+			}
+			this.ragManifest[key] = entry;
+		} else {
+			delete this.ragManifest[key];
+		}
+		await this.saveRagManifest();
 	}
 
 	// --- Drafts ---
@@ -753,6 +846,10 @@ export class EmailIndex {
 		return path.join(this.storageUri.fsPath, CASE_LINKS_FILE);
 	}
 
+	private ragManifestPath(): string {
+		return path.join(this.storageUri.fsPath, RAG_MANIFEST_FILE);
+	}
+
 	private tagsPath(): string {
 		return path.join(this.storageUri.fsPath, TAGS_FILE);
 	}
@@ -764,6 +861,7 @@ export class EmailIndex {
 			this.metaPath(),
 			this.caseLinksPath(),
 			this.tagsPath(),
+			this.ragManifestPath(),
 		];
 	}
 
@@ -844,10 +942,71 @@ export class EmailIndex {
 			this.threadTags = {};
 			this.hiddenThreads = new Set();
 		}
+
+		const ragManifestResult = await loadJson<RagManifestFile>(this.ragManifestPath(), dek, this.log);
+		this.ragManifest = ragManifestResult.value?.threads || {};
+		this.migrateLegacyThreadMetadata();
+		await Promise.all([
+			this.saveIndex(),
+			this.saveCaseLinks(),
+			this.saveTags(),
+			this.saveRagManifest(),
+		]);
+	}
+
+	private migrateLegacyThreadMetadata(): void {
+		const accountsByThread = new Map<string, Set<string>>();
+		for (const message of this.messages) {
+			const accounts = accountsByThread.get(message.threadId) ?? new Set<string>();
+			accounts.add(message.accountId);
+			accountsByThread.set(message.threadId, accounts);
+		}
+		const migrateRecord = <T>(record: Record<string, T>, accountFromValue?: (value: T) => string | undefined): Record<string, T> => {
+			const migrated: Record<string, T> = {};
+			for (const [key, value] of Object.entries(record)) {
+				if (key.includes('\0')) migrated[key] = value;
+			}
+			for (const [key, value] of Object.entries(record)) {
+				if (key.includes('\0')) {
+					continue;
+				}
+				const explicitAccount = accountFromValue?.(value);
+				const accounts = explicitAccount ? new Set([explicitAccount]) : accountsByThread.get(key);
+				if (accounts?.size === 1) {
+					const qualifiedKey = threadKey([...accounts][0], key);
+					if (!(qualifiedKey in migrated)) migrated[qualifiedKey] = value;
+				} else {
+					this.log?.(`Quarantined ambiguous legacy thread metadata for ${key}`);
+				}
+			}
+			return migrated;
+		};
+		this.threadStatus = migrateRecord(this.threadStatus);
+		this.caseLinks = migrateRecord(this.caseLinks);
+		this.threadTags = migrateRecord(this.threadTags);
+		this.hiddenThreads = new Set(Object.keys(migrateRecord(Object.fromEntries([...this.hiddenThreads].map(key => [key, true])))));
+		const migratedManifest = migrateRecord(this.ragManifest, entry => entry.accountId || undefined);
+		for (const [legacyKey, legacyEntry] of Object.entries(this.ragManifest)) {
+			if (legacyKey.includes('\0') || !legacyEntry.accountId) continue;
+			const qualifiedKey = threadKey(legacyEntry.accountId, legacyKey);
+			const qualifiedEntry = migratedManifest[qualifiedKey];
+			if (qualifiedEntry && qualifiedEntry !== legacyEntry) {
+				migratedManifest[qualifiedKey] = {
+					...qualifiedEntry,
+					docIds: [...new Set([...qualifiedEntry.docIds, ...legacyEntry.docIds])],
+					retryDocIds: [...new Set([...qualifiedEntry.retryDocIds, ...legacyEntry.retryDocIds])],
+				};
+			}
+		}
+		this.ragManifest = migratedManifest;
 	}
 
 	private async persist(filePath: string, payload: unknown): Promise<void> {
 		if (this.mode === 'memory' || !this.dek) {
+			return;
+		}
+		if (this.persistOverride) {
+			await this.persistOverride(filePath, payload);
 			return;
 		}
 		await writeEncryptedJson(filePath, payload, this.dek);
@@ -884,6 +1043,21 @@ export class EmailIndex {
 			hiddenThreads: [...this.hiddenThreads],
 		};
 		await this.persist(this.tagsPath(), payload);
+	}
+
+	private async saveRagManifest(): Promise<void> {
+		const payload: RagManifestFile = { version: '1.0', threads: this.ragManifest };
+		await this.persist(this.ragManifestPath(), payload);
+	}
+
+	/** Returns all threads that are linked to a case folder. */
+	getLinkedThreads(): EmailThread[] {
+		return Object.keys(this.caseLinks)
+			.map(key => {
+				const separator = key.indexOf('\0');
+				return separator < 0 ? undefined : this.getThread(key.slice(0, separator), key.slice(separator + 1));
+			})
+			.filter((t): t is EmailThread => t !== undefined);
 	}
 }
 

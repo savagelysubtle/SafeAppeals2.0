@@ -7436,7 +7436,7 @@
               setSelectedThreadId(msg.threadId);
               setPane("read");
               pendingSelectRef.current = msg.threadId;
-              vscode.postMessage({ type: "getThread", threadId: msg.threadId });
+              vscode.postMessage({ type: "getThread", accountId, threadId: msg.threadId });
             }
             break;
           case "openCompose":
@@ -7657,13 +7657,13 @@
       if (!selectedThreadId) {
         return;
       }
-      vscode.postMessage({ type: "linkThreadToCase", threadId: selectedThreadId });
+      vscode.postMessage({ type: "linkThreadToCase", accountId, threadId: selectedThreadId });
     };
     const onUnlinkCase = () => {
       if (!selectedThreadId) {
         return;
       }
-      vscode.postMessage({ type: "unlinkThreadFromCase", threadId: selectedThreadId });
+      vscode.postMessage({ type: "unlinkThreadFromCase", accountId, threadId: selectedThreadId });
     };
     const onForward = () => {
       if (!message) {
@@ -7679,6 +7679,12 @@ To: ${message.to}
 
 ${body}`;
       startCompose({ to: "", subject, body: forwarded, emailId: message.id });
+    };
+    const onExport = () => {
+      if (!selectedMessageId) {
+        return;
+      }
+      vscode.postMessage({ type: "exportEmail", messageId: selectedMessageId });
     };
     const onSaveSettings = () => {
       if (!settingsDraft) {
@@ -7994,6 +8000,7 @@ ${body}`;
               /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "msg-actions", children: [
                 /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { type: "button", onClick: onReply, children: "Reply" }),
                 /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { type: "button", onClick: onForward, children: "Forward" }),
+                /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { type: "button", onClick: onExport, children: "Export" }),
                 selectedThread.caseFolderPath ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { type: "button", className: "secondary", onClick: onUnlinkCase, children: "Unlink from case" }) : caseName ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
                   "button",
                   {

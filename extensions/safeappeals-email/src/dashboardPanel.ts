@@ -387,7 +387,7 @@ export class DashboardPanel {
 					break;
 				}
 				case 'getThread': {
-					const thread = this.engine.getThread(msg.threadId as string);
+					const thread = this.engine.getThread(msg.accountId as string, msg.threadId as string);
 					this.panel.webview.postMessage({ type: 'thread', thread });
 					break;
 				}
@@ -483,19 +483,7 @@ export class DashboardPanel {
 					if (!accountId) {
 						break;
 					}
-					const account = this.accounts.getAccount(accountId);
-					const label = account?.label || accountId;
-					const confirm = await vscode.window.showWarningMessage(
-						`Remove email account “${label}”? Cached messages for this account will be deleted.`,
-						{ modal: true },
-						'Remove',
-					);
-					if (confirm !== 'Remove') {
-						break;
-					}
-					await this.index.clearAccount(accountId);
-					await this.accounts.removeAccount(accountId);
-					this.log(`Account removed (dashboard): ${accountId}`);
+					await vscode.commands.executeCommand('safeappeals-email.removeAccount', accountId);
 					this.onAccountsChanged?.();
 					await this.postBootstrap();
 					break;
@@ -509,22 +497,24 @@ export class DashboardPanel {
 					break;
 				case 'linkThreadToCase': {
 					const threadId = msg.threadId as string | undefined;
-					if (!threadId) {
+					const accountId = msg.accountId as string | undefined;
+					if (!accountId || !threadId) {
 						break;
 					}
-					await vscode.commands.executeCommand('safeappeals-email.linkThreadToCase', threadId);
+					await vscode.commands.executeCommand('safeappeals-email.linkThreadToCase', accountId, threadId);
 					await this.postBootstrap();
-					this.panel.webview.postMessage({ type: 'thread', thread: this.engine.getThread(threadId) });
+					this.panel.webview.postMessage({ type: 'thread', thread: this.engine.getThread(accountId, threadId) });
 					break;
 				}
 				case 'unlinkThreadFromCase': {
 					const threadId = msg.threadId as string | undefined;
-					if (!threadId) {
+					const accountId = msg.accountId as string | undefined;
+					if (!accountId || !threadId) {
 						break;
 					}
-					await vscode.commands.executeCommand('safeappeals-email.unlinkThreadFromCase', threadId);
+					await vscode.commands.executeCommand('safeappeals-email.unlinkThreadFromCase', accountId, threadId);
 					await this.postBootstrap();
-					this.panel.webview.postMessage({ type: 'thread', thread: this.engine.getThread(threadId) });
+					this.panel.webview.postMessage({ type: 'thread', thread: this.engine.getThread(accountId, threadId) });
 					break;
 				}
 				case 'openEml': {
@@ -541,6 +531,13 @@ export class DashboardPanel {
 				case 'focusSidebar':
 					await vscode.commands.executeCommand('workbench.view.extension.safeappeals-email');
 					break;
+				case 'exportEmail': {
+					const messageId = msg.messageId as string | undefined;
+					if (messageId) {
+						await vscode.commands.executeCommand('safeappeals-email.exportEmail', messageId);
+					}
+					break;
+				}
 				default:
 					this.log(`Unknown dashboard message: ${msg.type}`);
 			}
@@ -780,31 +777,20 @@ export class EmailSidebarProvider implements vscode.WebviewViewProvider {
 					if (!accountId) {
 						break;
 					}
-					const account = this.accounts.getAccount(accountId);
-					const label = account?.label || accountId;
-					const confirm = await vscode.window.showWarningMessage(
-						`Remove email account “${label}”? Cached messages for this account will be deleted.`,
-						{ modal: true },
-						'Remove',
-					);
-					if (confirm !== 'Remove') {
-						break;
-					}
-					await this.index.clearAccount(accountId);
-					await this.accounts.removeAccount(accountId);
-					this.log(`Account removed (sidebar): ${accountId}`);
+					await vscode.commands.executeCommand('safeappeals-email.removeAccount', accountId);
 					this.onAccountsChanged?.();
 					await this.postBootstrap();
 					break;
 				}
 				case 'tagThread':
 				case 'untagThread': {
+					const accountId = msg.accountId as string | undefined;
 					const threadId = msg.threadId as string | undefined;
 					const tag = msg.tag as string | undefined;
-					if (!threadId || !tag) {
+					if (!accountId || !threadId || !tag) {
 						break;
 					}
-					await vscode.commands.executeCommand(`safeappeals-email.${msg.type}`, threadId, tag);
+					await vscode.commands.executeCommand(`safeappeals-email.${msg.type}`, accountId, threadId, tag);
 					await this.postBootstrap();
 					break;
 				}
@@ -835,21 +821,23 @@ export class EmailSidebarProvider implements vscode.WebviewViewProvider {
 				}
 				case 'hideThread':
 				case 'unhideThread': {
+					const accountId = msg.accountId as string | undefined;
 					const threadId = msg.threadId as string | undefined;
-					if (!threadId) {
+					if (!accountId || !threadId) {
 						break;
 					}
-					await vscode.commands.executeCommand(`safeappeals-email.${msg.type}`, threadId);
+					await vscode.commands.executeCommand(`safeappeals-email.${msg.type}`, accountId, threadId);
 					await this.postBootstrap();
 					break;
 				}
 				case 'linkThreadToCase':
 				case 'unlinkThreadFromCase': {
+					const accountId = msg.accountId as string | undefined;
 					const threadId = msg.threadId as string | undefined;
-					if (!threadId) {
+					if (!accountId || !threadId) {
 						break;
 					}
-					await vscode.commands.executeCommand(`safeappeals-email.${msg.type}`, threadId);
+					await vscode.commands.executeCommand(`safeappeals-email.${msg.type}`, accountId, threadId);
 					await this.postBootstrap();
 					break;
 				}

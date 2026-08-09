@@ -31,22 +31,23 @@ function isMailScope(value: unknown): value is MailScope {
 export const App: React.FC = () => {
 	const persisted = readPersisted();
 	const [accounts, setAccounts] = useState<Account[]>([]);
-	const [accountId, setAccountId] = useState(persisted.accountId || '');
-	const [folder, setFolder] = useState(persisted.folder || 'INBOX');
-	const [sort, setSort] = useState<ThreadSort>(isThreadSort(persisted.sort) ? persisted.sort : 'newest');
-	const [scope, setScope] = useState<MailScope>(isMailScope(persisted.scope) ? persisted.scope : 'all');
-	const [caseName, setCaseName] = useState<string | null>(null);
-	const [casePath, setCasePath] = useState<string | null>(null);
-	const [allTags, setAllTags] = useState<TagInfo[]>([]);
-	const [tagFilter, setTagFilter] = useState<string | null>(
-		typeof persisted.tagFilter === 'string' ? persisted.tagFilter : null,
-	);
-	const [tagMenuOpen, setTagMenuOpen] = useState(false);
-	const [menuThreadId, setMenuThreadId] = useState<string | null>(null);
-	const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null);
-	const [newTagDraft, setNewTagDraft] = useState<string | null>(null);
-	const menuRef = useRef<HTMLDivElement | null>(null);
-	const tagMenuRef = useRef<HTMLDivElement | null>(null);
+const [accountId, setAccountId] = useState(persisted.accountId || '');
+const [folder, setFolder] = useState(persisted.folder || 'INBOX');
+const [sort, setSort] = useState<ThreadSort>(isThreadSort(persisted.sort) ? persisted.sort : 'newest');
+const [scope, setScope] = useState<MailScope>(isMailScope(persisted.scope) ? persisted.scope : 'all');
+const [caseName, setCaseName] = useState<string | null>(null);
+const [casePath, setCasePath] = useState<string | null>(null);
+const [allTags, setAllTags] = useState<TagInfo[]>([]);
+const [tagFilter, setTagFilter] = useState<string | null>(
+	typeof persisted.tagFilter === 'string' ? persisted.tagFilter : null,
+);
+const [tagMenuOpen, setTagMenuOpen] = useState(false);
+const [menuThreadId, setMenuThreadId] = useState<string | null>(null);
+const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null);
+const [newTagDraft, setNewTagDraft] = useState<string | null>(null);
+const [accountMenuAction, setAccountMenuAction] = useState<string>('');
+const menuRef = useRef<HTMLDivElement | null>(null);
+const tagMenuRef = useRef<HTMLDivElement | null>(null);
 	const [threads, setThreads] = useState<Thread[]>([]);
 	const [total, setTotal] = useState(0);
 	const [syncStatus, setSyncStatus] = useState<SyncStatus | null>(null);
@@ -339,6 +340,7 @@ export const App: React.FC = () => {
 		const linked = !!casePath && thread.caseFolderPath === casePath;
 		vscode.postMessage({
 			type: linked ? 'unlinkThreadFromCase' : 'linkThreadToCase',
+			accountId: thread.accountId,
 			threadId: thread.threadId,
 		});
 		closeMenu();
@@ -347,6 +349,7 @@ export const App: React.FC = () => {
 	const onMenuToggleHidden = (thread: Thread) => {
 		vscode.postMessage({
 			type: thread.hidden ? 'unhideThread' : 'hideThread',
+			accountId: thread.accountId,
 			threadId: thread.threadId,
 		});
 		closeMenu();
@@ -356,6 +359,7 @@ export const App: React.FC = () => {
 		const has = (thread.tags || []).some((t) => t.toLowerCase() === tag.toLowerCase());
 		vscode.postMessage({
 			type: has ? 'untagThread' : 'tagThread',
+			accountId: thread.accountId,
 			threadId: thread.threadId,
 			tag,
 		});
@@ -367,7 +371,7 @@ export const App: React.FC = () => {
 		if (!tag) {
 			return;
 		}
-		vscode.postMessage({ type: 'tagThread', threadId: thread.threadId, tag });
+		vscode.postMessage({ type: 'tagThread', accountId: thread.accountId, threadId: thread.threadId, tag });
 		closeMenu();
 	};
 
@@ -442,11 +446,11 @@ export const App: React.FC = () => {
 					</select>
 					<select
 						className="account-menu"
-						value=""
+						value={accountMenuAction}
 						title="Account actions"
 						onChange={(e) => {
 							const action = e.target.value;
-							e.target.value = '';
+							setAccountMenuAction('');
 							onAccountMenu(action);
 						}}
 					>

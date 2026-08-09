@@ -28,14 +28,32 @@ function secretKey(accountId: string): string {
 export interface AccountConfigPersistence {
 	list(): EmailAccountConfig[];
 	save(accounts: EmailAccountConfig[]): Promise<void>;
+	initialize?(): Promise<void>;
 }
 
-function defaultPersistence(): AccountConfigPersistence {
+function defaultPersistence(secrets: SecretStorage): AccountConfigPersistence {
 	// Lazy require keeps unit tests that inject persistence off the vscode/config path.
 	const config = require('./config') as typeof import('./config');
+	const metadataKey = 'safeappeals-email.accountMetadata';
+	let cached = config.getConfiguredAccounts();
 	return {
-		list: () => config.getConfiguredAccounts(),
-		save: (accounts) => config.setConfiguredAccounts(accounts),
+		list: () => cached,
+		save: async accounts => {
+			await secrets.store(metadataKey, JSON.stringify(accounts));
+			cached = accounts;
+			await config.setConfiguredAccounts([]);
+		},
+		initialize: async () => {
+			const encrypted = await secrets.get(metadataKey);
+			if (encrypted) {
+				const parsed = JSON.parse(encrypted) as EmailAccountConfig[];
+				cached = Array.isArray(parsed) ? parsed : [];
+				await config.setConfiguredAccounts([]);
+			} else if (cached.length > 0) {
+				await secrets.store(metadataKey, JSON.stringify(cached));
+				await config.setConfiguredAccounts([]);
+			}
+		},
 	};
 }
 
@@ -58,8 +76,12 @@ export class AccountStore {
 		persistence?: AccountConfigPersistence,
 		showError?: (message: string) => void,
 	) {
-		this.persistence = persistence ?? defaultPersistence();
+		this.persistence = persistence ?? defaultPersistence(secrets);
 		this.showError = showError ?? defaultShowError;
+	}
+
+	async initialize(): Promise<void> {
+		await this.persistence.initialize?.();
 	}
 
 	listAccounts(): EmailAccountConfig[] {

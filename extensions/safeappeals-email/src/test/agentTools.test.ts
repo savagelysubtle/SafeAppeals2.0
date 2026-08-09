@@ -31,6 +31,7 @@ import {
 } from '../agentTools';
 import { resolveDraftAccountId } from '../draftAccount';
 import { EmailIndex } from '../emailIndex';
+import { loadJson, writeEncryptedJson } from '../shared/encryptedStore';
 import type { EmailDraft, EmailMessage } from '../types';
 
 class FakeSecretStorage implements vscode.SecretStorage {
@@ -330,9 +331,9 @@ suite('email agentTools', () => {
 		});
 
 		test('listThreads includes tags/hidden/caseFolderPath after organize ops', async () => {
-			await index.tagThread('thread-1', 'urgent');
-			await index.hideThread('thread-2');
-			await index.linkThreadToCase('thread-1', '/cases/smith');
+			await index.tagThread('acct-1', 'thread-1', 'urgent');
+			await index.hideThread('acct-1', 'thread-2');
+			await index.linkThreadToCase('acct-1', 'thread-1', '/cases/smith');
 
 			const { threads, total } = index.listThreads({ folder: 'INBOX', limit: 20 });
 			assert.strictEqual(total, 2);
@@ -369,24 +370,40 @@ suite('email agentTools', () => {
 			);
 		});
 
+		test('case-link memory rolls back when encrypted persistence fails', async () => {
+			const dir = await fs.mkdtemp(path.join(tempDir, 'atomic-link-'));
+			let fail = false;
+			const atomicIndex = new EmailIndex(
+				{ fsPath: dir } as vscode.Uri, new FakeSecretStorage(), new FakeMemento(), undefined,
+				async () => { if (fail) throw new Error('disk failure'); },
+			);
+			await atomicIndex.initialize();
+			await atomicIndex.linkThreadToCase('account', 'thread', '/case');
+			fail = true;
+			await assert.rejects(atomicIndex.linkThreadToCase('account', 'thread', '/other'), /disk failure/);
+			assert.strictEqual(atomicIndex.getThreadCase('account', 'thread'), '/case');
+			await assert.rejects(atomicIndex.unlinkThread('account', 'thread'), /disk failure/);
+			assert.strictEqual(atomicIndex.getThreadCase('account', 'thread'), '/case');
+		});
+
 		test('tag/untag/hide/unhide/link/unlink/deleteTag mutate index without dropping messages', async () => {
-			await index.tagThread('thread-1', 'review');
-			await index.tagThread('thread-2', 'review');
-			await index.untagThread('thread-2', 'review');
-			await index.hideThread('thread-1');
-			await index.unhideThread('thread-1');
-			await index.linkThreadToCase('thread-2', '/cases/jones');
-			await index.unlinkThread('thread-2');
+			await index.tagThread('acct-1', 'thread-1', 'review');
+			await index.tagThread('acct-1', 'thread-2', 'review');
+			await index.untagThread('acct-1', 'thread-2', 'review');
+			await index.hideThread('acct-1', 'thread-1');
+			await index.unhideThread('acct-1', 'thread-1');
+			await index.linkThreadToCase('acct-1', 'thread-2', '/cases/jones');
+			await index.unlinkThread('acct-1', 'thread-2');
 			await index.deleteTag('review');
 
 			assert.deepStrictEqual(
 				{
 					msgCount: index.getStats().totalEmails,
 					tags: index.listTags(),
-					t1tags: index.getThreadTags('thread-1'),
-					t2tags: index.getThreadTags('thread-2'),
-					t1hidden: index.isThreadHidden('thread-1'),
-					t2case: index.getThreadCase('thread-2'),
+					t1tags: index.getThreadTags('acct-1', 'thread-1'),
+					t2tags: index.getThreadTags('acct-1', 'thread-2'),
+					t1hidden: index.isThreadHidden('acct-1', 'thread-1'),
+					t2case: index.getThreadCase('acct-1', 'thread-2'),
 				},
 				{
 					msgCount: 2,
@@ -397,6 +414,81 @@ suite('email agentTools', () => {
 					t2case: undefined,
 				},
 			);
+		});
+
+		test('same thread ID in two accounts keeps metadata isolated', async () => {
+			await index.upsertMessage(sampleMessage({ id: 'other-message', accountId: 'acct-2', threadId: 'thread-1' }));
+			await index.tagThread('acct-1', 'thread-1', 'first');
+			await index.tagThread('acct-2', 'thread-1', 'second');
+			await index.hideThread('acct-1', 'thread-1');
+			await index.linkThreadToCase('acct-2', 'thread-1', '/cases/two');
+
+			assert.deepStrictEqual({
+				first: index.getThread('acct-1', 'thread-1'),
+				second: index.getThread('acct-2', 'thread-1'),
+			}, {
+				first: { ...index.getThread('acct-1', 'thread-1'), tags: ['first'], hidden: true, caseFolderPath: undefined },
+				second: { ...index.getThread('acct-2', 'thread-1'), tags: ['second'], hidden: false, caseFolderPath: '/cases/two' },
+			});
+			await index.clearAccount('acct-1');
+			assert.strictEqual(index.getThread('acct-2', 'thread-1')?.caseFolderPath, '/cases/two');
+		});
+
+		test('clearAccount removes stale account metadata without messages', async () => {
+			await index.updateThreadStatus('stale-account', 'orphan', 'resolved');
+			await index.linkThreadToCase('stale-account', 'orphan', '/stale');
+			await index.tagThread('stale-account', 'orphan', 'stale-tag');
+			await index.hideThread('stale-account', 'orphan');
+			await index.setRagManifestEntry('stale-account', 'orphan', {
+				accountId: 'stale-account', caseFolderPath: '/stale', docIds: ['doc'], retryDocIds: [],
+			});
+			await index.clearAccount('stale-account');
+			assert.deepStrictEqual({
+				casePath: index.getThreadCase('stale-account', 'orphan'),
+				tags: index.getThreadTags('stale-account', 'orphan'),
+				hidden: index.isThreadHidden('stale-account', 'orphan'),
+				manifest: index.getRagManifestEntry('stale-account', 'orphan'),
+				knownTags: index.listTags(),
+			}, { casePath: undefined, tags: [], hidden: false, manifest: undefined, knownTags: [] });
+		});
+
+		test('legacy migration preserves qualified state and merges RAG purge IDs', async () => {
+			const dir = await fs.mkdtemp(path.join(tempDir, 'legacy-collision-'));
+			const secrets = new FakeSecretStorage();
+			const memento = new FakeMemento();
+			const initial = new EmailIndex({ fsPath: dir } as vscode.Uri, secrets, memento);
+			await initial.initialize();
+			const encodedDek = await secrets.get('safeappeals-email.dek.emailIndex');
+			assert.ok(encodedDek);
+			const dek = Buffer.from(encodedDek, 'base64');
+			await writeEncryptedJson(path.join(dir, 'email-index.json'), {
+				version: '1.0', messages: [sampleMessage({ accountId: 'acct-1', threadId: 'shared' })],
+				threadStatus: { shared: 'resolved', ['acct-1\0shared']: 'active' },
+			}, dek);
+			await writeEncryptedJson(path.join(dir, 'email-case-links.json'), {
+				version: '1.0', links: { shared: '/legacy', ['acct-1\0shared']: '/qualified' },
+			}, dek);
+			await writeEncryptedJson(path.join(dir, 'email-rag-manifest.json'), {
+				version: '1.0', threads: {
+					shared: { accountId: 'acct-1', caseFolderPath: '/legacy', docIds: ['legacy-doc'], retryDocIds: ['legacy-retry'] },
+					['acct-1\0shared']: { accountId: 'acct-1', caseFolderPath: '/qualified', docIds: ['qualified-doc'], retryDocIds: [] },
+				},
+			}, dek);
+			const migrated = new EmailIndex({ fsPath: dir } as vscode.Uri, secrets, memento);
+			await migrated.initialize();
+			const storedIndex = await loadJson<{ threadStatus: Record<string, string> }>(path.join(dir, 'email-index.json'), dek);
+			assert.deepStrictEqual({
+				casePath: migrated.getThreadCase('acct-1', 'shared'),
+				status: storedIndex.value?.threadStatus,
+				manifest: migrated.getRagManifestEntry('acct-1', 'shared'),
+			}, {
+				casePath: '/qualified',
+				status: { ['acct-1\0shared']: 'active' },
+				manifest: {
+					accountId: 'acct-1', caseFolderPath: '/qualified',
+					docIds: ['qualified-doc', 'legacy-doc'], retryDocIds: ['legacy-retry'],
+				},
+			});
 		});
 	});
 });

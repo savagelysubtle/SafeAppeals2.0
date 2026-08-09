@@ -98,11 +98,13 @@ interface ListFoldersInput {
 }
 
 interface ThreadTagInput {
+	accountId: string;
 	threadId: string;
 	tag: string;
 }
 
 interface ThreadIdInput {
+	accountId: string;
 	threadId: string;
 }
 
@@ -111,6 +113,7 @@ interface DeleteTagInput {
 }
 
 interface LinkThreadInput {
+	accountId: string;
 	threadId: string;
 	caseFolderPath?: string;
 }
@@ -507,6 +510,7 @@ class EmailTagThreadTool implements vscode.LanguageModelTool<ThreadTagInput> {
 			return notInitialized();
 		}
 		const threadId = options.input?.threadId?.trim() ?? '';
+		const accountId = options.input?.accountId?.trim() ?? '';
 		const tag = options.input?.tag?.trim() ?? '';
 		if (!threadId) {
 			return textResult('Error: "threadId" is required.');
@@ -514,13 +518,13 @@ class EmailTagThreadTool implements vscode.LanguageModelTool<ThreadTagInput> {
 		if (!tag) {
 			return textResult('Error: "tag" is required.');
 		}
-		if (!engine.getThread(threadId)) {
+		if (!accountId || !engine.getThread(accountId, threadId)) {
 			return textResult(`Error: thread not found: ${threadId}`);
 		}
 		try {
-			await index.tagThread(threadId, tag);
+			await index.tagThread(accountId, threadId, tag);
 			await (this.ui.refreshEmailUi ?? refreshEmailUi)();
-			const tags = index.getThreadTags(threadId);
+			const tags = index.getThreadTags(accountId, threadId);
 			return textResult(
 				`Tagged thread ${threadId} with “${tag}”.\nCurrent tags: ${tags.join(', ') || '(none)'}`,
 			);
@@ -563,6 +567,7 @@ class EmailUntagThreadTool implements vscode.LanguageModelTool<ThreadTagInput> {
 			return notInitialized();
 		}
 		const threadId = options.input?.threadId?.trim() ?? '';
+		const accountId = options.input?.accountId?.trim() ?? '';
 		const tag = options.input?.tag?.trim() ?? '';
 		if (!threadId) {
 			return textResult('Error: "threadId" is required.');
@@ -570,13 +575,13 @@ class EmailUntagThreadTool implements vscode.LanguageModelTool<ThreadTagInput> {
 		if (!tag) {
 			return textResult('Error: "tag" is required.');
 		}
-		if (!engine.getThread(threadId)) {
+		if (!accountId || !engine.getThread(accountId, threadId)) {
 			return textResult(`Error: thread not found: ${threadId}`);
 		}
 		try {
-			await index.untagThread(threadId, tag);
+			await index.untagThread(accountId, threadId, tag);
 			await (this.ui.refreshEmailUi ?? refreshEmailUi)();
-			const tags = index.getThreadTags(threadId);
+			const tags = index.getThreadTags(accountId, threadId);
 			return textResult(
 				`Removed tag “${tag}” from thread ${threadId}.\nCurrent tags: ${tags.join(', ') || '(none)'}`,
 			);
@@ -666,14 +671,15 @@ class EmailHideThreadTool implements vscode.LanguageModelTool<ThreadIdInput> {
 			return notInitialized();
 		}
 		const threadId = options.input?.threadId?.trim() ?? '';
+		const accountId = options.input?.accountId?.trim() ?? '';
 		if (!threadId) {
 			return textResult('Error: "threadId" is required.');
 		}
-		if (!engine.getThread(threadId)) {
+		if (!accountId || !engine.getThread(accountId, threadId)) {
 			return textResult(`Error: thread not found: ${threadId}`);
 		}
 		try {
-			await index.hideThread(threadId);
+			await index.hideThread(accountId, threadId);
 			await (this.ui.refreshEmailUi ?? refreshEmailUi)();
 			return textResult(`Hidden thread ${threadId}.`);
 		} catch (error) {
@@ -714,14 +720,15 @@ class EmailUnhideThreadTool implements vscode.LanguageModelTool<ThreadIdInput> {
 			return notInitialized();
 		}
 		const threadId = options.input?.threadId?.trim() ?? '';
+		const accountId = options.input?.accountId?.trim() ?? '';
 		if (!threadId) {
 			return textResult('Error: "threadId" is required.');
 		}
-		if (!engine.getThread(threadId)) {
+		if (!accountId || !engine.getThread(accountId, threadId)) {
 			return textResult(`Error: thread not found: ${threadId}`);
 		}
 		try {
-			await index.unhideThread(threadId);
+			await index.unhideThread(accountId, threadId);
 			await (this.ui.refreshEmailUi ?? refreshEmailUi)();
 			return textResult(`Unhidden thread ${threadId}.`);
 		} catch (error) {
@@ -765,10 +772,11 @@ class EmailLinkThreadToCaseTool implements vscode.LanguageModelTool<LinkThreadIn
 			return notInitialized();
 		}
 		const threadId = options.input?.threadId?.trim() ?? '';
+		const accountId = options.input?.accountId?.trim() ?? '';
 		if (!threadId) {
 			return textResult('Error: "threadId" is required.');
 		}
-		if (!engine.getThread(threadId)) {
+		if (!accountId || !engine.getThread(accountId, threadId)) {
 			return textResult(`Error: thread not found: ${threadId}`);
 		}
 		const target = options.input?.caseFolderPath?.trim() || getCurrentCase()?.caseFolderPath;
@@ -778,7 +786,7 @@ class EmailLinkThreadToCaseTool implements vscode.LanguageModelTool<LinkThreadIn
 			);
 		}
 		try {
-			await index.linkThreadToCase(threadId, target);
+			await index.linkThreadToCase(accountId, threadId, target);
 			await (this.ui.refreshEmailUi ?? refreshEmailUi)();
 			return textResult(`Linked thread ${threadId} to case ${target}.`);
 		} catch (error) {
@@ -819,14 +827,15 @@ class EmailUnlinkThreadFromCaseTool implements vscode.LanguageModelTool<ThreadId
 			return notInitialized();
 		}
 		const threadId = options.input?.threadId?.trim() ?? '';
+		const accountId = options.input?.accountId?.trim() ?? '';
 		if (!threadId) {
 			return textResult('Error: "threadId" is required.');
 		}
-		if (!engine.getThread(threadId)) {
+		if (!accountId || !engine.getThread(accountId, threadId)) {
 			return textResult(`Error: thread not found: ${threadId}`);
 		}
 		try {
-			await index.unlinkThread(threadId);
+			await index.unlinkThread(accountId, threadId);
 			await (this.ui.refreshEmailUi ?? refreshEmailUi)();
 			return textResult(`Unlinked thread ${threadId} from its case.`);
 		} catch (error) {

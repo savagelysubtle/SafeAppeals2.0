@@ -7318,6 +7318,7 @@
     const [menuThreadId, setMenuThreadId] = (0, import_react.useState)(null);
     const [menuPos, setMenuPos] = (0, import_react.useState)(null);
     const [newTagDraft, setNewTagDraft] = (0, import_react.useState)(null);
+    const [accountMenuAction, setAccountMenuAction] = (0, import_react.useState)("");
     const menuRef = (0, import_react.useRef)(null);
     const tagMenuRef = (0, import_react.useRef)(null);
     const [threads, setThreads] = (0, import_react.useState)([]);
@@ -7579,6 +7580,7 @@
       const linked = !!casePath && thread.caseFolderPath === casePath;
       vscode.postMessage({
         type: linked ? "unlinkThreadFromCase" : "linkThreadToCase",
+        accountId: thread.accountId,
         threadId: thread.threadId
       });
       closeMenu();
@@ -7586,6 +7588,7 @@
     const onMenuToggleHidden = (thread) => {
       vscode.postMessage({
         type: thread.hidden ? "unhideThread" : "hideThread",
+        accountId: thread.accountId,
         threadId: thread.threadId
       });
       closeMenu();
@@ -7594,6 +7597,7 @@
       const has = (thread.tags || []).some((t) => t.toLowerCase() === tag.toLowerCase());
       vscode.postMessage({
         type: has ? "untagThread" : "tagThread",
+        accountId: thread.accountId,
         threadId: thread.threadId,
         tag
       });
@@ -7604,7 +7608,7 @@
       if (!tag) {
         return;
       }
-      vscode.postMessage({ type: "tagThread", threadId: thread.threadId, tag });
+      vscode.postMessage({ type: "tagThread", accountId: thread.accountId, threadId: thread.threadId, tag });
       closeMenu();
     };
     const commitFolder = () => {
@@ -7673,11 +7677,11 @@
             "select",
             {
               className: "account-menu",
-              value: "",
+              value: accountMenuAction,
               title: "Account actions",
               onChange: (e) => {
                 const action = e.target.value;
-                e.target.value = "";
+                setAccountMenuAction("");
                 onAccountMenu(action);
               },
               children: [
