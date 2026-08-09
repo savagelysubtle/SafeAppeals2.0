@@ -1,7 +1,0 @@
-.vscode
-src/
-package-lock.json
-bun.lock
-tsconfig.json
-*.md
-!README.md

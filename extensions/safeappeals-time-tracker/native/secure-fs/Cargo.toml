@@ -1,0 +1,22 @@
+[package]
+name = "safeappeals-secure-fs"
+version = "0.1.0"
+edition = "2021"
+authors = ["Safe Appeals"]
+license = "Proprietary"
+description = "SafeAppeals descriptor-anchored secure filesystem operations"
+publish = false
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+libc = "0.2"
+napi = { version = "3", default-features = false, features = ["napi4", "dyn-symbols"] }
+napi-derive = "3"
+
+[build-dependencies]
+napi-build = "2"
+
+[dev-dependencies]
+tempfile = "3"

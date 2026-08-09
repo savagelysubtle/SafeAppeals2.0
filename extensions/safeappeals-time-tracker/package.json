@@ -1,0 +1,238 @@
+{
+  "name": "time-tracker",
+  "displayName": "%displayName%",
+  "description": "%description%",
+  "version": "1.0.0",
+  "publisher": "safeappeals",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.70.0"
+  },
+  "main": "./out/extension.js",
+  "categories": [
+    "Other"
+  ],
+  "extensionKind": [
+    "workspace"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "extensionDependencies": [
+    "safeappeals.safeappeals-shared"
+  ],
+  "capabilities": {
+    "virtualWorkspaces": false,
+    "untrustedWorkspaces": {
+      "supported": false
+    }
+  },
+  "contributes": {
+    "commands": [
+      {
+        "command": "timeTracker.start",
+        "title": "%command.start%",
+        "category": "%category%",
+        "icon": "$(play)"
+      },
+      {
+        "command": "timeTracker.stop",
+        "title": "%command.stop%",
+        "category": "%category%",
+        "icon": "$(debug-stop)"
+      },
+      {
+        "command": "timeTracker.toggle",
+        "title": "%command.toggle%",
+        "category": "%category%",
+        "icon": "$(clock)"
+      },
+      {
+        "command": "timeTracker.addEntry",
+        "title": "%command.addEntry%",
+        "category": "%category%",
+        "icon": "$(add)"
+      },
+      {
+        "command": "timeTracker.manageMatter",
+        "title": "%command.manageMatters%",
+        "category": "%category%"
+      },
+      {
+        "command": "timeTracker.manageRates",
+        "title": "%command.manageRates%",
+        "category": "%category%"
+      },
+      {
+        "command": "timeTracker.exportCSV",
+        "title": "%command.exportCsv%",
+        "category": "%category%"
+      },
+      {
+        "command": "timeTracker.exportJSON",
+        "title": "%command.exportJson%",
+        "category": "%category%"
+      },
+      {
+        "command": "timeTracker.exportLEDES",
+        "title": "%command.exportLedes%",
+        "category": "%category%"
+      },
+      {
+        "command": "timeTracker.clearLocalDatabase",
+        "title": "%command.deleteDatabase%",
+        "category": "%category%"
+      },
+      {
+        "command": "timeTracker.clearLocalData",
+        "title": "%command.deleteAllData%",
+        "category": "%category%"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "timeTracker.toggle",
+        "key": "ctrl+shift+t",
+        "mac": "cmd+shift+t"
+      },
+      {
+        "command": "timeTracker.addEntry",
+        "key": "ctrl+shift+e",
+        "mac": "cmd+shift+e"
+      }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "timeTracker",
+          "title": "%category%",
+          "icon": "$(clock)"
+        }
+      ]
+    },
+    "views": {
+      "timeTracker": [
+        {
+          "type": "webview",
+          "id": "timeTracker.sidebar",
+          "name": "%category%"
+        }
+      ]
+    },
+    "languageModelTools": [
+      {
+        "name": "safeappeals_timer_getState",
+        "toolReferenceName": "timerGetState",
+        "displayName": "%tool.getState.name%",
+        "modelDescription": "%tool.getState.modelDescription%",
+        "userDescription": "%tool.getState.userDescription%",
+        "canBeReferencedInPrompt": true,
+        "icon": "$(clock)",
+        "inputSchema": {
+          "type": "object",
+          "properties": {}
+        }
+      },
+      {
+        "name": "safeappeals_timer_start",
+        "toolReferenceName": "timerStart",
+        "displayName": "%tool.start.name%",
+        "modelDescription": "%tool.start.modelDescription%",
+        "userDescription": "%tool.start.userDescription%",
+        "canBeReferencedInPrompt": true,
+        "icon": "$(play)",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "description": {
+              "type": "string",
+              "description": "%tool.start.description%"
+            },
+            "matterId": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "description": "%tool.start.matterId%"
+            },
+            "rateId": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "description": "%tool.start.rateId%"
+            },
+            "isBillable": {
+              "type": "boolean",
+              "description": "%tool.start.billable%"
+            }
+          }
+        }
+      },
+      {
+        "name": "safeappeals_timer_stop",
+        "toolReferenceName": "timerStop",
+        "displayName": "%tool.stop.name%",
+        "modelDescription": "%tool.stop.modelDescription%",
+        "userDescription": "%tool.stop.userDescription%",
+        "canBeReferencedInPrompt": true,
+        "icon": "$(debug-stop)",
+        "inputSchema": {
+          "type": "object",
+          "properties": {}
+        }
+      }
+    ],
+    "configuration": {
+      "title": "%category%",
+      "properties": {
+        "timeTracker.defaultRoundingMode": {
+          "type": "string",
+          "enum": [
+            "up",
+            "down",
+            "nearest"
+          ],
+          "default": "up",
+          "description": "%config.rounding%"
+        },
+        "timeTracker.minimumIncrement": {
+          "type": "number",
+          "default": 0.1,
+          "description": "%config.minimum%"
+        },
+        "timeTracker.descriptionMaxLength": {
+          "type": "number",
+          "default": 500,
+          "description": "%config.descriptionLength%"
+        },
+        "timeTracker.autoStopOnClose": {
+          "type": "boolean",
+          "default": true,
+          "description": "%config.autoStop%"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "gulp compile-extension:safeappeals-time-tracker",
+    "watch": "gulp watch-extension:safeappeals-time-tracker",
+    "lint": "eslint src --ext ts",
+    "test": "mocha --ui tdd out/test/*.test.js",
+    "rebuild-prebuilds": "node ./scripts/rebuild-prebuilds.js",
+    "build-secure-fs": "node ./scripts/build-secure-fs.js",
+    "test-secure-fs": "node ./native/secure-fs/test/smoke.js"
+  },
+  "dependencies": {
+    "better-sqlite3-multiple-ciphers": "12.11.1"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.8",
+    "@types/mocha": "^10.0.10",
+    "@types/node": "24.x",
+    "mocha": "^11.1.0"
+  },
+  "allowScripts": {
+    "better-sqlite3-multiple-ciphers@12.11.1": true
+  }
+}

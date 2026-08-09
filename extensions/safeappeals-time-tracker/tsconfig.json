@@ -1,0 +1,28 @@
+{
+	"extends": "../tsconfig.base.json",
+	"compilerOptions": {
+		"rootDir": "./src",
+		"outDir": "./out",
+		"types": [
+      "node",
+      "mocha"
+		],
+		"typeRoots": [
+			"./node_modules/@types",
+			"../../node_modules/@types"
+		],
+		"declaration": true,
+		"sourceMap": true,
+		"skipLibCheck": true
+	},
+	"include": [
+		"src/**/*",
+		"../../src/vscode-dts/vscode.d.ts",
+		"../../src/vscode-dts/vscode.proposed.defaultChatParticipant.d.ts",
+		"../../src/vscode-dts/vscode.proposed.chatParticipantAdditions.d.ts",
+		"../../src/vscode-dts/vscode.proposed.chatParticipantPrivate.d.ts",
+		"../../src/vscode-dts/vscode.proposed.chatPromptFiles.d.ts",
+		"../../src/vscode-dts/vscode.proposed.findTextInFiles.d.ts",
+		"../../src/vscode-dts/vscode.proposed.textSearchProvider.d.ts"
+	]
+}

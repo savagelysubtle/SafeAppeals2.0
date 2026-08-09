@@ -15,7 +15,7 @@ const TARGETS = [
 	'safeappeals-documents',
 	'safeappeals-audio',
 	'safeappeals-rag',
-	'time-tracker',
+	'safeappeals-time-tracker',
 ];
 
 const SOURCE_DIR = join(rootPath, 'extensions', 'safeappeals-shared', 'src');
@@ -29,7 +29,7 @@ function expectedContent(fileName: string, source: string): string {
 }
 
 function listSourceFiles(): string[] {
-	return readdirSync(SOURCE_DIR).filter(name => name.endsWith('.ts')).sort();
+	return readdirSync(SOURCE_DIR).filter(name => name === 'encryptedStore.ts' || name === 'secureFs.ts').sort();
 }
 
 function targetSharedDir(target: string): string {

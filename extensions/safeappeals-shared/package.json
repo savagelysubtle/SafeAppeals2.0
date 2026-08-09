@@ -1,0 +1,34 @@
+{
+  "name": "safeappeals-shared",
+  "displayName": "SafeAppeals Shared",
+  "description": "Shared utilities for SafeAppeals extensions (encrypted storage, secure file operations)",
+  "version": "1.0.0",
+  "publisher": "safeappeals",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.70.0"
+  },
+  "main": "./out/index.js",
+  "categories": [
+    "Other"
+  ],
+  "extensionKind": [
+    "workspace"
+  ],
+  "activationEvents": [
+    "*"
+  ],
+  "capabilities": {
+    "virtualWorkspaces": true,
+    "untrustedWorkspaces": {
+      "supported": true
+    }
+  },
+  "scripts": {
+    "compile": "gulp compile-extension:safeappeals-shared",
+    "watch": "gulp watch-extension:safeappeals-shared"
+  },
+  "devDependencies": {
+    "@types/node": "24.x"
+  }
+}
