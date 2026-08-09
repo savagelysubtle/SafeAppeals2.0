@@ -262,7 +262,7 @@ suite('time-tracker encrypted persistence', () => {
 		};
 		await context.workspaceState.update('timerState', timerState);
 		const legacyCodesPath = path.join(workspacePath, 'time-tracker-codes.json');
-		await fsPromises.writeFile(legacyCodesPath, JSON.stringify(customCodes));
+		await fsPromises.writeFile(legacyCodesPath, JSON.stringify(customCodes), { mode: 0o644 });
 		const first = new SensitiveStateStore(context, { workspacePath });
 		await first.initialize();
 		await first.flush();
@@ -494,7 +494,7 @@ suite('time-tracker encrypted persistence', () => {
 		await fsPromises.mkdir(workspacePath, { mode: 0o700 });
 		const context = createContext(path.join(directory, 'managed'));
 		const legacyPath = path.join(workspacePath, 'time-tracker-codes.json');
-		await fsPromises.writeFile(legacyPath, JSON.stringify({ version: 1, taskCodes: { X: 'Private' }, activityCodes: {} }));
+		await fsPromises.writeFile(legacyPath, JSON.stringify({ version: 1, taskCodes: { X: 'Private' }, activityCodes: {} }), { mode: 0o644 });
 		await fsPromises.chmod(workspacePath, 0o500);
 		const warnings: string[] = [];
 		const failing = new SensitiveStateStore(context, {

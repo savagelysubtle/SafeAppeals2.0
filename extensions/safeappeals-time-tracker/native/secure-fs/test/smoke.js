@@ -185,7 +185,49 @@ try {
 	expectCode('SA_FS_CLOSED', () => lock.fsyncDirectory());
 	const contenderLock = contender.acquireExclusiveLock();
 	contenderLock.dispose();
-	fs.writeFileSync(path.join(data, 'time-tracker-codes.json'), '{"private":"codes"}', { mode: 0o600 });
+	const sharedAbsentCodes = path.join(root, 'shared-absent-codes');
+	fs.mkdirSync(sharedAbsentCodes, { mode: 0o777 });
+	fs.chmodSync(sharedAbsentCodes, 0o777);
+	assert.equal(openLegacyCodesWorkspace(sharedAbsentCodes), null);
+	const sharedPresentCodes = path.join(root, 'shared-present-codes');
+	fs.mkdirSync(sharedPresentCodes, { mode: 0o777 });
+	fs.chmodSync(sharedPresentCodes, 0o777);
+	fs.writeFileSync(path.join(sharedPresentCodes, 'time-tracker-codes.json'), 'preserve-shared', { mode: 0o600 });
+	expectCode('SA_FS_UNTRUSTED_ANCHOR', () => openLegacyCodesWorkspace(sharedPresentCodes));
+	assert.equal(fs.readFileSync(path.join(sharedPresentCodes, 'time-tracker-codes.json'), 'utf8'), 'preserve-shared');
+	const readableSharedCodes = path.join(root, 'readable-shared-codes');
+	fs.mkdirSync(readableSharedCodes, { mode: 0o755 });
+	fs.writeFileSync(path.join(readableSharedCodes, 'time-tracker-codes.json'), 'preserve-readable', { mode: 0o644 });
+	fs.chmodSync(path.join(readableSharedCodes, 'time-tracker-codes.json'), 0o644);
+	expectCode('SA_FS_UNTRUSTED_DIRECTORY', () => openLegacyCodesWorkspace(readableSharedCodes));
+	assert.equal(fs.readFileSync(path.join(readableSharedCodes, 'time-tracker-codes.json'), 'utf8'), 'preserve-readable');
+	const privateFileSharedCodes = path.join(root, 'private-file-shared-codes');
+	fs.mkdirSync(privateFileSharedCodes, { mode: 0o755 });
+	fs.writeFileSync(path.join(privateFileSharedCodes, 'time-tracker-codes.json'), 'private-file', { mode: 0o600 });
+	const privateFileSharedWorkspace = openLegacyCodesWorkspace(privateFileSharedCodes);
+	const privateFileSharedLock = privateFileSharedWorkspace.acquireExclusiveLock();
+	privateFileSharedLock.dispose();
+	privateFileSharedWorkspace.dispose();
+	for (const [fixture, setup, code] of [
+		['codes-symlink', directoryPath => fs.symlinkSync('other.json', path.join(directoryPath, 'time-tracker-codes.json')), 'SA_FS_SYMLINK'],
+		['codes-hardlink', directoryPath => {
+			fs.writeFileSync(path.join(directoryPath, 'time-tracker-codes.json'), 'hardlink', { mode: 0o600 });
+			fs.linkSync(path.join(directoryPath, 'time-tracker-codes.json'), path.join(directoryPath, 'other-link.json'));
+		}, 'SA_FS_LINK_COUNT'],
+		['codes-wrong-mode', directoryPath => {
+			fs.writeFileSync(path.join(directoryPath, 'time-tracker-codes.json'), 'mode', { mode: 0o666 });
+			fs.chmodSync(path.join(directoryPath, 'time-tracker-codes.json'), 0o666);
+		}, 'SA_FS_UNTRUSTED_FILE'],
+	]) {
+		const fixturePath = path.join(root, fixture);
+		fs.mkdirSync(fixturePath, { mode: 0o700 });
+		fs.writeFileSync(path.join(fixturePath, 'other.json'), 'preserve', { mode: 0o600 });
+		setup(fixturePath);
+		expectCode(code, () => openLegacyCodesWorkspace(fixturePath));
+		assert.equal(fs.readFileSync(path.join(fixturePath, 'other.json'), 'utf8'), 'preserve');
+	}
+	fs.writeFileSync(path.join(data, 'time-tracker-codes.json'), '{"private":"codes"}', { mode: 0o644 });
+	fs.chmodSync(path.join(data, 'time-tracker-codes.json'), 0o644);
 	fs.writeFileSync(path.join(data, 'codes-unrelated.json'), 'preserve', { mode: 0o600 });
 	const codesWorkspace = openLegacyCodesWorkspace(data);
 	assert.equal(codesWorkspace.inspectCodes().kind, 'file');
@@ -200,7 +242,7 @@ try {
 	fs.symlinkSync(data, path.join(root, 'codes-workspace-link'));
 	expectCode('SA_FS_SYMLINK', () => openLegacyCodesWorkspace(path.join(root, 'codes-workspace-link')));
 	fs.chmodSync(data, 0o770);
-	expectCode('SA_FS_UNTRUSTED_ANCHOR', () => openLegacyCodesWorkspace(data));
+	assert.equal(openLegacyCodesWorkspace(data), null);
 	fs.chmodSync(data, 0o700);
 	fs.mkdirSync(path.join(root, 'chmod-after-open'), { mode: 0o700 });
 	const chmodAfterOpen = new SecureDirectory(root, 'chmod-after-open');

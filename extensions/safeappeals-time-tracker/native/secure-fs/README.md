@@ -28,7 +28,7 @@ While holding `DirectoryLock`, `createStagedFile` reserves an exclusive `0600` c
 
 `writeSensitiveState` uses the same locked CAS and durability protocol and is separately restricted to the exact `sensitive-state.saenc` basename and `.safeappeals-tx-sensitive-state-*` temporary family.
 
-`openLegacyWorkspaces` exposes only the fixed navigator workspace family and filters discovery/opening to validated 16-hex private children. `openLegacyCodesWorkspace` resolves an absolute workspace without symlinks and exposes only the fixed `time-tracker-codes.json` target through a specialized lock/quarantine capability; unrelated workspace files cannot be selected through that API.
+`openLegacyWorkspaces` exposes only the fixed navigator workspace family and filters discovery/opening to validated 16-hex private children. `openLegacyCodesWorkspace` resolves an absolute workspace without symlinks and first probes only the fixed `time-tracker-codes.json` target. An absent file returns no capability even when the legitimate workspace is shared. Historical `0600`, `0640`, and `0644` files are accepted only when same-UID, owner-readable, non-group/other-writable, regular, and single-link. A file with any group/other visibility (`0640`/`0644`) additionally requires an exact-0700 workspace; an exact-0600 file may be cleaned from a same-UID non-writable `0755` workspace. The selected policy is revalidated under the cleanup lock. Unrelated workspace files cannot be selected through that API.
 
 ```sh
 bun run build-secure-fs

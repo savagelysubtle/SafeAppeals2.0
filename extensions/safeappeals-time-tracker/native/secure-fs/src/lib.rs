@@ -173,6 +173,21 @@ mod linux {
         Ok(())
     }
 
+    fn require_legacy_readonly_regular(stat: &libc::stat, role: &str) -> FsResult<()> {
+        require_regular_single_link(stat)?;
+        // SAFETY: geteuid has no preconditions.
+        if stat.st_uid != unsafe { libc::geteuid() }
+            || stat.st_mode & 0o400 == 0
+            || stat.st_mode & 0o022 != 0
+        {
+            return Err(coded(
+                "SA_FS_UNTRUSTED_FILE",
+                format!("{role} must be same-UID, owner-readable, and not group/other writable"),
+            ));
+        }
+        Ok(())
+    }
+
     fn require_private_directory(stat: &libc::stat, code: &str, role: &str) -> FsResult<()> {
         // SAFETY: geteuid has no preconditions and does not dereference memory.
         let effective_uid = unsafe { libc::geteuid() };
@@ -1449,6 +1464,7 @@ mod linux {
     #[napi]
     pub struct LegacyCodesWorkspace {
         directory: SecureDirectory,
+        requires_private_namespace: bool,
     }
 
     #[napi]
@@ -1513,7 +1529,15 @@ mod linux {
                         .ok_or_else(|| coded("SA_FS_CLOSED", "codes workspace is closed"))?;
                     let reopened = open_beneath(root.as_raw_fd(), &self.directory.relative_path)?;
                     let actual = fstat(reopened.as_raw_fd())?;
-                    require_trusted_anchor(&actual, "legacy codes workspace")?;
+                    if self.requires_private_namespace {
+                        require_private_directory(
+                            &actual,
+                            "SA_FS_UNTRUSTED_DIRECTORY",
+                            "legacy codes workspace",
+                        )?;
+                    } else {
+                        require_trusted_anchor(&actual, "legacy codes workspace")?;
+                    }
                     if actual.st_dev.to_string() != self.directory.identity.device
                         || actual.st_ino.to_string() != self.directory.identity.inode
                     {
@@ -1582,8 +1606,34 @@ mod linux {
                     Err(error) if error.status == "SA_FS_NOT_FOUND" => return Ok(None),
                     Err(error) => return Err(error),
                 };
+                let codes_name = basename("time-tracker-codes.json")?;
+                let first_probe = match open_child(directory.as_raw_fd(), &codes_name, false) {
+                    Ok(file) => file,
+                    Err(error) if error.status == "SA_FS_NOT_FOUND" => return Ok(None),
+                    Err(error) => return Err(error),
+                };
+                let first_identity = fstat(first_probe.as_raw_fd())?;
+                require_legacy_readonly_regular(&first_identity, "legacy codes file")?;
+                let requires_private_namespace = first_identity.st_mode & 0o777 != 0o600;
                 let stat = fstat(directory.as_raw_fd())?;
-                require_trusted_anchor(&stat, "legacy codes workspace")?;
+                if requires_private_namespace {
+                    require_private_directory(
+                        &stat,
+                        "SA_FS_UNTRUSTED_DIRECTORY",
+                        "legacy codes workspace",
+                    )?;
+                } else {
+                    require_trusted_anchor(&stat, "legacy codes workspace")?;
+                }
+                let second_probe = open_child(directory.as_raw_fd(), &codes_name, false)?;
+                let second_identity = fstat(second_probe.as_raw_fd())?;
+                require_legacy_readonly_regular(&second_identity, "legacy codes file")?;
+                if !same_identity(&first_identity, &second_identity) {
+                    return Err(coded(
+                        "SA_FS_IDENTITY_MISMATCH",
+                        "legacy codes file changed during workspace validation",
+                    ));
+                }
                 Ok(Some(LegacyCodesWorkspace {
                     directory: SecureDirectory {
                         directory: Some(directory),
@@ -1591,6 +1641,7 @@ mod linux {
                         relative_path: relative,
                         identity: identity_from_stat(stat),
                     },
+                    requires_private_namespace,
                 }))
             })(),
         )
