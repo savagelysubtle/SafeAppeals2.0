@@ -25,6 +25,10 @@ export interface SseParseStep {
 	/** Newly finalized tool calls (emitted on finish / [DONE] / flush). */
 	readonly toolCalls: readonly SseToolCall[];
 	readonly done: boolean;
+	/** Run whose complete result is ready for acknowledgement after all parts are consumed. */
+	readonly resultReadyRunId?: string;
+	/** True only after the protocol's explicit `[DONE]` marker, never an EOF flush. */
+	readonly sawDoneMarker?: boolean;
 	/** Set when the stream reports an error; caller must not retry a partial stream. */
 	readonly error: Error | undefined;
 }
@@ -48,6 +52,9 @@ export class OpenAiSseParser {
 	private _buffer = '';
 	private _done = false;
 	private _toolCallsEmitted = false;
+	private _resultReadyRunId: string | undefined;
+	private _resultReadyCount = 0;
+	private _sawDoneMarker = false;
 	private readonly _toolCalls = new Map<number, AccumulatedToolCall>();
 
 	/**
@@ -132,7 +139,14 @@ export class OpenAiSseParser {
 			}
 		}
 
-		return { deltas, toolCalls, done: this._done, error };
+		return {
+			deltas,
+			toolCalls,
+			done: this._done,
+			...(this._resultReadyRunId ? { resultReadyRunId: this._resultReadyRunId } : {}),
+			...(this._sawDoneMarker ? { sawDoneMarker: true } : {}),
+			error,
+		};
 	}
 
 	/**
@@ -155,6 +169,7 @@ export class OpenAiSseParser {
 
 	private _handleEventBlock(block: string): SseParseStep {
 		const dataLines: string[] = [];
+		let eventName: string | undefined;
 		for (const rawLine of block.split(/\r?\n/)) {
 			const line = rawLine.trimEnd();
 			if (!line || line.startsWith(':')) {
@@ -162,6 +177,8 @@ export class OpenAiSseParser {
 			}
 			if (line.startsWith('data:')) {
 				dataLines.push(line.slice(5).trimStart());
+			} else if (line.startsWith('event:')) {
+				eventName = line.slice(6).trim();
 			}
 		}
 		if (dataLines.length === 0) {
@@ -170,10 +187,12 @@ export class OpenAiSseParser {
 
 		const data = dataLines.join('\n');
 		if (data === '[DONE]') {
+			this._sawDoneMarker = true;
 			return {
 				deltas: [],
 				toolCalls: this._finalizeToolCalls(),
 				done: true,
+				sawDoneMarker: true,
 				error: undefined,
 			};
 		}
@@ -182,6 +201,9 @@ export class OpenAiSseParser {
 		try {
 			parsed = JSON.parse(data);
 		} catch {
+			if (eventName === 'safeappeals.run.result_ready') {
+				return { deltas: [], toolCalls: [], done: true, error: new Error('Malformed result-ready event') };
+			}
 			// Skip malformed JSON — hostile or truncated events must not abort the stream.
 			return { deltas: [], toolCalls: [], done: false, error: undefined };
 		}
@@ -196,6 +218,26 @@ export class OpenAiSseParser {
 		}
 
 		const record = asRecord(parsed);
+		if (eventName === 'safeappeals.run.result_ready') {
+			const runId = record?.state === 'result_ready'
+				&& record.requires_ack === true
+				&& typeof record.run_id === 'string'
+				&& isUuid(record.run_id)
+				? record.run_id
+				: undefined;
+			this._resultReadyCount++;
+			if (!runId || this._resultReadyCount !== 1 || (this._resultReadyRunId && this._resultReadyRunId !== runId)) {
+				return { deltas: [], toolCalls: [], done: true, error: new Error('Invalid result-ready run identity') };
+			}
+			this._resultReadyRunId = runId;
+			return {
+				deltas: [],
+				toolCalls: [],
+				done: false,
+				resultReadyRunId: this._resultReadyRunId,
+				error: undefined,
+			};
+		}
 		if (record?.error) {
 			const errObj = asRecord(record.error);
 			const status = asFiniteNumber(errObj?.status) ?? asFiniteNumber(record.status);
@@ -285,6 +327,10 @@ export class OpenAiSseParser {
 		}
 		return result;
 	}
+}
+
+function isUuid(value: string): boolean {
+	return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 }
 
 /**

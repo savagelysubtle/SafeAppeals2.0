@@ -22,7 +22,9 @@ export const CLOUD_MAX_OUTPUT_TOKENS = 4096;
 export class CloudChatProvider implements vscode.LanguageModelChatProvider, vscode.Disposable {
 	private readonly _onDidChangeEmitter = new vscode.EventEmitter<void>();
 	private readonly _disposables: vscode.Disposable[] = [];
+	private readonly _activeRequests = new Set<AbortController>();
 	private _modelsCache: vscode.LanguageModelChatInformation[] | undefined;
+	private _disposed = false;
 
 	readonly onDidChangeLanguageModelChatInformation = this._onDidChangeEmitter.event;
 
@@ -41,6 +43,11 @@ export class CloudChatProvider implements vscode.LanguageModelChatProvider, vsco
 	}
 
 	dispose(): void {
+		this._disposed = true;
+		for (const controller of this._activeRequests) {
+			controller.abort();
+		}
+		this._activeRequests.clear();
 		for (const d of this._disposables) {
 			d.dispose();
 		}
@@ -119,6 +126,10 @@ export class CloudChatProvider implements vscode.LanguageModelChatProvider, vsco
 		const mapped = mapChatMessages(messages);
 		const tools = options.tools?.length ? mapTools(options.tools) : undefined;
 		const controller = new AbortController();
+		if (this._disposed) {
+			controller.abort();
+		}
+		this._activeRequests.add(controller);
 		const cancelSub = token.onCancellationRequested(() => controller.abort());
 		try {
 			await this.api.streamChat(
@@ -150,6 +161,7 @@ export class CloudChatProvider implements vscode.LanguageModelChatProvider, vsco
 			throw error;
 		} finally {
 			cancelSub.dispose();
+			this._activeRequests.delete(controller);
 		}
 	}
 

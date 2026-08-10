@@ -123,6 +123,14 @@ export type LlmChatStreamPart =
 	| { readonly kind: 'text'; readonly text: string }
 	| { readonly kind: 'tool_call'; readonly callId: string; readonly name: string; readonly input: object };
 
+export type LlmRunState = 'reserved' | 'provider_started' | 'result_ready' | 'settled' | 'failed' | 'cancelled' | 'expired';
+
+export interface LlmRunStatus {
+	readonly run_id: string;
+	readonly state: LlmRunState;
+	readonly hold_expires_at?: string | null;
+}
+
 /**
  * Cloud user profile returned by /auth/callback and /auth/me.
  */
@@ -326,6 +334,7 @@ export class CloudApiClient implements ConnectionsApi {
 		private readonly output: vscode.OutputChannel,
 		private readonly getAccessToken: () => string | undefined,
 		private readonly onUnauthorized: () => Promise<boolean>,
+		private readonly streamIdleTimeoutMs = STREAM_IDLE_TIMEOUT_MS,
 	) { }
 
 	/**
@@ -573,13 +582,15 @@ export class CloudApiClient implements ConnectionsApi {
 		onPart: (part: LlmChatStreamPart) => void,
 		abortSignal?: AbortSignal,
 	): Promise<void> {
-		return this.streamChatOnce(body, onPart, abortSignal, 0);
+		const idempotencyKey = globalThis.crypto.randomUUID();
+		return this.streamChatOnce(body, onPart, abortSignal, idempotencyKey, 0);
 	}
 
 	private async streamChatOnce(
 		body: LlmChatRequestBody,
 		onPart: (part: LlmChatStreamPart) => void,
 		abortSignal: AbortSignal | undefined,
+		idempotencyKey: string,
 		retryCount: number,
 	): Promise<void> {
 		if (abortSignal?.aborted) {
@@ -595,6 +606,7 @@ export class CloudApiClient implements ConnectionsApi {
 			'Content-Type': 'application/json',
 			'Accept': 'text/event-stream, application/json',
 			'X-Client-Version': CLIENT_VERSION,
+			'Idempotency-Key': idempotencyKey,
 		};
 		const token = this.getAccessToken();
 		if (token) {
@@ -609,7 +621,7 @@ export class CloudApiClient implements ConnectionsApi {
 			if (idleTimer) {
 				clearTimeout(idleTimer);
 			}
-			idleTimer = setTimeout(() => controller.abort(), STREAM_IDLE_TIMEOUT_MS);
+			idleTimer = setTimeout(() => controller.abort(), this.streamIdleTimeoutMs);
 		};
 		armIdleTimeout();
 
@@ -632,7 +644,7 @@ export class CloudApiClient implements ConnectionsApi {
 			if (response.status === 401 && retryCount === 0) {
 				const refreshed = await this.onUnauthorized();
 				if (refreshed) {
-					return this.streamChatOnce(body, onPart, abortSignal, retryCount + 1);
+					return this.streamChatOnce(body, onPart, abortSignal, idempotencyKey, retryCount + 1);
 				}
 				throw new Error(vscode.l10n.t('Session expired. Please sign in again.'));
 			}
@@ -641,6 +653,12 @@ export class CloudApiClient implements ConnectionsApi {
 				const errorBody = await response.json().catch(() => ({}));
 				if (isInsufficientCreditsPayload(errorBody)) {
 					throw parseInsufficientCreditsError(errorBody);
+				}
+				const replay = parseLlmReplay(errorBody);
+				if (response.status === 409 && replay) {
+					requireMatchingRunId(response, replay.runId);
+					const status = await this.getLlmRunStatus(replay.runId);
+					throw createReplayRecoveryError(status);
 				}
 				const record = errorBody && typeof errorBody === 'object'
 					? (errorBody as { error?: { message?: string } })
@@ -652,12 +670,26 @@ export class CloudApiClient implements ConnectionsApi {
 			}
 
 			const contentType = (response.headers.get('content-type') || '').toLowerCase();
+			const responseRunId = requireResponseRunId(response);
 			if (contentType.includes('application/json') && !contentType.includes('text/event-stream')) {
 				const jsonBody = await response.json();
 				if (isInsufficientCreditsPayload(jsonBody)) {
 					throw parseInsufficientCreditsError(jsonBody);
 				}
+				const replay = parseLlmReplay(jsonBody);
+				if (replay) {
+					requireMatchingRunId(response, replay.runId);
+					const status = await this.getLlmRunStatus(replay.runId);
+					throw createReplayRecoveryError(status);
+				}
 				emitJsonChatParts(jsonBody, onPart);
+				const resultReadyRunId = parseJsonResultReadyRunId(jsonBody);
+				if (!resultReadyRunId || resultReadyRunId !== responseRunId) {
+					throw new Error(vscode.l10n.t('The server returned an inconsistent model run identity.'));
+				}
+				if (!abortSignal?.aborted) {
+					await this.acknowledgeLlmRun(resultReadyRunId, abortSignal);
+				}
 				return;
 			}
 
@@ -669,6 +701,8 @@ export class CloudApiClient implements ConnectionsApi {
 			const reader = response.body.getReader();
 			const decoder = new TextDecoder();
 			const parser = new OpenAiSseParser();
+			let resultReadyRunId: string | undefined;
+			let sawDoneMarker = false;
 
 			while (true) {
 				const { done, value } = await reader.read();
@@ -676,6 +710,8 @@ export class CloudApiClient implements ConnectionsApi {
 				if (done) {
 					const flushed = parser.flush();
 					emitSseStep(flushed, onPart);
+					resultReadyRunId = flushed.resultReadyRunId ?? resultReadyRunId;
+					sawDoneMarker = flushed.sawDoneMarker ?? sawDoneMarker;
 					if (flushed.error) {
 						throw flushed.error;
 					}
@@ -683,6 +719,8 @@ export class CloudApiClient implements ConnectionsApi {
 				}
 				const step = parser.push(decoder.decode(value, { stream: true }));
 				emitSseStep(step, onPart);
+				resultReadyRunId = step.resultReadyRunId ?? resultReadyRunId;
+				sawDoneMarker = step.sawDoneMarker ?? sawDoneMarker;
 				if (step.error) {
 					// Never retry a partial stream — including mid-stream 401-shaped errors.
 					throw step.error;
@@ -690,6 +728,15 @@ export class CloudApiClient implements ConnectionsApi {
 				if (step.done) {
 					break;
 				}
+			}
+			if (!resultReadyRunId || resultReadyRunId !== responseRunId) {
+				throw new Error(vscode.l10n.t('The server returned an inconsistent model run identity.'));
+			}
+			if (!sawDoneMarker) {
+				throw new Error(vscode.l10n.t('The model response stream ended before completion.'));
+			}
+			if (!abortSignal?.aborted) {
+				await this.acknowledgeLlmRun(resultReadyRunId, abortSignal);
 			}
 		} catch (error) {
 			if (error instanceof InsufficientCreditsError) {
@@ -704,7 +751,7 @@ export class CloudApiClient implements ConnectionsApi {
 			// Do not refresh/retry after any bytes of the stream have been consumed.
 			if (!streamStarted && error instanceof TypeError && retryCount === 0) {
 				await sleep(INITIAL_RETRY_DELAY_MS);
-				return this.streamChatOnce(body, onPart, abortSignal, retryCount + 1);
+				return this.streamChatOnce(body, onPart, abortSignal, idempotencyKey, retryCount + 1);
 			}
 			throw error;
 		} finally {
@@ -712,6 +759,67 @@ export class CloudApiClient implements ConnectionsApi {
 				clearTimeout(idleTimer);
 			}
 			abortSignal?.removeEventListener('abort', onAbort);
+		}
+	}
+
+	/** Fetches the authenticated billing state for one cloud chat run. */
+	async getLlmRunStatus(runId: string): Promise<LlmRunStatus> {
+		if (!isUuid(runId)) {
+			throw new Error(vscode.l10n.t('The server returned an invalid model run identity.'));
+		}
+		const response = await this.request<{ run_id?: unknown; state?: unknown; hold_expires_at?: unknown }>(`/llm/runs/${encodeURIComponent(runId)}`, {
+			skipTransientRetry: true,
+		});
+		if (response.run_id !== runId || !isLlmRunState(response.state)) {
+			throw new Error(vscode.l10n.t('The server returned an invalid model run status.'));
+		}
+		return {
+			run_id: response.run_id,
+			state: response.state,
+			hold_expires_at: typeof response.hold_expires_at === 'string' || response.hold_expires_at === null
+				? response.hold_expires_at
+				: undefined,
+		};
+	}
+
+	/**
+	 * Acknowledges a fully consumed result. A lost ACK response is resolved through
+	 * status before the same run is acknowledged again; the provider is never repeated.
+	 */
+	async acknowledgeLlmRun(runId: string, abortSignal?: AbortSignal): Promise<void> {
+		if (!isUuid(runId)) {
+			throw new Error(vscode.l10n.t('The server returned an invalid model run identity.'));
+		}
+		throwIfAborted(abortSignal);
+		try {
+			await this.acknowledgeLlmRunOnce(runId, abortSignal);
+			return;
+		} catch (error) {
+			if (error instanceof CloudAuthError || abortSignal?.aborted) {
+				throw error;
+			}
+			const status = await this.getLlmRunStatus(runId);
+			throwIfAborted(abortSignal);
+			if (status.state === 'settled') {
+				return;
+			}
+			if (status.state === 'result_ready') {
+				await this.acknowledgeLlmRunOnce(runId, abortSignal);
+				return;
+			}
+			throw createRunStateError(status);
+		}
+	}
+
+	private async acknowledgeLlmRunOnce(runId: string, abortSignal?: AbortSignal): Promise<void> {
+		throwIfAborted(abortSignal);
+		const response = await this.request<{ run_id?: unknown; status?: unknown }>(`/llm/runs/${encodeURIComponent(runId)}/ack`, {
+			method: 'POST',
+			skipTransientRetry: true,
+			abortSignal,
+		});
+		if (response.run_id !== runId || (response.status !== 'settled' && response.status !== 'existing')) {
+			throw new Error(vscode.l10n.t('The server returned an invalid model run acknowledgement.'));
 		}
 	}
 
@@ -730,6 +838,7 @@ export class CloudApiClient implements ConnectionsApi {
 			retryCount?: number;
 			timeoutMs?: number;
 			authToken?: string;
+			abortSignal?: AbortSignal;
 		} = {},
 	): Promise<T> {
 		const retryCount = options.retryCount ?? 0;
@@ -738,9 +847,11 @@ export class CloudApiClient implements ConnectionsApi {
 		this.output.appendLine(`[api] ${options.method ?? 'GET'} ${endpoint}`);
 
 		const headers: Record<string, string> = {
-			'Content-Type': 'application/json',
 			'X-Client-Version': CLIENT_VERSION,
 		};
+		if (options.body !== undefined) {
+			headers['Content-Type'] = 'application/json';
+		}
 
 		if (!options.skipAuth) {
 			const token = options.authToken ?? this.getAccessToken();
@@ -750,6 +861,11 @@ export class CloudApiClient implements ConnectionsApi {
 		}
 
 		const controller = new AbortController();
+		const onAbort = () => controller.abort();
+		options.abortSignal?.addEventListener('abort', onAbort, { once: true });
+		if (options.abortSignal?.aborted) {
+			controller.abort();
+		}
 		const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
 		try {
@@ -805,6 +921,9 @@ export class CloudApiClient implements ConnectionsApi {
 				throw error;
 			}
 			if (error instanceof Error && error.name === 'AbortError') {
+				if (options.abortSignal?.aborted) {
+					throw error;
+				}
 				throw new Error(vscode.l10n.t('Request timed out after {0}s. Please try again.', String(timeoutMs / 1000)));
 			}
 			if (!options.skipTransientRetry && error instanceof TypeError && retryCount < MAX_API_RETRIES) {
@@ -814,6 +933,7 @@ export class CloudApiClient implements ConnectionsApi {
 			throw error;
 		} finally {
 			clearTimeout(timeoutId);
+			options.abortSignal?.removeEventListener('abort', onAbort);
 		}
 	}
 }
@@ -845,4 +965,86 @@ function emitJsonChatParts(body: unknown, onPart: (part: LlmChatStreamPart) => v
 	for (const call of result.toolCalls) {
 		onPart({ kind: 'tool_call', callId: call.id, name: call.name, input: call.input });
 	}
+}
+
+function parseJsonResultReadyRunId(body: unknown): string | undefined {
+	if (!body || typeof body !== 'object') {
+		return undefined;
+	}
+	const usage = (body as { void_usage?: unknown }).void_usage;
+	if (!usage || typeof usage !== 'object') {
+		return undefined;
+	}
+	const record = usage as { run_id?: unknown; state?: unknown; requires_ack?: unknown };
+	return record.state === 'result_ready' && record.requires_ack === true
+		&& typeof record.run_id === 'string' && isUuid(record.run_id)
+		? record.run_id
+		: undefined;
+}
+
+function parseLlmReplay(body: unknown): { runId: string; state: string } | undefined {
+	if (!body || typeof body !== 'object') {
+		return undefined;
+	}
+	const record = body as { run_id?: unknown; state?: unknown; replay?: unknown };
+	return record.replay === true && typeof record.run_id === 'string' && isUuid(record.run_id) && typeof record.state === 'string'
+		? { runId: record.run_id, state: record.state }
+		: undefined;
+}
+
+function requireResponseRunId(response: Response): string {
+	const runId = response.headers.get('x-safeappeals-run-id');
+	if (!runId || !isUuid(runId)) {
+		throw new Error(vscode.l10n.t('The server returned an invalid model run identity.'));
+	}
+	return runId;
+}
+
+function requireMatchingRunId(response: Response, bodyRunId: string): void {
+	if (requireResponseRunId(response) !== bodyRunId) {
+		throw new Error(vscode.l10n.t('The server returned an inconsistent model run identity.'));
+	}
+}
+
+function isUuid(value: string): boolean {
+	return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+}
+
+function isLlmRunState(value: unknown): value is LlmRunState {
+	return value === 'reserved'
+		|| value === 'provider_started'
+		|| value === 'result_ready'
+		|| value === 'settled'
+		|| value === 'failed'
+		|| value === 'cancelled'
+		|| value === 'expired';
+}
+
+function throwIfAborted(signal: AbortSignal | undefined): void {
+	if (signal?.aborted) {
+		const error = new Error('Aborted');
+		error.name = 'AbortError';
+		throw error;
+	}
+}
+
+function createReplayRecoveryError(status: LlmRunStatus): Error {
+	if (status.state === 'result_ready' || status.state === 'settled') {
+		return new Error(vscode.l10n.t(
+			'The model completed, but its response could not be recovered. The request was not repeated.',
+		));
+	}
+	return createRunStateError(status);
+}
+
+function createRunStateError(status: LlmRunStatus): Error {
+	if (status.state === 'reserved' || status.state === 'provider_started') {
+		return new Error(vscode.l10n.t(
+			'This model request is still in progress. Wait for it to finish before trying again.',
+		));
+	}
+	return new Error(vscode.l10n.t(
+		'This model request ended without a billable result ({0}). You can safely try a new request.',
+		status.state,
+	));
 }

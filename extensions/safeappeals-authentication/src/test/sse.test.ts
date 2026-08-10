@@ -167,6 +167,41 @@ suite('OpenAiSseParser', () => {
 			{ done: true, hasError: true },
 		);
 	});
+
+	test('recognizes the SafeAppeals result-ready event without completing the parser early', () => {
+		const parser = new OpenAiSseParser();
+		const ready = parser.push(
+			'event: safeappeals.run.result_ready\n'
+			+ 'data: {"run_id":"01700000-0000-4000-8000-000000000020","state":"result_ready","requires_ack":true}\n\n',
+		);
+		const done = parser.push('data: [DONE]\n\n');
+		assert.deepStrictEqual(
+			{ ready: { done: ready.done, runId: ready.resultReadyRunId }, done: { done: done.done, runId: done.resultReadyRunId } },
+			{
+				ready: { done: false, runId: '01700000-0000-4000-8000-000000000020' },
+				done: { done: true, runId: '01700000-0000-4000-8000-000000000020' },
+			},
+		);
+	});
+
+	test('rejects malformed and multiple SafeAppeals result-ready events', () => {
+		const malformed = new OpenAiSseParser().push(
+			'event: safeappeals.run.result_ready\ndata: not-json\n\ndata: [DONE]\n\n',
+		);
+		const multipleParser = new OpenAiSseParser();
+		multipleParser.push(
+			'event: safeappeals.run.result_ready\n'
+			+ 'data: {"run_id":"01700000-0000-4000-8000-000000000020","state":"result_ready","requires_ack":true}\n\n',
+		);
+		const multiple = multipleParser.push(
+			'event: safeappeals.run.result_ready\n'
+			+ 'data: {"run_id":"01700000-0000-4000-8000-000000000020","state":"result_ready","requires_ack":true}\n\n',
+		);
+		assert.deepStrictEqual(
+			{ malformed: malformed.error?.message, multiple: multiple.error?.message },
+			{ malformed: 'Malformed result-ready event', multiple: 'Invalid result-ready run identity' },
+		);
+	});
 });
 
 suite('extractJsonChatContent', () => {
