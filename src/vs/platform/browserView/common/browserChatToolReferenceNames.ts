@@ -21,6 +21,7 @@ export const BrowserChatToolReferenceName = {
 	DragElement: 'dragElement',
 	HandleDialog: 'handleDialog',
 	RunPlaywrightCode: 'runPlaywrightCode',
+	BrowserCdp: 'browserCdp',
 } as const;
 
 /**

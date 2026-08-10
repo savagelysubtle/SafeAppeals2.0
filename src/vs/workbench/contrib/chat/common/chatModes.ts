@@ -299,6 +299,7 @@ class ChatModes extends Disposable implements IChatModes {
 	private getBuiltinModes(): IChatMode[] {
 		const builtinModes: IChatMode[] = [
 			ChatMode.Ask,
+			ChatMode.Plan,
 		];
 
 		// Include Agent mode if:
@@ -709,15 +710,17 @@ export class BuiltinChatMode implements IChatMode {
 }
 
 export namespace ChatMode {
-	export const Ask = new BuiltinChatMode(ChatModeKind.Ask, 'Ask', localize('chatDescription', "Explore and understand your code"), Codicon.question);
-	export const Edit = new BuiltinChatMode(ChatModeKind.Edit, 'Edit', localize('editsDescription', "Edit or refactor selected code"), Codicon.edit);
-	export const Agent = new BuiltinChatMode(ChatModeKind.Agent, 'Agent', localize('agentDescription', "Describe what to build"), safeAppealsShieldOutlineIcon);
+	export const Ask = new BuiltinChatMode(ChatModeKind.Ask, 'Ask', localize('chatDescription', "Ask about your case files and research"), Codicon.question);
+	export const Edit = new BuiltinChatMode(ChatModeKind.Edit, 'Edit', localize('editsDescription', "Edit or revise selected text"), Codicon.edit);
+	export const Agent = new BuiltinChatMode(ChatModeKind.Agent, 'Agent', localize('agentDescription', "Describe what you need for this case"), safeAppealsShieldOutlineIcon);
+	export const Plan = new BuiltinChatMode(ChatModeKind.Plan, 'Plan', localize('planDescription', "Create and review implementation plans"), Codicon.checklist);
 }
 
 export function isBuiltinChatMode(mode: IChatMode): boolean {
 	return mode.id === ChatMode.Ask.id ||
 		mode.id === ChatMode.Edit.id ||
-		mode.id === ChatMode.Agent.id;
+		mode.id === ChatMode.Agent.id ||
+		mode.id === ChatMode.Plan.id;
 }
 
 /**

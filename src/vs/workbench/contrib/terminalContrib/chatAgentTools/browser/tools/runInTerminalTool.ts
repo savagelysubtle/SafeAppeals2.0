@@ -2105,7 +2105,6 @@ export class RunInTerminalTool extends Disposable implements IToolImpl {
 					}
 				}
 
-				await this._commandArtifactCollector.capture(toolSpecificData, toolTerminal.instance, commandId);
 				if (token.isCancellationRequested) {
 					throw new CancellationError();
 				}
@@ -2122,6 +2121,7 @@ export class RunInTerminalTool extends Disposable implements IToolImpl {
 								: `Command is running in terminal with ID=${termId}`
 				);
 				const backgroundOutput = pollingResult?.output ?? (idleTimedOut ? execution.getOutput() : undefined);
+				await this._commandArtifactCollector.capture(toolSpecificData, toolTerminal.instance, commandId, backgroundOutput ?? '');
 				const outputAnalyzerMessage = backgroundOutput
 					? await this._getOutputAnalyzerMessage(undefined, backgroundOutput, command, didSandboxWrapCommand)
 					: undefined;
@@ -2234,6 +2234,7 @@ export class RunInTerminalTool extends Disposable implements IToolImpl {
 					const idleOutput = execution.getOutput();
 					outputLineCount = idleOutput ? count(idleOutput.trim(), '\n') + 1 : 0;
 					terminalResult = idleOutput ?? '';
+					await this._commandArtifactCollector.capture(toolSpecificData, toolTerminal.instance, commandId, terminalResult);
 				} else if (raceResult.type === 'background') {
 					// Moved to background - execution continues running, just return current output
 					this._logService.debug(`RunInTerminalTool: Continue in background triggered, returning output collected so far`);
@@ -2241,6 +2242,7 @@ export class RunInTerminalTool extends Disposable implements IToolImpl {
 					const backgroundOutput = execution.getOutput();
 					outputLineCount = backgroundOutput ? count(backgroundOutput.trim(), '\n') + 1 : 0;
 					terminalResult = backgroundOutput;
+					await this._commandArtifactCollector.capture(toolSpecificData, toolTerminal.instance, commandId, terminalResult);
 				} else if (raceResult.type === 'timeout') {
 					// Timeout reached - return partial output and keep terminal alive as background.
 					this._logService.debug(`RunInTerminalTool: Timeout reached, returning output collected so far`);
@@ -2254,6 +2256,7 @@ export class RunInTerminalTool extends Disposable implements IToolImpl {
 					const timeoutOutput = execution.getOutput();
 					outputLineCount = timeoutOutput ? count(timeoutOutput.trim(), '\n') + 1 : 0;
 					terminalResult = timeoutOutput ?? '';
+					await this._commandArtifactCollector.capture(toolSpecificData, toolTerminal.instance, commandId, terminalResult);
 				} else if (raceResult.type === 'idleSilence') {
 					// No output for N ms - promote to background and hand back to model. Process keeps running.
 					this._logService.debug(`RunInTerminalTool: Idle silence reached (${idleSilenceMs}ms), promoting to background`);
@@ -2267,6 +2270,7 @@ export class RunInTerminalTool extends Disposable implements IToolImpl {
 					const idleSilenceOutput = execution.getOutput();
 					outputLineCount = idleSilenceOutput ? count(idleSilenceOutput.trim(), '\n') + 1 : 0;
 					terminalResult = idleSilenceOutput ?? '';
+					await this._commandArtifactCollector.capture(toolSpecificData, toolTerminal.instance, commandId, terminalResult);
 				} else {
 					const executeResult = raceResult.result;
 					// Reset user input state after command execution completes
@@ -2297,7 +2301,7 @@ export class RunInTerminalTool extends Disposable implements IToolImpl {
 							}]
 						};
 					} else {
-						await this._commandArtifactCollector.capture(toolSpecificData, toolTerminal.instance, commandId);
+						await this._commandArtifactCollector.capture(toolSpecificData, toolTerminal.instance, commandId, executeResult.output);
 						{
 							const state = toolSpecificData.terminalCommandState ?? {};
 							state.timestamp = state.timestamp ?? timingStart;
@@ -2467,14 +2471,6 @@ export class RunInTerminalTool extends Disposable implements IToolImpl {
 			if (retryResult) {
 				return retryResult;
 			}
-		}
-
-		// Re-check shell integration quality now that command execution has completed.
-		// Only set the banner if toolResultMessage hasn't already been set (e.g. by the alt-buffer path).
-		this._terminalToolCreator.refreshShellIntegrationQuality(toolTerminal);
-		this._logService.info(`RunInTerminalTool: shellIntegrationQuality=${toolTerminal.shellIntegrationQuality} at banner decision time`);
-		if (!toolResultMessage && toolTerminal.shellIntegrationQuality === ShellIntegrationQuality.None) {
-			toolResultMessage = '$(info) Enable [shell integration](https://code.visualstudio.com/docs/terminal/shell-integration) to improve command detection';
 		}
 
 		const resultText: string[] = [];

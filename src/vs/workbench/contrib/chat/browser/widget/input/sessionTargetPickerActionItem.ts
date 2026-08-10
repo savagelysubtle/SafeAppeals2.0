@@ -5,11 +5,9 @@
 
 import * as dom from '../../../../../../base/browser/dom.js';
 import { renderLabelWithIcons } from '../../../../../../base/browser/ui/iconLabel/iconLabels.js';
-import { IAction } from '../../../../../../base/common/actions.js';
 import { Codicon } from '../../../../../../base/common/codicons.js';
 import { IDisposable } from '../../../../../../base/common/lifecycle.js';
 import { ThemeIcon } from '../../../../../../base/common/themables.js';
-import { URI } from '../../../../../../base/common/uri.js';
 import { localize } from '../../../../../../nls.js';
 import { MenuItemAction } from '../../../../../../platform/actions/common/actions.js';
 import { IActionWidgetService } from '../../../../../../platform/actionWidget/browser/actionWidget.js';
@@ -30,7 +28,6 @@ import { getSessionTypeAvailability, getSessionTypeUnavailableDescription, getSe
 import { ChatConfiguration, getDefaultNewChatSessionType, isVisibleEditorChatSessionType, recordUserSelectedSessionType } from '../../../common/constants.js';
 import { ChatInputPickerActionViewItem, IChatInputPickerOptions } from './chatInputPickerActionItem.js';
 import { ISessionTypePickerDelegate } from '../../chat.js';
-import { IActionProvider } from '../../../../../../base/browser/ui/dropdown/dropdown.js';
 
 
 export interface ISessionTypeItem {
@@ -98,15 +95,8 @@ export class SessionTypePickerActionItem extends ChatInputPickerActionViewItem {
 			}
 		};
 
-		const actionBarActionProvider: IActionProvider = {
-			getActions: () => {
-				return [this._getLearnMore()];
-			}
-		};
-
 		const sessionTargetPickerOptions: Omit<IActionWidgetDropdownOptions, 'label' | 'labelRenderer'> = {
 			actionProvider,
-			actionBarActionProvider,
 			showItemKeybindings: true,
 			reporter: { id: 'ChatSessionTypePicker', name: `ChatSessionTypePicker`, includeOptions: true },
 		};
@@ -156,20 +146,6 @@ export class SessionTypePickerActionItem extends ChatInputPickerActionViewItem {
 
 	protected _getAdditionalActions(): IActionWidgetDropdownAction[] {
 		return [];
-	}
-
-	protected _getLearnMore(): IAction {
-		const learnMoreUrl = 'https://code.visualstudio.com/docs/copilot/agents/overview';
-		return {
-			id: 'workbench.action.chat.agentOverview.learnMore',
-			label: localize('chat.learnMoreAgentTypes', "Learn about agent types..."),
-			tooltip: learnMoreUrl,
-			class: undefined,
-			enabled: true,
-			run: async () => {
-				await this.openerService.open(URI.parse(learnMoreUrl));
-			}
-		};
 	}
 
 	private _updateAgentSessionItems(): void {

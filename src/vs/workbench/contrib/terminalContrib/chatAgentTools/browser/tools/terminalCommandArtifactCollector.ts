@@ -9,6 +9,28 @@ import { ITerminalInstance } from '../../../../terminal/browser/terminal.js';
 import { getCommandOutputSnapshot } from '../../../../terminal/browser/chatTerminalCommandMirror.js';
 import { TerminalCapability, type ITerminalCommand } from '../../../../../../platform/terminal/common/capabilities/capabilities.js';
 import { ITerminalLogService } from '../../../../../../platform/terminal/common/terminal.js';
+import { removeAnsiEscapeCodes } from '../../../../../../base/common/strings.js';
+import { MAX_OUTPUT_LENGTH, truncateLargeOutput } from '../outputHelpers.js';
+import { clearTransientTerminalCommandOutput, setTransientTerminalCommandOutput } from '../../../../chat/common/terminalCommandOutput.js';
+
+export function createTerminalCommandOutputSnapshot(output: string): NonNullable<IChatTerminalToolInvocationData['terminalCommandOutput']> {
+	const sanitizedOutput = removeAnsiEscapeCodes(output);
+	const truncated = sanitizedOutput.length > MAX_OUTPUT_LENGTH;
+	const text = truncated ? truncateLargeOutput(sanitizedOutput) : sanitizedOutput;
+	return {
+		text,
+		lineCount: text.length === 0 ? 0 : text.split(/\r?\n/).length,
+		truncated: truncated || undefined,
+	};
+}
+
+export interface ITerminalCommandArtifactSource {
+	readonly resource: URI;
+	getCommand(commandId: string): Promise<ITerminalCommand | undefined>;
+	captureCommandOutput(command: ITerminalCommand): Promise<IChatTerminalToolInvocationData['terminalCommandOutput'] | undefined>;
+	capturePartialCommandOutput(commandId: string): Promise<IChatTerminalToolInvocationData['terminalCommandOutput'] | undefined>;
+	getTheme(): IChatTerminalToolInvocationData['terminalTheme'] | undefined;
+}
 
 export class TerminalCommandArtifactCollector {
 	constructor(
@@ -19,38 +41,73 @@ export class TerminalCommandArtifactCollector {
 		toolSpecificData: IChatTerminalToolInvocationData,
 		instance: ITerminalInstance,
 		commandId: string | undefined,
+		capturedOutput?: string,
+	): Promise<void> {
+		return this.captureFromSource(toolSpecificData, this._createSource(instance), commandId, capturedOutput);
+	}
+
+	async captureFromSource(
+		toolSpecificData: IChatTerminalToolInvocationData,
+		source: ITerminalCommandArtifactSource,
+		commandId: string | undefined,
+		capturedOutput?: string,
 	): Promise<void> {
 		if (commandId) {
 			try {
-				toolSpecificData.terminalCommandUri = this._createTerminalCommandUri(instance, commandId);
+				toolSpecificData.terminalCommandUri = this._createTerminalCommandUri(source.resource, commandId);
 			} catch (error) {
 				this._logService.warn(`RunInTerminalTool: Failed to create terminal command URI for ${commandId}`, error);
 			}
 
-			const command = await this._tryGetCommand(instance, commandId);
+			const command = await source.getCommand(commandId);
 			if (command) {
 				toolSpecificData.terminalCommandState = {
 					exitCode: command.exitCode,
 					timestamp: command.timestamp,
 					duration: command.duration
 				};
-				const snapshot = await this._captureCommandOutput(instance, command);
+				const snapshot = await source.captureCommandOutput(command);
 				if (snapshot) {
 					toolSpecificData.terminalCommandOutput = snapshot;
+					clearTransientTerminalCommandOutput(toolSpecificData);
+				} else if (capturedOutput !== undefined) {
+					setTransientTerminalCommandOutput(toolSpecificData, createTerminalCommandOutputSnapshot(capturedOutput));
 				}
-				this._applyTheme(toolSpecificData, instance);
+				this._applyTheme(toolSpecificData, source);
 				return;
 			}
 
-			// Command not found in finished commands - try to capture current/partial command output
-			const partialSnapshot = await this._capturePartialCommandOutput(instance, commandId);
-			if (partialSnapshot) {
-				toolSpecificData.terminalCommandOutput = partialSnapshot;
-				this._logService.debug(`RunInTerminalTool: Captured partial command output for ${commandId}`);
+			if (capturedOutput !== undefined) {
+				setTransientTerminalCommandOutput(toolSpecificData, createTerminalCommandOutputSnapshot(capturedOutput));
+			} else {
+				// Only inspect the active terminal when no execution-scoped output is available.
+				const partialSnapshot = await source.capturePartialCommandOutput(commandId);
+				if (partialSnapshot) {
+					toolSpecificData.terminalCommandOutput = partialSnapshot;
+					clearTransientTerminalCommandOutput(toolSpecificData);
+					this._logService.debug(`RunInTerminalTool: Captured partial command output for ${commandId}`);
+				}
 			}
 		}
 
-		this._applyTheme(toolSpecificData, instance);
+		if (!toolSpecificData.terminalCommandOutput && capturedOutput !== undefined) {
+			setTransientTerminalCommandOutput(toolSpecificData, createTerminalCommandOutputSnapshot(capturedOutput));
+		}
+
+		this._applyTheme(toolSpecificData, source);
+	}
+
+	private _createSource(instance: ITerminalInstance): ITerminalCommandArtifactSource {
+		return {
+			resource: instance.resource,
+			getCommand: commandId => this._tryGetCommand(instance, commandId),
+			captureCommandOutput: command => this._captureCommandOutput(instance, command),
+			capturePartialCommandOutput: commandId => this._capturePartialCommandOutput(instance, commandId),
+			getTheme: () => {
+				const theme = instance.xterm?.getXtermTheme();
+				return theme ? { background: theme.background, foreground: theme.foreground } : undefined;
+			},
+		};
 	}
 
 	private async _captureCommandOutput(instance: ITerminalInstance, command: ITerminalCommand): Promise<IChatTerminalToolInvocationData['terminalCommandOutput'] | undefined> {
@@ -115,17 +172,17 @@ export class TerminalCommandArtifactCollector {
 		return undefined;
 	}
 
-	private _applyTheme(toolSpecificData: IChatTerminalToolInvocationData, instance: ITerminalInstance): void {
-		const theme = instance.xterm?.getXtermTheme();
+	private _applyTheme(toolSpecificData: IChatTerminalToolInvocationData, source: ITerminalCommandArtifactSource): void {
+		const theme = source.getTheme();
 		if (theme) {
-			toolSpecificData.terminalTheme = { background: theme.background, foreground: theme.foreground };
+			toolSpecificData.terminalTheme = theme;
 		}
 	}
 
-	private _createTerminalCommandUri(instance: ITerminalInstance, commandId: string): URI {
-		const params = new URLSearchParams(instance.resource.query);
+	private _createTerminalCommandUri(resource: URI, commandId: string): URI {
+		const params = new URLSearchParams(resource.query);
 		params.set('command', commandId);
-		return instance.resource.with({ query: params.toString() });
+		return resource.with({ query: params.toString() });
 	}
 
 	private async _tryGetCommand(instance: ITerminalInstance, commandId: string) {

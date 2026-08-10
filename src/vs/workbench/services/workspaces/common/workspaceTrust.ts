@@ -32,6 +32,7 @@ export const WORKSPACE_TRUST_STARTUP_PROMPT = 'security.workspace.trust.startupP
 export const WORKSPACE_TRUST_BANNER = 'security.workspace.trust.banner';
 export const WORKSPACE_TRUST_UNTRUSTED_FILES = 'security.workspace.trust.untrustedFiles';
 export const WORKSPACE_TRUST_EMPTY_WINDOW = 'security.workspace.trust.emptyWindow';
+export const WORKSPACE_TRUST_DEFAULT_TRUSTED = 'security.workspace.trust.defaultTrusted';
 export const WORKSPACE_TRUST_EXTENSION_SUPPORT = 'extensions.supportUntrustedWorkspaces';
 export const WORKSPACE_TRUST_STORAGE_KEY = 'content.trust.model.key';
 
@@ -188,7 +189,14 @@ export class WorkspaceTrustManagementService extends Disposable implements IWork
 	//#region private interface
 
 	private registerListeners(): void {
-		this._register(this.workspaceService.onDidChangeWorkspaceFolders(async () => await this.updateWorkspaceTrust()));
+		this._register(this.workspaceService.onDidChangeWorkspaceFolders(async (e) => {
+			// Auto-trust newly added folders if defaultTrusted setting is enabled
+			if (e.added.length > 0 && this.configurationService.getValue(WORKSPACE_TRUST_DEFAULT_TRUSTED)) {
+				const urisToTrust = e.added.map(folder => folder.uri);
+				await this.setUrisTrust(urisToTrust, true);
+			}
+			await this.updateWorkspaceTrust();
+		}));
 		this._register(this.storageService.onDidChangeValue(StorageScope.APPLICATION_SHARED, this.storageKey, this._store)(async () => {
 			/* This will only execute if storage was changed by a user action in a separate window */
 			if (JSON.stringify(this._trustStateInfo) !== JSON.stringify(this.loadTrustInfo())) {

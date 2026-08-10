@@ -1765,11 +1765,11 @@ configurationRegistry.registerConfiguration({
 		},
 		[ChatConfiguration.ThinkingStyle]: {
 			type: 'string',
-			default: 'fixedScrolling',
+			default: 'collapsedPreview',
 			enum: ['collapsed', 'collapsedPreview', 'fixedScrolling'],
 			enumDescriptions: [
 				nls.localize('chat.agent.thinkingMode.collapsed', "Thinking parts will be collapsed by default."),
-				nls.localize('chat.agent.thinkingMode.collapsedPreview', "Thinking parts will be expanded first, then collapse once we reach a part that is not thinking."),
+				nls.localize('chat.agent.thinkingMode.collapsedPreview', "Thinking parts are expanded while streaming and collapse when thinking finishes. Use the header to collapse or reopen them."),
 				nls.localize('chat.agent.thinkingMode.fixedScrolling', "Show thinking in a fixed-height streaming panel that auto-scrolls; click header to expand to full height."),
 			],
 			description: nls.localize('chat.agent.thinkingStyle', "Controls how thinking is rendered."),

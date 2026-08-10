@@ -22,8 +22,7 @@ import {
 } from '../../browser/sampleCaseTour.js';
 import { PRIVATE_SEARCH_STATUS_BAR_DOM_ID } from '../../browser/sampleCaseTourTargets.js';
 
-class FakeLayoutService implements Pick<IWorkbenchLayoutService, '_serviceBrand' | 'getContainer'> {
-	declare readonly _serviceBrand: undefined;
+class FakeLayoutService implements Pick<IWorkbenchLayoutService, 'getContainer'> {
 	constructor(private readonly container: HTMLElement) { }
 	getContainer(_targetWindow: Window): HTMLElement {
 		return this.container;
@@ -60,7 +59,7 @@ suite('SampleCaseTour', () => {
 		mainWindow.document.body.appendChild(workbenchContainer);
 		disposables.add({ dispose: () => workbenchContainer.remove() });
 
-		const layoutService = new FakeLayoutService(workbenchContainer) as IWorkbenchLayoutService;
+		const layoutService = new FakeLayoutService(workbenchContainer);
 		disposables.add(showApprovalPromptMock(layoutService));
 
 		const host = workbenchContainer.querySelector('.safeappeals-approval-mock-host');

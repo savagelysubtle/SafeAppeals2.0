@@ -57,7 +57,7 @@ export function getEffectiveThinkingDisplayMode(configurationService: IConfigura
 	if (contextKeyService.getContextKeyValue<boolean>(SESSIONS_IS_PHONE_LAYOUT_KEY) === true) {
 		return ThinkingDisplayMode.CollapsedPreview;
 	}
-	return configurationService.getValue<ThinkingDisplayMode>('chat.agent.thinkingStyle') ?? ThinkingDisplayMode.Collapsed;
+	return configurationService.getValue<ThinkingDisplayMode>('chat.agent.thinkingStyle') ?? ThinkingDisplayMode.CollapsedPreview;
 }
 
 function extractTextFromPart(content: IChatThinkingPart): string {
@@ -1061,6 +1061,15 @@ export class ChatThinkingContentPart extends ChatCollapsibleContentPart implemen
 		});
 
 		const isAttached = this.workingSpinnerElement.parentNode === this.wrapper;
+		if (!this.containsReasoning) {
+			if (isAttached && this.workingSpinnerElement.style.display !== 'none') {
+				hide(this.workingSpinnerElement);
+				this._onDidChangeHeight.fire();
+			}
+			return;
+		}
+
+		this.workingSpinnerElement.style.display = '';
 		if (hasRunningTerminalTool && isAttached) {
 			this.workingSpinnerElement.remove();
 			this._onDidChangeHeight.fire();
@@ -1097,6 +1106,7 @@ export class ChatThinkingContentPart extends ChatCollapsibleContentPart implemen
 
 		const raw = extractTextFromPart(content);
 		this.recordReasoningContent(raw);
+		this.updateWorkingSpinnerVisibility();
 		const next = raw;
 		if (next === this.currentThinkingValue) {
 			return;

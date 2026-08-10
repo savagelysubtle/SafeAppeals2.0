@@ -836,6 +836,9 @@ const OnboardingCaseInfoPage = ({
 	const [theirSideKeywords, setTheirSideKeywords] = useState(
 		"employer, wcb, ime, defense",
 	);
+	const [operatingSystem, setOperatingSystem] = useState<"linux" | "windows" | null>(
+		null,
+	);
 
 	const fileOrganizerService = useMemo(() => {
 		try {
@@ -976,6 +979,7 @@ const OnboardingCaseInfoPage = ({
 					createBackup: true,
 					targetFolder: "./organized",
 				},
+				operatingSystem: operatingSystem || undefined,
 				createdAt: new Date().toISOString(),
 				updatedAt: new Date().toISOString(),
 			};
@@ -1001,6 +1005,7 @@ const OnboardingCaseInfoPage = ({
 		employerRepresentative,
 		yourSideKeywords,
 		theirSideKeywords,
+		operatingSystem,
 		pageIndex,
 		setPageIndex,
 	]);
@@ -1062,11 +1067,45 @@ const OnboardingCaseInfoPage = ({
 									<option value="Employment Dispute">Employment Dispute</option>
 									<option value="Other">Other</option>
 								</select>
-							</div>
-						</div>
+</div>
 					</div>
+				</div>
 
-					{/* Your Side */}
+				{/* Operating System */}
+				<div className="bg-void-bg-2/50 rounded-lg p-4 border border-void-border-4">
+					<div className="text-sm font-medium mb-2">Why we ask</div>
+					<div className="text-xs opacity-80 mb-4 text-void-fg-3">
+						Safe Appeals includes an AI assistant that works with you on your cases and documents —
+						think of it as a junior colleague, not a chatbot. Knowing your OS helps it write correct
+						file paths and terminal commands.
+					</div>
+					<div className="flex gap-3">
+						<button
+							type="button"
+							onClick={() => setOperatingSystem("linux")}
+							className={`flex-1 px-4 py-2 rounded-lg border-2 transition-all ${
+								operatingSystem === "linux"
+									? "border-void-button-primary bg-void-button-primary/20 text-void-button-primary"
+									: "border-void-border-2 hover:border-void-border-3 text-void-fg-2"
+							}`}
+						>
+							Linux
+						</button>
+						<button
+							type="button"
+							onClick={() => setOperatingSystem("windows")}
+							className={`flex-1 px-4 py-2 rounded-lg border-2 transition-all ${
+								operatingSystem === "windows"
+									? "border-void-button-primary bg-void-button-primary/20 text-void-button-primary"
+									: "border-void-border-2 hover:border-void-border-3 text-void-fg-2"
+							}`}
+						>
+							Windows
+						</button>
+					</div>
+				</div>
+
+				{/* Your Side */}
 					<div className="bg-void-bg-2/50 rounded-lg p-4 border border-void-border-4">
 						<div className="text-sm font-medium mb-2">Your Side</div>
 						<div className="text-xs opacity-80 mb-4">

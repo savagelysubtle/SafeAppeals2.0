@@ -140,6 +140,7 @@ export const SUBAGENT_DEFAULT_DENIED_TOOL_IDS: readonly string[] = [
 	'type_in_page',
 	'handle_dialog',
 	'run_playwright_code',
+	'browser_cdp',
 	// Timeline mutators (CORE)
 	'timeline_add_event',
 	'timeline_update_event',

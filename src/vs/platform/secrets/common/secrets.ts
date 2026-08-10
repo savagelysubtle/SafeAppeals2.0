@@ -80,7 +80,6 @@ export async function writeEncryptedSecret(
  * from VS Code via crossAppIPC.
  */
 export const CROSS_APP_SHARED_SECRET_KEYS: readonly string[] = [
-	'{"extensionId":"vscode.github-authentication","key":"github.auth"}',
 ];
 
 export const ISecretStorageService = createDecorator<ISecretStorageService>('secretStorageService');

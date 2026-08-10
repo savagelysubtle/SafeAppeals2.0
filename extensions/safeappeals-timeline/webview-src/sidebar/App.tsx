@@ -5,7 +5,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { onHostMessage, postToHost } from '../shared/vscodeApi';
 import {
-	CalendarSoftEvent,
 	CaseTimeline,
 	dateOnly,
 	EVENT_CATEGORIES,
@@ -20,13 +19,12 @@ import {
 
 type FilterCategory = EventCategory | 'all';
 
+const CUSTOM_JURISDICTION_ID = '__custom__';
+
 export function App(): React.ReactElement {
 	const [timeline, setTimeline] = useState<CaseTimeline | null>(null);
 	const [jurisdictions, setJurisdictions] = useState<JurisdictionOption[]>([]);
 	const [workspaceName, setWorkspaceName] = useState('Workspace');
-	const [calendarEvents, setCalendarEvents] = useState<CalendarSoftEvent[]>([]);
-	const [calendarAvailable, setCalendarAvailable] = useState(false);
-	const [calendarError, setCalendarError] = useState<string | undefined>();
 	const [loading, setLoading] = useState(true);
 	const [filterCategory, setFilterCategory] = useState<FilterCategory>('all');
 	const [deadlinesOnly, setDeadlinesOnly] = useState(false);
@@ -34,6 +32,8 @@ export function App(): React.ReactElement {
 	const [injuryDateDraft, setInjuryDateDraft] = useState('');
 	const [injuryDateFocused, setInjuryDateFocused] = useState(false);
 	const [injuryDateDirty, setInjuryDateDirty] = useState(false);
+	const [customJurisdiction, setCustomJurisdiction] = useState('');
+	const [showCustomJurisdictionInput, setShowCustomJurisdictionInput] = useState(false);
 
 	useEffect(() => {
 		const dispose = onHostMessage(msg => {
@@ -41,16 +41,9 @@ export function App(): React.ReactElement {
 				setTimeline(msg.payload.timeline);
 				setJurisdictions(msg.payload.jurisdictions);
 				setWorkspaceName(msg.payload.workspaceName);
-				setCalendarEvents(msg.payload.calendarEvents);
-				setCalendarAvailable(msg.payload.calendarAvailable);
-				setCalendarError(msg.payload.calendarError);
 				setLoading(false);
 			} else if (msg.type === 'timelineUpdated') {
 				setTimeline(msg.timeline);
-			} else if (msg.type === 'calendarPulled') {
-				setCalendarEvents(msg.events);
-				setCalendarError(msg.error);
-				setCalendarAvailable(!msg.error || msg.events.length > 0);
 			} else if (msg.type === 'error') {
 				setError(msg.message);
 			}
@@ -113,6 +106,27 @@ export function App(): React.ReactElement {
 		return <div className="sidebar loading">Loading…</div>;
 	}
 
+	const handleJurisdictionChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+		const value = e.target.value;
+		if (value === CUSTOM_JURISDICTION_ID) {
+			setShowCustomJurisdictionInput(true);
+			setCustomJurisdiction('');
+		} else {
+			setShowCustomJurisdictionInput(false);
+			postToHost({ type: 'setJurisdiction', jurisdictionId: value });
+		}
+	};
+
+	const handleCustomJurisdictionSubmit = (e: React.FormEvent) => {
+		e.preventDefault();
+		const value = customJurisdiction.trim();
+		if (value) {
+			postToHost({ type: 'setJurisdiction', jurisdictionId: value });
+			setShowCustomJurisdictionInput(false);
+			setCustomJurisdiction('');
+		}
+	};
+
 	return (
 		<div className="sidebar">
 			<header className="sidebar-header">
@@ -137,13 +151,36 @@ export function App(): React.ReactElement {
 					<select
 						className="field"
 						value={timeline?.jurisdictionId ?? ''}
-						onChange={e => postToHost({ type: 'setJurisdiction', jurisdictionId: e.target.value })}
+						onChange={handleJurisdictionChange}
 					>
 						{jurisdictions.map(j => (
 							<option key={j.id} value={j.id}>{j.label}</option>
 						))}
+						<option value={CUSTOM_JURISDICTION_ID}>Other…</option>
 					</select>
-					{timeline?.jurisdictionId && (
+					{showCustomJurisdictionInput && (
+						<form onSubmit={handleCustomJurisdictionSubmit} className="custom-jurisdiction-form">
+							<input
+								className="field"
+								type="text"
+								placeholder="Enter custom jurisdiction name"
+								value={customJurisdiction}
+								onChange={e => setCustomJurisdiction(e.target.value)}
+								autoFocus
+							/>
+							<div className="form-actions">
+								<button type="submit" className="btn btn-primary btn-sm">Save</button>
+								<button
+									type="button"
+									className="btn btn-secondary btn-sm"
+									onClick={() => { setShowCustomJurisdictionInput(false); setCustomJurisdiction(''); }}
+								>
+									Cancel
+								</button>
+							</div>
+						</form>
+					)}
+					{timeline?.jurisdictionId && !showCustomJurisdictionInput && (
 						<div className="hint">
 							Statute: {jurisdictions.find(j => j.id === timeline.jurisdictionId)?.statuteOfLimitationsDays ?? '—'} days
 						</div>
@@ -258,35 +295,6 @@ export function App(): React.ReactElement {
 										<span className="compact-date">{formatTimelineDate(e.date)}</span>
 										<span className="compact-title">{e.title}</span>
 									</button>
-								</li>
-							))}
-						</ul>
-					)}
-				</section>
-
-				<section className="section">
-					<div className="section-label-row">
-						<div className="section-label">
-							Calendar {calendarAvailable ? '' : '(optional)'}
-						</div>
-						<button
-							type="button"
-							className="btn btn-secondary btn-sm"
-							onClick={() => postToHost({ type: 'pullCalendar' })}
-							title={calendarAvailable ? 'Soft-pull calendar events' : 'Calendar may be unavailable'}
-						>
-							Pull Calendar
-						</button>
-					</div>
-					{calendarError && <div className="hint">{calendarError}</div>}
-					{calendarEvents.length === 0 ? (
-						<div className="hint">No calendar events in range.</div>
-					) : (
-						<ul className="compact-list muted">
-							{calendarEvents.slice(0, 8).map(ev => (
-								<li key={ev.id} className="compact-static">
-									<span className="compact-date">{formatTimelineDate(ev.date)}</span>
-									<span className="compact-title">{ev.title}</span>
 								</li>
 							))}
 						</ul>

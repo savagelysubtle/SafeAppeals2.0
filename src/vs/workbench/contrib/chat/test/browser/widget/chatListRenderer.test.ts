@@ -6,7 +6,7 @@
 import assert from 'assert';
 import { URI } from '../../../../../../base/common/uri.js';
 import { ensureNoDisposablesAreLeakedInTestSuite } from '../../../../../../base/test/common/utils.js';
-import { buildPlanReviewProgressContent, getWorkingProgressRelevantParts, shouldCreateGroupedThinkingPart, shouldHideChatUserIdentity, shouldRenderInitialProgressiveContentImmediately, shouldScheduleInitialHeightChange, shouldStartNewCollapsedThinkingGroup } from '../../../browser/widget/chatListRenderer.js';
+import { buildPlanReviewProgressContent, getWorkingProgressRelevantParts, shouldCreateGroupedThinkingPart, shouldHideChatUserIdentity, shouldRenderInitialProgressiveContentImmediately, shouldScheduleInitialHeightChange, shouldStartNewCollapsedThinkingGroup, shouldSuppressWorkingProgressForThinking } from '../../../browser/widget/chatListRenderer.js';
 import { IChatToolInvocationSerialized, ToolConfirmKind } from '../../../common/chatService/chatService.js';
 import { CollapsedToolsDisplayMode, ThinkingDisplayMode } from '../../../common/constants.js';
 import { IChatRendererContent } from '../../../common/model/chatViewModel.js';
@@ -156,6 +156,29 @@ suite('ChatListRenderer', () => {
 		];
 
 		assert.deepStrictEqual(getWorkingProgressRelevantParts(parts).map(part => part.kind), ['references']);
+	});
+
+	test('generic working progress yields to default reasoning but remains for fixed scrolling', () => {
+		const createThinkingState = (hasReasoning: boolean, isActive = true) => ({
+			getIsActive: () => isActive,
+			hasReasoningContent: () => hasReasoning,
+		});
+
+		assert.deepStrictEqual({
+			beforeFirstReasoningDelta: shouldSuppressWorkingProgressForThinking(createThinkingState(false), ThinkingDisplayMode.CollapsedPreview, true),
+			afterReasoningBegins: shouldSuppressWorkingProgressForThinking(createThinkingState(true), ThinkingDisplayMode.CollapsedPreview, true),
+			fixedScrollingWithProgressDetails: shouldSuppressWorkingProgressForThinking(createThinkingState(true), ThinkingDisplayMode.FixedScrolling, true),
+			fixedScrollingWithoutProgressDetails: shouldSuppressWorkingProgressForThinking(createThinkingState(true), ThinkingDisplayMode.FixedScrolling, false),
+			inactiveReasoning: shouldSuppressWorkingProgressForThinking(createThinkingState(true, false), ThinkingDisplayMode.CollapsedPreview, true),
+			withoutThinkingPart: shouldSuppressWorkingProgressForThinking(undefined, ThinkingDisplayMode.CollapsedPreview, true),
+		}, {
+			beforeFirstReasoningDelta: false,
+			afterReasoningBegins: true,
+			fixedScrollingWithProgressDetails: false,
+			fixedScrollingWithoutProgressDetails: true,
+			inactiveReasoning: false,
+			withoutThinkingPart: false,
+		});
 	});
 
 });

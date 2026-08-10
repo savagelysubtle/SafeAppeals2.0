@@ -7,7 +7,8 @@
 			"node"
 		],
 		"typeRoots": [
-			"./node_modules/@types"
+			"./node_modules/@types",
+			"../../node_modules/@types"
 		],
 		"declaration": true,
 		"sourceMap": true,

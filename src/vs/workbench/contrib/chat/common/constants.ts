@@ -138,7 +138,8 @@ export const defaultChatToolsEditsAutoApprove: Readonly<Record<string, boolean>>
 export enum ChatModeKind {
 	Ask = 'ask',
 	Edit = 'edit',
-	Agent = 'agent'
+	Agent = 'agent',
+	Plan = 'plan'
 }
 
 /**

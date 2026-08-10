@@ -5,7 +5,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { onHostMessage, postToHost } from '../shared/vscodeApi';
 import {
-	CalendarSoftEvent,
 	CaseTimeline,
 	dateOnly,
 	EVENT_CATEGORIES,
@@ -24,6 +23,8 @@ type FilterCategory = EventCategory | 'all';
 
 const DEFAULT_REMINDER_DAYS = [7, 3, 1];
 const REMINDER_DAY_OPTIONS = [30, 14, 7, 3, 1];
+
+const CUSTOM_JURISDICTION_ID = '__custom__';
 
 type EventEditorSaveData = TimelineEventUpdates & Pick<
 	TimelineEvent,
@@ -56,6 +57,7 @@ function EventEditorModal(props: {
 		return [...DEFAULT_REMINDER_DAYS];
 	});
 	const [syncToCalendar, setSyncToCalendar] = useState(event?.syncToCalendar ?? false);
+	const [deadlineCategory, setDeadlineCategory] = useState(event?.deadlineCategory ?? '');
 	const [linkedDocuments, setLinkedDocuments] = useState<string[]>(event?.linkedDocuments ?? []);
 
 	const enableDeadline = (next: boolean) => {
@@ -162,6 +164,16 @@ function EventEditorModal(props: {
 								/>
 								Mark complete
 							</label>
+							<label className="field-label">
+								Deadline category
+								<input
+									className="field"
+									type="text"
+									placeholder="e.g., Review, Appeal, Reconsideration"
+									value={deadlineCategory}
+									onChange={e => setDeadlineCategory(e.target.value)}
+								/>
+							</label>
 							<div className="field-label">
 								Reminder days before deadline
 								<div className="chip-row" role="group" aria-label="Reminder days">
@@ -260,6 +272,7 @@ function EventEditorModal(props: {
 								: null,
 							source: event?.source ?? 'manual',
 							syncToCalendar,
+							deadlineCategory: deadlineCategory || '',
 						})}
 					>
 						Save
@@ -387,9 +400,6 @@ export function App(): React.ReactElement {
 	const [timeline, setTimeline] = useState<CaseTimeline | null>(null);
 	const [jurisdictions, setJurisdictions] = useState<JurisdictionOption[]>([]);
 	const [workspaceName, setWorkspaceName] = useState('Workspace');
-	const [calendarEvents, setCalendarEvents] = useState<CalendarSoftEvent[]>([]);
-	const [calendarAvailable, setCalendarAvailable] = useState(false);
-	const [calendarError, setCalendarError] = useState<string | undefined>();
 	const [loading, setLoading] = useState(true);
 	const [filterCategory, setFilterCategory] = useState<FilterCategory>('all');
 	const [deadlinesOnly, setDeadlinesOnly] = useState(false);
@@ -397,6 +407,8 @@ export function App(): React.ReactElement {
 	const [editingEvent, setEditingEvent] = useState<TimelineEvent | null>(null);
 	const [selectedEventId, setSelectedEventId] = useState<string | undefined>();
 	const [error, setError] = useState<string | undefined>();
+	const [customJurisdiction, setCustomJurisdiction] = useState('');
+	const [showCustomJurisdictionInput, setShowCustomJurisdictionInput] = useState(false);
 	const cardRefs = useRef<Map<string, HTMLDivElement>>(new Map());
 
 	const focusEvent = (eventId: string) => {
@@ -409,16 +421,9 @@ export function App(): React.ReactElement {
 				setTimeline(msg.payload.timeline);
 				setJurisdictions(msg.payload.jurisdictions);
 				setWorkspaceName(msg.payload.workspaceName);
-				setCalendarEvents(msg.payload.calendarEvents);
-				setCalendarAvailable(msg.payload.calendarAvailable);
-				setCalendarError(msg.payload.calendarError);
 				setLoading(false);
 			} else if (msg.type === 'timelineUpdated') {
 				setTimeline(msg.timeline);
-			} else if (msg.type === 'calendarPulled') {
-				setCalendarEvents(msg.events);
-				setCalendarError(msg.error);
-				setCalendarAvailable(!msg.error || msg.events.length > 0);
 			} else if (msg.type === 'selectEvent') {
 				focusEvent(msg.eventId);
 			} else if (msg.type === 'error') {
@@ -462,6 +467,27 @@ export function App(): React.ReactElement {
 
 	const needsSetup = !timeline?.jurisdictionId || !timeline?.injuryDate;
 
+	const handleJurisdictionChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+		const value = e.target.value;
+		if (value === CUSTOM_JURISDICTION_ID) {
+			setShowCustomJurisdictionInput(true);
+			setCustomJurisdiction('');
+		} else {
+			setShowCustomJurisdictionInput(false);
+			postToHost({ type: 'setJurisdiction', jurisdictionId: value });
+		}
+	};
+
+	const handleCustomJurisdictionSubmit = (e: React.FormEvent) => {
+		e.preventDefault();
+		const value = customJurisdiction.trim();
+		if (value) {
+			postToHost({ type: 'setJurisdiction', jurisdictionId: value });
+			setShowCustomJurisdictionInput(false);
+			setCustomJurisdiction('');
+		}
+	};
+
 	if (loading) {
 		return <div className="dashboard loading">Loading timeline…</div>;
 	}
@@ -474,10 +500,42 @@ export function App(): React.ReactElement {
 					<div className="toolbar-meta">
 						{workspaceName} · {jurisdictionLabel}
 						{timeline?.injuryDate ? ` · Injury ${formatTimelineDate(timeline.injuryDate)}` : ''}
-						{calendarEvents.length > 0 ? ` · ${calendarEvents.length} calendar` : ''}
 					</div>
 				</div>
 				<div className="toolbar-actions">
+					<select
+						className="field field-inline"
+						value={timeline?.jurisdictionId ?? ''}
+						onChange={handleJurisdictionChange}
+						aria-label="Jurisdiction"
+					>
+						{jurisdictions.map(j => (
+							<option key={j.id} value={j.id}>{j.label}</option>
+						))}
+						<option value={CUSTOM_JURISDICTION_ID}>Other…</option>
+					</select>
+					{showCustomJurisdictionInput && (
+						<form onSubmit={handleCustomJurisdictionSubmit} className="custom-jurisdiction-form">
+							<input
+								className="field field-inline"
+								type="text"
+								placeholder="Enter custom jurisdiction name"
+								value={customJurisdiction}
+								onChange={e => setCustomJurisdiction(e.target.value)}
+								autoFocus
+							/>
+							<div className="form-actions">
+								<button type="submit" className="btn btn-primary btn-sm">Save</button>
+								<button
+									type="button"
+									className="btn btn-secondary btn-sm"
+									onClick={() => { setShowCustomJurisdictionInput(false); setCustomJurisdiction(''); }}
+								>
+									Cancel
+								</button>
+							</div>
+						</form>
+					)}
 					<select
 						className="field field-inline"
 						value={filterCategory}
@@ -506,14 +564,6 @@ export function App(): React.ReactElement {
 					</button>
 					<button type="button" className="btn btn-secondary" onClick={() => postToHost({ type: 'exportIcs' })}>
 						Export ICS
-					</button>
-					<button
-						type="button"
-						className="btn btn-secondary"
-						onClick={() => postToHost({ type: 'pullCalendar' })}
-						title={calendarAvailable ? 'Soft-pull calendar events' : (calendarError ?? 'Calendar may be unavailable')}
-					>
-						Pull Calendar
 					</button>
 				</div>
 			</header>

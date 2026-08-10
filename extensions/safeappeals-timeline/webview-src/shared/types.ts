@@ -27,6 +27,7 @@ export interface TimelineEvent {
 	createdAt: string;
 	updatedAt: string;
 	syncToCalendar?: boolean;
+	deadlineCategory?: string;
 }
 
 export interface JurisdictionOption {
@@ -34,6 +35,7 @@ export interface JurisdictionOption {
 	name: string;
 	label: string;
 	statuteOfLimitationsDays: number;
+	isCustom?: boolean;
 }
 
 export interface CaseTimeline {
@@ -44,20 +46,10 @@ export interface CaseTimeline {
 	notificationsEnabled: boolean;
 }
 
-export interface CalendarSoftEvent {
-	id: string;
-	title: string;
-	date: string;
-	provider?: string;
-}
-
 export interface TimelineBootstrap {
 	timeline: CaseTimeline | null;
 	jurisdictions: JurisdictionOption[];
 	workspaceName: string;
-	calendarEvents: CalendarSoftEvent[];
-	calendarAvailable: boolean;
-	calendarError?: string;
 }
 
 /**
@@ -66,7 +58,7 @@ export interface TimelineBootstrap {
  */
 export type TimelineEventUpdates = Omit<
 	Partial<Omit<TimelineEvent, 'id' | 'createdAt' | 'updatedAt'>>,
-	'endDate' | 'description' | 'reminderDays' | 'isComplete' | 'syncToCalendar' | 'source'
+	'endDate' | 'description' | 'reminderDays' | 'isComplete' | 'syncToCalendar' | 'source' | 'deadlineCategory'
 > & {
 	endDate?: string | null;
 	description?: string | null;
@@ -74,12 +66,12 @@ export type TimelineEventUpdates = Omit<
 	isComplete?: boolean | null;
 	syncToCalendar?: boolean | null;
 	source?: string | null;
+	deadlineCategory?: string | null;
 };
 
 export type HostToWebviewMessage =
 	| { type: 'bootstrap'; payload: TimelineBootstrap }
 	| { type: 'timelineUpdated'; timeline: CaseTimeline }
-	| { type: 'calendarPulled'; events: CalendarSoftEvent[]; error?: string }
 	| { type: 'selectEvent'; eventId: string }
 	| { type: 'documentsPicked'; uris: string[] }
 	| { type: 'error'; message: string };
@@ -93,7 +85,6 @@ export type WebviewToHostMessage =
 	| { type: 'setInjuryDate'; injuryDate: string }
 	| { type: 'setNotificationsEnabled'; enabled: boolean }
 	| { type: 'exportIcs' }
-	| { type: 'pullCalendar' }
 	| { type: 'toggleSyncToCalendar'; id: string }
 	| { type: 'openDocument'; uri: string }
 	| { type: 'pickDocuments' }

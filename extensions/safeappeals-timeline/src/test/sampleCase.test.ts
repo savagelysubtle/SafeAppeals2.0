@@ -657,6 +657,7 @@ suite('renderProfileRule', () => {
 			stateProvince: '',
 			city: '',
 			jurisdiction: '',
+			operatingSystem: '',
 		};
 
 		assert.deepStrictEqual({

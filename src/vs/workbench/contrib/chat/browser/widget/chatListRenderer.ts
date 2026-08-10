@@ -1304,14 +1304,11 @@ export class ChatListItemRenderer extends Disposable implements ITreeRenderer<Ch
 
 		const workingParts = getWorkingProgressRelevantParts(partsToRender);
 		const lastPart = findLastMeaningfulPart(workingParts);
+		const thinkingDisplayMode = getEffectiveThinkingDisplayMode(this.configService, this.contextKeyService);
 
 		if (showProgressDetails) {
-			// When the thinking section is actively streaming with its own inline
-			// shimmer (collapsed mode), let it own the progress indicator. In
-			// fixed-scrolling mode the thinking section does not show its own
-			// active indicator, so the working-progress row should still render.
 			const lastThinking = this.getLastThinkingPart(templateData.renderedParts);
-			if (lastThinking?.getIsActive() && !lastThinking.isFixedScrollingMode) {
+			if (shouldSuppressWorkingProgressForThinking(lastThinking, thinkingDisplayMode, showProgressDetails)) {
 				return undefined;
 			}
 			if (lastPart?.kind === 'progressMessage') {
@@ -1332,7 +1329,7 @@ export class ChatListItemRenderer extends Disposable implements ITreeRenderer<Ch
 
 		// never show working progress when there is an active thinking piece
 		const lastThinking = this.getLastThinkingPart(templateData.renderedParts);
-		if (lastThinking) {
+		if (shouldSuppressWorkingProgressForThinking(lastThinking, thinkingDisplayMode, showProgressDetails)) {
 			return undefined;
 		}
 
@@ -3763,6 +3760,16 @@ export function getWorkingProgressRelevantParts(parts: readonly IChatRendererCon
 		}
 		return part.kind !== 'markdownContent' || !extractSubAgentInvocationIdFromText(part.content.value);
 	});
+}
+
+export function shouldSuppressWorkingProgressForThinking(
+	thinkingPart: Pick<ChatThinkingContentPart, 'getIsActive' | 'hasReasoningContent'> | undefined,
+	thinkingDisplayMode: ThinkingDisplayMode,
+	showProgressDetails: boolean,
+): boolean {
+	return (thinkingDisplayMode !== ThinkingDisplayMode.FixedScrolling || !showProgressDetails)
+		&& thinkingPart?.getIsActive() === true
+		&& thinkingPart.hasReasoningContent();
 }
 
 function findLastMeaningfulPart(parts: readonly IChatRendererContent[]): IChatRendererContent | undefined {

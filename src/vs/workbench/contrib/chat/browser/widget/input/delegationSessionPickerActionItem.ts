@@ -3,10 +3,8 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { IAction } from '../../../../../../base/common/actions.js';
 import { Codicon } from '../../../../../../base/common/codicons.js';
 import { Iterable } from '../../../../../../base/common/iterator.js';
-import { URI } from '../../../../../../base/common/uri.js';
 import { localize } from '../../../../../../nls.js';
 import { IActionWidgetService } from '../../../../../../platform/actionWidget/browser/actionWidget.js';
 import { IActionWidgetDropdownAction } from '../../../../../../platform/actionWidget/browser/actionWidgetDropdown.js';
@@ -142,19 +140,6 @@ export class DelegationSessionPickerActionItem extends SessionTypePickerActionIt
 		return undefined;
 	}
 
-	protected override _getLearnMore(): IAction {
-		const learnMoreUrl = 'https://aka.ms/vscode-continue-chat-in';
-		return {
-			id: 'workbench.action.chat.agentOverview.learnMoreHandOff',
-			label: localize('chat.learnMoreAgentHandOff', "Learn about agent handoff..."),
-			tooltip: learnMoreUrl,
-			class: undefined,
-			enabled: true,
-			run: async () => {
-				await this.openerService.open(URI.parse(learnMoreUrl));
-			}
-		};
-	}
 
 	protected override _getAdditionalActions(): IActionWidgetDropdownAction[] {
 		if (this._isSessionsWindow) {

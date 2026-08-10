@@ -7371,6 +7371,7 @@
   var import_jsx_runtime = __toESM(require_jsx_runtime());
   var DEFAULT_REMINDER_DAYS = [7, 3, 1];
   var REMINDER_DAY_OPTIONS = [30, 14, 7, 3, 1];
+  var CUSTOM_JURISDICTION_ID = "__custom__";
   function documentLabel(uri) {
     const trimmed = uri.replace(/\\/g, "/");
     const parts = trimmed.split("/");
@@ -7392,6 +7393,7 @@
       return [...DEFAULT_REMINDER_DAYS];
     });
     const [syncToCalendar, setSyncToCalendar] = (0, import_react.useState)(event?.syncToCalendar ?? false);
+    const [deadlineCategory, setDeadlineCategory] = (0, import_react.useState)(event?.deadlineCategory ?? "");
     const [linkedDocuments, setLinkedDocuments] = (0, import_react.useState)(event?.linkedDocuments ?? []);
     const enableDeadline = (next) => {
       setIsDeadline(next);
@@ -7500,6 +7502,19 @@
                 ),
                 "Mark complete"
               ] }),
+              /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", { className: "field-label", children: [
+                "Deadline category",
+                /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+                  "input",
+                  {
+                    className: "field",
+                    type: "text",
+                    placeholder: "e.g., Review, Appeal, Reconsideration",
+                    value: deadlineCategory,
+                    onChange: (e) => setDeadlineCategory(e.target.value)
+                  }
+                )
+              ] }),
               /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "field-label", children: [
                 "Reminder days before deadline",
                 /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "chip-row", role: "group", "aria-label": "Reminder days", children: REMINDER_DAY_OPTIONS.map((day) => {
@@ -7600,7 +7615,8 @@
                   linkedDocuments,
                   reminderDays: isDeadline ? [...reminderDays].sort((a, b) => b - a) : null,
                   source: event?.source ?? "manual",
-                  syncToCalendar
+                  syncToCalendar,
+                  deadlineCategory: deadlineCategory || ""
                 }),
                 children: "Save"
               }
@@ -7701,9 +7717,6 @@
     const [timeline, setTimeline] = (0, import_react.useState)(null);
     const [jurisdictions, setJurisdictions] = (0, import_react.useState)([]);
     const [workspaceName, setWorkspaceName] = (0, import_react.useState)("Workspace");
-    const [calendarEvents, setCalendarEvents] = (0, import_react.useState)([]);
-    const [calendarAvailable, setCalendarAvailable] = (0, import_react.useState)(false);
-    const [calendarError, setCalendarError] = (0, import_react.useState)();
     const [loading, setLoading] = (0, import_react.useState)(true);
     const [filterCategory, setFilterCategory] = (0, import_react.useState)("all");
     const [deadlinesOnly, setDeadlinesOnly] = (0, import_react.useState)(false);
@@ -7711,6 +7724,8 @@
     const [editingEvent, setEditingEvent] = (0, import_react.useState)(null);
     const [selectedEventId, setSelectedEventId] = (0, import_react.useState)();
     const [error, setError] = (0, import_react.useState)();
+    const [customJurisdiction, setCustomJurisdiction] = (0, import_react.useState)("");
+    const [showCustomJurisdictionInput, setShowCustomJurisdictionInput] = (0, import_react.useState)(false);
     const cardRefs = (0, import_react.useRef)(/* @__PURE__ */ new Map());
     const focusEvent = (eventId) => {
       setSelectedEventId(eventId);
@@ -7721,16 +7736,9 @@
           setTimeline(msg.payload.timeline);
           setJurisdictions(msg.payload.jurisdictions);
           setWorkspaceName(msg.payload.workspaceName);
-          setCalendarEvents(msg.payload.calendarEvents);
-          setCalendarAvailable(msg.payload.calendarAvailable);
-          setCalendarError(msg.payload.calendarError);
           setLoading(false);
         } else if (msg.type === "timelineUpdated") {
           setTimeline(msg.timeline);
-        } else if (msg.type === "calendarPulled") {
-          setCalendarEvents(msg.events);
-          setCalendarError(msg.error);
-          setCalendarAvailable(!msg.error || msg.events.length > 0);
         } else if (msg.type === "selectEvent") {
           focusEvent(msg.eventId);
         } else if (msg.type === "error") {
@@ -7766,6 +7774,25 @@
     }, [selectedEventId, loading, filteredEvents.length]);
     const jurisdictionLabel = jurisdictions.find((j) => j.id === timeline?.jurisdictionId)?.label ?? timeline?.jurisdictionId ?? "Not set";
     const needsSetup = !timeline?.jurisdictionId || !timeline?.injuryDate;
+    const handleJurisdictionChange = (e) => {
+      const value = e.target.value;
+      if (value === CUSTOM_JURISDICTION_ID) {
+        setShowCustomJurisdictionInput(true);
+        setCustomJurisdiction("");
+      } else {
+        setShowCustomJurisdictionInput(false);
+        postToHost({ type: "setJurisdiction", jurisdictionId: value });
+      }
+    };
+    const handleCustomJurisdictionSubmit = (e) => {
+      e.preventDefault();
+      const value = customJurisdiction.trim();
+      if (value) {
+        postToHost({ type: "setJurisdiction", jurisdictionId: value });
+        setShowCustomJurisdictionInput(false);
+        setCustomJurisdiction("");
+      }
+    };
     if (loading) {
       return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "dashboard loading", children: "Loading timeline\u2026" });
     }
@@ -7777,11 +7804,51 @@
             workspaceName,
             " \xB7 ",
             jurisdictionLabel,
-            timeline?.injuryDate ? ` \xB7 Injury ${formatTimelineDate(timeline.injuryDate)}` : "",
-            calendarEvents.length > 0 ? ` \xB7 ${calendarEvents.length} calendar` : ""
+            timeline?.injuryDate ? ` \xB7 Injury ${formatTimelineDate(timeline.injuryDate)}` : ""
           ] })
         ] }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "toolbar-actions", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
+            "select",
+            {
+              className: "field field-inline",
+              value: timeline?.jurisdictionId ?? "",
+              onChange: handleJurisdictionChange,
+              "aria-label": "Jurisdiction",
+              children: [
+                jurisdictions.map((j) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: j.id, children: j.label }, j.id)),
+                /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: CUSTOM_JURISDICTION_ID, children: "Other\u2026" })
+              ]
+            }
+          ),
+          showCustomJurisdictionInput && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("form", { onSubmit: handleCustomJurisdictionSubmit, className: "custom-jurisdiction-form", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+              "input",
+              {
+                className: "field field-inline",
+                type: "text",
+                placeholder: "Enter custom jurisdiction name",
+                value: customJurisdiction,
+                onChange: (e) => setCustomJurisdiction(e.target.value),
+                autoFocus: true
+              }
+            ),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "form-actions", children: [
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { type: "submit", className: "btn btn-primary btn-sm", children: "Save" }),
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+                "button",
+                {
+                  type: "button",
+                  className: "btn btn-secondary btn-sm",
+                  onClick: () => {
+                    setShowCustomJurisdictionInput(false);
+                    setCustomJurisdiction("");
+                  },
+                  children: "Cancel"
+                }
+              )
+            ] })
+          ] }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
             "select",
             {
@@ -7818,17 +7885,7 @@
               children: "Add Event"
             }
           ),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { type: "button", className: "btn btn-secondary", onClick: () => postToHost({ type: "exportIcs" }), children: "Export ICS" }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-            "button",
-            {
-              type: "button",
-              className: "btn btn-secondary",
-              onClick: () => postToHost({ type: "pullCalendar" }),
-              title: calendarAvailable ? "Soft-pull calendar events" : calendarError ?? "Calendar may be unavailable",
-              children: "Pull Calendar"
-            }
-          )
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { type: "button", className: "btn btn-secondary", onClick: () => postToHost({ type: "exportIcs" }), children: "Export ICS" })
         ] })
       ] }),
       error && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "error-banner", children: error }),

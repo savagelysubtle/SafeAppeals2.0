@@ -27,8 +27,9 @@ Satellite tools are **not** force-ensured into every turn. Ensured tools live in
 | ----- | ---- |
 | `safeappeals_*` prefix | Cloud/satellite tools — allowed when present; not ENSURED |
 | `ENSURED_AGENT_TOOL_NAMES` | Force-added unless the picker disabled them (workspace, web, RAG, `safeappeals_switchMode`, …) |
-| `CORE_AGENT_TOOL_NAMES` | Host tools by exact name (edit/fetch internals, terminal, todo, browser, **`timeline_*`**) |
+| `CORE_AGENT_TOOL_NAMES` | Host tools by exact name (edit/fetch internals, terminal, todo, browser suite + `browser_cdp`, **`timeline_*`**) |
 | `PLAN_MODE_EDIT_DENYLIST` | Edit/write tools stripped in Plan mode |
+| `PLAN_MODE_BROWSER_DENYLIST` | All integrated-browser CORE tools stripped in Plan mode (including `browser_cdp`) |
 
 `copilot_*` names are never allowed; substitutions map picker aliases to SafeAppeals ids.
 
@@ -100,6 +101,27 @@ Six tools on the CORE allowlist with void-compatible names: `timeline_add_event`
 ### Auth / workspace / web — `extensions/safeappeals-authentication`
 
 Workspace file tools, Brave web search / multi-search / fetch, plan/mode tools, and RAG tool ids are contributed or ensured from auth (and RAG from `safeappeals-rag`). Those are ENSURED or Plan-gated surfaces, not satellite-only.
+
+### Integrated browser (CORE) — `src/vs/workbench/contrib/browserView`
+
+Registered by `BrowserChatAgentToolsContribution` when sharing is available (`chat` + Agent enabled + `workbench.browser.enableChatTools`, default on). Tools are **CORE, not ENSURED** (picker can disable). Prefer snapshot/click/type; use escape hatches only when needed.
+
+| Tool id | Role |
+| ------- | ---- |
+| `open_browser_page` | Open / share a tab |
+| `read_page` | Accessibility snapshot (primary “see the page”) |
+| `screenshot_page` | Visual capture |
+| `navigate_page` / `click_element` / `type_in_page` / `hover_element` / `drag_element` / `handle_dialog` | Drive the shared page |
+| `run_playwright_code` | Playwright API escape hatch (confirm) |
+| `browser_cdp` | Page-scoped CDP method escape hatch (confirm; deny-list blocks Input.*/cookies/storage/permissions/downloads/target-escape) |
+
+**Failure mode when sharing unavailable:** only non-agentic `open_browser_page` is registered — pages may open, but contents are not shared and the interactive suite (including `browser_cdp`) is unreachable.
+
+**Plan mode:** all browser CORE ids above are stripped via `PLAN_MODE_BROWSER_DENYLIST`.
+
+**Not an Agent tool:** workbench/renderer Electron CDP (`--remote-debugging-port` / launch-skill attach) is **developer automation only**. Do not allowlist it into Agent chat.
+
+**Windows QA (remaining manual):** on a Windows Electron build, smoke open→share→`read_page`→click/type, `browser_cdp` `Runtime.evaluate`, deny-list errors, and chat-session dispose. Automated unit tests cover deny-list, Plan strip, tool contract, and CDP session-store dispose.
 
 ## Related docs
 

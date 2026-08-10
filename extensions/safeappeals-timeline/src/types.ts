@@ -23,6 +23,8 @@ export interface UserProfile {
 	 * custom free-text value — never a province or state name alone.
 	 */
 	jurisdiction: string;
+	/** Operating system for platform-appropriate commands and file paths. */
+	operatingSystem: string;
 }
 
 /**

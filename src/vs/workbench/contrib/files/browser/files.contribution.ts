@@ -520,7 +520,7 @@ configurationRegistry.registerConfiguration({
 		'explorer.expandFoldersByDefault': {
 			'type': 'boolean',
 			'description': nls.localize('expandFoldersByDefault', "Controls whether folders in the Explorer are expanded when revealed. When enabled, a reload re-applies this behavior, so folders you collapsed may reopen. Set to false for the upstream collapse-by-default behavior."),
-			'default': true
+			'default': false
 		},
 		'explorer.sortOrder': {
 			'type': 'string',

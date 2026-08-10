@@ -64,6 +64,8 @@ export interface TimelineEvent {
 	createdAt: string;
 	updatedAt: string;
 	syncToCalendar?: boolean;
+	/** Optional deadline category (e.g., 'review', 'appeal', 'reconsideration', or custom). */
+	deadlineCategory?: string;
 }
 
 /**
@@ -72,7 +74,7 @@ export interface TimelineEvent {
  */
 export type TimelineEventUpdates = Omit<
 	Partial<Omit<TimelineEvent, 'id' | 'createdAt' | 'updatedAt'>>,
-	'endDate' | 'description' | 'reminderDays' | 'isComplete' | 'syncToCalendar' | 'source'
+	'endDate' | 'description' | 'reminderDays' | 'isComplete' | 'syncToCalendar' | 'source' | 'deadlineCategory'
 > & {
 	endDate?: string | null;
 	description?: string | null;
@@ -80,6 +82,7 @@ export type TimelineEventUpdates = Omit<
 	isComplete?: boolean | null;
 	syncToCalendar?: boolean | null;
 	source?: string | null;
+	deadlineCategory?: string | null;
 };
 
 /**
@@ -120,6 +123,9 @@ export function applyTimelineEventUpdates(
 	}
 	if (updates.source === null) {
 		delete next.source;
+	}
+	if (updates.deadlineCategory === '' || updates.deadlineCategory === null) {
+		delete next.deadlineCategory;
 	}
 
 	if (next.isDeadline === false) {

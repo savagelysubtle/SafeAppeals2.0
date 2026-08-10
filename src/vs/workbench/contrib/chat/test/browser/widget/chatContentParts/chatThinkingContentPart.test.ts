@@ -179,6 +179,25 @@ suite('ChatThinkingContentPart', () => {
 		});
 	});
 
+	test('defaults to an expanded streaming reasoning transcript', () => {
+		const content = createThinkingPart('Reviewing the renderer architecture');
+		const part = store.add(instantiationService.createInstance(
+			ChatThinkingContentPart,
+			content,
+			createMockRenderContext(false),
+			mockMarkdownRenderer,
+			false
+		));
+
+		assert.deepStrictEqual({
+			expanded: !part.domNode.classList.contains('chat-used-context-collapsed'),
+			transcript: part.domNode.querySelector<HTMLElement>('.chat-thinking-item.markdown-content')?.textContent,
+		}, {
+			expanded: true,
+			transcript: 'Reviewing the renderer architecture',
+		});
+	});
+
 	suite('ThinkingDisplayMode.Collapsed', () => {
 		setup(() => {
 			mockConfigurationService.setUserConfiguration('chat.agent.thinkingStyle', ThinkingDisplayMode.Collapsed);
@@ -365,8 +384,63 @@ suite('ChatThinkingContentPart', () => {
 				'Should be expanded during streaming in CollapsedPreview mode');
 		});
 
+		test('transfers rendered status ownership when reasoning changes from blank to nonblank', () => {
+			const content = createThinkingPart(' ');
+			const part = store.add(instantiationService.createInstance(
+				ChatThinkingContentPart,
+				content,
+				createMockRenderContext(false),
+				mockMarkdownRenderer,
+				false
+			));
+
+			assert.deepStrictEqual({
+				expanded: !part.domNode.classList.contains('chat-used-context-collapsed'),
+				internalSpinnerHidden: part.domNode.querySelector<HTMLElement>('.chat-thinking-spinner-item')?.style.display === 'none',
+			}, {
+				expanded: true,
+				internalSpinnerHidden: true,
+			});
+
+			part.updateThinking({ ...content, value: ['Now ', 'reasoning about the request'] });
+
+			assert.deepStrictEqual({
+				internalSpinnerHidden: part.domNode.querySelector<HTMLElement>('.chat-thinking-spinner-item')?.style.display === 'none',
+			}, {
+				internalSpinnerHidden: false,
+			});
+		});
+
+		test('can collapse and reopen while streaming updates retain the latest transcript', () => {
+			const content = createThinkingPart('Initial reasoning');
+			const part = store.add(instantiationService.createInstance(
+				ChatThinkingContentPart,
+				content,
+				createMockRenderContext(false),
+				mockMarkdownRenderer,
+				false
+			));
+			const button = part.domNode.querySelector<HTMLElement>('.monaco-button');
+			assert.ok(button);
+
+			button.click();
+			part.updateThinking({ ...content, value: ['Updated ', 'reasoning transcript'] });
+			const collapsed = part.domNode.classList.contains('chat-used-context-collapsed');
+			button.click();
+
+			assert.deepStrictEqual({
+				collapsed,
+				reopened: !part.domNode.classList.contains('chat-used-context-collapsed'),
+				transcript: part.domNode.querySelector<HTMLElement>('.chat-thinking-item.markdown-content')?.textContent,
+			}, {
+				collapsed: true,
+				reopened: true,
+				transcript: 'Updated reasoning transcript',
+			});
+		});
+
 		test('should be collapsed when complete', () => {
-			const content = createThinkingPart('**Completed task**');
+			const content = createThinkingPart('**Completed task**\nFinal reasoning detail');
 			const context = createMockRenderContext(true); // isComplete = true
 
 			const part = store.add(instantiationService.createInstance(
@@ -383,6 +457,17 @@ suite('ChatThinkingContentPart', () => {
 			// When complete, should be collapsed
 			assert.strictEqual(part.domNode.classList.contains('chat-used-context-collapsed'), true,
 				'Should be collapsed when complete');
+
+			const button = part.domNode.querySelector<HTMLElement>('.monaco-button');
+			assert.ok(button);
+			button.click();
+			assert.deepStrictEqual({
+				reopened: !part.domNode.classList.contains('chat-used-context-collapsed'),
+				transcript: part.domNode.querySelector<HTMLElement>('.chat-thinking-item.markdown-content')?.textContent,
+			}, {
+				reopened: true,
+				transcript: '**Completed task**\nFinal reasoning detail',
+			});
 		});
 
 		test('should be collapsed when streamingCompleted is true even if element.isComplete is false (look-ahead completion)', () => {

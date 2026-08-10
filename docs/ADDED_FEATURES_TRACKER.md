@@ -36,6 +36,7 @@
 | Extension transfer service | Dropped (D3) | `void-reference/` only | No | master plan D1–D3 |
 | Cloud LLM / credits UI | Shipped (balance + Add Credits / `safeappeals.cloud.openCheckout` + insufficient-credits UX) | `extensions/safeappeals-authentication` + cloud backend | Yes | onboarding M2 T13; master plan rung 13 |
 | Agent LM tools (docs / email / time-tracker / workspace+web; pattern docs) | Shipped (plan closed Aug 3 2026; `bab332f6`) | `extensions/safeappeals-documents`, `safeappeals-email`, `time-tracker`, `safeappeals-authentication`; see `docs/agent-tools-pattern.md` | Yes | archive `safeappeals_agent_tools_da04f06e.plan.md` |
+| Integrated browser Agent tools + page `browser_cdp` | Shipped (CORE; Plan-stripped; deny-list on Agent CDP only) | `src/vs/workbench/contrib/browserView/.../tools` + auth `CORE_AGENT_TOOL_NAMES` / `PLAN_MODE_BROWSER_DENYLIST` | Yes | Browser CDP agent tools plan (Aug 2026) |
 | Contrib hub (`contrib/safeappeals`) | Deleted (dead stub; extension-first) | dropped | N/A | master plan “Resolution: the contrib hub is dead” / M0 |
 | Packaging / prebuilds / migrations | Pending | build / CI | Partial | master plan rung 14 |
 | void-reference cleanup | Pending | `void-reference/` | N/A | master plan rung 15 |

@@ -24,7 +24,7 @@ import { IStatusbarEntry, IStatusbarEntryAccessor, IStatusbarService, StatusbarA
 import { IEditorPaneRegistry, EditorPaneDescriptor } from '../../../browser/editor.js';
 import { shieldIcon, WorkspaceTrustEditor } from './workspaceTrustEditor.js';
 import { WorkspaceTrustEditorInput } from '../../../services/workspaces/browser/workspaceTrustEditorInput.js';
-import { WORKSPACE_TRUST_BANNER, WORKSPACE_TRUST_EMPTY_WINDOW, WORKSPACE_TRUST_ENABLED, WORKSPACE_TRUST_STARTUP_PROMPT, WORKSPACE_TRUST_UNTRUSTED_FILES } from '../../../services/workspaces/common/workspaceTrust.js';
+import { WORKSPACE_TRUST_BANNER, WORKSPACE_TRUST_DEFAULT_TRUSTED, WORKSPACE_TRUST_EMPTY_WINDOW, WORKSPACE_TRUST_ENABLED, WORKSPACE_TRUST_STARTUP_PROMPT, WORKSPACE_TRUST_UNTRUSTED_FILES } from '../../../services/workspaces/common/workspaceTrust.js';
 import { IEditorSerializer, IEditorFactoryRegistry, EditorExtensions } from '../../../common/editor.js';
 import { EditorInput } from '../../../common/editor/editorInput.js';
 import { ITelemetryService } from '../../../../platform/telemetry/common/telemetry.js';
@@ -50,7 +50,7 @@ import { basename, dirname as uriDirname } from '../../../../base/common/resourc
 import { URI } from '../../../../base/common/uri.js';
 import { IFileService } from '../../../../platform/files/common/files.js';
 import { CommandsRegistry } from '../../../../platform/commands/common/commands.js';
-import { IUserDataProfilesService } from '../../../../platform/userDataProfile/common/userDataProfile.js';
+import { IUserDataProfileService } from '../../../services/userDataProfile/common/userDataProfile.js';
 
 const BANNER_RESTRICTED_MODE = 'workbench.banner.restrictedMode';
 const STARTUP_PROMPT_SHOWN_KEY = 'workspace.trust.startupPrompt.shown';
@@ -797,8 +797,8 @@ registerAction2(class extends Action2 {
  */
 CommandsRegistry.registerCommand(TRUST_SAFE_APPEALS_SAMPLE_CASE_COMMAND_ID, async (accessor: ServicesAccessor) => {
 	const workspaceTrustManagementService = accessor.get(IWorkspaceTrustManagementService);
-	const userDataProfilesService = accessor.get(IUserDataProfilesService);
-	const sampleRoot = resolveSafeAppealsSampleCaseTrustUri(userDataProfilesService.currentProfile.globalStorageHome);
+	const userDataProfileService = accessor.get(IUserDataProfileService);
+	const sampleRoot = resolveSafeAppealsSampleCaseTrustUri(userDataProfileService.currentProfile.globalStorageHome);
 	await workspaceTrustManagementService.setUrisTrust([sampleRoot], true);
 });
 
@@ -860,6 +860,13 @@ Registry.as<IConfigurationRegistry>(ConfigurationExtensions.Configuration)
 				type: 'boolean',
 				default: true,
 				markdownDescription: localize('workspace.trust.emptyWindow.description', "Controls whether or not the empty window is trusted by default within VS Code. When used with `#{0}#`, you can enable the full functionality of VS Code without prompting in an empty window.", WORKSPACE_TRUST_UNTRUSTED_FILES),
+				tags: [WORKSPACE_TRUST_SETTING_TAG],
+				scope: ConfigurationScope.APPLICATION
+			},
+			[WORKSPACE_TRUST_DEFAULT_TRUSTED]: {
+				type: 'boolean',
+				default: true,
+				markdownDescription: localize('workspace.trust.defaultTrusted.description', "Controls whether new workspace folders are trusted by default. When enabled, newly added folders are automatically trusted without prompting."),
 				tags: [WORKSPACE_TRUST_SETTING_TAG],
 				scope: ConfigurationScope.APPLICATION
 			}

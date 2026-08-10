@@ -209,7 +209,7 @@ export function createSampleCaseTourScenario(
  * spotlight target. Dispose removes the DOM. Never talks to an agent.
  * Replaces any previously tracked mock so aborted tours cannot leave a host behind.
  */
-export function showApprovalPromptMock(layoutService: IWorkbenchLayoutService): IDisposable {
+export function showApprovalPromptMock(layoutService: Pick<IWorkbenchLayoutService, 'getContainer'>): IDisposable {
 	const store = new DisposableStore();
 	const container = layoutService.getContainer(mainWindow);
 	const host = append(container, $('div.safeappeals-approval-mock-host'));

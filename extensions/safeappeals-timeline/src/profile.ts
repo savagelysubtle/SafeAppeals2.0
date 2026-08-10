@@ -51,6 +51,7 @@ const PROFILE_SETTING_KEYS: readonly ProfileFieldKey[] = [
 	'stateProvince',
 	'city',
 	'jurisdiction',
+	'operatingSystem',
 ];
 
 function profileRuleUri(): vscode.Uri {
@@ -81,6 +82,7 @@ export function getProfile(): UserProfile {
 		stateProvince: cfg.get<string>('stateProvince', ''),
 		city: cfg.get<string>('city', ''),
 		jurisdiction: normalizeJurisdictionId(cfg.get<string>('jurisdiction', '')),
+		operatingSystem: cfg.get<string>('operatingSystem', 'Windows'),
 	};
 }
 

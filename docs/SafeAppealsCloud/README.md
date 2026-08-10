@@ -121,9 +121,13 @@ PROVIDER_TOKEN_ENCRYPTION_KEY=   # 32-byte key (hex or base64); fail closed if u
 # Stripe
 STRIPE_SECRET_KEY=sk_live_...
 STRIPE_WEBHOOK_SECRET=whsec_...
-STRIPE_PRICE_STARTER=price_xxx    # $30 pack
-STRIPE_PRICE_PRO=price_xxx        # $65 pack
-STRIPE_PRICE_POWER=price_xxx     # $130 pack
+STRIPE_PRICE_STARTER=price_xxx        # $20 pack
+STRIPE_PRICE_ESSENTIAL=price_xxx      # $40 pack
+STRIPE_PRICE_PRO=price_xxx            # $75 pack
+STRIPE_PRICE_POWER=price_xxx          # $150 pack
+STRIPE_PRICE_FIRM=price_xxx           # $350 pack
+STRIPE_PRICE_PRACTICE=price_xxx       # $750 pack
+STRIPE_PRICE_ENTERPRISE_1K=price_xxx  # $1,000 pack
 
 # Services
 BRAVE_SEARCH_URL=https://brave-search-service.up.railway.app

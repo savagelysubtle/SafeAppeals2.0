@@ -7369,13 +7369,11 @@
 
   // webview-src/sidebar/App.tsx
   var import_jsx_runtime = __toESM(require_jsx_runtime());
+  var CUSTOM_JURISDICTION_ID = "__custom__";
   function App() {
     const [timeline, setTimeline] = (0, import_react.useState)(null);
     const [jurisdictions, setJurisdictions] = (0, import_react.useState)([]);
     const [workspaceName, setWorkspaceName] = (0, import_react.useState)("Workspace");
-    const [calendarEvents, setCalendarEvents] = (0, import_react.useState)([]);
-    const [calendarAvailable, setCalendarAvailable] = (0, import_react.useState)(false);
-    const [calendarError, setCalendarError] = (0, import_react.useState)();
     const [loading, setLoading] = (0, import_react.useState)(true);
     const [filterCategory, setFilterCategory] = (0, import_react.useState)("all");
     const [deadlinesOnly, setDeadlinesOnly] = (0, import_react.useState)(false);
@@ -7383,22 +7381,17 @@
     const [injuryDateDraft, setInjuryDateDraft] = (0, import_react.useState)("");
     const [injuryDateFocused, setInjuryDateFocused] = (0, import_react.useState)(false);
     const [injuryDateDirty, setInjuryDateDirty] = (0, import_react.useState)(false);
+    const [customJurisdiction, setCustomJurisdiction] = (0, import_react.useState)("");
+    const [showCustomJurisdictionInput, setShowCustomJurisdictionInput] = (0, import_react.useState)(false);
     (0, import_react.useEffect)(() => {
       const dispose = onHostMessage((msg) => {
         if (msg.type === "bootstrap") {
           setTimeline(msg.payload.timeline);
           setJurisdictions(msg.payload.jurisdictions);
           setWorkspaceName(msg.payload.workspaceName);
-          setCalendarEvents(msg.payload.calendarEvents);
-          setCalendarAvailable(msg.payload.calendarAvailable);
-          setCalendarError(msg.payload.calendarError);
           setLoading(false);
         } else if (msg.type === "timelineUpdated") {
           setTimeline(msg.timeline);
-        } else if (msg.type === "calendarPulled") {
-          setCalendarEvents(msg.events);
-          setCalendarError(msg.error);
-          setCalendarAvailable(!msg.error || msg.events.length > 0);
         } else if (msg.type === "error") {
           setError(msg.message);
         }
@@ -7450,6 +7443,25 @@
     if (loading) {
       return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "sidebar loading", children: "Loading\u2026" });
     }
+    const handleJurisdictionChange = (e) => {
+      const value = e.target.value;
+      if (value === CUSTOM_JURISDICTION_ID) {
+        setShowCustomJurisdictionInput(true);
+        setCustomJurisdiction("");
+      } else {
+        setShowCustomJurisdictionInput(false);
+        postToHost({ type: "setJurisdiction", jurisdictionId: value });
+      }
+    };
+    const handleCustomJurisdictionSubmit = (e) => {
+      e.preventDefault();
+      const value = customJurisdiction.trim();
+      if (value) {
+        postToHost({ type: "setJurisdiction", jurisdictionId: value });
+        setShowCustomJurisdictionInput(false);
+        setCustomJurisdiction("");
+      }
+    };
     return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "sidebar", children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("header", { className: "sidebar-header", children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "sidebar-title", children: "Case Timeline" }),
@@ -7472,16 +7484,47 @@
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "sidebar-body", children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", { className: "section", children: [
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "section-label", children: "Jurisdiction" }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
             "select",
             {
               className: "field",
               value: timeline?.jurisdictionId ?? "",
-              onChange: (e) => postToHost({ type: "setJurisdiction", jurisdictionId: e.target.value }),
-              children: jurisdictions.map((j) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: j.id, children: j.label }, j.id))
+              onChange: handleJurisdictionChange,
+              children: [
+                jurisdictions.map((j) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: j.id, children: j.label }, j.id)),
+                /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: CUSTOM_JURISDICTION_ID, children: "Other\u2026" })
+              ]
             }
           ),
-          timeline?.jurisdictionId && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "hint", children: [
+          showCustomJurisdictionInput && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("form", { onSubmit: handleCustomJurisdictionSubmit, className: "custom-jurisdiction-form", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+              "input",
+              {
+                className: "field",
+                type: "text",
+                placeholder: "Enter custom jurisdiction name",
+                value: customJurisdiction,
+                onChange: (e) => setCustomJurisdiction(e.target.value),
+                autoFocus: true
+              }
+            ),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "form-actions", children: [
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { type: "submit", className: "btn btn-primary btn-sm", children: "Save" }),
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+                "button",
+                {
+                  type: "button",
+                  className: "btn btn-secondary btn-sm",
+                  onClick: () => {
+                    setShowCustomJurisdictionInput(false);
+                    setCustomJurisdiction("");
+                  },
+                  children: "Cancel"
+                }
+              )
+            ] })
+          ] }),
+          timeline?.jurisdictionId && !showCustomJurisdictionInput && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "hint", children: [
             "Statute: ",
             jurisdictions.find((j) => j.id === timeline.jurisdictionId)?.statuteOfLimitationsDays ?? "\u2014",
             " days"
@@ -7599,29 +7642,6 @@
               ]
             }
           ) }, e.id)) })
-        ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", { className: "section", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "section-label-row", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "section-label", children: [
-              "Calendar ",
-              calendarAvailable ? "" : "(optional)"
-            ] }),
-            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-              "button",
-              {
-                type: "button",
-                className: "btn btn-secondary btn-sm",
-                onClick: () => postToHost({ type: "pullCalendar" }),
-                title: calendarAvailable ? "Soft-pull calendar events" : "Calendar may be unavailable",
-                children: "Pull Calendar"
-              }
-            )
-          ] }),
-          calendarError && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "hint", children: calendarError }),
-          calendarEvents.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "hint", children: "No calendar events in range." }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", { className: "compact-list muted", children: calendarEvents.slice(0, 8).map((ev) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("li", { className: "compact-static", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "compact-date", children: formatTimelineDate(ev.date) }),
-            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "compact-title", children: ev.title })
-          ] }, ev.id)) })
         ] })
       ] })
     ] });

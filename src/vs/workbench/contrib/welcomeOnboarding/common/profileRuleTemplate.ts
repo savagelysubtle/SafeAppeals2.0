@@ -25,6 +25,7 @@ export interface ProfileRuleInput {
 	stateProvince?: string;
 	city?: string;
 	jurisdiction?: string;
+	operatingSystem?: string;
 }
 
 /** Canonical role strings persisted to `safeappeals.profile.role` (ordered). */
@@ -68,7 +69,8 @@ export type ProfileFieldKey =
 	| 'country'
 	| 'stateProvince'
 	| 'city'
-	| 'jurisdiction';
+	| 'jurisdiction'
+	| 'operatingSystem';
 
 /** One fact-bullet label used in the rendered rule when the value is non-empty. */
 export interface ProfileFactBulletLabel {
@@ -97,13 +99,13 @@ export const ROLE_TO_GROUP: Readonly<Record<ProfileRole, ProfilePersonaGroup>> =
  * Unknown / empty role keeps the legacy legal field set.
  */
 export const VISIBLE_FIELDS_BY_GROUP: Readonly<Record<ProfilePersonaGroupOrUnknown, readonly ProfileFieldKey[]>> = {
-	legal: ['name', 'organization', 'role', 'practiceArea', 'country', 'stateProvince', 'city', 'jurisdiction'],
-	self: ['name', 'role', 'country', 'stateProvince', 'city', 'jurisdiction'],
-	education: ['name', 'organization', 'role', 'focusArea', 'citationStyle', 'country', 'stateProvince'],
-	research: ['name', 'organization', 'role', 'focusArea', 'citationStyle', 'country', 'stateProvince'],
-	office: ['name', 'organization', 'role', 'focusArea'],
-	developer: ['name', 'organization', 'role', 'focusArea'],
-	unknown: ['name', 'organization', 'role', 'practiceArea', 'country', 'stateProvince', 'city', 'jurisdiction'],
+	legal: ['name', 'organization', 'role', 'practiceArea', 'country', 'stateProvince', 'city', 'jurisdiction', 'operatingSystem'],
+	self: ['name', 'role', 'country', 'stateProvince', 'city', 'jurisdiction', 'operatingSystem'],
+	education: ['name', 'organization', 'role', 'focusArea', 'citationStyle', 'country', 'stateProvince', 'operatingSystem'],
+	research: ['name', 'organization', 'role', 'focusArea', 'citationStyle', 'country', 'stateProvince', 'operatingSystem'],
+	office: ['name', 'organization', 'role', 'focusArea', 'operatingSystem'],
+	developer: ['name', 'organization', 'role', 'focusArea', 'operatingSystem'],
+	unknown: ['name', 'organization', 'role', 'practiceArea', 'country', 'stateProvince', 'city', 'jurisdiction', 'operatingSystem'],
 };
 
 /** Organization field label hints for consumers (by group). */
@@ -198,6 +200,7 @@ const LEGAL_OR_UNKNOWN_FACT_LABELS: readonly ProfileFactBulletLabel[] = [
 	{ key: 'stateProvince', label: 'State / province' },
 	{ key: 'city', label: 'City' },
 	{ key: 'jurisdiction', label: 'Compensation board / tribunal' },
+	{ key: 'operatingSystem', label: 'Operating System' },
 ];
 
 const SELF_FACT_LABELS: readonly ProfileFactBulletLabel[] = [
@@ -207,6 +210,7 @@ const SELF_FACT_LABELS: readonly ProfileFactBulletLabel[] = [
 	{ key: 'stateProvince', label: 'State / province' },
 	{ key: 'city', label: 'City' },
 	{ key: 'jurisdiction', label: 'Compensation board / tribunal' },
+	{ key: 'operatingSystem', label: 'Operating System' },
 ];
 
 const STUDENT_FACT_LABELS: readonly ProfileFactBulletLabel[] = [
@@ -217,6 +221,7 @@ const STUDENT_FACT_LABELS: readonly ProfileFactBulletLabel[] = [
 	{ key: 'citationStyle', label: 'Citation style' },
 	{ key: 'country', label: 'Country' },
 	{ key: 'stateProvince', label: 'State / province' },
+	{ key: 'operatingSystem', label: 'Operating System' },
 ];
 
 const TEACHER_FACT_LABELS: readonly ProfileFactBulletLabel[] = [
@@ -227,6 +232,7 @@ const TEACHER_FACT_LABELS: readonly ProfileFactBulletLabel[] = [
 	{ key: 'citationStyle', label: 'Citation style' },
 	{ key: 'country', label: 'Country' },
 	{ key: 'stateProvince', label: 'State / province' },
+	{ key: 'operatingSystem', label: 'Operating System' },
 ];
 
 const RESEARCH_FACT_LABELS: readonly ProfileFactBulletLabel[] = [
@@ -237,6 +243,7 @@ const RESEARCH_FACT_LABELS: readonly ProfileFactBulletLabel[] = [
 	{ key: 'citationStyle', label: 'Citation style' },
 	{ key: 'country', label: 'Country' },
 	{ key: 'stateProvince', label: 'State / province' },
+	{ key: 'operatingSystem', label: 'Operating System' },
 ];
 
 const OFFICE_FACT_LABELS: readonly ProfileFactBulletLabel[] = [
@@ -244,6 +251,7 @@ const OFFICE_FACT_LABELS: readonly ProfileFactBulletLabel[] = [
 	{ key: 'organization', label: 'Company / organization' },
 	{ key: 'role', label: 'Role' },
 	{ key: 'focusArea', label: 'Works on' },
+	{ key: 'operatingSystem', label: 'Operating System' },
 ];
 
 const DEVELOPER_FACT_LABELS: readonly ProfileFactBulletLabel[] = [
@@ -251,6 +259,7 @@ const DEVELOPER_FACT_LABELS: readonly ProfileFactBulletLabel[] = [
 	{ key: 'organization', label: 'Company / team' },
 	{ key: 'role', label: 'Role' },
 	{ key: 'focusArea', label: 'Languages / stack' },
+	{ key: 'operatingSystem', label: 'Operating System' },
 ];
 
 /**

@@ -14,7 +14,9 @@ import { IEditorService } from '../../../../services/editor/common/editorService
 import { IChatContextService } from '../../../chat/browser/contextContrib/chatContextService.js';
 import { IChatService } from '../../../chat/common/chatService/chatService.js';
 import { ILanguageModelToolsService, ToolDataSource, ToolSet } from '../../../chat/common/tools/languageModelToolsService.js';
-import { BrowserViewSharingState, IBrowserViewWorkbenchService } from '../../common/browserView.js';
+import { BrowserViewSharingState, IBrowserViewCDPService, IBrowserViewWorkbenchService } from '../../common/browserView.js';
+import { BrowserCdpTool, BrowserCdpToolData } from './browserCdpTool.js';
+import { browserCdpSessionStore } from './browserCdpSessionStore.js';
 import { formatBrowserEditorList } from './browserToolHelpers.js';
 import { ClickBrowserTool, ClickBrowserToolData } from './clickBrowserTool.js';
 import { DragElementTool, DragElementToolData } from './dragElementTool.js';
@@ -47,6 +49,7 @@ class BrowserChatAgentToolsContribution extends Disposable implements IWorkbench
 		@IAgentNetworkFilterService private readonly agentNetworkFilterService: IAgentNetworkFilterService,
 		@IChatService private readonly chatService: IChatService,
 		@IPlaywrightService private readonly playwrightService: IPlaywrightService,
+		@IBrowserViewCDPService private readonly cdpService: IBrowserViewCDPService,
 	) {
 		super();
 
@@ -67,10 +70,12 @@ class BrowserChatAgentToolsContribution extends Disposable implements IWorkbench
 			this._updateToolRegistrations();
 		}));
 
-		// Dispose Playwright sessions when the corresponding chat session ends.
+		// Dispose Playwright + Agent CDP session groups when the corresponding chat session ends.
 		this._register(this.chatService.onDidDisposeSession(e => {
 			for (const resource of e.sessionResources) {
-				void this.playwrightService.disposeSession(resource.toString()).catch(() => { });
+				const sessionId = resource.toString();
+				void this.playwrightService.disposeSession(sessionId).catch(() => { });
+				void browserCdpSessionStore.disposeChatSession(this.cdpService, sessionId).catch(() => { });
 			}
 		}));
 	}
@@ -80,8 +85,10 @@ class BrowserChatAgentToolsContribution extends Disposable implements IWorkbench
 		this._modelListeners.clearAndDisposeAll();
 
 		if (!this.browserViewService.isSharingAvailable) {
-			// If chat tools are disabled, we only register the non-agentic open tool,
-			// which allows opening browser pages without granting access to their contents.
+			// Failure mode: when sharing is unavailable (chat/agent off or
+			// workbench.browser.enableChatTools disabled), only the non-agentic
+			// open tool is registered — pages can open but contents are not
+			// shared; snapshot/click/type/playwright/browser_cdp are unreachable.
 			this._toolsStore.add(this.toolsService.registerTool(OpenBrowserToolNonAgenticData, this.instantiationService.createInstance(OpenBrowserToolNonAgentic)));
 			this._toolsStore.add(this._browserToolSet.addTool(OpenBrowserToolNonAgenticData));
 			this.chatContextService.updateWorkspaceContextItems(BrowserChatAgentToolsContribution.CONTEXT_ID, []);
@@ -98,6 +105,7 @@ class BrowserChatAgentToolsContribution extends Disposable implements IWorkbench
 		this._toolsStore.add(this.toolsService.registerTool(TypeBrowserToolData, this.instantiationService.createInstance(TypeBrowserTool)));
 		this._toolsStore.add(this.toolsService.registerTool(RunPlaywrightCodeToolData, this.instantiationService.createInstance(RunPlaywrightCodeTool)));
 		this._toolsStore.add(this.toolsService.registerTool(HandleDialogBrowserToolData, this.instantiationService.createInstance(HandleDialogBrowserTool)));
+		this._toolsStore.add(this.toolsService.registerTool(BrowserCdpToolData, this.instantiationService.createInstance(BrowserCdpTool)));
 
 		this._toolsStore.add(this._browserToolSet.addTool(OpenBrowserToolData));
 		this._toolsStore.add(this._browserToolSet.addTool(ReadBrowserToolData));
@@ -109,6 +117,7 @@ class BrowserChatAgentToolsContribution extends Disposable implements IWorkbench
 		this._toolsStore.add(this._browserToolSet.addTool(TypeBrowserToolData));
 		this._toolsStore.add(this._browserToolSet.addTool(RunPlaywrightCodeToolData));
 		this._toolsStore.add(this._browserToolSet.addTool(HandleDialogBrowserToolData));
+		this._toolsStore.add(this._browserToolSet.addTool(BrowserCdpToolData));
 
 		// Subscribe to browser view changes and model sharing state changes
 		this._syncModelListeners();

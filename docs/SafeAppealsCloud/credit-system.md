@@ -14,21 +14,29 @@ SafeAppeals uses a **token-based credit system**:
 
 ## Token Packs
 
-Users purchase tokens through Stripe:
+Users purchase tokens through Stripe. Self-serve packs use one-time Checkout (`mode: "payment"`), never subscriptions; credits never expire. Every model is available on every pack — pack tier does not gate model access, it only affects the effective $/token rate used for margin tracking.
 
-| Pack | Tokens | Price | $/Token | Stripe Price ID |
-|------|--------|-------|---------|-----------------|
-| **Starter** | 700,000 | $30 | $0.0000428 | `STRIPE_PRICE_STARTER` |
-| **Pro** | 2,000,000 | $65 | $0.0000325 | `STRIPE_PRICE_PRO` |
-| **Power** | 5,000,000 | $130 | $0.0000260 | `STRIPE_PRICE_POWER` |
+| Pack | Tokens | Price | $/Token | Stripe Price ID | Self-serve |
+|------|--------|-------|---------|-----------------|------------|
+| **Starter** | 500,000 | $20 | $0.0000400 | `STRIPE_PRICE_STARTER` | Yes |
+| **Essential** | 1,100,000 | $40 | $0.0000364 | `STRIPE_PRICE_ESSENTIAL` | Yes |
+| **Pro** | 2,300,000 | $75 | $0.0000326 | `STRIPE_PRICE_PRO` | Yes |
+| **Power** | 5,200,000 | $150 | $0.0000288 | `STRIPE_PRICE_POWER` | Yes |
+| **Firm** | 13,000,000 | $350 | $0.0000269 | `STRIPE_PRICE_FIRM` | Yes |
+| **Practice** | 30,000,000 | $750 | $0.0000250 | `STRIPE_PRICE_PRACTICE` | Yes |
+| **Enterprise 1K** | 42,000,000 | $1,000 | $0.0000238 | `STRIPE_PRICE_ENTERPRISE_1K` | Yes |
+| **Enterprise 5K** | 225,000,000 | $5,000 | $0.0000222 | *(contact-only — no env var, not wired into checkout)* | No |
+| **Enterprise 10K** | 480,000,000 | $10,000 | $0.0000208 | *(contact-only — no env var, not wired into checkout)* | No |
+
+Canonical definitions live in `void-cloud/api/src/lib/creditPacks.ts` (`CREDIT_PACKS` for the 7 self-serve keys, `ENTERPRISE_INVOICE_PACKS` for the 2 contact-only tiers) and are mirrored on the frontend in `void-cloud/dashboard/lib/pricingTiers.ts`. Public pricing page: `void-cloud/dashboard/app/pricing/page.tsx` (`/pricing`).
 
 ### Value Calculation
 
-Rates vary by tier: Starter $42.86/MTok, Pro $32.50/MTok, Power $26.00/MTok. Example (Starter):
+Rate varies by tier, from $40.00/MTok (Starter) down to $23.80/MTok (Enterprise 1K). Example (Starter):
 ```
-1 token = $30 / 700,000 = $0.0000428
-1 penny ($0.01) = 233 tokens
-$1.00 = 23,333 tokens
+1 token = $20 / 500,000 = $0.00004
+1 penny ($0.01) = 250 tokens
+$1.00 = 25,000 tokens
 ```
 
 ## How Credits Are Charged
@@ -203,8 +211,8 @@ Individual accounts can enable **auto-reload** on the dashboard **Billing** page
 | Setting | Description |
 |---------|-------------|
 | **Balance threshold** | Reload when balance falls at or below this level (minimum 10,000 tokens; default 100,000) |
-| **Reload pack** | Starter ($30), Pro ($65), or Power ($130)—same packs as manual checkout |
-| **Monthly cap** | Optional limit on auto-reload spend per calendar month (defaults to **$390** when first enabled; server maximum $390) |
+| **Reload pack** | Any of the 7 self-serve packs (Starter through Enterprise 1K)—same packs as manual checkout. Enterprise 5K/10K are contact-only and never auto-reload-eligible. |
+| **Monthly cap** | Optional limit on auto-reload spend per calendar month (defaults to **$1,000** when first enabled; server maximum **$3,000**) |
 
 **Card on file:** Users add a card via Stripe Checkout `mode: setup` (`POST /credits/auto-reload/setup-card`). The SetupIntent uses off-session usage so saved cards can be charged without the user present.
 
@@ -229,8 +237,8 @@ Defined in `void-cloud/api/src/lib/creditPacks.ts`:
 ```typescript
 AUTO_RELOAD_MIN_THRESHOLD = 10_000
 AUTO_RELOAD_DEFAULT_THRESHOLD = 100_000
-AUTO_RELOAD_DEFAULT_MONTHLY_CAP_CENTS = 39_000   // $390
-AUTO_RELOAD_SERVER_MONTHLY_MAX_CENTS = 39_000
+AUTO_RELOAD_DEFAULT_MONTHLY_CAP_CENTS = 100_000   // $1,000
+AUTO_RELOAD_SERVER_MONTHLY_MAX_CENTS = 300_000    // $3,000
 AUTO_RELOAD_MAX_RELOADS_PER_DAY = 3
 AUTO_RELOAD_COOLDOWN_MS = 15 * 60 * 1000
 AUTO_RELOAD_CONSENT_VERSION = "auto_reload_v1"
@@ -255,32 +263,41 @@ const session = await stripe.checkout.sessions.create({
     mode: "payment",
     line_items: [{ price: selectedPack.priceId, quantity: 1 }],
     metadata: {
-        void_user_id: user.id,
-        credit_pack: pack,
-        credits_amount: "700000",
+        userId: user.id,
+        packageKey: pack,       // e.g. "pro"
+        credits: "2300000",
     },
     success_url: `${FRONTEND_URL}/credits/success?session_id={CHECKOUT_SESSION_ID}`,
     cancel_url: `${FRONTEND_URL}/credits/cancelled`,
 });
 ```
 
+The server's own `CREDIT_PACKS` config is always the source of truth for the granted credit amount — session metadata is never trusted for the actual grant, only for identifying which user/pack a webhook event belongs to.
+
 ### 3. Stripe Webhook Fulfillment
 
-When payment succeeds, webhook adds credits:
+When payment succeeds, the webhook grants credits via the `fulfill_credit_purchase` RPC (idempotent on `stripe_session_id`), not a raw balance update:
 
 ```typescript
 // POST /webhooks/stripe
 if (event.type === 'checkout.session.completed') {
     const session = event.data.object;
-    const userId = session.metadata.void_user_id;
-    const credits = parseInt(session.metadata.credits_amount);
+    const userId = session.metadata.userId;
+    const pack = CREDIT_PACKS[session.metadata.packageKey]; // server-authoritative amount
 
-    await supabase.rpc('add_credits', {
+    await supabase.rpc('fulfill_credit_purchase', {
         p_user_id: userId,
-        p_amount: credits
+        p_pack: session.metadata.packageKey,
+        p_credits: pack.credits,
+        p_pack_tier: session.metadata.packageKey,
+        p_pack_rate: pack.amount / pack.credits,
+        p_stripe_session_id: session.id,
+        p_purchase_source: 'checkout',
     });
 }
 ```
+
+Refunds are handled separately via the `charge.refunded` webhook event and the `fulfill_credit_refund` RPC (migration `025_credit_refunds.sql`), which deducts credits proportionally to the refunded amount, clamped so a balance never goes negative.
 
 ## Usage Tracking
 
@@ -352,25 +369,24 @@ SELECT * FROM cost_by_model;
 
 ### Token Pack Pricing
 
-Edit `void-cloud/api/src/routes/credits.ts`:
+Edit `void-cloud/api/src/lib/creditPacks.ts` (not `credits.ts` — the route imports the pack config from here):
 
 ```typescript
-const CREDIT_PACKS = {
-    starter: {
-        priceId: process.env.STRIPE_PRICE_STARTER!,
-        credits: 700_000,
-        amount: 3000, // $30.00 in cents
-    },
-    pro: {
-        priceId: process.env.STRIPE_PRICE_PRO!,
-        credits: 2_000_000,
-        amount: 6500, // $65.00 in cents
-    },
-    power: {
-        priceId: process.env.STRIPE_PRICE_POWER!,
-        credits: 5_000_000,
-        amount: 13000, // $130.00 in cents
-    },
+export const CREDIT_PACKS = {
+    starter:       { priceId: process.env.STRIPE_PRICE_STARTER!,       credits: 500_000,    amount: 2_000 },   // $20.00
+    essential:     { priceId: process.env.STRIPE_PRICE_ESSENTIAL!,     credits: 1_100_000,  amount: 4_000 },   // $40.00
+    pro:           { priceId: process.env.STRIPE_PRICE_PRO!,           credits: 2_300_000,  amount: 7_500 },   // $75.00
+    power:         { priceId: process.env.STRIPE_PRICE_POWER!,        credits: 5_200_000,  amount: 15_000 },  // $150.00
+    firm:          { priceId: process.env.STRIPE_PRICE_FIRM!,          credits: 13_000_000, amount: 35_000 },  // $350.00
+    practice:      { priceId: process.env.STRIPE_PRICE_PRACTICE!,      credits: 30_000_000, amount: 75_000 },  // $750.00
+    enterprise_1k: { priceId: process.env.STRIPE_PRICE_ENTERPRISE_1K!, credits: 42_000_000, amount: 100_000 }, // $1,000.00
+    // amounts are in cents
+};
+
+// Contact-only — not read by /credits/checkout, no Stripe price env var required.
+export const ENTERPRISE_INVOICE_PACKS = {
+    enterprise_5k:  { credits: 225_000_000, amount: 500_000 },   // $5,000.00
+    enterprise_10k: { credits: 480_000_000, amount: 1_000_000 }, // $10,000.00
 };
 ```
 
@@ -449,7 +465,7 @@ Profit = Revenue - Cost
 
 ### In Database
 
-The `log_usage_with_cost` function calculates profit. It now uses per-user `pack_rate` from `profiles` table (Starter $42.86/MTok, Pro $32.50/MTok, Power $26.00/MTok) instead of a hardcoded rate:
+The `log_usage_with_cost` function calculates profit. It uses per-user `pack_rate` from the `profiles` table (set at purchase time from the pack's own $/token rate — see the pack table above, from $40.00/MTok on Starter down to $23.80/MTok on Enterprise 1K) instead of a hardcoded rate:
 
 ```sql
 -- Uses profiles.pack_rate for user's tier
@@ -458,21 +474,21 @@ v_profit := (v_credits * pack_rate) - v_cost.total_cost;
 
 ### Example
 
-Request: 5,000 input + 1,000 output tokens on `gpt-5.2` (Starter tier @ $42.86/MTok)
+Request: 5,000 input + 1,000 output tokens on `gpt-5.2` (Starter tier @ $40.00/MTok)
 
 ```
 Credits charged: 6,000 tokens
-Revenue: 6,000 × $0.0000428 = $0.257
+Revenue: 6,000 × $0.00004 = $0.240
 
 Provider cost:
   Input: 5,000 × $0.00000175 = $0.00875
   Output: 1,000 × $0.000014 = $0.014
   Total: $0.02275
 
-Profit: $0.257 - $0.02275 = $0.234 (91% margin)
+Profit: $0.240 - $0.02275 = $0.217 (90% margin)
 ```
 
-(Pro tier @ $32.50/MTok: Revenue = 6,000 × $0.0000325 = $0.195, margin ~88%. Power tier @ $26/MTok: Revenue = $0.156, margin ~86%.)
+(Pro tier @ $32.60/MTok: Revenue = 6,000 × $0.0000326 = $0.196, margin ~88%. Enterprise 1K tier @ $23.80/MTok: Revenue = 6,000 × $0.0000238 = $0.143, margin ~84%.)
 
 ---
 

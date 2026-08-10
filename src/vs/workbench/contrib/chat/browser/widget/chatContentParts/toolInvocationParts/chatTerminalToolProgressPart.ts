@@ -61,6 +61,7 @@ import { PANEL_BACKGROUND } from '../../../../../../common/theme.js';
 import { editorBackground } from '../../../../../../../platform/theme/common/colorRegistry.js';
 import { IThemeService } from '../../../../../../../platform/theme/common/themeService.js';
 import { CommandsRegistry } from '../../../../../../../platform/commands/common/commands.js';
+import { resolveTerminalCommandOutput } from '../../../../common/terminalCommandOutput.js';
 
 /**
  * Minimum number of rows to display in the terminal output view.
@@ -383,14 +384,14 @@ export class ChatTerminalToolProgressPart extends BaseChatToolInvocationSubPart 
 			ChatTerminalToolOutputSection,
 			() => this._ensureTerminalInstance(),
 			() => this._getResolvedCommand(),
-			() => this._terminalData.terminalCommandOutput,
+			() => resolveTerminalCommandOutput(this._terminalData),
 			() => this._commandText,
 			() => this._terminalData.terminalTheme,
 			!!this._terminalData.terminalToolSessionId,
 		));
 		// Only append the output section if there's a terminal session or stored output;
 		// display-only invocations with no output don't need the output area at all
-		if (this._terminalData.terminalToolSessionId || this._terminalData.terminalCommandOutput) {
+		if (this._terminalData.terminalToolSessionId || resolveTerminalCommandOutput(this._terminalData)) {
 			elements.container.append(this._outputView.domNode);
 		}
 		this._register(this._outputView.onDidFocus(() => this._handleOutputFocus()));
@@ -486,7 +487,7 @@ export class ChatTerminalToolProgressPart extends BaseChatToolInvocationSubPart 
 		this._renderImagePills(toolInvocation, context, elements.container);
 
 		// Only auto-expand in thinking containers if there's actual output to show
-		const hasStoredOutput = !!terminalData.terminalCommandOutput;
+		const hasStoredOutput = !!resolveTerminalCommandOutput(terminalData);
 		const storedExpandedState = expandedStateByInvocation.get(toolInvocation);
 		const hasStoredExpandedState = expandedStateByInvocation.has(toolInvocation);
 		if (storedExpandedState || (!hasStoredExpandedState && this._forceExpandTerminalOutput) || (this._isInThinkingContainer && IChatToolInvocation.isComplete(toolInvocation) && hasStoredOutput)) {
@@ -685,7 +686,7 @@ export class ChatTerminalToolProgressPart extends BaseChatToolInvocationSubPart 
 
 		// Show output action (only when NOT using collapsible wrapper)
 		if (!this._usesCollapsibleWrapper) {
-			const hasSnapshot = !!this._terminalData.terminalCommandOutput;
+			const hasSnapshot = !!resolveTerminalCommandOutput(this._terminalData);
 			const hasOutput = !!resolvedCommand || hasSnapshot;
 			this._toolbarHasOutput = hasOutput;
 
@@ -841,7 +842,7 @@ export class ChatTerminalToolProgressPart extends BaseChatToolInvocationSubPart 
 
 			const hasRealOutput = (): boolean => {
 				// Check for snapshot output
-				if (this._terminalData.terminalCommandOutput?.text?.trim()) {
+				if (resolveTerminalCommandOutput(this._terminalData)?.text?.trim()) {
 					return true;
 				}
 				// Check for live output (cursor moved past executed marker)
@@ -941,7 +942,7 @@ export class ChatTerminalToolProgressPart extends BaseChatToolInvocationSubPart 
 			if (command?.hasOutput()) {
 				return true;
 			}
-			return !!this._terminalData.terminalCommandOutput?.text?.trim();
+			return !!resolveTerminalCommandOutput(this._terminalData)?.text?.trim();
 		};
 
 		const autoExpand = store.add(new TerminalToolAutoExpand({

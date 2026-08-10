@@ -7,18 +7,12 @@ import { jurisdictionLabel } from './types';
 import type { TimelineService } from './timelineService';
 import type { CaseTimeline, TimelineEvent, TimelineEventUpdates } from './timelineTypes';
 
-interface CalendarSoftEvent {
-	id: string;
-	title: string;
-	date: string;
-	provider?: string;
-}
-
-interface JurisdictionOption {
+export interface JurisdictionOption {
 	id: string;
 	name: string;
 	label: string;
 	statuteOfLimitationsDays: number;
+	isCustom?: boolean;
 }
 
 export type TimelineWebviewSurface = 'sidebar' | 'dashboard';
@@ -32,7 +26,6 @@ export type WebviewToHostMessage =
 	| { type: 'setInjuryDate'; injuryDate: string }
 	| { type: 'setNotificationsEnabled'; enabled: boolean }
 	| { type: 'exportIcs' }
-	| { type: 'pullCalendar' }
 	| { type: 'toggleSyncToCalendar'; id: string }
 	| { type: 'openDocument'; uri: string }
 	| { type: 'pickDocuments' }
@@ -158,9 +151,6 @@ export class TimelineWebviewHost {
 				case 'exportIcs':
 					await this.exportIcs(service);
 					return;
-				case 'pullCalendar':
-					await this.pullCalendar();
-					return;
 				case 'openDocument':
 					await this.openDocument(msg.uri);
 					return;
@@ -190,17 +180,21 @@ export class TimelineWebviewHost {
 			label: jurisdictionLabel(j.id) || j.name,
 			statuteOfLimitationsDays: j.statuteOfLimitationsDays,
 		}));
+		// Add "Other" option for custom jurisdictions
+		jurisdictions.push({
+			id: '__custom__',
+			name: 'Other',
+			label: 'Other…',
+			statuteOfLimitationsDays: 90,
+			isCustom: true,
+		});
 		const folder = vscode.workspace.workspaceFolders?.[0];
-		const { events, available, error } = await softPullCalendarEvents();
 		await this.postMessage({
 			type: 'bootstrap',
 			payload: {
 				timeline,
 				jurisdictions,
 				workspaceName: folder?.name ?? 'Workspace',
-				calendarEvents: events,
-				calendarAvailable: available,
-				calendarError: error,
 			},
 		});
 	}
@@ -229,15 +223,6 @@ export class TimelineWebviewHost {
 		}
 		await vscode.workspace.fs.writeFile(uri, Buffer.from(content, 'utf8'));
 		vscode.window.showInformationMessage(`Exported timeline ICS to ${vscode.workspace.asRelativePath(uri)}`);
-	}
-
-	private async pullCalendar(): Promise<void> {
-		const { events, available, error } = await softPullCalendarEvents();
-		await this.postMessage({
-			type: 'calendarPulled',
-			events,
-			error: available ? undefined : error,
-		});
 	}
 
 	private async pickDocuments(): Promise<void> {
@@ -387,54 +372,3 @@ export function getTimelineWebviewHtml(
 </html>`;
 }
 
-async function softPullCalendarEvents(): Promise<{
-	events: CalendarSoftEvent[];
-	available: boolean;
-	error?: string;
-}> {
-	const start = new Date();
-	start.setMonth(start.getMonth() - 3);
-	const end = new Date();
-	end.setMonth(end.getMonth() + 6);
-	try {
-		const raw = await vscode.commands.executeCommand<unknown>(
-			'safeappeals-calendar.getEvents',
-			{
-				start: start.toISOString(),
-				end: end.toISOString(),
-				provider: 'all',
-			},
-		);
-		if (!Array.isArray(raw)) {
-			return {
-				events: [],
-				available: true,
-				error: 'Calendar returned no events (connect a provider if needed).',
-			};
-		}
-		const events: CalendarSoftEvent[] = [];
-		for (const item of raw) {
-			if (!item || typeof item !== 'object') {
-				continue;
-			}
-			const ev = item as Record<string, unknown>;
-			if (typeof ev.id !== 'string' || typeof ev.title !== 'string' || typeof ev.date !== 'string') {
-				continue;
-			}
-			events.push({
-				id: ev.id,
-				title: ev.title,
-				date: ev.date,
-				provider: typeof ev.provider === 'string' ? ev.provider : undefined,
-			});
-		}
-		return { events, available: true };
-	} catch (error) {
-		const message = error instanceof Error ? error.message : String(error);
-		return {
-			events: [],
-			available: false,
-			error: `Calendar unavailable: ${message}`,
-		};
-	}
-}

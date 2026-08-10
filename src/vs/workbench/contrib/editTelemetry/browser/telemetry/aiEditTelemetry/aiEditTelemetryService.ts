@@ -54,6 +54,8 @@ export interface IEditTelemetryBaseData {
 	| 'edit'
 	/** AI agent mode for autonomous task completion and multi-file edits */
 	| 'agent'
+	/** Planning mode for producing an implementation plan before changes */
+	| 'plan'
 	/** Custom mode defined by extensions or user settings */
 	| 'custom'
 	/** Applying a previously suggested code block */

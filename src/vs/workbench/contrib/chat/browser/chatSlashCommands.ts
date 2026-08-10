@@ -17,10 +17,13 @@ import { IConfigurationService } from '../../../../platform/configuration/common
 import { IInstantiationService } from '../../../../platform/instantiation/common/instantiation.js';
 import { ILogService } from '../../../../platform/log/common/log.js';
 import { IWorkspaceContextService } from '../../../../platform/workspace/common/workspace.js';
+import { IProgress } from '../../../../platform/progress/common/progress.js';
+import { IQuickInputService } from '../../../../platform/quickinput/common/quickInput.js';
 import { IChatAgentService } from '../common/participants/chatAgents.js';
 import { ChatContextKeys } from '../common/actions/chatContextKeys.js';
 import { IChatSlashCommandService } from '../common/participants/chatSlashCommands.js';
 import { IChatService } from '../common/chatService/chatService.js';
+import { IChatProgress } from '../common/chatService/chatService.js';
 import { IChatSessionsService, IChatSessionProviderOptionGroup, IChatSessionProviderOptionItem, SessionType } from '../common/chatSessionsService.js';
 import { ChatAgentLocation, ChatConfiguration, ChatModeKind, ChatPermissionLevel } from '../common/constants.js';
 import { getChatSessionType, isUntitledChatSession } from '../common/model/chatUri.js';
@@ -41,6 +44,8 @@ import { agentSlashCommandToMarkdown, agentToMarkdown } from './widget/chatConte
 import { IWorkbenchEnvironmentService } from '../../../services/environment/common/environmentService.js';
 import { ContextKeyExpr } from '../../../../platform/contextkey/common/contextkey.js';
 import { AICustomizationManagementCommands, AICustomizationManagementSection } from './aiCustomization/aiCustomizationManagement.js';
+import { NEW_AGENT_COMMAND_ID, NEW_SKILL_COMMAND_ID } from './promptSyntax/newPromptFileActions.js';
+import { PromptsStorage } from '../common/promptSyntax/service/promptsService.js';
 
 export class ChatSlashCommandsContribution extends Disposable {
 
@@ -50,7 +55,7 @@ export class ChatSlashCommandsContribution extends Disposable {
 		@IChatSlashCommandService slashCommandService: IChatSlashCommandService,
 		@ICommandService commandService: ICommandService,
 		@IChatAgentService chatAgentService: IChatAgentService,
-		@IInstantiationService instantiationService: IInstantiationService,
+		@IInstantiationService private readonly instantiationService: IInstantiationService,
 		@IAgentSessionsService agentSessionsService: IAgentSessionsService,
 		@IChatService chatService: IChatService,
 		@IConfigurationService configurationService: IConfigurationService,
@@ -191,6 +196,26 @@ export class ChatSlashCommandsContribution extends Disposable {
 			} else {
 				await commandService.executeCommand(CONFIGURE_PROMPTS_ACTION_ID);
 			}
+		}));
+		this._store.add(slashCommandService.registerSlashCommand({
+			command: 'create-agent',
+			detail: nls.localize('createAgent', "Create a custom agent"),
+			sortText: 'a1_createAgent',
+			executeImmediately: false,
+			locations: [ChatAgentLocation.Chat],
+			sessionTypes: [SessionType.Local],
+		}, async (prompt, progress, _history, _location, sessionResource) => {
+			await this.runCreateAgentFlow(prompt, progress, sessionResource);
+		}));
+		this._store.add(slashCommandService.registerSlashCommand({
+			command: 'create-skill',
+			detail: nls.localize('createSkill', "Create a skill"),
+			sortText: 'a1_createSkill',
+			executeImmediately: false,
+			locations: [ChatAgentLocation.Chat],
+			sessionTypes: [SessionType.Local],
+		}, async (prompt, progress, _history, _location, sessionResource) => {
+			await this.runCreateSkillFlow(prompt, progress, sessionResource);
 		}));
 		this._store.add(slashCommandService.registerSlashCommand({
 			command: 'fork',
@@ -378,6 +403,74 @@ export class ChatSlashCommandsContribution extends Disposable {
 			// it has received all response data has been received.
 			await timeout(200);
 		}));
+	}
+
+	private async runCreateAgentFlow(
+		prompt: string,
+		progress: IProgress<IChatProgress>,
+		sessionResource: URI
+	): Promise<void> {
+		await this.instantiationService.invokeFunction(async (accessor) => {
+			// Teach the user about agents
+			progress.report({
+				content: new MarkdownString(nls.localize('createAgent.teaching', "I'll help you create a custom agent. A custom agent is a specialized AI assistant with its own persona, tools, and instructions.")),
+				kind: 'markdownContent'
+			});
+
+			// Ask user where to create the agent (local vs global)
+			const quickInputService = accessor.get(IQuickInputService) as IQuickInputService;
+			const storageChoice = await quickInputService.pick<{ label: string; storage: PromptsStorage }>(
+				[
+					{ label: nls.localize('createAgent.local', "$(folder) Local (workspace) — Available in this workspace only"), storage: PromptsStorage.local },
+					{ label: nls.localize('createAgent.global', "$(sync) Global (user) — Available across all workspaces"), storage: PromptsStorage.user }
+				],
+				{ placeHolder: nls.localize('createAgent.placeHolder', "Where should this agent be created?") }
+			);
+
+			if (!storageChoice) {
+				return; // User cancelled
+			}
+
+			// Execute the create agent command with the chosen storage
+			const commandService = accessor.get(ICommandService) as ICommandService;
+			await commandService.executeCommand(NEW_AGENT_COMMAND_ID, {
+				targetStorage: storageChoice.storage
+			});
+		});
+	}
+
+	private async runCreateSkillFlow(
+		prompt: string,
+		progress: IProgress<IChatProgress>,
+		sessionResource: URI
+	): Promise<void> {
+		await this.instantiationService.invokeFunction(async (accessor) => {
+			// Teach the user about skills
+			progress.report({
+				content: new MarkdownString(nls.localize('createSkill.teaching', "I'll help you create a skill. A skill is a reusable workflow or capability that agents can load when relevant to a task.")),
+				kind: 'markdownContent'
+			});
+
+			// Ask user where to create the skill (local vs global)
+			const quickInputService = accessor.get(IQuickInputService) as IQuickInputService;
+			const storageChoice = await quickInputService.pick<{ label: string; storage: PromptsStorage }>(
+				[
+					{ label: nls.localize('createSkill.local', "$(folder) Local (workspace) — Available in this workspace only"), storage: PromptsStorage.local },
+					{ label: nls.localize('createSkill.global', "$(sync) Global (user) — Available across all workspaces"), storage: PromptsStorage.user }
+				],
+				{ placeHolder: nls.localize('createSkill.placeHolder', "Where should this skill be created?") }
+			);
+
+			if (!storageChoice) {
+				return; // User cancelled
+			}
+
+			// Execute the create skill command with the chosen storage
+			const commandService = accessor.get(ICommandService) as ICommandService;
+			await commandService.executeCommand(NEW_SKILL_COMMAND_ID, {
+				targetStorage: storageChoice.storage
+			});
+		});
 	}
 }
 
