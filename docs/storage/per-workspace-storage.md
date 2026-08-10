@@ -4,7 +4,7 @@
 
 ## Overview
 
-Chat threads are stored **exclusively** in per-workspace SQLite databases (`threads.db`). Global storage has been completely removed, ensuring complete data isolation between projects/workspaces.
+Chat threads are stored **exclusively** in per-workspace SQLite databases (`threads.db`) or extension `globalStorageUri` (per SafeAppeals rebrand). Global storage has been completely removed, ensuring complete data isolation between projects/workspaces. Legacy Void / Navigator paths are superseded.
 
 ## Storage Location
 
@@ -13,13 +13,13 @@ For full path details, see the [Storage documentation](../storage/README.md). Qu
 | Environment | threads.db Location |
 |-------------|---------------------|
 | **Development** | `%APPDATA%\safe-appeals-dev\` (Linux: `~/.config/safe-appeals-dev`) — see [storage README](./README.md); legacy Void path was `code-oss-dev\User\.safe-appeals-navigator\…` |
-| **Production** | `%APPDATA%\SafeAppealsNavigator\User\.safe-appeals-navigator\databases\workspaces\[hash]\threads.db` |
+| **Production** | `%APPDATA%\SafeAppeals\User\.safeappeals\databases\workspaces\[hash]\threads.db` (or extension `globalStorageUri`) |
 
 ---![1768786252933](image/per-workspace-storage/1768786252933.png)
 
 ## ⚠️ Breaking Change Notice
 
-**Previous behavior:** Threads stored globally, shared across all projects.
+**Previous behavior (Void era):** Threads stored globally or in legacy `.safe-appeals-navigator` paths.
 
 **New behavior:** Threads stored per-workspace only. No fallback to global storage.
 

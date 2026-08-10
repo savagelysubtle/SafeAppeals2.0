@@ -17,11 +17,11 @@ SafeAppeals Navigator keeps matter data isolated per workspace/profile. Electron
 | Environment | How to run | Electron user-data product folder |
 |-------------|------------|-----------------------------------|
 | **Development** | `VSCODE_DEV` set (e.g. `./scripts/code.sh`) | `safe-appeals-dev` |
-| **Production** | Installed Safe Appeals | `product.nameShort` → **Safe Appeals** (`applicationName` / `dataFolderName`: `safe-appeals-navigator` / `.safe-appeals-navigator`) |
+| **Production** | Installed SafeAppeals | `product.nameShort` → **SafeAppeals** (`dataFolderName`: `.safeappeals`) |
 
 Dev override is hard-coded in `src/vs/platform/environment/node/userDataPath.ts`
 when `VSCODE_DEV` is set (`productName = 'safe-appeals-dev'`). It is **not**
-`code-oss-dev` / `.vscode-oss-dev`, and production is **not** `%APPDATA%\Void\`.
+`code-oss-dev` / `.vscode-oss-dev` / `Void`, and production uses `.safeappeals`.
 
 ### Platform examples (development)
 
@@ -42,8 +42,7 @@ Inside that tree, VS Code / Electron layout is the usual `User/`,
 | Windows | `%APPDATA%\Safe Appeals` |
 | macOS | `~/Library/Application Support/Safe Appeals` |
 
-Product identity (`product.json`): `applicationName` =
-`safe-appeals-navigator`, `dataFolderName` = `.safe-appeals-navigator`.
+Product identity (`product.json`): `nameShort` = `SafeAppeals`, `applicationName` = `safeappeals`, `dataFolderName` = `.safeappeals`.
 
 ---
 
@@ -83,9 +82,8 @@ references: `core_references/`.
 Older Void contrib docs described per-workspace SQLite trees such as
 `User/.safe-appeals-navigator/databases/workspaces/[hash]/{workspace,threads,emails}.db`
 and `chroma/embeddings.db` under **`code-oss-dev`** / **`Void`**. That stack is
-retired for Private Search. Chat / email extensions may still use their own
-encrypted or SQLite stores under extension global/workspace storage — inspect the
-owning extension rather than assuming the Void `RAGPathService` paths.
+retired (superseded by SafeAppeals Cloud + extension `globalStorageUri` + `.safeAppeals/` per-workspace). Chat / email extensions use their own encrypted or SQLite stores under extension global/workspace storage — inspect the
+owning extension rather than assuming the old Void `RAGPathService` paths.
 
 ---
 
@@ -110,7 +108,8 @@ owning extension rather than assuming the Void `RAGPathService` paths.
 
 ## Important Notes
 
-1. **Dev product folder is `safe-appeals-dev`** — not `code-oss-dev` / `.vscode-oss-dev`
-2. **Production is Safe Appeals / `safe-appeals-navigator`** — not Void
-3. **Case config brand path is `.safeAppeals/`** in the workspace
-4. Prefer managed extension storage URIs for new encrypted stores
+1. **Dev product folder is `safe-appeals-dev`** — not legacy `code-oss-dev` / `Void`
+2. **Production uses `.safeappeals`** (updated in 2.1 rebrand; Navigator name dropped)
+3. **Case config brand path is `.safeAppeals/`** in the workspace root
+4. Prefer managed extension `globalStorageUri` / `storageUri` + `encryptedStore` for new data (per AGENTS.md local data security rules)
+5. `void-reference/` and old Void paths are superseded / read-only; do not reference them as active.

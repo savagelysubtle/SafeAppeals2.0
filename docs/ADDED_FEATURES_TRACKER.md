@@ -19,19 +19,19 @@
 | XLSX editor | Shipped (WASM crate source still in void-reference) | `extensions/safeappeals-documents` | Yes | master plan rung 5c |
 | Image viewer | Dropped (use upstream `media-preview`) | dropped | N/A | master plan “Explicitly dropped” |
 | Email (IMAP/SMTP, sidebar, dashboard, tags, case links; Google XOAUTH2 + app-password) | Shipped except AI classifier | `extensions/safeappeals-email` | Yes | master plan rung 6 / 6.5 / 6.6 / 6.7 / 6.8; `email_oauth_piggyback_e435d610.plan.md` |
-| Email AI classifier | Not built (noop seam) | seam in `extensions/safeappeals-email`; ref: `void-reference/browser/emailClassifier.ts` | Seam only | master plan rung 12 |
+| Email AI classifier | Not built (noop seam) | seam in `extensions/safeappeals-email` | Seam only | master plan rung 12 |
 | Tutorials + sample case | Shipped | `extensions/safeappeals-timeline` (`safeappeals-timeline.openTutorials`, sample `file://` workspace, walkthroughs) | Yes | timeline walkthrough + feature walkthroughs |
 | Timeline extension (profile / sample / walkthrough / project-setup + organize-files skills; case.json retired) | Shipped | `extensions/safeappeals-timeline` | Yes | `safeappeals_timeline_rung7_5ce1bf30.plan.md`; master `r8-organizer` |
-| Case-info dashboard | Dropped (D1) | `void-reference/` only | No | master plan D1–D3 |
+| Case-info dashboard | Dropped (D1) | superseded by upstream / safeappeals-timeline onboarding profile + AGENTS.md | No | master plan D1–D3 |
 | Encrypted-store helpers (`safeappeals-shared`) | Shipped (source-only; synced copies) | `extensions/safeappeals-shared` + per-ext `src/shared/` | Yes (hygiene check) | master plan ground truth |
 | Welcome onboarding wizard | In progress (M1 rewrite) | `src/vs/workbench/contrib/welcomeOnboarding/` | Yes | `onboarding_redesign_newcomer.plan.md` |
 | Unified SafeAppeals sign-in / cloud auth | Partial — `safeappeals-cloud` identity + service connections (`safeappeals-google` / `safeappeals-microsoft`); mail/calendar via `/connections/*` only (never at cloud onboarding) | `extensions/safeappeals-authentication` | Yes | `unified_safeappeals_sign-in_225af75a.plan.md`; service connections plan; onboarding T0/T1 |
-| File organizer / docket | Shipped (skill); docket UI dropped | `extensions/safeappeals-timeline/skills/organize-files`; ref: `void-reference/` | Yes (chatSkills) | master plan rung 8; `r8-organizer` |
+| File organizer / docket | Shipped (skill); docket UI dropped | `extensions/safeappeals-timeline/skills/organize-files` | Yes (chatSkills) | master plan rung 8; `r8-organizer` |
 | File converter | Partial | `extensions/safeappeals-converter` + `rust/converter` | Yes | master plan `r8-converter`; `safeappeals_converter_r8_production.plan.md` |
-| Audio recorder + transcription | In progress (P0–P5); Hearings Audio walkthrough shipped | `extensions/safeappeals-audio`; ref: `void-reference/` | Partial | `.cursor/plans/safeappeals_audio_r9_production.plan.md`; master plan rung 9 |
+| Audio recorder + transcription | In progress (P0–P5); Hearings Audio walkthrough shipped | `extensions/safeappeals-audio` | Partial | `.cursor/plans/safeappeals_audio_r9_production.plan.md`; master plan rung 9 |
 | Private Search (RAG) | Shipped | `extensions/safeappeals-rag` + `rust/rag-core`; status bar `$(search) Private Search`; tools in `docs/rag/tool-contracts.md` | Yes | master plan rung 10; packaging `docs/rag/packaging-rung-14.md` |
 | Agent / chat (SafeAppeals) | Upstream chat + vendored Copilot (rebrand pending) | `extensions/copilot` + upstream chat | Partial | master plan rung 11; M2 T14 |
-| Void chat / agent stack (sidebar, tools, MCP, quick edit, autocomplete, …) | Dropped (superseded by upstream) | `void-reference/` only | No | master plan “Explicitly dropped” |
+| Void chat / agent stack (sidebar, tools, MCP, quick edit, autocomplete, …) | Dropped (superseded by upstream SafeAppeals chat + Copilot) | superseded by upstream / safeappeals-* | No | master plan “Explicitly dropped” |
 | DocuSign / e-signature | Dropped (no partnership) | dropped | N/A | master plan “Explicitly dropped” |
 | Unified settings pane | Dropped (D2) | `void-reference/` only | No | master plan D1–D3 |
 | Extension transfer service | Dropped (D3) | `void-reference/` only | No | master plan D1–D3 |
@@ -41,7 +41,7 @@
 | Contrib hub (`contrib/safeappeals`) | Deleted (dead stub; extension-first) | dropped | N/A | master plan “Resolution: the contrib hub is dead” / M0 |
 | Packaging / prebuilds / migrations | Pending | build / CI | Partial | master plan rung 14 |
 | Slack integration (notifications, bidirectional sync, rich embeds) | Not built | `extensions/safeappeals-slack` (planned) | No | ROADMAP.md (Planned next) |
-| void-reference cleanup | Pending | `void-reference/` | N/A | master plan rung 15 |
+| void-reference cleanup | Completed as part of 2.1 rebrand (name shortened to SafeAppeals, void-cloud → safeappeals-cloud, appealsIcons → safeappeals-icons, Navigator dropped from name) | superseded | N/A | `.cursor/plans/safeappeals_2.1_rebrand_and_slack.plan.md` |
 
 **Status legend:** Shipped · Partial · In progress · Not built · reference / not migrated · Dropped
 

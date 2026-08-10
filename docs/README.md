@@ -107,7 +107,7 @@ Per-workspace isolation and Electron user-data paths.
 **Key Features:**
 
 - Development (`VSCODE_DEV`): user-data product name `safe-appeals-dev` (Linux: `~/.config/safe-appeals-dev`; Windows: `%APPDATA%\safe-appeals-dev`)
-- Production: Safe Appeals (`product.json` `applicationName` / `dataFolderName`: `safe-appeals-navigator` / `.safe-appeals-navigator`) — not Void / code-oss-dev
+- Production: SafeAppeals (`.safeappeals` data folder per 2.1 rebrand; Navigator name dropped) — not Void / code-oss-dev / legacy navigator paths
 - Private Search indexes live under the RAG extension `globalStorageUri` (`…/rag/<workspaceId>/`)
 - Case timeline data: `.safeAppeals/timeline.json` in the workspace
 
