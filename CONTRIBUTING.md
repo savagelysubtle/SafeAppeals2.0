@@ -1,99 +1,76 @@
-# Contributing to VS Code
+# Contributing to SafeAppeals
 
-Welcome, and thank you for your interest in contributing to VS Code!
+Welcome — thank you for your interest in contributing to SafeAppeals.
 
-There are several ways in which you can contribute, beyond writing code. The goal of this document is to provide a high-level overview of how you can get involved.
+SafeAppeals is an AI-native desktop workspace for legal appeals, research, and complex document work. There are several ways to contribute beyond writing code. This document is a high-level overview of how to get involved.
 
 ## Asking Questions
 
+Have a product or usage question? Open a [GitHub Discussion](https://github.com/savagelysubtle/SafeAppeals2.0/discussions) or email [support@safeappeals.com](mailto:support@safeappeals.com).
 
-Have a question? Instead of opening an issue, please ask on [Stack Overflow](https://stackoverflow.com/questions/tagged/visual-studio-code) using the tag `visual-studio-code`.
-
-The active community will be eager to assist you. Your well-worded question will serve as a resource to others searching for help.
+For development questions about the codebase, open an issue with the `question` label so others can find the answer later.
 
 ## Providing Feedback
 
-Your comments and feedback are welcome, and the development team is available via a handful of different channels.
+Comments and feedback are welcome.
 
-See the [Feedback Channels](https://github.com/microsoft/vscode/wiki/Feedback-Channels) wiki page for details on how to share your thoughts.
+- **Product ideas / feature requests**: [GitHub Issues](https://github.com/savagelysubtle/SafeAppeals2.0/issues/new) with the `enhancement` label
+- **Roadmap**: see [ROADMAP.md](ROADMAP.md) for shipped features and what’s next
+- **Email**: [support@safeappeals.com](mailto:support@safeappeals.com)
 
 ## Reporting Issues
 
-Have you identified a reproducible problem in VS Code? Do you have a feature request? We want to hear about it! Here's how you can report your issue as effectively as possible.
+Found a reproducible problem or have a feature request? We want to hear about it.
 
-### Identify Where to Report
+### Look for an existing issue
 
-The VS Code project is distributed across multiple repositories. Try to file the issue against the correct repository. Check the list of [Related Projects](https://github.com/microsoft/vscode/wiki/Related-Projects) if you aren't sure which repo is correct.
+Before creating a new issue, search [open issues](https://github.com/savagelysubtle/SafeAppeals2.0/issues) to see if it already exists.
 
-Can you recreate the issue even after [disabling all extensions](https://code.visualstudio.com/docs/editor/extension-gallery#_disable-an-extension)? If you find the issue is caused by an extension you have installed, please file an issue on the extension's repo directly.
+If you find a match, add a comment with extra detail or react with 👍 instead of opening a duplicate.
 
-### Look For an Existing Issue
+### Writing good bug reports and feature requests
 
-Before you create a new issue, please do a search in [open issues](https://github.com/microsoft/vscode/issues) to see if the issue or feature request has already been filed.
+- File **one issue per problem** or feature request
+- Do not add a different bug as a comment on an unrelated issue
 
-Be sure to scan through the [most popular](https://github.com/microsoft/vscode/issues?q=is%3Aopen+is%3Aissue+label%3Afeature-request+sort%3Areactions-%2B1-desc) feature requests.
+Please include:
 
-If you find your issue already exists, make relevant comments and add your [reaction](https://github.com/blog/2119-add-reactions-to-pull-requests-issues-and-comments). Use a reaction in place of a "+1" comment:
+- SafeAppeals version (Help → About)
+- Operating system
+- List of installed extensions (if relevant)
+- Reproducible steps (1… 2… 3…)
+- What you expected vs. what you saw
+- Screenshots, a short video, or console errors (Help → Toggle Developer Tools)
 
-* 👍 - upvote
-* 👎 - downvote
+### Creating pull requests
 
-If you cannot find an existing issue that describes your bug or feature, create a new issue using the guidelines below.
+1. Fork the repo and create a branch from `main` (or the active development branch)
+2. Follow the coding guidelines in [AGENTS.md](AGENTS.md)
+3. Prefer `bun` for scripts (`bun run …`); use `fnm` for Node version management
+4. After `src/` changes, restore a launchable tree with `bun run transpile-client`
+5. Open a PR with a clear description of the change and how to test it
 
-### Writing Good Bug Reports and Feature Requests
+### Final checklist
 
-File a single issue per problem and feature request. Do not enumerate multiple bugs or feature requests in the same issue.
+- [ ] Searched existing issues so this is not a duplicate
+- [ ] Reproduced the issue with a clean workspace when possible
+- [ ] Isolated the problem (minimal steps / sample files)
+- [ ] PR builds and is testable locally
 
-Do not add your issue as a comment to an existing issue unless it's for the identical issue. Many issues look similar but have different causes.
+## Code contributions
 
-The more information you can provide, the more likely someone will be successful at reproducing the issue and finding a fix.
+If you want to fix bugs or ship features:
 
-The built-in tool for reporting an issue, which you can access by using `Report Issue` in VS Code's Help menu, can help streamline this process by automatically providing the version of VS Code, all your installed extensions, and your system info. Additionally, the tool will search among existing issues to see if a similar issue already exists.
+1. Read [AGENTS.md](AGENTS.md) for architecture, tooling, and coding standards
+2. Check [ROADMAP.md](ROADMAP.md) and [docs/ADDED_FEATURES_TRACKER.md](docs/ADDED_FEATURES_TRACKER.md) for priorities
+3. See the [Development Setup](README.md#development-setup) section in the README
 
-Please include the following with each issue:
+SafeAppeals handles confidential legal data. New stores must encrypt user content at rest — see the **Local Data Security** section in [AGENTS.md](AGENTS.md).
 
-* Version of VS Code
-* Your operating system
-* List of extensions that you have installed
-* Reproducible steps (1... 2... 3...) that cause the issue
-* What you expected to see, versus what you actually saw
-* Images, animations, or a link to a video showing the issue occurring
-* A code snippet that demonstrates the issue or a link to a code repository the developers can easily pull down to recreate the issue locally
-  * **Note:** Because the developers need to copy and paste the code snippet, including a code snippet as a media file (i.e. .gif) is not sufficient.
-* Errors from the Dev Tools Console (open from the menu: Help > Toggle Developer Tools)
+## License
 
-### Creating Pull Requests
+By contributing, you agree that your contributions will be licensed under the project’s [Apache License 2.0](LICENSE.txt) (with upstream Code - OSS portions remaining under MIT as described there).
 
-* Please refer to the article on [creating pull requests](https://github.com/microsoft/vscode/wiki/How-to-Contribute#pull-requests) and contributing to this project.
+## Thank you
 
-### Final Checklist
-
-Please remember to do the following:
-
-* [ ] Search the issue repository to ensure your report is a new issue
-* [ ] Recreate the issue after disabling all extensions
-* [ ] Simplify your code around the issue to better isolate the problem
-
-Don't feel bad if the developers can't reproduce the issue right away. They will simply ask for more information!
-
-### Follow Your Issue
-
-Once submitted, your report will go into the [issue tracking](https://github.com/microsoft/vscode/wiki/Issue-Tracking) workflow. Be sure to understand what will happen next, so you know what to expect and how to continue to assist throughout the process.
-
-## Automated Issue Management
-
-We use GitHub Actions to help us manage issues. These Actions and their descriptions can be [viewed here](https://github.com/microsoft/vscode-github-triage-actions). Some examples of what these Actions do are:
-
-* Automatically close any issue marked `info-needed` if there has been no response in the past 7 days.
-* Automatically lock issues 45 days after they are closed.
-* Automatically implement the VS Code [feature request pipeline](https://github.com/microsoft/vscode/wiki/Issues-Triaging#managing-feature-requests).
-
-If you believe the bot got something wrong, please open a new issue and let us know.
-
-## Contributing Fixes
-
-If you are interested in writing code to fix issues, please see [How to Contribute](https://github.com/microsoft/vscode/wiki/How-to-Contribute) in the wiki.
-
-## Thank You
-
-Your contributions to open source, large or small, make great projects like this possible. Thank you for taking the time to contribute.
+Your contributions — large or small — make SafeAppeals better for people navigating complex document and legal work. Thank you for taking the time to contribute.

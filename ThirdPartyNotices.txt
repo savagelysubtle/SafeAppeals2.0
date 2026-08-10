@@ -1,6 +1,12 @@
 NOTICES
 
-This repository incorporates material as listed below or described in the code.
+SafeAppeals (https://safeappeals.com) incorporates open-source material as listed
+below or described in the code. Package names that mention "vscode" refer to
+upstream dependency identity and copyright notices — they are retained as required
+by those licenses and do not indicate product branding.
+
+This product is derived from Microsoft Code - OSS. See LICENSE.txt for the
+SafeAppeals Apache 2.0 terms and upstream MIT attribution.
 
 
 

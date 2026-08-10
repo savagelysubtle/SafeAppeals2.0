@@ -1,10 +1,11 @@
 # SafeAppeals Feature Tracker
 
-> **Source of truth:** [`.cursor/plans/safeappeals_master_plan.plan.md`](../.cursor/plans/safeappeals_master_plan.plan.md).
+> **Public roadmap:** [../ROADMAP.md](../ROADMAP.md)  
+> **Source of truth:** [`.cursor/plans/safeappeals_master_plan.plan.md`](../.cursor/plans/safeappeals_master_plan.plan.md).  
 > This file is a derived status INDEX only — update one row when a rung ships. Do not expand into narrative.
 >
 > Derived from the master plan’s **Ground truth (audited Jul 29 2026)** section; statuses below refreshed against shipping extensions (Aug 2026).
-> Product: SafeAppeals (fork of VS Code **1.129**, branch `update-vscode`).
+> Product: SafeAppeals (built on Code - OSS **1.129**, branch `update-vscode`).
 
 | Feature | Status | Location | Wired? | Plan link |
 | ------- | ------ | -------- | ------ | --------- |
@@ -39,6 +40,7 @@
 | Integrated browser Agent tools + page `browser_cdp` | Shipped (CORE; Plan-stripped; deny-list on Agent CDP only) | `src/vs/workbench/contrib/browserView/.../tools` + auth `CORE_AGENT_TOOL_NAMES` / `PLAN_MODE_BROWSER_DENYLIST` | Yes | Browser CDP agent tools plan (Aug 2026) |
 | Contrib hub (`contrib/safeappeals`) | Deleted (dead stub; extension-first) | dropped | N/A | master plan “Resolution: the contrib hub is dead” / M0 |
 | Packaging / prebuilds / migrations | Pending | build / CI | Partial | master plan rung 14 |
+| Slack integration (notifications, bidirectional sync, rich embeds) | Not built | `extensions/safeappeals-slack` (planned) | No | ROADMAP.md (Planned next) |
 | void-reference cleanup | Pending | `void-reference/` | N/A | master plan rung 15 |
 
 **Status legend:** Shipped · Partial · In progress · Not built · reference / not migrated · Dropped

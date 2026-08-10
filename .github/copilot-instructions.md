@@ -1,6 +1,6 @@
-# VS Code Copilot Instructions
+# SafeAppeals Agent Instructions
 
-## Product stance (SafeAppeals)
+## Product stance
 
 SafeAppeals is a **production product**, not an MVP, prototype, or throwaway demo. Plan and implement features for real users and real legal workflows. Do **not** frame work as "MVP-only", "good enough for now", or "stub until later" unless Steve explicitly asks for a temporary spike. Plan docs that still say "MVP" are outdated wording — treat shipping quality and a complete agent/tool surface as the default bar.
 
@@ -17,7 +17,7 @@ The only intended use of `npm` here is **`npm install`** at startup to install d
 
 SafeAppeals is a **desktop Electron** product. When you need to inspect, automate, or E2E-test the real app:
 
-1. **Prefer Steve’s live desktop window via Run Dev (CDP)** — VS Code task **“Run Dev (CDP)”** in `.vscode/tasks.json` (`./scripts/code.sh --remote-debugging-port=9222`). Attach Playwright/`@playwright/cli` or CDP tools to `http://127.0.0.1:9222`. Do **not** start **Run Dev (WEB)** / `code-server` / `code-web` for everyday UI or agent E2E work.
+1. **Prefer Steve’s live desktop window via Run Dev (CDP)** — workspace task **“Run Dev (CDP)”** in `.vscode/tasks.json` (`./scripts/code.sh --remote-debugging-port=9222`). Attach Playwright/`@playwright/cli` or CDP tools to `http://127.0.0.1:9222`. Do **not** start **Run Dev (WEB)** / `code-server` / `code-web` for everyday UI or agent E2E work.
 2. If that window is not running, ask Steve to start **Run Dev (CDP)** (or start that task). Prefer attaching to it over spinning up a throwaway `launch.sh` instance.
 3. Use the **launch** skill’s throwaway `launch.sh` profile only when you need an isolated disposable instance (parallel ports, clean slate) and Run Dev (CDP) is unavailable or unsuitable.
 4. **Cursor’s browser** (`cursor-ide-browser`) is for true web surfaces (docs sites, dashboards opened as URLs, Simple Browser). It is **not** a substitute for the Electron workbench — do not treat the web build as the app under test.
@@ -26,17 +26,19 @@ Do not open a separate Playwright session against a web localhost build when the
 
 ## Project Overview
 
-Visual Studio Code is built with a layered architecture using TypeScript, web APIs and Electron, combining web technologies with native app capabilities. The codebase is organized into key architectural layers:
+SafeAppeals is a desktop Electron product built on the Code - OSS layered architecture (TypeScript, web APIs, native capabilities). Product features for legal workflows live primarily in `extensions/safeappeals-*` and related contrib code. The codebase is organized into these layers:
 
 ### Root Folders
 
 - `src/`: Main TypeScript source code with unit tests in `src/vs/*/test/` folders
 - `build/`: Build scripts and CI/CD tools
-- `extensions/`: Built-in extensions that ship with VS Code
+- `extensions/`: Built-in and SafeAppeals first-party extensions
 - `test/`: Integration tests and test infrastructure
 - `scripts/`: Development and build scripts
 - `resources/`: Static resources (icons, themes, etc.)
+- `appealsIcons/`: SafeAppeals brand icon source (shield logo)
 - `out/`: Compiled JavaScript output (generated during build)
+- `docs/`: Product and engineering documentation (including feature tracker / roadmap)
 
 ### Core Architecture (`src/` folder)
 
@@ -46,8 +48,8 @@ Visual Studio Code is built with a layered architecture using TypeScript, web AP
 - `src/vs/workbench/` - Main application workbench for web and desktop
   - `workbench/browser/` - Core workbench UI components (parts, layout, actions)
   - `workbench/services/` - Service implementations
-  - `workbench/contrib/` - Feature contributions (git, debug, search, terminal, etc.)
-  - `workbench/api/` - Extension host and VS Code API implementation
+  - `workbench/contrib/` - Feature contributions (chat, browser, search, terminal, SafeAppeals surfaces, etc.)
+  - `workbench/api/` - Extension host and Extension API implementation
 - `src/vs/code/` - Electron main process specific implementation
 - `src/vs/server/` - Server specific implementation
 - `src/vs/sessions/` - Agent sessions window, a dedicated workbench layer for agentic workflows (sits alongside `vs/workbench`, may import from it but not vice versa)
@@ -62,14 +64,15 @@ The core architecture follows these principles:
 
 ### Built-in Extensions (`extensions/` folder)
 
-The `extensions/` directory contains first-party extensions that ship with VS Code:
+The `extensions/` directory contains first-party extensions that ship with SafeAppeals:
 
+- **SafeAppeals product** - `safeappeals-documents/`, `safeappeals-email/`, `safeappeals-timeline/`, `safeappeals-rag/`, `safeappeals-authentication/`, `time-tracker/`, etc.
 - **Language support** - `typescript-language-features/`, `html-language-features/`, `css-language-features/`, etc.
-- **Core features** - `git/`, `debug-auto-launch/`, `emmet/`, `markdown-language-features/`
-- **Themes** - `theme-*` folders for default color themes
-- **Development tools** - `extension-editing/`, `vscode-api-tests/`
+- **Core workbench** - `git/`, `debug-auto-launch/`, `emmet/`, `markdown-language-features/`
+- **Themes** - `theme-safeappeals-*` and other theme packs
+- **Development tools** - `extension-editing/`, API test suites
 
-Each extension follows the standard VS Code extension structure with `package.json`, TypeScript sources, and contribution points to extend the workbench through the Extension API.
+Each extension follows the standard extension structure with `package.json`, TypeScript sources, and contribution points to extend the workbench through the Extension API.
 
 ### Finding Related Code
 
@@ -105,7 +108,7 @@ Coders (and any agent that edits client sources) **must** leave a launchable tre
 
 ### TypeScript compilation steps
 
-- If the `#runTasks/getTaskOutput` tool is available, check the `VS Code - Build` watch task output for compilation errors. This task runs `Core - Build` and `Ext - Build` to incrementally compile VS Code TypeScript sources and built-in extensions. Start the task if it's not already running in the background.
+- If the `#runTasks/getTaskOutput` tool is available, check the **SafeAppeals / client build** watch task output for compilation errors. This task runs `Core - Build` and `Ext - Build` to incrementally compile TypeScript sources and built-in extensions. Start the task if it's not already running in the background.
 - If the tool is not available (e.g. in CLI environments) and you only changed code under `src/`, run `bun run transpile-client` (required for launch) and `bun run typecheck-client` when you need a typecheck-only gate (`./src/tsconfig.json`).
 - If you changed built-in extensions under `extensions/` and the tool is not available, run the corresponding gulp task `bun run gulp compile-extensions` (or `compile-extension:<name>`) so that TypeScript errors in extensions are also reported.
 - For TypeScript changes in the `build` folder, you can simply run typecheck in the `build` folder (`bun run` / project scripts as available).
@@ -185,7 +188,7 @@ function f(x: number, y: string): void {}
 
 ### Code Quality
 
-- Copyright headers: use the Microsoft MIT header for forked upstream VS Code code (`src/`, `build/`, non-SafeAppeals `extensions/`, etc.). For SafeAppeals-owned code (`extensions/safeappeals-*`, `void-cloud/`, SafeAppeals docs/plans you author), use `Copyright (c) Safe Appeals. All rights reserved.` — do **not** put Microsoft headers on new SafeAppeals product code.
+- Copyright headers: use the Microsoft MIT header for forked upstream Code - OSS code (`src/`, `build/`, non-SafeAppeals `extensions/`, etc.). For SafeAppeals-owned code (`extensions/safeappeals-*`, `void-cloud/`, SafeAppeals docs/plans you author), use `Copyright (c) Safe Appeals. All rights reserved.` — do **not** put Microsoft headers on new SafeAppeals product code.
 - Prefer `async` and `await` over `Promise` and `then` calls
 - All user facing messages must be localized using the applicable localization framework (for example `nls.localize()` method)
 - Don't add tests to the wrong test suite (e.g., adding to end of file instead of inside relevant suite)
@@ -208,7 +211,7 @@ function f(x: number, y: string): void {}
 
 ### Local Data Security (MANDATORY)
 
-SafeAppeals handles confidential legal data (client names, case content, emails, billing). Upstream VS Code's storage habits are NOT sufficient here. Whenever you create or modify a database, cache, index, or any other persisted store:
+SafeAppeals handles confidential legal data (client names, case content, emails, billing). Upstream Code - OSS storage habits are NOT sufficient here. Whenever you create or modify a database, cache, index, or any other persisted store:
 
 - **Never write user content to disk in plaintext.** Emails, calendar events, case data, billing records, annotations, and signatures MUST be encrypted at rest. Use the shared `encryptedStore` helper (AES-256-GCM with a data-encryption key held in `SecretStorage`) — see `.cursor/plans/local_storage_security_hardening.plan.md` for the pattern. Metadata-only stores (timestamps, sync state) should still use it; it is cheap.
 - **Secrets go in `SecretStorage` only** — passwords, tokens, API keys, encryption keys, and signature images. Never in settings, `globalState`, `workspaceState`, or files.
