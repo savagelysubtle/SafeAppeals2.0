@@ -1,6 +1,6 @@
-# SafeAppeals Navigator
+# SafeAppeals
 
-_Support this project: [paypal.me/safeappealnavigator](https://paypal.me/safeappealnavigator)_
+_Support this project: [paypal.me/safeappeals](https://paypal.me/safeappeals)_
 
 [![GitHub stars](https://img.shields.io/github/stars/savagelysubtle/SafeAppeals2.0?style=social)](https://github.com/savagelysubtle/SafeAppeals2.0/stargazers)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
@@ -10,7 +10,7 @@ _Support this project: [paypal.me/safeappealnavigator](https://paypal.me/safeapp
 
 <div align="center">
   <img
-    src="./appealsIcons/logo_cube_noshadow.png"
+    src="./safeappeals-icons/logo_cube_noshadow.png"
     alt="SafeAppeals"
     width="200"
     height="200"
@@ -44,9 +44,9 @@ SafeAppeals is a desktop workspace and AI assistant for complex document work. L
 
 | Platform | Download | Notes |
 | -------- | -------- | ----- |
-| **Windows** | [Installer (.exe)](https://github.com/savagelysubtle/SafeAppeals2.0/releases/download/v2.0.0/SafeAppealsNavigator-2.0.0-win32-x64-user-setup.exe) / [Portable (.zip)](https://github.com/savagelysubtle/SafeAppeals2.0/releases/download/v2.0.0/SafeAppealsNavigator-2.0.0-win32-x64-portable.zip) | Windows 10/11 (64-bit) |
-| **macOS** | [Apple Silicon (.zip)](https://github.com/savagelysubtle/SafeAppeals2.0/releases/download/v2.0.0/SafeAppealsNavigator-2.0.0-darwin-arm64.zip) | M1/M2/M3/M4 |
-| **Linux** | [x64 (.tar.gz)](https://github.com/savagelysubtle/SafeAppeals2.0/releases/download/v2.0.0/SafeAppealsNavigator-2.0.0-linux-x64.tar.gz) | 64-bit |
+| **Windows** | [Installer (.exe)](https://github.com/savagelysubtle/SafeAppeals2.0/releases/download/v2.0.0/SafeAppeals-2.1.0-win32-x64-user-setup.exe) / [Portable (.zip)](https://github.com/savagelysubtle/SafeAppeals2.0/releases/download/v2.0.0/SafeAppeals-2.1.0-win32-x64-portable.zip) | Windows 10/11 (64-bit) |
+| **macOS** | [Apple Silicon (.zip)](https://github.com/savagelysubtle/SafeAppeals2.0/releases/download/v2.0.0/SafeAppeals-2.1.0-darwin-arm64.zip) | M1/M2/M3/M4 |
+| **Linux** | [x64 (.tar.gz)](https://github.com/savagelysubtle/SafeAppeals2.0/releases/download/v2.0.0/SafeAppeals-2.1.0-linux-x64.tar.gz) | 64-bit |
 
 > On Windows, if SmartScreen appears click "More info" then "Run anyway". On macOS, extract and drag to Applications. On Linux, extract the archive and run the executable.
 

@@ -6,7 +6,7 @@ then writes them to the correct paths. Does **not** overwrite language-specific
 file-association icons (typescript.ico, python.icns, etc.).
 
 Usage (from repo root or anywhere):
-    python appealsIcons/generate_app_icons.py
+    python safeappeals-icons/generate_app_icons.py
 
 Requires: Pillow, icnsutil
     uv pip install pillow icnsutil
