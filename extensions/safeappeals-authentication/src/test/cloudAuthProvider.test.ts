@@ -300,9 +300,8 @@ suite('CloudAuthProvider security behavior', () => {
 		const { provider, secrets } = makeProvider({
 			globalState,
 			startLoopback: async () => loopback,
-			// Skip identity picker — empty scopes cancel before PKCE is written.
-			openExternal: async () => true,
 		});
+		// Explicit identity scope skips the picker (mock returns undefined).
 		const create = provider.createSession(['provider:slack']);
 		void create.catch(() => { /* disposed below */ });
 		await new Promise<void>(resolve => setTimeout(resolve, 30));
