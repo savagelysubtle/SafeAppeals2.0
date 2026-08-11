@@ -1,8 +1,8 @@
 # SafeAppeals Roadmap
 
-Public tracker of **features SafeAppeals has added** on top of the Code - OSS foundation, plus what’s in flight and what’s next.
+Public tracker of **features SafeAppeals has added** on top of the Code - OSS foundation, plus what's in flight and what's next.
 
-> **Detailed status index (engineers):** [docs/ADDED_FEATURES_TRACKER.md](docs/ADDED_FEATURES_TRACKER.md)  
+> **Detailed status index (engineers):** [docs/ADDED_FEATURES_TRACKER.md](docs/ADDED_FEATURES_TRACKER.md)
 > **Competitive planning notes:** [docs/COMPETITIVE_ROADMAP.md](docs/COMPETITIVE_ROADMAP.md)
 
 Last refreshed: **August 2026** · Product: SafeAppeals 2.x
@@ -21,7 +21,7 @@ Last refreshed: **August 2026** · Product: SafeAppeals 2.x
 
 ---
 
-## Shipped — what we’ve added
+## Shipped — what we've added
 
 Features SafeAppeals owns beyond a plain code editor:
 
@@ -49,7 +49,7 @@ Features SafeAppeals owns beyond a plain code editor:
 
 | Feature | Status | Notes |
 | ------- | ------ | ----- |
-| Email dashboard (IMAP/SMTP, tags, case links) | ✅ | Google XOAUTH2 + app password |
+| Email dashboard (IMAP/SMTP, tags, case links) | ✅ | Google + Outlook XOAUTH2 via service connections; app password fallback |
 | AI draft replies | ✅ | Context from project documents |
 | Email AI classifier | 📋 | Seam only today |
 
@@ -71,15 +71,15 @@ Features SafeAppeals owns beyond a plain code editor:
 | Google Calendar sync | ✅ | Per-event, workspace-isolated |
 | Outlook Calendar sync | ✅ | Microsoft Graph |
 | Time tracker (UTBMS, 6-min billing, LEDES) | ✅ | Encrypted local storage; Windows prebuilds still hardening |
-| Audio record + Whisper transcription | 🚧 | Local/offline path; walkthroughs shipping |
+| Audio record + Whisper transcription | ✅ | Local/offline speech-to-text, fully installed; use it to transcribe recordings into case notes, or as a voice input mode to chat directly with the agent |
 
 ### Auth, cloud & security
 
 | Feature | Status | Notes |
 | ------- | ------ | ----- |
-| SafeAppeals Cloud sign-in | 🧩 | Replaces GitHub sign-in; Agents window parity in progress |
+| SafeAppeals Cloud sign-in | ✅ | Google + Outlook/Microsoft identity; chat setup, onboarding, Models, Accounts, and dashboard login |
 | Encrypted local stores | ✅ | AES-GCM + SecretStorage pattern for legal data |
-| Service connections (Google / Microsoft) | 🧩 | Mail/calendar via connections API |
+| Service connections (Google / Microsoft) | ✅ | Mail/calendar via `/connections/*`; short-lived provider tokens only |
 
 ---
 
@@ -88,9 +88,7 @@ Features SafeAppeals owns beyond a plain code editor:
 | Item | Focus |
 | ---- | ----- |
 | Welcome onboarding rewrite | First-run experience for newcomers |
-| Audio production polish | Reliability across platforms |
 | Converter production hardening | Smart convert + selective merge |
-| Cloud / Agents window parity | Consistent SafeAppeals identity |
 | Packaging & prebuilds | Windows native deps, installers, migrations |
 
 ---
@@ -101,9 +99,17 @@ Priorities can shift; open an issue if something is blocking your workflow.
 
 | Area | Candidates |
 | ---- | ---------- |
-| **Integrations & Notifications** | **Slack integration** (real-time case notifications, bidirectional updates, rich embeds, approval buttons, secure file sharing, channel mapping, notification rules) |
+| **Integrations & Data Import** | **Slack integration** (selected-channel/file import into a workspace, reviewed share-back, OAuth with minimal scopes — no background indexing of all channels); **Microsoft 365 / OneDrive / SharePoint import** (Graph API + MSAL, pull Word/Excel/PDF into a workspace through the existing conversion pipeline); **Obsidian vault import** (local `.md` parsing — wikilinks, tags, frontmatter — no OAuth required, feeds the knowledge graph below) |
 | Deadlines | Statute-of-limitations tracker; richer jurisdiction rules |
-| Documents | Court form auto-fill; DOCX merge templates; redline compare |
+| Documents | Court form auto-fill — both a native-file-generation path and a browser-driven portal-fill path, with a required field-level preview and human approval gate before any submission; DOCX merge templates; redline / document comparison |
+| Evidence & Citations | Built-in Citation & Evidence system — link every drafted claim to a source document/page, verification status indicators, and a pre-export audit that flags unsupported claims |
+| Case Intelligence | Medical chronology extraction (provider/date/treatment/diagnosis pulled from records with exact page links); case health/readiness panel (deadlines, missing evidence, unresolved citations in one view) |
+| Agent & Automation | Agent Action Center (single queue to review/approve/reject every proposed agent action); explicit Agent Modes (Ask / Plan / Act / Submission) with visible current mode; living Case Brief UI over `AGENTS.md` with agent-proposed diffs instead of silent rewrites; local Case History (Git-backed checkpoints with plain-language labels, compare/restore, no Git vocabulary required); multi-model handoff packet so switching AI providers mid-task doesn't lose case context |
+| Knowledge & Search | Knowledge graph view — 2D force-directed graph by default (lighter weight, better for daily use), with an optional 3D toggle for exploratory sessions |
+| Model Transparency | Clear labeling of local vs. hosted vs. hybrid model processing per run, so it's obvious what stays on-device versus what leaves it |
+| Presentations | Visual Case Story generator — evidence-backed hearing decks, medical chronologies, and client-update decks generated from workspace data, exported to PPTX/PDF with source-linked speaker notes |
+| Platform / Extensibility | Extension SDK and marketplace groundwork — permission-scoped extensions, static + sandboxed review before publishing, clear separation from general VS Code extension compatibility |
+| Agent Skills | Expand built-in agent skill library (e.g., PDF operations: merge/split/rotate/watermark/OCR/form-fill) as a pattern for future skills |
 | Billing | Invoice generation; AI-assisted time entry; expenses |
 | Client | Secure sharing / light client portal |
 | Email | AI classification of incoming mail |
@@ -113,7 +119,7 @@ Priorities can shift; open an issue if something is blocking your workflow.
 
 ## Explicitly dropped (for now)
 
-Kept here so we don’t re-litigate settled calls:
+Kept here so we don't re-litigate settled calls:
 
 - Standalone case-info dashboard (superseded by timeline / workspace model)
 - DocuSign partnership path (no partnership; may revisit generic e-sign later)
@@ -132,6 +138,6 @@ Kept here so we don’t re-litigate settled calls:
 
 ## Feedback
 
-- Issues: https://github.com/savagelysubtle/SafeAppeals2.0/issues  
-- Website: https://safeappeals.com  
+- Issues: https://github.com/savagelysubtle/SafeAppeals2.0/issues
+- Website: https://safeappeals.com
 - Email: support@safeappeals.com
