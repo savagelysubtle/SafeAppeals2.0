@@ -13,6 +13,7 @@ import type { BillingRate, ExportOptions, Matter, TimeEntry, TimeEntryWithDetail
 import { logInfo } from './logger';
 import { getLegacyTimeTrackerWorkspaceId, getTimeTrackerWorkspaceId } from './workspaceIdentity';
 import { MigrationEngine } from './migrationEngine';
+import { hasSecureFsPrebuild, supportsDurableTimeTrackerStorage } from './platformSupport';
 import { StorageMigrationAdapterSession, StorageMigrationPurge, type StorageMigrationNativeBinding } from './storageMigrationAdapter';
 
 /**
@@ -51,17 +52,32 @@ interface StorageContext {
 	readonly globalState: vscode.Memento;
 }
 
+/**
+ * Resolve dual-ABI SQLCipher binding. Prefer electron-<abi> when NODE_MODULE_VERSION
+ * matches Electron (146 for Electron 42), even if `process.versions.electron` is
+ * unset in some extension-host utility processes.
+ */
 function resolveNativeBindingPath(): string | undefined {
 	const abi = process.versions.modules;
-	const runtime = process.versions.electron ? 'electron' : 'node';
-	// Compiled output lives in out/; prebuilds/ sits at the extension root.
-	const candidate = path.join(__dirname, '..', 'prebuilds', `${process.platform}-${process.arch}`, `${runtime}-${abi}`, 'better_sqlite3.node');
-	return fs.existsSync(candidate) ? candidate : undefined;
+	const platformArch = `${process.platform}-${process.arch}`;
+	const root = path.join(__dirname, '..', 'prebuilds', platformArch);
+	const ordered = process.versions.electron
+		? [`electron-${abi}`, `node-${abi}`]
+		: [`electron-${abi}`, `node-${abi}`];
+	// When modules===146, electron-146 is the correct desktop binary regardless of
+	// whether the electron version string is present on process.versions.
+	for (const runtimeAbi of ordered) {
+		const candidate = path.join(root, runtimeAbi, 'better_sqlite3.node');
+		if (fs.existsSync(candidate)) {
+			return candidate;
+		}
+	}
+	return undefined;
 }
 
 function expectedNativeBindingPath(): string {
 	const abi = process.versions.modules;
-	const runtime = process.versions.electron ? 'electron' : 'node';
+	const runtime = process.versions.electron || abi === '146' ? 'electron' : 'node';
 	return path.join(__dirname, '..', 'prebuilds', `${process.platform}-${process.arch}`, `${runtime}-${abi}`, 'better_sqlite3.node');
 }
 
@@ -88,7 +104,10 @@ export class StorageService {
 			/** @deprecated Native storage always uses the fixed home-relative legacy family. */
 			readonly legacyRootPath?: string;
 			readonly showUnreadableDatabaseWarning?: (setAsidePath: string) => void;
-			readonly showMemoryFallbackWarning?: () => void;
+			/** OS secret storage / DEK failure — data would not survive restart. */
+			readonly showMemoryFallbackWarning?: (reason?: string) => void;
+			/** Empty window: open a folder to enable durable tracking. */
+			readonly showNoWorkspaceWarning?: () => void;
 			readonly showMigrationBlockedWarning?: (reason: string) => void;
 			readonly showLegacyCleanupFailureWarning?: (legacyPath: string) => void;
 			readonly homePath?: string;
@@ -116,9 +135,15 @@ export class StorageService {
 		if (this.environment.migrationNativeBinding) {
 			return this.environment.migrationNativeBinding;
 		}
-		const runtime = process.versions.electron ? 'electron' : 'node';
-		const bindingPath = path.join(__dirname, '..', 'prebuilds', `${process.platform}-${process.arch}`, `${runtime}-${process.versions.modules}`, 'safeappeals_secure_fs.node');
-		return require(bindingPath) as StorageMigrationNativeBinding;
+		const abi = process.versions.modules;
+		const root = path.join(__dirname, '..', 'prebuilds', `${process.platform}-${process.arch}`);
+		for (const runtimeAbi of [`electron-${abi}`, `node-${abi}`]) {
+			const bindingPath = path.join(root, runtimeAbi, 'safeappeals_secure_fs.node');
+			if (fs.existsSync(bindingPath)) {
+				return require(bindingPath) as StorageMigrationNativeBinding;
+			}
+		}
+		throw new Error(`safeappeals_secure_fs.node not found under ${root} for modules=${abi}`);
 	}
 
 	private openDatabase(dbPath: string, options?: { readonly?: boolean; nativeBinding?: string }): CipherDatabase {
@@ -161,8 +186,29 @@ export class StorageService {
 
 	private async purgeDatabases(all: boolean): Promise<void> {
 		this.close();
-		if (!this.durable || process.platform !== 'linux' || process.arch !== 'x64') {
+		if (!this.durable || !supportsDurableTimeTrackerStorage()) {
 			throw new Error('Secure local database purge is unavailable on this platform');
+		}
+		// Without secure-fs (Windows today), delete managed DB files directly.
+		if (!hasSecureFsPrebuild()) {
+			if (all) {
+				const workspacesRoot = path.join(this.context.globalStorageUri.fsPath, 'workspaces');
+				try {
+					const names = await fsPromises.readdir(workspacesRoot);
+					for (const name of names) {
+						await this.deleteDatabaseFiles(path.join(workspacesRoot, name, 'timetracker.db'));
+					}
+				} catch (error) {
+					if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+						throw error;
+					}
+				}
+			} else {
+				await this.deleteDatabaseFiles(this.dbPath);
+			}
+			await this.context.secrets.delete(DEK_KEY_ID);
+			await this.durabilityMarker().setStored(false);
+			return;
 		}
 		const encodedDek = await this.context.secrets.get(DEK_KEY_ID);
 		const decodedDek = encodedDek ? Buffer.from(encodedDek, 'base64') : undefined;
@@ -190,6 +236,18 @@ export class StorageService {
 		}
 		await this.context.secrets.delete(DEK_KEY_ID);
 		await this.durabilityMarker().setStored(false);
+	}
+
+	private async deleteDatabaseFiles(dbPath: string): Promise<void> {
+		for (const suffix of ['', '-wal', '-shm']) {
+			try {
+				await fsPromises.unlink(`${dbPath}${suffix}`);
+			} catch (error) {
+				if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+					throw error;
+				}
+			}
+		}
 	}
 
 	private async hasRemainingDatabaseArtifacts(native: StorageMigrationNativeBinding): Promise<boolean> {
@@ -245,6 +303,12 @@ export class StorageService {
 		}
 
 		const nativeBinding = resolveNativeBindingPath();
+		log(
+			`initialize: durable=${this.durable} platform=${process.platform}-${process.arch} ` +
+			`modules=${process.versions.modules} electron=${process.versions.electron ?? 'n/a'} ` +
+			`binding=${nativeBinding ?? '(none)'} expected=${expectedNativeBindingPath()} ` +
+			`dbPath=${this.dbPath}`
+		);
 		if (!nativeBinding) {
 			log(
 				`No committed prebuild at ${expectedNativeBindingPath()}; falling back to package default resolution (node_modules build/Release).`
@@ -252,10 +316,20 @@ export class StorageService {
 		}
 
 		try {
-			if (!this.durable || process.platform !== 'linux' || process.arch !== 'x64') {
+			if (!supportsDurableTimeTrackerStorage()) {
 				this.db = this.openDatabase(':memory:', { nativeBinding });
 				this.createTables();
-				this.environment.showMemoryFallbackWarning?.();
+				this.environment.showMemoryFallbackWarning?.(
+					`platform ${process.platform}-${process.arch} is not supported for durable encrypted storage`
+				);
+				return;
+			}
+			if (!this.durable) {
+				// Empty window (no folder / workspace file): intentionally non-durable.
+				this.db = this.openDatabase(':memory:', { nativeBinding });
+				this.createTables();
+				log('No workspace folder or .code-workspace identity; using in-memory DB until a folder is opened');
+				this.environment.showNoWorkspaceWarning?.();
 				return;
 			}
 
@@ -269,8 +343,8 @@ export class StorageService {
 			if (dekResult.kind === 'unavailable') {
 				this.db = this.openDatabase(':memory:', { nativeBinding });
 				this.createTables();
-				this.environment.showMemoryFallbackWarning?.();
 				log(`Using non-persistent in-memory database because secure storage is unavailable (${dekResult.reason})`);
+				this.environment.showMemoryFallbackWarning?.(dekResult.reason);
 				return;
 			}
 			const dek = dekResult.dek;
@@ -279,45 +353,53 @@ export class StorageService {
 				return;
 			}
 
-			let session: StorageMigrationAdapterSession | undefined;
 			let migrationAllowedPersistentOpen = false;
 			let migrationFailure: object | undefined;
-			try {
-				session = await (this.environment.createMigrationSession ?? StorageMigrationAdapterSession.create)({
-					globalStoragePath: this.context.globalStorageUri.fsPath,
-					managedId: this.workspaceId,
-					legacyId: getLegacyTimeTrackerWorkspaceId(
-						this.environment.workspacePath ?? this.environment.workspaceIdentity!
-					),
-					homePath: this.environment.homePath ?? os.homedir(),
-					dek,
-					native: this.loadMigrationNativeBinding(),
-					sqliteNativeBinding: nativeBinding,
-					logger: { log, warn: log }
-				});
-				const result = await new MigrationEngine(session.dependencies).run();
-				if (result.kind === 'blocked') {
-					migrationFailure = new Error(result.reason);
-					this.environment.showMigrationBlockedWarning?.(result.reason);
-				} else {
-					migrationAllowedPersistentOpen = true;
-				}
-			} catch (error) {
-				migrationFailure = error;
-				this.environment.showMigrationBlockedWarning?.(
-					error instanceof Error ? error.message : String(error)
-				);
-			} finally {
-				if (session) {
-					try {
-						await session.dispose();
-					} catch (error) {
-						migrationAllowedPersistentOpen = false;
-						migrationFailure = migrationFailure
-							? new AggregateError([migrationFailure, error], 'Migration and cleanup failed')
-							: error;
+			// secure-fs migration/purge is Linux-only today. On Windows (and any host
+			// without the prebuild), open the SQLCipher DB directly after DEK acquire.
+			if (hasSecureFsPrebuild()) {
+				let session: StorageMigrationAdapterSession | undefined;
+				try {
+					session = await (this.environment.createMigrationSession ?? StorageMigrationAdapterSession.create)({
+						globalStoragePath: this.context.globalStorageUri.fsPath,
+						managedId: this.workspaceId,
+						legacyId: getLegacyTimeTrackerWorkspaceId(
+							this.environment.workspacePath ?? this.environment.workspaceIdentity!
+						),
+						homePath: this.environment.homePath ?? os.homedir(),
+						dek,
+						native: this.loadMigrationNativeBinding(),
+						sqliteNativeBinding: nativeBinding,
+						logger: { log, warn: log }
+					});
+					const result = await new MigrationEngine(session.dependencies).run();
+					if (result.kind === 'blocked') {
+						migrationFailure = new Error(result.reason);
+						this.environment.showMigrationBlockedWarning?.(result.reason);
+					} else {
+						migrationAllowedPersistentOpen = true;
+					}
+				} catch (error) {
+					migrationFailure = error;
+					this.environment.showMigrationBlockedWarning?.(
+						error instanceof Error ? error.message : String(error)
+					);
+				} finally {
+					if (session) {
+						try {
+							await session.dispose();
+						} catch (error) {
+							migrationAllowedPersistentOpen = false;
+							migrationFailure = migrationFailure
+								? new AggregateError([migrationFailure, error], 'Migration and cleanup failed')
+								: error;
+						}
 					}
 				}
+			} else {
+				await fsPromises.mkdir(path.dirname(this.dbPath), { recursive: true });
+				migrationAllowedPersistentOpen = true;
+				log('Opening durable SQLCipher database without secure-fs migration (platform prebuild absent)');
 			}
 			if (!migrationAllowedPersistentOpen) {
 				this.openMemoryDatabase(nativeBinding, migrationFailure instanceof Error ? migrationFailure.message : 'migration state is uncertain');
@@ -380,7 +462,7 @@ export class StorageService {
 	private openMemoryDatabase(nativeBinding: string | undefined, reason: string): void {
 		this.db = this.openDatabase(':memory:', { nativeBinding });
 		this.createTables();
-		this.environment.showMemoryFallbackWarning?.();
+		this.environment.showMemoryFallbackWarning?.(reason);
 		log(`Using non-persistent in-memory database because ${reason}`);
 	}
 

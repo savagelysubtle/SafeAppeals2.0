@@ -127,9 +127,33 @@ function buildWin32Setup(arch: string, target: string): task.CallbackTask {
 	};
 }
 
+function verifyWin32NativePrebuilds(arch: string): task.CallbackTask {
+	return (cb) => {
+		// Fresh-install apps must ship dual-ABI prebuilds; never compile on the end machine.
+		const result = cp.spawnSync(
+			process.execPath,
+			[
+				'--experimental-strip-types',
+				path.join(repoPath, 'build', 'lib', 'verifyNativePrebuilds.ts'),
+				'--platform', 'win32',
+				'--arch', arch,
+			],
+			{ cwd: repoPath, stdio: 'inherit' },
+		);
+		if (result.status !== 0) {
+			cb(new Error(`verifyNativePrebuilds failed for win32-${arch} (exit ${result.status ?? 'unknown'})`));
+			return;
+		}
+		cb();
+	};
+}
+
 function defineWin32SetupTasks(arch: string, target: string) {
 	const cleanTask = util.rimraf(setupDir(arch, target));
-	task.task(task.define(`vscode-win32-${arch}-${target}-setup`, task.series(cleanTask, buildWin32Setup(arch, target))));
+	task.task(task.define(
+		`vscode-win32-${arch}-${target}-setup`,
+		task.series(verifyWin32NativePrebuilds(arch), cleanTask, buildWin32Setup(arch, target)),
+	));
 }
 
 defineWin32SetupTasks('x64', 'system');

@@ -36,6 +36,7 @@
 	"urlProtocol": "safeappeals",
 	"quality": "stable",
 	"version": "2.1.0",
+	"vscodeVersion": "1.107.0",
 	"updateUrl": "https://safeappeals.com",
 	"downloadUrl": "https://github.com/savagelysubtle/SafeAppeals2.0/releases/latest",
 	"releaseNotesUrl": "https://github.com/savagelysubtle/SafeAppeals2.0/releases",

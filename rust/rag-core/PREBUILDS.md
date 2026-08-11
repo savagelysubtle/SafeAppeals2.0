@@ -17,10 +17,12 @@ prebuilds/<platform>-<arch>/<runtime>-<abi>/rag_core.node
 |-----------|---------------|----------------------------|------|
 | linux-x64 | Electron 42.x | 146 | `prebuilds/linux-x64/electron-146/rag_core.node` |
 | linux-x64 | Node 24.x     | 137 | `prebuilds/linux-x64/node-137/rag_core.node` |
+| win32-x64 | Electron 42.x | 146 | `prebuilds/win32-x64/electron-146/rag_core.node` |
+| win32-x64 | Node 24.x     | 137 | `prebuilds/win32-x64/node-137/rag_core.node` |
 
-Additional platforms (win32-x64, darwin-arm64, …) follow the same pattern and
+Additional platforms (darwin-arm64, …) follow the same pattern and
 are produced on the matching host OS. Cross-compiling Windows from Linux is
-not supported for the Electron ABI build.
+not supported.
 
 ## Build (current host Node ABI)
 
@@ -56,11 +58,33 @@ node ./scripts/smoke-native.js
 - **linux-x64 / electron-146** — present for Electron **42.6.0** (ABI 146).
   Verify with `../../scripts/node-electron.sh ./scripts/smoke-native.js` from
   `rust/rag-core` (requires `.build/electron` from a desktop gulp fetch).
+- **win32-x64 / node-137 + electron-146** — present. Built on Windows with MSVC,
+  **Strawberry Perl** (for vendored OpenSSL), and
+  `--no-default-features -F "sqlcipher-vendored fastembed cross-encoder"`.
+  Smoke: `bun run test:native` (Node). Electron slot is a copy of the N-API
+  Node artifact (see below).
 
 `rag-core` is built with **N-API** (`napi` feature), so a Node-built `.node` can
 load under Electron when ABIs differ — install into the electron-146 slot via
-`node-electron.sh` (below). Do **not** use `napi build --target electron-42.6.0`:
+`node-electron.sh` / `node-electron.bat` (below) or by copying the node-137
+prebuild. Do **not** use `napi build --target electron-42.6.0`:
 napi-cli 3.x expects Rust target triples, not Electron version strings.
+
+### Windows build notes
+
+```bat
+cd rust\rag-core
+bun install
+REM needs: VS Build Tools C++, Strawberry Perl on PATH, cargo
+napi build --platform --release --no-js --no-default-features -F "sqlcipher-vendored fastembed cross-encoder"
+node .\scripts\install-prebuild.js
+mkdir prebuilds\win32-x64\electron-146 2>nul
+copy /Y prebuilds\win32-x64\node-137\rag_core.node prebuilds\win32-x64\electron-146\rag_core.node
+node .\scripts\smoke-native.js
+```
+
+Default `sqlcipher` (system OpenSSL) is awkward on Windows; prefer
+`sqlcipher-vendored`. Perl is required to compile OpenSSL from source.
 
 ## Electron ABI (146)
 

@@ -6,9 +6,10 @@ This folder contains guides, setup instructions, and migration plans for develop
 
 For new developers or setting up a fresh environment:
 
-1. **[DOCLING_QUICKSTART.md](./DOCLING_QUICKSTART.md)** - 5-minute setup for PDF extraction with local ML models
-2. **[DOCLING_LOCAL_MODELS.md](./DOCLING_LOCAL_MODELS.md)** - Complete guide for offline-capable document processing
-3. **[HUGGINGFACE_TOKEN.md](./HUGGINGFACE_TOKEN.md)** - How to get authentication tokens for ML models
+1. **[WINDOWS_PACKAGING.md](./WINDOWS_PACKAGING.md)** - Fresh Windows installs, dual-ABI prebuilds, installer gates (no end-user compile)
+2. **[DOCLING_QUICKSTART.md](./DOCLING_QUICKSTART.md)** - 5-minute setup for PDF extraction with local ML models
+3. **[DOCLING_LOCAL_MODELS.md](./DOCLING_LOCAL_MODELS.md)** - Complete guide for offline-capable document processing
+4. **[HUGGINGFACE_TOKEN.md](./HUGGINGFACE_TOKEN.md)** - How to get authentication tokens for ML models
 
 ## Migration & Updates
 

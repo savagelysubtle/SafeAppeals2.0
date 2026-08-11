@@ -671,6 +671,24 @@ BUILD_TARGETS.forEach(buildTarget => {
 		];
 
 		if (platform === 'win32') {
+			// Fail packaging if dual-ABI prebuilds are missing (fresh installs cannot compile).
+			packageTasks.unshift(task.define(`verify-native-prebuilds-win32-${arch}`, (cb) => {
+				const result = cp.spawnSync(
+					process.execPath,
+					[
+						'--experimental-strip-types',
+						path.join(root, 'build', 'lib', 'verifyNativePrebuilds.ts'),
+						'--platform', 'win32',
+						'--arch', arch,
+					],
+					{ cwd: root, stdio: 'inherit' },
+				);
+				if (result.status !== 0) {
+					cb(new Error(`verifyNativePrebuilds failed for win32-${arch}`));
+					return;
+				}
+				cb();
+			}));
 			packageTasks.push(patchWin32DependenciesTask(destinationFolderName));
 		}
 

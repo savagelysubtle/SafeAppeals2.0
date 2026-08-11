@@ -15,7 +15,7 @@ import { StatusBarController } from './statusBarController';
 import { StorageService } from './storageService';
 import { serializeTimeTrackerWorkspaceIdentity } from './workspaceIdentity';
 import { TimeTrackerService } from './timeTrackerService';
-import { initializeLogger, logError, logInfo } from './logger';
+import { initializeLogger, logError, logInfo, logWarning } from './logger';
 
 let storageService: StorageService;
 let codesService: CodesService;
@@ -43,9 +43,17 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 			'Time Tracker: the previous time-tracking database could not be read and has been set aside at {0}. A new empty encrypted database will be created.',
 			setAsidePath
 		)); },
-		showMemoryFallbackWarning: () => { void vscode.window.showWarningMessage(vscode.l10n.t(
-			'Secure key storage is unavailable. Time Tracker is using memory only; entries from this session will be lost when the window closes.'
-		)); },
+		showNoWorkspaceWarning: () => {
+			// Quiet: empty window is expected. Durable storage starts when a folder is opened.
+			logInfo('Time Tracker: open a workspace folder to enable durable encrypted storage.');
+		},
+		showMemoryFallbackWarning: reason => {
+			logWarning(`Time Tracker durable DB unavailable: ${reason ?? 'unknown'}`);
+			void vscode.window.showWarningMessage(vscode.l10n.t(
+				'Secure key storage is unavailable ({0}). Time Tracker is using memory only; entries from this session will be lost when the window closes.',
+				reason ?? 'unknown'
+			));
+		},
 		showLegacyCleanupFailureWarning: legacyPath => { void vscode.window.showWarningMessage(vscode.l10n.t(
 			'Time Tracker could not securely remove the previous plaintext database at {0}. Close other programs using it, then retry. The encrypted database will not be activated until cleanup succeeds.',
 			legacyPath
@@ -54,9 +62,16 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 	sensitiveStateStore = new SensitiveStateStore(context, {
 		workspacePath: vscode.workspace.workspaceFolders?.[0]?.uri.fsPath,
 		workspaceIdentity,
-		showMemoryFallbackWarning: () => { void vscode.window.showWarningMessage(vscode.l10n.t(
-			'Time Tracker cannot access secure key storage. Timer recovery and custom billing codes will remain in memory only for this session.'
-		)); },
+		showNoWorkspaceWarning: () => {
+			logInfo('Time Tracker sensitive state: open a workspace folder for durable timer recovery / codes.');
+		},
+		showMemoryFallbackWarning: reason => {
+			logWarning(`Time Tracker sensitive state unavailable: ${reason ?? 'unknown'}`);
+			void vscode.window.showWarningMessage(vscode.l10n.t(
+				'Time Tracker cannot access secure key storage ({0}). Timer recovery and custom billing codes will remain in memory only for this session.',
+				reason ?? 'unknown'
+			));
+		},
 		showLegacyCleanupFailureWarning: legacyPath => { void vscode.window.showWarningMessage(vscode.l10n.t(
 			'Time Tracker encrypted the legacy custom billing codes but could not remove the plaintext file at {0}. Close other programs using it, then retry. Sensitive state will not be activated until cleanup succeeds.',
 			legacyPath

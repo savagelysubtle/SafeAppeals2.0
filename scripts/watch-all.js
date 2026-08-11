@@ -23,11 +23,11 @@ const ansiRegex = /[\u001b\u009b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-O
  */
 // npm-run-all2 -l pads labels to equal width inside the brackets
 // (e.g. "[watch-client           ]"), so allow trailing spaces before "]".
+// Copilot was dropped from SafeAppeals; extensions are covered by watch-extensions.
 const WATCHERS = [
 	{ name: 'watch-client-transpile', ready: /\[watch-client-transpile\s*\].*Finished transpilation with/ },
 	{ name: 'watch-client', ready: /\[watch-client\s*\].*Finished watch-client-noEmit/ },
 	{ name: 'watch-extensions', ready: /\[watch-extensions\s*\].*Finished compilation/ },
-	{ name: 'watch-copilot', ready: /\[watch-copilot\s*\].*Watching for file changes/ },
 ];
 
 const READY_MESSAGE = 'Watchers done and ready for changes.';
@@ -96,7 +96,6 @@ function main() {
 		'watch-client-transpile',
 		'watch-client',
 		'watch-extensions',
-		'watch-copilot',
 	];
 
 	const npmRunAll = path.join(APP_ROOT, 'node_modules', '.bin', 'npm-run-all2');
@@ -149,7 +148,6 @@ if (require.main === module) {
 			'[watch-client-transpile] Finished transpilation with 0 errors after 12 ms',
 			'[watch-client          ] [12:00:00] Finished \x1b[32mwatch-client-noEmit\x1b[39m src/tsconfig.json with 0 errors.',
 			'[watch-extensions      ] Finished compilation',
-			'[watch-copilot         ] Found 0 errors. Watching for file changes.',
 		];
 		// Padded watch-client must not be satisfied by the transpile line alone.
 		const partial = new Set();

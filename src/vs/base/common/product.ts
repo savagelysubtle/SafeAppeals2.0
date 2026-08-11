@@ -85,6 +85,12 @@ export interface IAgentSdkProductConfig {
 
 export interface IProductConfiguration {
 	readonly version: string;
+	/**
+	 * VS Code API / engine compatibility version reported to extensions as
+	 * `vscode.version`. SafeAppeals marketing version may be 2.x while language
+	 * clients still require `^1.91.0`-style engines.
+	 */
+	readonly vscodeVersion?: string;
 	readonly date?: string;
 	readonly quality?: string;
 	readonly commit?: string;

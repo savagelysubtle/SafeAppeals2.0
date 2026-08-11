@@ -9,7 +9,7 @@
 
 | Feature | Status | Location | Wired? | Plan link |
 | ------- | ------ | -------- | ------ | --------- |
-| Time tracker | Shipped (Linux); broken on Windows pending prebuilds | `extensions/time-tracker` | Yes | master plan M0 / rung 1; `WINDOWS-PREBUILDS-TODO.md` |
+| Time tracker | Shipped (Linux + Windows SQLCipher prebuilds) | `extensions/safeappeals-time-tracker` | Yes | master plan M0 / rung 1; see `PREBUILDS.md` |
 | Theme packs (43 × `theme-safeappeals-*`) | Shipped | `extensions/theme-safeappeals-*` | Yes (runtime scan) | master plan foundation / rung 2 |
 | Branding / product overlay | Shipped | product / branding core edits | Yes | merge plan rung 3 |
 | Calendar sync (pull-only backend) | Partial — backend only, no UI, no write-back | `extensions/safeappeals-calendar` | Yes (commands / status bar) | master plan rung 4; Q5 write-back |

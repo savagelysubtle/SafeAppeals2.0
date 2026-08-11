@@ -52,12 +52,51 @@ function spawnAsync(command: string, args: string[], opts: child_process.SpawnOp
 	});
 }
 
+function isSpawnEnoent(err: unknown): boolean {
+	return !!err && typeof err === 'object' && (err as NodeJS.ErrnoException).code === 'ENOENT';
+}
+
+/** Windows can spuriously fail `shell:true` spawns of cmd.exe under parallel load (ENOENT). */
+async function spawnAsyncWithRetry(command: string, args: string[], opts: child_process.SpawnOptions, retries = 2): Promise<string> {
+	let lastError: unknown;
+	for (let attempt = 0; attempt <= retries; attempt++) {
+		try {
+			return await spawnAsync(command, args, opts);
+		} catch (err) {
+			lastError = err;
+			if (!isSpawnEnoent(err) || attempt === retries) {
+				throw err;
+			}
+			await new Promise(r => setTimeout(r, 100 * (attempt + 1)));
+		}
+	}
+	throw lastError;
+}
+
 async function npmInstallAsync(dir: string, opts?: child_process.SpawnOptions): Promise<void> {
+	// Ensure Windows shell can find cmd.exe even if a parent env wiped SystemRoot/Path.
+	const baseEnv: NodeJS.ProcessEnv = {
+		...process.env,
+		...(opts?.env ?? {}),
+	};
+	if (process.platform === 'win32') {
+		baseEnv.SystemRoot ??= 'C:\\Windows';
+		baseEnv.SYSTEMROOT ??= baseEnv.SystemRoot;
+		baseEnv.ComSpec ??= path.join(baseEnv.SystemRoot, 'System32', 'cmd.exe');
+		const system32 = path.join(baseEnv.SystemRoot, 'System32');
+		const pathKey = baseEnv.Path !== undefined ? 'Path' : 'PATH';
+		const currentPath = baseEnv[pathKey] ?? '';
+		if (!currentPath.toLowerCase().split(';').includes(system32.toLowerCase())) {
+			baseEnv[pathKey] = `${system32};${currentPath}`;
+		}
+	}
+
 	const finalOpts: child_process.SpawnOptions = {
-		env: { ...process.env },
 		...(opts ?? {}),
+		env: baseEnv,
 		cwd: path.join(root, dir),
 		shell: true,
+		windowsHide: true,
 	};
 
 	const command = process.env['npm_command'] || 'install';
@@ -88,7 +127,7 @@ async function npmInstallAsync(dir: string, opts?: child_process.SpawnOptions): 
 		run('sudo', ['chown', '-R', `${userinfo.uid}:${userinfo.gid}`, `${path.resolve(root, dir)}`], syncOpts);
 	} else {
 		log(dir, 'Installing dependencies...');
-		const output = await spawnAsync(npm, command.split(' '), finalOpts);
+		const output = await spawnAsyncWithRetry(npm, command.split(' '), finalOpts);
 		if (output.trim()) {
 			for (const line of output.trim().split('\n')) {
 				log(dir, line);
@@ -256,6 +295,12 @@ async function main() {
 			continue; // already executed in root
 		}
 
+		// Optional / vendored dirs may be listed but absent on some checkouts (e.g. copilot).
+		if (!fs.existsSync(path.join(root, dir, 'package.json'))) {
+			log(dir, 'Skipping (no package.json)');
+			continue;
+		}
+
 		if (dir === 'build') {
 			nativeTasks.push(() => {
 				const env: NodeJS.ProcessEnv = { ...process.env };
@@ -308,13 +353,16 @@ async function main() {
 		await task();
 	}
 
-	// JS-only dirs run in parallel
-	const concurrency = Math.min(os.cpus().length, 8);
+	// JS-only dirs run in parallel. On Windows, high concurrency can spuriously fail
+	// shell spawns with "spawn cmd.exe ENOENT" under Defender / process-creation pressure.
+	const concurrency = process.platform === 'win32'
+		? Math.min(os.cpus().length, 2)
+		: Math.min(os.cpus().length, 8);
 	log('.', `Running ${parallelTasks.length} npm installs with concurrency ${concurrency}...`);
 	await runWithConcurrency(parallelTasks, concurrency);
 
-	child_process.execSync('git config pull.rebase merges');
-	child_process.execSync('git config blame.ignoreRevsFile .git-blame-ignore-revs');
+	child_process.execSync('git config pull.rebase merges', { stdio: 'inherit', shell: true, env: process.env });
+	child_process.execSync('git config blame.ignoreRevsFile .git-blame-ignore-revs', { stdio: 'inherit', shell: true, env: process.env });
 
 	fs.writeFileSync(stateFile, JSON.stringify(_state));
 	fs.writeFileSync(stateContentsFile, JSON.stringify(computeContents()));

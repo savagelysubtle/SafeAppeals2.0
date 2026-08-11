@@ -56,15 +56,19 @@ Expect `function`.
 
 Cross-compiling from Linux is not supported (node-gyp produces host-platform addons; Windows needs MSVC).
 
-**As of the SQLCipher migration, both `prebuilds/win32-x64/**` binaries were deleted.** They were plain `better-sqlite3` builds and would fail-open to plaintext if left in place. Windows time tracking is unavailable until you regenerate both ABIs on a Windows machine:
+Windows must be built on a Windows host with MSVC (node-gyp cannot cross-compile). Use **Node 24.x** (`abi=137` — check with `node -p "process.versions.modules"`).
 
 ```bat
-cd extensions\time-tracker
+cd extensions\safeappeals-time-tracker
 npm install
 npm run rebuild-prebuilds
 ```
 
-Or the two manual `npx node-gyp rebuild` commands above with `win32-x64` in the destination path. Commit the resulting:
+`rebuild-prebuilds` builds Electron 146 first, then host Node 137. The Node pass explicitly overrides the extension `.npmrc` Electron pins so both ABIs are real (not two copies of electron-146).
+
+Commit:
 
 - `prebuilds/win32-x64/electron-146/better_sqlite3.node`
 - `prebuilds/win32-x64/node-137/better_sqlite3.node`
+
+Smoke-check before committing: `typeof db.key` must be `function` when loading the `node-137` binding under Node 24 (see command above).

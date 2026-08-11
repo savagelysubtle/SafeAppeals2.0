@@ -60,12 +60,30 @@ function main() {
 	// Electron 42.x → NODE_MODULE_VERSION 146 (keep in sync with product Electron major).
 	copyBinding('electron-146');
 
+	// Extension .npmrc pins Electron headers (target/runtime/disturl). Those bleed into
+	// bare `node-gyp rebuild` via npm_config_* and produce another electron-146 binary
+	// labeled node-<modules>. Override explicitly for the host-Node ABI pass.
+	const hostNodeVersion = process.versions.node; // e.g. 24.18.0
 	console.log(`Building Node ABI prebuild (host Node ${process.version}, modules=${process.versions.modules}) for ${platformArch}…`);
 	run(process.platform === 'win32' ? 'npx.cmd' : 'npx', [
 		'node-gyp', 'rebuild', '--release',
-	]);
+		`--target=${hostNodeVersion}`,
+		'--dist-url=https://nodejs.org/dist',
+		'--runtime=node',
+	], {
+		env: {
+			npm_config_target: hostNodeVersion,
+			npm_config_runtime: 'node',
+			npm_config_disturl: 'https://nodejs.org/dist',
+			npm_config_dist_url: 'https://nodejs.org/dist',
+			npm_config_build_from_source: 'true',
+		},
+	});
 	if (!fs.existsSync(releaseNode)) {
 		throw new Error(`Expected native addon missing after Node rebuild: ${releaseNode}`);
+	}
+	if (process.versions.modules !== '137') {
+		console.warn(`WARNING: host NODE_MODULE_VERSION is ${process.versions.modules}, expected 137 (Node 24.x). Folder will be node-${process.versions.modules}.`);
 	}
 	copyBinding(`node-${process.versions.modules}`);
 

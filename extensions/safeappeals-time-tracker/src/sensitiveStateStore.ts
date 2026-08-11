@@ -8,12 +8,14 @@ import * as fs from 'node:fs';
 import * as crypto from 'node:crypto';
 import type * as vscode from 'vscode';
 import { acquireDek, createMementoDekDurabilityMarker, open, seal } from './shared/encryptedStore';
+import { ensureDir, writeFileAtomic, deleteFileIfExists } from './shared/secureFs';
 import type { CustomUTBMSCodes, TimerState } from './types';
 import { logError, logWarning } from './logger';
 import {
 	createSensitiveStateDeleteName, createSensitiveStateTemporaryName,
 	sensitiveStateDeleteNamePattern, sensitiveStateTemporaryNamePattern
 } from './storageArtifactNames';
+import { hasSecureFsPrebuild, supportsDurableTimeTrackerStorage } from './platformSupport';
 import { getTimeTrackerWorkspaceId } from './workspaceIdentity';
 
 interface SensitiveState {
@@ -61,9 +63,16 @@ interface SecureFsBinding {
 }
 
 function loadSecureFs(): SecureFsBinding {
-	const runtime = process.versions.electron ? 'electron' : 'node';
-	const bindingPath = path.join(__dirname, '..', 'prebuilds', `${process.platform}-${process.arch}`, `${runtime}-${process.versions.modules}`, 'safeappeals_secure_fs.node');
-	return require(bindingPath) as SecureFsBinding;
+	const abi = process.versions.modules;
+	const root = path.join(__dirname, '..', 'prebuilds', `${process.platform}-${process.arch}`);
+	const ordered = [`electron-${abi}`, `node-${abi}`];
+	for (const runtimeAbi of ordered) {
+		const bindingPath = path.join(root, runtimeAbi, 'safeappeals_secure_fs.node');
+		if (fs.existsSync(bindingPath)) {
+			return require(bindingPath) as SecureFsBinding;
+		}
+	}
+	throw new Error(`safeappeals_secure_fs.node not found under ${root} for modules=${abi}`);
 }
 
 /** Encrypted persistence for timer descriptions, matter selection, and custom billing codes. */
@@ -81,7 +90,8 @@ export class SensitiveStateStore {
 		private readonly environment: {
 			readonly workspacePath?: string;
 			readonly workspaceIdentity?: string;
-			readonly showMemoryFallbackWarning?: () => void;
+			readonly showMemoryFallbackWarning?: (reason?: string) => void;
+			readonly showNoWorkspaceWarning?: () => void;
 			readonly showLegacyCleanupFailureWarning?: (legacyPath: string) => void;
 			readonly deleteFileIfExists?: (filePath: string) => Promise<boolean>;
 		} = {}
@@ -95,8 +105,16 @@ export class SensitiveStateStore {
 	}
 
 	async initialize(): Promise<boolean> {
-		if (!this.durable || process.platform !== 'linux' || process.arch !== 'x64') {
-			this.environment.showMemoryFallbackWarning?.();
+		if (!supportsDurableTimeTrackerStorage()) {
+			this.environment.showMemoryFallbackWarning?.(
+				`platform ${process.platform}-${process.arch} is not supported for durable encrypted storage`
+			);
+			await this.applyPendingLegacyPurge();
+			return false;
+		}
+		if (!this.durable) {
+			logWarning('No workspace identity; sensitive state stays in memory until a folder is opened');
+			this.environment.showNoWorkspaceWarning?.();
 			await this.applyPendingLegacyPurge();
 			return false;
 		}
@@ -108,24 +126,40 @@ export class SensitiveStateStore {
 			log: logWarning,
 		});
 		if (result.kind === 'unavailable') {
-			this.environment.showMemoryFallbackWarning?.();
+			this.environment.showMemoryFallbackWarning?.(result.reason);
 			return false;
 		}
 
 		this.dek = result.dek;
-		const directory = this.openManagedDirectory();
+		if (hasSecureFsPrebuild()) {
+			const directory = this.openManagedDirectory();
+			try {
+				const names = directory.enumerateChildren(256).map(entry => entry.name);
+				if (names.includes(STORE_FILE_NAME)) {
+					const held = directory.openRegularFile(STORE_FILE_NAME, false);
+					try {
+						this.storeIdentity = held.identity;
+						this.state = JSON.parse(open(await fsPromises.readFile(held.descriptorPath), result.dek).toString('utf8')) as SensitiveState;
+					} finally { held.close(); }
+				}
+			} finally { directory.close(); }
+			await this.applyPendingLegacyPurge();
+			await this.migrateLegacyState();
+			return true;
+		}
+
+		// Windows (no secure-fs): encrypted atomic file under globalStorage.
+		await ensureDir(path.dirname(this.storePath));
 		try {
-			const names = directory.enumerateChildren(256).map(entry => entry.name);
-			if (names.includes(STORE_FILE_NAME)) {
-				const held = directory.openRegularFile(STORE_FILE_NAME, false);
-				try {
-					this.storeIdentity = held.identity;
-					this.state = JSON.parse(open(await fsPromises.readFile(held.descriptorPath), result.dek).toString('utf8')) as SensitiveState;
-				} finally { held.close(); }
+			const bytes = await fsPromises.readFile(this.storePath);
+			this.state = JSON.parse(open(bytes, result.dek).toString('utf8')) as SensitiveState;
+		} catch (error) {
+			if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+				throw error;
 			}
-		} finally { directory.close(); }
+		}
 		await this.applyPendingLegacyPurge();
-		await this.migrateLegacyState();
+		// Legacy codes migration needs secure-fs; skip on platforms without it.
 		return true;
 	}
 
@@ -193,7 +227,13 @@ export class SensitiveStateStore {
 	async purge(): Promise<void> {
 		this.state = {};
 		await this.writeQueue;
-		if (this.durable) { this.deleteNativeState(this.openManagedDirectory()); }
+		if (this.durable) {
+			if (hasSecureFsPrebuild()) {
+				this.deleteNativeState(this.openManagedDirectory());
+			} else {
+				await deleteFileIfExists(this.storePath);
+			}
+		}
 		await this.context.workspaceState.update('timerState', undefined);
 		if (!(await this.hasOtherWorkspaceStores())) {
 			await this.deleteKeyAndMarker();
@@ -205,15 +245,29 @@ export class SensitiveStateStore {
 		this.state = {};
 		await this.writeQueue;
 		const globalStoragePath = this.context.globalStorageUri.fsPath;
-		const workspaces = fs.existsSync(globalStoragePath)
-			? loadSecureFs().bootstrapPrivateDirectory(globalStoragePath, ['workspaces'])
-			: loadSecureFs().bootstrapPrivateDirectory(path.dirname(globalStoragePath), [path.basename(globalStoragePath), 'workspaces']);
-		try {
-			for (const entry of workspaces.enumerateChildren(4096)) {
-				const child = workspaces.openPrivateChild(entry.name);
-				this.deleteNativeState(child);
+		if (hasSecureFsPrebuild()) {
+			const workspaces = fs.existsSync(globalStoragePath)
+				? loadSecureFs().bootstrapPrivateDirectory(globalStoragePath, ['workspaces'])
+				: loadSecureFs().bootstrapPrivateDirectory(path.dirname(globalStoragePath), [path.basename(globalStoragePath), 'workspaces']);
+			try {
+				for (const entry of workspaces.enumerateChildren(4096)) {
+					const child = workspaces.openPrivateChild(entry.name);
+					this.deleteNativeState(child);
+				}
+			} finally { workspaces.close(); }
+		} else {
+			const workspacesPath = path.join(globalStoragePath, 'workspaces');
+			try {
+				const names = await fsPromises.readdir(workspacesPath);
+				for (const name of names) {
+					await deleteFileIfExists(path.join(workspacesPath, name, STORE_FILE_NAME));
+				}
+			} catch (error) {
+				if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+					throw error;
+				}
 			}
-		} finally { workspaces.close(); }
+		}
 		await this.context.workspaceState.update('timerState', undefined);
 		const generation = this.context.globalState.get<number>(PURGE_GENERATION_KEY, 0) + 1;
 		await this.context.globalState.update(PURGE_GENERATION_KEY, generation);
@@ -273,10 +327,14 @@ export class SensitiveStateStore {
 	}
 
 	private async writeNative(snapshot: SensitiveState): Promise<void> {
+		const bytes = seal(Buffer.from(JSON.stringify(snapshot), 'utf8'), this.dek!);
+		if (!hasSecureFsPrebuild()) {
+			await writeFileAtomic(this.storePath, bytes);
+			return;
+		}
 		const directory = this.openManagedDirectory();
 		const lock = directory.acquireExclusiveLock();
 		try {
-			const bytes = seal(Buffer.from(JSON.stringify(snapshot), 'utf8'), this.dek!);
 			this.storeIdentity = lock.writeSensitiveState(
 				createSensitiveStateTemporaryName(),
 				bytes,

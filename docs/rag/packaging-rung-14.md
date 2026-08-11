@@ -23,9 +23,12 @@ prebuilds/<platform>-<arch>/<runtime>-<abi>/rag_core.node
 | Target | Runtime | Status (today) |
 |--------|---------|----------------|
 | `linux-x64` / `node-137` | Node 24.x | **Built** — present under `rust/rag-core/prebuilds/` |
-| `linux-x64` / `electron-146` | Electron 42.x | **Pending** — needs Electron 42 headers / ABI 146 toolchain |
-| `win32-x64` / both ABIs | Node 24 + Electron 42 | **Not produced** — build on Windows (no Linux→Windows Electron cross-compile) |
+| `linux-x64` / `electron-146` | Electron 42.x | **Built** (N-API copy / Electron smoke) |
+| `win32-x64` / both ABIs | Node 24 + Electron 42 | **Built** on Windows — must be committed before Inno setup |
 | Other platforms | same pattern | Follow PREBUILDS.md when a matching host is available |
+
+Installer gate: `npm run verify-native-prebuilds:win32` (also runs before `vscode-win32-*-setup`).
+See [`docs/development/WINDOWS_PACKAGING.md`](../development/WINDOWS_PACKAGING.md).
 
 Missing matching `.node` → `loadRagCore()` fail-soft → host **hard-disables** Private Search
 (no crash). Do not ship a wrong-ABI binary; wrong natives fail open or crash unpredictably.
@@ -106,13 +109,13 @@ Cross-compiling Windows Electron ABI from Linux is **not** supported.
 ## Honest v1 checklist
 
 - [x] Document dual-ABI + model layout (this note)
-- [ ] `linux-x64/electron-146` prebuild
-- [ ] `win32-x64` node-137 + electron-146
+- [x] `linux-x64/electron-146` prebuild
+- [x] `win32-x64` node-137 + electron-146 (commit + verify before Windows installer)
 - [x] Pinned Search-pack download URLs / digests (HF Xenova commit pins via ModelCatalog `files[]`)
 - [x] Pinned Unlimited-OCR download URLs / digests (HF baidu/Unlimited-OCR @ d549bb9)
 - [ ] Optional offline media / enterprise OCR bundle (explicit product decision)
 
-Until those land, Private Search and OCR stay capability-gated: BYO or consent install, or hard-disable.
+Private Search still needs Search-pack weights (consent/BYO). Missing **natives** hard-disable search; missing **models** is a separate gate.
 
 ---
 

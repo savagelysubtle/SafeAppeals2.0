@@ -5,4 +5,10 @@ bun.lock
 tsconfig.json
 *.md
 !README.md
+!PREBUILDS.md
 native/secure-fs/target/
+# Ship dual-ABI SQLCipher (and secure-fs when present) in the packaged app.
+# Do not ignore prebuilds/** — fresh installs must not compile natives.
+!prebuilds/
+!prebuilds/**/*.node
+
