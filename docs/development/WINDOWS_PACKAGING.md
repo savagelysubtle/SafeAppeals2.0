@@ -106,9 +106,26 @@ End users: install → launch. No compile step.
 Language clients require `^1.91.0`. Marketing 2.x alone breaks them; keep `vscodeVersion`
 on the 1.x API line.
 
+## DocParse sidecar (Unlimited-OCR)
+
+Unlimited-OCR **weights** download via consent install. The **runtime** is a separate
+binary (`sa-docparse.exe`) that is **gitignored** under `extensions/safeappeals-ml/bin/`.
+
+On the Windows packager / dev machine:
+
+```powershell
+pwsh -File scripts/package-docparse-sidecar.ps1
+```
+
+That runs `cargo build -p docparse --release` and copies into `extensions/safeappeals-ml/bin/`.
+Without it, install still stores weights but OCR health reports runtime-missing (soft warning).
+
+Also needs Python on PATH for the OCR helper (`infer_unlimited_ocr.py`) when running jobs.
+
 ## Checklist before a Windows release
 
 - [ ] `npm run verify-native-prebuilds:win32` passes on a clean checkout (no local rebuild)
+- [ ] `scripts/package-docparse-sidecar.ps1` run so `sa-docparse.exe` is in the packaged app
 - [ ] Time Tracker: create entry → restart app → data still present (not memory-only toast)
 - [ ] Private Search: no “rag-core native addon not found for electron-146 (win32-x64)”
 - [ ] JSON / HTML / CSS language features activate (no `^1.91.0` vs `2.1.0` error)

@@ -235,6 +235,34 @@ suite('consentInstall', () => {
 		}
 		assert.strictEqual(await store.isReady('unlimited-ocr'), true);
 	});
+
+	test('unlimited-OCR runtimeMissing keeps installed outcome with warning', async () => {
+		const catalog = new ModelCatalog([ocrSpec()]);
+		const store = new ModelArtifactStore({
+			globalStorageFsPath: tmpRoot,
+			catalog,
+			fetcher: async () => PAYLOAD,
+		});
+		const probe = fakeProbe(eligibleSnapshot());
+
+		const outcome = await consentInstallUnlimitedOcr(
+			{ probe, catalog, store },
+			true,
+			{
+				ensureDocParseReady: async () => ({
+					ready: false,
+					runtimeMissing: true,
+					detail: 'sa-docparse binary is missing',
+				}),
+			},
+		);
+
+		assert.strictEqual(outcome.kind, 'installed');
+		if (outcome.kind === 'installed') {
+			assert.ok(outcome.warning?.includes('sa-docparse'));
+		}
+		assert.strictEqual(await store.isReady('unlimited-ocr'), true);
+	});
 });
 
 function fakeProbe(snapshot: HwSnapshot): HwCapabilityProbe {

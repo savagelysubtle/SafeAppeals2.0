@@ -6,6 +6,7 @@ import { createHash, randomUUID } from 'crypto';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as vscode from 'vscode';
+import { isWebClient } from './config';
 import {
 	acquireDek,
 	createMementoDekDurabilityMarker,
@@ -867,19 +868,53 @@ export class EmailIndex {
 
 	/**
 	 * Acquire or mint the DEK. Sets mode to encrypted on success; otherwise memory.
+	 * When ciphertext exists but the DEK is gone (common on web: session SecretStorage),
+	 * auto-purge unreadable files and mint a fresh key instead of blocking every startup.
 	 */
 	private async acquireEncryptionKey(): Promise<void> {
-		const result = await acquireDek({
-			secrets: this.secrets,
-			keyId: DEK_KEY_ID,
-			existingDataPaths: this.dataPaths(),
-			log: this.log,
-			marker: this.marker,
-		});
+		const tryAcquire = (existingDataPaths: string[]) =>
+			acquireDek({
+				secrets: this.secrets,
+				keyId: DEK_KEY_ID,
+				existingDataPaths,
+				log: this.log,
+				marker: this.marker,
+			});
+
+		let result = await tryAcquire(this.dataPaths());
 		if (result.kind === 'ok') {
 			this.dek = result.dek;
 			this.mode = 'encrypted';
 			return;
+		}
+
+		if (
+			result.reason === 'key-lost-with-data'
+			|| result.reason === 'secret-storage-not-durable'
+		) {
+			this.log?.(
+				`EmailIndex: DEK unrecoverable (${result.reason}); purging unreadable cache and minting a new key`,
+			);
+			await this.purgeUnreadableStoreFiles();
+			try {
+				await this.marker.setStored(false);
+			} catch {
+				// continue
+			}
+			result = await tryAcquire([]);
+			if (result.kind === 'ok') {
+				this.dek = result.dek;
+				this.mode = 'encrypted';
+				if (!this.warnedUnavailable && !isWebClient()) {
+					this.warnedUnavailable = true;
+					void vscode.window.showInformationMessage(
+						vscode.l10n.t(
+							'Local email cache was reset because its encryption key was no longer available. Accounts are unchanged; messages will re-sync.',
+						),
+					);
+				}
+				return;
+			}
 		}
 
 		this.dek = undefined;
@@ -891,14 +926,40 @@ export class EmailIndex {
 		this.warnedUnavailable = true;
 		if (result.reason === 'secret-storage-unusable') {
 			void vscode.window.showWarningMessage(
-				'Emails will not be saved to disk because secure storage is unavailable.',
+				isWebClient()
+					? vscode.l10n.t(
+						'Browser email cache is memory-only for this session (secure key storage is not durable on the web). Prefer the desktop app to keep mail on disk.',
+					)
+					: vscode.l10n.t(
+						'Emails will not be saved to disk because secure storage is unavailable.',
+					),
 			);
 		} else {
-			// key-lost-with-data and secret-storage-not-durable
 			void vscode.window.showWarningMessage(
-				'The local email cache cannot be decrypted (key missing). Run "Clear Local Email Cache" to reset it.',
+				vscode.l10n.t(
+					'The local email cache cannot be decrypted (key missing). Run "Clear Local Email Cache" to reset it.',
+				),
 			);
 		}
+	}
+
+	/** Delete encrypted store files without wiping secrets marker (caller may clear marker). */
+	private async purgeUnreadableStoreFiles(): Promise<void> {
+		const dir = this.storageUri.fsPath;
+		for (const name of STORE_FILES) {
+			await deleteFileIfExists(path.join(dir, name));
+		}
+		try {
+			const entries = await fs.readdir(dir);
+			for (const entry of entries) {
+				if (STORE_FILES.some(name => entry.startsWith(`${name}.corrupt-`))) {
+					await deleteFileIfExists(path.join(dir, entry));
+				}
+			}
+		} catch {
+			// directory missing
+		}
+		await this.attachmentStore?.purgeAll();
 	}
 
 	private async load(): Promise<void> {

@@ -2,6 +2,7 @@
  *  Copyright (c) Safe Appeals. All rights reserved.
  *--------------------------------------------------------------------------------------------*/
 
+import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import * as vscode from 'vscode';
 import { hardDisableMessage } from './disableMessages';
@@ -11,11 +12,50 @@ import {
 	createMementoDekDurabilityMarker,
 	type DekUnavailableReason,
 } from './shared/encryptedStore';
-import { ensureDir } from './shared/secureFs';
+import { ensureDir, quarantineFile } from './shared/secureFs';
 import {
 	RAG_DEK_KEY,
 	type HardDisableCode,
 } from './types';
+
+/** True when openWorkspace failed because the on-disk index is unreadable (wrong DEK / corrupt). */
+function isUnreadableIndexError(message: string): boolean {
+	return /SQLCipher|key rejected|not a database|plaintext|crypto unavailable|PRAGMA key/i.test(message);
+}
+
+/**
+ * Move aside unreadable workspace index files so a fresh encrypted DB can be created.
+ * Does not delete permanently — files become `*.corrupt-<timestamp>`.
+ */
+async function quarantineUnreadableIndex(rootDir: string, log?: (m: string) => void): Promise<void> {
+	const names = [
+		'chunks.db',
+		'chunks.db-wal',
+		'chunks.db-shm',
+		'vectors.usearch',
+		'.dek-sentinel',
+	];
+	for (const name of names) {
+		const p = path.join(rootDir, name);
+		const moved = await quarantineFile(p);
+		if (moved) {
+			log?.(`Quarantined unreadable Private Search file: ${moved}`);
+		}
+	}
+	// Tantivy index is a directory — rename wholesale when present.
+	const tantivy = path.join(rootDir, 'text.tantivy');
+	try {
+		const st = await fs.stat(tantivy);
+		if (st.isDirectory()) {
+			const stamp = new Date().toISOString().replace(/:/g, '-');
+			const dest = `${tantivy}.corrupt-${stamp}`;
+			await fs.rename(tantivy, dest);
+			log?.(`Quarantined unreadable Private Search index dir: ${dest}`);
+		}
+	} catch {
+		// absent
+	}
+}
 
 /** Indexing role reported by rag-core when a workspace is open. */
 export type IndexWriteRole = 'primary' | 'secondary';
@@ -412,11 +452,37 @@ export class RagCoreHost {
 		}
 
 		await ensureDir(rootDir);
-		const open = loaded.native.openWorkspace(rootDir, this.dek, preferSecondary);
+		let open = loaded.native.openWorkspace(rootDir, this.dek, preferSecondary);
 		if (!open.ok) {
 			const err = open.error ?? 'openWorkspace failed';
-			this.setDisable('native-missing', [err]);
-			return;
+			// Wrong DEK / corrupt chunks.db is not an ABI problem — recover by quarantining
+			// and creating a fresh encrypted index (primary only; secondaries stay read-only).
+			if (!preferSecondary && isUnreadableIndexError(err)) {
+				this.log?.(
+					`Private Search index unreadable (${err}); quarantining workspace files and retrying open`,
+				);
+				await quarantineUnreadableIndex(rootDir, this.log);
+				open = loaded.native.openWorkspace(rootDir, this.dek, preferSecondary);
+				if (open.ok) {
+					this.log?.('Private Search index reset successfully; re-index workspace documents if needed.');
+				} else {
+					const retryErr = open.error ?? err;
+					this.setDisable(
+						'crypto-unavailable',
+						[
+							retryErr,
+							'Could not open or recreate the encrypted index. Try “Clear Local Data” for Private Search if available, or reload the window.',
+						],
+					);
+					return;
+				}
+			} else if (isUnreadableIndexError(err)) {
+				this.setDisable('crypto-unavailable', [err]);
+				return;
+			} else {
+				this.setDisable('native-missing', [err]);
+				return;
+			}
 		}
 
 		this.workspaceRoot = rootDir;

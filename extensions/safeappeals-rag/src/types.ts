@@ -138,7 +138,13 @@ export const MS_MARCO_CE_MODEL_ID = 'ms-marco-minilm-l6-v2';
  * Duplicated so this extension compiles without importing sibling sources.
  */
 export type ConsentInstallOutcome =
-	| { readonly kind: 'installed'; readonly modelId: string; readonly version: string }
+	| {
+		readonly kind: 'installed';
+		readonly modelId: string;
+		readonly version: string;
+		/** Soft warning (e.g. OCR weights OK but sa-docparse runtime missing). */
+		readonly warning?: string;
+	}
 	| { readonly kind: 'already-ready'; readonly modelId: string; readonly version: string }
 	| { readonly kind: 'ineligible'; readonly modelId: string; readonly reasons: readonly string[] }
 	| { readonly kind: 'consent-required'; readonly modelId: string }

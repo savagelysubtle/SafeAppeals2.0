@@ -26,6 +26,7 @@
     "verify-native-prebuilds": "node --experimental-strip-types build/lib/verifyNativePrebuilds.ts",
     "verify-native-prebuilds:all": "node --experimental-strip-types build/lib/verifyNativePrebuilds.ts --require-all-platforms",
     "verify-native-prebuilds:win32": "node --experimental-strip-types build/lib/verifyNativePrebuilds.ts --platform win32 --arch x64",
+    "package-docparse-sidecar": "pwsh -File scripts/package-docparse-sidecar.ps1",
     "build-fast": "npm-run-all2 -lp transpile-client build-fast-extensions",
     "build-fast-extensions": "npm run gulp copy-codicons compile-extensions compile-extension-media",
     "typecheck-client": "tsgo --project ./src/tsconfig.json --noEmit --skipLibCheck",

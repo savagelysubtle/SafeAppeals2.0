@@ -7,6 +7,7 @@ import { randomUUID } from 'node:crypto';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import type * as vscode from 'vscode';
+import { isWebClient } from './config';
 import {
 	acquireDek,
 	createMementoDekDurabilityMarker,
@@ -355,18 +356,46 @@ export class DraftAttachmentStore {
 	}
 
 	private async acquireEncryptionKey(): Promise<void> {
-		const result = await acquireDek({
-			secrets: this.secrets,
-			keyId: DRAFT_ATTACHMENT_DEK_KEY_ID,
-			existingDataPaths: await this.existingSidecarPaths(),
-			log: this.log,
-			marker: this.marker,
-		});
+		const paths = await this.existingSidecarPaths();
+		const tryAcquire = (existingDataPaths: string[]) =>
+			acquireDek({
+				secrets: this.secrets,
+				keyId: DRAFT_ATTACHMENT_DEK_KEY_ID,
+				existingDataPaths,
+				log: this.log,
+				marker: this.marker,
+			});
+
+		let result = await tryAcquire(paths);
 		if (result.kind === 'ok') {
 			this.dek = result.dek;
 			this.mode = 'encrypted';
 			return;
 		}
+
+		if (
+			result.reason === 'key-lost-with-data'
+			|| result.reason === 'secret-storage-not-durable'
+		) {
+			this.log?.(
+				`DraftAttachmentStore: DEK unrecoverable (${result.reason}); purging sidecars`,
+			);
+			for (const p of paths) {
+				await deleteFileIfExists(p);
+			}
+			try {
+				await this.marker.setStored(false);
+			} catch {
+				// continue
+			}
+			result = await tryAcquire([]);
+			if (result.kind === 'ok') {
+				this.dek = result.dek;
+				this.mode = 'encrypted';
+				return;
+			}
+		}
+
 		this.dek = undefined;
 		this.mode = 'memory';
 		this.log?.(`DraftAttachmentStore encryption unavailable (${result.reason})`);
@@ -374,7 +403,9 @@ export class DraftAttachmentStore {
 			this.warnedUnavailable = true;
 			if (result.reason === 'secret-storage-unusable') {
 				this.showWarning(
-					'Draft attachments will not be saved to disk because secure storage is unavailable.',
+					isWebClient()
+						? 'Browser draft attachments are memory-only for this session. Prefer the desktop app for durable storage.'
+						: 'Draft attachments will not be saved to disk because secure storage is unavailable.',
 				);
 			} else {
 				this.showWarning(

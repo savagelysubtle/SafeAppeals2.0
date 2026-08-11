@@ -8,7 +8,13 @@ import type { ModelCatalog } from './modelCatalog';
 import type { ModelArtifactStore, ArtifactDownloadProgress } from './modelArtifactStore';
 
 export type ConsentInstallOutcome =
-	| { readonly kind: 'installed'; readonly modelId: string; readonly version: string }
+	| {
+		readonly kind: 'installed';
+		readonly modelId: string;
+		readonly version: string;
+		/** Soft warning (e.g. weights OK but runtime sidecar not ready). */
+		readonly warning?: string;
+	}
 	| { readonly kind: 'already-ready'; readonly modelId: string; readonly version: string }
 	| { readonly kind: 'ineligible'; readonly modelId: string; readonly reasons: readonly string[] }
 	| { readonly kind: 'consent-required'; readonly modelId: string }
@@ -106,7 +112,15 @@ export async function consentInstallModel(
 	}
 }
 
-export type DocParseReadyResult = { readonly ready: boolean; readonly detail?: string };
+export type DocParseReadyResult = {
+	readonly ready: boolean;
+	readonly detail?: string;
+	/**
+	 * Weights/artifacts are present but the managed `sa-docparse` binary is not
+	 * on disk (and no BYO localhost sidecar answered). Not a corrupt download.
+	 */
+	readonly runtimeMissing?: boolean;
+};
 
 /** Convenience wrapper for Unlimited-OCR consent install. */
 export async function consentInstallUnlimitedOcr(
@@ -138,6 +152,17 @@ export async function consentInstallUnlimitedOcr(
 	const readyResult = await options.ensureDocParseReady();
 	if (readyResult.ready) {
 		return outcome;
+	}
+
+	// Artifacts verified; missing sidecar is a packaging/dev setup gap, not a bad download.
+	if (readyResult.runtimeMissing) {
+		return {
+			kind: 'installed',
+			modelId: outcome.modelId,
+			version: outcome.version,
+			warning: readyResult.detail
+				?? 'Unlimited-OCR weights are installed, but the sa-docparse runtime is not available yet.',
+		};
 	}
 
 	return {

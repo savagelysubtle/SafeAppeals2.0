@@ -71,7 +71,7 @@ export function hardDisableMessage(code: HardDisableCode, reasons: readonly stri
 			);
 		case 'crypto-unavailable':
 			return vscode.l10n.t(
-				'Private Search cannot open an encrypted index because secure key storage is unavailable on this computer.{0}',
+				'Private Search cannot open its encrypted index (secure key missing, wrong key, or a corrupt database).{0}',
 				detail,
 			);
 	}

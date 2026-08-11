@@ -53,7 +53,7 @@ suite('installMissingModels', () => {
 			{
 				consentCalls: 0,
 				onReadyCalls: 0,
-				summary: { installed: [], alreadyReady: [], errors: [] },
+				summary: { installed: [], alreadyReady: [], errors: [], warnings: [] },
 			},
 		);
 	});
@@ -101,11 +101,20 @@ suite('installMissingModels', () => {
 			evaluate: { eligible: true, reasons: [] },
 		});
 		const plan = await resolveInstallMissingModelsPlan(ml);
-		assert.deepStrictEqual(plan, {
-			includeOcr: true,
-			searchPackDiskMb: 350,
-			ocrDiskMb: 7000,
-		});
+		assert.deepStrictEqual(
+			{
+				includeOcr: plan.includeOcr,
+				searchPackDiskMb: plan.searchPackDiskMb,
+				ocrDiskMb: plan.ocrDiskMb,
+			},
+			{
+				includeOcr: true,
+				searchPackDiskMb: 350,
+				ocrDiskMb: 7000,
+			},
+		);
+		assert.strictEqual(typeof plan.includeWhisper, 'boolean');
+		assert.strictEqual(typeof plan.whisperDiskMb, 'number');
 	});
 
 	test('confirm installs OCR when eligible after Search pack', async () => {

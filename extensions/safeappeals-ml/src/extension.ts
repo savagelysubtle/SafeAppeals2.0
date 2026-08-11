@@ -108,7 +108,11 @@ export function activate(context: vscode.ExtensionContext): SafeAppealsMlApi {
 		return artifactStore.artifactDir('unlimited-ocr', spec.version);
 	};
 
-	const ensureDocParseReady = async (): Promise<{ readonly ready: boolean; readonly detail?: string }> => {
+	const ensureDocParseReady = async (): Promise<{
+		readonly ready: boolean;
+		readonly detail?: string;
+		readonly runtimeMissing?: boolean;
+	}> => {
 		const modelDir = await refreshDocParseModelDir();
 		if (!modelDir) {
 			return {
@@ -128,14 +132,19 @@ export function activate(context: vscode.ExtensionContext): SafeAppealsMlApi {
 			}
 		}
 
+		// Optional external/BYO sidecar on the configured loopback URL.
 		try {
 			await smokeDocParseHealth({ baseUrl: docParseBaseUrl() });
 			return { ready: true };
-		} catch (err) {
-			const message = err instanceof Error ? err.message : String(err);
+		} catch {
+			// No bundled binary and nothing listening — not a corrupt weight pack.
 			return {
 				ready: false,
-				detail: `DocParse BYO health failed: ${message}`,
+				runtimeMissing: true,
+				detail:
+					'sa-docparse runtime is missing (extensions/safeappeals-ml/bin/sa-docparse[.exe]). ' +
+					'Weights can still install; build the sidecar with ' +
+					'`cargo build -p docparse --release` and copy it into bin/, or set SAFEAPPEALS_DOCPARSE_PATH.',
 			};
 		}
 	};
@@ -341,6 +350,9 @@ function logConsentOutcome(outcome: ConsentInstallOutcome): void {
 	switch (outcome.kind) {
 		case 'installed':
 			outputChannel?.appendLine(`Installed ${outcome.modelId} @ ${outcome.version}`);
+			if (outcome.warning) {
+				outputChannel?.appendLine(`Install warning for ${outcome.modelId}: ${outcome.warning}`);
+			}
 			break;
 		case 'already-ready':
 			outputChannel?.appendLine(`Already ready: ${outcome.modelId} @ ${outcome.version}`);
