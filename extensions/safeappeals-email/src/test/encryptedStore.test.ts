@@ -199,7 +199,7 @@ suite('encryptedStore', () => {
 		});
 	});
 
-	test('marker stored + secret absent is secret-storage-not-durable without minting', async () => {
+	test('marker stored + secret absent + ciphertext present is key-lost-with-data without minting', async () => {
 		const secrets = new FakeSecretStorage();
 		const marker = new FakeDurabilityMarker(true);
 		const filePath = path.join(tempDir, 'sealed-not-durable.json');
@@ -218,9 +218,36 @@ suite('encryptedStore', () => {
 			dekKeysAfter: afterKeys,
 			markerStillStored: marker.wasStored(),
 		}, {
-			result: { kind: 'unavailable', reason: 'secret-storage-not-durable' },
+			// Probe proved SecretStorage works; refuse to mint over unreadable data.
+			result: { kind: 'unavailable', reason: 'key-lost-with-data' },
 			dekKeysAfter: [],
 			markerStillStored: true,
+		});
+	});
+
+	test('stale marker + secret absent + no ciphertext remints after app-identity key loss', async () => {
+		const secrets = new FakeSecretStorage();
+		const marker = new FakeDurabilityMarker(true);
+		const keyId = 'safeappeals-email.dek.stale-marker';
+
+		const result = await acquireDek({
+			secrets,
+			keyId,
+			existingDataPaths: [],
+			marker,
+		});
+		const afterKeys = [...secrets.snapshot().keys()].filter(k => !k.endsWith('.probe'));
+
+		assert.deepStrictEqual({
+			kind: result.kind,
+			dekKeysAfter: afterKeys,
+			markerStored: marker.wasStored(),
+			dekLength: result.kind === 'ok' ? result.dek.length : 0,
+		}, {
+			kind: 'ok',
+			dekKeysAfter: [keyId],
+			markerStored: true,
+			dekLength: 32,
 		});
 	});
 

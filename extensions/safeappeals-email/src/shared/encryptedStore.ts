@@ -182,9 +182,18 @@ export async function acquireDek(request: DekRequest): Promise<DekResult> {
 			log?.(`Ignoring invalid DEK for ${keyId}`);
 		}
 
+		// Marker says a DEK was stored, but SecretStorage no longer has it.
+		// The probe above already proved SecretStorage is usable *now*, so this is
+		// almost always a stale marker after OSCrypt/app-identity change (e.g.
+		// code-oss-dev → safe-appeals-dev), not a permanently non-durable store.
 		if (marker?.wasStored()) {
-			log?.(`DEK previously stored but missing from SecretStorage for ${keyId}`);
-			return { kind: 'unavailable', reason: 'secret-storage-not-durable' };
+			if (await anyPathExists(existingDataPaths)) {
+				// Ciphertext remains; refuse to mint a new key over unreadable data.
+				log?.(`DEK missing with encrypted data present for ${keyId} (stale marker after key loss)`);
+				return { kind: 'unavailable', reason: 'key-lost-with-data' };
+			}
+			log?.(`Clearing stale DEK durability marker for ${keyId} (SecretStorage usable, no ciphertext)`);
+			await marker.setStored(false);
 		}
 
 		if (await anyPathExists(existingDataPaths)) {
