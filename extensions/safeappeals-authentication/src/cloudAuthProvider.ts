@@ -401,30 +401,30 @@ export class CloudAuthProvider implements vscode.AuthenticationProvider, vscode.
 	}
 
 	/**
-	 * Lets the user choose Google or Microsoft for Cloud identity sign-in.
-	 * Returns undefined when the quick pick is dismissed.
+	 * Lets the user choose Google or Outlook for Cloud identity sign-in.
+	 * Uses a modal button dialog (not the command palette quick pick) so Accounts,
+	 * Models, and bare createSession match the chat setup Google/Outlook UI.
+	 * Returns undefined when dismissed.
 	 */
 	private async pickIdentityProvider(): Promise<CloudIdentityProvider | undefined> {
-		const picked = await vscode.window.showQuickPick(
-			[
-				{
-					label: vscode.l10n.t('Continue with Google'),
-					description: vscode.l10n.t('Gmail and Google accounts'),
-					provider: 'google' as const,
-				},
-				{
-					label: vscode.l10n.t('Continue with Outlook'),
-					description: vscode.l10n.t('Outlook, Hotmail, and Microsoft work or school accounts'),
-					provider: 'microsoft' as const,
-				},
-			],
+		const google = vscode.l10n.t('Continue with Google');
+		const outlook = vscode.l10n.t('Continue with Outlook');
+		const picked = await vscode.window.showInformationMessage(
+			vscode.l10n.t('Sign in to SafeAppeals Cloud'),
 			{
-				title: vscode.l10n.t('Sign in to SafeAppeals Cloud'),
-				placeHolder: vscode.l10n.t('Choose an account provider'),
-				ignoreFocusOut: true,
+				modal: true,
+				detail: vscode.l10n.t('Choose Google or Outlook. Connecting a mailbox is separate under Email settings.'),
 			},
+			google,
+			outlook,
 		);
-		return picked?.provider;
+		if (picked === google) {
+			return 'google';
+		}
+		if (picked === outlook) {
+			return 'microsoft';
+		}
+		return undefined;
 	}
 
 	/**

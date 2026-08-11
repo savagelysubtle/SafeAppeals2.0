@@ -1359,20 +1359,22 @@ export class ModelPickerWidget extends Disposable {
 	}
 
 	/**
-	 * Starts sign-in. SafeAppeals Cloud path uses createSession (never CHAT_SETUP /
-	 * chatSetupRunner). Upstream Copilot path keeps the setup command.
+	 * Starts sign-in. SafeAppeals Cloud uses the same Google/Outlook dialog as
+	 * chat setup (not a bare createSession quick pick). Upstream keeps CHAT_SETUP.
 	 */
 	private async _requestSetup(): Promise<void> {
 		// SafeAppeals: never open the GitHub Copilot setup modal for these surfaces
 		if (this.usesSafeAppealsCloudSetup()) {
 			try {
-				await this._authenticationService.createSession(SAFEAPPEALS_CLOUD_VENDOR_ID, [], { activateImmediate: true });
+				await this._commandService.executeCommand(CHAT_SETUP_ACTION_ID, undefined, {
+					forceSignInDialog: true,
+					disableChatViewReveal: true,
+				});
 			} catch (error) {
 				// SafeAppeals: cancelled sign-in must not surface an error toast (mirror onboarding)
 				if (isCancellationError(error)) {
 					return;
 				}
-				// Extension already surfaces a specific, actionable error toast — leave picker as-is
 				return;
 			}
 			// SafeAppeals: force session refresh + LM resolve so setup clears immediately after sign-in
