@@ -14,8 +14,14 @@
 /** Identity provider behind a service connection. */
 export type ProviderKind = 'google' | 'microsoft';
 
-/** What a connection is allowed to do. Mirrors void-cloud's `Capability`. */
-export type ConnectionCapability = 'mail' | 'calendar';
+/**
+ * What a connection is allowed to do. Mirrors void-cloud's `Capability`.
+ *
+ * - `mail` — IMAP/SMTP
+ * - `calendar` — calendar events
+ * - `files` — Google Drive or OneDrive / SharePoint / Teams libraries
+ */
+export type ConnectionCapability = 'mail' | 'calendar' | 'files';
 
 /** Server-side health of a grant. `needs_reconsent` means reconnect, not retry. */
 export type ConnectionStatus = 'active' | 'needs_reconsent' | 'revoked';
@@ -113,7 +119,7 @@ export function isProviderKind(value: unknown): value is ProviderKind {
  * True for a supported capability id.
  */
 export function isConnectionCapability(value: unknown): value is ConnectionCapability {
-	return value === 'mail' || value === 'calendar';
+	return value === 'mail' || value === 'calendar' || value === 'files';
 }
 
 /**
@@ -126,20 +132,37 @@ export function normalizeCapabilities(
 	return [...new Set((capabilities ?? []).filter(isConnectionCapability))];
 }
 
+/** Microsoft capabilities that share the Graph resource audience. */
+const MICROSOFT_GRAPH_CAPABILITIES: ReadonlySet<ConnectionCapability> = new Set(['calendar', 'files']);
+
 /**
  * Whether one authorize request can carry every requested capability.
  *
  * Entra issues tokens for a single resource audience, so Microsoft mail
- * (Exchange Online) and calendar (Graph) need one connection each.
+ * (Exchange Online) cannot share a grant with calendar/files (Graph).
+ * Calendar + files may be requested together on Microsoft. Google allows any
+ * non-empty mix of mail/calendar/files in one grant.
  */
 export function providerSupportsCapabilityBundle(
 	provider: ProviderKind,
 	capabilities: readonly ConnectionCapability[],
 ): boolean {
-	if (provider !== 'microsoft') {
-		return capabilities.length > 0;
+	if (capabilities.length === 0) {
+		return false;
 	}
-	return capabilities.length === 1;
+	if (provider === 'google') {
+		return true;
+	}
+	// microsoft
+	const hasMail = capabilities.includes('mail');
+	const hasGraph = capabilities.some(cap => MICROSOFT_GRAPH_CAPABILITIES.has(cap));
+	if (hasMail && hasGraph) {
+		return false;
+	}
+	if (hasMail) {
+		return capabilities.length === 1;
+	}
+	return capabilities.every(cap => MICROSOFT_GRAPH_CAPABILITIES.has(cap));
 }
 
 /**

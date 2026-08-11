@@ -11,7 +11,9 @@ import type { ConnectionCapability, ProviderKind } from './connectionsApi';
  * Scope convention for `getSession` consumers:
  * - `['mail']` — Gmail / Exchange IMAP-SMTP XOAUTH2
  * - `['calendar']` — Google Calendar / Microsoft Graph calendars
- * - `['mail', 'calendar']` — both capabilities
+ * - `['files']` — Google Drive or OneDrive / SharePoint / Teams libraries
+ * - `['mail', 'calendar']` — both (Google only in one grant; Microsoft needs two)
+ * - `['calendar', 'files']` — Microsoft Graph bundle
  * - `[]` (empty) — treated as mail for email-dashboard consumers
  *
  * Full provider scope URIs (e.g. `https://mail.google.com/`) are also recognized.
@@ -36,8 +38,22 @@ const CALENDAR_SCOPE_MARKERS = new Set([
 	'https://graph.microsoft.com/calendars.readwrite',
 ]);
 
+const FILES_SCOPE_MARKERS = new Set([
+	'files',
+	'https://www.googleapis.com/auth/drive',
+	'https://www.googleapis.com/auth/drive.file',
+	'https://www.googleapis.com/auth/drive.readonly',
+	'https://graph.microsoft.com/files.readwrite.all',
+	'https://graph.microsoft.com/files.read.all',
+	'https://graph.microsoft.com/files.readwrite',
+	'https://graph.microsoft.com/sites.readwrite.all',
+	'https://graph.microsoft.com/sites.read.all',
+	'https://graph.microsoft.com/team.readbasic.all',
+	'https://graph.microsoft.com/channel.readbasic.all',
+]);
+
 /**
- * Infers mail/calendar capabilities from VS Code authentication scopes.
+ * Infers mail/calendar/files capabilities from VS Code authentication scopes.
  * Empty scopes default to mail (email consumers).
  */
 export function inferProviderCapabilities(
@@ -60,6 +76,18 @@ export function inferProviderCapabilities(
 		}
 		if (CALENDAR_SCOPE_MARKERS.has(normalized) || normalized.includes('calendar')) {
 			capabilities.add('calendar');
+		}
+		if (
+			FILES_SCOPE_MARKERS.has(normalized)
+			|| normalized.includes('/auth/drive')
+			|| normalized.includes('files.read')
+			|| normalized.includes('files.readwrite')
+			|| normalized.includes('sites.read')
+			|| normalized.includes('sites.readwrite')
+			|| normalized.includes('team.readbasic')
+			|| normalized.includes('channel.readbasic')
+		) {
+			capabilities.add('files');
 		}
 	}
 	// Unknown scopes alone: do not invent capabilities (caller should fail createSession).
@@ -89,6 +117,9 @@ export function capabilitiesFromGrantedScope(
 		if (granted.includes('/auth/calendar')) {
 			capabilities.add('calendar');
 		}
+		if (granted.includes('/auth/drive') || granted.includes('googleapis.com/auth/drive')) {
+			capabilities.add('files');
+		}
 		return capabilities;
 	}
 	if (granted.includes('imap.accessasuser.all') || granted.includes('smtp.send')) {
@@ -96,6 +127,16 @@ export function capabilitiesFromGrantedScope(
 	}
 	if (granted.includes('calendars.')) {
 		capabilities.add('calendar');
+	}
+	if (
+		granted.includes('files.read')
+		|| granted.includes('files.readwrite')
+		|| granted.includes('sites.read')
+		|| granted.includes('sites.readwrite')
+		|| granted.includes('team.readbasic')
+		|| granted.includes('channel.readbasic')
+	) {
+		capabilities.add('files');
 	}
 	return capabilities;
 }
@@ -111,6 +152,9 @@ export function scopesForCapabilities(capabilities: Iterable<ProviderCapability>
 	}
 	if (set.has('calendar')) {
 		scopes.push('calendar');
+	}
+	if (set.has('files')) {
+		scopes.push('files');
 	}
 	return scopes;
 }

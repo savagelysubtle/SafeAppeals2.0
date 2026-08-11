@@ -57,7 +57,7 @@ export function registerConnectionCommands(facade: SafeAppealsConnectionsApi): v
 			const parsed = parseConnectOptions(options);
 			if (!parsed) {
 				throw new Error(
-					vscode.l10n.t(`Connecting an account needs a provider and at least one of 'mail' or 'calendar'.`),
+					vscode.l10n.t(`Connecting an account needs a provider and at least one of 'mail', 'calendar', or 'files'.`),
 				);
 			}
 			return facade.connect(parsed);

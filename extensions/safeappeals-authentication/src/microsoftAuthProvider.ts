@@ -25,7 +25,7 @@ export type MicrosoftAuthProviderDeps = Omit<
  * Microsoft connection-minted AuthenticationProvider backed by service connections.
  *
  * Entra issues tokens for a single resource audience, so mail (Exchange Online)
- * and calendar (Graph) are separate connections: asking for both capabilities at
+ * and calendar/files (Graph) are separate connections: asking for mail with Graph capabilities at
  * once has no matching connection and starting one is rejected up front.
  */
 export class MicrosoftAuthProvider extends ConnectionAuthProvider {
