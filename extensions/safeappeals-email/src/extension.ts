@@ -763,19 +763,19 @@ function registerCloudSignOutCascade(
 async function promptAddAccount(
 	log: (msg: string) => void,
 ): Promise<EmailAccountConfig | undefined> {
-	const googleLabel = vscode.l10n.t('Sign in with Safe Appeals (Google)');
-	const microsoftLabel = vscode.l10n.t('Sign in with Safe Appeals (Microsoft)');
+	const googleLabel = vscode.l10n.t('Sign in with Google');
+	const microsoftLabel = vscode.l10n.t('Sign in with Outlook');
 	const passwordLabel = vscode.l10n.t('Advanced: App Password / IMAP');
 	const method = await vscode.window.showQuickPick(
 		[
 			{
 				label: googleLabel,
-				description: vscode.l10n.t('Connect Gmail with Safe Appeals'),
+				description: vscode.l10n.t('Connect Gmail with Safe Appeals Cloud'),
 				id: 'google' as AddAccountMethod,
 			},
 			{
 				label: microsoftLabel,
-				description: vscode.l10n.t('Connect Outlook mail with Safe Appeals'),
+				description: vscode.l10n.t('Connect Outlook / Microsoft 365 mail'),
 				id: 'microsoft' as AddAccountMethod,
 			},
 			{

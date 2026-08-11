@@ -53,6 +53,10 @@ export enum ChatSetupStrategy {
 	SetupWithAppleProvider = 5,
 	/** SafeAppeals: sign in via createSession(safeappeals-cloud), not Copilot providers */
 	SetupWithSafeAppealsCloud = 6,
+	/** SafeAppeals Cloud identity via Google (skips provider picker). */
+	SetupWithSafeAppealsCloudGoogle = 7,
+	/** SafeAppeals Cloud identity via Microsoft/Outlook (skips provider picker). */
+	SetupWithSafeAppealsCloudOutlook = 8,
 }
 
 export type ChatSetupResultValue = boolean /* success */ | undefined /* canceled */;

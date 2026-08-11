@@ -46,6 +46,13 @@ const vscodeMock = {
 	window: {
 		showErrorMessage: async () => undefined,
 		showInformationMessage: async () => undefined,
+		showWarningMessage: async () => undefined,
+		showInputBox: async () => undefined,
+		/** Default to Google so createSession tests do not hang on the identity picker. */
+		showQuickPick: async (items) => {
+			const list = Array.isArray(items) ? items : [];
+			return list[0] ?? undefined;
+		},
 		createOutputChannel: () => ({ appendLine() { }, dispose() { } }),
 	},
 	env: {

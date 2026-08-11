@@ -5,7 +5,8 @@
 
 import * as vscode from 'vscode';
 import {
-	buildGoogleAuthorizeUrl,
+	buildCloudIdentityAuthorizeUrl,
+	type CloudIdentityProvider,
 	CloudApiClient,
 	CloudSessionEnvelope,
 	CreditBalance,
@@ -227,6 +228,11 @@ export class CloudAuthProvider implements vscode.AuthenticationProvider, vscode.
 		}
 		await this.purgeLegacyPlaintextOAuthState();
 
+		const identityProvider = identityProviderFromScopes(_scopes) ?? await this.pickIdentityProvider();
+		if (!identityProvider) {
+			throw new vscode.CancellationError();
+		}
+
 		const pkce = generatePkceChallenge();
 		await this.persistPending({
 			codeVerifier: pkce.codeVerifier,
@@ -234,13 +240,14 @@ export class CloudAuthProvider implements vscode.AuthenticationProvider, vscode.
 			startedAt: Date.now(),
 		});
 		const flow = await this.resolveSignInFlow(pkce.state);
-		const authUrl = buildGoogleAuthorizeUrl({
+		const authUrl = buildCloudIdentityAuthorizeUrl({
+			provider: identityProvider,
 			codeChallenge: pkce.codeChallenge,
 			state: pkce.state,
 			redirectUri: flow.redirectUri,
 		});
 
-		this.output.appendLine(`[auth] opening SafeAppeals Cloud sign-in (flow ${flow.kind})`);
+		this.output.appendLine(`[auth] opening SafeAppeals Cloud sign-in via ${identityProvider} (flow ${flow.kind})`);
 		// openExternal requires a real Uri. Strict parsing preserves the already
 		// encoded redirect_uri, state, and PKCE query parameters.
 		const opened = await this.openExternal(vscode.Uri.parse(authUrl));
@@ -387,6 +394,33 @@ export class CloudAuthProvider implements vscode.AuthenticationProvider, vscode.
 			d.dispose();
 		}
 		this.output.appendLine('[auth] dispose: preserving pending sign-in in SecretStorage for reload recovery');
+	}
+
+	/**
+	 * Lets the user choose Google or Microsoft for Cloud identity sign-in.
+	 * Returns undefined when the quick pick is dismissed.
+	 */
+	private async pickIdentityProvider(): Promise<CloudIdentityProvider | undefined> {
+		const picked = await vscode.window.showQuickPick(
+			[
+				{
+					label: vscode.l10n.t('Continue with Google'),
+					description: vscode.l10n.t('Gmail and Google accounts'),
+					provider: 'google' as const,
+				},
+				{
+					label: vscode.l10n.t('Continue with Outlook'),
+					description: vscode.l10n.t('Outlook, Hotmail, and Microsoft work or school accounts'),
+					provider: 'microsoft' as const,
+				},
+			],
+			{
+				title: vscode.l10n.t('Sign in to SafeAppeals Cloud'),
+				placeHolder: vscode.l10n.t('Choose an account provider'),
+				ignoreFocusOut: true,
+			},
+		);
+		return picked?.provider;
 	}
 
 	/**
@@ -623,7 +657,7 @@ export class CloudAuthProvider implements vscode.AuthenticationProvider, vscode.
 	private async promptAndCompletePastedCode(): Promise<vscode.AuthenticationSession> {
 		const raw = await vscode.window.showInputBox({
 			title: vscode.l10n.t('Paste Auth Code'),
-			prompt: vscode.l10n.t('Finish signing in with Google, then paste the code your browser shows here.'),
+			prompt: vscode.l10n.t('Finish signing in, then paste the code your browser shows here.'),
 			ignoreFocusOut: true,
 		});
 		if (!raw) {
@@ -1025,6 +1059,40 @@ export function parsePastedAuthInput(raw: string): {
 	}
 
 	return { code: trimmed, state: undefined, fromUrl: false };
+}
+
+/**
+ * Optional identity provider from createSession scopes so UI can offer dedicated
+ * Google / Outlook buttons without a second picker.
+ *
+ * Recognized: `provider:google`, `provider:microsoft`, `provider:outlook`, `provider:azure`.
+ */
+export function identityProviderFromScopes(
+	scopes: readonly string[] | undefined,
+): CloudIdentityProvider | undefined {
+	if (!scopes?.length) {
+		return undefined;
+	}
+	for (const scope of scopes) {
+		const normalized = scope.trim().toLowerCase();
+		if (
+			normalized === 'provider:google'
+			|| normalized === 'identity:google'
+		) {
+			return 'google';
+		}
+		if (
+			normalized === 'provider:microsoft'
+			|| normalized === 'provider:outlook'
+			|| normalized === 'provider:azure'
+			|| normalized === 'identity:microsoft'
+			|| normalized === 'identity:outlook'
+			|| normalized === 'identity:azure'
+		) {
+			return 'microsoft';
+		}
+	}
+	return undefined;
 }
 
 /**

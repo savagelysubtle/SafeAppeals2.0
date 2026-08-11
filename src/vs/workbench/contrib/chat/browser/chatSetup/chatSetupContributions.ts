@@ -455,16 +455,9 @@ export class ChatSetupContribution extends Disposable implements IWorkbenchContr
 			}
 
 			override async run(accessor: ServicesAccessor): Promise<void> {
-				const authenticationService = accessor.get(IAuthenticationService);
-				try {
-					await authenticationService.createSession(SAFEAPPEALS_CLOUD_VENDOR_ID, [], { activateImmediate: true });
-				} catch (error) {
-					// SafeAppeals: cancelled sign-in must not surface an error toast (mirror onboarding)
-					if (isCancellationError(error)) {
-						return;
-					}
-					// Extension already surfaces a specific, actionable error toast.
-				}
+				const commandService = accessor.get(ICommandService);
+				// Open the Google / Outlook sign-in dialog (not a bare createSession).
+				return commandService.executeCommand(CHAT_SETUP_ACTION_ID, undefined, { forceSignInDialog: true });
 			}
 		}
 

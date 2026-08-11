@@ -7,19 +7,21 @@ import 'mocha';
 import * as assert from 'assert';
 import type { OutputChannel } from 'vscode';
 import {
+	buildCloudIdentityAuthorizeUrl,
 	buildGoogleAuthorizeUrl,
+	buildMicrosoftAuthorizeUrl,
 	CloudApiClient,
 	DEFAULT_API_URL,
 } from '../api';
 
-suite('buildGoogleAuthorizeUrl', () => {
+suite('buildCloudIdentityAuthorizeUrl', () => {
 	const baseParams = {
 		codeChallenge: 'challenge',
 		state: 'state-1',
 		redirectUri: 'http://127.0.0.1:0/callback',
 	};
 
-	test('sign-in carries PKCE only — no capability scopes or login hint', () => {
+	test('google sign-in carries PKCE only — no capability scopes or login hint', () => {
 		const url = new URL(buildGoogleAuthorizeUrl(baseParams));
 		assert.deepStrictEqual(
 			{
@@ -35,6 +37,29 @@ suite('buildGoogleAuthorizeUrl', () => {
 					['state', 'state-1'],
 				],
 			},
+		);
+	});
+
+	test('microsoft sign-in uses /auth/microsoft with the same PKCE params', () => {
+		const url = new URL(buildMicrosoftAuthorizeUrl(baseParams));
+		assert.deepStrictEqual(
+			{
+				originPath: `${url.origin}${url.pathname}`,
+				params: [...url.searchParams.entries()].sort(),
+			},
+			{
+				originPath: `${DEFAULT_API_URL}/auth/microsoft`,
+				params: [
+					['code_challenge', 'challenge'],
+					['code_challenge_method', 'S256'],
+					['redirect_uri', 'http://127.0.0.1:0/callback'],
+					['state', 'state-1'],
+				],
+			},
+		);
+		assert.strictEqual(
+			buildCloudIdentityAuthorizeUrl({ ...baseParams, provider: 'microsoft' }).includes('/auth/microsoft'),
+			true,
 		);
 	});
 });

@@ -13,6 +13,7 @@ import {
 	type SafeAppealsAuthenticationApi,
 } from './connectionsFacade';
 import { GoogleAuthProvider } from './googleAuthProvider';
+import { MicrosoftAuthProvider } from './microsoftAuthProvider';
 import { CloudChatProvider } from './llm/cloudChatProvider';
 import { isAllowedExternalHttpsUrl } from './llm/externalUrl';
 
@@ -53,6 +54,11 @@ export async function activate(context: vscode.ExtensionContext): Promise<SafeAp
 	// Clear in-memory tokens when Cloud signs out; connections remain server-side.
 	context.subscriptions.push(
 		new GoogleAuthProvider({
+			connections,
+			onDidChangeCloudSessions: provider.onDidChangeSessions,
+			output,
+		}),
+		new MicrosoftAuthProvider({
 			connections,
 			onDidChangeCloudSessions: provider.onDidChangeSessions,
 			output,

@@ -304,26 +304,54 @@ export function getWebCallbackOrigins(): readonly string[] {
 		.filter(origin => origin.length > 0);
 }
 
+/** Cloud identity social provider (maps to `/auth/google` or `/auth/microsoft`). */
+export type CloudIdentityProvider = 'google' | 'microsoft';
+
 /**
- * Builds the Google authorize URL with required PKCE + state query params.
+ * Builds the Cloud identity authorize URL with required PKCE + state query params.
  *
  * Identity only: Cloud sign-in never requests mail/calendar scopes. Capability
  * grants go through service connections (`/connections/*`), which keep the
  * provider grant separate from the Cloud identity.
  */
-export function buildGoogleAuthorizeUrl(params: {
+export function buildCloudIdentityAuthorizeUrl(params: {
+	readonly provider: CloudIdentityProvider;
 	readonly codeChallenge: string;
 	readonly state: string;
 	readonly redirectUri: string;
 }): string {
 	const apiUrl = getApiUrl();
+	const path = params.provider === 'microsoft' ? '/auth/microsoft' : '/auth/google';
 	const query = new URLSearchParams({
 		redirect_uri: params.redirectUri,
 		code_challenge: params.codeChallenge,
 		code_challenge_method: 'S256',
 		state: params.state,
 	});
-	return `${apiUrl}/auth/google?${query.toString()}`;
+	return `${apiUrl}${path}?${query.toString()}`;
+}
+
+/**
+ * Builds the Google authorize URL with required PKCE + state query params.
+ * @deprecated Prefer {@link buildCloudIdentityAuthorizeUrl} with `provider: 'google'`.
+ */
+export function buildGoogleAuthorizeUrl(params: {
+	readonly codeChallenge: string;
+	readonly state: string;
+	readonly redirectUri: string;
+}): string {
+	return buildCloudIdentityAuthorizeUrl({ ...params, provider: 'google' });
+}
+
+/**
+ * Builds the Microsoft authorize URL with required PKCE + state query params.
+ */
+export function buildMicrosoftAuthorizeUrl(params: {
+	readonly codeChallenge: string;
+	readonly state: string;
+	readonly redirectUri: string;
+}): string {
+	return buildCloudIdentityAuthorizeUrl({ ...params, provider: 'microsoft' });
 }
 
 /**

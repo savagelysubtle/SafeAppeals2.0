@@ -53,14 +53,18 @@ export interface ISafeAppealsCloudSetupOperations {
 	readonly enableAuthExtension: () => Promise<void>;
 	readonly activateAuthProvider: () => Promise<void>;
 	readonly getSessionCount: () => Promise<number>;
-	readonly createSession: () => Promise<void>;
+	/** Optional identity scopes, e.g. `provider:google` / `provider:microsoft`. */
+	readonly createSession: (scopes?: readonly string[]) => Promise<void>;
 }
 
-export async function runSafeAppealsCloudSetup(operations: ISafeAppealsCloudSetupOperations): Promise<void> {
+export async function runSafeAppealsCloudSetup(
+	operations: ISafeAppealsCloudSetupOperations,
+	identityScopes: readonly string[] = [],
+): Promise<void> {
 	await operations.enableAuthExtension();
 	await operations.activateAuthProvider();
 	if (await operations.getSessionCount() === 0) {
-		await operations.createSession();
+		await operations.createSession(identityScopes);
 	}
 }
 
@@ -194,13 +198,27 @@ export class ChatSetup {
 					success = await this.controller.value.setupWithProvider({ useEnterpriseProvider: false, useSocialProvider: 'google', additionalScopes: options?.additionalScopes, forceAnonymous: options?.forceAnonymous });
 					break;
 				case ChatSetupStrategy.SetupWithSafeAppealsCloud:
+				case ChatSetupStrategy.SetupWithSafeAppealsCloudGoogle:
+				case ChatSetupStrategy.SetupWithSafeAppealsCloudOutlook:
 					try {
+						const identityScopes =
+							setupStrategy === ChatSetupStrategy.SetupWithSafeAppealsCloudGoogle
+								? ['provider:google']
+								: setupStrategy === ChatSetupStrategy.SetupWithSafeAppealsCloudOutlook
+									? ['provider:microsoft']
+									: [];
 						await runSafeAppealsCloudSetup({
 							enableAuthExtension: async () => { await maybeEnableAuthExtension(this.extensionsWorkbenchService, this.logService, true); },
 							activateAuthProvider: async () => { await this.extensionService.activateByEvent('onAuthenticationRequest:safeappeals-cloud', ActivationKind.Immediate); },
 							getSessionCount: async () => (await this.authenticationService.getSessions(SAFEAPPEALS_CLOUD_VENDOR_ID)).length,
-							createSession: async () => { await this.authenticationService.createSession(SAFEAPPEALS_CLOUD_VENDOR_ID, [], { activateImmediate: true }); },
-						});
+							createSession: async scopes => {
+								await this.authenticationService.createSession(
+									SAFEAPPEALS_CLOUD_VENDOR_ID,
+									scopes ?? [],
+									{ activateImmediate: true },
+								);
+							},
+						}, identityScopes);
 						success = true;
 					} catch (error) {
 						if (isCancellationError(error)) {
@@ -310,7 +328,11 @@ export class ChatSetup {
 		// SafeAppeals always owns sign-in. Do not fall back to the upstream
 		// provider link while the Cloud extension is still registering.
 		if (!options?.forceAnonymous && (this.context.state.entitlement === ChatEntitlement.Unknown || options?.forceSignInDialog)) {
-			buttons = [[localize('signInSafeAppealsCloudButton', "Sign in to SafeAppeals Cloud..."), ChatSetupStrategy.SetupWithSafeAppealsCloud, styleButton('continue-button', 'safeappeals-cloud')]];
+			// Dedicated provider buttons — scopes skip the CloudAuthProvider quick pick.
+			buttons = [
+				[localize('continueWithGoogle', "Continue with Google"), ChatSetupStrategy.SetupWithSafeAppealsCloudGoogle, styleButton('continue-button', 'google')],
+				[localize('continueWithOutlook', "Continue with Outlook"), ChatSetupStrategy.SetupWithSafeAppealsCloudOutlook, styleButton('continue-button', 'outlook')],
+			];
 		} else {
 			buttons = [[localize('setupAIButton', "Use AI Features"), ChatSetupStrategy.DefaultSetup, undefined]];
 		}
@@ -348,7 +370,7 @@ export class ChatSetup {
 
 		let footer: string;
 		if (this.usesSafeAppealsCloudSetup()) {
-			footer = localize('safeAppealsCloudFooter', "Continue to sign in to SafeAppeals Cloud and use Chat.");
+			footer = localize('safeAppealsCloudFooter', "Sign in with Google or Outlook to use SafeAppeals Cloud Chat. Mailbox connect is separate under Email settings.");
 		} else {
 			footer = localize({ key: 'safeAppealsFooter', comment: ['{Locked="]({0})"}', '{Locked="]({1})"}'] }, "By continuing with SafeAppeals, you agree to [Terms]({0}) and [Privacy Statement]({1}).", defaultChat.termsStatementUrl, defaultChat.privacyStatementUrl);
 		}

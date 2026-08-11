@@ -29,6 +29,7 @@
 		"onUri",
 		"onAuthenticationRequest:safeappeals-cloud",
 		"onAuthenticationRequest:safeappeals-google",
+		"onAuthenticationRequest:safeappeals-microsoft",
 		"onCustomAgentProvider"
 	],
 	"capabilities": {
@@ -46,6 +47,10 @@
 			{
 				"id": "safeappeals-google",
 				"label": "%auth.safeappealsGoogle.label%"
+			},
+			{
+				"id": "safeappeals-microsoft",
+				"label": "%auth.safeappealsMicrosoft.label%"
 			}
 		],
 		"languageModelChatProviders": [

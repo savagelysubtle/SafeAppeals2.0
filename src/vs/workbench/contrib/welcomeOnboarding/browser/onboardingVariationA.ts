@@ -570,7 +570,7 @@ type OnboardingActionEvent = {
  * tab. When dismissed, the welcome tab is revealed underneath.
  *
  * Steps:
- * 1. Sign In — Safe Appeals Cloud (Google) identity, or continue without an account
+ * 1. Sign In — Safe Appeals Cloud (Google or Outlook) identity, or continue without an account
  * 2. Profile — practice scoping and role
  * 3. Meet Your AI Assistant — data-flow disclosure, hallucination inoculation, approval mode
  * 4. Credits & First Steps — honest zero-credit handoff
@@ -1194,14 +1194,25 @@ export class OnboardingVariationA extends Disposable implements IOnboardingServi
 	}
 
 	private _renderDefaultSignInActions(actions: HTMLElement): void {
-		const safeAppealsCloudLabel = localize('onboarding.signIn.safeAppealsCloud', "Sign in to SafeAppeals Cloud...");
-		const safeAppealsCloudBtn = this._registerStepFocusable(this._createSignInButton(actions, safeAppealsCloudLabel, {
+		const googleLabel = localize('onboarding.signIn.google', "Continue with Google");
+		const outlookLabel = localize('onboarding.signIn.outlook', "Continue with Outlook");
+		const googleBtn = this._registerStepFocusable(this._createSignInButton(actions, googleLabel, {
 			emphasized: true,
-			ariaLabel: safeAppealsCloudLabel,
+			ariaLabel: googleLabel,
+			providerMark: 'google',
 		}));
-		this.stepDisposables.add(addDisposableListener(safeAppealsCloudBtn, EventType.CLICK, () => {
-			this._logAction('signIn', undefined, SAFEAPPEALS_CLOUD_AUTH_PROVIDER_ID);
-			void this._handleSignIn();
+		this.stepDisposables.add(addDisposableListener(googleBtn, EventType.CLICK, () => {
+			this._logAction('signIn', undefined, 'google');
+			void this._handleSignIn('google');
+		}));
+		const outlookBtn = this._registerStepFocusable(this._createSignInButton(actions, outlookLabel, {
+			emphasized: false,
+			ariaLabel: outlookLabel,
+			providerMark: 'outlook',
+		}));
+		this.stepDisposables.add(addDisposableListener(outlookBtn, EventType.CLICK, () => {
+			this._logAction('signIn', undefined, 'microsoft');
+			void this._handleSignIn('microsoft');
 		}));
 	}
 
@@ -1219,9 +1230,13 @@ export class OnboardingVariationA extends Disposable implements IOnboardingServi
 	}
 
 	/**
-	 * Creates the primary SafeAppeals Cloud sign-in button.
+	 * Creates a SafeAppeals Cloud sign-in button (Google or Outlook).
 	 */
-	private _createSignInButton(parent: HTMLElement, label: string, options?: { emphasized?: boolean; ariaLabel?: string }): HTMLButtonElement {
+	private _createSignInButton(parent: HTMLElement, label: string, options?: {
+		emphasized?: boolean;
+		ariaLabel?: string;
+		providerMark?: 'google' | 'outlook' | 'safeappeals-cloud';
+	}): HTMLButtonElement {
 		const btn = append(parent, $<HTMLButtonElement>('button.onboarding-a-signin-btn'));
 		btn.type = 'button';
 		btn.title = options?.ariaLabel ?? label;
@@ -1230,7 +1245,8 @@ export class OnboardingVariationA extends Disposable implements IOnboardingServi
 			btn.classList.add('primary');
 		}
 
-		const mark = append(btn, $('span.onboarding-a-provider-mark.safeappeals-cloud'));
+		const markClass = options?.providerMark ?? 'safeappeals-cloud';
+		const mark = append(btn, $(`span.onboarding-a-provider-mark.${markClass}`));
 		mark.setAttribute('aria-hidden', 'true');
 
 		const labelEl = append(btn, $('span.onboarding-a-signin-btn-label'));
@@ -1239,8 +1255,11 @@ export class OnboardingVariationA extends Disposable implements IOnboardingServi
 		return btn;
 	}
 
-	/** Signs in via Safe Appeals Cloud (`safeappeals-cloud`). */
-	private async _handleSignIn(): Promise<void> {
+	/**
+	 * Signs in via Safe Appeals Cloud (`safeappeals-cloud`).
+	 * @param identityProvider When set, skips the provider quick pick (Google vs Outlook).
+	 */
+	private async _handleSignIn(identityProvider?: 'google' | 'microsoft'): Promise<void> {
 		if (this._signInInProgress) {
 			return;
 		}
@@ -1290,9 +1309,14 @@ export class OnboardingVariationA extends Disposable implements IOnboardingServi
 				return;
 			}
 
-			const session = await this.authenticationService.createSession(SAFEAPPEALS_CLOUD_AUTH_PROVIDER_ID, [], {
-				activateImmediate: true,
-			});
+			const identityScopes = identityProvider
+				? [`provider:${identityProvider}`]
+				: [];
+			const session = await this.authenticationService.createSession(
+				SAFEAPPEALS_CLOUD_AUTH_PROVIDER_ID,
+				identityScopes,
+				{ activateImmediate: true },
+			);
 
 			if (!isSameShowing()) {
 				return;

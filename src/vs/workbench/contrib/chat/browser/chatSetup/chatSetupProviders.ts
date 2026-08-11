@@ -1104,8 +1104,9 @@ export class SetupAgent extends Disposable implements IChatAgentImplementation {
 		if (this.usesSafeAppealsCloudSetup(languageModelsService)
 			&& !this.context.state.untrusted
 			&& this.workspaceTrustManagementService.isWorkspaceTrusted()) {
+			// Show Google / Outlook buttons (do not skip the dialog with a bare strategy).
 			const setupResult = await ChatSetup.getInstance(this.instantiationService, this.context, this.controller).run({
-				setupStrategy: ChatSetupStrategy.SetupWithSafeAppealsCloud,
+				forceSignInDialog: true,
 				disableChatViewReveal: true,
 			});
 			if (!setupResult.success) {
