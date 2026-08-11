@@ -63,6 +63,25 @@ suite('buildCloudIdentityAuthorizeUrl', () => {
 		);
 	});
 
+	test('slack sign-in uses /auth/slack with the same PKCE params', () => {
+		const url = new URL(buildCloudIdentityAuthorizeUrl({ ...baseParams, provider: 'slack' }));
+		assert.deepStrictEqual(
+			{
+				originPath: `${url.origin}${url.pathname}`,
+				params: [...url.searchParams.entries()].sort(),
+			},
+			{
+				originPath: `${DEFAULT_API_URL}/auth/slack`,
+				params: [
+					['code_challenge', 'challenge'],
+					['code_challenge_method', 'S256'],
+					['redirect_uri', 'http://127.0.0.1:0/callback'],
+					['state', 'state-1'],
+				],
+			},
+		);
+	});
+
 	test('web asExternalUri redirect_uri stays a single query value (no split on &)', () => {
 		const webCallback =
 			'http://localhost:8080/stable-dev/callback?vscode-reqid=1&vscode-scheme=safeappeals&vscode-authority=safeappeals.safeappeals-authentication&vscode-path=/auth/callback';

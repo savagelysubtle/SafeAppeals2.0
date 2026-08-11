@@ -1196,6 +1196,7 @@ export class OnboardingVariationA extends Disposable implements IOnboardingServi
 	private _renderDefaultSignInActions(actions: HTMLElement): void {
 		const googleLabel = localize('onboarding.signIn.google', "Continue with Google");
 		const outlookLabel = localize('onboarding.signIn.outlook', "Continue with Outlook");
+		const slackLabel = localize('onboarding.signIn.slack', "Continue with Slack");
 		const googleBtn = this._registerStepFocusable(this._createSignInButton(actions, googleLabel, {
 			emphasized: true,
 			ariaLabel: googleLabel,
@@ -1214,6 +1215,15 @@ export class OnboardingVariationA extends Disposable implements IOnboardingServi
 			this._logAction('signIn', undefined, 'microsoft');
 			void this._handleSignIn('microsoft');
 		}));
+		const slackBtn = this._registerStepFocusable(this._createSignInButton(actions, slackLabel, {
+			emphasized: false,
+			ariaLabel: slackLabel,
+			providerMark: 'slack',
+		}));
+		this.stepDisposables.add(addDisposableListener(slackBtn, EventType.CLICK, () => {
+			this._logAction('signIn', undefined, 'slack');
+			void this._handleSignIn('slack');
+		}));
 	}
 
 	/**
@@ -1230,12 +1240,12 @@ export class OnboardingVariationA extends Disposable implements IOnboardingServi
 	}
 
 	/**
-	 * Creates a SafeAppeals Cloud sign-in button (Google or Outlook).
+	 * Creates a SafeAppeals Cloud sign-in button (Google, Outlook, or Slack).
 	 */
 	private _createSignInButton(parent: HTMLElement, label: string, options?: {
 		emphasized?: boolean;
 		ariaLabel?: string;
-		providerMark?: 'google' | 'outlook' | 'safeappeals-cloud';
+		providerMark?: 'google' | 'outlook' | 'slack' | 'safeappeals-cloud';
 	}): HTMLButtonElement {
 		const btn = append(parent, $<HTMLButtonElement>('button.onboarding-a-signin-btn'));
 		btn.type = 'button';
@@ -1257,9 +1267,9 @@ export class OnboardingVariationA extends Disposable implements IOnboardingServi
 
 	/**
 	 * Signs in via Safe Appeals Cloud (`safeappeals-cloud`).
-	 * @param identityProvider When set, skips the provider quick pick (Google vs Outlook).
+	 * @param identityProvider When set, skips the provider quick pick (Google / Outlook / Slack).
 	 */
-	private async _handleSignIn(identityProvider?: 'google' | 'microsoft'): Promise<void> {
+	private async _handleSignIn(identityProvider?: 'google' | 'microsoft' | 'slack'): Promise<void> {
 		if (this._signInInProgress) {
 			return;
 		}

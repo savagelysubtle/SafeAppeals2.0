@@ -200,13 +200,16 @@ export class ChatSetup {
 				case ChatSetupStrategy.SetupWithSafeAppealsCloud:
 				case ChatSetupStrategy.SetupWithSafeAppealsCloudGoogle:
 				case ChatSetupStrategy.SetupWithSafeAppealsCloudOutlook:
+				case ChatSetupStrategy.SetupWithSafeAppealsCloudSlack:
 					try {
 						const identityScopes =
 							setupStrategy === ChatSetupStrategy.SetupWithSafeAppealsCloudGoogle
 								? ['provider:google']
 								: setupStrategy === ChatSetupStrategy.SetupWithSafeAppealsCloudOutlook
 									? ['provider:microsoft']
-									: [];
+									: setupStrategy === ChatSetupStrategy.SetupWithSafeAppealsCloudSlack
+										? ['provider:slack']
+										: [];
 						await runSafeAppealsCloudSetup({
 							enableAuthExtension: async () => { await maybeEnableAuthExtension(this.extensionsWorkbenchService, this.logService, true); },
 							activateAuthProvider: async () => { await this.extensionService.activateByEvent('onAuthenticationRequest:safeappeals-cloud', ActivationKind.Immediate); },
@@ -332,6 +335,7 @@ export class ChatSetup {
 			buttons = [
 				[localize('continueWithGoogle', "Continue with Google"), ChatSetupStrategy.SetupWithSafeAppealsCloudGoogle, styleButton('continue-button', 'google')],
 				[localize('continueWithOutlook', "Continue with Outlook"), ChatSetupStrategy.SetupWithSafeAppealsCloudOutlook, styleButton('continue-button', 'outlook')],
+				[localize('continueWithSlack', "Continue with Slack"), ChatSetupStrategy.SetupWithSafeAppealsCloudSlack, styleButton('continue-button', 'slack')],
 			];
 		} else {
 			buttons = [[localize('setupAIButton', "Use AI Features"), ChatSetupStrategy.DefaultSetup, undefined]];
@@ -370,7 +374,7 @@ export class ChatSetup {
 
 		let footer: string;
 		if (this.usesSafeAppealsCloudSetup()) {
-			footer = localize('safeAppealsCloudFooter', "Sign in with Google or Outlook to use SafeAppeals Cloud Chat. Mailbox connect is separate under Email settings.");
+			footer = localize('safeAppealsCloudFooter', "Sign in with Google, Outlook, or Slack to use SafeAppeals Cloud Chat. Mailbox connect is separate under Email settings.");
 		} else {
 			footer = localize({ key: 'safeAppealsFooter', comment: ['{Locked="]({0})"}', '{Locked="]({1})"}'] }, "By continuing with SafeAppeals, you agree to [Terms]({0}) and [Privacy Statement]({1}).", defaultChat.termsStatementUrl, defaultChat.privacyStatementUrl);
 		}

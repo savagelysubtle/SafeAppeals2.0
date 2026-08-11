@@ -304,8 +304,8 @@ export function getWebCallbackOrigins(): readonly string[] {
 		.filter(origin => origin.length > 0);
 }
 
-/** Cloud identity social provider (maps to `/auth/google` or `/auth/microsoft`). */
-export type CloudIdentityProvider = 'google' | 'microsoft';
+/** Cloud identity social provider (maps to `/auth/google`, `/auth/microsoft`, or `/auth/slack`). */
+export type CloudIdentityProvider = 'google' | 'microsoft' | 'slack';
 
 /**
  * Builds the Cloud identity authorize URL with required PKCE + state query params.
@@ -321,7 +321,12 @@ export function buildCloudIdentityAuthorizeUrl(params: {
 	readonly redirectUri: string;
 }): string {
 	const apiUrl = getApiUrl();
-	const path = params.provider === 'microsoft' ? '/auth/microsoft' : '/auth/google';
+	const path =
+		params.provider === 'microsoft'
+			? '/auth/microsoft'
+			: params.provider === 'slack'
+				? '/auth/slack'
+				: '/auth/google';
 	const query = new URLSearchParams({
 		redirect_uri: params.redirectUri,
 		code_challenge: params.codeChallenge,
@@ -352,6 +357,17 @@ export function buildMicrosoftAuthorizeUrl(params: {
 	readonly redirectUri: string;
 }): string {
 	return buildCloudIdentityAuthorizeUrl({ ...params, provider: 'microsoft' });
+}
+
+/**
+ * Builds the Slack authorize URL with required PKCE + state query params.
+ */
+export function buildSlackAuthorizeUrl(params: {
+	readonly codeChallenge: string;
+	readonly state: string;
+	readonly redirectUri: string;
+}): string {
+	return buildCloudIdentityAuthorizeUrl({ ...params, provider: 'slack' });
 }
 
 /**

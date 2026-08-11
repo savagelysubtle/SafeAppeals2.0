@@ -57,6 +57,8 @@ export enum ChatSetupStrategy {
 	SetupWithSafeAppealsCloudGoogle = 7,
 	/** SafeAppeals Cloud identity via Microsoft/Outlook (skips provider picker). */
 	SetupWithSafeAppealsCloudOutlook = 8,
+	/** SafeAppeals Cloud identity via Slack (skips provider picker). */
+	SetupWithSafeAppealsCloudSlack = 9,
 }
 
 export type ChatSetupResultValue = boolean /* success */ | undefined /* canceled */;

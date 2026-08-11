@@ -401,28 +401,33 @@ export class CloudAuthProvider implements vscode.AuthenticationProvider, vscode.
 	}
 
 	/**
-	 * Lets the user choose Google or Outlook for Cloud identity sign-in.
+	 * Lets the user choose Google, Outlook, or Slack for Cloud identity sign-in.
 	 * Uses a modal button dialog (not the command palette quick pick) so Accounts,
-	 * Models, and bare createSession match the chat setup Google/Outlook UI.
+	 * Models, and bare createSession match the chat setup / walkthrough UI.
 	 * Returns undefined when dismissed.
 	 */
 	private async pickIdentityProvider(): Promise<CloudIdentityProvider | undefined> {
 		const google = vscode.l10n.t('Continue with Google');
 		const outlook = vscode.l10n.t('Continue with Outlook');
+		const slack = vscode.l10n.t('Continue with Slack');
 		const picked = await vscode.window.showInformationMessage(
 			vscode.l10n.t('Sign in to SafeAppeals Cloud'),
 			{
 				modal: true,
-				detail: vscode.l10n.t('Choose Google or Outlook. Connecting a mailbox is separate under Email settings.'),
+				detail: vscode.l10n.t('Choose Google, Outlook, or Slack. Connecting a mailbox is separate under Email settings.'),
 			},
 			google,
 			outlook,
+			slack,
 		);
 		if (picked === google) {
 			return 'google';
 		}
 		if (picked === outlook) {
 			return 'microsoft';
+		}
+		if (picked === slack) {
+			return 'slack';
 		}
 		return undefined;
 	}
@@ -1067,9 +1072,10 @@ export function parsePastedAuthInput(raw: string): {
 
 /**
  * Optional identity provider from createSession scopes so UI can offer dedicated
- * Google / Outlook buttons without a second picker.
+ * Google / Outlook / Slack buttons without a second picker.
  *
- * Recognized: `provider:google`, `provider:microsoft`, `provider:outlook`, `provider:azure`.
+ * Recognized: `provider:google`, `provider:microsoft`, `provider:outlook`,
+ * `provider:azure`, `provider:slack`.
  */
 export function identityProviderFromScopes(
 	scopes: readonly string[] | undefined,
@@ -1094,6 +1100,12 @@ export function identityProviderFromScopes(
 			|| normalized === 'identity:azure'
 		) {
 			return 'microsoft';
+		}
+		if (
+			normalized === 'provider:slack'
+			|| normalized === 'identity:slack'
+		) {
+			return 'slack';
 		}
 	}
 	return undefined;
