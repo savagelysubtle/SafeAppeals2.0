@@ -1,0 +1,6 @@
+﻿"Issue","Type","Pages affected"
+"Meta Description tag missing ","Error","18"
+"Blocked by robots.txt ","Error","3"
+"Title too long ","Warning","18"
+"More than one h1 tag ","Notice","18"
+"H1 tag missing ","Notice","1"
