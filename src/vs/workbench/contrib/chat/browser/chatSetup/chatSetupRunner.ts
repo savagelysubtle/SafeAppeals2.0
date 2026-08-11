@@ -63,7 +63,11 @@ export async function runSafeAppealsCloudSetup(
 ): Promise<void> {
 	await operations.enableAuthExtension();
 	await operations.activateAuthProvider();
-	if (await operations.getSessionCount() === 0) {
+	// Dedicated provider buttons pass identityScopes (e.g. provider:slack). Always
+	// start createSession in that case — skipping when a Google session already
+	// exists made "Continue with Slack" a no-op hang with no browser.
+	// Bare setup (no identityScopes) only signs in when there is no session yet.
+	if (identityScopes.length > 0 || await operations.getSessionCount() === 0) {
 		await operations.createSession(identityScopes);
 	}
 }

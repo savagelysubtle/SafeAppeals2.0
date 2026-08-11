@@ -147,14 +147,23 @@ function makeEnvelope(overrides: Partial<CloudSessionEnvelope> & { userId?: stri
 }
 
 suite('shouldReturnExistingCloudSession', () => {
-	test('createSession reuses existing session and ignores scopes', () => {
+	test('createSession reuses existing session unless an identity provider scope is set', () => {
 		const session = makeEnvelope();
 		assert.deepStrictEqual(
 			{
 				withSession: shouldReturnExistingCloudSession(session, ['openid', 'https://mail.google.com/']),
 				withoutSession: shouldReturnExistingCloudSession(undefined, ['openid']),
+				explicitGoogle: shouldReturnExistingCloudSession(session, ['provider:google']),
+				explicitSlack: shouldReturnExistingCloudSession(session, ['provider:slack']),
+				emptyScopes: shouldReturnExistingCloudSession(session, []),
 			},
-			{ withSession: true, withoutSession: false },
+			{
+				withSession: true,
+				withoutSession: false,
+				explicitGoogle: false,
+				explicitSlack: false,
+				emptyScopes: true,
+			},
 		);
 	});
 });
@@ -291,10 +300,12 @@ suite('CloudAuthProvider security behavior', () => {
 		const { provider, secrets } = makeProvider({
 			globalState,
 			startLoopback: async () => loopback,
+			// Skip identity picker — empty scopes cancel before PKCE is written.
+			openExternal: async () => true,
 		});
-		const create = provider.createSession([]);
+		const create = provider.createSession(['provider:slack']);
 		void create.catch(() => { /* disposed below */ });
-		await new Promise<void>(resolve => setTimeout(resolve, 10));
+		await new Promise<void>(resolve => setTimeout(resolve, 30));
 
 		assert.deepStrictEqual({
 			secretPending: typeof secrets.values.get(pendingSecretKey),

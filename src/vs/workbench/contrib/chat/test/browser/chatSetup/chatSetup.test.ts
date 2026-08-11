@@ -125,7 +125,7 @@ suite('SafeAppeals Cloud setup', () => {
 		assert.deepStrictEqual(calls, ['checked', 'activate', 'create']);
 	});
 
-	test('preserves an existing session', async () => {
+	test('preserves an existing session when no identity provider is requested', async () => {
 		const calls: string[] = [];
 		await runSafeAppealsCloudSetup({
 			enableAuthExtension: async () => { calls.push('checked'); },
@@ -134,5 +134,22 @@ suite('SafeAppeals Cloud setup', () => {
 			createSession: async () => { calls.push('create'); },
 		});
 		assert.deepStrictEqual(calls, ['checked', 'activate', 'sessions']);
+	});
+
+	test('dedicated identity scopes force createSession even with an existing session', async () => {
+		const calls: string[] = [];
+		const scopesSeen: string[][] = [];
+		await runSafeAppealsCloudSetup({
+			enableAuthExtension: async () => { calls.push('checked'); },
+			activateAuthProvider: async () => { calls.push('activate'); },
+			getSessionCount: async () => { calls.push('sessions'); return 1; },
+			createSession: async scopes => {
+				calls.push('create');
+				scopesSeen.push([...(scopes ?? [])]);
+			},
+		}, ['provider:slack']);
+		// getSessionCount is skipped when identityScopes are non-empty
+		assert.deepStrictEqual(calls, ['checked', 'activate', 'create']);
+		assert.deepStrictEqual(scopesSeen, [['provider:slack']]);
 	});
 });

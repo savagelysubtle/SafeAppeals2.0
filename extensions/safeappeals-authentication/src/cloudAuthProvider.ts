@@ -52,14 +52,24 @@ const AUTH_CALLBACK_PATH = '/auth/callback';
 
 /**
  * Whether identity createSession should return the existing session without a new
- * PKCE flow. Scopes are intentionally ignored — mail and calendar access comes
- * from service connections (`ConnectionManager.connect`), never from this session.
+ * PKCE flow.
+ *
+ * When the UI passes an explicit identity scope (`provider:google` /
+ * `provider:microsoft` / `provider:slack`), always start a fresh OAuth flow so
+ * "Continue with Slack" cannot silently reuse a Google/Outlook session (and vice
+ * versa). Mail/calendar still never overload this path — those are connections.
  */
 export function shouldReturnExistingCloudSession(
 	session: CloudSessionEnvelope | undefined,
-	_scopes?: readonly string[],
+	scopes?: readonly string[],
 ): boolean {
-	return !!session;
+	if (!session) {
+		return false;
+	}
+	if (identityProviderFromScopes(scopes)) {
+		return false;
+	}
+	return true;
 }
 
 /**
@@ -232,7 +242,30 @@ export class CloudAuthProvider implements vscode.AuthenticationProvider, vscode.
 
 		const identityProvider = identityProviderFromScopes(_scopes) ?? await this.pickIdentityProvider();
 		if (!identityProvider) {
+			// Scopes asked for a specific provider we do not recognize (stale extension
+			// host) — fail loudly instead of hanging on a modal behind the walkthrough.
+			const requested = (_scopes ?? []).join(', ');
+			if (requested) {
+				throw new Error(
+					vscode.l10n.t(
+						'Could not start sign-in for requested provider ({0}). Reload the window and try again.',
+						requested,
+					),
+				);
+			}
 			throw new vscode.CancellationError();
+		}
+
+		// Switching identity provider: drop only the in-memory Cloud session so we
+		// never resolve the waiter with the previous Google/Outlook envelope.
+		// Do not call purgeSession() here — that also clears the pending PKCE we
+		// are about to write.
+		if (this._session) {
+			this.output.appendLine(`[auth] clearing existing Cloud session before ${identityProvider} sign-in`);
+			this.clearRefreshTimer();
+			this._session = undefined;
+			this._sessionMemoryOnly = false;
+			this._creditBalance = undefined;
 		}
 
 		const pkce = generatePkceChallenge();
@@ -249,7 +282,7 @@ export class CloudAuthProvider implements vscode.AuthenticationProvider, vscode.
 			redirectUri: flow.redirectUri,
 		});
 
-		this.output.appendLine(`[auth] opening SafeAppeals Cloud sign-in via ${identityProvider} (flow ${flow.kind})`);
+		this.output.appendLine(`[auth] opening SafeAppeals Cloud sign-in via ${identityProvider} (flow ${flow.kind}) url=${authUrl}`);
 		// Do NOT Uri.parse the authorize URL: parse percent-decodes the query and
 		// openExternal re-encodes poorly, which splits redirect_uri on `&` (web
 		// asExternalUri callbacks carry vscode-* query keys). Same fix as
@@ -260,6 +293,7 @@ export class CloudAuthProvider implements vscode.AuthenticationProvider, vscode.
 			await this.clearPending();
 			throw new Error(vscode.l10n.t('Could not open the system browser for sign-in.'));
 		}
+		this.output.appendLine(`[auth] browser open requested for ${identityProvider}`);
 
 		if (flow.kind === 'paste') {
 			return this.waitForPastedCode();
