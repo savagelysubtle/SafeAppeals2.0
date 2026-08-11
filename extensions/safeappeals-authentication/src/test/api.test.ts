@@ -62,6 +62,29 @@ suite('buildCloudIdentityAuthorizeUrl', () => {
 			true,
 		);
 	});
+
+	test('web asExternalUri redirect_uri stays a single query value (no split on &)', () => {
+		const webCallback =
+			'http://localhost:8080/stable-dev/callback?vscode-reqid=1&vscode-scheme=safeappeals&vscode-authority=safeappeals.safeappeals-authentication&vscode-path=/auth/callback';
+		const authUrl = buildCloudIdentityAuthorizeUrl({
+			provider: 'microsoft',
+			codeChallenge: 'challenge',
+			state: 'state-1',
+			redirectUri: webCallback,
+		});
+		const parsed = new URL(authUrl);
+		assert.deepStrictEqual(
+			{
+				redirectUri: parsed.searchParams.get('redirect_uri'),
+				// Top-level params must not leak vscode-* keys from the callback.
+				topLevelKeys: [...parsed.searchParams.keys()].sort(),
+			},
+			{
+				redirectUri: webCallback,
+				topLevelKeys: ['code_challenge', 'code_challenge_method', 'redirect_uri', 'state'],
+			},
+		);
+	});
 });
 
 suite('CloudApiClient.exchangeCode / refreshSession', () => {

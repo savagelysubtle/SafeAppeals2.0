@@ -123,7 +123,8 @@ export class CloudAuthProvider implements vscode.AuthenticationProvider, vscode.
 		private readonly output: vscode.OutputChannel,
 		dependencies: {
 			readonly api?: CloudApiClient;
-			readonly openExternal?: (uri: vscode.Uri) => Thenable<boolean>;
+			/** Prefer a string URL — see createSession openExternal note. */
+			readonly openExternal?: (uri: vscode.Uri | string) => Thenable<boolean>;
 			readonly startLoopback?: typeof startOAuthLoopback;
 			readonly registerUriHandler?: boolean;
 			readonly showWarning?: (message: string) => Thenable<string | undefined>;
@@ -134,7 +135,8 @@ export class CloudAuthProvider implements vscode.AuthenticationProvider, vscode.
 			() => this._session?.accessToken,
 			async () => this.refreshSession(),
 		);
-		this.openExternal = dependencies.openExternal ?? vscode.env.openExternal;
+		this.openExternal = dependencies.openExternal
+			?? ((target: vscode.Uri | string) => vscode.env.openExternal(target as vscode.Uri));
 		this.startLoopback = dependencies.startLoopback ?? startOAuthLoopback;
 		this.showWarning = dependencies.showWarning ?? vscode.window.showWarningMessage;
 		this._disposables.push(
@@ -165,7 +167,7 @@ export class CloudAuthProvider implements vscode.AuthenticationProvider, vscode.
 		);
 	}
 
-	private readonly openExternal: (uri: vscode.Uri) => Thenable<boolean>;
+	private readonly openExternal: (uri: vscode.Uri | string) => Thenable<boolean>;
 	private readonly startLoopback: typeof startOAuthLoopback;
 	private readonly showWarning: (message: string) => Thenable<string | undefined>;
 
@@ -248,9 +250,11 @@ export class CloudAuthProvider implements vscode.AuthenticationProvider, vscode.
 		});
 
 		this.output.appendLine(`[auth] opening SafeAppeals Cloud sign-in via ${identityProvider} (flow ${flow.kind})`);
-		// openExternal requires a real Uri. Strict parsing preserves the already
-		// encoded redirect_uri, state, and PKCE query parameters.
-		const opened = await this.openExternal(vscode.Uri.parse(authUrl));
+		// Do NOT Uri.parse the authorize URL: parse percent-decodes the query and
+		// openExternal re-encodes poorly, which splits redirect_uri on `&` (web
+		// asExternalUri callbacks carry vscode-* query keys). Same fix as
+		// connectionManager.openExternal — pass the string through.
+		const opened = await this.openExternal(authUrl);
 		if (!opened) {
 			this.disposeLoopback();
 			await this.clearPending();
