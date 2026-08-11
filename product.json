@@ -199,6 +199,9 @@
 		"safeappeals-microsoft": [
 			"safeappeals.safeappeals-email",
 			"safeappeals.safeappeals-calendar"
+		],
+		"safeappeals-slack": [
+			"safeappeals.safeappeals-authentication"
 		]
 	},
 	"trustedExtensionProtocolHandlers": [

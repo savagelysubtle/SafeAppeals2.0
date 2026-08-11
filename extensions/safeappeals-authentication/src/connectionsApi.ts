@@ -12,7 +12,7 @@
  */
 
 /** Identity provider behind a service connection. */
-export type ProviderKind = 'google' | 'microsoft';
+export type ProviderKind = 'google' | 'microsoft' | 'slack';
 
 /**
  * What a connection is allowed to do. Mirrors void-cloud's `Capability`.
@@ -20,8 +20,9 @@ export type ProviderKind = 'google' | 'microsoft';
  * - `mail` — IMAP/SMTP
  * - `calendar` — calendar events
  * - `files` — Google Drive or OneDrive / SharePoint / Teams libraries
+ * - `messaging` — Slack messaging (channels, DMs, etc.)
  */
-export type ConnectionCapability = 'mail' | 'calendar' | 'files';
+export type ConnectionCapability = 'mail' | 'calendar' | 'files' | 'messaging';
 
 /** Server-side health of a grant. `needs_reconsent` means reconnect, not retry. */
 export type ConnectionStatus = 'active' | 'needs_reconsent' | 'revoked';
@@ -112,14 +113,14 @@ export interface ConnectionsApi {
  * True for a supported provider id.
  */
 export function isProviderKind(value: unknown): value is ProviderKind {
-	return value === 'google' || value === 'microsoft';
+	return value === 'google' || value === 'microsoft' || value === 'slack';
 }
 
 /**
  * True for a supported capability id.
  */
 export function isConnectionCapability(value: unknown): value is ConnectionCapability {
-	return value === 'mail' || value === 'calendar' || value === 'files';
+	return value === 'mail' || value === 'calendar' || value === 'files' || value === 'messaging';
 }
 
 /**
@@ -135,6 +136,9 @@ export function normalizeCapabilities(
 /** Microsoft capabilities that share the Graph resource audience. */
 const MICROSOFT_GRAPH_CAPABILITIES: ReadonlySet<ConnectionCapability> = new Set(['calendar', 'files']);
 
+/** Slack workspace connections support only messaging and/or files. */
+const SLACK_CAPABILITIES: ReadonlySet<ConnectionCapability> = new Set(['messaging', 'files']);
+
 /**
  * Whether one authorize request can carry every requested capability.
  *
@@ -142,6 +146,7 @@ const MICROSOFT_GRAPH_CAPABILITIES: ReadonlySet<ConnectionCapability> = new Set(
  * (Exchange Online) cannot share a grant with calendar/files (Graph).
  * Calendar + files may be requested together on Microsoft. Google allows any
  * non-empty mix of mail/calendar/files in one grant.
+ * Slack allows any non-empty subset of messaging+files; mail/calendar are invalid for Slack.
  */
 export function providerSupportsCapabilityBundle(
 	provider: ProviderKind,
@@ -152,6 +157,10 @@ export function providerSupportsCapabilityBundle(
 	}
 	if (provider === 'google') {
 		return true;
+	}
+	if (provider === 'slack') {
+		// Slack only accepts messaging and/or files; reject mail/calendar.
+		return capabilities.every(cap => SLACK_CAPABILITIES.has(cap));
 	}
 	// microsoft
 	const hasMail = capabilities.includes('mail');

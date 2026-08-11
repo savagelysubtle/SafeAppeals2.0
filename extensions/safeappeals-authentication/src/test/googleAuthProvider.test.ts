@@ -198,6 +198,14 @@ suite('provider capability helpers', () => {
 					'microsoft',
 					'openid https://graph.microsoft.com/Calendars.ReadWrite',
 				)!],
+				slackMessaging: [...capabilitiesFromGrantedScope(
+					'slack',
+					'chat:write channels:read groups:read im:write search:read',
+				)!],
+				slackFiles: [...capabilitiesFromGrantedScope(
+					'slack',
+					'files:read files:write remote_files:read',
+				)!],
 				missing: capabilitiesFromGrantedScope('google', undefined),
 				satisfied: sessionSatisfiesCapabilities(new Set(['mail', 'calendar']), new Set(['mail'])),
 				unsatisfied: sessionSatisfiesCapabilities(new Set(['mail']), new Set(['calendar'])),
@@ -209,11 +217,30 @@ suite('provider capability helpers', () => {
 				googleIdentityOnly: [],
 				microsoftMail: ['mail'],
 				microsoftCalendar: ['calendar'],
+				slackMessaging: ['messaging'],
+				slackFiles: ['files'],
 				missing: undefined,
 				satisfied: true,
 				unsatisfied: false,
 				reconnect: true,
 				notReconnect: false,
+			},
+		);
+	});
+
+	test('infers and scopes Slack messaging/files capabilities', () => {
+		assert.deepStrictEqual(
+			{
+				slackMessagingInfer: [...inferProviderCapabilities(['chat:write', 'channels:read', 'im:write'])].sort(),
+				slackFilesInfer: [...inferProviderCapabilities(['files:read', 'remote_files'])].sort(),
+				slackBundleInfer: [...inferProviderCapabilities(['messaging', 'files'])].sort(),
+				slackScopes: scopesForCapabilities(new Set<ConnectionCapability>(['messaging', 'files'])),
+			},
+			{
+				slackMessagingInfer: ['messaging'],
+				slackFilesInfer: ['files'],
+				slackBundleInfer: ['files', 'messaging'],
+				slackScopes: ['files', 'messaging'],
 			},
 		);
 	});

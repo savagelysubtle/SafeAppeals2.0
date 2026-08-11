@@ -14,6 +14,8 @@ import type { ConnectionCapability, ProviderKind } from './connectionsApi';
  * - `['files']` — Google Drive or OneDrive / SharePoint / Teams libraries
  * - `['mail', 'calendar']` — both (Google only in one grant; Microsoft needs two)
  * - `['calendar', 'files']` — Microsoft Graph bundle
+ * - `['messaging']` — Slack messaging (chat:write, channels, groups, im, etc.)
+ * - `['messaging', 'files']` — Slack messaging + files
  * - `[]` (empty) — treated as mail for email-dashboard consumers
  *
  * Full provider scope URIs (e.g. `https://mail.google.com/`) are also recognized.
@@ -52,6 +54,23 @@ const FILES_SCOPE_MARKERS = new Set([
 	'https://graph.microsoft.com/channel.readbasic.all',
 ]);
 
+const SLACK_MESSAGING_SCOPE_MARKERS = new Set([
+	'messaging',
+	'chat:write',
+	'channels:',
+	'groups:',
+	'im:',
+	'mpim:',
+	'reactions:',
+	'search:read',
+]);
+
+const SLACK_FILES_SCOPE_MARKERS = new Set([
+	'files:read',
+	'files:write',
+	'remote_files',
+]);
+
 /**
  * Infers mail/calendar/files capabilities from VS Code authentication scopes.
  * Empty scopes default to mail (email consumers).
@@ -86,6 +105,26 @@ export function inferProviderCapabilities(
 			|| normalized.includes('sites.readwrite')
 			|| normalized.includes('team.readbasic')
 			|| normalized.includes('channel.readbasic')
+		) {
+			capabilities.add('files');
+		}
+		if (
+			SLACK_MESSAGING_SCOPE_MARKERS.has(normalized)
+			|| normalized.includes('chat:write')
+			|| normalized.includes('channels:')
+			|| normalized.includes('groups:')
+			|| normalized.includes('im:')
+			|| normalized.includes('mpim:')
+			|| normalized.includes('reactions:')
+			|| normalized.includes('search:read')
+		) {
+			capabilities.add('messaging');
+		}
+		if (
+			SLACK_FILES_SCOPE_MARKERS.has(normalized)
+			|| normalized.includes('files:read')
+			|| normalized.includes('files:write')
+			|| normalized.includes('remote_files')
 		) {
 			capabilities.add('files');
 		}
@@ -138,6 +177,25 @@ export function capabilitiesFromGrantedScope(
 	) {
 		capabilities.add('files');
 	}
+	// Slack: messaging + files
+	if (
+		granted.includes('chat:write')
+		|| granted.includes('channels:')
+		|| granted.includes('groups:')
+		|| granted.includes('im:')
+		|| granted.includes('mpim:')
+		|| granted.includes('reactions:')
+		|| granted.includes('search:read')
+	) {
+		capabilities.add('messaging');
+	}
+	if (
+		granted.includes('files:read')
+		|| granted.includes('files:write')
+		|| granted.includes('remote_files')
+	) {
+		capabilities.add('files');
+	}
 	return capabilities;
 }
 
@@ -155,6 +213,9 @@ export function scopesForCapabilities(capabilities: Iterable<ProviderCapability>
 	}
 	if (set.has('files')) {
 		scopes.push('files');
+	}
+	if (set.has('messaging')) {
+		scopes.push('messaging');
 	}
 	return scopes;
 }

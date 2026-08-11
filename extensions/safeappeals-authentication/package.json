@@ -30,6 +30,7 @@
 		"onAuthenticationRequest:safeappeals-cloud",
 		"onAuthenticationRequest:safeappeals-google",
 		"onAuthenticationRequest:safeappeals-microsoft",
+		"onAuthenticationRequest:safeappeals-slack",
 		"onCustomAgentProvider"
 	],
 	"capabilities": {
@@ -51,6 +52,10 @@
 			{
 				"id": "safeappeals-microsoft",
 				"label": "%auth.safeappealsMicrosoft.label%"
+			},
+			{
+				"id": "safeappeals-slack",
+				"label": "%auth.safeappealsSlack.label%"
 			}
 		],
 		"languageModelChatProviders": [
@@ -820,6 +825,11 @@
 			{
 				"command": "safeappeals.cloud.signOut",
 				"title": "%command.signOut.title%",
+				"category": "%command.category%"
+			},
+			{
+				"command": "safeappeals.connections.connectSlack",
+				"title": "%command.connectSlack.title%",
 				"category": "%command.category%"
 			}
 		],

@@ -14,6 +14,7 @@ import {
 } from './connectionsFacade';
 import { GoogleAuthProvider } from './googleAuthProvider';
 import { MicrosoftAuthProvider } from './microsoftAuthProvider';
+import { SlackAuthProvider } from './slackAuthProvider';
 import { CloudChatProvider } from './llm/cloudChatProvider';
 import { isAllowedExternalHttpsUrl } from './llm/externalUrl';
 
@@ -59,6 +60,11 @@ export async function activate(context: vscode.ExtensionContext): Promise<SafeAp
 			output,
 		}),
 		new MicrosoftAuthProvider({
+			connections,
+			onDidChangeCloudSessions: provider.onDidChangeSessions,
+			output,
+		}),
+		new SlackAuthProvider({
 			connections,
 			onDidChangeCloudSessions: provider.onDidChangeSessions,
 			output,

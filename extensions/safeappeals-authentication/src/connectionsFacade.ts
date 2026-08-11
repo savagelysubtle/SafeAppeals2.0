@@ -11,6 +11,9 @@ import type { ICloudApiClient } from './cloudApiClient';
 /** Command id: connect a mail/calendar account. */
 export const CONNECT_COMMAND_ID = 'safeappeals.connections.connect';
 
+/** Command id: connect a Slack workspace (messaging + optional files). */
+export const CONNECT_SLACK_COMMAND_ID = 'safeappeals.connections.connectSlack';
+
 /** Command id: list the signed-in user's connections. */
 export const LIST_COMMAND_ID = 'safeappeals.connections.list';
 
@@ -57,10 +60,14 @@ export function registerConnectionCommands(facade: SafeAppealsConnectionsApi): v
 			const parsed = parseConnectOptions(options);
 			if (!parsed) {
 				throw new Error(
-					vscode.l10n.t(`Connecting an account needs a provider and at least one of 'mail', 'calendar', or 'files'.`),
+					vscode.l10n.t(`Connecting an account needs a provider and at least one of 'mail', 'calendar', 'files', or 'messaging'.`),
 				);
 			}
 			return facade.connect(parsed);
+		}),
+		vscode.commands.registerCommand(CONNECT_SLACK_COMMAND_ID, async () => {
+			// Title-case label per spec: Connect Slack Workspace...
+			return facade.connect({ provider: 'slack', capabilities: ['messaging', 'files'] });
 		}),
 		vscode.commands.registerCommand(LIST_COMMAND_ID, async (filter?: ConnectionFilter) => {
 			return facade.list(filter);

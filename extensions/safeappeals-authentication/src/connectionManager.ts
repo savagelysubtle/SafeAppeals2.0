@@ -92,10 +92,10 @@ export class ConnectionManager implements vscode.Disposable {
 	async connect(options: ConnectOptions): Promise<ConnectionInfo> {
 		const capabilities = normalizeCapabilities(options.capabilities);
 		if (capabilities.length === 0) {
-			throw new Error(vscode.l10n.t('Request mail and/or calendar access to connect an account.'));
+			throw new Error(vscode.l10n.t('Request mail, calendar, files, or messaging access to connect an account.'));
 		}
 		if (!providerSupportsCapabilityBundle(options.provider, capabilities)) {
-			throw new Error(vscode.l10n.t('Microsoft mail and calendar must be connected separately.'));
+			throw new Error(vscode.l10n.t('Microsoft mail and calendar must be connected separately. Slack only supports messaging and/or files.'));
 		}
 
 		await this.deps.ensureCloudSession();
