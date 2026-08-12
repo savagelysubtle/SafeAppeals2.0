@@ -13,7 +13,19 @@ Last refreshed: **2026-08-11** · Product: **SafeAppeals 2.1** (`2.1.0`)
 
 **SafeAppeals 2.1 is the launch line.** The VS Code migration ladder is closed.
 
-**Why 2.1 (not 3.0):** Same product line as 2.0 for users and installers, with a **major platform refresh** under the hood — jumped from the old VS Code/Void-era base to current Code - OSS, rebuilt the legal surface, and landed upgraded Rust natives (RAG, converter, tracker, docs). That is a 3.0-sized engineering change; the **shipped product version stays 2.1** so the story is “big refresh of SafeAppeals 2,” not a new product number. Git tags: historical `v2.0.0` remains the prior line; cut **`v2.1.0`** on the release commit when installers go out.
+**Why 2.1 (not 3.0):** Same product line as 2.0 for users and installers, with a **major platform overhaul** under the hood — jumped from the old VS Code/Void-era base to current Code - OSS, rebuilt the legal surface, and landed upgraded Rust natives (RAG, converter, tracker, docs). That is a 3.0-sized engineering change; the **shipped product version stays 2.1** so the story is “big refresh of SafeAppeals 2,” not a new product number. Git tags: historical `v2.0.0` remains the prior line; cut **`v2.1.0`** on the release commit when installers go out.
+
+### Introducing the overhaul (branches)
+
+This line is a **new baseline**, not a merge of old `main`.
+
+| Branch | Role now |
+| ------ | -------- |
+| **`dev`** | Overhaul integration branch — same tip as `update-vscode`. Build and harden here. |
+| **`update-vscode`** | Original overhaul branch name; keep aligned with `dev` until retired. |
+| **`main`** | Still pre-overhaul until we promote. **Do not merge old main into dev.** When builds/smoke pass → promote `dev` → `main` + tag `v2.1.0`. |
+
+Details: [docs/development/BRANCHING.md](docs/development/BRANCHING.md).
 
 | What | Where (historical only) |
 | ---- | ----------------------- |
