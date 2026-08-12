@@ -21,6 +21,19 @@ function processRoot() {
 			fs.rmSync(filePath, { recursive: true });
 		}
 	}
+
+	// Pruning `bin/` leaves dangling npm shims; packaging stats every path and
+	// fails with ENOENT on extensions/node_modules/.bin/tsc (and tsserver).
+	const binDir = path.join(path.dirname(root), '.bin');
+	for (const shim of ['tsc', 'tsserver']) {
+		const shimPath = path.join(binDir, shim);
+		try {
+			fs.rmSync(shimPath, { force: true });
+			console.log(`Removed ${shimPath}`);
+		} catch (e) {
+			console.warn(e);
+		}
+	}
 }
 
 function processLib() {
