@@ -30,30 +30,59 @@ function getNpmProductionDependencies(folder: string): string[] {
 		raw = stdout;
 	}
 
-	return raw.split(/\r?\n/).filter(line => {
+	return raw.split(/\r?\n/).flatMap(line => {
 		const trimmed = line.trim();
 		if (!trimmed) {
-			return false;
+			return [];
 		}
 		// npm ls always emits the folder itself as the first parseable line.
 		// Including it makes packageTask glob `/**` (entire monorepo) and
 		// Buffer.concat the tree into node_modules.asar — blows the 2GiB
 		// write limit (seen as ERR_OUT_OF_RANGE length ≈ 13e9).
-		let realLine: string;
-		try {
-			realLine = fs.realpathSync(trimmed);
-		} catch {
-			return false;
-		}
-		if (realLine === realFolder) {
-			return false;
+		const realLine = resolveNpmParseablePath(trimmed, realFolder);
+		if (!realLine || realLine === realFolder) {
+			return [];
 		}
 		const rel = path.relative(realFolder, realLine);
 		if (!rel || rel.startsWith('..') || path.isAbsolute(rel)) {
-			return false;
+			return [];
 		}
-		return true;
+		return [realLine];
 	});
+}
+
+/**
+ * Map an `npm ls --parseable` path onto a real filesystem path under `realFolder`.
+ * Some environments redact UUID mount segments in child stdout (`/mnt/<uuid>` →
+ * `/mnt/***`), which breaks realpath; recover via the `node_modules/...` suffix.
+ */
+function resolveNpmParseablePath(trimmed: string, realFolder: string): string | undefined {
+	try {
+		if (fs.existsSync(trimmed)) {
+			return fs.realpathSync(trimmed);
+		}
+	} catch {
+		// fall through
+	}
+
+	const marker = `${path.sep}node_modules${path.sep}`;
+	const idx = trimmed.indexOf(marker);
+	if (idx !== -1) {
+		const candidate = path.join(realFolder, trimmed.slice(idx + 1));
+		try {
+			if (fs.existsSync(candidate)) {
+				return fs.realpathSync(candidate);
+			}
+		} catch {
+			return undefined;
+		}
+	}
+
+	// Project root line (no node_modules) — caller filters equality to realFolder.
+	if (!trimmed.includes(`${path.sep}node_modules`)) {
+		return realFolder;
+	}
+	return undefined;
 }
 
 export function getProductionDependencies(folderPath: string): string[] {
