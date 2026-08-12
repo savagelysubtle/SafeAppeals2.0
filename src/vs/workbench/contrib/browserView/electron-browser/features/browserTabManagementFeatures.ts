@@ -268,6 +268,19 @@ interface IOpenBrowserOptions {
 	 * This is used by Live Preview extension to reuse tabs, especially after reload / restart.
 	 */
 	reuseUrlFilter?: string;
+
+	/**
+	 * When true, open in the active editor group and ignore `workbench.browser.newTabPlacement`
+	 * (side group / dedicated window). Used by the sample-case tour so the spotlight target
+	 * lands in the same window as the overlay.
+	 */
+	preferActiveGroup?: boolean;
+
+	/**
+	 * When true, focus an already-open browser tab instead of creating a new one.
+	 * Falls back to opening a new tab when none exist.
+	 */
+	reuseExisting?: boolean;
 }
 
 class OpenIntegratedBrowserAction extends Action2 {
@@ -289,7 +302,21 @@ class OpenIntegratedBrowserAction extends Action2 {
 		// Parse arguments
 		const options = typeof urlOrOptions === 'string' ? { url: urlOrOptions } : (urlOrOptions ?? {});
 		const resource = BrowserViewUri.forId(generateUuid());
-		const group = await browserViewService.getPreferredGroup(options.openToSide ? SIDE_GROUP : undefined);
+		const group = options.preferActiveGroup
+			? ACTIVE_GROUP
+			: await browserViewService.getPreferredGroup(options.openToSide ? SIDE_GROUP : undefined);
+
+		if (options.reuseExisting) {
+			const existing = [...browserViewService.getContextualBrowserViews().values()][0]
+				?? [...browserViewService.getKnownBrowserViews().values()][0];
+			if (existing) {
+				if (options.url) {
+					existing.navigate(options.url);
+				}
+				await editorService.openEditor(existing, options.preferActiveGroup ? ACTIVE_GROUP : undefined);
+				return;
+			}
+		}
 
 		if (options.reuseUrlFilter) {
 			const filterUri = URI.parse(options.reuseUrlFilter);

@@ -53,7 +53,22 @@ export function findOnboardingTarget(targetWindow: Window, id: string): HTMLElem
 	const selector = `[${ONBOARDING_TARGET_ATTR}="${CSS.escape(id)}"]`;
 	// eslint-disable-next-line no-restricted-syntax -- matching only our own onboarding attribute (never foreign classes/structure) is the whole point of this helper
 	const targets = Array.from(targetWindow.document.querySelectorAll<HTMLElement>(selector));
-	return targets.find(target => isVisibleOnboardingTarget(targetWindow, target));
+	// When the same id is marked on more than one element (e.g. browser editor + title-bar
+	// control), prefer the largest visible target so the spotlight highlights the primary UI.
+	let best: HTMLElement | undefined;
+	let bestArea = 0;
+	for (const target of targets) {
+		if (!isVisibleOnboardingTarget(targetWindow, target)) {
+			continue;
+		}
+		const rect = target.getBoundingClientRect();
+		const area = rect.width * rect.height;
+		if (!best || area > bestArea) {
+			best = target;
+			bestArea = area;
+		}
+	}
+	return best;
 }
 
 function isVisibleOnboardingTarget(targetWindow: Window, target: HTMLElement): boolean {

@@ -4,6 +4,10 @@
 
 import { mainWindow } from '../../../../base/browser/window.js';
 import { Disposable, IDisposable, MutableDisposable, toDisposable } from '../../../../base/common/lifecycle.js';
+import { IActionViewItemService } from '../../../../platform/actions/browser/actionViewItemService.js';
+import { MenuEntryActionViewItem } from '../../../../platform/actions/browser/menuEntryActionViewItem.js';
+import { MenuId, MenuItemAction } from '../../../../platform/actions/common/actions.js';
+import { BrowserViewCommandId } from '../../../../platform/browserView/common/browserView.js';
 import { IWorkbenchLayoutService } from '../../../services/layout/browser/layoutService.js';
 import { markOnboardingTarget } from './spotlight/onboardingTarget.js';
 import { SAMPLE_CASE_TOUR_TARGETS } from './sampleCaseTour.js';
@@ -76,6 +80,39 @@ export function watchPrivateSearchStatusBarTarget(layoutService: IWorkbenchLayou
 		layoutObserver.disconnect();
 		itemObserver.disconnect();
 	});
+}
+
+/**
+ * Title-bar Integrated Browser control marked as the sample-case tour browser
+ * target. Prefer the editor root when both are marked (largest-area wins in
+ * {@link findOnboardingTarget}); this is a durable fallback when the editor
+ * target is slow to appear or lives only as chrome after open.
+ */
+class BrowserTitleBarOnboardingActionViewItem extends MenuEntryActionViewItem {
+	override render(container: HTMLElement): void {
+		super.render(container);
+		if (this.element) {
+			this._register(markOnboardingTarget(this.element, SAMPLE_CASE_TOUR_TARGETS.browser));
+		}
+	}
+}
+
+/**
+ * Registers the title-bar Browser action as an onboarding spotlight target.
+ */
+export function registerBrowserTitleBarOnboardingTarget(
+	actionViewItemService: IActionViewItemService,
+): IDisposable {
+	return actionViewItemService.register(
+		MenuId.TitleBar,
+		BrowserViewCommandId.OpenOrList,
+		(action, options, instantiationService) => {
+			if (!(action instanceof MenuItemAction)) {
+				return undefined;
+			}
+			return instantiationService.createInstance(BrowserTitleBarOnboardingActionViewItem, action, options);
+		},
+	);
 }
 
 function findStatusbarElement(layoutService: IWorkbenchLayoutService): Element | undefined {

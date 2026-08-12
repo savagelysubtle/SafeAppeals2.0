@@ -15,10 +15,12 @@ import { IOnboardingScenarioService } from '../../common/onboardingScenarioServi
 import {
 	createSampleCaseTourScenario,
 	EXPLORE_MORE_TUTORIALS_WALKTHROUGH,
+	OPEN_BROWSER_PALETTE_FILTER,
 	PRIVATE_SEARCH_TARGET_RESOLVE_TIMEOUT_MS,
 	runSampleCaseTourCommand,
 	SAMPLE_CASE_TOUR_STEP_COUNT,
 	showApprovalPromptMock,
+	showCommandPaletteMock,
 } from '../../browser/sampleCaseTour.js';
 import { PRIVATE_SEARCH_STATUS_BAR_DOM_ID } from '../../browser/sampleCaseTourTargets.js';
 
@@ -27,6 +29,24 @@ class FakeLayoutService implements Pick<IWorkbenchLayoutService, 'getContainer'>
 	getContainer(_targetWindow: Window): HTMLElement {
 		return this.container;
 	}
+}
+
+function createFakeEditorService(overrides?: {
+	getEditors?: () => unknown[];
+	openEditor?: (...args: unknown[]) => Promise<unknown>;
+}): IEditorService {
+	return {
+		getEditors: overrides?.getEditors ?? (() => []),
+		closeEditors: async () => { },
+		openEditor: overrides?.openEditor ?? (async (input: unknown) => ({ input })),
+	} as unknown as IEditorService;
+}
+
+function createMockHost() {
+	return {
+		showApproval: () => ({ dispose: () => { } }),
+		showCommandPalette: () => ({ dispose: () => { } }),
+	};
 }
 
 suite('SampleCaseTour', () => {
@@ -40,18 +60,103 @@ suite('SampleCaseTour', () => {
 		const contextService = {
 			getWorkspace: () => ({ folders: [] }),
 		} as unknown as IWorkspaceContextService;
-		const scenario = createSampleCaseTourScenario(commandService, contextService, {
-			show: () => ({ dispose: () => { } }),
-		});
-		const payload = scenario.presentation.payload as { steps: readonly { id: string; targetResolveTimeoutMs?: number }[] };
+		const scenario = createSampleCaseTourScenario(
+			commandService,
+			contextService,
+			createMockHost(),
+		);
+		const payload = scenario.presentation.payload as {
+			steps: readonly {
+				id: string;
+				targetResolveTimeoutMs?: number;
+				onBeforeShow?: () => void | Promise<void>;
+			}[];
+		};
 		assert.strictEqual(payload.steps.length, SAMPLE_CASE_TOUR_STEP_COUNT);
 		const privateSearchStep = payload.steps.find(step => step.id === 'privateSearch');
 		assert.ok(privateSearchStep);
 		assert.strictEqual(privateSearchStep!.targetResolveTimeoutMs, PRIVATE_SEARCH_TARGET_RESOLVE_TIMEOUT_MS);
+		const ids = payload.steps.map(step => step.id);
+		assert.ok(!ids.includes('browser'), 'live browser step is deferred');
+		assert.strictEqual(ids.indexOf('commandPalette'), 5, 'command palette is step 6 (0-based index 5)');
+		assert.strictEqual(ids.indexOf('chat'), 6, 'chat is step 7 (0-based index 6)');
+		assert.strictEqual(ids.indexOf('approvalMock'), 7, 'approval is step 8 (0-based index 7)');
+	});
+
+	test('command palette step shows the marketing mock', async () => {
+		let showCount = 0;
+		const commandService = {
+			executeCommand: async () => { },
+		} as unknown as ICommandService;
+		const contextService = {
+			getWorkspace: () => ({ folders: [] }),
+		} as unknown as IWorkspaceContextService;
+		const scenario = createSampleCaseTourScenario(
+			commandService,
+			contextService,
+			{
+				showApproval: () => ({ dispose: () => { } }),
+				showCommandPalette: () => {
+					showCount++;
+					return { dispose: () => { } };
+				},
+			},
+		);
+		const payload = scenario.presentation.payload as {
+			steps: readonly { id: string; onBeforeShow?: () => void | Promise<void> }[];
+		};
+		const step = payload.steps.find(s => s.id === 'commandPalette');
+		assert.ok(step?.onBeforeShow);
+		await step!.onBeforeShow!();
+		assert.strictEqual(showCount, 1);
+	});
+
+	test('chat step does not open the browser', async () => {
+		const executed: string[] = [];
+		const commandService = {
+			executeCommand: async (id: string) => {
+				executed.push(id);
+			},
+		} as unknown as ICommandService;
+		const contextService = {
+			getWorkspace: () => ({ folders: [] }),
+		} as unknown as IWorkspaceContextService;
+		const scenario = createSampleCaseTourScenario(
+			commandService,
+			contextService,
+			createMockHost(),
+		);
+		const payload = scenario.presentation.payload as {
+			steps: readonly { id: string; onBeforeShow?: () => void | Promise<void> }[];
+		};
+		const chatStep = payload.steps.find(step => step.id === 'chat');
+		assert.ok(chatStep?.onBeforeShow);
+		await chatStep!.onBeforeShow!();
+		assert.ok(executed.includes('workbench.action.chat.open'));
+		assert.ok(!executed.some(id => id.includes('browser')));
 	});
 
 	test('Private Search status bar DOM id matches safeappeals-rag pinned item id', () => {
 		assert.strictEqual(PRIVATE_SEARCH_STATUS_BAR_DOM_ID, 'safeappeals.safeappeals-rag.privateSearch');
+	});
+
+	test('showCommandPaletteMock mounts under layout container and shows Open Integrated Browser', () => {
+		const workbenchContainer = $('div.test-workbench-container');
+		mainWindow.document.body.appendChild(workbenchContainer);
+		disposables.add({ dispose: () => workbenchContainer.remove() });
+
+		const layoutService = new FakeLayoutService(workbenchContainer);
+		disposables.add(showCommandPaletteMock(layoutService));
+
+		const host = workbenchContainer.querySelector('.safeappeals-command-palette-mock-host');
+		assert.ok(host);
+		assert.strictEqual(host.parentElement, workbenchContainer);
+		const filter = workbenchContainer.querySelector('.safeappeals-command-palette-mock-filter');
+		assert.ok(filter);
+		assert.strictEqual(filter.textContent, OPEN_BROWSER_PALETTE_FILTER);
+		const row = workbenchContainer.querySelector('.safeappeals-command-palette-mock-row-label');
+		assert.ok(row);
+		assert.strictEqual(row.textContent, OPEN_BROWSER_PALETTE_FILTER);
 	});
 
 	test('showApprovalPromptMock mounts under layout container, not document.body', () => {
@@ -79,10 +184,6 @@ suite('SampleCaseTour', () => {
 				}
 			},
 		} as unknown as ICommandService;
-		const editorService = {
-			getEditors: () => [],
-			closeEditors: async () => { },
-		} as unknown as IEditorService;
 
 		for (const { outcome, expectedCalls } of [
 			{ outcome: OnboardingOutcome.Completed, expectedCalls: 1 },
@@ -94,7 +195,7 @@ suite('SampleCaseTour', () => {
 				runScenario: async () => outcome,
 			} as unknown as IOnboardingScenarioService;
 
-			await runSampleCaseTourCommand(onboarding, editorService, commandService);
+			await runSampleCaseTourCommand(onboarding, createFakeEditorService(), commandService);
 
 			assert.strictEqual(walkthroughCalls.length, expectedCalls, outcome);
 			if (expectedCalls > 0) {
@@ -112,10 +213,6 @@ suite('SampleCaseTour', () => {
 				}
 			},
 		} as unknown as ICommandService;
-		const editorService = {
-			getEditors: () => [],
-			closeEditors: async () => { },
-		} as unknown as IEditorService;
 		const onboarding = {
 			runScenario: async () => {
 				throw new Error('runScenario failed');
@@ -123,7 +220,11 @@ suite('SampleCaseTour', () => {
 		} as unknown as IOnboardingScenarioService;
 
 		await assert.rejects(
-			() => runSampleCaseTourCommand(onboarding, editorService, commandService),
+			() => runSampleCaseTourCommand(
+				onboarding,
+				createFakeEditorService(),
+				commandService,
+			),
 			/runScenario failed/,
 		);
 		assert.deepStrictEqual(walkthroughCalls, []);

@@ -4,8 +4,9 @@
 
 import { $, append } from '../../../../base/browser/dom.js';
 import { mainWindow } from '../../../../base/browser/window.js';
-import { URI } from '../../../../base/common/uri.js';
 import { DisposableStore, IDisposable, MutableDisposable, toDisposable } from '../../../../base/common/lifecycle.js';
+import { isMacintosh } from '../../../../base/common/platform.js';
+import { URI } from '../../../../base/common/uri.js';
 import { localize } from '../../../../nls.js';
 import { ICommandService } from '../../../../platform/commands/common/commands.js';
 import { IWorkspaceContextService } from '../../../../platform/workspace/common/workspace.js';
@@ -47,6 +48,8 @@ export const SAMPLE_CASE_TOUR_TARGETS = {
 	caseFiles: 'safeappeals.sampleCase.caseFiles',
 	privateSearch: 'safeappeals.sampleCase.privateSearch',
 	timeline: 'safeappeals.sampleCase.timeline',
+	commandPalette: 'safeappeals.sampleCase.commandPalette',
+	/** Reserved for a future live browser step; title-bar control still marks this id. */
 	browser: 'safeappeals.sampleCase.browser',
 	chat: 'safeappeals.sampleCase.chat',
 	approvalMock: 'safeappeals.sampleCase.approvalMock',
@@ -58,6 +61,9 @@ export const SAMPLE_CASE_TOUR_STEP_COUNT = 8;
 /** Longer target resolve wait for the Private Search status bar step (extension-contributed). */
 export const PRIVATE_SEARCH_TARGET_RESOLVE_TIMEOUT_MS = 5000;
 
+/** Command-palette filter text shown in the browser-teaching mock. */
+export const OPEN_BROWSER_PALETTE_FILTER = 'Open Integrated Browser';
+
 /** Root case brief filename in the sample workspace. */
 const AGENTS_MD = 'AGENTS.md';
 
@@ -67,14 +73,16 @@ const CORE_REFERENCES_FOLDER = 'core_references';
 /** Timeline extension view container command. */
 const TIMELINE_VIEW_COMMAND = 'workbench.view.extension.safeappeals-timeline';
 
-/** Integrated browser open command. */
-const BROWSER_OPEN_COMMAND = 'workbench.action.browser.open';
-
 /**
  * Tracks the live approval-mock DisposableStore so aborted tours dispose the
  * previous mock by reference — never by querying the document.
  */
 const currentApprovalPromptMock = new MutableDisposable();
+
+/**
+ * Tracks the live command-palette marketing mock the same way.
+ */
+const currentCommandPaletteMock = new MutableDisposable();
 
 function getFirstWorkspaceFolderUri(contextService: IWorkspaceContextService): URI | undefined {
 	return contextService.getWorkspace().folders[0]?.uri;
@@ -94,16 +102,24 @@ async function revealWorkspaceResource(
 	await commandService.executeCommand('revealInExplorer', resource);
 }
 
+function commandPaletteShortcutLabel(): string {
+	return isMacintosh ? '⌘⇧P' : 'Ctrl+Shift+P';
+}
+
 /**
  * Builds the sample-case spotlight scenario. Trigger is command-only (never automatic).
  * Steps 2–3 reuse the explorer tree target while {@link revealInExplorer} selects AGENTS.md
  * or `core_references/` so the spotlight stays on the file tree with the right row highlighted.
- * The approval step is a static mock — the AI is never invoked.
+ * The command-palette step teaches Ctrl/Cmd+Shift+P → Open Integrated Browser for later use;
+ * the tour does not open a browser tab. The approval step is a static mock — the AI is never invoked.
  */
 export function createSampleCaseTourScenario(
 	commandService: ICommandService,
 	contextService: IWorkspaceContextService,
-	mockHost: { show(): IDisposable },
+	mockHost: {
+		showApproval(): IDisposable;
+		showCommandPalette(): IDisposable;
+	},
 ): IOnboardingScenario<ISpotlightPayload> {
 	const payload: ISpotlightPayload = {
 		steps: [
@@ -159,13 +175,18 @@ export function createSampleCaseTourScenario(
 				},
 			},
 			{
-				id: 'browser',
-				targetId: SAMPLE_CASE_TOUR_TARGETS.browser,
-				title: localize('safeappeals.sampleCaseTour.browser.title', "Browser Stays in the App"),
-				description: localize('safeappeals.sampleCaseTour.browser.description', "Research portals, insurer sites, and tribunal pages open in the integrated browser — no switching to an external window. The assistant can read pages you share from here."),
+				id: 'commandPalette',
+				targetId: SAMPLE_CASE_TOUR_TARGETS.commandPalette,
+				title: localize('safeappeals.sampleCaseTour.commandPalette.title', "Open the Browser from Here"),
+				description: localize(
+					'safeappeals.sampleCaseTour.commandPalette.description',
+					"Press {0} anytime for the Command Palette, then run \"{1}\". Research portals and tribunal pages stay inside Safe Appeals — no external window. Try it after the tour when you need the web.",
+					commandPaletteShortcutLabel(),
+					OPEN_BROWSER_PALETTE_FILTER,
+				),
 				placement: 'below',
-				onBeforeShow: async () => {
-					await commandService.executeCommand(BROWSER_OPEN_COMMAND);
+				onBeforeShow: () => {
+					mockHost.showCommandPalette();
 				},
 			},
 			{
@@ -175,6 +196,7 @@ export function createSampleCaseTourScenario(
 				description: localize('safeappeals.sampleCaseTour.chat.description', "Chat is where you ask the assistant about the open case. Opening Chat by itself does not spend credits — drafting and research only run after you choose to buy a pack."),
 				placement: 'left',
 				onBeforeShow: async () => {
+					clearCommandPaletteMock();
 					await commandService.executeCommand('workbench.action.chat.open');
 				},
 			},
@@ -185,7 +207,7 @@ export function createSampleCaseTourScenario(
 				description: localize('safeappeals.sampleCaseTour.approval.description', "This is a practice preview — the AI is not running. When the assistant wants to edit a file, you will see a prompt like this first. Nothing is written until you approve."),
 				placement: 'below',
 				onBeforeShow: () => {
-					mockHost.show();
+					mockHost.showApproval();
 				},
 			},
 		],
@@ -201,6 +223,45 @@ export function createSampleCaseTourScenario(
 			payload,
 		},
 	};
+}
+
+/**
+ * Injects a static Command Palette marketing mock (Ctrl/Cmd+Shift+P → Open Integrated
+ * Browser) and marks it as a spotlight target. Dispose removes the DOM. Does not open
+ * the real quick-input UI or a browser tab.
+ */
+export function showCommandPaletteMock(layoutService: Pick<IWorkbenchLayoutService, 'getContainer'>): IDisposable {
+	const store = new DisposableStore();
+	const container = layoutService.getContainer(mainWindow);
+	const host = append(container, $('div.safeappeals-command-palette-mock-host'));
+	store.add(toDisposable(() => host.remove()));
+
+	const widget = append(host, $('div.safeappeals-command-palette-mock'));
+	const shortcut = commandPaletteShortcutLabel();
+
+	const header = append(widget, $('div.safeappeals-command-palette-mock-header'));
+	append(header, $('span.safeappeals-command-palette-mock-title')).textContent = localize(
+		'safeappeals.sampleCaseTour.commandPalette.mockTitle',
+		"Command Palette",
+	);
+	const kbd = append(header, $('kbd.safeappeals-command-palette-mock-kbd'));
+	kbd.textContent = shortcut;
+
+	const input = append(widget, $('div.safeappeals-command-palette-mock-input'));
+	append(input, $('span.safeappeals-command-palette-mock-prefix')).textContent = '>';
+	append(input, $('span.safeappeals-command-palette-mock-filter')).textContent = OPEN_BROWSER_PALETTE_FILTER;
+
+	const list = append(widget, $('div.safeappeals-command-palette-mock-list'));
+	const row = append(list, $('div.safeappeals-command-palette-mock-row.active'));
+	append(row, $('span.safeappeals-command-palette-mock-row-label')).textContent = OPEN_BROWSER_PALETTE_FILTER;
+	append(row, $('span.safeappeals-command-palette-mock-row-category')).textContent = localize(
+		'safeappeals.sampleCaseTour.commandPalette.mockCategory',
+		"View",
+	);
+
+	store.add(markOnboardingTarget(widget, SAMPLE_CASE_TOUR_TARGETS.commandPalette));
+	currentCommandPaletteMock.value = store;
+	return store;
 }
 
 /**
@@ -236,11 +297,17 @@ export function showApprovalPromptMock(layoutService: Pick<IWorkbenchLayoutServi
 	return store;
 }
 
+/** Disposes the tracked command-palette mock, if any. */
+export function clearCommandPaletteMock(): void {
+	currentCommandPaletteMock.clear();
+}
+
 /**
- * Disposes the tracked approval mock, if any (e.g. tour finished or aborted).
+ * Disposes tracked tour mocks (approval + command palette), e.g. tour finished or aborted.
  */
 export function clearApprovalPromptMocks(): void {
 	currentApprovalPromptMock.clear();
+	currentCommandPaletteMock.clear();
 }
 
 export async function closeGettingStartedEditors(editorService: IEditorService): Promise<void> {

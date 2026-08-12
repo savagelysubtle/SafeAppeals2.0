@@ -68,3 +68,107 @@
 	background: var(--vscode-button-background);
 	color: var(--vscode-button-foreground);
 }
+
+/* Command Palette marketing mock — top-center like the real quick input. */
+.safeappeals-command-palette-mock-host {
+	position: fixed;
+	inset: 0;
+	display: flex;
+	align-items: flex-start;
+	justify-content: center;
+	padding-top: 12vh;
+	pointer-events: none;
+	/* Same stacking context as spotlight (2600); mock must sit below the dim layer. */
+	z-index: 2550;
+}
+
+.safeappeals-command-palette-mock {
+	pointer-events: none;
+	width: min(520px, calc(100vw - 48px));
+	border-radius: var(--vscode-cornerRadius-large, 8px);
+	background-color: var(--vscode-quickInput-background, var(--vscode-editorWidget-background));
+	color: var(--vscode-quickInput-foreground, var(--vscode-editor-foreground));
+	border: 1px solid var(--vscode-quickInput-border, var(--vscode-widget-border));
+	box-shadow: 0 8px 24px var(--vscode-widget-shadow);
+	font-family: var(--vscode-font-family);
+	font-size: var(--vscode-font-size);
+	overflow: hidden;
+}
+
+.safeappeals-command-palette-mock-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	padding: 10px 14px 0;
+}
+
+.safeappeals-command-palette-mock-title {
+	font-size: 11px;
+	font-weight: 600;
+	letter-spacing: 0.02em;
+	text-transform: uppercase;
+	color: var(--vscode-descriptionForeground);
+}
+
+.safeappeals-command-palette-mock-kbd {
+	font-family: var(--vscode-editor-font-family, var(--vscode-font-family));
+	font-size: 11px;
+	padding: 2px 6px;
+	border-radius: var(--vscode-cornerRadius-small, 4px);
+	border: 1px solid var(--vscode-widget-border);
+	background: var(--vscode-keybindingLabel-background, transparent);
+	color: var(--vscode-keybindingLabel-foreground, var(--vscode-descriptionForeground));
+	box-shadow: inset 0 -1px 0 var(--vscode-widget-border);
+}
+
+.safeappeals-command-palette-mock-input {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	margin: 10px 12px 8px;
+	padding: 8px 10px;
+	border-radius: var(--vscode-cornerRadius-small, 4px);
+	border: 1px solid var(--vscode-focusBorder, var(--vscode-widget-border));
+	background: var(--vscode-input-background, var(--vscode-editor-background));
+	color: var(--vscode-input-foreground, var(--vscode-editor-foreground));
+}
+
+.safeappeals-command-palette-mock-prefix {
+	opacity: 0.7;
+	font-weight: 600;
+}
+
+.safeappeals-command-palette-mock-filter {
+	flex: 1;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.safeappeals-command-palette-mock-list {
+	padding: 0 6px 8px;
+}
+
+.safeappeals-command-palette-mock-row {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	padding: 8px 10px;
+	border-radius: var(--vscode-cornerRadius-small, 4px);
+}
+
+.safeappeals-command-palette-mock-row.active {
+	background: var(--vscode-list-activeSelectionBackground, var(--vscode-list-focusBackground));
+	color: var(--vscode-list-activeSelectionForeground, var(--vscode-list-focusForeground));
+}
+
+.safeappeals-command-palette-mock-row-label {
+	font-weight: 500;
+}
+
+.safeappeals-command-palette-mock-row-category {
+	opacity: 0.75;
+	font-size: 12px;
+}

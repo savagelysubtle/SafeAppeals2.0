@@ -19,11 +19,12 @@ import {
 	runSampleCaseTourCommand,
 	SAMPLE_CASE_TOUR_COMMAND_ID,
 	showApprovalPromptMock,
+	showCommandPaletteMock,
 } from './sampleCaseTour.js';
 
 /**
- * Registers the Safe Appeals sample-case spotlight scenario. The approval mock
- * is tracked inside {@link showApprovalPromptMock}.
+ * Registers the Safe Appeals sample-case spotlight scenario. Tour mocks
+ * (command palette + approval) are tracked inside their show helpers.
  */
 class SampleCaseTourContribution extends Disposable implements IWorkbenchContribution {
 
@@ -35,9 +36,14 @@ class SampleCaseTourContribution extends Disposable implements IWorkbenchContrib
 		@IWorkbenchLayoutService layoutService: IWorkbenchLayoutService,
 	) {
 		super();
-		this._register(onboardingScenarioRegistry.register(createSampleCaseTourScenario(commandService, contextService, {
-			show: () => showApprovalPromptMock(layoutService),
-		})));
+		this._register(onboardingScenarioRegistry.register(createSampleCaseTourScenario(
+			commandService,
+			contextService,
+			{
+				showApproval: () => showApprovalPromptMock(layoutService),
+				showCommandPalette: () => showCommandPaletteMock(layoutService),
+			},
+		)));
 	}
 }
 
