@@ -5,13 +5,15 @@ Public tracker of **features SafeAppeals has added** on top of the Code - OSS fo
 > **Detailed status index (engineers):** [docs/ADDED_FEATURES_TRACKER.md](docs/ADDED_FEATURES_TRACKER.md)
 > **Competitive planning notes:** [docs/COMPETITIVE_ROADMAP.md](docs/COMPETITIVE_ROADMAP.md)
 
-Last refreshed: **2026-08-11** · Product: SafeAppeals 2.x
+Last refreshed: **2026-08-11** · Product: **SafeAppeals 2.1** (`2.1.0`)
 
 ---
 
-## ★ Launch — migration complete (2026-08-11)
+## ★ Launch — SafeAppeals 2.1 (2026-08-11)
 
-**SafeAppeals is at launch.** The VS Code 1.129 migration ladder is closed.
+**SafeAppeals 2.1 is the launch line.** The VS Code migration ladder is closed.
+
+**Why 2.1 (not 3.0):** Same product line as 2.0 for users and installers, with a **major platform refresh** under the hood — jumped from the old VS Code/Void-era base to current Code - OSS, rebuilt the legal surface, and landed upgraded Rust natives (RAG, converter, tracker, docs). That is a 3.0-sized engineering change; the **shipped product version stays 2.1** so the story is “big refresh of SafeAppeals 2,” not a new product number. Git tags: historical `v2.0.0` remains the prior line; cut **`v2.1.0`** on the release commit when installers go out.
 
 | What | Where (historical only) |
 | ---- | ----------------------- |

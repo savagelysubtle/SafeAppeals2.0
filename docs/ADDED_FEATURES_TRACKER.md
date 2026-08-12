@@ -4,8 +4,8 @@
 > **Migration history (closed):** [`.cursor/plans/archive/safeappeals_master_plan.plan.md`](../.cursor/plans/archive/safeappeals_master_plan.plan.md) · [upstream merge spike](../.cursor/plans/archive/upstream_vs_code_merge_spike_2245beba.plan.md)  
 > This file is a derived status INDEX only — update one row when a feature ships. Do not expand into narrative.
 >
-> **LAUNCH (2026-08-11):** Migration ladder complete. Product surface below is ship-ready. New work is post-launch only (see ROADMAP).
-> Product: SafeAppeals (built on Code - OSS **1.129**, branch `update-vscode`).
+> **LAUNCH — SafeAppeals 2.1 (2026-08-11):** Migration ladder complete. Product version **`2.1.0`** (`package.json` / `product.json`). Engineering change is 3.0-scale (new Code - OSS base + Rust stack + UI refresh); marketed/shipped as **2.1** on the 2.x line after `v2.0.0`. New work is post-launch only (see ROADMAP).
+> Product: SafeAppeals (Code - OSS / VS Code **1.107** family per `product.json` `vscodeVersion`, branch `update-vscode`).
 
 | Feature | Status | Location | Wired? | Plan link |
 | ------- | ------ | -------- | ------ | --------- |
