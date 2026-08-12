@@ -104,5 +104,48 @@ export class CodesService {
 	isCustomTaskCode(code: string): boolean { return Object.hasOwn(this.current().taskCodes, code); }
 	isCustomActivityCode(code: string): boolean { return Object.hasOwn(this.current().activityCodes, code); }
 	getMergedCodes(): Promise<UTBMSCodes> { return this.loadCodes(); }
+
+	async syncCustomCodesFromServer(authToken: string, apiUrl: string = 'https://api.safeappeals.com'): Promise<void> {
+		try {
+			const response = await fetch(`${apiUrl}/team-codes`, {
+				headers: {
+					'Authorization': `Bearer ${authToken}`,
+					'Content-Type': 'application/json'
+				}
+			});
+
+			if (!response.ok) {
+				throw new Error(`Sync failed: ${response.statusText}`);
+			}
+
+			const data = (await response.json()) as { codes: Array<{ code: string; description: string; code_type: 'task' | 'activity' }> };
+			if (data?.codes) {
+				const currentConfig = this.current();
+				const taskCodes = { ...currentConfig.taskCodes };
+				const activityCodes = { ...currentConfig.activityCodes };
+
+				for (const item of data.codes) {
+					if (item.code_type === 'task') {
+						taskCodes[item.code] = item.description;
+					} else if (item.code_type === 'activity') {
+						activityCodes[item.code] = item.description;
+					}
+				}
+
+				const updated: CustomUTBMSCodes = {
+					version: CONFIG_VERSION,
+					taskCodes,
+					activityCodes,
+					inheritBuiltIn: currentConfig.inheritBuiltIn,
+				};
+
+				await this.replaceCustomCodes(updated);
+			}
+		} catch (err) {
+			console.error('[TimeTracker] Failed to sync team codes:', err);
+			throw err;
+		}
+	}
+
 	dispose(): void { this._onCodesChanged.dispose(); }
 }
