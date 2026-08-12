@@ -1,11 +1,30 @@
 # SafeAppeals Roadmap
 
-Public tracker of **features SafeAppeals has added** on top of the Code - OSS foundation, plus what's in flight and what's next.
+Public tracker of **features SafeAppeals has added** on top of the Code - OSS foundation, plus what's next **after launch**.
 
 > **Detailed status index (engineers):** [docs/ADDED_FEATURES_TRACKER.md](docs/ADDED_FEATURES_TRACKER.md)
 > **Competitive planning notes:** [docs/COMPETITIVE_ROADMAP.md](docs/COMPETITIVE_ROADMAP.md)
 
-Last refreshed: **August 2026** · Product: SafeAppeals 2.x
+Last refreshed: **2026-08-11** · Product: SafeAppeals 2.x
+
+---
+
+## ★ Launch — migration complete (2026-08-11)
+
+**SafeAppeals is at launch.** The VS Code 1.129 migration ladder is closed.
+
+| What | Where (historical only) |
+| ---- | ----------------------- |
+| Master plan (ordered rungs → ship) | [`.cursor/plans/archive/safeappeals_master_plan.plan.md`](.cursor/plans/archive/safeappeals_master_plan.plan.md) |
+| Upstream merge / disposition inventory | [`.cursor/plans/archive/upstream_vs_code_merge_spike_2245beba.plan.md`](.cursor/plans/archive/upstream_vs_code_merge_spike_2245beba.plan.md) |
+| Final micro-plans (r11–r15, r65) | [`.cursor/plans/archive/`](.cursor/plans/archive/) |
+
+**Implications for planning:**
+
+- Product features on the migration ladder are **done and working** (agent, auth, email, docs, timeline, tracker, RAG, cloud credits, tools).
+- **All new features and plans are post-launch.** Do not reopen the master plan or merge spike as active workstreams.
+- Business/ops that are not product code (e.g. Google restricted-scope verification) may still run in parallel; they do not reopen the ladder.
+- New work gets a **new** plan under `.cursor/plans/` (or an issue), then ships into **Shipped** below when done.
 
 ---
 
@@ -14,14 +33,14 @@ Last refreshed: **August 2026** · Product: SafeAppeals 2.x
 | Status | Meaning |
 | ------ | ------- |
 | ✅ Shipped | Available in current builds |
-| 🚧 In progress | Actively being built or polished |
+| 🚧 In progress | Actively being built or polished (**post-launch only**) |
 | 🧩 Partial | Core path works; gaps remain |
-| 📋 Planned | On the roadmap, not started |
+| 📋 Planned | On the roadmap, not started (**post-launch**) |
 | ❌ Dropped | Explicitly out of scope |
 
 ---
 
-## Shipped — what we've added
+## Shipped — launch surface
 
 Features SafeAppeals owns beyond a plain code editor:
 
@@ -34,6 +53,7 @@ Features SafeAppeals owns beyond a plain code editor:
 | File organizer (AI + rules) | ✅ | Side classification, naming patterns, preview/apply |
 | Tutorials + sample case | ✅ | In-app walkthroughs |
 | Theme packs (SafeAppeals) | ✅ | Dozens of branded themes |
+| Welcome onboarding | ✅ | First-run for legal users new to agentic AI |
 
 ### Documents
 
@@ -42,7 +62,7 @@ Features SafeAppeals owns beyond a plain code editor:
 | PDF viewer (annotations, highlights) | ✅ | Rust/WASM path |
 | DOCX editor | ✅ | Full editing in-app |
 | XLSX editor | ✅ | Rust/WASM rewrite |
-| Document converter + PDF merge | 🧩 | Extension + Rust sidecar |
+| Document converter + PDF merge | ✅ | Extension + Rust sidecar |
 | OCR (Tesseract) / Poppler helpers | ✅ | Scanned PDF / image text |
 
 ### Email & communications
@@ -51,12 +71,12 @@ Features SafeAppeals owns beyond a plain code editor:
 | ------- | ------ | ----- |
 | Email dashboard (IMAP/SMTP, tags, case links) | ✅ | Google + Outlook XOAUTH2 via service connections; app password fallback |
 | AI draft replies | ✅ | Context from project documents |
-| Email AI classifier | 📋 | Seam only today |
 
 ### AI, RAG & agents
 
 | Feature | Status | Notes |
 | ------- | ------ | ----- |
+| SafeAppeals Agent | ✅ | Launch-ready; works end-to-end |
 | Private Search (local RAG) | ✅ | Hybrid search, per-workspace isolation, offline embeddings |
 | Chat modes (Drafting / Research / Case Manager) | ✅ | Project-aware assistant |
 | BYOK providers + SafeAppeals Cloud credits | ✅ | Claude, GPT, Gemini, and more |
@@ -70,8 +90,8 @@ Features SafeAppeals owns beyond a plain code editor:
 | ------- | ------ | ----- |
 | Google Calendar sync | ✅ | Per-event, workspace-isolated |
 | Outlook Calendar sync | ✅ | Microsoft Graph |
-| Time tracker (UTBMS, 6-min billing, LEDES) | ✅ | Encrypted local storage; Windows prebuilds still hardening |
-| Audio record + Whisper transcription | ✅ | Local/offline speech-to-text, fully installed; use it to transcribe recordings into case notes, or as a voice input mode to chat directly with the agent |
+| Time tracker (UTBMS, 6-min billing, LEDES) | ✅ | Encrypted local storage; Linux + Windows prebuilds |
+| Audio record + Whisper transcription | ✅ | Local/offline speech-to-text; case notes or voice input to agent |
 
 ### Auth, cloud & security
 
@@ -80,22 +100,13 @@ Features SafeAppeals owns beyond a plain code editor:
 | SafeAppeals Cloud sign-in | ✅ | Google + Outlook/Microsoft identity; chat setup, onboarding, Models, Accounts, and dashboard login |
 | Encrypted local stores | ✅ | AES-GCM + SecretStorage pattern for legal data |
 | Service connections (Google / Microsoft) | ✅ | Mail/calendar via `/connections/*`; short-lived provider tokens only |
+| Packaging / native prebuilds | ✅ | Installer path and dual-ABI natives for desktop targets |
 
 ---
 
-## In progress
+## Post-launch — planned next
 
-| Item | Focus |
-| ---- | ----- |
-| Welcome onboarding rewrite | First-run experience for newcomers |
-| Converter production hardening | Smart convert + selective merge |
-| Packaging & prebuilds | Windows native deps, installers, migrations |
-
----
-
-## Planned next
-
-Priorities can shift; open an issue if something is blocking your workflow.
+Everything below is **after launch**. Priorities can shift; open an issue if something is blocking your workflow.
 
 | Area | Candidates |
 | ---- | ---------- |
@@ -112,8 +123,9 @@ Priorities can shift; open an issue if something is blocking your workflow.
 | Agent Skills | Expand built-in agent skill library (e.g., PDF operations: merge/split/rotate/watermark/OCR/form-fill) as a pattern for future skills |
 | Billing | Invoice generation; AI-assisted time entry; expenses |
 | Client | Secure sharing / light client portal |
-| Email | AI classification of incoming mail |
-| Platform | Finish Windows prebuilds; void-reference cleanup |
+| Email | AI classification of incoming mail (optional enhancement) |
+
+Active post-launch plan files (if any) live under [`.cursor/plans/`](.cursor/plans/) — currently Slack-related only. Migration plans stay in **archive**.
 
 ---
 
@@ -130,9 +142,11 @@ Kept here so we don't re-litigate settled calls:
 
 ## How we update this file
 
-1. When a feature **ships**, move it to **Shipped** (or flip 🚧 → ✅) and update [docs/ADDED_FEATURES_TRACKER.md](docs/ADDED_FEATURES_TRACKER.md).
-2. When scope **changes**, note it under Planned or Dropped with a one-line reason.
-3. Prefer short, user-facing names here; put paths and plan links in the docs tracker.
+1. **Launch is closed.** Do not add migration-ladder work here.
+2. When a **post-launch** feature ships, move it to **Shipped** (or flip 🚧 → ✅) and update [docs/ADDED_FEATURES_TRACKER.md](docs/ADDED_FEATURES_TRACKER.md).
+3. When scope **changes**, note it under Post-launch or Dropped with a one-line reason.
+4. Prefer short, user-facing names here; put paths and plan links in the docs tracker.
+5. New engineering plans go in `.cursor/plans/`; closed migration history stays in `.cursor/plans/archive/`.
 
 ---
 

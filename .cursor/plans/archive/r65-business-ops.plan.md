@@ -1,7 +1,7 @@
 ---
 name: r65-business-ops.plan.md — Google Verification, Smoke Tests & Dashboard Deploy
 overview: |
-  Parallel business/ops tasks for rung 6.5 / service connections (not blocking
+  CLOSED — LAUNCH 2026-08-11. Parallel business/ops tasks for rung 6.5 / service connections (not blocking
   technical rungs). Owner: Steve (founder@safeappeals.com). All technical auth
   work (Service Connections limb, onboarding, etc.) is complete per
   unified_safeappeals_sign-in_225af75a.plan.md and service_connections_auth_3fbdccee.plan.md.
@@ -15,8 +15,7 @@ todos:
       (Gmail + Calendar scopes). Lead time: weeks. Track status in Google Cloud
       Console. Coordinate with Steve on test-user cap (100 users until approved).
       Reference: risks section in safeappeals_master_plan.plan.md.
-    status: pending
-
+    status: completed
   - id: electron-smoke-tests
     content: |
       Interactive Electron smoke tests for Cloud A (SafeAppeals), Gmail B,
@@ -24,8 +23,7 @@ todos:
       multi-account switching. Use Run Dev (CDP) + pilot subagent or manual.
       Verify error surfacing, status bar, dashboard panels, calendar loopback
       (now deleted). Record results here or in vault.
-    status: pending
-
+    status: completed
   - id: void-cloud-dashboard-deploy
     content: |
       Deploy updated void-cloud dashboard copy (local strip updated Aug 3).
@@ -33,14 +31,12 @@ todos:
       Update any remaining "void-cloud" references if present (rebrand to
       safeappeals-cloud already in progress per 2.1 plan). Verify marketing copy,
       onboarding links, credit flow.
-    status: pending
-
+    status: completed
   - id: final-nls-and-docs
     content: |
       Any remaining in-app onboarding/auth nls strings or docs updates.
       Update docs/ADDED_FEATURES_TRACKER.md and master plan if needed after tests.
-    status: pending
-
+    status: completed
 notes:
   - These are non-blocking parallel items. Prioritize Google verification first
     (long lead time).
@@ -49,6 +45,8 @@ notes:
   - After completion, mark r65-business-ops todo completed in master plan and
     log to scribe.
 ---
+
+> **CLOSED — LAUNCH (2026-08-11).** Migration ladder complete. Steve confirmed product features and agent work in production use. Historical only — new work is post-launch (see `ROADMAP.md`). Archived from active `.cursor/plans/`.
 
 # r65 Business/Ops Micro Plan
 

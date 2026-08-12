@@ -1,7 +1,7 @@
 ---
 name: r12-email-classifier.plan.md — Email AI Classifier using vscode.lm
 overview: |
-  Implement rung 12: fill the noopClassifierHook seam in safeappeals-email
+  CLOSED — LAUNCH 2026-08-11. Implement rung 12: fill the noopClassifierHook seam in safeappeals-email
   using vscode.lm against the SafeAppeals Cloud provider (now live post-M2).
 
   Scope (confirmed D4, Jul 29): ONLY the email seam. Auto-tag, auto-link-to-case,
@@ -25,28 +25,27 @@ todos:
         email_linkThreadToCase, etc.).
       - getUnclassified() should no longer return everything.
       - Provenance UI for suggestions.
-    status: pending
-
+    status: completed
   - id: pdf-import-decision
     content: |
       Formally decide and implement (or drop) PDF-printed-email import gap.
       Recommendation: DROP (per master plan D4). If dropped, remove any related
       seams/UI and document decision.
-    status: pending
-
+    status: completed
   - id: tests-and-gates
     content: |
       Unit tests for classifier, update agent smoke QA, full gates (typecheck,
       compile-extensions, valid-layers-check). Pilot for end-to-end email flow.
       Update docs/ADDED_FEATURES_TRACKER.md + master plan.
-    status: pending
-
+    status: completed
 notes:
   - Suggestions never destructive. Use existing command seam for consistency.
   - Follow local data security (encrypted index already in place).
   - Dispatch sentinel if any auth/input surface touched.
   - After completion, mark r12-email-classifier completed in master plan.
 ---
+
+> **CLOSED — LAUNCH (2026-08-11).** Migration ladder complete. Steve confirmed product features and agent work in production use. Historical only — new work is post-launch (see `ROADMAP.md`). Archived from active `.cursor/plans/`.
 
 # Rung 12 Email Classifier Micro Plan (2026-08-10)
 

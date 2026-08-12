@@ -1,7 +1,7 @@
 ---
 name: SafeAppeals Master Plan — Single Entry Point
 overview:
-  "THE entry point for the SafeAppeals 2.0 migration (fork of VS Code 1.129,
+  "CLOSED — LAUNCH 2026-08-11. THE entry point for the SafeAppeals 2.0 migration (fork of VS Code 1.129,
   branch update-vscode, migrating off the 1.95-era Void fork via
   void-reference/ rewrite-not-copy). This plan owns the single ordered
   execution sequence from here to shipping and DELEGATES to the five
@@ -126,14 +126,14 @@ todos:
       Aug 3 — free account unlocks email/calendar/docs; pay for AI / $30
       credits). In-app onboarding + auth nls already shipped. Micro-plan:
       r65-business-ops.plan.md (created 2026-08-10)."
-    status: pending
+    status: completed
   - id: r11-agent-remainder
     content: "Rung 11 remainder (T14 already did the product.json swap):
       rebrand vendored extensions/copilot as the SafeAppeals agent; BYOK
       provider wiring via upstream Manage Models UI. Detail: merge plan
       rung 11 + section C.1. Micro-plan: r11-agent-remainder.plan.md (created
       2026-08-10)."
-    status: pending
+    status: completed
   - id: r12-email-classifier
     content: "Rung 12 (numbering CONFIRMED Jul 29; deps: M2 so a
       live LM exists): email AI classifier filling the noopClassifierHook
@@ -143,14 +143,14 @@ todos:
       seams belong to the tools pass. Also decide PDF-printed-email import
       here (gap-audit item 3: recommend DROP formally). Detail: §D4 below.
       Micro-plan: r12-email-classifier.plan.md (created 2026-08-10)."
-    status: pending
+    status: completed
   - id: r13-cloud-remainder
     content: "Rung 13 remainder (T13 already did the LLM provider): credits/
       balance/checkout UI polish, /models endpoint as source of truth, server
       SSE if not landed with T13, metrics/update service decisions. Detail:
       merge plan rung 13 + C.1 server prerequisite. Micro-plan:
       r13-cloud-remainder.plan.md (created 2026-08-10)."
-    status: pending
+    status: completed
   - id: tools-pass
     content: "Agent tools pass — CORE DONE Aug 2 (e1754228): workspace/file tools,
       Brave search/fetch (credits+filters), DOCX/XLSX open+closed + structure
@@ -170,15 +170,17 @@ todos:
       (WINDOWS-PREBUILDS-TODO.md). Re-verify web-server quality/commit path
       from built server; remaining core-edit audit (merge plan section H).
       Micro-plan: r14-packaging.plan.md (created 2026-08-10)."
-    status: pending
+    status: completed
   - id: r15-cleanup
     content: "Rung 15: placement review, delete void-reference/ (first move
       the XLSX Rust crate source out — it still lives there), delete
       python/ if r8 retired it, final tracker refresh, close this plan.
       Micro-plan: r15-cleanup.plan.md (created 2026-08-10)."
-    status: pending
+    status: completed
 isProject: true
 ---
+
+> **CLOSED — LAUNCH (2026-08-11).** Migration ladder complete. Steve confirmed product features and agent work in production use. Historical only — new work is post-launch (see `ROADMAP.md`). Archived from active `.cursor/plans/`.
 
 # SafeAppeals Master Plan — Single Entry Point
 

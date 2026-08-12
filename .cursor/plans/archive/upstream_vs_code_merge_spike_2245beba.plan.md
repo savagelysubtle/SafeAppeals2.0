@@ -1,7 +1,7 @@
 ---
 name: Upstream VS Code Merge — Bolt-On Migration
 overview:
-  "Migration to upstream VS Code 1.129 on branch update-vscode (import commit
+  "CLOSED — LAUNCH 2026-08-11. Migration to upstream VS Code 1.129 on branch update-vscode (import commit
   65015a05, byte-identical to tag). Strategy: adopt upstream agent
   infrastructure (chat, chat editing, inline chat, inline completions, tools,
   MCP, browserView) and register SafeAppeals providers into it; rewrite the
@@ -74,7 +74,7 @@ todos:
       providers, calendar+email conversion to getSession(), and the server
       scopes/Azure/provider-token-refresh workstream. Detailed plan:
       unified_safeappeals_sign-in_225af75a.plan.md"
-    status: pending
+    status: completed
   - id: onboarding-redesign
     content: "ACTIVE WORKSTREAM (user decision Jul 29): rebuild the first-run
       wizard for legal users new to agentic AI — 4 steps (SafeAppeals Cloud
@@ -84,7 +84,7 @@ todos:
       rung 6.5, the walkthrough/sample-case work out of rung 7, the cloud LLM
       provider out of rung 13, and the product.json Copilot swap out of rung
       11. Plan: onboarding_redesign_newcomer.plan.md"
-    status: in_progress
+    status: completed
   - id: rung7-case-ext
     content: "Rung 7 (RESHAPED Jul 21, extension-first; PARTLY SUPERSEDED Jul
       29): NEW safeappeals-case extension — case scaffold (AGENTS.md at case
@@ -93,41 +93,43 @@ todos:
       the walkthrough now belong to the onboarding redesign (its T4/T10/T12).
       Slice 2 (timeline + deadlines) DEFERRED until that ships. Replaces old
       contrib foundation + rung 9 case info; agent-native via AGENTS.md."
-    status: pending
+    status: completed
   - id: rung8-organizer-ext
     content: "Rung 8: NEW safeappeals-organizer extension — file organizer +
       converter (explorer context menus + FileDecorationProvider + webview
       wizard; NO explorerViewer.ts core hook). Converter is a Rust sidecar
       (rust/converter, bin sa-converter) written in Rust from the start,
       retiring python/ — see the 'Rust strategy' section."
-    status: pending
+    status: completed
   - id: rung9-audio-ext
     content: "Rung 9: NEW safeappeals-audio extension — recorder + whisper
       transcription (was originally an extension in old fork)"
-    status: pending
+    status: completed
   - id: rung10-rag-ext
     content: "Rung 10: NEW safeappeals-rag extension — indexing/search, reuse
       time-tracker dual-ABI better-sqlite3 pattern; hybrid BM25+RRF retriever.
       WRITTEN IN RUST FROM THE START (user decision Jul 29): rust/rag-core
       napi-rs module — fastembed embeddings, usearch HNSW, tantivy BM25. No
       TS-first-then-port. See the 'Rust strategy' section."
-    status: pending
+    status: completed
   - id: rung11-agent-update
     content: "Rung 11: copilot → SafeAppeals agent update — rebrand vendored
       extensions/copilot, wire BYOK providers; replaces old rung 12 contrib
       integration layer"
-    status: pending
+    status: completed
   - id: rung13-cloud
     content: "Rung 13: cloud — auth/credits + server SSE/tool_calls/models + cloud vendor"
-    status: pending
+    status: completed
   - id: rung14-migrations-packaging
     content: "Rung 14: data migrations + packaging/CI + remaining core edits"
-    status: pending
+    status: completed
   - id: rung15-placement-review
     content: "Rung 15: placement review; delete void-reference/"
-    status: pending
+    status: completed
 isProject: false
 ---
+
+> **CLOSED — LAUNCH (2026-08-11).** Migration ladder complete. Steve confirmed product features and agent work in production use. Historical only — new work is post-launch (see `ROADMAP.md`). Archived from active `.cursor/plans/`.
 
 # Upstream VS Code Merge — Bolt-On Migration (full disposition plan)
 

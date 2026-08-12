@@ -1,7 +1,7 @@
 ---
 name: r11-agent-remainder.plan.md — SafeAppeals Agent Rebrand + BYOK Wiring
 overview: |
-  Complete rung 11: rebrand the vendored extensions/copilot as the SafeAppeals
+  CLOSED — LAUNCH 2026-08-11. Complete rung 11: rebrand the vendored extensions/copilot as the SafeAppeals
   agent and wire BYOK providers through upstream's Manage Models UI
   (chatLanguageModels.json + chat.lm.secret.* secrets).
 
@@ -18,8 +18,7 @@ todos:
       - Update contributes, commands, menus, nls strings.
       - Ensure defaultChatAgent string rebrand (deferred from M2).
       - Remove any remaining GitHub.copilot-* references.
-    status: pending
-
+    status: completed
   - id: byok-provider-wiring
     content: |
       Wire BYOK providers via upstream Manage Models UI:
@@ -28,20 +27,20 @@ todos:
       - Integrate with hasByokModels / chatEntitlementService (already partially done in M2).
       - Update any settings/React UI remnants (per D2 decision: use upstream UI).
       - Test model picker shows SafeAppeals Cloud + BYOK options.
-    status: pending
-
+    status: completed
   - id: gates-and-verify
     content: |
       Full gates: typecheck-client, compile-extensions (safeappeals + copilot rebrand), valid-layers-check, agent smoke tests.
       Pilot for Manage Models UI flow. Update docs/ADDED_FEATURES_TRACKER.md and master plan.
-    status: pending
-
+    status: completed
 notes:
   - Follow exact patterns from onboarding_redesign_newcomer.plan.md and agent tools plan.
   - No new contrib hub; everything via extension or upstream.
   - Record any deviations in master plan "Implementation deviations" section.
   - After completion, flip r11-agent-remainder todo to completed in master plan.
 ---
+
+> **CLOSED — LAUNCH (2026-08-11).** Migration ladder complete. Steve confirmed product features and agent work in production use. Historical only — new work is post-launch (see `ROADMAP.md`). Archived from active `.cursor/plans/`.
 
 # Rung 11 Agent Remainder Micro Plan (2026-08-10)
 

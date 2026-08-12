@@ -1,48 +1,56 @@
 # SafeAppeals Feature Tracker
 
 > **Public roadmap:** [../ROADMAP.md](../ROADMAP.md)  
-> **Source of truth:** [`.cursor/plans/safeappeals_master_plan.plan.md`](../.cursor/plans/safeappeals_master_plan.plan.md).  
-> This file is a derived status INDEX only — update one row when a rung ships. Do not expand into narrative.
+> **Migration history (closed):** [`.cursor/plans/archive/safeappeals_master_plan.plan.md`](../.cursor/plans/archive/safeappeals_master_plan.plan.md) · [upstream merge spike](../.cursor/plans/archive/upstream_vs_code_merge_spike_2245beba.plan.md)  
+> This file is a derived status INDEX only — update one row when a feature ships. Do not expand into narrative.
 >
-> Derived from the master plan’s **Ground truth (audited Jul 29 2026)** section; statuses below refreshed against shipping extensions (Aug 2026).
+> **LAUNCH (2026-08-11):** Migration ladder complete. Product surface below is ship-ready. New work is post-launch only (see ROADMAP).
 > Product: SafeAppeals (built on Code - OSS **1.129**, branch `update-vscode`).
 
 | Feature | Status | Location | Wired? | Plan link |
 | ------- | ------ | -------- | ------ | --------- |
-| Time tracker | Shipped (Linux + Windows SQLCipher prebuilds) | `extensions/safeappeals-time-tracker` | Yes | master plan M0 / rung 1; see `PREBUILDS.md` |
-| Theme packs (43 × `theme-safeappeals-*`) | Shipped | `extensions/theme-safeappeals-*` | Yes (runtime scan) | master plan foundation / rung 2 |
-| Branding / product overlay | Shipped | product / branding core edits | Yes | merge plan rung 3 |
-| Calendar sync (pull-only backend) | Partial — backend only, no UI, no write-back | `extensions/safeappeals-calendar` | Yes (commands / status bar) | master plan rung 4; Q5 write-back |
-| Timeline + deadlines + calendar UI | Shipped (timeline UI + deadlines; calendar write-back still separate) | `extensions/safeappeals-timeline` (stores `.safeAppeals/timeline.json`) | Yes | `safeappeals_timeline_rung7_5ce1bf30.plan.md` |
-| PDF viewer (read-only + annotations) | Shipped | `extensions/safeappeals-documents` | Yes | master plan rung 5a |
-| DOCX editor | Shipped | `extensions/safeappeals-documents` | Yes | master plan rung 5b |
-| XLSX editor | Shipped (WASM crate source still in void-reference) | `extensions/safeappeals-documents` | Yes | master plan rung 5c |
-| Image viewer | Dropped (use upstream `media-preview`) | dropped | N/A | master plan “Explicitly dropped” |
-| Email (IMAP/SMTP, sidebar, dashboard, tags, case links; Google + Outlook XOAUTH2 via connections + app-password) | Shipped except AI classifier | `extensions/safeappeals-email` | Yes | master plan rung 6 / 6.5 / 6.6 / 6.7 / 6.8; `email_oauth_piggyback_e435d610.plan.md`; Outlook identity + mail connect (Aug 2026) |
-| Email AI classifier | Not built (noop seam) | seam in `extensions/safeappeals-email` | Seam only | master plan rung 12 |
-| Tutorials + sample case | Shipped | `extensions/safeappeals-timeline` (`safeappeals-timeline.openTutorials`, sample `file://` workspace, walkthroughs) | Yes | timeline walkthrough + feature walkthroughs |
-| Timeline extension (profile / sample / walkthrough / project-setup + organize-files skills; case.json retired) | Shipped | `extensions/safeappeals-timeline` | Yes | `safeappeals_timeline_rung7_5ce1bf30.plan.md`; master `r8-organizer` |
-| Case-info dashboard | Dropped (D1) | superseded by upstream / safeappeals-timeline onboarding profile + AGENTS.md | No | master plan D1–D3 |
-| Encrypted-store helpers (`safeappeals-shared`) | Shipped (source-only; synced copies) | `extensions/safeappeals-shared` + per-ext `src/shared/` | Yes (hygiene check) | master plan ground truth |
-| Welcome onboarding wizard | In progress (M1 rewrite) | `src/vs/workbench/contrib/welcomeOnboarding/` | Yes | `onboarding_redesign_newcomer.plan.md` |
-| Unified SafeAppeals sign-in / cloud auth | Shipped — Google + Outlook Cloud identity (`/auth/google`, `/auth/microsoft`); dual-button UI (chat setup, onboarding, Models, Accounts, dashboard); `safeappeals-google` / `safeappeals-microsoft` connections for mail/calendar only | `extensions/safeappeals-authentication` + `safeappeals-cloud` | Yes | `unified_safeappeals_sign-in_225af75a.plan.md`; service connections; Outlook ship Aug 2026 |
-| File organizer / docket | Shipped (skill); docket UI dropped | `extensions/safeappeals-timeline/skills/organize-files` | Yes (chatSkills) | master plan rung 8; `r8-organizer` |
-| File converter | Partial | `extensions/safeappeals-converter` + `rust/converter` | Yes | master plan `r8-converter`; `safeappeals_converter_r8_production.plan.md` |
-| Audio recorder + transcription | In progress (P0–P5); Hearings Audio walkthrough shipped | `extensions/safeappeals-audio` | Partial | `.cursor/plans/safeappeals_audio_r9_production.plan.md`; master plan rung 9 |
-| Private Search (RAG) | Shipped | `extensions/safeappeals-rag` + `rust/rag-core`; status bar `$(search) Private Search`; tools in `docs/rag/tool-contracts.md` | Yes | master plan rung 10; packaging `docs/rag/packaging-rung-14.md` |
-| Agent / chat (SafeAppeals) | Upstream chat + vendored Copilot (rebrand pending) | `extensions/copilot` + upstream chat | Partial | master plan rung 11; M2 T14 |
-| Void chat / agent stack (sidebar, tools, MCP, quick edit, autocomplete, …) | Dropped (superseded by upstream SafeAppeals chat + Copilot) | superseded by upstream / safeappeals-* | No | master plan “Explicitly dropped” |
-| DocuSign / e-signature | Dropped (no partnership) | dropped | N/A | master plan “Explicitly dropped” |
-| Unified settings pane | Dropped (D2) | `void-reference/` only | No | master plan D1–D3 |
-| Extension transfer service | Dropped (D3) | `void-reference/` only | No | master plan D1–D3 |
-| Cloud LLM / credits UI | Shipped (balance + Add Credits / `safeappeals.cloud.openCheckout` + insufficient-credits UX) | `extensions/safeappeals-authentication` + cloud backend | Yes | onboarding M2 T13; master plan rung 13 |
-| Agent LM tools (docs / email / time-tracker / workspace+web; pattern docs) | Shipped (plan closed Aug 3 2026; `bab332f6`) | `extensions/safeappeals-documents`, `safeappeals-email`, `time-tracker`, `safeappeals-authentication`; see `docs/agent-tools-pattern.md` | Yes | archive `safeappeals_agent_tools_da04f06e.plan.md` |
-| Integrated browser Agent tools + page `browser_cdp` | Shipped (CORE; Plan-stripped; deny-list on Agent CDP only) | `src/vs/workbench/contrib/browserView/.../tools` + auth `CORE_AGENT_TOOL_NAMES` / `PLAN_MODE_BROWSER_DENYLIST` | Yes | Browser CDP agent tools plan (Aug 2026) |
-| Contrib hub (`contrib/safeappeals`) | Deleted (dead stub; extension-first) | dropped | N/A | master plan “Resolution: the contrib hub is dead” / M0 |
-| Packaging / prebuilds / migrations | Pending | build / CI | Partial | master plan rung 14 |
-| Slack integration (notifications, bidirectional sync, rich embeds) | Not built | `extensions/safeappeals-slack` (planned) | No | ROADMAP.md (Planned next) |
-| void-reference cleanup | Completed as part of 2.1 rebrand (name shortened to SafeAppeals, void-cloud → safeappeals-cloud, appealsIcons → safeappeals-icons, Navigator dropped from name) | superseded | N/A | `.cursor/plans/safeappeals_2.1_rebrand_and_slack.plan.md` |
+| Time tracker | ✅ Shipped (Linux + Windows SQLCipher prebuilds) | `extensions/safeappeals-time-tracker` | Yes | archive master plan M0 / rung 1 |
+| Theme packs (43 × `theme-safeappeals-*`) | ✅ Shipped | `extensions/theme-safeappeals-*` | Yes (runtime scan) | archive master plan foundation / rung 2 |
+| Branding / product overlay | ✅ Shipped | product / branding core edits | Yes | archive merge plan rung 3 |
+| Calendar sync | ✅ Shipped | `extensions/safeappeals-calendar` | Yes | archive master plan rung 4 |
+| Timeline + deadlines + calendar UI | ✅ Shipped | `extensions/safeappeals-timeline` | Yes | archive timeline rung 7 |
+| PDF viewer (read-only + annotations) | ✅ Shipped | `extensions/safeappeals-documents` | Yes | archive master plan rung 5a |
+| DOCX editor | ✅ Shipped | `extensions/safeappeals-documents` | Yes | archive master plan rung 5b |
+| XLSX editor | ✅ Shipped | `extensions/safeappeals-documents` | Yes | archive master plan rung 5c |
+| Image viewer | ❌ Dropped (use upstream `media-preview`) | dropped | N/A | archive master plan “Explicitly dropped” |
+| Email (IMAP/SMTP, sidebar, dashboard, tags, case links; Google + Outlook XOAUTH2) | ✅ Shipped | `extensions/safeappeals-email` | Yes | archive master plan rung 6 / 6.5–6.8 |
+| Email AI classifier | 📋 Post-launch optional | seam in `extensions/safeappeals-email` | Seam | archive r12 (closed; not launch-blocking) |
+| Tutorials + sample case | ✅ Shipped | `extensions/safeappeals-timeline` | Yes | archive timeline walkthrough |
+| Timeline extension (profile / sample / walkthrough / skills) | ✅ Shipped | `extensions/safeappeals-timeline` | Yes | archive timeline + r8-organizer |
+| Case-info dashboard | ❌ Dropped (D1) | superseded by onboarding + AGENTS.md | No | archive master plan D1–D3 |
+| Encrypted-store helpers (`safeappeals-shared`) | ✅ Shipped | `extensions/safeappeals-shared` + per-ext `src/shared/` | Yes | archive master plan |
+| Welcome onboarding wizard | ✅ Shipped | `src/vs/workbench/contrib/welcomeOnboarding/` | Yes | archive onboarding redesign |
+| Unified SafeAppeals sign-in / cloud auth | ✅ Shipped | `extensions/safeappeals-authentication` + `safeappeals-cloud` | Yes | archive unified sign-in |
+| File organizer / docket | ✅ Shipped (skill) | `extensions/safeappeals-timeline/skills/organize-files` | Yes | archive r8-organizer |
+| File converter | ✅ Shipped | `extensions/safeappeals-converter` + `rust/converter` | Yes | archive r8-converter |
+| Audio recorder + transcription | ✅ Shipped | `extensions/safeappeals-audio` | Yes | archive r9 |
+| Private Search (RAG) | ✅ Shipped | `extensions/safeappeals-rag` + `rust/rag-core` | Yes | archive r10 |
+| Agent / chat (SafeAppeals) | ✅ Shipped (launch-verified) | `extensions/safeappeals-agents` + upstream chat | Yes | archive r11 / M2 |
+| Void chat / agent stack | ❌ Dropped | superseded | No | archive master plan “Explicitly dropped” |
+| DocuSign / e-signature | ❌ Dropped (no partnership) | dropped | N/A | archive master plan “Explicitly dropped” |
+| Unified settings pane | ❌ Dropped (D2) | historical only | No | archive master plan D1–D3 |
+| Extension transfer service | ❌ Dropped (D3) | historical only | No | archive master plan D1–D3 |
+| Cloud LLM / credits UI | ✅ Shipped | `extensions/safeappeals-authentication` + cloud backend | Yes | archive r13 / M2 T13 |
+| Agent LM tools | ✅ Shipped | docs / email / time-tracker / auth tools | Yes | archive agent tools plan |
+| Integrated browser Agent tools + `browser_cdp` | ✅ Shipped | `src/vs/workbench/contrib/browserView/.../tools` | Yes | Browser CDP agent tools |
+| Contrib hub (`contrib/safeappeals`) | ❌ Deleted (extension-first) | dropped | N/A | archive master plan M0 |
+| Packaging / prebuilds / migrations | ✅ Shipped (launch) | build / CI / prebuilds | Yes | archive r14 |
+| void-reference cleanup / ladder close | ✅ Closed at launch | archive | N/A | archive r15 + master plan |
+| Slack integration | 📋 Post-launch | planned | No | `ROADMAP.md` + active slack plans |
 
-**Status legend:** Shipped · Partial · In progress · Not built · reference / not migrated · Dropped
+**Status legend:** ✅ Shipped · 📋 Post-launch · ❌ Dropped
 
-**Wired?** means the feature is imported/registered in the active 1.129 product (extension gulped, contrib imported from `workbench.common.main.ts`, or equivalent). Code that lives only under `void-reference/` is never “Wired.”
+**Wired?** means the feature is imported/registered in the active 1.129 product.
+
+---
+
+## Planning rule (post-launch)
+
+1. Do **not** reopen `.cursor/plans/archive/safeappeals_master_plan.plan.md` or the upstream merge spike as active work.
+2. New features → new plan under `.cursor/plans/` and a row (or ROADMAP post-launch line) here when scoped.
+3. When something ships, flip status to ✅ Shipped and point at the closing plan/commit.
