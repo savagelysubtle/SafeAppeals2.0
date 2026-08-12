@@ -329,7 +329,15 @@ function packageTask(platform: string, arch: string, sourceFolderName: string, d
 		const jsFilter = util.filter(data => !data.isDirectory() && /\.js$/.test(data.path));
 		const root = path.resolve(path.join(import.meta.dirname, '..'));
 		const productionDependencies = getProductionDependencies(root);
-		const dependenciesSrc = productionDependencies.map(d => path.relative(root, d)).map(d => [`${d}/**`, `!${d}/**/{test,tests}/**`]).flat().concat('!**/*.mk');
+		// Never glob the repo root (`/**`) — empty relative paths would ship
+		// void-reference/, rust/, safeappeals-cloud/, etc. into the app and
+		// overflow ASAR Buffer.concat (Node max ~2GiB per write).
+		const dependenciesSrc = productionDependencies
+			.map(d => path.relative(root, d))
+			.filter(rel => !!rel && !rel.startsWith('..') && !path.isAbsolute(rel))
+			.map(d => [`${d}/**`, `!${d}/**/{test,tests}/**`])
+			.flat()
+			.concat('!**/*.mk');
 
 		const depFilterPattern = ['**', `!**/${config.version}/**`, '!**/bin/darwin-arm64-87/**', '!**/package-lock.json', '!**/yarn.lock'];
 		if (stripSourceMapsInPackagingTasks) {

@@ -32,8 +32,30 @@ function getNpmProductionDependencies(folder: string): string[] {
 		raw = err.stdout;
 	}
 
+	const realFolder = fs.realpathSync(folder);
 	return raw.split(/\r?\n/).filter(line => {
-		return !!line.trim() && path.relative(root, line) !== path.relative(root, folder);
+		const trimmed = line.trim();
+		if (!trimmed) {
+			return false;
+		}
+		// npm ls always emits the folder itself as the first parseable line.
+		// Including it makes packageTask glob `/**` (entire monorepo) and
+		// Buffer.concat the tree into node_modules.asar — blows the 2GiB
+		// write limit (seen as ERR_OUT_OF_RANGE length ≈ 13e9).
+		let realLine: string;
+		try {
+			realLine = fs.realpathSync(trimmed);
+		} catch {
+			return false;
+		}
+		if (realLine === realFolder) {
+			return false;
+		}
+		const rel = path.relative(realFolder, realLine);
+		if (!rel || rel.startsWith('..') || path.isAbsolute(rel)) {
+			return false;
+		}
+		return true;
 	});
 }
 
