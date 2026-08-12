@@ -30,10 +30,11 @@ From `rust/rag-core` (fnm + bun preferred):
 
 ```bash
 # ensure Node via fnm, then:
-bun install
 bun run build:prebuild
+# uses bunx @napi-rs/cli (not package.json deps — keeps file: consumers
+# packagable under vsce/npm list --production)
 # equivalent:
-#   bunx napi build --platform --release --no-js
+#   bunx --bun @napi-rs/cli@3.2.0 napi build --platform --release --no-js -F "fastembed cross-encoder"
 #   bun run install-prebuild
 ```
 

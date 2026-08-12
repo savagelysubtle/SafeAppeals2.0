@@ -28,18 +28,13 @@
 		"node": ">= 20"
 	},
 	"scripts": {
-		"build": "napi build --platform --release --no-js -F \"fastembed cross-encoder\"",
-		"build:debug": "napi build --platform --no-js -F \"fastembed cross-encoder\"",
-		"artifacts": "napi artifacts",
+		"build": "bunx --bun @napi-rs/cli@3.2.0 napi build --platform --release --no-js -F \"fastembed cross-encoder\"",
+		"build:debug": "bunx --bun @napi-rs/cli@3.2.0 napi build --platform --no-js -F \"fastembed cross-encoder\"",
+		"artifacts": "bunx --bun @napi-rs/cli@3.2.0 napi artifacts",
 		"install-prebuild": "node ./scripts/install-prebuild.js",
 		"build:prebuild": "bun run build && bun run install-prebuild",
 		"test:native": "node ./scripts/smoke-native.js",
 		"test:loader": "node ./scripts/test-loader.js",
 		"cargo-test": "cargo test -p rag-core"
-	},
-	"devDependencies": {
-		"@napi-rs/cli": "^3.2.0",
-		"@types/node": "^24.0.0",
-		"typescript": "^5.8.0"
 	}
 }
